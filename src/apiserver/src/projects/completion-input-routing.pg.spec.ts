@@ -76,6 +76,9 @@ const noWakeDisposition = {
   chooseAction: () => {
     throw new Error('N7 evidence routing must not choose an action for its facts');
   },
+  raiseBlockerIfNeeded: () => {
+    throw new Error('N7 evidence routing must not raise a blocker for its facts');
+  },
 } as unknown as WakeDispositionService;
 const suite = URL ? test : test.skip;
 

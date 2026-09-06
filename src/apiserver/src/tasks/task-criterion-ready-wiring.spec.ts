@@ -65,6 +65,7 @@ function routerOver(
     {
       openIfDecisive: async () => null,
       chooseAction: async () => null,
+      raiseBlockerIfNeeded: async () => null,
     } as unknown as WakeDispositionService,
     { factsFor: () => { throw new Error('not this door'); } } as unknown as CriterionUnlandedProducer,
   );

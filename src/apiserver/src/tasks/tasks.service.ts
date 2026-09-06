@@ -1421,15 +1421,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * doubles have to answer for a delivery that is not going to happen. One lookup serves both
    * deliveries, because both are derived from the same committed project.
    */
-  private async deliverProjectFactsOfTask(taskId: string): Promise<void> {
-    if (!this.completionInputs) return;
+  private async deliverProjectFactsOfTask(taskId: string): Promise<boolean> {
+    if (!this.completionInputs) return false;
     const settled = await this.prisma.task.findUnique({
       where: { id: taskId },
       select: { projectId: true },
     });
     await this.deliverSettledProjects([settled?.projectId]);
     await this.deliverReadyCriteria([settled?.projectId]);
-    await this.deliverUnlandedCriteria([settled?.projectId]);
+    return this.deliverUnlandedCriteria([settled?.projectId]);
   }
 
   /**
@@ -1493,12 +1493,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async deliverUnlandedCriteria(
     projectIds: ReadonlyArray<string | null | undefined>,
-  ): Promise<void> {
-    if (!this.completionInputs) return;
-    if (!projectIds.some((id) => !!id)) return;
-    await this.completionInputs.routeUnlandedCriteria(projectIds).catch((e) =>
-      this.logger.warn(`unlanded-criterion delivery failed: ${e?.message ?? e}`),
-    );
+  ): Promise<boolean> {
+    if (!this.completionInputs) return false;
+    if (!projectIds.some((id) => !!id)) return false;
+    const delivered = await this.completionInputs.routeUnlandedCriteria(projectIds).catch((e) => {
+      this.logger.warn(`unlanded-criterion delivery failed: ${e?.message ?? e}`);
+      return [];
+    });
+    // A delivery that could not be made says nothing about whether this completion is one somebody
+    // has to look at, and reading a logged failure as "stopped" would let a transient conflict
+    // hold a project's next task. So only a delivery that ANSWERED with a blocker stops anything.
+    return delivered.some((delivery) => !!delivery.blockerKind);
   }
 
   /**
@@ -8153,19 +8158,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.dispatchDependentsOf(ownerId, doneTaskId);
     } finally {
-      // The half of "start what this completion released" that the dependency dispatch above
-      // cannot reach: a Project whose tasks depend on nothing releases nothing by finishing one of
-      // them, so `dispatchDependentsOf` finds no edge, and until this pass existed a batch of
-      // mutually independent tasks stopped dead after the first. In `finally` beside the delivery
-      // below, and best-effort inside itself, for the same reason: the completed row is a fact
-      // whatever any dispatch does with it.
-      await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
       // The completion edge every criterion shares. `update` reaches it for a verified subject and
       // the runner door reaches it for a task whose declared acceptance command just derived DONE
       // — which is where most tasks actually settle — so the fact is delivered from here rather
       // than from each door's own idea of what it committed. In `finally` because a dispatch that
       // failed still leaves the completed row behind, and that row is the fact.
-      await this.deliverProjectFactsOfTask(doneTaskId);
+      //
+      // It runs BEFORE the release below, which it did not used to. Delivering the fact is how
+      // this edge finds out whether the delivery it just settled is one a person has to look at,
+      // and finding that out afterwards would mean the next task had already started.
+      const stopped = await this.deliverProjectFactsOfTask(doneTaskId);
+      // The half of "start what this completion released" that the dependency dispatch above
+      // cannot reach: a Project whose tasks depend on nothing releases nothing by finishing one of
+      // them, so `dispatchDependentsOf` finds no edge, and until this pass existed a batch of
+      // mutually independent tasks stopped dead after the first. Best-effort inside itself, for
+      // the same reason the delivery is: the completed row is a fact whatever any dispatch does
+      // with it.
+      //
+      // Unless the delivery stopped. `blocker-disposition.ts` §0 names the four deliveries a
+      // coordinator may not settle, and "stop" means both halves of what it would otherwise do:
+      // not merging it, and not releasing the next task on the strength of it. Releasing one
+      // anyway would answer a question this edge has just established nobody may answer yet.
+      // Narrow on purpose: only the pass this project added is gated, and only by the blocker
+      // THIS completion raised. The dependency dispatch above is untouched, and a project carrying
+      // an unrelated blocker from some earlier episode goes on releasing its work.
+      if (!stopped) await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
     }
   }
 

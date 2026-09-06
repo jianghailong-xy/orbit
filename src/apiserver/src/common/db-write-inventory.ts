@@ -112,6 +112,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'The post-commit caller logs the exhausted conflict and leaves the source Session/Task facts derivable for startup or explicit redelivery; an API caller still receives the global typed 503.',
   },
   {
+    at: 'projects/wake-disposition.service.ts#raiseBlocker',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), then project_blocker (rank 60). Monotone and short: the five observations the disposition is a function of are read before the transaction opens, because they are rows this unit does not write and locking them would be holding the project against readers for the length of a decision it has already made.',
+    identity: 'The open episode key `<kind>:<reason>:<taskId>`, enforced by the partial unique blocker index over unresolved rows. A redelivery of the same unlanded-criterion fact finds the question already asked and inserts nothing, which is what keeps "a person has to look at this" one notification rather than one per delivery.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Nothing is derived inside the closure: the disposition is decided before it opens, and the statement is one conditional INSERT. A re-run after a conflict re-issues the same INSERT under the same key and either wins it once or finds the winner. `lifecycleGeneration` is allocated from MAX inside the statement, so a re-run cannot skip a generation either.',
+    effects: 'None. One database row; the caller returns the kind to the delivery it came from and performs no merge, no dispatch and no task write.',
+    answer: 'The post-commit caller logs the exhausted conflict. The fact stays exactly as true as it was — the work is still finished and still off `main` — so the next delivery of it asks the same question again.',
+  },
+  {
     at: 'projects/coordinator-convergence.service.ts#judge',
     shape: 'TX_RETRIED',
     locks: 'project FOR NO KEY UPDATE (rank 40), then project_blocker and project_convergence_decision (rank 60). Monotone, and nothing above the project is reached for: the measurement reads `task`, `task_verification_finding`, `project_acceptance_criterion_definition` and `project_blocker` without locking any of them, because the only writer it has to be serialised against is another judgment of the same project — which is holding the same project row.',

@@ -53,6 +53,14 @@ export interface CriterionUnlandedDelivery {
   refusalCode?: string;
   /** What the round behind this fact settles without a judgement, when anything does. */
   action?: MechanicalAction;
+  /**
+   * The `project_blocker.kind` this delivery stopped on, when a person has to look at it first.
+   *
+   * Present exactly when `action` is absent, and for the reason `blocker-disposition.ts` §0 gives:
+   * a delivery whose ruler is in dispute, whose files nobody asked for, or whose branch will not
+   * merge has not settled anything a machine may act on.
+   */
+  blockerKind?: string;
 }
 
 /**

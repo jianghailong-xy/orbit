@@ -1,11 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { createHash, randomUUID } from 'node:crypto';
 
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   NO_COMPARABLE_EXIT_CODE,
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   readExecutableAcceptanceOutcome,
 } from '../tasks/executable-acceptance-round';
+import {
+  type BlockerDisposition,
+  type DeliveryObservations,
+  blockerDisposition,
+  declaredPaths,
+} from './blocker-disposition';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { WakeFact, criterionSubjectId } from './coordinator-wake';
@@ -17,8 +27,23 @@ import {
   mechanicalAction,
 } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
-import { type CriterionWithLandingFacts, criterionLanding } from './project-criterion-landing';
+import {
+  type CriterionWithLandingFacts,
+  criterionLanding,
+  receiptIsLandingEvidence,
+} from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
+
+/** The blocker one delivery raised, for a caller that has to report that it stopped. */
+export interface RaisedBlocker extends BlockerDisposition {
+  /** The work the blocker is about. */
+  taskId: string;
+  /** The row, or `null` when this episode was already open and this delivery added nothing. */
+  blockerId: string | null;
+}
+
+/** How long a HUMAN-recovery blocker waits before it reads as overdue (BL5's escalation alarm). */
+const HUMAN_BLOCKER_ALARM_MS = 30 * 60 * 1_000;
 
 /**
  * What a fact that DID change the decision was spent on, for a caller that has to report it.
@@ -70,9 +95,19 @@ export interface WakeSpend {
  * service would be a second reader of the same rows with its own idea of when to ask them.
  * Neither method authorizes anything, and both are called only for a fact its producer's own
  * authorizer already allowed.
+ *
+ * AND THE HALF THAT IS NOBODY'S TO SPEND
+ * ======================================
+ * `raiseBlockerIfNeeded` answers the third: whether this fact is one a machine may settle at all.
+ * `blocker-disposition.ts` §0 names the four deliveries it may not, and this method is where their
+ * observations are read — the same rows, at the same moment, for the same fact. It runs BEFORE
+ * `chooseAction` in the router, because a delivery a person has to look at is not a delivery whose
+ * merge is worth computing.
  */
 @Injectable()
 export class WakeDispositionService {
+  private readonly logger = new Logger(WakeDispositionService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
@@ -314,6 +349,190 @@ export class WakeDispositionService {
       expectedExitCode: task.acceptanceExpectedExitCode,
     });
   }
+
+  /**
+   * Raise the one blocker this authorized fact calls for, or `null` when nothing about it does.
+   *
+   * WHY ONLY THIS EVENT
+   * ===================
+   * `CRITERION_UNLANDED` is the fact that means "the work is finished and it is not on `main`" —
+   * the one moment a coordinator would otherwise merge and release the next task. That is exactly
+   * the moment these four deliveries have to stop it, and stopping a fact that was never going to
+   * merge anything would be raising a blocker about nothing.
+   *
+   * WHY THE FIRST TASK WINS
+   * =======================
+   * A criterion can be served by several tasks, and the fact is about all of them at once. This
+   * walks them in id order and stops at the first that needs a person, because a blocker is a
+   * question addressed to somebody: two of them raised in one pass would be two notifications
+   * about one delivery, and the second question is not askable until the first is answered
+   * anyway. The order is fixed so that two readings of the same world ask the same question.
+   */
+  async raiseBlockerIfNeeded(fact: WakeFact): Promise<RaisedBlocker | null> {
+    if (fact.event !== 'CRITERION_UNLANDED') return null;
+
+    for (const delivery of await this.deliveriesUnder(fact)) {
+      const disposition = blockerDisposition(delivery.observed);
+      if (!disposition) continue;
+      return {
+        ...disposition,
+        taskId: delivery.taskId,
+        blockerId: await this.raiseBlocker(fact.projectId, delivery.taskId, disposition),
+      };
+    }
+    return null;
+  }
+
+  /**
+   * The work serving this criterion, each with the five observations the fold is a function of.
+   *
+   * One query. The nested selects carry the receipts and the delivering session with the task,
+   * because the alternative is a query per task and the criterion this fact is about can be served
+   * by several. Nothing here decides anything: `blocker-disposition.ts` §2 says which row each
+   * observation is, and this is that reading, spelled once.
+   */
+  private async deliveriesUnder(
+    fact: WakeFact,
+  ): Promise<Array<{ taskId: string; observed: DeliveryObservations }>> {
+    const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: fact.projectId },
+      select: {
+        id: true,
+        revision: true,
+        servingTasks: {
+          orderBy: { id: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            acceptanceCriteria: true,
+            completionCriterionOverrideReason: true,
+            criterionRevision: true,
+            mergeReceipts: {
+              orderBy: { createdAt: 'desc' },
+              select: { result: true, targetBranch: true, conflicts: true },
+            },
+            // The attempt that produced the branch. Its snapshot is what the runner computed
+            // against this session's own base, so a task that ran twice is described by its
+            // latest delivery and not by a diff of a tree nobody has any more.
+            sessions: {
+              where: { startsTaskWork: true, deletedAt: null },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { changedFiles: true },
+            },
+          },
+        },
+      },
+    });
+
+    return stated
+      .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
+      .flatMap((row) => row.servingTasks.map((task) => ({
+        taskId: task.id,
+        observed: {
+          criterionExemptionArgued: (task.completionCriterionOverrideReason ?? '').trim() !== '',
+          // A snapshot that disagrees with the criterion it names. A task filed against no
+          // criterion has no snapshot to disagree, and says nothing about the standard moving.
+          statedCriterionMoved:
+            task.criterionRevision != null && task.criterionRevision !== row.revision,
+          changedPaths: changedPathsOf(task.sessions[0]?.changedFiles),
+          declaredPaths: declaredPaths(task),
+          // The branch test is the landing fold's own, asked without its result: a conflict on
+          // some other branch is a conflict about somewhere else, exactly as a merge into one is.
+          conflictedPaths: task.mergeReceipts.find((receipt) => receipt.result === 'CONFLICT'
+            && receiptIsLandingEvidence({ result: 'MERGED', targetBranch: receipt.targetBranch }),
+          )?.conflicts ?? [],
+        },
+      })));
+  }
+
+  /**
+   * Put the question on the project's needs-human surface, once per episode.
+   *
+   * The shape is the one the missing-judgment-path signal already uses, for the same reasons:
+   * USER owns it, only a HUMAN clears it, and the partial unique index over open rows is what
+   * makes a redelivery of the same condition find the question already asked instead of asking it
+   * again. `lifecycleGeneration` advances only when a resolved episode genuinely comes back.
+   *
+   * Nothing else is written. This method does not touch the task, its status, the wake row or any
+   * merge: what it produces is a question, and the answer is somebody else's.
+   */
+  private async raiseBlocker(
+    projectId: string,
+    taskId: string,
+    disposition: BlockerDisposition,
+  ): Promise<string | null> {
+    const dedupeKey = `${disposition.kind}:${disposition.reason}:${taskId}`;
+    const detail = {
+      reason: disposition.reason,
+      source: 'CRITERION_UNLANDED',
+      taskId,
+      paths: disposition.paths,
+    };
+    const conditionVersion = createHash('sha256').update(JSON.stringify(detail)).digest('hex');
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      // The project row is the only thing this write has to be serialised against — a second
+      // delivery of the same fact — and it is taken before the blocker rows below it.
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE
+      `);
+      const now = new Date();
+      const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO "project_blocker" (
+          "id", "project_id", "kind", "owner", "recovery", "severity", "required_action",
+          "next_check_at", "subject_type", "subject_id", "detail", "dedupe_key",
+          "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at",
+          "updated_at"
+        )
+        SELECT ${randomUUID()}::uuid, ${projectId}::uuid, ${disposition.kind},
+               'USER'::"project_blocker_owner", 'HUMAN'::"project_blocker_recovery",
+               'CRITICAL'::"project_blocker_severity", ${REQUIRED_ACTION[disposition.reason]},
+               ${new Date(now.getTime() + HUMAN_BLOCKER_ALARM_MS)}, 'TASK', ${taskId},
+               ${JSON.stringify(detail)}::jsonb, ${dedupeKey},
+               coalesce(max(blocker."lifecycle_generation"), 0) + 1,
+               ${conditionVersion}, ${now}, ${now}, ${now}
+          FROM "project_blocker" blocker
+         WHERE blocker."project_id" = ${projectId}::uuid
+           AND blocker."dedupe_key" = ${dedupeKey}
+        ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
+        RETURNING "id"
+      `);
+      return rows[0]?.id ?? null;
+    }, loggedRetry(this.logger, 'wakeDisposition.raiseBlocker'));
+  }
+}
+
+/** One executable sentence per reason, addressed to the person the blocker hands the delivery to. */
+const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], string>> = {
+  CRITERION_EXEMPTION_ARGUED:
+    '这份交付写下了「某条判据不适用」的理由。请读那段理由并裁定它成不成立，再决定合不合入；'
+    + '在你裁定之前不要合并，也不要放行下一条。',
+  ACCEPTANCE_STANDARD_MOVED:
+    '这份工作声明的那条验收标准在它开工之后被改过。请确认按今天的措辞它算不算通过；'
+    + '改验收标准只有账号所有者能做，协调会话不能替。',
+  OUTSIDE_DECLARED_SCOPE:
+    '这份交付改了它自己的声明里没提过的文件。请看 detail.paths 列出的那些改动，'
+    + '决定接受、退回还是让它拆开；在你决定之前不要合并。',
+  MERGE_REFUSED_BY_GIT:
+    'git 拒绝了这次合并。请按 detail.paths 列出的冲突文件手工解决，再重新合入；'
+    + '重试不会有帮助。',
+};
+
+/**
+ * The paths in a session's reported worktree snapshot.
+ *
+ * The column is JSON because that is what the runner sends, and this reads it defensively for the
+ * same reason every reader of it does: a session that never ran has none, an older runner may omit
+ * the field, and neither is a delivery that changed nothing outside its scope — it is a delivery
+ * about which nothing can be said.
+ */
+function changedPathsOf(reported: unknown): string[] {
+  if (!Array.isArray(reported)) return [];
+  return reported
+    .map((file) => (file && typeof file === 'object' ? (file as { path?: unknown }).path : null))
+    .filter((path): path is string => typeof path === 'string' && path.length > 0);
 }
 
 /** What one criterion's serving work has to carry for both halves of the rule to be answerable. */

@@ -30,14 +30,19 @@ import { WakeDispositionService, type WakeSpend } from './wake-disposition.servi
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
 
 /**
- * One spent fact: where it ended, and the action it settles.
+ * One spent fact: where it ended, and either the action it settles or the blocker it raised.
  *
- * The action rides beside the outcome rather than replacing it, because they answer different
- * questions — "is this fact recorded" and "what does the round it is about call for" — and a
- * caller that only wants the first must not have to know the second exists.
+ * Both ride beside the outcome rather than replacing it, because they answer different questions —
+ * "is this fact recorded", "what does the round it is about call for", "does somebody have to look
+ * at it first" — and a caller that only wants the first must not have to know the others exist.
+ *
+ * Never both at once, and `spend` is where that is enforced rather than here: a delivery a person
+ * has to decide about is not a delivery whose merge anybody may compute.
  */
-export type SpentFact =
-  (CompletionInputRouteOutcome | WakeSpend) & { action?: MechanicalAction };
+export type SpentFact = (CompletionInputRouteOutcome | WakeSpend) & {
+  action?: MechanicalAction;
+  blockerKind?: string;
+};
 
 export type CompletionInputRouteOutcome =
   | { outcome: 'CONSUMED'; wakeId: string; idempotencyKey: string; consumer: CompletionInputConsumer }
@@ -90,6 +95,12 @@ export class CompletionInputRouter {
    * decision the refusal exists to prevent (and, for the reds, spend a real check finding out). So
    * `REFUSED` and `ALREADY_AWAKE` carry no action: the first was not permitted, and the second
    * belongs to whoever won the key.
+   *
+   * And a blocker comes before the action, which is the whole of how the two tables stay apart. A
+   * delivery whose ruler is in dispute, whose files nobody asked for, or whose branch will not
+   * merge is a delivery somebody has to look at; computing what it would otherwise settle would be
+   * offering an answer to a question this fact just established nobody may answer. So a fact that
+   * raised a blocker returns with no action at all, and nothing downstream can find one on it.
    */
   private async spend(
     fact: WakeFact,
@@ -106,6 +117,8 @@ export class CompletionInputRouter {
       authorize,
     );
     if (outcome.outcome === 'REFUSED' || outcome.outcome === 'ALREADY_AWAKE') return outcome;
+    const blocker = await this.disposition.raiseBlockerIfNeeded(fact);
+    if (blocker) return { ...outcome, blockerKind: blocker.kind };
     const action = await this.disposition.chooseAction(fact);
     return action ? { ...outcome, action } : outcome;
   }
@@ -258,6 +271,7 @@ export class CompletionInputRouter {
         outcome: routed.outcome,
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
         ...(routed.action ? { action: routed.action } : {}),
+        ...(routed.blockerKind ? { blockerKind: routed.blockerKind } : {}),
       });
     }
     return deliveries;
