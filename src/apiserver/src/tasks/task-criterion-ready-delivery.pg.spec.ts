@@ -218,6 +218,11 @@ async function fixture(
     assigneeId: workspaceId,
     projectId,
     completionCriterion: 'EVIDENCE_JUDGMENT',
+    // This fixture settles its own tasks, one at a time, by hand. Left opted in, the release pass
+    // on the completion edge would start whichever of them is still OPEN when the previous one
+    // finishes — legitimately, it is a coordinated project of tasks that depend on nothing — and
+    // the run this fixture then creates for that task collides with the one already claiming it.
+    autoRunWhenReady: false,
   } as never);
   return { ownerId, runnerId, workspaceId, projectId, choreTaskId: chore.id };
 }
@@ -238,6 +243,9 @@ async function serve(stack: Stack, f: Fixture, criterionKey: string, title: stri
     projectId: f.projectId,
     criterionKey,
     ...ACCEPTANCE,
+    // Settled by hand below, like the chore above: this fixture is about which FACT a completion
+    // produces, not about what the completion starts next.
+    autoRunWhenReady: false,
   } as never);
   assert.equal(declared.completionCriterion, 'EXECUTABLE');
   assert.equal(declared.status, TaskStatus.OPEN, 'the declaration is not a status');
