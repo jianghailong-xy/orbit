@@ -806,6 +806,47 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   )`;
 
 /**
+ * The candidate predicate for a Project's tasks that depend on NOTHING (see
+ * dispatchIndependentSiblingsOf), correlated to an outer `task t`.
+ *
+ * AUTO_RUN_READY_SQL with its one anchor inverted, and that inversion is the whole of it: that
+ * predicate is the "a prerequisite just completed, start what it released" pass and therefore
+ * insists a candidate HAVE an edge, which leaves the tasks that have none with no automatic
+ * starter at all. Here the reason to start is that a sibling under the same goal just finished,
+ * and having no prerequisites is the entry condition rather than a disqualification.
+ *
+ * Every other clause is the same clause spelled the same way, because these are the standing rules
+ * about dispatching a task rather than anything to do with which pass found it: OPEN, opted into
+ * auto-run, not held by a paused list, an assignee bound to a runner, no schedule still in the
+ * future, not retired, and nothing already occupying it (TASK_OCCUPYING, so an idle-but-live
+ * session counts).
+ *
+ * `dependenciesSatisfiedSql` is the one clause deliberately NOT restated: a task with no edges
+ * satisfies it vacuously, so it could only ever permit, and a gate that cannot refuse is one more
+ * place for these two predicates to drift apart without either of them changing what it selects.
+ *
+ * Scoped to one Project by its caller rather than here, like AUTO_RUN_READY_SQL's owner scope: a
+ * predicate that selected across Projects would be a second fleet-wide starter, and the budget
+ * that bounds this one is a single Project's.
+ */
+const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
+  t.status = 'OPEN'::task_status
+  AND t.auto_run_when_ready = true
+  AND t.dispatch_hold = false
+  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND (t.run_at IS NULL OR t.run_at <= now())
+  AND NOT EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
+  AND ${Prisma.raw(taskNotObsoleteSql('t'))}
+  AND NOT EXISTS (
+    SELECT 1 FROM session s
+    WHERE s.task_id = t.id
+      AND s.status IN (${Prisma.join(
+        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+        ', ',
+      )})
+  )`;
+
+/**
  * The scheduled sweep's candidate predicate (see dispatchDueScheduledTasks), correlated to an
  * outer `task t`. Anchored on `run_at`, which is the one selective thing about it: a schedule is
  * rare, the partial index (migration 0110) holds only the tasks that have one, and every other
@@ -8099,6 +8140,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.dispatchDependentsOf(ownerId, doneTaskId);
     } finally {
+      // The half of "start what this completion released" that the dependency dispatch above
+      // cannot reach: a Project whose tasks depend on nothing releases nothing by finishing one of
+      // them, so `dispatchDependentsOf` finds no edge, and until this pass existed a batch of
+      // mutually independent tasks stopped dead after the first. In `finally` beside the delivery
+      // below, and best-effort inside itself, for the same reason: the completed row is a fact
+      // whatever any dispatch does with it.
+      await this.dispatchIndependentSiblingsOf(ownerId, doneTaskId);
       // The completion edge every criterion shares. `update` reaches it for a verified subject and
       // the runner door reaches it for a task whose declared acceptance command just derived DONE
       // — which is where most tasks actually settle — so the fact is delivered from here rather
@@ -8165,6 +8213,100 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
         );
       }
+    }
+  }
+
+  /**
+   * A task in a coordinated Project finished: release that Project's tasks that depend on NOTHING.
+   *
+   * `dispatchDependentsOf` above answers "what did this completion unblock", and that question has
+   * no answer for a task nobody was waiting on. A Project filed as a batch of independent tasks is
+   * exactly that shape — finishing one releases no edge, the auto-run sweep requires a candidate to
+   * HAVE one (AUTO_RUN_READY_SQL), and the batch stops after whatever a person started by hand.
+   * This is the pass that starts the next one, and the reason it is keyed on the PROJECT rather
+   * than on the finished task: what makes these tasks each other's next is being filed under the
+   * same goal, which is the only relation they have.
+   *
+   * Three things decide, and none of them is new. `coordinator_enabled` is the switch — releasing
+   * the next task is a coordinator's action, so a Project whose coordinator is off must not have
+   * one taken on its behalf. `max_concurrent_tasks` is the Project's own budget, counted over the
+   * Project's tasks that a live session already occupies, and it bounds what one completion may
+   * start. Everything about the candidate itself is PROJECT_INDEPENDENT_READY_SQL, which is the
+   * sweep's predicate with its one anchor inverted.
+   *
+   * Best-effort and self-contained, like the dependency dispatch it sits beside: every failure is
+   * logged and none of them reaches the caller, because the completion this rides on is committed
+   * and the facts delivered after it are not this pass's to lose.
+   */
+  private async dispatchIndependentSiblingsOf(ownerId: string, doneTaskId: string): Promise<void> {
+    try {
+      // WHICH Project finished something — the one question the completed row answers here, and
+      // the same read `deliverProjectFactsOfTask` opens with. A task filed under no project has no
+      // coordinator to release anything on its behalf, and that is most tasks.
+      const done = await this.prisma.task.findFirst({
+        where: { id: doneTaskId, ownerId },
+        select: { projectId: true },
+      });
+      const projectId = done?.projectId;
+      if (!projectId) return;
+      // May this Project start anything, and how much room is there. One statement, because the
+      // permission and the budget are read off the same row and a second round trip would let them
+      // be answered at two different instants. A Project whose coordinator is off returns no row at
+      // all, which is the difference between "no room" and "not mine to fill".
+      const [room] = await this.prisma.$queryRaw<Array<{ free: number }>>(Prisma.sql`
+        SELECT p.max_concurrent_tasks - (
+                 SELECT count(*)::int FROM task o
+                  WHERE o.project_id = p.id
+                    AND EXISTS (
+                      SELECT 1 FROM session s
+                       WHERE s.task_id = o.id
+                         AND s.status IN (${Prisma.join(
+                           TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+                           ', ',
+                         )})
+                    )
+               ) AS "free"
+          FROM project p
+         WHERE p.id = ${projectId}::uuid
+           AND p.owner_id = ${ownerId}::uuid
+           AND p.coordinator_enabled = true`);
+      if (!room) return;
+      if (room.free <= 0) {
+        // Not a fault, and deliberately not a queue: the tasks keep their OPEN row, and the next
+        // completion in this Project is the next time anything looks at them.
+        this.logger.log(
+          `project ${projectId}: no independent task released — the concurrency budget is full`,
+        );
+        return;
+      }
+      const candidates = await this.prisma.$queryRaw<
+        Array<{ id: string; dispatchEpoch: bigint | null }>
+      >(Prisma.sql`
+        SELECT t.id, e.epoch AS "dispatchEpoch"
+          FROM task t
+          -- 0137's dispatch epoch, joined into the scan that selects the candidate so the fence
+          -- carries the moment every clause below was evaluated against, exactly as the two sweeps
+          -- do it. A second read would be a second snapshot.
+          LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
+         WHERE t.project_id = ${projectId}::uuid
+           AND t.owner_id = ${ownerId}::uuid
+           AND ${PROJECT_INDEPENDENT_READY_SQL}
+         -- Oldest first: with more ready tasks than budget, the one that has waited longest goes.
+         ORDER BY t.created_at, t.id
+         LIMIT ${room.free}`);
+      for (const candidate of candidates) {
+        try {
+          await this.dispatchReadyTask(ownerId, candidate.id, candidate.dispatchEpoch ?? 0n);
+        } catch (e) {
+          this.logger.warn(
+            `auto-run of independent task ${candidate.id} failed: ${e instanceof Error ? e.message : e}`,
+          );
+        }
+      }
+    } catch (e) {
+      this.logger.warn(
+        `releasing ${doneTaskId}'s independent siblings failed: ${e instanceof Error ? e.message : e}`,
+      );
     }
   }
 
