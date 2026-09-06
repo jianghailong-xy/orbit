@@ -181,8 +181,10 @@ export class CompletionInputRouter {
    *
    * And `spend` decides the terminal here on the same terms as the door above. It answers
    * RECORD_ONLY for every criterion this producer derives a fact for — a criterion whose serving
-   * work is all DONE is backed, and `wake-disposition.ts` §2 says a backed claim is nobody's next
-   * step — which is the answer this door used to hard-code while waiting for a rule to state it.
+   * work is all DONE is backed, and `wake-disposition.ts` §2 says a backed claim owes nobody a
+   * JUDGMENT — which is the answer this door used to hard-code while waiting for a rule to state
+   * it. What such a criterion may still owe is a merge, and §2.1 there says why that is answered
+   * on the fact that reports its landing rather than a second time on this one.
    */
   async routeReadyCriteria(
     projectIds: ReadonlyArray<string | null | undefined>,
@@ -214,7 +216,9 @@ export class CompletionInputRouter {
    * So the two are two facts about one criterion, and a criterion that is ready and landed simply
    * produces the first. `spend` decides the terminal on the same terms as every door here, and it
    * is deliberately not overridden: which authorized wakes are worth a session is one rule, stated
-   * once, in the unit that states it for every event kind.
+   * once, in the one unit every door asks. That rule reads this event's landing half and no other
+   * door's — §2.1 there, because a merge is owed once — but it is that unit's reading and not a
+   * decision taken here.
    */
   async routeUnlandedCriteria(
     projectIds: ReadonlyArray<string | null | undefined>,

@@ -20,13 +20,18 @@ export const CRITERION_UNLANDED_WAKE_PROJECT_GONE = 'PROJECT_GONE';
 export const CRITERION_UNLANDED_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
 
 /**
- * Who this fact is recorded FOR.
+ * Who this fact is recorded FOR, in the case where it is only recorded.
  *
- * The same surface its readiness sibling ends on, and for now for the same reason: what an
- * authorized wake is SPENT on is `wake-disposition.ts`'s question, answered for every event kind at
- * once, and its answer today for a criterion whose serving work is all DONE is that the claim is
- * BACKED and nobody owes it a next step. Deciding here that this one event is different would be
- * making that decision twice, in two places, with nothing keeping the two agreeing.
+ * The same surface its readiness sibling ends on, and still for the same reason: what an authorized
+ * wake is SPENT on is `wake-disposition.ts`'s question and not this unit's, so deciding here that
+ * this one event is different would be making that decision twice, in two places, with nothing
+ * keeping the two agreeing.
+ *
+ * What has changed is that rule's answer, not where it is asked. A criterion whose serving work is
+ * all DONE and whose result is not known to be on the default branch now opens a session — §2.1
+ * there says why the fact reporting the landing is the one that gets it. This consumer is what the
+ * OTHER case ends against: the criterion whose receipts arrived between the derivation of this fact
+ * and its delivery, which is a merge nobody owes any more and a person can still read about.
  */
 export const CRITERION_UNLANDED_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 

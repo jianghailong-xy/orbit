@@ -1,4 +1,5 @@
-import type { TaskSettlement } from './coordinator-wake';
+import type { CoordinatorWakeEvent, TaskSettlement } from './coordinator-wake';
+import type { CriterionLanding } from './project-criterion-landing';
 
 /**
  * Whether a committed fact changes what the coordinator would decide — and therefore whether it is
@@ -33,15 +34,50 @@ import type { TaskSettlement } from './coordinator-wake';
  *   * a task fails and it was the only work serving a criterion — `STRANDED`. Everything changed:
  *     no work is going to deliver that criterion, and nothing but a decision can move it.
  *
- * §2 — WHY `BACKED` IS NOT A DECISION EITHER
- * ==========================================
- * A criterion every serving task of which is DONE has run out of work too, and it is deliberately
- * NOT a decision. The coordinator's tools are the reversible ones — redispatch, succeed, split,
- * cancel, escalate, file more work — and a criterion whose work is finished needs none of them.
- * What it needs is a judgment about whether the claim actually holds, and this project states in
- * as many words that nothing in Orbit answers that: the ruler is a person's editable list, and
- * whoever edits it can make any conclusion true. So a backed criterion is recorded, on the surface
- * a person reads, and no session is opened to decide something no session may decide.
+ * §2 — A `BACKED` CRITERION OWES NO JUDGMENT, AND MAY STILL OWE A MERGE
+ * =====================================================================
+ * A criterion every serving task of which is DONE has run out of work too, and no JUDGMENT is
+ * available about it. Whether the claim actually holds is the question this project states in as
+ * many words that nothing in Orbit answers: the ruler is a person's editable list, and whoever
+ * edits it can make any conclusion true. So a backed criterion is recorded, on the surface a
+ * person reads, and no session is opened to decide something no session may decide. That much is
+ * unchanged.
+ *
+ * What this paragraph claimed BEYOND that was wrong, and 2026-09-05 is what it cost. It concluded
+ * that a finished criterion is nobody's next step AT ALL, and its evidence was a list of the
+ * coordinator's moves: redispatch, succeed, split, cancel, escalate, file more work. Every item on
+ * that list is a REPAIR, and repairs are what UNFINISHED work needs. The two moves that apply to
+ * work which is finished were missing from it — MERGE IT, and RELEASE THE NEXT PIECE OF WORK —
+ * so a list that happened to contain no counterexample was read as an argument that none exists.
+ * A criterion's finished result then sat outside `main` for four hours, and the only thing that
+ * would have noticed was a person deciding to look.
+ *
+ * The claim is therefore narrower than it was: a backed criterion owes nobody a judgment. It can
+ * still owe a merge, and unlike "does the claim hold", "is a merge owed" is a question with an
+ * answer nothing has to be believed for — `project-criterion-landing.ts` reads it off the merge
+ * receipts, which is where a person reads it too.
+ *
+ * §2.1 — A MERGE IS OWED ONCE, SO IT IS ANSWERED ON THE FACT THAT REPORTS IT
+ * =========================================================================
+ * TWO facts are derived about one backed criterion, deliberately, for the reason the fifth door of
+ * `completion-input-router.service.ts` gives: "the work is finished" and "the work is on nobody's
+ * default branch" are read from rows written by different paths at different times, so folding
+ * them into one event would key one fact on two independently moving projections.
+ *
+ * A merge, though, is owed once. Answering BOTH of those facts with a session would open two
+ * sessions to perform one irreversible action — §0's loop with a merge in the middle of it, and
+ * two coordinators racing each other for one branch. So the landing half of this rule is read for
+ * the fact that REPORTS a landing, and every other fact about the same criterion is recorded,
+ * exactly as §2 has always said.
+ *
+ * That is not the lookup table this rule was written to avoid, and the difference is worth stating
+ * precisely. A lookup table answers FROM the event — kind X opens, kind Y records — and never
+ * consults the world, which is why a case that paired two event kinds would prove nothing about
+ * it. Here the event selects WHICH of a criterion's two independent conditions this fact is a
+ * report of, and the answer still comes from the criterion's own rows: the same fact, delivered
+ * again once those rows carry a receipt, is recorded rather than judged. And `STRANDED` is
+ * selected by nothing at all — nothing is going to deliver that criterion, so every fact bearing
+ * on it is answered whatever it was a report of.
  *
  * §3 — A FACT THAT BEARS ON NO CRITERION CHANGES NO CRITERION'S COVERAGE
  * =====================================================================
@@ -62,7 +98,7 @@ export function isPendingTaskStatus(status: string): boolean {
 export type CriterionCoverage =
   /** Work other than the one this fact is about is still expected to deliver it. */
   | 'IN_FLIGHT'
-  /** Every task serving it is DONE. The claim is backed; §2 says that is nobody's next step. */
+  /** Every task serving it is DONE. The claim is backed; §2 says that owes no judgment. */
   | 'BACKED'
   /** Nothing is going to deliver it and nothing did. Only a decision moves this criterion. */
   | 'STRANDED';
@@ -97,11 +133,40 @@ export type WakeDisposition =
   | 'RECORD_ONLY';
 
 /**
- * The decision, over the coverage of every criterion the fact bears on.
+ * One criterion the fact bears on, in the two dimensions this rule reads.
  *
- * One stranded criterion is enough: a fact that leaves any stated condition with no work and no
- * backing is a fact the coordinator has to answer, whatever the rest of the project looks like.
+ * `landing` is `project-criterion-landing.ts`'s answer over that criterion's merge receipts,
+ * borrowed rather than re-derived: which merge results count and which branch names count is one
+ * reading in one module, and a second one here would be a second definition of "landed" able to
+ * drift from the one a person is shown.
  */
-export function wakeDisposition(coverage: readonly CriterionCoverage[]): WakeDisposition {
-  return coverage.includes('STRANDED') ? 'OPEN_JUDGMENT' : 'RECORD_ONLY';
+export interface CriterionState {
+  coverage: CriterionCoverage;
+  landing: CriterionLanding;
+}
+
+/**
+ * The decision, over what this fact reports about the criteria it bears on.
+ *
+ * One stranded criterion is enough, and it is enough whatever the fact was about: a fact that
+ * leaves any stated condition with no work and no backing is a fact the coordinator has to answer,
+ * whatever the rest of the project looks like. It is asked first so that the answer for a stranded
+ * criterion cannot depend on the second clause, on a receipt, or on which fact arrived.
+ *
+ * The second clause is §2.1's. It reads `!== 'LANDED'` rather than `=== 'UNKNOWN'` because that is
+ * the question the merge receipts can answer: `CriterionLanding` has no `NOT_LANDED` — absence of
+ * a receipt is absence of evidence — and what owes a merge is work that is not KNOWN to be on the
+ * default branch, which is every value that is not `LANDED` however many of them there come to be.
+ */
+export function wakeDisposition(
+  event: CoordinatorWakeEvent,
+  criteria: readonly CriterionState[],
+): WakeDisposition {
+  if (criteria.some((criterion) => criterion.coverage === 'STRANDED')) return 'OPEN_JUDGMENT';
+  if (event === 'CRITERION_UNLANDED' && criteria.some(
+    (criterion) => criterion.coverage === 'BACKED' && criterion.landing !== 'LANDED',
+  )) {
+    return 'OPEN_JUDGMENT';
+  }
+  return 'RECORD_ONLY';
 }

@@ -118,6 +118,13 @@ interface Stack {
  * `convergence` is the only seam: passing a refusing double is how a case asks "was this fact
  * authorized THERE", because a delivery that ate the router's always-allow default would never
  * consult it and would land CONSUMED instead of REFUSED.
+ *
+ * It is handed to both criterion producers, not just the one a case is about, because that is what
+ * the ledger it doubles for IS: a per-project accounting of whether this project is still
+ * converging, which cannot be true for one fact about a criterion and false for another. The
+ * landing fact derived from the very same finished work would otherwise be authorized by a real
+ * ledger and — since `wake-disposition.ts` §2.1 — open a session, which is a second event's
+ * terminal arriving inside a case about this one's.
  */
 async function connect(options: {
   convergence?: CoordinatorConvergenceService;
@@ -142,7 +149,7 @@ async function connect(options: {
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
-    new CriterionUnlandedProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new CriterionUnlandedProducer(prisma, convergence),
   );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router);
   const api = new RunnerApiController(

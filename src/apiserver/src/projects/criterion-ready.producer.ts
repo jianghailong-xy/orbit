@@ -22,11 +22,12 @@ export const CRITERION_READY_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
  * Who this fact is recorded FOR when it is recorded rather than judged.
  *
  * A criterion whose work has finished looks like a strong candidate for a judgment session, and
- * it is not: "does this event change the coordinator's decision" is answered for every event kind
- * at once by `wake-disposition.ts`, and its answer for a criterion whose serving work is all DONE
- * is that the claim is BACKED and nobody owes it a next step (§2 there says why — the reversible
- * moves a coordinator has do not apply to finished work, and whether the claim HOLDS is not a
- * question anything in Orbit answers). So this consumer is where such a fact ends: durable,
+ * READINESS is not: "does this event change the coordinator's decision" is answered for every
+ * event kind at once by `wake-disposition.ts`, and its answer for a criterion whose serving work
+ * is all DONE is that the claim is BACKED and owes nobody a JUDGMENT (§2 there says why — whether
+ * the claim HOLDS is not a question anything in Orbit answers). Such a criterion may still owe a
+ * merge; §2.1 there says why that is answered on the fact that reports its landing rather than a
+ * second time here, and this consumer is where the readiness fact ends either way: durable,
  * idempotent, convergence-bounded, on the surface a person reads.
  */
 export const CRITERION_READY_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';

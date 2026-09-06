@@ -452,8 +452,12 @@ test('finished work off main wakes the coordinator, and the same work on main do
       for (const taskId of [onMain, onBranch, f.choreTaskId]) {
         assert.notEqual(row.subjectId, taskId, 'the subject is a criterion, not a task');
       }
-      assert.equal(row.status, 'CONSUMED');
-      assert.equal(row.consumerType, CRITERION_UNLANDED_CONSUMER);
+      // The terminal a finished-but-unlanded criterion gets: `wake-disposition.ts` §2.1 sends this
+      // one event to a judgment session, so the row names that session instead of a consumer.
+      assert.equal(row.status, 'SESSION_OPENED');
+      assert.equal(row.consumerType, null);
+      assert.notEqual(row.consumerType, CRITERION_UNLANDED_CONSUMER);
+      assert.notEqual(row.sessionId, null);
 
       // Both criteria are READY — the work is finished on both — which is what makes the row above
       // a statement about landing rather than about completion.
