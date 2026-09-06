@@ -36,7 +36,20 @@ export const CRITERION_READY_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 export interface CriterionReadyDelivery {
   /** The criterion's wake subject — `<projectId>:<criterionKey>`, which is not any task's id. */
   criterionSubjectId: string;
-  outcome: 'CONSUMED' | 'ALREADY_AWAKE' | 'REFUSED' | 'OPENED' | 'ALREADY_OPEN';
+  /**
+   * Every terminal the shared `spend` can hand back, not every terminal THIS event reaches. The
+   * readiness fact is recorded (`wake-disposition.ts` §2), so `DELIVERED` is unreachable for it
+   * today — and narrowing the type to say so would be a claim about a rule that lives in another
+   * module and can change without this one.
+   */
+  outcome:
+    | 'CONSUMED'
+    | 'ALREADY_AWAKE'
+    | 'REFUSED'
+    | 'OPENED'
+    | 'ALREADY_OPEN'
+    | 'DELIVERED'
+    | 'ALREADY_DELIVERED';
   refusalCode?: string;
 }
 

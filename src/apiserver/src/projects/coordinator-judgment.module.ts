@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
+import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
@@ -35,9 +36,14 @@ import { WakeDispositionService } from './wake-disposition.service';
  * unbounded version of this fact is the most expensive one to have wired anywhere else.
  *
  * `WakeDispositionService` is here for the other half of that argument: it decides which of the
- * two terminals an authorized wake gets, and opening one of them is `CoordinatorJudgmentService`'s
- * — this module's own provider, and the reason the router can ask the question without holding the
- * answer.
+ * three terminals an authorized wake gets, and two of them are performed by this module's own
+ * providers — `CoordinatorJudgmentService` opens a session, `CoordinatorDeliveryService` writes to
+ * the conversation the project already has. That is the reason the router can ask the question
+ * without holding the answer.
+ *
+ * `CoordinatorDeliveryService` is registered beside the judgment one rather than in SessionsModule
+ * even though `SessionsService` is what it ultimately calls: what it decides is which wake reaches
+ * a coordinator, which is this module's subject, and SessionsModule is imported here already.
  */
 @Module({
   imports: [SessionsModule],
@@ -46,6 +52,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
+    CoordinatorDeliveryService,
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
     CriterionReadyProducer,
@@ -57,6 +64,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CompletionInputRouter,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
+    CoordinatorDeliveryService,
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
     CriterionReadyProducer,

@@ -3,7 +3,13 @@ import { uuidToBase62 } from '@orbit/shared';
 import { WakeFact } from './coordinator-wake';
 
 /**
- * What a JUDGMENT session opens on — the one-shot conversation a committed fact wakes.
+ * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
+ *
+ * Two writers, one renderer. `buildJudgmentOpening` opens the one-shot conversation a fact wakes;
+ * `buildCoordinatorDeliveryMessage` is the message the project's standing conversation is sent when
+ * the fact is delivered to it instead (`coordinator-delivery.service.ts`). They differ in what the
+ * reader already knows and in nothing else, so `describeWakeFact` renders the fact for both — one
+ * event never gets two descriptions.
  *
  * WHY THIS IS NOT `coordinator-opening.ts`
  * ========================================
@@ -69,6 +75,12 @@ export function describeWakeFact(fact: WakeFact): string {
       return (
         `服务验收标准 ${String(detail.criterionKey ?? fact.subjectId)} 的 ` +
         `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了。`
+      );
+    case 'CRITERION_UNLANDED':
+      return (
+        `服务验收标准 ${String(detail.criterionKey ?? fact.subjectId)} 的 ` +
+        `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了，但没有任何合并回执能证明这些成果` +
+        `已经在默认分支上（落地判定：${String(detail.landing ?? '未知')}）。`
       );
     case 'COMPLETION_ACK_STALE':
       {
@@ -160,5 +172,49 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
     + '\n\n'
     + '同一个项目还有一条人点开的协调会话，长期开着、由人驱动。它和这次判断读库里同一份事实，不共享上下文；'
     + '这次判断不会动它，它也不会动这次判断。'
+  );
+}
+
+/**
+ * The message the project's STANDING coordinator conversation is sent.
+ *
+ * WHY THIS IS NOT `buildJudgmentOpening`
+ * ======================================
+ * That one opens a conversation, and everything it says is calibrated for a reader with no
+ * context: who it is, what it may not do, where every read lives, that nobody will answer it. This
+ * reader has all of that already — it is the conversation a person opened to drive this project,
+ * it has been reading these same tables for however long it has been running, and it was told the
+ * rules on its own first turn. Repeating them would spend the one resource this carrier is chosen
+ * to save.
+ *
+ * WHAT IT SAYS INSTEAD, AND WHY EACH LINE EARNS ITS PLACE
+ * ======================================================
+ * A coordinator conversation measured on 2026-09-06 was 365 turns and 481k of a 1000k context
+ * window, so a message here is charged to every turn that comes after it, for the rest of that
+ * conversation's life. Four lines survive that test:
+ *
+ *   1. the fact, rendered by `describeWakeFact` and from nothing else — the same renderer the
+ *      judgment opening uses, so one event never gets two descriptions;
+ *   2. the merge order, which is a hard constraint rather than advice and is the whole reason this
+ *      fact is worth interrupting anybody about. It is `settledAcceptanceProtocol`'s order, said in
+ *      one line rather than five: the reader already knows the tools;
+ *   3. where to read the rest, because nothing else about the project is copied in here — the
+ *      state is in the database, and this message is not a snapshot of it;
+ *   4. that this is a NOTIFICATION. Claude does not steer mid-turn, so a conversation that was
+ *      running when this arrived reads it afterwards, by which time its own reads are newer than
+ *      anything this message could have carried. A reader that assumed otherwise would act on a
+ *      world that has moved.
+ */
+export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: string): string {
+  const projectId = uuidToBase62(fact.projectId);
+  return (
+    `【项目「${projectTitle}」有干完但还没落 main 的成果】\n\n`
+    + `${describeWakeFact(fact)}\n\n`
+    + '合并的顺序是硬约束，不是建议：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据 '
+    + '→ 再把对应任务置终态。合并失败就停下来把原因写进 task_comment，不要反复重试。\n\n'
+    + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
+    + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+    + '所以以你自己刚读到的库里状态为准。'
   );
 }

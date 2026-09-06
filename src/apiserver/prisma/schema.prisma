@@ -1240,9 +1240,12 @@ model Session {
   consoleForLists       TaskList[]             @relation("TaskListConsole")
   // At most one, enforced by the unique index behind Project.coordinatorSessionId.
   coordinatorForProject Project?               @relation("ProjectCoordinator")
-  /// The wake this session was opened to judge, if it is a judgment session (unit T3, 0174). At
-  /// most one — distinct from `coordinatorForProject`, which is the conversation a PERSON opens.
-  judgmentForWake       ProjectCoordinatorWake? @relation("CoordinatorJudgmentSession")
+  /// Every coordinator wake that REACHED this session: the one it was opened to judge if it is a
+  /// judgment session (unit T3, 0174, at most one — `project_coordinator_wake_session_id_key` is
+  /// unique over exactly those), and every fact DELIVERED to it if it is the conversation a person
+  /// opened to coordinate a project (0243, any number). A list because of the second: which of the
+  /// two a row is is its `status`, so a reader wanting only the first filters on it.
+  coordinatorWakes      ProjectCoordinatorWake[] @relation("CoordinatorJudgmentSession")
   attachments           Attachment[]
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
@@ -2211,8 +2214,9 @@ model ProjectCoordinatorWake {
   subjectVersion String @map("subject_version")
   idempotencyKey String @map("idempotency_key")
 
-  /// CLAIMED, SESSION_OPENED, CONSUMED or REFUSED. Both successful terminal states remain inside
-  /// 0174's partial unique index: one fact opens/feeds one consumer at most once.
+  /// CLAIMED, SESSION_OPENED, DELIVERED, CONSUMED or REFUSED. All three successful terminal states
+  /// remain inside 0174's partial unique index: one fact opens one session, is handed to the
+  /// standing coordinator conversation, or feeds one consumer — at most once, whichever it is.
   status      String  @default("CLAIMED")
   /// Non-null exactly when `status` is REFUSED, enforced by a CHECK: a stop with no reason is the
   /// one shape this table exists to make impossible.
@@ -2226,10 +2230,20 @@ model ProjectCoordinatorWake {
   consumerType String?   @map("consumer_type")
   consumedAt   DateTime? @map("consumed_at")
 
-  /// The one judgment session this wake opened (unit T3, migration 0175). Unique, so two wakes
-  /// cannot name one session; nullable and `SetNull`, so deleting a session is never refused by
-  /// this ledger — what the row still says afterwards is that it opened one.
-  sessionId String?  @unique(map: "project_coordinator_wake_session_id_key") @map("session_id") @db.Uuid
+  /// What this delivery handed to the standing coordinator conversation, written by the same
+  /// compare-and-set that writes DELIVERED and constrained to that status (migration 0243).
+  /// Separate from `detail` because `detail` is written by the INSERT that claims the key, which
+  /// runs BEFORE authorization: nothing that exists only once a wake is permitted can go in it.
+  delivery     Json?
+
+  /// The session this wake reached: the judgment session it OPENED (unit T3, migration 0175), or
+  /// the project's standing coordinator conversation it was DELIVERED to (migration 0243). Unique
+  /// only over the first — `project_coordinator_wake_session_id_key` is partial on
+  /// `status = 'SESSION_OPENED'`, so two facts still cannot claim one judgment conversation while
+  /// any number of them may name the one conversation that was already there. Nullable and
+  /// `SetNull`, so deleting a session is never refused by this ledger — what the row still says
+  /// afterwards is that it reached one.
+  sessionId String?  @map("session_id") @db.Uuid
   session   Session? @relation("CoordinatorJudgmentSession", fields: [sessionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")

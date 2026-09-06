@@ -122,6 +122,37 @@ export const RETIRED_COORDINATOR_WAKE_EVENTS = [
 ] as const;
 
 /**
+ * The closed set of ends one delivery of a fact can reach, and the one state that is not an end.
+ *
+ * Held here beside the events, and by a CHECK in the migration, for the reason the events are: the
+ * values are frozen in a TypeScript module, and a second spelling of them is a second place to
+ * drift. `coordinator-wake.spec.ts` requires this list to equal the constraint exactly, so a
+ * status that reaches the database without appearing here is a failure rather than a surprise.
+ *
+ * Only `CLAIMED` is not terminal. Of the four that are, three are successes that go on holding the
+ * fact's idempotency key (0174's index excludes `REFUSED` and nothing else), and they differ in
+ * WHAT the fact was spent on — which is the question a reader of this ledger is asking:
+ *
+ *   * `SESSION_OPENED` — a new judgment session was created for it (`coordinator-judgment.service`).
+ *   * `DELIVERED`      — it was handed to the project's standing coordinator conversation, which
+ *     already existed (`coordinator-delivery.service`). No session row is created.
+ *   * `CONSUMED`       — recorded against a named non-session consumer, and nothing more.
+ *
+ * `REFUSED` is the one that is not a success: it releases the key so the same fact may be
+ * delivered again, and keeps the code it was refused with so that "it silently did nothing" is not
+ * a state this table can be in.
+ */
+export const COORDINATOR_WAKE_STATUSES = [
+  'CLAIMED',
+  'SESSION_OPENED',
+  'DELIVERED',
+  'CONSUMED',
+  'REFUSED',
+] as const;
+
+export type CoordinatorWakeStatus = (typeof COORDINATOR_WAKE_STATUSES)[number];
+
+/**
  * What the fact is about. `CRITERION` has no row of its own — an acceptance criterion is a line of
  * the project's `acceptance_criteria` text, identified by `parseCriteria`'s content key — which is
  * why `subjectId` below is text rather than a uuid, exactly as `project_blocker.subject_id` is.

@@ -28,10 +28,12 @@ export const CRITERION_UNLANDED_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLE
  * keeping the two agreeing.
  *
  * What has changed is that rule's answer, not where it is asked. A criterion whose serving work is
- * all DONE and whose result is not known to be on the default branch now opens a session — §2.1
- * there says why the fact reporting the landing is the one that gets it. This consumer is what the
- * OTHER case ends against: the criterion whose receipts arrived between the derivation of this fact
- * and its delivery, which is a merge nobody owes any more and a person can still read about.
+ * all DONE and whose result is not known to be on the default branch is now handed to the project's
+ * standing coordinator conversation — §2.1 there says why the fact reporting the landing is the one
+ * that gets a coordinator at all, and §2.2 why the one it gets is the conversation that already
+ * exists rather than a session opened for it. This consumer is what the OTHER case ends against:
+ * the criterion whose receipts arrived between the derivation of this fact and its delivery, which
+ * is a merge nobody owes any more and a person can still read about.
  */
 export const CRITERION_UNLANDED_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 
@@ -39,7 +41,14 @@ export const CRITERION_UNLANDED_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX
 export interface CriterionUnlandedDelivery {
   /** The criterion's wake subject — `<projectId>:<criterionKey>`, which is not any task's id. */
   criterionSubjectId: string;
-  outcome: 'CONSUMED' | 'ALREADY_AWAKE' | 'REFUSED' | 'OPENED' | 'ALREADY_OPEN';
+  outcome:
+    | 'CONSUMED'
+    | 'ALREADY_AWAKE'
+    | 'REFUSED'
+    | 'OPENED'
+    | 'ALREADY_OPEN'
+    | 'DELIVERED'
+    | 'ALREADY_DELIVERED';
   refusalCode?: string;
 }
 

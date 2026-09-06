@@ -15,10 +15,11 @@ import type { CriterionLanding } from './project-criterion-landing';
  * NOT OPENING IS NOT A REFUSAL. `REFUSED` means the wake was not allowed — the switch is off, the
  * project is gone, the convergence ledger says this project is no longer converging — and it
  * releases the fact's idempotency key so the same fact may be delivered again. What this unit
- * decides is what an ALLOWED wake is spent on, and both of its answers are terminal states inside
- * 0174's partial unique index: the fact goes on holding its key either way. A reader of the ledger
- * can therefore tell the three apart — `REFUSED` was not permitted, `CONSUMED` was recorded and
- * nothing more, `SESSION_OPENED` was judged.
+ * decides is what an ALLOWED wake is spent on, and every one of its answers is a terminal state
+ * inside 0174's partial unique index: the fact goes on holding its key whichever it takes. A
+ * reader of the ledger can therefore tell them apart — `REFUSED` was not permitted, `CONSUMED` was
+ * recorded and nothing more, `SESSION_OPENED` was judged in a conversation opened for it, and
+ * `DELIVERED` was handed to the conversation this project already had (§2.2).
  *
  * §1 — THE INPUT IS A CRITERION'S COVERAGE, NOT A TASK'S STATUS
  * =============================================================
@@ -79,6 +80,31 @@ import type { CriterionLanding } from './project-criterion-landing';
  * selected by nothing at all — nothing is going to deliver that criterion, so every fact bearing
  * on it is answered whatever it was a report of.
  *
+ * §2.2 — A MERGE IS OWED TO THE COORDINATOR THAT EXISTS, NOT TO A NEW ONE
+ * =======================================================================
+ * §2.1 settles WHICH fact is worth waking somebody for. Who gets woken is a second question, and
+ * for this one fact the answer is not a fresh judgment session.
+ *
+ * `coordinator-judgment.service.ts` §0 argues that a JUDGMENT wants no continuity: the project's
+ * state is in the database, so a one-shot conversation judges it as well as a long one and is
+ * bounded, replayable and un-poisoned by its own earlier turns. That argument is about judging. It
+ * does not carry to MERGING, and the difference is the one §2 already turns on — a merge is an
+ * irreversible action owed exactly once, so two conversations that both believe they should
+ * perform it are two coordinators racing for one branch. A project that has a standing coordinator
+ * conversation has a row naming the one that is doing this work, and telling it is one message.
+ *
+ * The price is stated rather than hidden, because it is real and it is not solved here:
+ *
+ *   * a message is a NOTIFICATION, not an interrupt — Claude does not steer mid-turn, so a
+ *     conversation that is running a turn reads it afterwards. This is enough for a merge that is
+ *     already overdue and would not be enough for anything that had to stop what it interrupted;
+ *   * context is finite, and a message is charged to every later turn of that conversation for the
+ *     rest of its life. That is the reason this is one event kind and not every decisive fact:
+ *     everything else stays exactly as §2 left it;
+ *   * a message to a conversation nobody is watching is `HUMAN_INBOX` with extra steps. Changing
+ *     the carrier does not make delivery reliable, and nothing here claims it does — what the
+ *     ledger keeps is the fact, and a delivery that could not be made releases its key.
+ *
  * §3 — A FACT THAT BEARS ON NO CRITERION CHANGES NO CRITERION'S COVERAGE
  * =====================================================================
  * Work that declares no criterion is work whose end moves nothing this unit can reason about, so
@@ -125,10 +151,12 @@ export function criterionCoverage(
   return 'STRANDED';
 }
 
-/** What an authorized wake is spent on. Both are terminal; neither is a refusal. */
+/** What an authorized wake is spent on. All three are terminal; none of them is a refusal. */
 export type WakeDisposition =
   /** Open the one judgment session this fact gets. */
   | 'OPEN_JUDGMENT'
+  /** Hand it to the coordinator conversation this project already has. See §2.2. */
+  | 'DELIVER_TO_COORDINATOR'
   /** Leave the ledger row and stop. The fact is durable, ageable, and nobody is interrupted. */
   | 'RECORD_ONLY';
 
@@ -153,10 +181,17 @@ export interface CriterionState {
  * whatever the rest of the project looks like. It is asked first so that the answer for a stranded
  * criterion cannot depend on the second clause, on a receipt, or on which fact arrived.
  *
- * The second clause is §2.1's. It reads `!== 'LANDED'` rather than `=== 'UNKNOWN'` because that is
- * the question the merge receipts can answer: `CriterionLanding` has no `NOT_LANDED` — absence of
- * a receipt is absence of evidence — and what owes a merge is work that is not KNOWN to be on the
- * default branch, which is every value that is not `LANDED` however many of them there come to be.
+ * The second clause is §2.1's, and §2.2's is what it answers WITH. It reads `!== 'LANDED'` rather
+ * than `=== 'UNKNOWN'` because that is the question the merge receipts can answer:
+ * `CriterionLanding` has no `NOT_LANDED` — absence of a receipt is absence of evidence — and what
+ * owes a merge is work that is not KNOWN to be on the default branch, which is every value that is
+ * not `LANDED` however many of them there come to be.
+ *
+ * The two decisive answers are deliberately different values rather than one with a flag beside
+ * it. A stranded criterion needs a judgment and gets a conversation opened to make it; work that is
+ * merely off the branch needs an action performed once and goes to the conversation already
+ * performing them. Collapsing them would put this unit's caller in the position of asking the
+ * event a second time to find out which it meant.
  */
 export function wakeDisposition(
   event: CoordinatorWakeEvent,
@@ -166,7 +201,7 @@ export function wakeDisposition(
   if (event === 'CRITERION_UNLANDED' && criteria.some(
     (criterion) => criterion.coverage === 'BACKED' && criterion.landing !== 'LANDED',
   )) {
-    return 'OPEN_JUDGMENT';
+    return 'DELIVER_TO_COORDINATOR';
   }
   return 'RECORD_ONLY';
 }

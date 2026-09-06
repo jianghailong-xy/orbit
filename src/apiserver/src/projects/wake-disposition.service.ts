@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { WakeFact, criterionSubjectId } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
@@ -8,9 +9,23 @@ import { criterionKeyOf } from './project-acceptance';
 import { type CriterionWithLandingFacts, criterionLanding } from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
 
-/** What a fact that DID change the decision was spent on, for a caller that has to report it. */
+/**
+ * What a fact that DID change the decision was spent on, for a caller that has to report it.
+ *
+ * Two ways to be spent and therefore two ways to have already been: `OPENED`/`ALREADY_OPEN` came
+ * back from the unit that opens a judgment session, `DELIVERED`/`ALREADY_DELIVERED` from the one
+ * that hands the fact to the conversation the project already has. They are kept apart rather than
+ * folded into one word because they name different things having happened — a conversation that
+ * now exists, against a message on one that already did.
+ */
 export interface WakeSpend {
-  outcome: 'OPENED' | 'ALREADY_AWAKE' | 'ALREADY_OPEN' | 'REFUSED';
+  outcome:
+    | 'OPENED'
+    | 'ALREADY_OPEN'
+    | 'DELIVERED'
+    | 'ALREADY_DELIVERED'
+    | 'ALREADY_AWAKE'
+    | 'REFUSED';
   refusalCode?: string;
 }
 
@@ -32,7 +47,8 @@ export interface WakeSpend {
  * =============================
  * `CompletionInputRouter` records facts against named consumers and deliberately opens no session
  * of its own — a claim `completion-input.spec.ts` holds it to over its source. Opening one is
- * `CoordinatorJudgmentService`'s, and choosing between the two terminals is this unit's, which is
+ * `CoordinatorJudgmentService`'s, writing to the one this project already has is
+ * `CoordinatorDeliveryService`'s, and choosing between the three terminals is this unit's, which is
  * why the router asks and does not decide.
  */
 @Injectable()
@@ -40,20 +56,33 @@ export class WakeDispositionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
+    private readonly deliveries: CoordinatorDeliveryService,
   ) {}
 
   /**
-   * Open the one judgment session this fact justifies, or `null` when it justifies none.
+   * Spend the one decisive terminal this fact justifies, or `null` when it justifies none.
    *
    * `null` is the caller's instruction to record the fact and stop — NOT a refusal, and not a
    * failure. The authorizer is handed straight through rather than consulted here, so a wake the
    * coordinator's switch or the convergence ledger would refuse is refused on the same terms in
-   * both branches: this unit decides what an allowed wake is spent on and never whether it is
+   * every branch: this unit decides what an allowed wake is spent on and never whether it is
    * allowed.
+   *
+   * The name is older than the second decisive answer and is kept: what the caller asks is still
+   * "is this one worth acting on, and if so act on it", and WHICH action is exactly the thing this
+   * unit exists to keep out of the caller. `wake-disposition.ts` §2.2 is where the two differ.
    */
   async openIfDecisive(fact: WakeFact, authorize: WakeAuthorizer): Promise<WakeSpend | null> {
     const criteria = await this.statesOf(fact);
-    if (wakeDisposition(fact.event, criteria) === 'RECORD_ONLY') return null;
+    const decided = wakeDisposition(fact.event, criteria);
+    if (decided === 'RECORD_ONLY') return null;
+
+    if (decided === 'DELIVER_TO_COORDINATOR') {
+      const delivered = await this.deliveries.deliver(fact, authorize);
+      return delivered.outcome === 'REFUSED'
+        ? { outcome: 'REFUSED', refusalCode: delivered.refusalCode }
+        : { outcome: delivered.outcome };
+    }
 
     const judged = await this.judgments.wake(fact, authorize);
     return judged.outcome === 'REFUSED'

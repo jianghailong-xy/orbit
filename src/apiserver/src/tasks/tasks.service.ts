@@ -4052,13 +4052,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // arm a judgment session derives no scope at all, so R5 refuses every task it files into
         // the project it was woken for, and unit T6's bounded `OPEN_TASK` would be a bound on
         // something nothing could do.
-        judgmentForWake: { select: { projectId: true } },
+        //
+        // Filtered to `SESSION_OPENED`, which is what "the wake this session was opened for"
+        // means since 0243: a fact DELIVERED to a standing coordinator names that conversation too,
+        // and that one is not what grants scope — the conversation already has its own through
+        // `coordinatorForProject`, and reading a delivered fact here would let a message decide
+        // authority.
+        coordinatorWakes: {
+          where: { status: 'SESSION_OPENED' }, select: { projectId: true }, take: 1,
+        },
         task: { select: { projectId: true } },
       },
     });
     if (!session) return null;
     const projectId = session.coordinatorForProject?.id
-      ?? session.judgmentForWake?.projectId
+      ?? session.coordinatorWakes[0]?.projectId
       ?? session.task?.projectId
       ?? null;
     if (!projectId) return null;
