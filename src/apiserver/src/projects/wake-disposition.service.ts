@@ -1,10 +1,21 @@
 import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  NO_COMPARABLE_EXIT_CODE,
+  TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
+  readExecutableAcceptanceOutcome,
+} from '../tasks/executable-acceptance-round';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { WakeFact, criterionSubjectId } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
+import { probeMainTip, type MainTipAnswer } from './main-tip-probe';
+import {
+  type MechanicalAction,
+  type RoundOutcome,
+  mechanicalAction,
+} from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
 import { type CriterionWithLandingFacts, criterionLanding } from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
@@ -50,6 +61,15 @@ export interface WakeSpend {
  * `CoordinatorJudgmentService`'s, writing to the one this project already has is
  * `CoordinatorDeliveryService`'s, and choosing between the three terminals is this unit's, which is
  * why the router asks and does not decide.
+ *
+ * THE SECOND HALF OF "SPENT ON"
+ * =============================
+ * `chooseAction` answers the other half of the same question: not which terminal this fact is
+ * worth, but which action the round it is about already settles without one. It is here rather
+ * than in a unit of its own because the two answers are about one fact at one moment, and a second
+ * service would be a second reader of the same rows with its own idea of when to ask them.
+ * Neither method authorizes anything, and both are called only for a fact its producer's own
+ * authorizer already allowed.
  */
 @Injectable()
 export class WakeDispositionService {
@@ -88,6 +108,69 @@ export class WakeDispositionService {
     return judged.outcome === 'REFUSED'
       ? { outcome: 'REFUSED', refusalCode: judged.refusalCode }
       : { outcome: judged.outcome };
+  }
+
+  /**
+   * The mechanical action this authorized fact calls for, or `null` when nothing about it is
+   * mechanical.
+   *
+   * WHY THIS QUESTION LIVES BESIDE `openIfDecisive`
+   * ===============================================
+   * "What is an allowed wake spent on" is one question with two halves, and both are answered
+   * here so that neither can be answered twice. `openIfDecisive` decides which terminal the fact is
+   * worth — a judgment session, a message to the standing conversation, or the ledger row alone;
+   * this decides what the round it is about already settles without any of them. Neither is an
+   * authorization: a caller asks this only for a fact its producer's own authorizer already
+   * allowed, which is what makes "the switch is off, so no action is chosen" true by construction
+   * rather than by a second check of the same column.
+   *
+   * WHY THE OBSERVATIONS ARE READ HERE AND FOLDED THERE
+   * ===================================================
+   * `mechanical-disposition.ts` is a fold over three observations and cannot go and get them.
+   * Getting them is this method's whole body, and it is deliberately visible: a row, a count, and
+   * a check that is really run. Nothing is passed in but the fact, so no caller can hand this unit
+   * the answer it is supposed to find out.
+   *
+   * The probe is reached only from the branch that needs it — a round that came back with a code
+   * of its own and disagreed. A pass merges, and a round that did not come back is decided by
+   * concurrency, so neither spends a subprocess.
+   */
+  async chooseAction(fact: WakeFact): Promise<MechanicalAction | null> {
+    // A criterion whose finished work is off `main`. Every serving task reached DONE, and for
+    // EXECUTABLE work there is exactly one way to reach it: the declared command exited the
+    // declared code under the task's own row lock. That IS the round, so it is read as one rather
+    // than re-derived from a session that has long since ended.
+    if (fact.event === 'CRITERION_UNLANDED') {
+      return (await this.servingWorkPassed(fact))
+        ? mechanicalAction({ round: 'PASSED', concurrentRounds: 0, mainTip: 'UNKNOWN' })
+        : null;
+    }
+
+    if (fact.event !== 'ATTEMPT_ENDED_UNSETTLED') return null;
+
+    // The attempt's session id is this fact's subject version — `coordinator-wake.ts` §2 chose it
+    // precisely because it names one attempt and cannot move — and the session's `error` is the
+    // one place the round's two numbers survive the request that compared them.
+    const attempt = await this.prisma.session.findUnique({
+      where: { id: fact.subjectVersion },
+      select: { id: true, error: true, assignedRunnerId: true },
+    });
+    const reported = readExecutableAcceptanceOutcome(attempt?.error);
+    if (!attempt || !reported) return null;
+
+    const round: RoundOutcome = reported.actualExitCode === NO_COMPARABLE_EXIT_CODE
+      ? 'NO_COMPARABLE_RESULT'
+      : 'RAN_AND_DISAGREED';
+
+    return mechanicalAction({
+      round,
+      concurrentRounds: round === 'NO_COMPARABLE_RESULT'
+        ? await this.roundsAlongside(attempt.id, attempt.assignedRunnerId)
+        : 0,
+      mainTip: round === 'RAN_AND_DISAGREED'
+        ? await this.checkAtMainTip(fact.projectId, fact.subjectId)
+        : 'UNKNOWN',
+    });
   }
 
   /**
@@ -130,6 +213,106 @@ export class WakeDispositionService {
     }
 
     return [];
+  }
+
+  /**
+   * Whether this criterion's serving work is finished work whose finishing was a comparison.
+   *
+   * The fact's own predicate already says every serving task is DONE. This adds the half the fact
+   * does not carry: that each of them declared a command and a code, so "the round exited what it
+   * was asked to" is something that HAPPENED rather than something assumed. A criterion served by
+   * work that reached DONE another way is not a round, and this unit has nothing to say about it.
+   */
+  private async servingWorkPassed(fact: WakeFact): Promise<boolean> {
+    const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: fact.projectId },
+      select: {
+        id: true,
+        servingTasks: { select: { status: true, completionCriterion: true } },
+      },
+    });
+    const serving = stated
+      .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
+      .flatMap((row) => row.servingTasks);
+    return serving.length > 0
+      && serving.every((task) => task.status === 'DONE' && task.completionCriterion === 'EXECUTABLE');
+  }
+
+  /**
+   * How many other acceptance rounds were in flight while this one ran.
+   *
+   * COUNTED, NOT DECLARED
+   * =====================
+   * A round is a reserved shell turn: the server queues exactly one per attempt and marks it with
+   * `TASK_ACCEPTANCE_CLIENT_TURN_PREFIX`, which is how the door that compares exit codes knows a
+   * turn is one. So "was anything else running" is a question about rows — delivered before this
+   * round ended, and either still unanswered or answered after it started — and the answer moves
+   * when the world does, which is the whole reason `-1` is allowed to mean anything here.
+   *
+   * Bounded to the same runner on purpose. Two rounds on two machines do not contend for anything,
+   * and counting them would turn a busy account into a permanent excuse for every `-1`. A session
+   * with no runner cannot say what it shared a machine with, so it counts nothing.
+   */
+  private async roundsAlongside(
+    sessionId: string,
+    assignedRunnerId: string | null,
+  ): Promise<number> {
+    if (!assignedRunnerId) return 0;
+    const round = await this.prisma.conversationTurn.findFirst({
+      where: {
+        sessionId,
+        kind: 'shell',
+        clientTurnId: { startsWith: TASK_ACCEPTANCE_CLIENT_TURN_PREFIX },
+      },
+      orderBy: { seq: 'desc' },
+      select: { deliveredAt: true, answeredAt: true },
+    });
+    // Never delivered is not a round that ran, and a round with no start has no window for
+    // anything to overlap. Neither is an observation of concurrency, so neither is reported as one.
+    if (!round?.deliveredAt) return 0;
+    const ended = round.answeredAt ?? new Date();
+
+    return this.prisma.conversationTurn.count({
+      where: {
+        sessionId: { not: sessionId },
+        kind: 'shell',
+        clientTurnId: { startsWith: TASK_ACCEPTANCE_CLIENT_TURN_PREFIX },
+        session: { assignedRunnerId },
+        deliveredAt: { lte: ended },
+        OR: [{ answeredAt: null }, { answeredAt: { gte: round.deliveredAt } }],
+      },
+    });
+  }
+
+  /**
+   * Run this task's own declared check at the tip of the project's integration ref.
+   *
+   * The two inputs are rows: the task says what the check IS, and the project's primary codebase
+   * binding says which repository and which ref the tip is OF. `project_codebase` is the row that
+   * owns both — a second opinion about where a project's `main` lives is the ambiguity that
+   * contract exists to remove — so a project with no binding gets no answer rather than a guess
+   * about a repository nobody named.
+   */
+  private async checkAtMainTip(projectId: string, taskId: string): Promise<MainTipAnswer> {
+    const [task, codebase] = await Promise.all([
+      this.prisma.task.findUnique({
+        where: { id: taskId },
+        select: { acceptanceCommand: true, acceptanceExpectedExitCode: true },
+      }),
+      this.prisma.projectCodebase.findFirst({
+        where: { projectId, slot: 'primary' },
+        select: { canonicalRepoUrl: true, integrationRef: true },
+      }),
+    ]);
+    if (!task?.acceptanceCommand || task.acceptanceExpectedExitCode == null) return 'UNKNOWN';
+    if (!codebase) return 'UNKNOWN';
+
+    return probeMainTip({
+      repoUrl: codebase.canonicalRepoUrl,
+      ref: codebase.integrationRef,
+      command: task.acceptanceCommand,
+      expectedExitCode: task.acceptanceExpectedExitCode,
+    });
   }
 }
 

@@ -16,6 +16,7 @@ import {
   CriterionUnlandedProducer,
   type CriterionUnlandedDelivery,
 } from './criterion-unlanded.producer';
+import type { MechanicalAction } from './mechanical-disposition';
 import {
   ProjectTasksSettledProducer,
   type SettledProjectDelivery,
@@ -27,6 +28,16 @@ import {
 import { WakeDispositionService, type WakeSpend } from './wake-disposition.service';
 
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
+
+/**
+ * One spent fact: where it ended, and the action it settles.
+ *
+ * The action rides beside the outcome rather than replacing it, because they answer different
+ * questions — "is this fact recorded" and "what does the round it is about call for" — and a
+ * caller that only wants the first must not have to know the second exists.
+ */
+export type SpentFact =
+  (CompletionInputRouteOutcome | WakeSpend) & { action?: MechanicalAction };
 
 export type CompletionInputRouteOutcome =
   | { outcome: 'CONSUMED'; wakeId: string; idempotencyKey: string; consumer: CompletionInputConsumer }
@@ -62,8 +73,8 @@ export class CompletionInputRouter {
   ) {}
 
   /**
-   * Spend one derived fact: record it always, and reach a coordinator only when it changes what
-   * that coordinator would decide.
+   * Spend one derived fact: record it always, reach a coordinator only when it changes what that
+   * coordinator would decide, and say what the round it is about already settles.
    *
    * The order is the whole claim. `openIfDecisive` answers first and `null` means "record it" —
    * so a fact that changes nothing still reaches the ledger through `route` below and still ends
@@ -72,14 +83,21 @@ export class CompletionInputRouter {
    * unit's question too, and this door does not learn the answer beyond reporting it. No branch is
    * a refusal: an unauthorized wake is refused inside whichever one it took, by the producer's own
    * authorizer, which is handed to all of them unchanged.
+   *
+   * The action comes LAST and only for a fact that was allowed. A refusal — the coordinator's
+   * switch, a deleted project, a convergence ledger that has stopped, no conversation to deliver
+   * to — means nobody may act on this fact at all, and choosing an action anyway would compute a
+   * decision the refusal exists to prevent (and, for the reds, spend a real check finding out). So
+   * `REFUSED` and `ALREADY_AWAKE` carry no action: the first was not permitted, and the second
+   * belongs to whoever won the key.
    */
   private async spend(
     fact: WakeFact,
     consumer: CompletionInputConsumer,
     authorize: WakeAuthorizer,
-  ): Promise<CompletionInputRouteOutcome | WakeSpend> {
+  ): Promise<SpentFact> {
     const opened = await this.disposition.openIfDecisive(fact, authorize);
-    return opened ?? this.route(
+    const outcome = opened ?? await this.route(
       fact,
       consumer,
       // No side effect beyond the ledger row, so `route`'s own no-op delivery is taken. The
@@ -87,6 +105,9 @@ export class CompletionInputRouter {
       undefined,
       authorize,
     );
+    if (outcome.outcome === 'REFUSED' || outcome.outcome === 'ALREADY_AWAKE') return outcome;
+    const action = await this.disposition.chooseAction(fact);
+    return action ? { ...outcome, action } : outcome;
   }
 
   async route(
@@ -161,6 +182,7 @@ export class CompletionInputRouter {
         event: fact.event,
         outcome: routed.outcome,
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
+        ...(routed.action ? { action: routed.action } : {}),
       });
     }
     return deliveries;
@@ -199,6 +221,7 @@ export class CompletionInputRouter {
         criterionSubjectId: fact.subjectId,
         outcome: routed.outcome,
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
+        ...(routed.action ? { action: routed.action } : {}),
       });
     }
     return deliveries;
@@ -234,6 +257,7 @@ export class CompletionInputRouter {
         criterionSubjectId: fact.subjectId,
         outcome: routed.outcome,
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
+        ...(routed.action ? { action: routed.action } : {}),
       });
     }
     return deliveries;
@@ -247,4 +271,6 @@ export interface TaskExceptionDelivery {
   /** Both terminals: `CONSUMED` for a fact that was recorded, `OPENED` for one that was judged. */
   outcome: CompletionInputRouteOutcome['outcome'] | WakeSpend['outcome'];
   refusalCode?: string;
+  /** What the round this fact is about settles without a judgement, when anything does. */
+  action?: MechanicalAction;
 }

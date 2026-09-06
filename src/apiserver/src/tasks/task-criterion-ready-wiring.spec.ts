@@ -62,7 +62,10 @@ function routerOver(
     // The terminal chooser, answering RECORD_ONLY for everything: what this file asks is
     // which authorizer the door hands the LEDGER, and a fact routed to a judgment session
     // never reaches the ledger double at all.
-    { openIfDecisive: async () => null } as unknown as WakeDispositionService,
+    {
+      openIfDecisive: async () => null,
+      chooseAction: async () => null,
+    } as unknown as WakeDispositionService,
     { factsFor: () => { throw new Error('not this door'); } } as unknown as CriterionUnlandedProducer,
   );
 }

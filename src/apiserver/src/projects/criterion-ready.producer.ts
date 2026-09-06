@@ -5,6 +5,7 @@ import type { CompletionInputConsumer } from './completion-input';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { WakeFact, criterionReadyFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
+import type { MechanicalAction } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
 
 /** The project disappeared between the committed criterion read and the wake's authorization. */
@@ -51,6 +52,8 @@ export interface CriterionReadyDelivery {
     | 'DELIVERED'
     | 'ALREADY_DELIVERED';
   refusalCode?: string;
+  /** What the round behind this fact settles without a judgement, when anything does. */
+  action?: MechanicalAction;
 }
 
 /**

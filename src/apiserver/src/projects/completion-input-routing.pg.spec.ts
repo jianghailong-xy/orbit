@@ -73,6 +73,9 @@ const noWakeDisposition = {
   openIfDecisive: () => {
     throw new Error('N7 evidence routing must not choose a terminal for its facts');
   },
+  chooseAction: () => {
+    throw new Error('N7 evidence routing must not choose an action for its facts');
+  },
 } as unknown as WakeDispositionService;
 const suite = URL ? test : test.skip;
 

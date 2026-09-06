@@ -128,6 +128,10 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import {
+  TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
+  executableAcceptanceFailureReason,
+} from '../tasks/executable-acceptance-round';
+import {
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
   reclaimStalledTask,
@@ -271,11 +275,6 @@ function supportsSparseCoordinatorContext(
       : null;
   return capability != null && capabilities.includes(capability);
 }
-
-// Existing ConversationTurn is the whole L0 execution queue. The reserved client-turn prefix
-// marks provenance and binds the expected exit code: one successful message mints one shell turn,
-// and its unique key makes a lost /turn-complete response unable to enqueue the command twice.
-const TASK_ACCEPTANCE_CLIENT_TURN_PREFIX = 'system:task-acceptance:v1:';
 
 // A normal task starts OPEN and stays there while its run does the work. IN_PROGRESS exists only
 // for the retry of a prior FAILED run. Neither is an assertion about completion, so both are valid
@@ -3090,7 +3089,7 @@ export class RunnerApiController {
             // The one place the two numbers are written down, and it is the session's own run
             // outcome rather than a record about the task. Diagnosis is reading the session.
             acceptanceFailureReason =
-              `acceptance command exited ${actualExitCode}; expected ${expectedExitCode}`;
+              executableAcceptanceFailureReason(actualExitCode, expectedExitCode);
           }
         }
       }

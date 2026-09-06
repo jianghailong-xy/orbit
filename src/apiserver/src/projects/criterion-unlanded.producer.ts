@@ -5,6 +5,7 @@ import type { CompletionInputConsumer } from './completion-input';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { WakeFact, criterionUnlandedFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
+import type { MechanicalAction } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
 import { criterionLanding } from './project-criterion-landing';
 
@@ -50,6 +51,8 @@ export interface CriterionUnlandedDelivery {
     | 'DELIVERED'
     | 'ALREADY_DELIVERED';
   refusalCode?: string;
+  /** What the round behind this fact settles without a judgement, when anything does. */
+  action?: MechanicalAction;
 }
 
 /**
