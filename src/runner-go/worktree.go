@@ -613,12 +613,211 @@ func shortSha(sha string) string {
 	return sha
 }
 
+// refuseSource records why this run may not start and returns the empty exec dir that says so.
+//
+// It is the ONLY way out of the new-style path other than a real worktree. Every one of the Legacy
+// degradations answers the same questions with a *dir to run in*, which is what makes them
+// degradations: the caller cannot tell "isolated" from "sharing the user's checkout" by looking at
+// the return value. Here the two are different values, and job.SourceRefusal carries §10.1's stable
+// code so the reason survives past the log line.
+func refuseSource(job *ClaimedSession, code string, detail map[string]interface{}) string {
+	detail["sessionId"] = job.SessionID
+	job.SourceRefusal = &SourcePinRefusal{Code: code, Detail: detail}
+	logln(fmt.Sprintf("session %s — refusing to start: %s %v", job.SessionID, code, detail))
+	return ""
+}
+
+// setupSourceWorktree is the new-style path: the admission gate's remaining levels, then a checkout
+// forked from the commit the control plane froze (§5, §6.3 steps 4–5).
+//
+// It shares no exit with the Legacy path. That is the point of SR33: engine start is a conjunction
+// — SOURCE is PINNED *and* this machine's checkout stands on that commit — so every way this can
+// fail returns "" with a code, and none of them returns baseDir. Concretely, nothing below creates
+// baseDir, runs `git init`, reads `HEAD`, or writes job.IsolationStatus with anything but
+// isoWorktree; TestNewStylePathCannotReachAnySharedNoGitExit is the standing proof of that.
+//
+// The order is §5's, and each level's reason for its position is in the contract rather than
+// repeated here: G1 identity, G4 object, G6 isolation. G5 (dependency containment) is not run by
+// this build — see the gap note in setupWorktree's dispatch.
+func setupSourceWorktree(job *ClaimedSession, baseDir string) string {
+	src := job.Source
+	// SR33's first half, restated where the second half is enforced. ensureSourcePinned already
+	// guarantees it upstream; a run that got here without a frozen commit has no baseline at all,
+	// which is what BASE_SHA_UNAVAILABLE says.
+	if src.State != sourceStatePinned || !fullSha.MatchString(src.BaseSha) {
+		return refuseSource(job, sourceRefusalShaUnavailable, map[string]interface{}{
+			"sourceState": src.State, "baseSha": src.BaseSha,
+			"reason": "the run reached worktree creation without a frozen base commit",
+		})
+	}
+
+	// A workspace that is not a checkout cannot be shown to be the right repository, so G1 has
+	// nothing to decide and this is reported where §10.1 puts it: WORKTREE_REQUIRED's first
+	// sub-cause. It does not offend SR24's ordering — a machine whose directory is not a checkout
+	// is exactly the workspace-level problem that moving the work elsewhere fixes.
+	if !isGitRepo(baseDir) {
+		return refuseSource(job, sourceRefusalWorktreeRequired, map[string]interface{}{
+			"cause": "not-a-git-repo", "workDir": baseDir,
+			"reason": "a new-style run may not be given a checkout this runner would have to create",
+		})
+	}
+	repoRoot, err := git(baseDir, "rev-parse", "--show-toplevel")
+	if err != nil || repoRoot == "" {
+		return refuseSource(job, sourceRefusalWorktreeRequired, map[string]interface{}{
+			"cause": "not-a-git-repo", "workDir": baseDir, "stderr": gitStderr(err),
+		})
+	}
+
+	// G1. Matched, never inherited: if this checkout is not the repository the snapshot named, the
+	// run stops here rather than continuing against whatever that workspace does contain.
+	if refusal := repoIdentityRefusal(repoRoot, src); refusal != nil {
+		refusal.Detail["workDir"] = baseDir
+		return refuseSource(job, refusal.Code, refusal.Detail)
+	}
+
+	// G4. The baseline is an OBJECT, not a ref (SR42), and a takeover fetches that object rather
+	// than whatever the ref points at now (SR41) — "the tip today" is a different run.
+	if refusal := fetchBaseObject(repoRoot, src); refusal != nil {
+		refusal.Detail["workDir"] = baseDir
+		return refuseSource(job, refusal.Code, refusal.Detail)
+	}
+
+	// G6. An empty Branch is the server saying this session gets no isolation, which a new-style
+	// run may not accept: sharing the user's checkout IS the degradation.
+	if job.Branch == "" {
+		return refuseSource(job, sourceRefusalWorktreeRequired, map[string]interface{}{
+			"cause": "isolation-disabled", "workDir": baseDir,
+			"reason": "this session was dispatched without a branch to isolate on",
+		})
+	}
+
+	wtPath := filepath.Join(worktreesDir(), job.SessionID)
+	rel, _ := filepath.Rel(repoRoot, baseDir)
+	if rel == "" || rel == "." || strings.HasPrefix(rel, "..") {
+		rel = "."
+	}
+	execDir := filepath.Join(wtPath, rel)
+
+	// Resume / reclaim / takeover-onto-an-existing-checkout (§6.4 rows 3 and 4). The pin is READ,
+	// never re-derived, and here it is what the existing checkout is CHECKED against: a checkout
+	// whose history does not contain the frozen commit is not standing on this run's baseline, and
+	// SR33 has no third answer for that.
+	if isGitRepo(wtPath) {
+		if _, err := git(wtPath, "merge-base", "--is-ancestor", src.BaseSha, "HEAD"); err != nil {
+			return refuseSource(job, sourceRefusalWorktreeRequired, map[string]interface{}{
+				"cause": "checkout-off-base", "worktree": wtPath, "baseSha": src.BaseSha,
+				"stderr": gitStderr(err),
+			})
+		}
+		base, _ := git(repoRoot, "rev-parse", baseRefName(job.SessionID))
+		base = resolveBaseSha(repoRoot, job.SessionID, job.Branch, base)
+		if base == "" {
+			base = src.BaseSha
+		}
+		job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
+		job.IsolationStatus = isoWorktree
+		logln(fmt.Sprintf("session %s — re-attached worktree %s (branch %s, pinned %s)",
+			job.SessionID, wtPath, job.Branch, shortSha(src.BaseSha)))
+		return execDir
+	}
+
+	// The fork point is the pin, full stop. Not the workspace's HEAD, not its merge target, not
+	// the integration ref: the shared checkout may be on another branch, behind, ahead or dirty,
+	// and none of that is an input here. Nor is it an output — the branch is created inside the
+	// new worktree, so the shared checkout is neither moved nor written to.
+	base := src.BaseSha
+	if branchExists(repoRoot, job.Branch) {
+		// A revived session's branch already carries commits made on this baseline; the frozen
+		// commit must still be in its history or the checkout would not stand on it.
+		if _, err := git(repoRoot, "merge-base", "--is-ancestor", base, job.Branch); err != nil {
+			return refuseSource(job, sourceRefusalWorktreeRequired, map[string]interface{}{
+				"cause": "branch-off-base", "branch": job.Branch, "baseSha": base,
+				"stderr": gitStderr(err),
+			})
+		}
+		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
+		_, err = git(repoRoot, "worktree", "add", wtPath, job.Branch)
+	} else {
+		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
+		_, err = git(repoRoot, "worktree", "add", "-b", job.Branch, wtPath, base)
+	}
+	if err != nil {
+		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
+		return refuseSource(job, sourceRefusalWorktreeRequired, map[string]interface{}{
+			"cause": "worktree-add-failed", "worktree": wtPath, "branch": job.Branch,
+			"baseSha": base, "stderr": gitStderr(err),
+		})
+	}
+	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
+	job.IsolationStatus = isoWorktree
+	logln(fmt.Sprintf("session %s — isolated in worktree %s (branch %s @ pinned %s)",
+		job.SessionID, wtPath, job.Branch, shortSha(base)))
+	return execDir
+}
+
+// fetchBaseObject answers gate G4: is the frozen commit an object THIS machine has?
+//
+// SR42 makes the test object presence rather than ref existence, so a baseline whose ref was
+// force-pushed away is still a usable baseline — it is a commit that really existed and this run
+// really started from it. When the object is absent the authority is asked for it, and only for
+// it: the ref is a fallback way to REACH that object, never a substitute for it (SR41).
+func fetchBaseObject(repoRoot string, src *SessionSource) *SourcePinRefusal {
+	sha := src.BaseSha
+	present := func() bool {
+		_, err := git(repoRoot, "cat-file", "-e", sha+"^{commit}")
+		return err == nil
+	}
+	if present() {
+		return nil
+	}
+	attempted := []string{}
+	if src.RefAuthority == refAuthorityRemote {
+		remote := src.RemoteName
+		if remote == "" {
+			remote = "origin"
+		}
+		// Asking for the commit itself is the honest request; many servers refuse it
+		// (uploadpack.allowReachableSHA1InWant), so the ref that was meant to contain it is the
+		// second try — and the object, not the ref's tip, is still what decides.
+		for _, spec := range []string{sha, src.Ref} {
+			if spec == "" {
+				continue
+			}
+			attempted = append(attempted, remote+" "+spec)
+			if _, err := git(repoRoot, "fetch", "--no-tags", remote, spec); err == nil && present() {
+				return nil
+			}
+		}
+	}
+	return &SourcePinRefusal{
+		Code: sourceRefusalShaUnavailable,
+		Detail: map[string]interface{}{
+			"sha": sha, "sourceKind": src.Kind, "refAuthority": src.RefAuthority,
+			"fetched": attempted,
+		},
+	}
+}
+
 // setupWorktree ensures a per-session git worktree exists for job and returns the dir
 // claude should run in, creating baseDir first when it isn't there yet. When job has no
 // branch, baseDir isn't a git repo, or the repo has no commits, it returns baseDir
 // unchanged (shared-dir fallback) and records why on job.IsolationStatus. Otherwise it
 // sets job.WT and returns the checkout's exec dir.
+//
+// That description is the LEGACY path, and it stays true of it byte for byte (SR45/SR46). A
+// new-style session — one whose stored sourceState is not UNBOUND, which is what needsSourcePin
+// reads, never a guess from "does this have a projectId" — takes setupSourceWorktree instead and
+// gets none of it: no dir creation, no `git init`, no HEAD, no shared fallback, and "" plus a
+// stable code where the Legacy path would have degraded.
+//
+// Not yet run by either path: G5, dependency containment. `Source.RequiredContains` arrives on the
+// wire and nothing reads it, so a baseline missing a prerequisite's commit is admitted here and
+// refused nowhere. That belongs to the checkpoint/closure task; it is named rather than silently
+// absent because a gate with a hole in it should not read as a gate that is complete.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
+	if needsSourcePin(job) {
+		return setupSourceWorktree(job, baseDir)
+	}
 	// An agent's workDir is a path the user typed against a machine the control plane
 	// cannot see, so it may simply not be there yet: a fresh runner, a reinstalled box, or
 	// a project the session is meant to start ("create the dir if it doesn't exist" is a

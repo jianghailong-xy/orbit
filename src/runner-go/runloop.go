@@ -1225,6 +1225,17 @@ func runLoop(cfg *RunnerConfig) bool {
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
 		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
+		// SR33's second half. The pin succeeded, so the run got this far; the checkout did not,
+		// so it stops here — unregistered, unspawned, and with nothing written into the user's
+		// shared checkout. The Legacy path cannot reach this: it has no refusal to set.
+		if job.SourceRefusal != nil {
+			logln("session", job.SessionID, "— not starting:", job.SourceRefusal.Code)
+			forgetMergeTarget(job.SessionID)
+			if err := removeOrchestrationCredential(job.SessionID); err != nil {
+				logln("cannot remove orchestration credential for", job.SessionID+":", err)
+			}
+			return
+		}
 		// A resumed/reclaimed session whose last act was a park checkpoint: undo it so the
 		// agent continues from an uncommitted working tree, not a committed snapshot — no
 		// stray checkpoint left in history. No-op for fresh sessions and permanent ends.

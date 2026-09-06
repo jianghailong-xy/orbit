@@ -597,6 +597,13 @@ type ClaimedSession struct {
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
 	WT              *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
+	// SourceRefusal is the admission gate's answer when a new-style run may not start at all
+	// (§5, §10.1) — the one outcome the Legacy path has no equivalent of, because there every
+	// failure still returned a directory to run in. Non-nil means no engine is spawned and the
+	// shared checkout was not written to; it carries the stable code that says which level said no.
+	// Runner-internal: by this point the pin is frozen, so there is nothing left to send to
+	// /source/pin, and reporting it onward is the control plane's SOURCE_UNRESOLVED blocker (SR50).
+	SourceRefusal *SourcePinRefusal `json:"-"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen
