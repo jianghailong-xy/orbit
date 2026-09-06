@@ -30,8 +30,18 @@ unchanged replay cannot run a consumer twice; a new evidence/result/verdict vers
 There is no scheduler, timeout, startup sweep or elapsed-time interpretation in this path.
 `AWAITING_INPUT` neither refuses nor delays evidence/request routing. EVIDENCE_JUDGMENT consumers are
 people and use the request/inbox surface. Only VERIFICATION uses its deterministic verifier Task
-and the ordinary one-shot task execution machinery; fact routing never steers the Project's
-person-opened `coordinator_session_id` conversation.
+and the ordinary one-shot task execution machinery.
+
+Since migration 0243 one fact kind, and one only, does reach the Project's person-opened
+`coordinator_session_id` conversation: `CRITERION_UNLANDED`, whose work is finished and is on
+nobody's default branch. What it needs done is a merge — irreversible and owed exactly once — so
+opening a conversation per such fact would mean two coordinators racing for one branch, and the
+conversation already coordinating the project is the one that should be told. The wake ends
+`DELIVERED`, naming that conversation and creating no Session row, and the message is a NEXT_TURN
+message rather than a steer: a conversation running a turn reads it after that turn ends. Delivery
+is refused, with the key released, when there is no such conversation, when it has ended, and when
+it has not yet read the last thing it was told. Every other fact kind is unchanged — recorded, or
+judged in a one-shot session opened for it — and nothing here steers a running turn.
 
 The N6 exit for the durable open question remains `OPEN_JUDGMENT_REQUEST`: it closes when the
 bound N11 request is `DECIDED` or `SUPERSEDED`. Wake rows are delivery receipts, not open blockers,
