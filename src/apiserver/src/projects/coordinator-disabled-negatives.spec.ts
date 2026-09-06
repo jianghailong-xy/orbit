@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Four kinds, nine controls. The mapping is many-to-one in both directions on purpose: one kind is
+ * Five kinds, ten controls. The mapping is many-to-one in both directions on purpose: one kind is
  * reached by more than one write path and is controlled once per path, and one control can cover
  * two kinds when the same run drives both.
  */
@@ -194,6 +194,23 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'tasks/task-criterion-ready-delivery.pg.spec.ts',
         test: 'a ready criterion under a switched-off coordinator produces nothing and wakes nobody',
+      },
+    ],
+  },
+  {
+    // The same unit as the kind above and the same control shape, over one clause more: whether a
+    // merge receipt puts that finished work on the default branch. Its receipts are written by a
+    // path the task write path does not touch, which changes nothing about the switch — the
+    // producer's own authorizer refuses on the column before the convergence ledger is charged.
+    event: 'CRITERION_UNLANDED',
+    producedBy: [
+      'projects/coordinator-wake.ts#criterionUnlandedFact',
+      'projects/criterion-unlanded.producer.ts#factsFor',
+    ],
+    negatives: [
+      {
+        spec: 'tasks/task-criterion-unlanded-delivery.pg.spec.ts',
+        test: 'an unlanded criterion under a switched-off coordinator produces nothing and wakes nobody',
       },
     ],
   },
