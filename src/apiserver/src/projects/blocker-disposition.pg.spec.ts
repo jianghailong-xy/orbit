@@ -215,11 +215,22 @@ interface Fixture {
   runnerId: string;
   workspaceId: string;
   projectId: string;
+  /** The conversation this project is already coordinated from, parked and waiting. */
+  coordinatorSessionId: string;
   /** The one tree every delivery in this fixture is made in. */
   treeDir: string;
 }
 
-/** One owner, one runner, one project, and one real repository to deliver into. */
+/**
+ * One owner, one runner, one project with a standing coordinator conversation, and one real
+ * repository to deliver into.
+ *
+ * The conversation is not scenery. A criterion whose finished work is off `main` is DELIVERED to
+ * it — told, in those words, to merge — so a fixture without one would refuse every fact on
+ * "there is nobody to deliver to" and never reach anything this file is about. With one, the two
+ * outcomes are distinguishable: an ordinary delivery reaches the conversation, and one that has to
+ * stop does not.
+ */
 async function fixture(
   stack: Stack,
   label: string,
@@ -252,6 +263,35 @@ async function fixture(
   await db.workspace.create({
     data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true },
   });
+  const coordinatorSessionId = randomUUID();
+  await db.session.create({
+    data: {
+      id: coordinatorSessionId,
+      ownerId,
+      creatorId: ownerId,
+      workspaceId,
+      assignedRunnerId: runnerId,
+      title: `协调：${label}`,
+      prompt: `协调：${label}`,
+      provider: 'claude',
+      status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      titleManagedByProject: true,
+    },
+  });
+  // A conversation somebody has been talking to already has its opening prompt on the row as a
+  // turn, so the delivery below is never the thing that seeds one. Counted back out by
+  // `messagesTo`, which is why it is written here rather than left to `createTurn`.
+  await db.conversationTurn.create({
+    data: {
+      sessionId: coordinatorSessionId,
+      seq: 1,
+      clientTurnId: SessionsService.initialTurnClientId(coordinatorSessionId),
+      kind: 'message',
+      content: `协调：${label}`,
+      status: 'ANSWERED',
+    },
+  });
   await db.project.create({
     data: {
       id: projectId,
@@ -259,10 +299,13 @@ async function fixture(
       title: `${label} 必须停下来的项目`,
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: workspaceId,
+      coordinatorSessionId,
     },
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
-  return { ownerId, runnerId, workspaceId, projectId, treeDir: repository(label) };
+  return {
+    ownerId, runnerId, workspaceId, projectId, coordinatorSessionId, treeDir: repository(label),
+  };
 }
 
 function teardown(f: Fixture): void {
@@ -506,6 +549,16 @@ const landedReceipts = (db: PrismaClient, projectId: string) =>
     where: { projectId, result: { in: ['MERGED', 'ALREADY_MERGED'] } },
   });
 
+/**
+ * What the standing coordinator conversation was told, beyond the prompt it opened with.
+ *
+ * The message a delivered `CRITERION_UNLANDED` fact carries is an instruction to merge, in that
+ * order — so counting these is how "nothing was told to merge this" becomes observable rather than
+ * asserted.
+ */
+const messagesTo = async (db: PrismaClient, sessionId: string) =>
+  (await db.conversationTurn.count({ where: { sessionId } })) - 1;
+
 /** Whether this task was started — the observable half of "the next one was released". */
 const sessionsOf = (db: PrismaClient, taskId: string) =>
   db.session.count({ where: { taskId, deletedAt: null } });
@@ -607,7 +660,12 @@ test('four deliveries a machine may not settle — an argued exemption, a moved 
         const one = await deliverCase(stack, `stop-${which.toLowerCase()}`, which);
         delivered.push(one);
         const spent = criterionFor(stack, one.f, one.criterionKey);
-        assert.equal(spent[0]?.outcome, 'CONSUMED', `${which}: the fact was not delivered`);
+        // Recorded, not DELIVERED. The standing conversation is the thing that performs merges,
+        // and what it is sent is an instruction to perform one; case (b)'s control shows the same
+        // fact reach it when nothing has to stop.
+        assert.equal(spent[0]?.outcome, 'CONSUMED', `${which}: the fact took the wrong terminal`);
+        assert.equal(await messagesTo(stack.db, one.f.coordinatorSessionId), 0,
+          `${which}: a delivery that had to stop still told the coordinator to merge it`);
 
         // 1 — its own kind, and exactly one row for it.
         assert.equal(spent[0]?.blockerKind, EXPECTED_KIND[which],
@@ -738,6 +796,8 @@ test('the file set is the input: two deliveries in one project, with one declara
         'the stopped delivery released the next task anyway');
       assert.equal(await sessionsOf(stack.db, kept), 0,
         'the stopped delivery started the other half of this pair');
+      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 0,
+        'the stopped delivery told the coordinator to merge it anyway');
 
       const keptFiles = stage(f.treeDir, IN_SCOPE);
       await finishRound(stack, f, await queueRound(stack, f, kept, 'inside-scope'), keptFiles);
@@ -766,11 +826,13 @@ test('the file set is the input: two deliveries in one project, with one declara
       // it settles the very action the mechanical table has for a round that passed, and the next
       // task starts. Without this half, every "it did not stop" above would be true of a unit
       // that was never wired up.
-      assert.equal(keptSpent?.outcome, 'CONSUMED', 'the in-scope fact was not delivered');
+      assert.equal(keptSpent?.outcome, 'DELIVERED', 'the in-scope fact did not reach the coordinator');
       assert.equal(keptSpent?.blockerKind, undefined,
         'a delivery that stayed inside its declaration was stopped anyway');
       assert.equal(keptSpent?.action, 'MERGE_AND_RELEASE_NEXT',
         'the in-scope control settled nothing either — this pair would be green over a dead unit');
+      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 1,
+        'the coordinator was told nothing even by the delivery that stopped at nothing');
       assert.notEqual(keptSpent?.blockerKind, strayedSpent?.blockerKind,
         'the answer did not move when the file set did');
       assert.equal(await sessionsOf(stack.db, chore), 1,
@@ -815,6 +877,8 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
         const spent = criterionFor(stack, one.f, one.criterionKey);
         assert.equal(spent.length, 1, `${which}: the fact was delivered more than once`);
         assert.equal(spent[0]?.outcome, 'REFUSED', `${which}: the delivery did not report a refusal`);
+        assert.equal(await messagesTo(stack.db, one.f.coordinatorSessionId), 0,
+          `${which}: a switched-off coordinator was written to`);
         assert.equal(spent[0]?.blockerKind, undefined,
           `${which}: a switched-off coordinator raised a blocker anyway`);
         assert.equal(spent[0]?.action, undefined,
@@ -840,6 +904,8 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
       control = await deliverCase(stack, 'on-scope', 'SCOPE');
       const [stopped] = criterionFor(stack, control.f, control.criterionKey);
       assert.equal(stopped?.outcome, 'CONSUMED', 'the control fact was not delivered');
+      assert.equal(await messagesTo(stack.db, control.f.coordinatorSessionId), 0,
+        'the control told its coordinator to merge a delivery that had to stop');
       assert.equal(
         stopped?.blockerKind, EXPECTED_KIND.SCOPE,
         'the control delivery stopped at nothing either — this negative would be green over a '

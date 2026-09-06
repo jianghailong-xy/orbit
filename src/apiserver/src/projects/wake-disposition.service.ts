@@ -133,6 +133,19 @@ export class WakeDispositionService {
     if (decided === 'RECORD_ONLY') return null;
 
     if (decided === 'DELIVER_TO_COORDINATOR') {
+      // ...unless a person has to answer first. What the standing conversation is sent is an
+      // instruction to MERGE, in that order, and that conversation is the thing that performs
+      // merges — so telling it to merge a delivery whose ruler is in dispute, whose files nobody
+      // asked for, or whose branch git already refused would be routing the merge around the
+      // blocker rather than stopping it. RECORD_ONLY is the existing answer for "this fact is not
+      // worth waking anybody for", and it is the right one here: the fact stays in the ledger, and
+      // `raiseBlockerIfNeeded` puts the question to the person on the way back through `spend`.
+      //
+      // A read, not a decision about permission: it takes the same branch either way, both
+      // branches end in a status inside 0174's partial unique index, and nothing is WRITTEN here.
+      // The blocker itself is raised only after this fact's own authorizer allowed it, which is
+      // what keeps a switched-off coordinator from being handed a question it never asked.
+      if (await this.blockerFor(fact)) return null;
       const delivered = await this.deliveries.deliver(fact, authorize);
       return delivered.outcome === 'REFUSED'
         ? { outcome: 'REFUSED', refusalCode: delivered.refusalCode }
@@ -369,16 +382,31 @@ export class WakeDispositionService {
    * anyway. The order is fixed so that two readings of the same world ask the same question.
    */
   async raiseBlockerIfNeeded(fact: WakeFact): Promise<RaisedBlocker | null> {
+    const stopped = await this.blockerFor(fact);
+    if (!stopped) return null;
+    return {
+      ...stopped.disposition,
+      taskId: stopped.taskId,
+      blockerId: await this.raiseBlocker(fact.projectId, stopped.taskId, stopped.disposition),
+    };
+  }
+
+  /**
+   * The same question, asked without writing anything.
+   *
+   * Two callers and one answer: `openIfDecisive` needs it BEFORE the fact is handed to whoever
+   * would act on it, and `raiseBlockerIfNeeded` needs it after the fact was allowed, because that
+   * is the only moment a blocker may be written. Asking twice costs one repeated read and buys the
+   * property that matters — nothing is written on the strength of a fact nobody authorized.
+   */
+  private async blockerFor(
+    fact: WakeFact,
+  ): Promise<{ taskId: string; disposition: BlockerDisposition } | null> {
     if (fact.event !== 'CRITERION_UNLANDED') return null;
 
     for (const delivery of await this.deliveriesUnder(fact)) {
       const disposition = blockerDisposition(delivery.observed);
-      if (!disposition) continue;
-      return {
-        ...disposition,
-        taskId: delivery.taskId,
-        blockerId: await this.raiseBlocker(fact.projectId, delivery.taskId, disposition),
-      };
+      if (disposition) return { taskId: delivery.taskId, disposition };
     }
     return null;
   }
