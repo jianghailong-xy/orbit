@@ -55,6 +55,9 @@ func originAndClone(t *testing.T) (origin, clone, tip string) {
 	if out, err := git(t.TempDir(), "clone", origin, clone); err != nil {
 		t.Fatalf("clone: %v (%s)", err, out)
 	}
+	// A clone starts from a fresh .git/config: the origin's repo-local identity is not copied.
+	mustGit(t, clone, "config", "user.email", "test@orbit")
+	mustGit(t, clone, "config", "user.name", "Test")
 	return origin, clone, mustGit(t, origin, "rev-parse", "HEAD")
 }
 
