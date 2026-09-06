@@ -62,14 +62,16 @@ export class CompletionInputRouter {
   ) {}
 
   /**
-   * Spend one derived fact: record it always, and open a judgment session only when it changes
-   * what the coordinator would decide.
+   * Spend one derived fact: record it always, and reach a coordinator only when it changes what
+   * that coordinator would decide.
    *
    * The order is the whole claim. `openIfDecisive` answers first and `null` means "record it" —
    * so a fact that changes nothing still reaches the ledger through `route` below and still ends
-   * CONSUMED against its named consumer. Neither branch is a refusal: an unauthorized wake is
-   * refused inside whichever branch it took, by the producer's own authorizer, which is handed to
-   * both unchanged.
+   * CONSUMED against its named consumer. Which of the decisive terminals a fact gets — a judgment
+   * session opened for it, or a message to the conversation the project already has — is that
+   * unit's question too, and this door does not learn the answer beyond reporting it. No branch is
+   * a refusal: an unauthorized wake is refused inside whichever one it took, by the producer's own
+   * authorizer, which is handed to all of them unchanged.
    */
   private async spend(
     fact: WakeFact,
@@ -215,10 +217,11 @@ export class CompletionInputRouter {
    *
    * So the two are two facts about one criterion, and a criterion that is ready and landed simply
    * produces the first. `spend` decides the terminal on the same terms as every door here, and it
-   * is deliberately not overridden: which authorized wakes are worth a session is one rule, stated
-   * once, in the one unit every door asks. That rule reads this event's landing half and no other
-   * door's — §2.1 there, because a merge is owed once — but it is that unit's reading and not a
-   * decision taken here.
+   * is deliberately not overridden: which authorized wakes are worth a coordinator's attention is
+   * one rule, stated once, in the one unit every door asks. That rule reads this event's landing
+   * half and no other door's — §2.1 there, because a merge is owed once — and answers it with the
+   * standing conversation rather than a new session — §2.2 there, because a merge owed once must
+   * not be asked of two. Both are that unit's readings and neither is a decision taken here.
    */
   async routeUnlandedCriteria(
     projectIds: ReadonlyArray<string | null | undefined>,
