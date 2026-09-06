@@ -575,9 +575,17 @@ test('the same fact says it once; a different fact says it again',
       ) as WakeFact;
 
       // ── the delivery ──────────────────────────────────────────────────────────────────────────
+      // Counted either side of the delivery ALONE, which is what a by-hand one buys: no attempt
+      // session is being created around it, so "no session row was made to carry this fact" is the
+      // table not moving at all rather than a number a reader has to reconcile.
+      const sessionsBefore = await allSessions(stack.db, f.ownerId);
       const one = factFor(first!.key, firstWork);
       assert.deepEqual(
         await stack.disposition.openIfDecisive(one, allowed), { outcome: 'DELIVERED' },
+      );
+      assert.equal(
+        await allSessions(stack.db, f.ownerId), sessionsBefore,
+        'the delivery created a session row instead of writing to the one already there',
       );
       const afterFirst = await coordinatorMessages(stack.db, f);
       assert.equal(afterFirst.length, 1);
