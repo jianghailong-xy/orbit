@@ -10221,6 +10221,33 @@ html[data-theme='dark'] .session-tag-chip {
   width: 2px;
   background: var(--error-solid);
 }
+/* The left gutter: a status mark, then the number. SHAPE BEFORE HUE — met is a filled disc and
+   unmet is a 2px ring around nothing, so the two stay apart in greyscale and for a reader who
+   cannot separate the hues; colour is the second signal here, never the only one. The ring is
+   drawn in near-black rather than grey deliberately: against a white row it carries MORE weight
+   than the green disc, which puts the emphasis on the rows that still want somebody. */
+.acceptance-row-gutter {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-top: 0.15em;
+}
+.acceptance-dot {
+  position: relative;
+  top: 1px;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.acceptance-dot.is-met {
+  background: var(--success);
+}
+.acceptance-dot.is-unmet {
+  border: 2px solid var(--text-1);
+  background: transparent;
+}
 .acceptance-row-no {
   flex: none;
   width: 20px;
@@ -10234,27 +10261,47 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
   line-height: 1.66;
 }
-/* What the read says about a criterion's work, under the criterion itself. Words at 12px, not a
-   pill and not a rail: 0229 deleted a per-row verdict and a head meter, and this is a different
+/* What the read says about a criterion's work, under the criterion itself. A SENTENCE, still not
+   a pill and not a rail: 0229 deleted a per-row verdict and a head meter, and this is a different
    kind of thing — computed from task rows, written by nobody — so it must not arrive dressed as
-   the score that was removed. No hue carries meaning here either; the nested edge below is the
-   same subtle border every indented block on the page uses. */
+   the score that was removed. It sits at the standing line's size rather than the row text's: it
+   answers the criterion, it does not compete with it. At 12px in the third grey it was the right
+   sentence set as a footnote, and nobody read it. */
 .acceptance-work {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 2px 8px;
-  margin-top: 3px;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.acceptance-work-state {
+  margin-top: 4px;
   color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+/* The one hue in the row, and it lands on three words rather than behind the whole line.
+   UNMET IS NOT RED. A project stated this morning has met none of its criteria and has failed
+   nothing; fifty-three red rows would tell its owner the project was broken. It is given weight
+   instead — full text colour at 600 — which also clears AA at 13px, where --warning (3.7 : 1)
+   does not. */
+.acceptance-work-state.is-met {
+  color: var(--success);
+}
+.acceptance-work-state.is-unmet {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* Printed only beside work that HAS met its criterion, where both values appear: the ordinary
+   one recedes, and the one with no receipt behind it comes up to full text colour, because a
+   criterion reported met by work nothing puts on the default branch is the exact false green
+   this card exists to keep visible. */
+.acceptance-landing {
+  color: var(--text-2);
+}
+.acceptance-landing.is-flagged {
+  color: var(--text-1);
 }
 .acceptance-landing::before {
   content: '· ';
-  color: var(--text-4);
+  color: var(--text-3);
 }
 .acceptance-unmet {
   margin-top: 5px;
@@ -10280,11 +10327,54 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
 }
 .acceptance-held-up-title {
+  color: var(--brand-strong);
+}
+.acceptance-held-up-title:hover {
+  color: var(--brand-strong);
+  text-decoration: underline;
+}
+/* What that task needs, as a sentence, and readable as one: inheriting the container's --text-3
+   put it at 3.0 : 1 on white — the same contrast the state line was pulled out of. A raw code
+   this build does not recognise keeps the receded chip, because it is a value and not prose. */
+.acceptance-held-up-action {
   color: var(--text-2);
 }
 .acceptance-held-up-action .ant-typography code {
   margin-inline: 0;
   font-size: 11px;
+}
+/* "How it's checked" — the method the OWNER wrote beside the criterion, folded away because it
+   is what a reader needs when they are about to go and check one, not while they are reading down
+   the list. Styled as the quiet twisty it is rather than as a button: nothing about it should
+   compete with the state sentence above it. */
+.acceptance-method {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.acceptance-method-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+.acceptance-method-toggle:hover {
+  color: var(--text-1);
+}
+.acceptance-method-marker {
+  color: var(--text-3);
+  font-size: 10px;
+}
+.acceptance-method-body {
+  margin-top: 4px;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--border-subtle);
+  color: var(--text-2);
 }
 .acceptance-more-meta.ant-typography {
   margin-inline-start: 10px;
@@ -10343,11 +10433,23 @@ html[data-theme='dark'] .session-tag-chip {
   }
   .acceptance-row {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: 54px minmax(0, 1fr);
     align-items: start;
     column-gap: 12px;
     row-gap: 4px;
     padding: 12px 16px;
+  }
+  /* 10px mark + 8px gap + the 36px numbered disc. Centred on the disc rather than sitting on the
+     first baseline, because on a phone the number is a circle and the mark reads as its pair. */
+  .acceptance-row-gutter {
+    grid-column: 1;
+    align-items: center;
+    padding-top: 0;
+  }
+  .acceptance-dot {
+    top: 0;
+    width: 10px;
+    height: 10px;
   }
   .acceptance-row:first-child {
     border-top: 0;
@@ -10401,6 +10503,9 @@ html[data-theme='dark'] .session-tag-chip {
     display: block;
     margin: 6px 0 0;
     font-size: 11.5px;
+  }
+  .acceptance-method-toggle {
+    min-height: 32px;
   }
   .acceptance-note {
     padding: 9px 16px 11px;

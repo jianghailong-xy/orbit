@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCEPTANCE_PHONE_QUERY,
@@ -66,12 +69,36 @@ function client() {
   return new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
 }
 
+// A blocked task is drawn as a link into the app, so the card now needs a router the way every
+// other linking view on the project page does.
 function paint(qc: QueryClient) {
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
-      <ProjectAcceptanceCard projectId={PROJECT} />
+      <MemoryRouter initialEntries={[`/projects/${PROJECT}`]}>
+        <ProjectAcceptanceCard projectId={PROJECT} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+/**
+ * One rule out of the stylesheet, by exact selector, so an assertion about a mark's SHAPE is about
+ * the shape and not about the class name that was supposed to carry it — jsdom computes none of
+ * this. Comments come off first: a rule must not be satisfied by a sentence describing it.
+ *
+ * Both path spellings, because the web suite runs from `src/web` and a runner may start at the
+ * repository root.
+ */
+function styleRule(selector: string): string {
+  const found = ['src/index.css', 'src/web/src/index.css']
+    .map((each) => resolve(process.cwd(), each))
+    .find(existsSync);
+  if (found === undefined) throw new Error(`no index.css from ${process.cwd()}`);
+  const css = readFileSync(found, 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
+  const rule = new RegExp(`(?:^|[},])\\s*${selector.replace(/[.]/gu, '\\.')}\\s*\\{([^{}]*)\\}`, 'u')
+    .exec(css);
+  if (rule === null) throw new Error(`no rule for "${selector}" in index.css`);
+  return rule[1];
 }
 
 /** Mounts the stateful card so its phone-only controls can be pressed. */
@@ -85,7 +112,9 @@ async function mount(qc: QueryClient): Promise<{
   await act(async () => {
     root.render(
       <QueryClientProvider client={qc}>
-        <ProjectAcceptanceCard projectId={PROJECT} />
+        <MemoryRouter initialEntries={[`/projects/${PROJECT}`]}>
+          <ProjectAcceptanceCard projectId={PROJECT} />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
@@ -279,7 +308,9 @@ describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
 
     const html = renderToStaticMarkup(
       <QueryClientProvider client={qc}>
-        <ProjectAcceptanceCard projectId={PROJECT} action={<button type="button">Edit</button>} />
+        <MemoryRouter initialEntries={[`/projects/${PROJECT}`]}>
+          <ProjectAcceptanceCard projectId={PROJECT} action={<button type="button">Edit</button>} />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
     expect(html).toContain('>Edit<');
@@ -309,15 +340,35 @@ describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
 // project read — nobody writes `satisfied`, `unmet` or `landing`, and nobody can overrule them —
 // which is the distinction these cases exist to keep visible: the card draws a derivation, not
 // the judgment 0229 removed.
+/** What the owner wrote beside a criterion about how anybody would know it holds. Long enough
+ *  that a card printing all of them inline would double the height of every row, which is why it
+ *  is folded away — and why "folded" has to mean absent rather than merely out of sight. */
+const METHOD = 'Read the project document back and check each criterion carries its own answer.';
+
 const MET_CRITERION: AcceptanceCriterionItem = {
   ...criterion(1, 'The project read serves each criterion its satisfaction'),
   satisfied: true,
   unmet: [],
   landing: 'LANDED',
+  verificationMethod: METHOD,
+};
+
+/** Met by its work, with nothing putting that work on the default branch. This is the row the
+ *  whole landing lane exists for: settled and landed are different facts, and a card that let
+ *  them look the same would be hiding exactly the false green it was built to expose. */
+const MET_UNRECEIPTED_CRITERION: AcceptanceCriterionItem = {
+  ...criterion(2, 'Settling a task and landing its code are separate facts'),
+  satisfied: true,
+  unmet: [],
+  landing: 'UNKNOWN',
+  verificationMethod: null,
 };
 
 const HELD_UP_CRITERION: AcceptanceCriterionItem = {
-  ...criterion(2, 'A reader can see what is holding a criterion open'),
+  // Carries a landing the card is expected to WITHHOLD: a reader whose criterion is still open is
+  // not asking where the unfinished work merged to, so the silence below has to be a decision
+  // rather than an absence in the fixture.
+  ...criterion(3, 'A reader can see what is holding a criterion open'),
   satisfied: false,
   landing: 'UNKNOWN',
   unmet: [
@@ -332,14 +383,41 @@ const HELD_UP_CRITERION: AcceptanceCriterionItem = {
       clause: 'DECLARATION_STALE',
       heldUpBy: [
         { taskId: 't-3', title: 'Reword the landing lane', requiredAction: 'SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION' },
+        // A code a newer server knows and this build does not — a browser held open across a
+        // deploy is how that arrives, and it must not be dropped on the floor.
+        { taskId: 't-4', title: 'Something a later server added', requiredAction: 'AWAIT_THE_NEXT_THING' },
       ],
     },
   ],
 };
 
-const DERIVED = [MET_CRITERION, HELD_UP_CRITERION];
+const DERIVED = [MET_CRITERION, MET_UNRECEIPTED_CRITERION, HELD_UP_CRITERION];
 
 describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 }, () => {
+  it('marks met and unmet rows apart by shape before it uses any colour', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const html = paint(qc);
+    const met = rowFor(html, 'The project read serves each criterion its satisfaction');
+    const open = rowFor(html, 'A reader can see what is holding a criterion open');
+    expect(met).toContain('acceptance-dot is-met');
+    expect(open).toContain('acceptance-dot is-unmet');
+    // Nothing about the distinction rides on an inline colour, and neither mark can pass for the
+    // other once one is stripped out.
+    expect(withoutColour(met)).toContain('is-met');
+    expect(withoutColour(met)).not.toContain('is-unmet');
+    expect(withoutColour(open)).toContain('is-unmet');
+
+    // And what the stylesheet draws is a SHAPE, not a second hue: a filled disc against a ring
+    // around nothing, which survives greyscale and colour blindness. Two classes that differed
+    // only in `color` would satisfy the markup above and none of the reason for it.
+    expect(styleRule('.acceptance-dot.is-met')).toMatch(/background:\s*var\(--success\)/);
+    expect(styleRule('.acceptance-dot.is-met')).not.toMatch(/border/);
+    expect(styleRule('.acceptance-dot.is-unmet')).toMatch(/border:\s*2px solid/);
+    expect(styleRule('.acceptance-dot.is-unmet')).toMatch(/background:\s*transparent/);
+  });
+
   it('says a criterion its work has met, and says it about the work', () => {
     const qc = client();
     seed(qc, DERIVED);
@@ -378,20 +456,111 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     expect(reasons[0]).not.toContain('Reword the landing lane');
   });
 
-  it('draws a landing that is unknown as unknown, never as unlanded', () => {
+  it('says where met work is, and says nothing about it on a criterion still open', () => {
     const qc = client();
     seed(qc, DERIVED);
 
     const html = paint(qc);
-    expect(rowFor(html, 'The project read serves each criterion its satisfaction'))
-      .toContain('Landed on the default branch');
-    const unknown = rowFor(html, 'A reader can see what is holding a criterion open');
-    expect(unknown).toContain('Landing unknown');
-    expect(unknown).not.toContain('Landed on the default branch');
+    // A met row carries both halves: the state and where that work went.
+    const met = rowFor(html, 'The project read serves each criterion its satisfaction');
+    expect(met).toContain('Met by its work');
+    expect(met).toContain('landed on the default branch');
+
+    // The open row's fixture HAS a landing. Withholding it is the decision under test: a reader
+    // whose criterion is not met is not asking where the unfinished work merged to, and printing
+    // it put a second sentence on the row that had nothing to do with why it was open.
+    const open = rowFor(html, 'A reader can see what is holding a criterion open');
+    expect(open).toContain('Not met by its work');
+    expect(open).not.toContain('acceptance-landing');
+    for (const half of ['landed on the default branch', 'no merge receipt either way']) {
+      expect(open).not.toContain(half);
+    }
+  });
+
+  it('gives met work with no receipt behind it more weight than met work that landed', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const html = paint(qc);
+    // Both are printed — the difference between settled and landed cannot be expressed by
+    // silence — but they are not printed at the same weight.
+    const landed = rowFor(html, 'The project read serves each criterion its satisfaction');
+    const unreceipted = rowFor(html, 'Settling a task and landing its code are separate facts');
+    expect(landed).toContain('class="acceptance-landing"');
+    expect(landed).not.toContain('is-flagged');
+    expect(unreceipted).toContain('class="acceptance-landing is-flagged"');
+    expect(unreceipted).toContain('no merge receipt either way');
+    // The emphasis is real and not just a spare class name: the flagged half comes up to full
+    // text colour while the ordinary one stays receded.
+    expect(styleRule('.acceptance-landing')).toMatch(/color:\s*var\(--text-2\)/);
+    expect(styleRule('.acceptance-landing.is-flagged')).toMatch(/color:\s*var\(--text-1\)/);
+
     // The value the lane refuses to produce may not be invented by the drawing either: no receipt
     // is no evidence, and work lands without leaving one.
     for (const lie of ['Not landed', 'NOT_LANDED', 'not merged', 'Unmerged']) {
       expect(html).not.toContain(lie);
+    }
+  });
+
+  it('makes every blocked task openable and says what it needs in words', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const row = rowFor(paint(qc), 'A reader can see what is holding a criterion open');
+    const reasons = unmetReasons(row);
+
+    // EVERY named task is a link, not just the first: knowing which task is holding a criterion
+    // open and having no way to open it is the whole of what this line was failing to do.
+    const named = (row.match(/class="acceptance-held-up"/g) ?? []).length;
+    const links = (row.match(/<a [^>]*href="\/tasks\/[^"]+"/g) ?? []).length;
+    expect(named).toBe(4);
+    expect(links).toBe(named);
+    expect(reasons[0]).toContain('href="/tasks/t-1"');
+    expect(reasons[0]).toContain('href="/tasks/t-2"');
+    expect(reasons[1]).toContain('href="/tasks/t-3"');
+
+    // What each one needs, as a sentence. The code is a completion-refusal token and reads as
+    // one; nobody opening a project page agreed to learn that vocabulary.
+    expect(accessibleText(reasons[0])).toContain('needs its acceptance command to run');
+    expect(accessibleText(reasons[0])).toContain('needs an independent verification pass');
+    expect(accessibleText(reasons[1]))
+      .toContain('needs evidence submitted, then an independent decision');
+    expect(accessibleText(reasons[0])).not.toContain('RUN_ACCEPTANCE_COMMAND');
+
+    // Kept, not discarded: a reader matching this row against an API response still has the code.
+    expect(reasons[0]).toContain('title="RUN_ACCEPTANCE_COMMAND"');
+    expect(reasons[0]).toContain('title="OBTAIN_INDEPENDENT_VERIFICATION_PASS"');
+    expect(reasons[1]).toContain('title="SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION"');
+
+    // A code this build does not recognise prints as itself rather than vanishing — the same
+    // treatment an unknown clause already gets. Dropping it would say the task needs nothing.
+    expect(accessibleText(reasons[1])).toContain('AWAIT_THE_NEXT_THING');
+  });
+
+  it("folds the owner's verification method away until it is asked for", async () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    // Collapsed means ABSENT. Fifty-three methods sitting in the document behind a shut twisty is
+    // fifty-three criteria rendered twice over.
+    const html = paint(qc);
+    expect(html).toMatch(/How it(?:&#x27;|')s checked/);
+    expect(html).not.toContain(METHOD);
+    // And a criterion whose author left the method unanswered offers nothing to open.
+    expect(rowFor(html, 'Settling a task and landing its code are separate facts')).not.toContain('acceptance-method');
+
+    const { container, cleanup } = await mount(qc);
+    try {
+      expect(container.textContent).not.toContain(METHOD);
+      const toggle = container.querySelector<HTMLButtonElement>('.acceptance-method-toggle');
+      expect(toggle).not.toBeNull();
+      expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+
+      await click(toggle!);
+      expect(toggle!.getAttribute('aria-expanded')).toBe('true');
+      expect(container.textContent).toContain(METHOD);
+    } finally {
+      await cleanup();
     }
   });
 
@@ -415,6 +584,9 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     expect(html).toContain('The runner reconnects after a restart');
     expect(html).not.toContain('acceptance-work');
     expect(html).not.toContain('Met by its work');
+    // Including the gutter: there is no answer, so there is nothing to mark the row with. A dot
+    // defaulting to "unmet" would be this file inventing the answer the read declined to give.
+    expect(html).not.toContain('acceptance-dot');
   });
 });
 

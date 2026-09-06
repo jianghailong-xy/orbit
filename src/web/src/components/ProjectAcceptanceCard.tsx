@@ -2,6 +2,7 @@ import { DownOutlined } from '@ant-design/icons';
 import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
+import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
@@ -43,6 +44,30 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  * anything either way — never "not landed", because work lands without leaving a receipt. Drawing
  * UNKNOWN as a red "not merged" would be a false red invented by this file.
  *
+ * HOW A ROW IS DRAWN, AND WHY IT IS DRAWN THAT WAY
+ * -----------------------------------------------
+ * The first version of this said all of it at 12px in the third grey. It was true and nobody saw
+ * it — a fifty-three row list whose only landmark was an ordinal, with the answer set smaller than
+ * the question. What replaced it, and the reason for each:
+ *
+ *  - A mark in the left gutter, filled for met and a hollow ring for unmet. SHAPE BEFORE HUE: the
+ *    two stay apart in greyscale and for a reader who cannot separate the colours, so the hue is
+ *    a second signal and never the only one. The ring is near-black rather than grey because it
+ *    then outweighs the green disc, which puts the visual weight on the rows still wanting work.
+ *  - The state sentence at the standing line's size, not the row text's: it answers the row, it
+ *    does not compete with it. UNMET IS NOT RED. A project stated this morning has met none of
+ *    its criteria and has failed nothing; fifty-three red rows would tell its owner the project
+ *    was broken. It gets weight — full text colour at 600 — which also clears AA at 13px, where
+ *    the warning token (3.7 : 1) does not.
+ *  - Landing only beside work that HAS met its criterion, where both values are printed and the
+ *    receiptless one is drawn heavier. A reader whose criterion is still open is not asking where
+ *    the unfinished work merged to.
+ *  - `requiredAction` and the clause codes as sentences, with the code kept on `title`. Neither
+ *    vocabulary is something a person opening a project page agreed to learn.
+ *  - The blocking task as a link, because knowing which task and not being able to open it is the
+ *    whole of what that line is for.
+ *  - The owner's `verificationMethod` behind a disclosure that renders nothing until it is opened.
+ *
  * THIS IS THE PROJECT PAGE'S ONE HOME FOR THE CRITERIA. It used to render them twice, once as the
  * authored legacy `acceptanceCriteria` text under its own heading and again here; 0229 removed
  * that text column too, and the per-item rows are the whole of it.
@@ -77,6 +102,10 @@ export interface AcceptanceCriterionItem {
   satisfied?: boolean;
   unmet?: CriterionUnmetReason[];
   landing?: string;
+  /** How the OWNER said anybody would know this criterion holds, authored beside the criterion
+   *  itself. Not derived and not judged by it: it is the instruction, and until now the card
+   *  printed none of it. Null for a criterion whose author left it unanswered. */
+  verificationMethod?: string | null;
 }
 
 /** The parts of the project detail document this card reads. */
@@ -123,11 +152,38 @@ const UNMET_CLAUSE: Record<string, string> = {
   DECLARATION_STALE: 'Work here was filed against an earlier wording of this criterion.',
 };
 
-/** The landing lane, which has no third value to print. UNKNOWN is the ABSENCE of evidence — work
- *  lands without leaving a receipt — so it is drawn as not knowing, and never as not landed. */
+/** The landing lane, which has no third value to print, said as the tail of the state sentence
+ *  rather than as a claim of its own — lower case because it continues "Met by its work ·".
+ *  UNKNOWN is the ABSENCE of evidence — work lands without leaving a receipt — so it is drawn as
+ *  nobody having said either way, and never as not landed.
+ *
+ *  It is printed ONLY beside work that has met its criterion. A reader looking at a criterion
+ *  nothing has settled yet is not asking where that unfinished work merged to, and answering
+ *  anyway put a second sentence on every row that had nothing to do with why the row was open. */
 const LANDING: Record<string, string> = {
-  LANDED: 'Landed on the default branch',
-  UNKNOWN: 'Landing unknown — no merge receipt either way',
+  LANDED: 'landed on the default branch',
+  UNKNOWN: 'no merge receipt either way',
+};
+
+/** The landing value that is drawn heavier than the other. A criterion its work has MET, with no
+ *  receipt putting that work on the default branch, is precisely the false green this card exists
+ *  to keep visible — so it is given full text colour while the ordinary answer stays receded.
+ *  Both are printed: the difference between settled and landed has to be readable, and silence
+ *  cannot express a difference. */
+const LANDING_FLAGGED = 'UNKNOWN';
+
+/** What would settle one blocking task, as a sentence. `requiredAction` is a code out of the
+ *  completion table every refusal quotes, and it reads as one; somebody looking at a project page
+ *  has not agreed to learn that vocabulary any more than they agreed to learn the clause codes.
+ *  The code stays on `title` for the reader matching this row against an API response, and a code
+ *  this build does not recognise prints as itself — the same treatment an unknown clause gets,
+ *  for the same reason: a browser held open across a deploy must under-report nothing. */
+const REQUIRED_ACTION: Record<string, string> = {
+  RUN_ACCEPTANCE_COMMAND: 'needs its acceptance command to run',
+  OBTAIN_INDEPENDENT_VERIFICATION_PASS: 'needs an independent verification pass',
+  RECORD_VERIFICATION_VERDICT: 'needs its verdict recorded',
+  SUBMIT_EVIDENCE_AND_AWAIT_INDEPENDENT_DECISION:
+    'needs evidence submitted, then an independent decision',
 };
 
 /** A criterion is one LINE of the authored field, so it is rendered as inline Markdown: emphasis,
@@ -135,6 +191,21 @@ const LANDING: Record<string, string> = {
  *  would otherwise produce are flattened, because a row is one row whatever the author typed. */
 const Flat = ({ children }: { children?: ReactNode }) => <>{children}</>;
 const INLINE_ONLY = { p: Flat, h1: Flat, h2: Flat, h3: Flat, h4: Flat, h5: Flat, h6: Flat };
+
+/** What would move one blocking task, in words. An unrecognised code is printed as the code it
+ *  is, in the same monospace the card has always given a raw value: dropping it would say the
+ *  task needs nothing. */
+function RequiredAction({ code }: { code: string }) {
+  const sentence = REQUIRED_ACTION[code];
+  if (sentence === undefined) {
+    return (
+      <span className="acceptance-held-up-action">
+        <Typography.Text code>{code}</Typography.Text>
+      </span>
+    );
+  }
+  return <span className="acceptance-held-up-action" title={code}>{sentence}</span>;
+}
 
 /**
  * What the read says about one criterion's work: whether it has met the criterion, where that work
@@ -151,12 +222,18 @@ function CriterionWork({ criterion }: { criterion: AcceptanceCriterionItem }) {
   return (
     <>
       <div className="acceptance-work">
-        <span className="acceptance-work-state">{criterion.satisfied ? MET : NOT_MET}</span>
-        {criterion.landing === undefined ? null : (
-          <span className="acceptance-landing">
+        <span className={`acceptance-work-state ${criterion.satisfied ? 'is-met' : 'is-unmet'}`}>
+          {criterion.satisfied ? MET : NOT_MET}
+        </span>
+        {criterion.satisfied && criterion.landing !== undefined ? (
+          <span
+            className={
+              `acceptance-landing${criterion.landing === LANDING_FLAGGED ? ' is-flagged' : ''}`
+            }
+          >
             {LANDING[criterion.landing] ?? criterion.landing}
           </span>
-        )}
+        ) : null}
       </div>
       {unmet.length === 0 ? null : (
         <div className="acceptance-unmet">
@@ -167,11 +244,12 @@ function CriterionWork({ criterion }: { criterion: AcceptanceCriterionItem }) {
               </div>
               {(reason.heldUpBy ?? []).map((task) => (
                 <div key={task.taskId} className="acceptance-held-up">
-                  <span className="acceptance-held-up-title">{task.title}</span>
-                  <span className="acceptance-held-up-action">
-                    {'Next: '}
-                    <Typography.Text code>{task.requiredAction}</Typography.Text>
-                  </span>
+                  {/* The whole reason this line exists is "who does what next", and the reader's
+                      next move after recognising the name is to open it. */}
+                  <Link className="acceptance-held-up-title" to={`/tasks/${task.taskId}`}>
+                    {task.title}
+                  </Link>
+                  <RequiredAction code={task.requiredAction} />
                 </div>
               ))}
             </div>
@@ -179,6 +257,37 @@ function CriterionWork({ criterion }: { criterion: AcceptanceCriterionItem }) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * How the owner said this criterion would be checked, folded away until somebody asks.
+ *
+ * Collapsed means ABSENT rather than merely out of sight: fifty-three methods sitting in the
+ * document under a closed twisty is fifty-three criteria rendered twice, and it is the reader who
+ * is about to go and check one who needs it — not the reader going down the list. A native
+ * `<details>` keeps its body in the page whatever it is showing, which is the one thing this
+ * must not do, so the disclosure is the same `aria-expanded` button the list itself uses.
+ */
+function CriterionMethod({ method }: { method: string }) {
+  const bodyId = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="acceptance-method">
+      <button
+        type="button"
+        className="acceptance-method-toggle"
+        aria-expanded={open}
+        aria-controls={open ? bodyId : undefined}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="acceptance-method-marker" aria-hidden>{open ? '\u25be' : '\u25b8'}</span>
+        {"How it's checked"}
+      </button>
+      {open ? (
+        <div id={bodyId} className="acceptance-method-body">{method}</div>
+      ) : null}
+    </div>
   );
 }
 
@@ -194,12 +303,26 @@ export function AcceptanceCriteriaList({
     <ul id={id} className="acceptance-criteria">
       {criteria.map((c) => (
         <li key={c.id} className="acceptance-row">
-          <span className="acceptance-row-no">{c.ordinal}</span>
+          {/* The scanning handle. Fifty-three criteria had nothing but their numbers to aim at,
+              and a number says which one, never which ones still want somebody. Filled versus
+              hollow survives greyscale and colour blindness; the hue is the second signal. The
+              read that did not answer for a criterion gets no mark, because there is nothing to
+              mark it with. */}
+          <span className="acceptance-row-gutter">
+            {c.satisfied === undefined ? null : (
+              <span
+                className={`acceptance-dot ${c.satisfied ? 'is-met' : 'is-unmet'}`}
+                aria-hidden
+              />
+            )}
+            <span className="acceptance-row-no">{c.ordinal}</span>
+          </span>
           <div className="acceptance-row-text">
             <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
               {c.text}
             </Markdown>
             <CriterionWork criterion={c} />
+            {c.verificationMethod ? <CriterionMethod method={c.verificationMethod} /> : null}
           </div>
         </li>
       ))}
