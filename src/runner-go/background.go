@@ -268,6 +268,22 @@ func (b *bgTailer) stop(toolUseID string) {
 	}
 }
 
+// hasLiveEngineShells reports whether any background shell belonging to the provider
+// process is still running. Read-only, and deliberately the same set killEngineShells
+// would report killed: runner-owned `!`-shells survive an engine restart, so they are
+// not a reason to keep one resident. The session pool consults this through a probe
+// func — see sessionPool.setBackgroundJobProbe.
+func (b *bgTailer) hasLiveEngineShells() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, s := range b.live {
+		if s.engineOwned {
+			return true
+		}
+	}
+	return false
+}
+
 // killEngineShells reports every still-running shell of the provider process as killed and
 // stops its tail. Those shells are children of that process, so they're gone the moment it
 // stops — but Claude only writes a <task-notification> for a shell that ends on its own, so

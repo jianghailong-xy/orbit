@@ -11,6 +11,22 @@ import (
 // the local coding-runtime supervisor is recycled.
 const warmEngineTTL = 4 * time.Hour
 
+// warmResidencyHardCap is the absolute ceiling on one idle engine's warm residency,
+// every background-job renewal included. The renewal below exists because a parked
+// session's Bash(run_in_background) children are children of the engine process, so
+// recycling the engine reports them killed — but a renewal a still-running process can
+// refresh is a renewal a forgotten `vite` refreshes forever, and this host has a
+// global-OOM history (2026-08-31: five runner drops in one day, swap fully consumed).
+// Peak memory is already bounded elsewhere — warm engines never exceed the resident
+// cap — so what this bounds is how long one abandoned session may hold a slot.
+//
+// 12h = 3x warmEngineTTL: two renewals, enough for a genuinely long job to outlive a
+// session parked without a human present, and the slot still comes back inside a day.
+//
+// Stage-0 stopgap. Stage 3 makes background jobs runner-owned rather than engine
+// children, at which point this constant, the probe, and both deferrals come out.
+const warmResidencyHardCap = 12 * time.Hour
+
 type poolTimer interface {
 	Stop() bool
 }
@@ -62,6 +78,12 @@ type liveSession struct {
 	idleGeneration uint64
 	warmTimer      poolTimer
 	lastActive     time.Time // LRU key: when active -> warm most recently
+
+	// Stage-0 stopgap: read-only liveness query into this run's bgTailer, so warm
+	// eviction can see work the active turn permit does not represent. A plain
+	// func keeps the tailer out of the pool; it is called under p.mu and must
+	// therefore never re-enter the pool (bgTailer takes only its own lock).
+	bgJobsLive func() bool
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -244,18 +266,66 @@ func (p *sessionPool) warmCountLocked() int {
 	return n
 }
 
+// setBackgroundJobProbe installs one session run's background-job liveness query
+// and returns the deregistration func. The supervisor pointer is the epoch token:
+// a probe belonging to a superseded run can neither install onto nor uninstall
+// from its replacement.
+func (p *sessionPool) setBackgroundJobProbe(s *liveSession, probe func() bool) func() {
+	p.mu.Lock()
+	if p.sessions[s.id] == s {
+		s.bgJobsLive = probe
+	}
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		if p.sessions[s.id] == s {
+			s.bgJobsLive = nil
+		}
+		p.mu.Unlock()
+	}
+}
+
+// warmResidencyDeadlineLocked returns the instant after which this warm supervisor
+// stops being deferred for its background job, or the zero time when no deferral
+// applies at all (no probe registered, or no job running). lastActive is when the
+// supervisor went warm, so it is both the LRU key and the start of the capped window.
+//
+// This is the only place the cap is expressed. Both deferrals below read it, so a
+// supervisor cannot be spared by one and capped by the other.
+func (p *sessionPool) warmResidencyDeadlineLocked(s *liveSession) time.Time {
+	if s.bgJobsLive == nil || !s.bgJobsLive() {
+		return time.Time{}
+	}
+	return s.lastActive.Add(warmResidencyHardCap)
+}
+
+// sparedForBackgroundJobLocked reports whether this warm supervisor still earns the
+// stage-0 deferral: a live background job, and warm residency not yet spent.
+func (p *sessionPool) sparedForBackgroundJobLocked(s *liveSession) bool {
+	return p.clock.Now().Before(p.warmResidencyDeadlineLocked(s))
+}
+
 // oldestWarmLocked returns the LRU warm process that is not already on its way
 // out. Stable id ordering breaks equal-timestamp ties, making behavior and tests
 // deterministic.
+//
+// Stage-0 stopgap: a supervisor spared for a live background job sorts after every
+// supervisor that is not, so it is chosen only when nothing else is left. That is a
+// deprioritization, not an exemption — real capacity pressure still recycles it, and
+// so does warmResidencyHardCap, which ends the deferral outright.
 func (p *sessionPool) oldestWarmLocked(except string) *liveSession {
 	var oldest *liveSession
+	oldestSpared := false
 	for _, s := range p.sessions {
 		if s.id == except || !s.resident || s.active || s.evictRequested {
 			continue
 		}
-		if oldest == nil || s.lastActive.Before(oldest.lastActive) ||
-			(s.lastActive.Equal(oldest.lastActive) && s.id < oldest.id) {
-			oldest = s
+		spared := p.sparedForBackgroundJobLocked(s)
+		if oldest == nil || (oldestSpared && !spared) ||
+			(spared == oldestSpared &&
+				(s.lastActive.Before(oldest.lastActive) ||
+					(s.lastActive.Equal(oldest.lastActive) && s.id < oldest.id))) {
+			oldest, oldestSpared = s, spared
 		}
 	}
 	return oldest
@@ -500,6 +570,11 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 // park releases the active-turn permit only after /turn-complete has durably
 // moved the control-plane session to AWAITING_INPUT. The engine remains resident
 // and warm until its timer or LRU pressure recycles it.
+//
+// The timer wound here is always one warmEngineTTL; a session with a live background
+// job renews it from expireWarm rather than starting longer, so a job that finishes
+// during the first window costs nothing. lastActive, set just below, anchors both the
+// LRU order and the warmResidencyHardCap window those renewals run out of.
 func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
@@ -534,10 +609,36 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 	return s.permitGeneration
 }
 
+// warmRenewalLocked returns how much longer a warm engine may be held for a live
+// background job, or 0 to recycle it now. One warmEngineTTL at a time, and never past
+// warmResidencyHardCap — so the renewal is a bounded number of extensions, not a loop
+// a still-running process can keep alive.
+func (p *sessionPool) warmRenewalLocked(s *liveSession) time.Duration {
+	remaining := p.warmResidencyDeadlineLocked(s).Sub(p.clock.Now())
+	if remaining <= 0 {
+		return 0
+	}
+	if remaining < warmEngineTTL {
+		return remaining
+	}
+	return warmEngineTTL
+}
+
+// expireWarm recycles a warm engine when its TTL elapses. Stage-0 stopgap: a
+// supervisor still running a background job rewinds the timer instead, under the same
+// idleGeneration — a claim that arrives meanwhile bumps that generation and defuses
+// the renewed timer exactly as it defused the original one.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
 		s.idleGeneration != idleGeneration {
+		p.mu.Unlock()
+		return
+	}
+	if renewal := p.warmRenewalLocked(s); renewal > 0 {
+		s.warmTimer = p.clock.AfterFunc(renewal, func() {
+			p.expireWarm(s, idleGeneration)
+		})
 		p.mu.Unlock()
 		return
 	}
