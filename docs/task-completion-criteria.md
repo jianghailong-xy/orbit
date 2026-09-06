@@ -75,13 +75,20 @@ The runner executes the command synchronously as `bash -lc <acceptanceCommand>`,
 ordinary execution turn. A trailing `&` is passed to Bash as command text and never activates
 Orbit's detached-shell shortcut, because the runner must observe a final exit code.
 
-The wall-clock budget is two minutes unless the task declares `acceptanceTimeoutSeconds` (1 to
+The wall-clock budget is one hour unless the task declares `acceptanceTimeoutSeconds` (1 to
 86400), which replaces it for that task's acceptance command only — an interactive `!`-shell keeps
-the two minutes unconditionally. The declared value is used exactly as given: nothing negotiates
-it, clamps it, or decides before the command starts whether it was allowed to ask for that long.
-Migration `0236` added it because the fixed ceiling made EXECUTABLE unusable for any repository
-whose suite runs longer than two minutes, including this one — a suite measured at 101s, 104s,
-105s and 126s across four runs of the same tree derived `DONE` or `FAILED` according to host load.
+its own two minutes unconditionally, because the reason a prompt is bounded (a stray `tail -f`
+must not pin a session) is not the reason an unattended suite is. The declared value is used
+exactly as given: nothing negotiates it, clamps it, or decides before the command starts whether
+it was allowed to ask for that long.
+
+Migration `0236` made the budget declarable because a fixed two-minute ceiling made EXECUTABLE
+unusable for any repository whose suite runs longer than that, including this one — a suite
+measured at 101s, 104s, 105s and 126s across four runs of the same tree derived `DONE` or `FAILED`
+according to host load. The default was raised from those two minutes to an hour afterwards, on
+the evidence of what authors who found the knob actually asked for: of the tasks carrying a
+declared budget on 2026-09-06, none asked for less than 300s and the common values were 3000 to
+4200s. Two minutes was a default only reachable by someone who already knew it could be escaped.
 
 A budget is not a second chance. Exceeding whichever budget applies kills the command and reports
 `-1`, which is compared like any other exit code, so it derives `FAILED` exactly as it did before —

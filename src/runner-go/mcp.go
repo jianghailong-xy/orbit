@@ -1604,9 +1604,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// wall-clock, it is used exactly as given, and there is no ceiling to negotiate it against and
 	// no admission that could refuse it before the command starts.
 	acceptanceTimeoutSecondsDescription := "Wall-clock budget for acceptanceCommand, in seconds. " +
-		"Omit for the two-minute default — raise it when the declared command is a test suite that " +
-		"legitimately runs longer, which is the difference between a task that can use EXECUTABLE " +
-		"and one that cannot. Applies only to this task's acceptance command; an interactive `!`-shell " +
+		"Omit for the one-hour default, which holds an ordinary test suite — declare a number to " +
+		"bound the command more tightly than that, or to buy a suite that needs longer than an hour. " +
+		"Applies only to this task's acceptance command; an interactive `!`-shell " +
 		"is unaffected. Exceeding it kills the command and reports -1, which derives FAILED like any " +
 		"other disagreeing exit code — a budget is not a second chance, so size it above a passing run."
 	acceptanceTimeoutSecondsProp := map[string]interface{}{

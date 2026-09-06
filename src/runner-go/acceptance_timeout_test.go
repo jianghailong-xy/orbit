@@ -63,10 +63,10 @@ func TestAcceptanceTimeoutDeclaredBudgetBoundsTheAcceptanceCommand(t *testing.T)
 	}
 }
 
-// A task that declares a budget LONGER than the default gets it. Proving that with the real two
-// minutes would need a command that runs for two minutes, so the default is supplied as an
+// A task that declares a budget LONGER than the default gets it. Proving that against the real
+// default would need a command that runs for an hour, so the acceptance default is supplied as an
 // argument and compressed: shellTurnBudget is the single policy both this and production use, and
-// production passes shellTurnTimeout into exactly this parameter.
+// production passes acceptanceTurnTimeout into exactly this parameter.
 func TestAcceptanceTimeoutDeclaredBudgetOutlivesTheDefault(t *testing.T) {
 	resp := decodeInboxTurn(t, `{
 		"turnId": "acceptance-outlives-default",
@@ -76,7 +76,7 @@ func TestAcceptanceTimeoutDeclaredBudgetOutlivesTheDefault(t *testing.T) {
 		"acceptanceTimeoutSeconds": 5
 	}`)
 	compressedDefault := 150 * time.Millisecond
-	budget := shellTurnBudget(resp, compressedDefault)
+	budget := shellTurnBudget(resp, shellTurnTimeout, compressedDefault)
 	if budget != 5*time.Second {
 		t.Fatalf("declared budget = %s, want 5s", budget)
 	}
@@ -92,9 +92,12 @@ func TestAcceptanceTimeoutDeclaredBudgetOutlivesTheDefault(t *testing.T) {
 	}
 }
 
-func TestAcceptanceTimeoutDefaultsToTwoMinutesWhenUndeclared(t *testing.T) {
-	if shellTurnTimeout != 2*time.Minute {
-		t.Fatalf("the default shell turn budget is %s, want 2m", shellTurnTimeout)
+// What a task that declares nothing gets. The number is the point of the test: an acceptance
+// command is unattended work whose author mostly never learned the knob exists, and two minutes
+// could not hold a real suite, so the default is the hour rather than the interactive bound.
+func TestAcceptanceTimeoutDefaultsToAnHourWhenUndeclared(t *testing.T) {
+	if acceptanceTurnTimeout != 3600*time.Second {
+		t.Fatalf("the default acceptance budget is %s, want 1h", acceptanceTurnTimeout)
 	}
 	undeclared := decodeInboxTurn(t, `{
 		"turnId": "acceptance-undeclared",
@@ -102,19 +105,22 @@ func TestAcceptanceTimeoutDefaultsToTwoMinutesWhenUndeclared(t *testing.T) {
 		"content": "true",
 		"taskAcceptance": true
 	}`)
-	if got := shellTurnBudget(undeclared, shellTurnTimeout); got != 2*time.Minute {
-		t.Fatalf("an acceptance turn declaring no budget ran under %s, want the 2m default", got)
+	if got := shellTurnBudget(undeclared, shellTurnTimeout, acceptanceTurnTimeout); got != time.Hour {
+		t.Fatalf("an acceptance turn declaring no budget ran under %s, want the 1h default", got)
 	}
 	// Absent is 0, and neither a zero nor a negative declaration invents a budget of its own.
 	for _, seconds := range []int{0, -1, -900} {
 		resp := *undeclared
 		resp.AcceptanceTimeoutSeconds = seconds
-		if got := shellTurnBudget(&resp, shellTurnTimeout); got != 2*time.Minute {
-			t.Fatalf("acceptanceTimeoutSeconds=%d produced %s, want the 2m default", seconds, got)
+		if got := shellTurnBudget(&resp, shellTurnTimeout, acceptanceTurnTimeout); got != time.Hour {
+			t.Fatalf("acceptanceTimeoutSeconds=%d produced %s, want the 1h default", seconds, got)
 		}
 	}
-	if got := shellTurnBudget(nil, shellTurnTimeout); got != 2*time.Minute {
-		t.Fatalf("a turn with no delivery at all ran under %s, want the 2m default", got)
+	// A turn with no delivery is not an acceptance turn, so it gets the conservative bound. This
+	// is the one place the two defaults could be confused without anything looking wrong.
+	if got := shellTurnBudget(nil, shellTurnTimeout, acceptanceTurnTimeout); got != shellTurnTimeout {
+		t.Fatalf("a turn with no delivery at all ran under %s, want the %s interactive bound",
+			got, shellTurnTimeout)
 	}
 	// And an undeclared acceptance command still runs: the default is a budget, not a block.
 	req := runAcceptanceShellTurn(t, undeclared)
@@ -123,9 +129,11 @@ func TestAcceptanceTimeoutDefaultsToTwoMinutesWhenUndeclared(t *testing.T) {
 	}
 }
 
-// Negative control. `!`-prefixed interactive shells share runSynchronousShellTurn with acceptance
-// commands and must NOT have picked up the task's budget along the way: a person waiting at a
-// prompt gets the same two minutes they always did, even if a budget is somehow on the delivery.
+// Negative control, and the one that pays for the split. `!`-prefixed interactive shells share
+// runSynchronousShellTurn with acceptance commands, so they can pick up the acceptance side by
+// accident in two ways: from a budget riding on the delivery, or -- since the acceptance default
+// was raised to an hour -- from the default itself. A person waiting at a prompt gets the same two
+// minutes they always did, because a stray `tail -f` must not pin a session for an hour.
 func TestAcceptanceTimeoutLeavesTheInteractiveShellBudgetAlone(t *testing.T) {
 	interactive := decodeInboxTurn(t, `{
 		"turnId": "interactive-shell",
@@ -136,8 +144,14 @@ func TestAcceptanceTimeoutLeavesTheInteractiveShellBudgetAlone(t *testing.T) {
 	if interactive.TaskAcceptance {
 		t.Fatal("the fixture is an acceptance turn, so it cannot show what interactive shells do")
 	}
-	if got := shellTurnBudget(interactive, shellTurnTimeout); got != shellTurnTimeout {
+	if got := shellTurnBudget(interactive, shellTurnTimeout, acceptanceTurnTimeout); got != shellTurnTimeout {
 		t.Fatalf("an interactive `!`-shell ran under %s, want the unchanged %s", got, shellTurnTimeout)
+	}
+	// Said as the thing that would actually be wrong, so collapsing the two constants back into
+	// one fails here rather than passing because both happen to be spelled the same.
+	if shellTurnTimeout != 2*time.Minute || acceptanceTurnTimeout == shellTurnTimeout {
+		t.Fatalf("interactive %s / acceptance %s: the prompt's bound is no longer its own",
+			shellTurnTimeout, acceptanceTurnTimeout)
 	}
 	// Behaviourally too: a 1s budget on the delivery does not cut a 2s interactive command.
 	req := runAcceptanceShellTurn(t, interactive)
@@ -280,7 +294,7 @@ func TestAcceptanceTimeoutFieldReachesTheServerThroughEveryTaskWriteTool(t *test
 	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
 
 	if result := mcp.callTool("task_create", map[string]interface{}{
-		"title":                      "a suite that needs longer than two minutes",
+		"title":                      "a suite that needs longer than the default",
 		"completionCriterion":        "EXECUTABLE",
 		"acceptanceCommand":          "go test ./...",
 		"acceptanceExpectedExitCode": 0,

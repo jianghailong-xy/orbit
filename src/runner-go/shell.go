@@ -17,11 +17,28 @@ import (
 // `tail -f`) can't pin the session's turn loop. The poller runs the command inline, so
 // nothing else on the session advances until it returns or the context is cancelled.
 //
-// It is also the DEFAULT budget for a task's EXECUTABLE acceptance command — the only budget it
-// had until a task could declare `acceptanceTimeoutSeconds`, and still the one every task that
-// declares nothing gets. See shellTurnBudget for which of the two a given turn is run under.
+// It is NOT the default for a task's EXECUTABLE acceptance command — acceptanceTurnTimeout is.
+// The two were a single constant until the acceptance default was raised, and separating them is
+// exactly what that raise is allowed to change: the reason a person waiting at a prompt gets two
+// minutes is not the reason an unattended test suite gets what it gets. See shellTurnBudget for
+// which of them a given turn is run under.
 const (
 	shellTurnTimeout = 2 * time.Minute
+	// acceptanceTurnTimeout is the budget the server-generated EXECUTABLE acceptance command runs
+	// under when its task declares no `acceptanceTimeoutSeconds`.
+	//
+	// Two minutes was the wrong default for the work it was the default for. Of the tasks that had
+	// declared a budget by 2026-09-06 not one asked for less than 300s and the common declarations
+	// were 3000-4200s, so the default was a number every author had to know the knob existed to
+	// escape, and a task whose author did not know it was judged by host load. An hour holds a real
+	// suite; a task that needs more still says so, and one that wants the old bound declares 120.
+	//
+	// It buys wall-clock and decides nothing. A command that outlives this is killed, reported as
+	// exit -1 and compared literally against the task's expectation exactly as before — raising a
+	// default cannot turn a failing suite into a passing one. The cost is the other side of the
+	// same fact: an acceptance command that HANGS now holds its session for an hour rather than
+	// two minutes, which is the exposure tasks declaring 3600-7200 already ran under.
+	acceptanceTurnTimeout = time.Hour
 	// tool_output is broadcast-only, so it cannot use the realtime bridge's durable-row
 	// fallback when a JSON event exceeds PostgreSQL NOTIFY's payload limit. 1 KiB remains
 	// below the bridge's 7 KiB safety envelope even when every byte needs a six-byte JSON
@@ -168,22 +185,26 @@ func waitWithForegroundShellOutput(wait func() error, output shellOutputSnapshot
 }
 
 // shellTurnBudget answers the one question a shell turn has to settle before it starts: how long
-// may this process run? `def` is the standing default (shellTurnTimeout in production); it is a
-// parameter rather than a read of the constant so the substitution can be exercised at
-// millisecond scale instead of across two real minutes.
+// may this process run? The answer is decided by the KIND of turn first and the task's declaration
+// second — never the other way round.
 //
-// A declared budget belongs to ONE kind of turn: the server-generated EXECUTABLE acceptance
-// command, which is a test suite the task owner sized. A `!`-prefixed interactive shell is a
-// person waiting at a prompt and keeps the default unconditionally, so this never reads the
-// declaration off a turn that is not `taskAcceptance`.
+// `interactive` is a person waiting at a prompt: two minutes, for the reason shellTurnTimeout
+// gives, and a budget that somehow rides along on such a delivery is read by nothing.
+// `acceptance` is the server-generated EXECUTABLE command, a test suite nobody is watching, and a
+// declared `acceptanceTimeoutSeconds` replaces it for that task alone. Both defaults are
+// parameters rather than reads of the constants so the substitution can be exercised at
+// millisecond scale instead of across a real hour.
 //
 // This changes how long a command may run and nothing else. A command that outlives whichever
 // budget applies is still killed, still reported as exit -1, and still compared literally against
 // the task's expectation like any other integer — 0227 removed the typed termination that could
 // tell a kill from a disagreement, and nothing here brings it back.
-func shellTurnBudget(resp *RunInboxResponse, def time.Duration) time.Duration {
-	if resp == nil || !resp.TaskAcceptance || resp.AcceptanceTimeoutSeconds <= 0 {
-		return def
+func shellTurnBudget(resp *RunInboxResponse, interactive, acceptance time.Duration) time.Duration {
+	if resp == nil || !resp.TaskAcceptance {
+		return interactive
+	}
+	if resp.AcceptanceTimeoutSeconds <= 0 {
+		return acceptance
 	}
 	return time.Duration(resp.AcceptanceTimeoutSeconds) * time.Second
 }
@@ -319,7 +340,7 @@ func runSynchronousShellTurn(
 ) (TurnCompleteRequest, error) {
 	out, exitCode := runShellTurn(
 		ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env,
-		shellTurnBudget(resp, shellTurnTimeout),
+		shellTurnBudget(resp, shellTurnTimeout, acceptanceTurnTimeout),
 	)
 	return TurnCompleteRequest{
 		TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode),
