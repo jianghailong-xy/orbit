@@ -8,6 +8,7 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
+import { WakeDispositionService } from './wake-disposition.service';
 
 /**
  * The clock-independent fact → judgment reducer, shared by synchronous producers and the
@@ -27,6 +28,11 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
  * `CoordinatorConvergenceService` into the authorizer its facts may not be delivered without, and
  * the router the task write path already holds is what reaches it. `CriterionReadyProducer` is the
  * third of the same shape, and the third to be constructed nowhere else.
+ *
+ * `WakeDispositionService` is here for the other half of that argument: it decides which of the
+ * two terminals an authorized wake gets, and opening one of them is `CoordinatorJudgmentService`'s
+ * — this module's own provider, and the reason the router can ask the question without holding the
+ * answer.
  */
 @Module({
   imports: [SessionsModule],
@@ -38,6 +44,7 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
     CriterionReadyProducer,
+    WakeDispositionService,
   ],
   exports: [
     CoordinatorWakeService,
@@ -47,6 +54,7 @@ import { TaskExceptionInputProducer } from './task-exception-input.producer';
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
     CriterionReadyProducer,
+    WakeDispositionService,
   ],
 })
 export class CoordinatorJudgmentModule {}

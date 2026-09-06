@@ -39,6 +39,7 @@ import {
   TASK_EXCEPTION_CONSUMER,
   TaskExceptionInputProducer,
 } from '../projects/task-exception-input.producer';
+import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -137,6 +138,10 @@ async function connect(options: {
     ),
     new TaskExceptionInputProducer(prisma, convergence),
     new CriterionReadyProducer(prisma, convergence),
+    new WakeDispositionService(
+      prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+    ),
   );
   const router = options.wrapRouter ? options.wrapRouter(real) : real;
   const attempts = new SessionAttemptService(prisma, new ConvergenceLedgerService(prisma));

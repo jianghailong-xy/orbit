@@ -19,15 +19,15 @@ export const EXCEPTION_WAKE_PROJECT_GONE = 'PROJECT_GONE';
 export const EXCEPTION_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
 
 /**
- * Who this fact is recorded FOR today.
+ * Who this fact is recorded FOR when it is recorded rather than judged.
  *
  * A task that failed, or an attempt that ended with the task still open, is not consumed by any
  * evaluator in this tree — the four evaluator consumers lost their producers with the judgment
- * machinery — and whether such a fact should also OPEN a judgment session is a decision this unit
- * deliberately does not make: it is `CRITERION_READY`'s sibling question, "does this event change
- * the coordinator's decision", and it belongs to the unit that answers it. So the terminal claimed
- * here is the honest one: the fact is durable, idempotent and convergence-bounded, and the surface
- * it is visible on is the one a person reads.
+ * machinery. Whether such a fact ALSO opens a judgment session is not decided here and never was:
+ * `wake-disposition.ts` answers it from the coverage of the criterion the task serves, so the same
+ * exception ends CONSUMED here when other work is still expected to deliver that criterion, and
+ * ends in a judgment session when nothing is. This consumer is the first of those two terminals:
+ * durable, idempotent, convergence-bounded, and visible on the surface a person reads.
  */
 export const TASK_EXCEPTION_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 

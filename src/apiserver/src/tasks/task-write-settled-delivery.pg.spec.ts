@@ -30,6 +30,7 @@ import {
   type SettledProjectDelivery,
 } from '../projects/project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
+import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -101,6 +102,10 @@ async function connect(): Promise<Stack> {
     ),
     new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
     new CriterionReadyProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new WakeDispositionService(
+      prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+    ),
   );
 
   // The real router, observed rather than replaced: a Proxy that records what each delivery

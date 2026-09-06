@@ -19,13 +19,15 @@ export const CRITERION_READY_WAKE_PROJECT_GONE = 'PROJECT_GONE';
 export const CRITERION_READY_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
 
 /**
- * Who this fact is recorded FOR today.
+ * Who this fact is recorded FOR when it is recorded rather than judged.
  *
- * A criterion whose work has finished is a strong candidate for a judgment session, and this unit
- * deliberately does not open one: "does this event change the coordinator's decision" is the
- * question the unit after this one answers, over every event kind at once, and answering it here
- * for one of them would be that decision made twice. So the terminal claimed is the honest one —
- * the fact is durable, idempotent and convergence-bounded, on the surface a person reads.
+ * A criterion whose work has finished looks like a strong candidate for a judgment session, and
+ * it is not: "does this event change the coordinator's decision" is answered for every event kind
+ * at once by `wake-disposition.ts`, and its answer for a criterion whose serving work is all DONE
+ * is that the claim is BACKED and nobody owes it a next step (§2 there says why — the reversible
+ * moves a coordinator has do not apply to finished work, and whether the claim HOLDS is not a
+ * question anything in Orbit answers). So this consumer is where such a fact ends: durable,
+ * idempotent, convergence-bounded, on the surface a person reads.
  */
 export const CRITERION_READY_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 
@@ -33,7 +35,7 @@ export const CRITERION_READY_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 export interface CriterionReadyDelivery {
   /** The criterion's wake subject — `<projectId>:<criterionKey>`, which is not any task's id. */
   criterionSubjectId: string;
-  outcome: 'CONSUMED' | 'ALREADY_AWAKE' | 'REFUSED';
+  outcome: 'CONSUMED' | 'ALREADY_AWAKE' | 'REFUSED' | 'OPENED' | 'ALREADY_OPEN';
   refusalCode?: string;
 }
 

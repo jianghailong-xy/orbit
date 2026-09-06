@@ -16,6 +16,7 @@ import type {
 import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
+import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 
@@ -57,6 +58,10 @@ function routerOver(
     { afterCommit: () => { throw new Error('not this door'); } } as unknown as ProjectTasksSettledProducer,
     { factsFor: () => { throw new Error('not this door'); } } as unknown as TaskExceptionInputProducer,
     criteria,
+    // The terminal chooser, answering RECORD_ONLY for everything: what this file asks is
+    // which authorizer the door hands the LEDGER, and a fact routed to a judgment session
+    // never reaches the ledger double at all.
+    { openIfDecisive: async () => null } as unknown as WakeDispositionService,
   );
 }
 

@@ -37,6 +37,7 @@ import { readCriterionSatisfaction } from '../projects/project-criterion-satisfa
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { ProjectsService } from '../projects/projects.service';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
+import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -136,6 +137,10 @@ async function connect(options: {
     ),
     new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
     new CriterionReadyProducer(prisma, convergence),
+    new WakeDispositionService(
+      prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+    ),
   );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router);
   const api = new RunnerApiController(

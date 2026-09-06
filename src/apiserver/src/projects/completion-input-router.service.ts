@@ -19,6 +19,7 @@ import {
   TASK_EXCEPTION_CONSUMER,
   TaskExceptionInputProducer,
 } from './task-exception-input.producer';
+import { WakeDispositionService, type WakeSpend } from './wake-disposition.service';
 
 export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILED';
 
@@ -51,7 +52,34 @@ export class CompletionInputRouter {
     private readonly settled: ProjectTasksSettledProducer,
     private readonly exceptions: TaskExceptionInputProducer,
     private readonly criteria: CriterionReadyProducer,
+    private readonly disposition: WakeDispositionService,
   ) {}
+
+  /**
+   * Spend one derived fact: record it always, and open a judgment session only when it changes
+   * what the coordinator would decide.
+   *
+   * The order is the whole claim. `openIfDecisive` answers first and `null` means "record it" —
+   * so a fact that changes nothing still reaches the ledger through `route` below and still ends
+   * CONSUMED against its named consumer. Neither branch is a refusal: an unauthorized wake is
+   * refused inside whichever branch it took, by the producer's own authorizer, which is handed to
+   * both unchanged.
+   */
+  private async spend(
+    fact: WakeFact,
+    consumer: CompletionInputConsumer,
+    authorize: WakeAuthorizer,
+  ): Promise<CompletionInputRouteOutcome | WakeSpend> {
+    const opened = await this.disposition.openIfDecisive(fact, authorize);
+    return opened ?? this.route(
+      fact,
+      consumer,
+      // No side effect beyond the ledger row, so `route`'s own no-op delivery is taken. The
+      // argument is named rather than dropped because the one after it may not be defaulted.
+      undefined,
+      authorize,
+    );
+  }
 
   async route(
     fact: WakeFact,
@@ -108,6 +136,10 @@ export class CompletionInputRouter {
    * agent submitted on purpose; for a failure it is the hole "failed → open a successor → fail
    * again" lives in, so the convergence ledger — not this file's default — decides whether the
    * coordinator may be woken again.
+   *
+   * What an authorized exception is then SPENT on is `spend`'s question rather than this door's: a
+   * failure whose criterion still has other work outstanding changes nothing and is recorded, and
+   * one that leaves its criterion with nothing to deliver it opens the session.
    */
   async routeTaskExceptions(
     taskIds: ReadonlyArray<string | null | undefined>,
@@ -115,14 +147,7 @@ export class CompletionInputRouter {
     const facts = await this.exceptions.factsFor(taskIds);
     const deliveries: TaskExceptionDelivery[] = [];
     for (const fact of facts) {
-      const routed = await this.route(
-        fact,
-        TASK_EXCEPTION_CONSUMER,
-        // No side effect beyond the ledger row, so `route`'s own no-op delivery is taken. The
-        // argument is named rather than dropped because the one after it may not be defaulted.
-        undefined,
-        this.exceptions.authorize,
-      );
+      const routed = await this.spend(fact, TASK_EXCEPTION_CONSUMER, this.exceptions.authorize);
       deliveries.push({
         taskId: fact.subjectId,
         event: fact.event,
@@ -147,6 +172,11 @@ export class CompletionInputRouter {
    * The fourth argument is passed here too. Readiness is not an exception, but it is not an input
    * an agent submitted either: work reopens and finishes again, and only the convergence ledger
    * bounds how often that may wake anybody.
+   *
+   * And `spend` decides the terminal here on the same terms as the door above. It answers
+   * RECORD_ONLY for every criterion this producer derives a fact for — a criterion whose serving
+   * work is all DONE is backed, and `wake-disposition.ts` §2 says a backed claim is nobody's next
+   * step — which is the answer this door used to hard-code while waiting for a rule to state it.
    */
   async routeReadyCriteria(
     projectIds: ReadonlyArray<string | null | undefined>,
@@ -154,14 +184,7 @@ export class CompletionInputRouter {
     const facts = await this.criteria.factsFor(projectIds);
     const deliveries: CriterionReadyDelivery[] = [];
     for (const fact of facts) {
-      const routed = await this.route(
-        fact,
-        CRITERION_READY_CONSUMER,
-        // No side effect beyond the ledger row, so `route`'s own no-op delivery is taken. The
-        // argument is named rather than dropped because the one after it may not be defaulted.
-        undefined,
-        this.criteria.authorize,
-      );
+      const routed = await this.spend(fact, CRITERION_READY_CONSUMER, this.criteria.authorize);
       deliveries.push({
         criterionSubjectId: fact.subjectId,
         outcome: routed.outcome,
@@ -176,6 +199,7 @@ export class CompletionInputRouter {
 export interface TaskExceptionDelivery {
   taskId: string;
   event: CoordinatorWakeEvent;
-  outcome: CompletionInputRouteOutcome['outcome'];
+  /** Both terminals: `CONSUMED` for a fact that was recorded, `OPENED` for one that was judged. */
+  outcome: CompletionInputRouteOutcome['outcome'] | WakeSpend['outcome'];
   refusalCode?: string;
 }

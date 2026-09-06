@@ -40,6 +40,7 @@ import {
   EXCEPTION_WAKE_COORDINATOR_DISABLED,
   TaskExceptionInputProducer,
 } from '../projects/task-exception-input.producer';
+import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -132,6 +133,10 @@ async function connect(): Promise<Stack> {
     ),
     new TaskExceptionInputProducer(prisma, convergence),
     new CriterionReadyProducer(prisma, convergence),
+    new WakeDispositionService(
+      prisma,
+      new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
+    ),
   );
   return { db, tasks: new TasksService(prisma, sessions, realtime, undefined, router) };
 }
