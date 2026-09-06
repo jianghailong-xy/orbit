@@ -254,6 +254,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        all, so it is not a fourth writer of the DONE fence, and has no INSERT/UPDATE/DELETE,
   //        so no preserved row is read or written. Every existing attachment reads NULL for the
   //        new column, which the new CHECK permits unconditionally, so it needs no backfill.
+  //   0242 widened `project_coordinator_wake`'s event CHECK by one spelling, so a criterion whose
+  //        work is finished and whose result is on nobody's default branch has a name. Read against
+  //        every claim above: `project_coordinator_wake` is not a relation this file preserves and
+  //        is not reachable from one. It is one `ALTER TABLE ... DROP CONSTRAINT / ADD CONSTRAINT`
+  //        over that table alone — it names no `task` object, neither 0177 relation,
+  //        `task_executable_acceptance_pair` nor any `project_acceptance_*` object. It creates no
+  //        table, column, index, enum or trigger, drops nothing but the constraint it immediately
+  //        restates, carries no `ALTER TYPE` and no `DROP TYPE` — so all three
+  //        `task_completion_criterion` labels survive — has no `CREATE OR REPLACE FUNCTION` at all,
+  //        so it is not a fourth writer of the DONE fence, and has no INSERT/UPDATE/DELETE, so no
+  //        preserved row is read or written. The set only grows, so no stored event can be refused
+  //        by it and it needs no backfill.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -265,7 +277,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0238_task_evidence_decision',
       '0239_evidence_judgment_confirm_lane',
       '0240_runner_model_catalog_refresh_request',
-      '0241_task_attachments'],
+      '0241_task_attachments',
+      '0242_criterion_unlanded_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

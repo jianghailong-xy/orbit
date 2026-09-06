@@ -116,6 +116,12 @@ test('the gates are wired through the router, and the hollowed-out attempt produ
   assert.match(moduleSource, /CriterionReadyProducer/);
   assert.doesNotMatch(tasksSource, /CriterionReadyProducer/);
 
+  // And the criterion-landing gate, the fourth. Its input is a merge receipt rather than a task
+  // status, which changes nothing about either claim: one instance, in the module that owns its
+  // convergence service, reached from the write path through the router.
+  assert.match(moduleSource, /CriterionUnlandedProducer/);
+  assert.doesNotMatch(tasksSource, /CriterionUnlandedProducer/);
+
   assert.doesNotMatch(moduleSource, /AttemptEndedUnsettledProducer/);
   assert.doesNotMatch(runnerSource, /AttemptEndedUnsettledProducer|attemptEndedUnsettled/);
   assert.doesNotMatch(attemptSource, /ATTEMPT_WAKE_SESSION_PARKED|ATTEMPT_SESSION_PARKED/);

@@ -14,6 +14,7 @@ import type {
   WakeAuthorizer,
 } from '../projects/coordinator-wake.service';
 import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
+import { CriterionUnlandedProducer } from '../projects/criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
 import { WakeDispositionService } from '../projects/wake-disposition.service';
@@ -62,6 +63,7 @@ function routerOver(
     // which authorizer the door hands the LEDGER, and a fact routed to a judgment session
     // never reaches the ledger double at all.
     { openIfDecisive: async () => null } as unknown as WakeDispositionService,
+    { factsFor: () => { throw new Error('not this door'); } } as unknown as CriterionUnlandedProducer,
   );
 }
 

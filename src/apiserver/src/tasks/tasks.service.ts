@@ -1388,6 +1388,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     await this.deliverSettledProjects([settled?.projectId]);
     await this.deliverReadyCriteria([settled?.projectId]);
+    await this.deliverUnlandedCriteria([settled?.projectId]);
   }
 
   /**
@@ -1434,6 +1435,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!projectIds.some((id) => !!id)) return;
     await this.completionInputs.routeReadyCriteria(projectIds).catch((e) =>
       this.logger.warn(`ready-criterion delivery failed: ${e?.message ?? e}`),
+    );
+  }
+
+  /**
+   * Deliver the acceptance criteria whose finished work is on nobody's default branch.
+   *
+   * The fourth fact of the completion edge, cut per CRITERION like the readiness one above and
+   * asking the question that one cannot: a criterion can read finished while the code implementing
+   * it exists only in a task session's own worktree. Project ids and the same generosity, for the
+   * same reason — whether anything landed is decided by merge receipts this write did not make and
+   * cannot see, so what this write finished off is not something it gets to guess.
+   *
+   * Logged rather than raised, for the same reason as its three siblings: the write is already
+   * committed, and the same fact is re-derived from the same rows by the next delivery.
+   */
+  private async deliverUnlandedCriteria(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    if (!this.completionInputs) return;
+    if (!projectIds.some((id) => !!id)) return;
+    await this.completionInputs.routeUnlandedCriteria(projectIds).catch((e) =>
+      this.logger.warn(`unlanded-criterion delivery failed: ${e?.message ?? e}`),
     );
   }
 
@@ -7859,6 +7882,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // And the criterion half, over the same two projects: this door is where an aggregate parent
     // reaches DONE from a child's write, and that parent can be the last work serving a criterion.
     await this.deliverReadyCriteria([before.projectId, updated.projectId, dto.projectId]);
+    await this.deliverUnlandedCriteria([before.projectId, updated.projectId, dto.projectId]);
     // And the exception half of the same committed write: this door is where a run files its own
     // conservative FAILED, and where a task whose attempt already ended is edited again.
     await this.deliverTaskExceptions([id]);
@@ -9124,6 +9148,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and leaves a criterion whose only unfinished work was that task served entirely by DONE.
     await this.deliverSettledProjects(projectIds);
     await this.deliverReadyCriteria(projectIds);
+    await this.deliverUnlandedCriteria(projectIds);
     return { ok: true };
   }
 

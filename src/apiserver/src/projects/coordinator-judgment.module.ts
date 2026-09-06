@@ -6,6 +6,7 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
+import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
@@ -27,7 +28,11 @@ import { WakeDispositionService } from './wake-disposition.service';
  * `TaskExceptionInputProducer` joins them for exactly that reason: it composes this module's
  * `CoordinatorConvergenceService` into the authorizer its facts may not be delivered without, and
  * the router the task write path already holds is what reaches it. `CriterionReadyProducer` is the
- * third of the same shape, and the third to be constructed nowhere else.
+ * third of the same shape, and the third to be constructed nowhere else. `CriterionUnlandedProducer`
+ * is the fourth: it answers a question about MERGE receipts rather than about task statuses, and it
+ * is here for the same one reason all of them are — the convergence service its authorizer composes
+ * is this module's provider, and merging is the one coordinator action that cannot be undone, so an
+ * unbounded version of this fact is the most expensive one to have wired anywhere else.
  *
  * `WakeDispositionService` is here for the other half of that argument: it decides which of the
  * two terminals an authorized wake gets, and opening one of them is `CoordinatorJudgmentService`'s
@@ -44,6 +49,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
     CriterionReadyProducer,
+    CriterionUnlandedProducer,
     WakeDispositionService,
   ],
   exports: [
@@ -54,6 +60,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     ProjectTasksSettledProducer,
     TaskExceptionInputProducer,
     CriterionReadyProducer,
+    CriterionUnlandedProducer,
     WakeDispositionService,
   ],
 })

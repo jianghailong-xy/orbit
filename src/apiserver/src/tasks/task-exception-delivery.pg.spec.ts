@@ -32,6 +32,7 @@ import {
 import type { WakeFact } from '../projects/coordinator-wake';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
+import { CriterionUnlandedProducer } from '../projects/criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import {
@@ -142,6 +143,7 @@ async function connect(options: {
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
+    new CriterionUnlandedProducer(prisma, convergence),
   );
   const router = options.wrapRouter ? options.wrapRouter(real) : real;
   const attempts = new SessionAttemptService(prisma, new ConvergenceLedgerService(prisma));

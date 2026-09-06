@@ -206,12 +206,12 @@ test('the events this unit knows about are exactly those the latest migration ac
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0224_evidence_judgment_removal_of_human_signoff/migration.sql',
+      '../../prisma/migrations/0242_criterion_unlanded_wake/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0224 no longer constrains the event column');
+  assert.ok(check, 'migration 0242 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,

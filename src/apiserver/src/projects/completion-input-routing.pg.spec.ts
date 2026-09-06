@@ -25,6 +25,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
+import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
@@ -55,6 +56,13 @@ const noReadyCriteria = {
     throw new Error('N7 evidence routing must not derive criterion-readiness facts');
   },
 } as unknown as CriterionReadyProducer;
+
+/** And the fifth. */
+const noUnlandedCriteria = {
+  factsFor: () => {
+    throw new Error('N7 evidence routing must not derive criterion-landing facts');
+  },
+} as unknown as CriterionUnlandedProducer;
 
 /**
  * The terminal chooser, doubled for the same reason: `route` is called directly here, so nothing
@@ -174,7 +182,7 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
     const prisma = db as unknown as PrismaService;
     const router = new CompletionInputRouter(
       new CoordinatorWakeService(prisma), noSettledDeliveries, noTaskExceptions, noReadyCriteria,
-      noWakeDisposition,
+      noWakeDisposition, noUnlandedCriteria,
     );
     const evidenceService = new TaskCompletionEvidenceService(prisma, undefined, router);
     const actor = { type: CreatorType.USER, id: ownerId };
@@ -278,7 +286,7 @@ suite('result/verdict inputs consume once; refusal releases the exact fact for r
     });
     const router = new CompletionInputRouter(
       new CoordinatorWakeService(db as unknown as PrismaService), noSettledDeliveries,
-      noTaskExceptions, noReadyCriteria, noWakeDisposition,
+      noTaskExceptions, noReadyCriteria, noWakeDisposition, noUnlandedCriteria,
     );
     // The key is computed/claimed before authorization. REFUSED rows remain audit, but leave the
     // partial unique index so the repaired authorization can consume this same immutable fact.

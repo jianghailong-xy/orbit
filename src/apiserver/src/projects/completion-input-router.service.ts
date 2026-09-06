@@ -12,6 +12,11 @@ import {
   type CriterionReadyDelivery,
 } from './criterion-ready.producer';
 import {
+  CRITERION_UNLANDED_CONSUMER,
+  CriterionUnlandedProducer,
+  type CriterionUnlandedDelivery,
+} from './criterion-unlanded.producer';
+import {
   ProjectTasksSettledProducer,
   type SettledProjectDelivery,
 } from './project-tasks-settled.producer';
@@ -33,8 +38,8 @@ export type CompletionInputRouteOutcome =
  *
  * Right for the one fact that eats it — an evidence revision an agent chose to submit is bounded by
  * the agent that submitted it. Wrong for every fact DERIVED from a world that can go round again,
- * which is why `routeTaskExceptions` and `routeReadyCriteria` below both pass their producer's
- * authorizer rather than letting this stand in for one.
+ * which is why `routeTaskExceptions`, `routeReadyCriteria` and `routeUnlandedCriteria` below all
+ * pass their producer's authorizer rather than letting this stand in for one.
  */
 const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
 
@@ -53,6 +58,7 @@ export class CompletionInputRouter {
     private readonly exceptions: TaskExceptionInputProducer,
     private readonly criteria: CriterionReadyProducer,
     private readonly disposition: WakeDispositionService,
+    private readonly unlanded: CriterionUnlandedProducer,
   ) {}
 
   /**
@@ -185,6 +191,38 @@ export class CompletionInputRouter {
     const deliveries: CriterionReadyDelivery[] = [];
     for (const fact of facts) {
       const routed = await this.spend(fact, CRITERION_READY_CONSUMER, this.criteria.authorize);
+      deliveries.push({
+        criterionSubjectId: fact.subjectId,
+        outcome: routed.outcome,
+        ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
+      });
+    }
+    return deliveries;
+  }
+
+  /**
+   * The fifth door: the acceptance criteria whose finished work is on nobody's default branch.
+   *
+   * Project ids in, the same generosity, and the same producer-owned authorizer as the door above
+   * — and one thing that is genuinely different about this fact, which is why it is a door rather
+   * than a flag on the readiness one. "The work is done" and "the work is on `main`" are answered
+   * from DIFFERENT rows written by DIFFERENT paths: a task settles through the write path this
+   * router hangs off, and a merge is recorded by a runner, an agent or a person long afterwards.
+   * Folding the second into the first event would key one fact on two independently moving
+   * projections, and the first of them to move would spend the idempotency key the second needed.
+   *
+   * So the two are two facts about one criterion, and a criterion that is ready and landed simply
+   * produces the first. `spend` decides the terminal on the same terms as every door here, and it
+   * is deliberately not overridden: which authorized wakes are worth a session is one rule, stated
+   * once, in the unit that states it for every event kind.
+   */
+  async routeUnlandedCriteria(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<CriterionUnlandedDelivery[]> {
+    const facts = await this.unlanded.factsFor(projectIds);
+    const deliveries: CriterionUnlandedDelivery[] = [];
+    for (const fact of facts) {
+      const routed = await this.spend(fact, CRITERION_UNLANDED_CONSUMER, this.unlanded.authorize);
       deliveries.push({
         criterionSubjectId: fact.subjectId,
         outcome: routed.outcome,

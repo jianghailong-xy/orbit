@@ -25,6 +25,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
+import { CriterionUnlandedProducer } from '../projects/criterion-unlanded.producer';
 import { criteriaFromDefinitions } from '../projects/project-acceptance';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
@@ -128,6 +129,7 @@ async function connect(): Promise<Stack> {
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
+    new CriterionUnlandedProducer(prisma, new CoordinatorConvergenceService(prisma)),
   );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router);
   const api = new RunnerApiController(

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { AttemptBudgetDimension } from './attempt-budget';
 import { canonicalJson, compare } from './canonical-json';
+import type { CriterionLanding } from './project-criterion-landing';
 
 /**
  * What wakes a project coordinator, and what makes one waking of it the same as another.
@@ -81,6 +82,8 @@ export const COORDINATOR_WAKE_EVENTS = [
   'PROJECT_TASKS_SETTLED',
   /** The last task serving one acceptance criterion reached DONE. */
   'CRITERION_READY',
+  /** A criterion's work is finished and no merge receipt puts it on the default branch. */
+  'CRITERION_UNLANDED',
   /** N10 appended a new immutable completion-evidence revision. */
   'COMPLETION_EVIDENCE_REVISED',
   /** A terminal result is durable but the control plane has not committed its completion ACK. */
@@ -327,5 +330,55 @@ export function criterionReadyFact(
     subjectId: criterionSubjectId(projectId, criterionKey),
     subjectVersion: settlementVersion(serving),
     detail: { criterionKey, taskCount: serving.length },
+  };
+}
+
+/**
+ * `CRITERION_UNLANDED` — a criterion's work is finished and none of it is on the default branch.
+ *
+ * WHY THIS IS `CRITERION_READY` PLUS ONE CLAUSE, AND NOT A SECOND SHAPE
+ * ====================================================================
+ * The two questions are asked about the same subject in the same unit, and the honest reading of
+ * the second is "the first, and the result is nowhere anybody can get at it". So the readiness
+ * predicate is restated here in full rather than approximated: a non-empty serving set, every
+ * member of it DONE. Cutting this one per TASK instead would say "this branch is not on main"
+ * about a piece of work whose SIBLINGS are still running, which is not a fact anybody can act on —
+ * merging one of three unfinished contributions to a criterion is not what a coordinator would do
+ * with it.
+ *
+ * `landing` is the answer this event exists to carry and it arrives as a parameter, computed by
+ * the module that owns what a merge receipt means. It is deliberately not recomputed here: the
+ * three-valued vocabulary, the two results that count and the branch names that count are one
+ * reading in one place, and a second one in a fact reducer would be a second definition of
+ * "landed" that could drift from the one a person is shown.
+ *
+ * `null` for `LANDED`, which is the ordinary end of a piece of work and the whole point of the
+ * pairing: the only difference between a criterion that produces this fact and one that does not
+ * is whether a receipt exists.
+ *
+ * THE VERSION IS THE SETTLEMENT, AND NOT THE RECEIPTS
+ * ==================================================
+ * `settlementVersion` again, so one finished task set wakes a coordinator about its landing at
+ * most once. Folding the receipts into the version instead would make PARTIAL progress towards
+ * landing — one of three serving tasks merged, the criterion still not on main — a second fact
+ * about the same unfinished situation, which is §0's loop with a merge in the middle of it. When
+ * the receipts complete, the answer stops being this fact at all.
+ */
+export function criterionUnlandedFact(
+  projectId: string,
+  criterionKey: string,
+  serving: readonly TaskSettlement[],
+  landing: CriterionLanding,
+): WakeFact | null {
+  if (landing === 'LANDED') return null;
+  if (serving.length === 0) return null;
+  if (!serving.every((task) => task.status === 'DONE')) return null;
+  return {
+    event: 'CRITERION_UNLANDED',
+    projectId,
+    subjectType: 'CRITERION',
+    subjectId: criterionSubjectId(projectId, criterionKey),
+    subjectVersion: settlementVersion(serving),
+    detail: { criterionKey, taskCount: serving.length, landing },
   };
 }

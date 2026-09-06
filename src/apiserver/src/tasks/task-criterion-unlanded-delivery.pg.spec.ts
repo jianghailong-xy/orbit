@@ -26,15 +26,14 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { criterionSubjectId } from '../projects/coordinator-wake';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
+import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import {
-  CRITERION_READY_CONSUMER,
-  CRITERION_READY_WAKE_COORDINATOR_DISABLED,
-  CriterionReadyProducer,
-} from '../projects/criterion-ready.producer';
-import { CriterionUnlandedProducer } from '../projects/criterion-unlanded.producer';
+  CRITERION_UNLANDED_CONSUMER,
+  CRITERION_UNLANDED_WAKE_COORDINATOR_DISABLED,
+  CriterionUnlandedProducer,
+} from '../projects/criterion-unlanded.producer';
 import { criteriaFromDefinitions } from '../projects/project-acceptance';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
-import { readCriterionSatisfaction } from '../projects/project-criterion-satisfaction';
 import { ProjectTasksSettledProducer } from '../projects/project-tasks-settled.producer';
 import { ProjectsService } from '../projects/projects.service';
 import { TaskExceptionInputProducer } from '../projects/task-exception-input.producer';
@@ -46,23 +45,30 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 
 /**
- * `CRITERION_READY`: the fact cut per ACCEPTANCE CRITERION, and never per task.
+ * `CRITERION_UNLANDED`: the criterion whose work is finished and is on nobody's default branch.
  *
  *   COORDINATOR_PG_URL=postgresql://... \
  *   COORDINATOR_PG_EXPECTED_DATABASE=pcc... \
  *   COORDINATOR_PG_EXPECTED_USER=pcc... \
  *   COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER=... \
- *   node --test build/tasks/task-criterion-ready-delivery.pg.spec.js
+ *   node --test build/tasks/task-criterion-unlanded-delivery.pg.spec.js
  *
- * WHY EVERY PROJECT BELOW KEEPS ONE TASK OPEN
- * ===========================================
- * Deliberate, and it is the whole claim. A criterion becoming ready is not "this project settled"
- * — `PROJECT_TASKS_SETTLED` is that fact and its two siblings already cover it — so every fixture
- * here files one chore task that serves no criterion and never finishes. The project therefore
- * cannot settle, and anything that lands in the ledger landed because a CRITERION's own serving
- * work finished. Cutting the event per task would get both ends of this wrong: a project whose
- * tasks have all settled while some criterion has nobody serving it is a long way from done, and a
- * project whose criteria are all met while one forgotten task sits open is done and never asked.
+ * WHY THE CONTROL IS A SIBLING CRITERION AND NOT A SECOND DELIVERY
+ * ===============================================================
+ * "Add the receipt and deliver again, expect nothing" cannot on its own tell a working landing
+ * clause from a deleted producer, and it cannot even tell one from an untouched world: the wake
+ * key is a function of the fact, so re-delivering the SAME finished task set answers ALREADY_AWAKE
+ * whatever the receipts say. The pairing therefore has to be two worlds that differ by the receipt
+ * and by nothing else, each reaching the ledger for the first time — so the first case below
+ * states two criteria in one project, serves each with one EXECUTABLE task, settles both through
+ * the product's own write path, and records a merge receipt for exactly one of them.
+ *
+ * It then does the literal second delivery as well, in a shape where idempotency cannot be what
+ * suppresses the row: more work is filed against the criterion that DID wake, so its serving set —
+ * and therefore its fact version — moves, and this time every serving task carries a receipt. That
+ * the version really moved is not asserted by inspection: `CRITERION_READY` is derived from the
+ * same serving set at the same moment by a predicate identical to this one except for the landing
+ * clause, and it writes its second row while this event writes none.
  *
  * WHAT SETTLES THE WORK
  * =====================
@@ -70,6 +76,9 @@ import { TasksService } from './tasks.service';
  * reaches DONE the way most tasks in production do: `turnComplete` queues the command, `dequeueTurn`
  * reserves it, bash runs it, and `turnComplete` compares the code it returned against the declared
  * one under the task's own row lock. What the cases assert is what that DERIVED status delivered.
+ *
+ * Every fixture files one chore task that serves no criterion and never finishes, so no project
+ * here can settle and nothing that lands in the ledger landed because a project ended.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  */
@@ -110,14 +119,16 @@ interface Stack {
   api: RunnerApiController;
   tasks: TasksService;
   projects: ProjectsService;
+  /** The same service over a router of the caller's choosing, for the post-commit probe. */
+  tasksWith: (router: CompletionInputRouter) => TasksService;
 }
 
 /**
  * The production wiring, over one client.
  *
- * `convergence` is the only seam: passing a refusing double is how a case asks "was this fact
- * authorized THERE", because a delivery that ate the router's always-allow default would never
- * consult it and would land CONSUMED instead of REFUSED.
+ * `convergence` is the only seam, and it is handed to THIS producer alone: passing a refusing
+ * double is how a case asks "was this fact authorized THERE", because a delivery that ate the
+ * router's always-allow default would never consult it and would land CONSUMED instead of REFUSED.
  */
 async function connect(options: {
   convergence?: CoordinatorConvergenceService;
@@ -137,12 +148,12 @@ async function connect(options: {
       new CoordinatorConvergenceService(prisma),
     ),
     new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
-    new CriterionReadyProducer(prisma, convergence),
+    new CriterionReadyProducer(prisma, new CoordinatorConvergenceService(prisma)),
     new WakeDispositionService(
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
-    new CriterionUnlandedProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new CriterionUnlandedProducer(prisma, convergence),
   );
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router);
   const api = new RunnerApiController(
@@ -158,7 +169,13 @@ async function connect(options: {
     tasks,
   );
   const projects = new ProjectsService(prisma, new ProjectAcceptanceService(prisma));
-  return { db, api, tasks, projects };
+  return {
+    db,
+    api,
+    tasks,
+    projects,
+    tasksWith: (wired) => new TasksService(prisma, sessions, realtime, undefined, wired),
+  };
 }
 
 interface Fixture {
@@ -183,7 +200,7 @@ async function fixture(
   await db.user.create({
     data: {
       id: ownerId,
-      email: `${label}-${ownerId}@criterion-ready.invalid`,
+      email: `${label}-${ownerId}@criterion-unlanded.invalid`,
       name: label,
       passwordHash: 'x',
     },
@@ -206,7 +223,7 @@ async function fixture(
     data: {
       id: projectId,
       ownerId,
-      title: `${label} 唤醒项目`,
+      title: `${label} 落地项目`,
       coordinatorEnabled: options.coordinatorEnabled ?? true,
       coordinatorWorkspaceId: workspaceId,
     },
@@ -242,6 +259,50 @@ async function serve(stack: Stack, f: Fixture, criterionKey: string, title: stri
   assert.equal(declared.completionCriterion, 'EXECUTABLE');
   assert.equal(declared.status, TaskStatus.OPEN, 'the declaration is not a status');
   return declared.id;
+}
+
+/**
+ * Record that this task's branch was merged into `main`.
+ *
+ * The receipt is the whole input this event is defined over, and it is written the way the three
+ * production writers of it write one: a session of the task, a `MERGED` result, a target branch the
+ * runner would have auto-detected, and a target the merge moved to. Written directly rather than
+ * through a merge, because what is under test is what the DERIVATION does with a receipt — not how
+ * git produces one.
+ */
+async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: string) {
+  const sessionId = randomUUID();
+  await stack.db.session.create({
+    data: {
+      id: sessionId,
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId,
+      title: `${label}-merge`,
+      prompt: `${label}-merge`,
+      provider: 'claude',
+      status: RunStatus.SUCCEEDED,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+    },
+  });
+  await stack.db.sessionMergeReceipt.create({
+    data: {
+      ownerId: f.ownerId,
+      sessionId,
+      taskId,
+      projectId: f.projectId,
+      result: 'MERGED',
+      sourceBranch: `orbit/${label}`,
+      sourceSha: 'a'.repeat(40),
+      targetBranch: 'main',
+      targetShaBefore: 'b'.repeat(40),
+      targetShaAfter: 'c'.repeat(40),
+      recordedBy: 'AGENT',
+      idempotencyKey: `landed:${taskId}`,
+    },
+  });
 }
 
 /**
@@ -317,10 +378,11 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
   );
 }
 
-function readyWakes(db: PrismaClient, projectId: string) {
+function wakesOf(db: PrismaClient, projectId: string, event: string) {
   return db.projectCoordinatorWake.findMany({
-    where: { projectId, event: 'CRITERION_READY' },
+    where: { projectId, event },
     select: {
+      projectId: true,
       subjectType: true,
       subjectId: true,
       status: true,
@@ -333,6 +395,9 @@ function readyWakes(db: PrismaClient, projectId: string) {
   });
 }
 
+const unlandedWakes = (db: PrismaClient, projectId: string) =>
+  wakesOf(db, projectId, 'CRITERION_UNLANDED');
+
 function judgmentSessions(db: PrismaClient, ownerId: string) {
   return db.session.findMany({
     where: { ownerId, dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR, deletedAt: null },
@@ -340,101 +405,87 @@ function judgmentSessions(db: PrismaClient, ownerId: string) {
   });
 }
 
-test('the criterion wakes on its LAST serving task, and not on the one before it',
-  { skip, timeout: 240_000 }, async () => {
+test('finished work off main wakes the coordinator, and the same work on main does not',
+  { skip, timeout: 300_000 }, async () => {
     const stack = await connect();
     try {
-      const f = await fixture(stack, 'last-serving-task');
-      const [criterion] = await state(stack, f, ['两条活一起服务这条标准']);
-      const first = await serve(stack, f, criterion!.key, '服务这条标准的第一件活');
-      const second = await serve(stack, f, criterion!.key, '服务这条标准的第二件活');
+      const f = await fixture(stack, 'off-main-and-on-main');
+      const [landed, stranded] = await state(stack, f, [
+        '这条标准的活已经合进 main', '这条标准的活干完了但还在分支上',
+      ]);
 
-      // ── the criterion still has work outstanding ─────────────────────────────────────────────
-      await settleByAcceptance(stack, f, first, 'first-of-two');
-      assert.deepEqual(
-        await readyWakes(stack.db, f.projectId), [],
-        'a criterion one of whose two serving tasks is still OPEN is not ready',
-      );
+      // Two criteria, one EXECUTABLE task each, settled by the same route. The ONLY asymmetry is
+      // that one of the two tasks has a merge receipt into the default branch.
+      const onMain = await serve(stack, f, landed!.key, '已经合进 main 的那件活');
+      const onBranch = await serve(stack, f, stranded!.key, '还在分支上的那件活');
+      await recordLanding(stack, f, onMain, 'on-main');
 
-      // ── and now it does not ──────────────────────────────────────────────────────────────────
-      await settleByAcceptance(stack, f, second, 'second-of-two');
-      const wakes = await readyWakes(stack.db, f.projectId);
-      assert.equal(wakes.length, 1, 'the last serving task reaching DONE delivered exactly one row');
+      await settleByAcceptance(stack, f, onMain, 'first-of-two');
+      await settleByAcceptance(stack, f, onBranch, 'second-of-two');
 
-      // The identity is the CRITERION's. A row keyed on the task that happened to finish last
-      // would carry a different subject for the same event depending on which of the two ran
-      // second, and would say nothing about the condition the coordinator reasons in.
-      const row = wakes[0]!;
-      assert.equal(row.subjectType, 'CRITERION');
-      assert.equal(row.subjectId, criterionSubjectId(f.projectId, criterion!.key));
+      const wakes = await unlandedWakes(stack.db, f.projectId);
       assert.equal(
-        (row.detail as Record<string, unknown>).criterionKey, criterion!.key,
-        'the fact must name the criterion whose coverage changed',
+        wakes.length, 1,
+        'exactly one of the two finished criteria is off the default branch',
       );
-      assert.equal((row.detail as Record<string, unknown>).taskCount, 2);
-      for (const taskId of [first, second, f.choreTaskId]) {
+      const row = wakes[0]!;
+      assert.equal(row.projectId, f.projectId);
+      assert.equal(row.subjectType, 'CRITERION');
+      assert.equal(
+        row.subjectId, criterionSubjectId(f.projectId, stranded!.key),
+        'the fact is about the criterion whose work is on a branch',
+      );
+      assert.notEqual(
+        row.subjectId, criterionSubjectId(f.projectId, landed!.key),
+        'a criterion whose every serving task has a MERGED receipt into main is not unlanded',
+      );
+      assert.equal((row.detail as Record<string, unknown>).criterionKey, stranded!.key);
+      assert.equal((row.detail as Record<string, unknown>).landing, 'UNKNOWN');
+      for (const taskId of [onMain, onBranch, f.choreTaskId]) {
         assert.notEqual(row.subjectId, taskId, 'the subject is a criterion, not a task');
       }
       assert.equal(row.status, 'CONSUMED');
-      assert.equal(row.consumerType, CRITERION_READY_CONSUMER);
+      assert.equal(row.consumerType, CRITERION_UNLANDED_CONSUMER);
 
-      // And the project itself is nowhere near settled, which is the point of cutting it this way.
+      // Both criteria are READY — the work is finished on both — which is what makes the row above
+      // a statement about landing rather than about completion.
+      assert.equal((await wakesOf(stack.db, f.projectId, 'CRITERION_READY')).length, 2);
+
+      // ── the literal second delivery: the receipt arrives, and the fact stops ─────────────────
+      // The serving set of the criterion that DID wake is moved by filing more work against it, so
+      // its fact version moves too and the already-claimed key cannot be what suppresses the row.
+      // Both members now carry a receipt.
+      await recordLanding(stack, f, onBranch, 'caught-up');
+      const alsoServing = await serve(stack, f, stranded!.key, '同一条标准的第二件活，也合进了 main');
+      await recordLanding(stack, f, alsoServing, 'second-serving');
+      await settleByAcceptance(stack, f, alsoServing, 'after-the-receipt');
+
+      assert.equal(
+        (await unlandedWakes(stack.db, f.projectId)).length, 1,
+        'a criterion every serving task of which now has a receipt woke the coordinator again',
+      );
+      // And the delivery that produced nothing DID run over a moved serving set: readiness is
+      // derived from the same rows at the same moment by the same predicate minus the landing
+      // clause, and it wrote its third row. The receipt is the only difference between them.
+      assert.equal(
+        (await wakesOf(stack.db, f.projectId, 'CRITERION_READY')).length, 3,
+        'the serving set did not move, so the previous assertion proved only idempotency',
+      );
+
       assert.equal(
         (await stack.db.task.findUniqueOrThrow({ where: { id: f.choreTaskId } })).status,
         TaskStatus.OPEN,
       );
       assert.deepEqual(
-        await stack.db.projectCoordinatorWake.findMany({
-          where: { projectId: f.projectId, event: 'PROJECT_TASKS_SETTLED' },
-        }),
-        [],
-        'the project has not settled, and the criterion became ready anyway',
+        await wakesOf(stack.db, f.projectId, 'PROJECT_TASKS_SETTLED'), [],
+        'the project has not settled, and a criterion was answered about anyway',
       );
     } finally {
       await stack.db.$disconnect();
     }
   });
 
-test('a criterion nobody serves is not ready, and the derivation says why',
-  { skip, timeout: 240_000 }, async () => {
-    const stack = await connect();
-    try {
-      const f = await fixture(stack, 'nobody-serves-it');
-      const [served, unserved] = await state(stack, f, [
-        '这条标准有活服务它', '这条标准没有任何活服务它',
-      ]);
-      const only = await serve(stack, f, served!.key, '服务第一条标准的唯一一件活');
-      await settleByAcceptance(stack, f, only, 'the-only-one');
-
-      // The sibling criterion is what makes this case non-vacuous: the producer ran over BOTH, and
-      // came back with one fact. Zero rows on their own would also be what a deleted producer
-      // returns.
-      const wakes = await readyWakes(stack.db, f.projectId);
-      assert.equal(wakes.length, 1, 'exactly one of the two criteria may be ready');
-      assert.equal(wakes[0]!.subjectId, criterionSubjectId(f.projectId, served!.key));
-      assert.notEqual(
-        wakes[0]!.subjectId, criterionSubjectId(f.projectId, unserved!.key),
-        'a criterion with an empty serving set has not been met — it has not been attempted',
-      );
-
-      // Cross-checked against the product's own answer about that criterion, so the emptiness this
-      // producer declines to wake on is the same emptiness the satisfaction derivation reports as
-      // `NO_WORK_SERVES_IT` rather than a second opinion about what "unserved" means.
-      const derived = await readCriterionSatisfaction(
-        stack.db as unknown as PrismaService, f.ownerId, f.projectId,
-      );
-      const forUnserved = derived.find((row) => row.definitionId === unserved!.definitionId);
-      assert.ok(forUnserved);
-      assert.equal(forUnserved.satisfied, false);
-      assert.deepEqual(forUnserved.unmet.map((reason) => reason.clause), ['NO_WORK_SERVES_IT']);
-      const forServed = derived.find((row) => row.definitionId === served!.definitionId);
-      assert.equal(forServed?.satisfied, true, 'and the one that DID wake is the one that is met');
-    } finally {
-      await stack.db.$disconnect();
-    }
-  });
-
-test('a ready criterion is refused by convergence, not waved through by a default',
+test('an unlanded criterion is refused by convergence, not waved through by a default',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect({ convergence: refusingConvergence() });
     try {
@@ -445,9 +496,10 @@ test('a ready criterion is refused by convergence, not waved through by a defaul
 
       // The delivery reached the producer's authorizer and the authorizer reached convergence. A
       // door that let `route()`'s always-allow default stand in would never consult it, and this
-      // row would say CONSUMED.
-      const wakes = await readyWakes(stack.db, f.projectId);
-      assert.equal(wakes.length, 1, 'the ready criterion never reached the wake ledger');
+      // row would say CONSUMED. Merging is the one coordinator action that cannot be undone, so
+      // this is the fact whose retries most need a budget rather than a default.
+      const wakes = await unlandedWakes(stack.db, f.projectId);
+      assert.equal(wakes.length, 1, 'the unlanded criterion never reached the wake ledger');
       assert.equal(wakes[0]!.status, 'REFUSED');
       assert.equal(wakes[0]!.refusalCode, PROJECT_NOT_CONVERGING);
       assert.equal(wakes[0]!.consumerType, null);
@@ -457,7 +509,7 @@ test('a ready criterion is refused by convergence, not waved through by a defaul
     }
   });
 
-test('a ready criterion under a switched-off coordinator produces nothing and wakes nobody',
+test('an unlanded criterion under a switched-off coordinator produces nothing and wakes nobody',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -470,10 +522,10 @@ test('a ready criterion under a switched-off coordinator produces nothing and wa
       // whole way and was refused leaves EXACTLY ONE row saying so. Asserting an empty table here
       // would be green over a producer nobody calls — which is the state this wiring replaced —
       // and green over a caller that decided for itself whether the switch was on.
-      const wakes = await readyWakes(stack.db, f.projectId);
-      assert.equal(wakes.length, 1, 'the ready criterion never reached the wake ledger');
+      const wakes = await unlandedWakes(stack.db, f.projectId);
+      assert.equal(wakes.length, 1, 'the unlanded criterion never reached the wake ledger');
       assert.equal(wakes[0]!.status, 'REFUSED');
-      assert.equal(wakes[0]!.refusalCode, CRITERION_READY_WAKE_COORDINATOR_DISABLED);
+      assert.equal(wakes[0]!.refusalCode, CRITERION_UNLANDED_WAKE_COORDINATOR_DISABLED);
       assert.equal(wakes[0]!.sessionId, null);
       assert.equal(wakes[0]!.consumerType, null);
       assert.notEqual(wakes[0]!.status, 'SESSION_OPENED');
@@ -493,6 +545,60 @@ test('a ready criterion under a switched-off coordinator produces nothing and wa
     }
   });
 
-test('the criterion-ready PostgreSQL target is explicitly disposable', { skip }, () => {
+test('the landing delivery happens after the write it is about has committed',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    const outside = prismaClientFor(URL!);
+    try {
+      const f = await fixture(stack, 'landing-after-commit');
+      const [criterion] = await state(stack, f, ['提交之后才投递']);
+      const served = await serve(stack, f, criterion!.key, '这条标准的活');
+
+      const observed: Array<{ projectIds: string[]; titles: string[] }> = [];
+      // A stub in the router's place: it does not deliver anything, it reports what a SECOND
+      // connection could see at the moment the write path called it. Nothing is asserted inside it
+      // — a throw here would be swallowed by the caller's own logging and the case would pass.
+      const probe = {
+        routeSettledProjects: async () => [],
+        routeTaskExceptions: async () => [],
+        routeReadyCriteria: async () => [],
+        routeUnlandedCriteria: async (projectIds: ReadonlyArray<string | null | undefined>) => {
+          const named = projectIds.filter((id): id is string => !!id);
+          const rows = await outside.task.findMany({
+            where: { id: served },
+            select: { title: true },
+          });
+          observed.push({ projectIds: named, titles: rows.map((row) => row.title) });
+          return [];
+        },
+      } as unknown as CompletionInputRouter;
+
+      // `dependsOnTaskIds` puts this write on `update`'s interactive-transaction branch, which is
+      // the branch where "inside or outside the transaction" is a real difference rather than an
+      // autocommit statement that has already ended.
+      await stack.tasksWith(probe).update(
+        f.ownerId,
+        served,
+        { title: '提交之后才看得见的标题', dependsOnTaskIds: [] } as never,
+      );
+
+      assert.ok(observed.length > 0, 'the committed write delivered nothing to the landing door');
+      assert.ok(
+        observed.some((call) => call.projectIds.includes(f.projectId)),
+        'the delivery did not name the project the write touched',
+      );
+      for (const call of observed) {
+        assert.deepEqual(
+          call.titles, ['提交之后才看得见的标题'],
+          'the delivery ran before its own write was visible outside the transaction',
+        );
+      }
+    } finally {
+      await outside.$disconnect();
+      await stack.db.$disconnect();
+    }
+  });
+
+test('the criterion-landing PostgreSQL target is explicitly disposable', { skip }, () => {
   assertCoordinatorPgUrlIsIsolated(URL);
 });
