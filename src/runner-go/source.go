@@ -15,13 +15,12 @@ import (
 // compare-and-set. Only then may a worktree be created, and only then may an engine be spawned
 // (SR33).
 //
-// The admission gate's levels are now spread across two files, in SR21's order. G1 (repository
-// identity) is here, ahead of G2/G3, because those ask the authority THROUGH a checkout and a
-// foreign checkout is the wrong thing to ask through. G4 (object availability) and G6 (isolation)
-// are in worktree.go's setupSourceWorktree, which is where a baseline stops being a string and
-// becomes a checkout. G5 (dependency containment) is the one level this build does not run at all;
-// it belongs to the checkpoint/closure task (34IMkgyuwfAZfobPNphTB), and setupWorktree's dispatch
-// names the hole rather than letting the gate read as complete.
+// What is deliberately NOT here is the admission gate's later levels — repository identity (G1),
+// object availability (G4), dependency containment (G5) and isolation (G6) — and the fail-closed
+// reporting that goes with them. Those belong to the runner worktree task
+// (34D2Ag9O0KnLGxLXifk39), which is also where `setupWorktree` learns to fork from BaseSha instead
+// of HEAD. This file establishes the ORDER those checks will slot into; it does not pretend to be
+// them.
 
 const (
 	sourceStateUnbound  = "UNBOUND"
@@ -36,8 +35,6 @@ const (
 	sourceRefusalAuthorityUnreachable = "SOURCE_AUTHORITY_UNREACHABLE"
 	sourceRefusalRefNotFound          = "BASE_REF_NOT_FOUND"
 	sourceRefusalShaUnavailable       = "BASE_SHA_UNAVAILABLE"
-	sourceRefusalRepoMismatch         = "BASE_REPO_MISMATCH"
-	sourceRefusalWorktreeRequired     = "WORKTREE_REQUIRED"
 )
 
 var fullSha = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -157,13 +154,6 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 			},
 		}
 	}
-	// G1 before G2 (SR21's total order, for SR23's reason). The authority is asked THROUGH this
-	// checkout: fetching into a repository that is not the one the snapshot named would write
-	// objects into somebody else's repo and could freeze a commit that never belonged to this
-	// codebase — and a pin is immutable, so noticing at G4 would be noticing too late.
-	if refusal := repoIdentityRefusal(dir, src); refusal != nil {
-		return "", refusal
-	}
 	switch src.RefAuthority {
 	case refAuthorityRunnerLocal:
 		// This machine's own checkout IS the authority (SR31 guarantees the binding names exactly
@@ -232,113 +222,4 @@ func mentionsMissingRef(err error) bool {
 	return strings.Contains(text, "couldn't find remote ref") ||
 		strings.Contains(text, "could not find remote ref") ||
 		strings.Contains(text, "no such ref")
-}
-
-// canonicalizeRepoURL is SR36's pure function: a repository's IDENTITY, computed the same way on
-// both sides of every comparison and used for nothing else — a clone is still run with the value
-// the user wrote. Two spellings of the same repository (`git@host:owner/repo.git`,
-// `ssh://git@host/owner/repo`, `https://host/owner/repo/`) must answer the same string, because
-// the alternative is a workspace that holds exactly the right code being refused over a suffix.
-//
-// It shares its decomposition with clone.go's cloneDirName (SR36), and
-// TestCanonicalRepoURLAgreesWithCloneDirName is the differential that keeps the two from drifting
-// apart — including a negative half, because a canonicaliser that collapsed everything would make
-// G1 answer "yes" to any workspace at all.
-func canonicalizeRepoURL(raw string) string {
-	s := strings.TrimSpace(raw)
-	if s == "" {
-		return ""
-	}
-	if i := strings.Index(s, "://"); i >= 0 {
-		scheme := strings.ToLower(s[:i])
-		rest := s[i+3:]
-		slash := strings.Index(rest, "/")
-		// Drop a `user@` prefix: it is a credential, and the same repository read by two accounts
-		// is one repository.
-		if at := strings.LastIndex(rest, "@"); at >= 0 && (slash < 0 || at < slash) {
-			rest = rest[at+1:]
-			slash = strings.Index(rest, "/")
-		}
-		host, path := rest, ""
-		if slash >= 0 {
-			host, path = rest[:slash], rest[slash+1:]
-		}
-		if scheme == "file" {
-			s = "/" + path // file:///srv/repo names a path, not a host
-		} else {
-			s = strings.ToLower(host) + "/" + path
-		}
-	} else if colon := strings.Index(s, ":"); colon > 0 && !strings.ContainsAny(s[:colon], "/\\") {
-		// scp-like `git@host:owner/repo` — the same repository as `ssh://git@host/owner/repo`.
-		host, path := s[:colon], strings.TrimPrefix(s[colon+1:], "/")
-		if at := strings.LastIndex(host, "@"); at >= 0 {
-			host = host[at+1:]
-		}
-		s = strings.ToLower(host) + "/" + path
-	}
-	s = strings.TrimSuffix(s, "/")
-	s = strings.TrimSuffix(s, ".git")
-	return strings.TrimSuffix(s, "/")
-}
-
-// repoRootCommits lists every root commit in the checkout at dir — `--all`, not `HEAD`, because a
-// workspace parked on an unrelated branch is still the same repository and identity may not depend
-// on which branch somebody happens to have checked out.
-func repoRootCommits(dir string) []string {
-	out, err := git(dir, "rev-list", "--max-parents=0", "--all")
-	if err != nil || out == "" {
-		return nil
-	}
-	return strings.Fields(strings.ToLower(out))
-}
-
-// repoIdentityRefusal answers gate G1 (§5) for the checkout at dir: nil when this checkout IS the
-// repository the snapshot froze, a BASE_REPO_MISMATCH otherwise.
-//
-// This is the whole of "identity is MATCHED, never inherited". The frozen `(canonicalRepoUrl,
-// rootCommitSha)` pair is the question and the local checkout is the candidate answer; a checkout
-// that does not answer it is refused, and the run does NOT continue against that workspace's own
-// HEAD, ref or remote. SR37 makes the test a disjunction on purpose: URL alone breaks the day a
-// remote is migrated, root commit alone cannot separate two forks.
-//
-// Why it runs BEFORE the authority is asked (SR21/SR23): asking through a foreign checkout means
-// `git fetch` into somebody else's repository, and then freezing whatever ref of that name it
-// happens to carry. That is the exact substitution this gate exists to prevent, and by the time
-// G4 noticed, the pin would already be immutable.
-func repoIdentityRefusal(dir string, src *SessionSource) *SourcePinRefusal {
-	want := canonicalizeRepoURL(src.RepoURL)
-	remote := src.RemoteName
-	if remote == "" {
-		remote = "origin"
-	}
-	gotURL, urlErr := git(dir, "remote", "get-url", remote)
-	got := canonicalizeRepoURL(gotURL)
-	if want != "" && got != "" && want == got {
-		return nil
-	}
-	wantRoot := strings.ToLower(strings.TrimSpace(src.RootCommitSha))
-	gotRoots := repoRootCommits(dir)
-	if wantRoot != "" {
-		for _, root := range gotRoots {
-			if root == wantRoot {
-				return nil
-			}
-		}
-	}
-	detail := map[string]interface{}{
-		"expectedRepoUrl":       src.RepoURL,
-		"actualRepoUrl":         gotURL,
-		"remoteName":            remote,
-		"expectedRootCommitSha": src.RootCommitSha,
-		"actualRootCommitShas":  gotRoots,
-		"codebaseId":            src.CodebaseID,
-	}
-	if urlErr != nil {
-		// Not a different repository — a checkout that states no identity at all. Same refusal:
-		// "I cannot show this is the right repository" and "this is the wrong one" both have to
-		// fail closed, and both are fixed by the same action (point the workspace at the repo).
-		detail["reason"] = "this checkout has no " + remote + " remote to identify it by"
-		detail["stderr"] = gitStderr(urlErr)
-	}
-	return &SourcePinRefusal{Code: sourceRefusalRepoMismatch, Detail: detail}
 }

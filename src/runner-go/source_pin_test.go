@@ -58,12 +58,7 @@ func originAndClone(t *testing.T) (origin, clone, tip string) {
 	return origin, clone, mustGit(t, origin, "rev-parse", "HEAD")
 }
 
-// RepoURL is read from the checkout rather than written as a constant: gate G1 runs ahead of the
-// authority (SR21), so a selector naming a repository this clone is not would be refused before any
-// of these tests reached the behaviour they are about. A fixture stating an identity the checkout
-// cannot have describes a world where none of this can happen.
 func selectedJob(workDir string) *ClaimedSession {
-	repoURL, _ := git(workDir, "remote", "get-url", "origin")
 	return &ClaimedSession{
 		SessionID: "11111111-1111-4111-8111-111111111111",
 		WorkDir:   workDir,
@@ -72,7 +67,7 @@ func selectedJob(workDir string) *ClaimedSession {
 			State:          sourceStateSelected,
 			Kind:           "PROJECT_UPSTREAM",
 			CodebaseID:     "22222222-2222-4222-8222-222222222222",
-			RepoURL:        repoURL,
+			RepoURL:        "https://example.invalid/acme/widgets",
 			Ref:            "refs/heads/main",
 			ConfigRevision: "0",
 			RefAuthority:   refAuthorityRemote,
