@@ -50,10 +50,15 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  * it — a fifty-three row list whose only landmark was an ordinal, with the answer set smaller than
  * the question. What replaced it, and the reason for each:
  *
- *  - A mark in the left gutter, filled for met and a hollow ring for unmet. SHAPE BEFORE HUE: the
- *    two stay apart in greyscale and for a reader who cannot separate the colours, so the hue is
- *    a second signal and never the only one. The ring is near-black rather than grey because it
- *    then outweighs the green disc, which puts the visual weight on the rows still wanting work.
+ *  - ONE mark per row, and it is the ordinal itself: a disc filled for met, a 2px ring for unmet,
+ *    a dashed ring for a criterion the read did not answer for. SHAPE BEFORE HUE — fill and stroke
+ *    keep the three apart in greyscale and for a reader who cannot separate the colours, so hue is
+ *    a second signal and never the only one. The unmet ring is near-black rather than grey because
+ *    it then outweighs the filled disc, which puts the visual weight on the rows still wanting
+ *    work. Until 2026-09-06 the state was a separate 10px dot BESIDE the number; on a phone, where
+ *    the number is a 36px disc, that put two circles in the gutter with the meaningless one 3.6x
+ *    the size of the meaningful one, and the dot read as a bullet. Nothing but the ordinal goes
+ *    inside the mark: a tick or a cross would turn it into the verdict badge 0229 deleted.
  *  - The state sentence at the standing line's size, not the row text's: it answers the row, it
  *    does not compete with it. UNMET IS NOT RED. A project stated this morning has met none of
  *    its criteria and has failed nothing; fifty-three red rows would tell its owner the project
@@ -141,6 +146,14 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  *  would be the badge 0229 deleted, wearing a derivation's clothes. */
 const MET = 'Met by its work';
 const NOT_MET = 'Not met by its work';
+
+/** Which way the row's one mark is drawn. THREE states, not two: `satisfied === undefined` is the
+ *  read declining to answer, and it gets a dashed ring of its own rather than the unmet ring —
+ *  "no answer" and "the answer is no" are different things and the drawing may not merge them. */
+function markState(satisfied: boolean | undefined): string {
+  if (satisfied === undefined) return 'is-unanswered';
+  return satisfied ? 'is-met' : 'is-unmet';
+}
 
 /** Each clause as a sentence. The codes are the read's vocabulary and a person looking at a
  *  project page has not agreed to learn it. An unrecognised clause prints as itself rather than
@@ -303,20 +316,11 @@ export function AcceptanceCriteriaList({
     <ul id={id} className="acceptance-criteria">
       {criteria.map((c) => (
         <li key={c.id} className="acceptance-row">
-          {/* The scanning handle. Fifty-three criteria had nothing but their numbers to aim at,
-              and a number says which one, never which ones still want somebody. Filled versus
-              hollow survives greyscale and colour blindness; the hue is the second signal. The
-              read that did not answer for a criterion gets no mark, because there is nothing to
-              mark it with. */}
-          <span className="acceptance-row-gutter">
-            {c.satisfied === undefined ? null : (
-              <span
-                className={`acceptance-dot ${c.satisfied ? 'is-met' : 'is-unmet'}`}
-                aria-hidden
-              />
-            )}
-            <span className="acceptance-row-no">{c.ordinal}</span>
-          </span>
+          {/* The scanning handle, and the row's ONE mark: the number is drawn as the state
+              rather than beside it. It says which criterion, and how it is drawn says what the
+              read said about that criterion's work. Nothing but the ordinal goes inside it — a
+              tick or a cross would make it a verdict badge, and there is no verdict here. */}
+          <span className={`acceptance-row-no ${markState(c.satisfied)}`}>{c.ordinal}</span>
           <div className="acceptance-row-text">
             <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
               {c.text}

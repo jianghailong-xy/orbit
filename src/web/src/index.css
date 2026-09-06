@@ -10221,44 +10221,51 @@ html[data-theme='dark'] .session-tag-chip {
   width: 2px;
   background: var(--error-solid);
 }
-/* The left gutter: a status mark, then the number. SHAPE BEFORE HUE — met is a filled disc and
-   unmet is a 2px ring around nothing, so the two stay apart in greyscale and for a reader who
-   cannot separate the hues; colour is the second signal here, never the only one. The ring is
-   drawn in near-black rather than grey deliberately: against a white row it carries MORE weight
-   than the green disc, which puts the emphasis on the rows that still want somebody. */
-.acceptance-row-gutter {
-  flex: none;
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  /* Wide enough for mark + gap + number, and the numbers hang off its right edge, so the row the
-     read did not answer for — which has no mark to draw — keeps its number in the same column as
-     every other row instead of sliding left into the empty slot. */
-  width: 36px;
-  padding-top: 0.15em;
-}
-.acceptance-dot {
-  position: relative;
-  top: 1px;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.acceptance-dot.is-met {
-  background: var(--success);
-}
-.acceptance-dot.is-unmet {
-  border: 2px solid var(--text-1);
-  background: transparent;
-}
+/* The row's ONE mark: the number IS the state. SHAPE BEFORE HUE — met is a filled disc, unmet is
+   a 2px ring around nothing, and a criterion the read did not answer for is a dashed ring; the
+   three stay apart in greyscale and for a reader who cannot separate the hues, so colour is the
+   second signal here and never the only one. The unmet ring is drawn in near-black deliberately:
+   against a white row it carries MORE weight than the filled disc, which puts the emphasis on the
+   rows that still want somebody.
+
+   Until 2026-09-06 the state was a separate 10px dot beside the number. On a phone the number is
+   a 36px disc, so that put two circles in the gutter with the meaningless one 3.6x the size of
+   the one carrying the meaning, and the dot was read as a bullet. One mark, drawn three ways.
+
+   22px on the desktop rather than the phone's 36px: desktop rows are denser and a 36px disc would
+   become the page's subject instead of the criterion beside it. */
 .acceptance-row-no {
   flex: none;
-  width: 20px;
-  color: var(--text-3);
-  font-size: 12.5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  font-weight: 600;
+}
+.acceptance-row-no.is-met {
+  border: 1px solid var(--success);
+  background: var(--success);
+  /* Knocked out of the fill, which is what makes it reversed in BOTH themes: white on the light
+     theme's #1a7f37, and the dark theme's own page colour on its lighter green — where white
+     would sit at 2.3 : 1. */
+  color: var(--bg-base);
+}
+.acceptance-row-no.is-unmet {
+  border: 2px solid var(--text-1);
+  background: transparent;
+  color: var(--text-1);
+}
+/* No answer, drawn as no answer. The read did not report on this criterion, so the ring is dashed
+   and grey: a solid ring would say "not met", which is a claim nobody made. */
+.acceptance-row-no.is-unanswered {
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-3);
+  font-weight: 400;
 }
 .acceptance-row-text {
   flex: 1;
@@ -10359,20 +10366,29 @@ html[data-theme='dark'] .session-tag-chip {
 .acceptance-method-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  /* A 10px triangle beside 12px text is a 15px-high target that reads as decoration. The row is
+     given a real height and the label is underlined, so it is visibly something to press before
+     anybody has hovered it — still the quiet twisty, no longer a hairline. */
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-2);
   font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
   cursor: pointer;
 }
 .acceptance-method-toggle:hover {
   color: var(--text-1);
+  text-decoration-color: currentColor;
 }
 .acceptance-method-marker {
   color: var(--text-3);
-  font-size: 10px;
+  font-size: 12px;
+  text-decoration: none;
 }
 .acceptance-method-body {
   margin-top: 4px;
@@ -10437,40 +10453,24 @@ html[data-theme='dark'] .session-tag-chip {
   }
   .acceptance-row {
     display: grid;
-    grid-template-columns: 54px minmax(0, 1fr);
+    grid-template-columns: 36px minmax(0, 1fr);
     align-items: start;
     column-gap: 12px;
     row-gap: 4px;
     padding: 12px 16px;
   }
-  /* 10px mark + 8px gap + the 36px numbered disc. Centred on the disc rather than sitting on the
-     first baseline, because on a phone the number is a circle and the mark reads as its pair. */
-  .acceptance-row-gutter {
-    grid-column: 1;
-    align-items: center;
-    width: 54px;
-    padding-top: 0;
-  }
-  .acceptance-dot {
-    top: 0;
-    width: 10px;
-    height: 10px;
-  }
   .acceptance-row:first-child {
     border-top: 0;
   }
+  /* The 36px disc this gutter has drawn since c5343b96 keeps its size and gains the meaning: same
+     three states as the desktop, scaled. It no longer shares the column with anything — the 54px
+     that held a dot beside it is gone with the dot. */
   .acceptance-row-no {
-    display: grid;
-    place-items: center;
+    grid-column: 1;
     width: 36px;
     height: 36px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 50%;
-    background: var(--bg-subtle);
-    color: var(--text-1);
+    margin-top: 0;
     font-size: 14px;
-    font-weight: 600;
-    text-align: center;
   }
   .acceptance-row-text {
     grid-column: 2;
@@ -10508,6 +10508,16 @@ html[data-theme='dark'] .session-tag-chip {
     display: block;
     margin: 6px 0 0;
     font-size: 11.5px;
+  }
+  /* The landing half wraps on a 393px screen whatever it is given, and the separator that joins
+     it to the state sentence on a desktop then hangs alone at the head of the new line. Narrow,
+     it takes a line of its own and drops the dot: the two facts are still adjacent, and nothing
+     is left dangling. */
+  .acceptance-landing {
+    flex-basis: 100%;
+  }
+  .acceptance-landing::before {
+    content: none;
   }
   .acceptance-method-toggle {
     min-height: 32px;

@@ -82,23 +82,68 @@ function paint(qc: QueryClient) {
 }
 
 /**
- * One rule out of the stylesheet, by exact selector, so an assertion about a mark's SHAPE is about
- * the shape and not about the class name that was supposed to carry it — jsdom computes none of
- * this. Comments come off first: a rule must not be satisfied by a sentence describing it.
+ * The stylesheet, with comments off. They come off first because a rule must not be satisfied by
+ * a sentence describing it — "a 2px ring" in prose beside a rule reads as `2px` to a regex.
  *
  * Both path spellings, because the web suite runs from `src/web` and a runner may start at the
  * repository root.
  */
-function styleRule(selector: string): string {
+function loadCss(): string {
   const found = ['src/index.css', 'src/web/src/index.css']
     .map((each) => resolve(process.cwd(), each))
     .find(existsSync);
   if (found === undefined) throw new Error(`no index.css from ${process.cwd()}`);
-  const css = readFileSync(found, 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
+  return readFileSync(found, 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
+}
+
+/**
+ * One rule out of the stylesheet, by exact selector, so an assertion about a mark's SHAPE is about
+ * the shape and not about the class name that was supposed to carry it — jsdom computes none of
+ * this.
+ */
+function styleRule(selector: string, css: string = loadCss()): string {
   const rule = new RegExp(`(?:^|[},])\\s*${selector.replace(/[.]/gu, '\\.')}\\s*\\{([^{}]*)\\}`, 'u')
     .exec(css);
   if (rule === null) throw new Error(`no rule for "${selector}" in index.css`);
   return rule[1];
+}
+
+/**
+ * The body of the `@media (max-width: 560px)` block the acceptance rules live in, so a rule
+ * asserted about a narrow screen is read out of the phone's stylesheet and not the desktop's.
+ * Found by brace matching rather than by regex: the file has several blocks on this breakpoint
+ * and only one of them draws the criteria rows.
+ */
+function phoneCss(): string {
+  const css = loadCss();
+  const query = `@media (${ACCEPTANCE_PHONE_QUERY.replace(/^\(|\)$/gu, '')}) {`;
+  for (let at = css.indexOf(query); at !== -1; at = css.indexOf(query, at + 1)) {
+    let depth = 0;
+    for (let i = at + query.length - 1; i < css.length; i += 1) {
+      if (css[i] === '{') depth += 1;
+      else if (css[i] === '}' && (depth -= 1) === 0) {
+        const body = css.slice(at + query.length, i);
+        if (body.includes('.acceptance-row-no')) return body;
+        at = i;
+        break;
+      }
+    }
+  }
+  throw new Error('no acceptance block on the phone breakpoint in index.css');
+}
+
+/** How many pixels tall the rule says its target is at least. */
+function minHeightPx(rule: string): number {
+  const found = /min-height:\s*(\d+(?:\.\d+)?)px/u.exec(rule);
+  if (found === null) throw new Error(`no min-height in "${rule.trim()}"`);
+  return Number(found[1]);
+}
+
+/** What the row's one mark has inside it, exactly as rendered. */
+function markContent(row: string): string {
+  const found = /<span class="acceptance-row-no[^"]*">([\s\S]*?)<\/span>/u.exec(row);
+  if (found === null) throw new Error('no mark rendered in row');
+  return found[1];
 }
 
 /** Mounts the stateful card so its phone-only controls can be pressed. */
@@ -226,7 +271,7 @@ describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
 
     const html = paint(qc);
     for (const item of FIVE) expect(html).toContain(item.text);
-    const numbers = [...html.matchAll(/class="acceptance-row-no">(\d+)</g)].map((m) => m[1]);
+    const numbers = [...html.matchAll(/class="acceptance-row-no[^"]*">(\d+)</g)].map((m) => m[1]);
     expect(numbers).toEqual(['1', '2', '3', '4', '5']);
     const order = FIVE.map((item) => html.indexOf(item.text));
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -391,31 +436,131 @@ const HELD_UP_CRITERION: AcceptanceCriterionItem = {
   ],
 };
 
-const DERIVED = [MET_CRITERION, MET_UNRECEIPTED_CRITERION, HELD_UP_CRITERION];
+/** A criterion this read did not answer for: no `satisfied`, so no `unmet` and no `landing`
+ *  either. It is the third state and it is NOT a "no" — an older server's document renders like
+ *  this too, and so does any criterion the read could not reach. */
+const UNANSWERED_CRITERION: AcceptanceCriterionItem =
+  criterion(4, 'A criterion this read did not answer for');
+
+const DERIVED = [
+  MET_CRITERION, MET_UNRECEIPTED_CRITERION, HELD_UP_CRITERION, UNANSWERED_CRITERION,
+];
 
 describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 }, () => {
-  it('marks met and unmet rows apart by shape before it uses any colour', () => {
+  it('draws its three states as three shapes before it uses any colour', () => {
     const qc = client();
     seed(qc, DERIVED);
 
     const html = paint(qc);
     const met = rowFor(html, 'The project read serves each criterion its satisfaction');
     const open = rowFor(html, 'A reader can see what is holding a criterion open');
-    expect(met).toContain('acceptance-dot is-met');
-    expect(open).toContain('acceptance-dot is-unmet');
-    // Nothing about the distinction rides on an inline colour, and neither mark can pass for the
-    // other once one is stripped out.
+    const silent = rowFor(html, UNANSWERED_CRITERION.text);
+
+    // ONE mark per row, and it is the number. The separate dot is gone: on a phone the number is
+    // a 36px disc, so a 10px dot beside it put the meaningless circle at 3.6x the size of the
+    // meaningful one and the dot was read as a bullet.
+    for (const row of [met, open, silent]) {
+      expect((row.match(/acceptance-row-no/gu) ?? [])).toHaveLength(1);
+      expect(row).not.toContain('acceptance-dot');
+    }
+    expect(met).toContain('class="acceptance-row-no is-met"');
+    expect(open).toContain('class="acceptance-row-no is-unmet"');
+    expect(silent).toContain('class="acceptance-row-no is-unanswered"');
+    // Nothing about the distinction rides on an inline colour, and no mark can pass for another
+    // once one is stripped out.
     expect(withoutColour(met)).toContain('is-met');
     expect(withoutColour(met)).not.toContain('is-unmet');
     expect(withoutColour(open)).toContain('is-unmet');
+    expect(withoutColour(silent)).toContain('is-unanswered');
 
-    // And what the stylesheet draws is a SHAPE, not a second hue: a filled disc against a ring
-    // around nothing, which survives greyscale and colour blindness. Two classes that differed
-    // only in `color` would satisfy the markup above and none of the reason for it.
-    expect(styleRule('.acceptance-dot.is-met')).toMatch(/background:\s*var\(--success\)/);
-    expect(styleRule('.acceptance-dot.is-met')).not.toMatch(/border/);
-    expect(styleRule('.acceptance-dot.is-unmet')).toMatch(/border:\s*2px solid/);
-    expect(styleRule('.acceptance-dot.is-unmet')).toMatch(/background:\s*transparent/);
+    // And what the stylesheet draws for them is FILL and STROKE, which survive greyscale and
+    // colour blindness. Three classes differing only in `color` would satisfy every assertion
+    // above and none of the reason for them.
+    const met_ = styleRule('.acceptance-row-no.is-met');
+    const unmet_ = styleRule('.acceptance-row-no.is-unmet');
+    const silent_ = styleRule('.acceptance-row-no.is-unanswered');
+    // Met: a filled disc, its number knocked out of the fill rather than set on top of it.
+    expect(met_).toMatch(/background:\s*var\(--success\)/u);
+    expect(met_).toMatch(/color:\s*var\(--bg-base\)/u);
+    // Unmet: a solid ring around nothing.
+    expect(unmet_).toMatch(/border:\s*2px solid/u);
+    expect(unmet_).toMatch(/background:\s*transparent/u);
+    // No answer is not "the answer is no". A dashed ring, never the unmet ring.
+    expect(silent_).toMatch(/border:\s*1px dashed/u);
+    expect(silent_).toMatch(/background:\s*transparent/u);
+    expect(silent_).not.toMatch(/border:[^;]*solid/u);
+
+    // Pairwise, on the two properties that are not hue: three different strokes, and exactly one
+    // of the three is filled.
+    const declaration = (rule: string, property: string) => {
+      const found = new RegExp(`${property}:\\s*([^;]+);`, 'u').exec(rule);
+      if (found === null) throw new Error(`no ${property} in "${rule.trim()}"`);
+      return found[1];
+    };
+    const strokes = [met_, unmet_, silent_]
+      .map((rule) => declaration(rule, 'border').replace(/var\([^)]*\)/gu, '').trim());
+    expect(new Set(strokes).size).toBe(3);
+    const fills = [met_, unmet_, silent_].map((rule) => declaration(rule, 'background'));
+    expect(fills.filter((fill) => fill === 'transparent')).toHaveLength(2);
+  });
+
+  it('has no separate status dot left, in the markup or in the stylesheet', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    expect(paint(qc)).not.toContain('acceptance-dot');
+    // Nor left behind as a rule. Dead CSS for a mark nothing renders is the next reader's
+    // evidence that the dot is still part of this design.
+    expect(loadCss()).not.toContain('acceptance-dot');
+    for (const gone of ['.acceptance-dot', '.acceptance-dot.is-met', '.acceptance-dot.is-unmet']) {
+      expect(() => styleRule(gone)).toThrow();
+    }
+  });
+
+  it('puts nothing but the ordinal inside the mark', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    const html = paint(qc);
+    for (const item of DERIVED) {
+      expect(markContent(rowFor(html, item.text))).toBe(String(item.ordinal));
+    }
+    // A tick in the met circle would make it the verdict badge 0229 deleted. The mark says WHICH
+    // criterion; the row says, in words, what that criterion's work has done.
+    const marks = (html.match(/<span class="acceptance-row-no[^"]*">[\s\S]*?<\/span>/gu) ?? [])
+      .join('');
+    expect(marks).not.toBe('');
+    for (const symbol of ['\u2713', '\u2714', '\u2717', '\u2718', '\u00d7', '!', '?']) {
+      expect(marks).not.toContain(symbol);
+    }
+  });
+
+  it('leaves no orphaned separator where the landing half wraps on a narrow screen', () => {
+    const qc = client();
+    seed(qc, DERIVED);
+
+    // The separator is drawn by the desktop rule and by nothing else: the markup itself never
+    // carries one, so switching that rule off at the breakpoint removes it outright.
+    const row = rowFor(paint(qc), 'The project read serves each criterion its satisfaction');
+    expect(row).toContain('landed on the default branch');
+    expect(row).not.toContain('\u00b7');
+    expect(styleRule('.acceptance-landing::before')).toMatch(/content:\s*'\u00b7 '/u);
+
+    // Narrow, that half wraps whatever it is given. It takes a line of its own and drops the
+    // dot, rather than starting the new line with a separator joining it to nothing above.
+    const phone = phoneCss();
+    expect(styleRule('.acceptance-landing::before', phone)).toMatch(/content:\s*none/u);
+    expect(styleRule('.acceptance-landing', phone)).toMatch(/flex-basis:\s*100%/u);
+  });
+
+  it("gives How it's checked a target big enough to press", () => {
+    // A 10px triangle beside 12px text is a 15px-high target drawn as decoration and read as
+    // decoration. 24px is the floor everywhere, and the phone gives it more.
+    expect(minHeightPx(styleRule('.acceptance-method-toggle'))).toBeGreaterThanOrEqual(24);
+    expect(minHeightPx(styleRule('.acceptance-method-toggle', phoneCss())))
+      .toBeGreaterThanOrEqual(24);
+    // And it reads as something to press before anybody has hovered it.
+    expect(styleRule('.acceptance-method-toggle')).toMatch(/text-decoration:\s*underline/u);
   });
 
   it('says a criterion its work has met, and says it about the work', () => {
@@ -576,7 +721,7 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     expect(html).not.toMatch(/\d+\s*(?:\/|of)\s*\d+/);
   });
 
-  it('draws nothing for a criterion the read did not answer for', () => {
+  it('says nothing about work the read did not answer for, and marks the row as unanswered', () => {
     const qc = client();
     seed(qc, [criterion(1, 'The runner reconnects after a restart')]);
 
@@ -584,8 +729,10 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     expect(html).toContain('The runner reconnects after a restart');
     expect(html).not.toContain('acceptance-work');
     expect(html).not.toContain('Met by its work');
-    // Including the gutter: there is no answer, so there is nothing to mark the row with. A dot
-    // defaulting to "unmet" would be this file inventing the answer the read declined to give.
+    // The row still has its mark — it is the number, and every row has one — but the mark says
+    // the read declined to answer. Drawing it as unmet would be this file inventing the answer.
+    expect(html).toContain('class="acceptance-row-no is-unanswered"');
+    expect(html).not.toContain('is-unmet');
     expect(html).not.toContain('acceptance-dot');
   });
 });
