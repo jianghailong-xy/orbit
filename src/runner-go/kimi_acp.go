@@ -594,6 +594,25 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envMCPPermissionPrompt+"=0",
 	)
+	// Runner-hosted background jobs (mcp__orbit__bg_run). Kimi's `orbit` MCP server
+	// is configured with an empty env block on purpose and inherits this process's
+	// environment (kimiMCPConfigRecord), so setting them here is what reaches it.
+	//
+	// Kimi gets the transport but NOT the guard, and it is the one engine where
+	// that gap is load-bearing. Kimi's Bash tool has a real run_in_background
+	// (with disable_timeout, and description required when it is set) — the exact
+	// analogue of the Claude call stage 2 refuses. It is live here: Kimi enables it
+	// when TaskList, TaskOutput and TaskStop are all active, and Orbit's disallow
+	// list for that family (builtinTaskTools) is applied by claude_spawn.go only,
+	// while Kimi's DisallowedTools are consulted as a permission filter that never
+	// leaves Kimi's own tool registry. `orbit hook bg-guard` cannot be pointed at
+	// it: Kimi's PreToolUse payload spells the fields toolName/toolInput, the hook
+	// parses tool_name/tool_input, and a hook that reads neither fails OPEN — a
+	// guard that looks installed and refuses nothing is worse than none. So a Kimi
+	// agent that reaches for its native background shell still gets a process that
+	// dies with the engine; noteEngineBackgroundShell (kimi tool_call handling
+	// below) is what makes that visible to the user rather than silent.
+	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
 	// The session's private Kimi home (see kimi_home.go), so runner-owned
 	// configuration never lands in the user's own ~/.kimi-code.
 	cmd.Env = envWithValue(cmd.Env, "KIMI_CODE_HOME", kimiHome)
@@ -1218,7 +1237,9 @@ func kimiPingContext(ctxPing *contextPinger, gauge *kimiUsageGauge, job *Claimed
 	}, tokens, job)
 }
 
-func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, activeMu *sync.Mutex, active **kimiActiveTurn, gauge *kimiUsageGauge) {
+// bg may be nil: the tests that exercise this function's event mapping have no
+// session and therefore no tailer. Only the background-shell note below reads it.
+func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, activeMu *sync.Mutex, active **kimiActiveTurn, gauge *kimiUsageGauge, bg *bgTailer) {
 	if msg.Method != "session/update" {
 		return
 	}
@@ -1264,11 +1285,16 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		id := firstString(update, "toolCallId", "tool_call_id")
 		if id != "" && !a.seenTools[id] {
 			a.seenTools[id] = true
-			emit(evToolUse, map[string]interface{}{
-				"id":    id,
-				"name":  firstString(update, "title"),
-				"input": firstPresent(update, "rawInput", "raw_input"),
-			})
+			name := firstString(update, "title")
+			input := firstPresent(update, "rawInput", "raw_input")
+			emit(evToolUse, map[string]interface{}{"id": id, "name": name, "input": input})
+			// Kimi's own background shell — see startKimiACP for why Orbit hosts a
+			// job service for Kimi but cannot guard this call. Recording it is what
+			// turns "the build vanished" into a tray entry that visibly stops when
+			// the engine is recycled.
+			if bg != nil && kimiToolStartsBackgroundShell(name, input) {
+				bg.noteEngineBackgroundShell(id, id)
+			}
 		}
 	case "tool_call_update":
 		status := strings.ToLower(firstString(update, "status"))
@@ -1372,7 +1398,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				return
 			}
 			if item.message != nil {
-				handleKimiNotification(expectedSessionID.Load().(string), *item.message, emit, &activeMu, &active, gauge)
+				handleKimiNotification(expectedSessionID.Load().(string), *item.message, emit, &activeMu, &active, gauge, bg)
 				activeMu.Lock()
 				inTurn := active != nil
 				activeMu.Unlock()
@@ -1984,4 +2010,24 @@ func kimiPermissionOption(options []interface{}, decision *ApprovalDecisionRespo
 		}
 	}
 	return fallback
+}
+
+// kimiToolStartsBackgroundShell reports whether a Kimi tool call leaves a process
+// running past the call. Kimi's Bash tool takes run_in_background as a sibling of
+// command, and it is a real background shell: the tool returns at once with a task
+// id and the process keeps going, addressed afterwards through TaskOutput/TaskStop.
+//
+// Deliberately narrow. `Terminal` is Kimi's other shell spelling and carries the
+// same flag; the agent-launch tools also have a run_in_background, but what they
+// leave running is a sub-agent INSIDE the engine, which is not a process the
+// runner could have hosted and not one worth telling the user died with it.
+func kimiToolStartsBackgroundShell(toolName string, input interface{}) bool {
+	if toolName != "Bash" && toolName != "Terminal" {
+		return false
+	}
+	args := mapValue(input)
+	if args == nil {
+		return false
+	}
+	return asBool(args["run_in_background"])
 }

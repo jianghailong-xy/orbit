@@ -198,6 +198,36 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string, engineOwned bool) 
 	}()
 }
 
+// noteEngineBackgroundShell registers a background shell the ENGINE owns and
+// whose output Orbit cannot read — it lives in that engine's own task registry,
+// not in a file the runner can tail. Registering it buys exactly one thing, and
+// it is the thing the user needs: when the engine is recycled, killEngineShells
+// reports this shell as killed, so the job appears in the session's background
+// tray and then visibly stops, with the reason. Without it the process dies the
+// same way and the user is told nothing at all.
+//
+// This is the honest half of a provider Orbit could not fit with a guard (Kimi;
+// see startKimiACP). It is deliberately NOT a tail: inventing an output path we
+// cannot read would produce an empty live pane that looks like a job producing
+// no output, which is a different and worse lie than "no output available".
+func (b *bgTailer) noteEngineBackgroundShell(toolUseID, shellID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stopping {
+		return
+	}
+	if _, ok := b.live[toolUseID]; ok {
+		return
+	}
+	// A no-op cancel rather than a nil one: there is no goroutine to stop on this
+	// side (the shell ends when its engine does, which is the fact being recorded),
+	// but stop/stopAll/killEngineShells all call cancel on every entry, and an
+	// entry that cannot be cancelled like the others would be a trap for whoever
+	// adds the fourth caller.
+	b.live[toolUseID] = liveShell{cancel: func() {}, shellID: shellID, engineOwned: true}
+	b.holdFor(toolUseID, shellID, true)
+}
+
 func (b *bgTailer) startTranscriptWatcher(sessionUUID string) {
 	b.mu.Lock()
 	if b.stopping {

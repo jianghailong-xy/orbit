@@ -657,18 +657,24 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only — Codex has no such transcript; the glob would simply never match.)
 	if runtimeProvider(job) == providerClaude {
 		bg.startTranscriptWatcher(job.SessionUUID)
-		// The door the agent's background jobs come in through, served for the life
-		// of this session run rather than of any one engine: a job outlives the
-		// engine that asked for it, and the agent finds it again by the same id
-		// after a respawn. Claude only — the hook that routes an agent here is a
-		// Claude Code mechanism, and stage 4 decides what the other engines get.
-		if stopBgJobService, err := startSessionBgJobService(sessionCtx, bg, job, execDir, scratch); err != nil {
-			// Not fatal, and not silent: the bg_* tools report the transport as
-			// unavailable, and the agent keeps the engine-owned shells it has today.
-			logln("background job service unavailable for", sessionID+":", err)
-		} else {
-			defer stopBgJobService()
-		}
+	}
+	// The door the agent's background jobs come in through, served for the life of
+	// this session run rather than of any one engine: a job outlives the engine
+	// that asked for it, and the agent finds it again by the same id after a
+	// respawn.
+	//
+	// Every provider, not just Claude. The bg_* tools are advertised by the `orbit`
+	// MCP server, which all four engines are configured with, so gating the service
+	// on one engine did not hide the tools from the others — it only guaranteed
+	// they were refused. What stays Claude-only is the *guard* that pushes an agent
+	// here (claude_spawn.go); each engine's own background mechanism, and what
+	// Orbit can do about it, is recorded beside that engine's spawn.
+	if stopBgJobService, err := startSessionBgJobService(sessionCtx, bg, job, execDir, scratch); err != nil {
+		// Not fatal, and not silent: the bg_* tools report the transport as
+		// unavailable, and the agent keeps the engine-owned shells it has today.
+		logln("background job service unavailable for", sessionID+":", err)
+	} else {
+		defer stopBgJobService()
 	}
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))

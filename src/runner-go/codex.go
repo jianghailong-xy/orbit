@@ -324,7 +324,12 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // Codex launches stdio MCP servers with a filtered environment. The Orbit MCP server reads
 // these values to attribute work to the current session/agent/task, gate orchestration tools,
 // and disable the Claude-only permission bridge, so explicitly forward the full context.
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
+// ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on this list because Codex passes an MCP
+// server an ALLOWLIST rather than its own environment: a variable missing here
+// does not reach `orbit mcp` however carefully the spawn sets it, and the bg_*
+// tools would report the transport as unavailable on a session that is serving
+// it perfectly well.
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
 
 // codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
 // the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's
@@ -388,6 +393,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envMCPPermissionPrompt+"=0",
 	)
+	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
 	cmd.Stdin = strings.NewReader(prompt)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

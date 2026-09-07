@@ -816,7 +816,7 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 		},
 	}
 	for _, update := range updates {
-		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge)
+		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge, nil)
 	}
 	if len(events) != 4 {
 		t.Fatalf("events = %#v", events)
@@ -833,7 +833,7 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 	}
 	// Terminal tool updates are replace-style and can be repeated by an ACP
 	// transport retry; Orbit must persist exactly one result.
-	handleKimiNotification("session-1", kimiNotification(t, "session-1", updates[3]), emit, &mu, &active, gauge)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", updates[3]), emit, &mu, &active, gauge, nil)
 	if len(events) != 4 {
 		t.Fatalf("duplicate terminal update emitted another event: %#v", events)
 	}
@@ -866,8 +866,8 @@ func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
 			},
 		}
 	}
-	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("pending")), emit, &mu, &active, gauge)
-	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("completed")), emit, &mu, &active, gauge)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("pending")), emit, &mu, &active, gauge, nil)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("completed")), emit, &mu, &active, gauge, nil)
 	if len(events) != 4 {
 		t.Fatalf("events = %#v, want a tool_use/tool_result pair per plan update", events)
 	}
@@ -885,7 +885,7 @@ func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
 	}
 	// An empty plan carries nothing to show and must not open a card.
 	handleKimiNotification("session-1", kimiNotification(t, "session-1",
-		map[string]interface{}{"sessionUpdate": "plan"}), emit, &mu, &active, gauge)
+		map[string]interface{}{"sessionUpdate": "plan"}), emit, &mu, &active, gauge, nil)
 	if len(events) != 4 {
 		t.Fatalf("empty plan emitted %#v", events[4:])
 	}
@@ -904,7 +904,7 @@ func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
 		"sessionUpdate": "usage_update",
 		"used":          21166,
 		"size":          1048576,
-	}), emit, &mu, &active, gauge)
+	}), emit, &mu, &active, gauge, nil)
 
 	if tokens, window := gauge.read(); tokens != 21166 || window != 1048576 {
 		t.Fatalf("reading = %d/%d, want 21166/1048576", tokens, window)
@@ -919,7 +919,7 @@ func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
 		"sessionUpdate": "usage_update",
 		"used":          40000,
 		"size":          1048576,
-	}), emit, &mu, &active, gauge)
+	}), emit, &mu, &active, gauge, nil)
 	if tokens, _ := gauge.read(); tokens != 40000 {
 		t.Fatalf("second reading = %d, want 40000", tokens)
 	}
@@ -931,7 +931,7 @@ func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
 		"sessionUpdate": "usage_update",
 		"used":          51000,
 		"size":          1048576,
-	}), emit, &mu, &active, gauge)
+	}), emit, &mu, &active, gauge, nil)
 	if tokens, _ := gauge.read(); tokens != 51000 {
 		t.Fatalf("reading with no active turn = %d, want 51000 — it was dropped", tokens)
 	}
@@ -1027,7 +1027,7 @@ func TestKimiUsageUpdateAfterTheTurnSettlesReachesTheNextTurnEnd(t *testing.T) {
 					close(item.barrier)
 					continue
 				}
-				handleKimiNotification("session-1", *item.message, emit, &activeMu, &active, gauge)
+				handleKimiNotification("session-1", *item.message, emit, &activeMu, &active, gauge, nil)
 				applied <- struct{}{}
 			case <-app.done:
 				return
@@ -1144,7 +1144,7 @@ func TestHandleKimiSessionScopedUpdatesAreNotReportedAsGaps(t *testing.T) {
 	}
 	for _, kind := range []string{"config_option_update", "session_info_update"} {
 		handleKimiNotification("session-1", kimiNotification(t, "session-1",
-			map[string]interface{}{"sessionUpdate": kind}), emit, &mu, &active, gauge)
+			map[string]interface{}{"sessionUpdate": kind}), emit, &mu, &active, gauge, nil)
 		if reported(kind) {
 			t.Fatalf("%s still reported as an unrendered stream kind", kind)
 		}
@@ -1152,7 +1152,7 @@ func TestHandleKimiSessionScopedUpdatesAreNotReportedAsGaps(t *testing.T) {
 
 	// The report itself still works — otherwise the assertions above pass for the wrong reason.
 	handleKimiNotification("session-1", kimiNotification(t, "session-1",
-		map[string]interface{}{"sessionUpdate": "kimi_invented_this_kind"}), emit, &mu, &active, gauge)
+		map[string]interface{}{"sessionUpdate": "kimi_invented_this_kind"}), emit, &mu, &active, gauge, nil)
 	t.Cleanup(func() { unhandledStreamKinds.Delete("kimi/kimi_invented_this_kind") })
 	if !reported("kimi_invented_this_kind") {
 		t.Fatal("an unknown kind went unreported")

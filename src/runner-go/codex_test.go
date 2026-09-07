@@ -54,7 +54,12 @@ func TestNormalizeCodexReasoningEffort(t *testing.T) {
 
 func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	t.Helper()
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
+	// Spelled out rather than read from codexOrbitMCPEnvVarsConfig: comparing the
+	// constant with itself would assert nothing. Adding a name here is meant to be
+	// a deliberate edit, because Codex hands its MCP servers this ALLOWLIST instead
+	// of its own environment — a variable the spawn sets but this list omits simply
+	// never arrives (ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on it for that reason).
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {

@@ -951,6 +951,19 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envMCPPermissionPrompt+"=0",
 	)
+	// Runner-hosted background jobs (mcp__orbit__bg_run). Codex also needs the two
+	// names on the MCP env allowlist — see codexOrbitMCPEnvVarsConfig.
+	//
+	// Codex gets the transport but no guard, and needs none: as Orbit configures
+	// it, Codex HAS no agent-facing background mechanism to route away from. Its
+	// `shell` tool runs to completion and returns; the PTY sessions that would be
+	// the equivalent (exec_command/write_stdin, "returning output or a session ID
+	// for ongoing interaction") exist in codex-cli 0.153.4 but only behind
+	// `experimental_use_unified_exec_tool`, which Orbit never sets. What is left is
+	// an agent writing `cmd &` inside a shell call, which is a descendant of this
+	// process and dies with it — deliberately, since terminateSessionProcessTree
+	// walks the ppid table precisely to catch escapees. Stage 4 verdict.
+	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()

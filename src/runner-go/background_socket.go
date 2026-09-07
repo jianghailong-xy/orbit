@@ -329,3 +329,40 @@ func startSessionBgJobService(ctx context.Context, bg *bgTailer, job *ClaimedSes
 	}
 	return startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
 }
+
+// bgJobEnvPairs is how an engine's `orbit mcp` child finds this session's
+// runner-hosted job service. Read from the token file the service wrote rather
+// than threaded through the spawn, so a process started at any point in the
+// session sees the socket the supervisor is actually serving — and sees nothing
+// when the service failed to start, which is the case the bg_* tools report as
+// BG_TRANSPORT_UNAVAILABLE rather than quietly running an engine child.
+//
+// Every engine spawn site passes these, because the runner-hosted path is the
+// one thing about background work that does not depend on which engine asked:
+// the job is the runner's process either way.
+func bgJobEnvPairs(sessionID string) []string {
+	env := bgJobEnv(sessionID)
+	// Fixed order, not map iteration order: an argv or an env block that differs
+	// run to run is a diff no test can pin.
+	pairs := make([]string, 0, len(env))
+	for _, key := range []string{envBgSocket, envBgToken} {
+		if value := env[key]; value != "" {
+			pairs = append(pairs, key+"="+value)
+		}
+	}
+	return pairs
+}
+
+// bgJobEnv is the same two variables for the spawn sites that take a map
+// (OpenCode configures its MCP servers with one).
+func bgJobEnv(sessionID string) map[string]string {
+	token, err := os.ReadFile(bgTokenPath(sessionID))
+	if err != nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(string(token))
+	if trimmed == "" {
+		return nil
+	}
+	return map[string]string{envBgSocket: bgSocketPath(sessionID), envBgToken: trimmed}
+}

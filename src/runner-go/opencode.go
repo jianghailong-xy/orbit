@@ -475,6 +475,20 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
 	})
+	// Runner-hosted background jobs (mcp__orbit__bg_run), for `orbit mcp` to
+	// inherit; also written into the MCP server's own environment block by
+	// openCodeConfigContent, since that is the one OpenCode passes it.
+	//
+	// OpenCode gets the transport and needs no guard, because it has no
+	// agent-facing background mechanism at all: its bash tool takes
+	// {command, timeout, workdir, description} and runs to completion under a
+	// timeout — there is no run_in_background to refuse. That makes bg_run the ONLY
+	// way an OpenCode agent can leave work running past its turn, which is why this
+	// engine gains the most from the wiring and loses nothing to the missing hook.
+	// An agent's `cmd &` still dies with the engine, and note that OpenCode spawns
+	// its shell tool with detached:true (its own process group), which is the case
+	// terminateSessionProcessTree's ppid walk exists to catch. Stage 4 verdict.
+	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
 	cmd.Stdin = strings.NewReader(prompt)
 	configureSessionProcessTree(cmd)
 	stdout, err := cmd.StdoutPipe()
@@ -870,19 +884,26 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 		}
 	}
 	if executable != "" {
+		environment := map[string]string{
+			"ORBIT_SESSION_ID":          publicID(job.SessionID),
+			"ORBIT_AGENT_ID":            publicID(job.AgentID),
+			"ORBIT_TASK_ID":             publicID(job.TaskID),
+			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
+			envOrchestrationToken:       job.OrchestrationToken,
+			envMCPPermissionPrompt:      "0",
+		}
+		// Where `orbit mcp` reaches the runner to start a background job the runner
+		// owns. Written here as well as into the OpenCode process env, because this
+		// block is what OpenCode hands its local MCP servers.
+		for name, value := range bgJobEnv(job.SessionID) {
+			environment[name] = value
+		}
 		mcp["orbit"] = map[string]interface{}{
-			"type":    "local",
-			"command": []string{executable, "mcp"},
-			"enabled": true,
-			"timeout": 30000,
-			"environment": map[string]string{
-				"ORBIT_SESSION_ID":          publicID(job.SessionID),
-				"ORBIT_AGENT_ID":            publicID(job.AgentID),
-				"ORBIT_TASK_ID":             publicID(job.TaskID),
-				"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
-				envOrchestrationToken:       job.OrchestrationToken,
-				envMCPPermissionPrompt:      "0",
-			},
+			"type":        "local",
+			"command":     []string{executable, "mcp"},
+			"enabled":     true,
+			"timeout":     30000,
+			"environment": environment,
 		}
 	}
 	encoded, err := json.Marshal(config)

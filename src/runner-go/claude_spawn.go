@@ -182,16 +182,8 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
-	// background job the runner will own. Read from the session's scratch dir
-	// rather than threaded through, so a spawn always sees the socket the
-	// supervisor is actually serving; absent when the service failed to start, and
-	// the bg_* tools then say so instead of silently running an engine child.
-	if token, err := os.ReadFile(bgTokenPath(job.SessionID)); err == nil && len(token) > 0 {
-		cmd.Env = append(cmd.Env,
-			envBgSocket+"="+bgSocketPath(job.SessionID),
-			envBgToken+"="+strings.TrimSpace(string(token)),
-		)
-	}
+	// background job the runner will own (bgJobEnvPairs).
+	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {
