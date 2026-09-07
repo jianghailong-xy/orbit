@@ -132,6 +132,17 @@ beforeEach(() => {
       }
     },
   );
+  // `api()` reads the bearer token off `localStorage` before every request it makes, and Node 24+
+  // ships a `localStorage` global of its own that is undefined unless the process was started with
+  // `--localstorage-file`. It SHADOWS jsdom's, so without this the page's first read throws and the
+  // whole file asserts against the "Project could not be loaded" branch rather than against the
+  // affordance under test. Nothing is signed in here — `serve` stubs the wire, and no assertion
+  // in this file reads a request header.
+  vi.stubGlobal('localStorage', {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  });
 });
 
 afterEach(async () => {
