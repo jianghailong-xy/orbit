@@ -52,8 +52,13 @@ const (
 // declares it, so a destructive worktree operation can see it. A background
 // shell holds the checkout for as long as it runs, which is routinely past the
 // end of the turn that launched it.
+//
+// The two doors record the same hold and differ in one fact the pool keeps
+// beside it: whether the runner spawned this writer itself. A runner-hosted one
+// outlives engine eviction, so it is also the one a capacity ledger has to count.
 type worktreeHoldRegistry interface {
 	holdWorktree(jobID, name string)
+	holdRunnerJob(jobID, name string)
 	releaseWorktree(jobID string)
 }
 
@@ -70,6 +75,11 @@ type bgTailer struct {
 	live     map[string]liveShell // toolUseId → its running tail
 	seen     map[string]bool      // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
 	terminal map[string]bool      // toolUseId already reported in a terminal state
+	// jobs are the background processes this runner spawned and waits on itself
+	// (background_job.go), keyed by the id the runner issued. Retained after they
+	// finish: an agent that comes back to a job asks by that id, and "no such job"
+	// and "that job exited 7" are different answers.
+	jobs map[string]*bgJob
 }
 
 // liveShell is a background shell with a tail running. engineOwned separates the agent's
@@ -93,16 +103,25 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 		live:     map[string]liveShell{},
 		seen:     map[string]bool{},
 		terminal: map[string]bool{},
+		jobs:     map[string]*bgJob{},
 	}
 }
 
 // holdFor / releaseHold declare this tailer's shells to whoever fences the
 // checkout. Both are called under b.mu, alongside the b.live edit they describe,
 // so the registry never disagrees with what is actually running.
-func (b *bgTailer) holdFor(toolUseID, shellID string) {
-	if b.holds != nil {
-		b.holds.holdWorktree(toolUseID, shellID)
+//
+// A shell the engine owns dies with it; one the runner owns does not, and is
+// declared through the door that says so.
+func (b *bgTailer) holdFor(toolUseID, shellID string, engineOwned bool) {
+	if b.holds == nil {
+		return
 	}
+	if engineOwned {
+		b.holds.holdWorktree(toolUseID, shellID)
+		return
+	}
+	b.holds.holdRunnerJob(toolUseID, shellID)
 }
 
 func (b *bgTailer) releaseHold(toolUseID string) {
@@ -170,7 +189,7 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string, engineOwned bool) 
 	}
 	ctx, cancel := context.WithCancel(b.ctx)
 	b.live[toolUseID] = liveShell{cancel: cancel, shellID: shellID, engineOwned: engineOwned}
-	b.holdFor(toolUseID, shellID)
+	b.holdFor(toolUseID, shellID, engineOwned)
 	b.wg.Add(1)
 	b.mu.Unlock()
 	go func() {
@@ -350,6 +369,11 @@ func (b *bgTailer) killEngineShells() {
 // background shell. Returning is the supervisor handoff barrier: no old epoch
 // goroutine may emit or retain the worktree after it completes.
 func (b *bgTailer) stopAll() {
+	// Session end is one of the three things allowed to end a runner-hosted job,
+	// and the kind decides how: a service is killed at once, a job is given
+	// bgDrainWaitCap to land its own exit code. Before the gate closes, because a
+	// drained job still has a terminal event to emit.
+	b.drainJobs(bgDrainWaitCap)
 	b.mu.Lock()
 	b.stopping = true
 	for id, s := range b.live {

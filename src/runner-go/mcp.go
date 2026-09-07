@@ -211,6 +211,11 @@ const maxProjectAcceptanceCriteriaItems = 100
 const maxProjectAcceptanceVerificationMethodChars = 4000
 
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
+	// Runner-hosted background jobs are not a control-plane call at all: they are
+	// forwarded to the local runner over this session's socket (mcp_bg.go).
+	if result, handled := s.callBgTool(name, args); handled {
+		return result
+	}
 	switch name {
 	case "task_list":
 		limit, err := getBoundedOptionalNumber(args, "limit", maxTaskListLimit)
@@ -2444,6 +2449,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 		)
 	}
+	// Always advertised: an agent that cannot see the tool falls back to
+	// Bash(run_in_background), and a session without the runner socket gets a
+	// refusal that says why rather than a silently engine-owned process.
+	tools = append(tools, bgToolDescriptors(obj)...)
 	if includePermissionPrompt {
 		tools = append(tools, map[string]interface{}{
 			// Claude Code's --permission-prompt-tool target. Claude calls it (not the

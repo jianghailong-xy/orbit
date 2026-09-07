@@ -362,6 +362,8 @@ func main() {
 		cmdEngineUpdate()
 	case "mcp":
 		cmdMcp()
+	case "hook":
+		cmdHook(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println(version)
 	default:

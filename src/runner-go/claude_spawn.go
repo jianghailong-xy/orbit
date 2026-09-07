@@ -97,6 +97,16 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		// (ensureClaudeTranscript) before we get here, so --resume has something to resume.
 		args = append(args, "--resume", job.SessionUUID)
 	}
+	// Route the agent's background work to the runner. The settings file is
+	// session-private (never the user's own ~/.claude/settings.json — this same
+	// machine's interactive claude reads that one), and the hook it installs is
+	// the only way to refuse Bash *with run_in_background* while leaving Bash
+	// itself alone. It fails open: a settings file we could not write, or an exe
+	// we could not resolve, leaves the engine's own background shells working
+	// exactly as before.
+	if path, err := writeClaudeSettings(scratchDir, orbitExe); err == nil && path != "" {
+		args = append(args, "--settings", path)
+	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
 	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read
 	// them without a per-read permission prompt; created up front so the flag points at an
@@ -106,6 +116,34 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		args = append(args, "--add-dir", upDir)
 	}
 	return args
+}
+
+// writeClaudeSettings writes this session's private settings file — the
+// PreToolUse hooks that send background work to the runner — and returns its
+// path. Two matchers, for the two halves of one story: the launch door, and the
+// readers that would be asked about a job this CLI has never heard of.
+func writeClaudeSettings(scratchDir, orbitExe string) (string, error) {
+	if scratchDir == "" || orbitExe == "" {
+		return "", nil
+	}
+	guard := []map[string]interface{}{{"type": "command", "command": orbitExe + " hook bg-guard"}}
+	settings := map[string]interface{}{
+		"hooks": map[string]interface{}{
+			"PreToolUse": []map[string]interface{}{
+				{"matcher": "Bash", "hooks": guard},
+				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
+			},
+		},
+	}
+	b, err := json.Marshal(settings)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(scratchDir, "settings.json")
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // claudeSpawn is a started `claude` process and the pipes that drive it. stdin stays open
@@ -143,6 +181,17 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)
+	// Where `orbit mcp` (a child of this process) reaches the runner to start a
+	// background job the runner will own. Read from the session's scratch dir
+	// rather than threaded through, so a spawn always sees the socket the
+	// supervisor is actually serving; absent when the service failed to start, and
+	// the bg_* tools then say so instead of silently running an engine child.
+	if token, err := os.ReadFile(bgTokenPath(job.SessionID)); err == nil && len(token) > 0 {
+		cmd.Env = append(cmd.Env,
+			envBgSocket+"="+bgSocketPath(job.SessionID),
+			envBgToken+"="+strings.TrimSpace(string(token)),
+		)
+	}
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {

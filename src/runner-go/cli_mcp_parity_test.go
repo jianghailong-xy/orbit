@@ -18,6 +18,17 @@ import (
 // parity check below must not demand.
 var cliParityExemptTools = map[string]string{
 	"permission_prompt": "runtime approval bridge, called by the engine mid-turn",
+	// The bg_* family is the other kind of exception: not a second door onto the
+	// control-plane API, but a call into the local runner over the socket in one
+	// session's scratch dir (background_socket.go). Typed at a terminal there is
+	// no session and no socket, so `orbit bg run` would have nothing to talk to.
+	// Stage 4 adds a CLI door for the engines that cannot speak MCP, and it will
+	// carry the session's socket path explicitly — at which point these gain
+	// commands and come off this list.
+	"bg_run":    "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
+	"bg_output": "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
+	"bg_kill":   "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
+	"bg_list":   "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.

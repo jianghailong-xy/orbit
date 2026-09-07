@@ -123,6 +123,15 @@ const (
 
 func (h worktreeHolder) String() string { return h.kind + " " + h.name }
 
+// bgHold is one live background writer of a checkout. runnerHosted is the fact a
+// capacity ledger needs and a fence does not: a shell the engine owns dies with
+// it, so it is never the reason a parked session still costs anything, while a
+// runner-hosted job goes on running across an engine eviction.
+type bgHold struct {
+	name         string
+	runnerHosted bool
+}
+
 // sessionPool owns both concurrency resources:
 //   - at most max active turn permits;
 //   - at most max resident engines (active + warm).
@@ -137,10 +146,11 @@ type sessionPool struct {
 	clock       poolClock
 	sessions    map[string]*liveSession
 	worktreeOps map[string]*worktreeOperationState
-	// bgJobs is sessionID → live background shell id → the name a refusal calls
-	// it. A shell is a writer of the checkout for exactly as long as it runs, and
-	// it routinely outlives the turn that launched it.
-	bgJobs  map[string]map[string]string
+	// bgJobs is sessionID → live background shell id → what is known about it: the
+	// name a refusal calls it, and whether the runner hosts it. A shell is a writer
+	// of the checkout for exactly as long as it runs, and it routinely outlives the
+	// turn that launched it.
+	bgJobs  map[string]map[string]bgHold
 	changed chan struct{}
 }
 
@@ -157,7 +167,7 @@ func newSessionPoolWithClock(max int, clock poolClock) *sessionPool {
 		clock:       clock,
 		sessions:    map[string]*liveSession{},
 		worktreeOps: map[string]*worktreeOperationState{},
-		bgJobs:      map[string]map[string]string{},
+		bgJobs:      map[string]map[string]bgHold{},
 		changed:     make(chan struct{}),
 	}
 }
@@ -185,8 +195,8 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // hours of warmEngineTTL.
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
-	for _, name := range p.bgJobs[id] {
-		names = append(names, name)
+	for _, hold := range p.bgJobs[id] {
+		names = append(names, hold.name)
 	}
 	sort.Strings(names) // a receipt reads the same twice
 	var holders []worktreeHolder
@@ -209,6 +219,30 @@ func (p *sessionPool) worktreeHolders(id string) []worktreeHolder {
 	return p.worktreeHoldersLocked(id)
 }
 
+// backgroundJobCounts reports, per session, how many runner-hosted background
+// jobs are alive right now. Stage 0 could only ask "is this session doing
+// something", and only through the turn permit, which is why recycling an engine
+// could silently destroy an agent's build. This is the number, not the bit:
+// stage 3 spends it as capacity, and until then it is what makes the work
+// visible at all.
+func (p *sessionPool) backgroundJobCounts() map[string]int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	counts := map[string]int{}
+	for sessionID, jobs := range p.bgJobs {
+		n := 0
+		for _, hold := range jobs {
+			if hold.runnerHosted {
+				n++
+			}
+		}
+		if n > 0 {
+			counts[sessionID] = n
+		}
+	}
+	return counts
+}
+
 // worktreeWritersLocked reports whether a writer that no other mechanism already
 // fences is still working in this checkout. That is exactly the live background
 // jobs: the engine writes through them (see worktreeHoldersLocked), and a
@@ -221,6 +255,18 @@ func (p *sessionPool) worktreeWritersLocked(id string) bool {
 // the session's checkout, and raises the fence on its account. jobID is the
 // launching tool_use id; name is what a refusal will call it.
 func (p *sessionPool) holdWorktreeForBackgroundJob(sessionID, jobID, name string) {
+	p.holdWorktreeWriter(sessionID, jobID, name, false)
+}
+
+// holdWorktreeForRunnerJob records the same hold for a job the RUNNER spawned and
+// owns. It fences the checkout identically — a writer is a writer — and is
+// additionally counted, because this is the work that survives engine eviction
+// and therefore the work a capacity account has to know about.
+func (p *sessionPool) holdWorktreeForRunnerJob(sessionID, jobID, name string) {
+	p.holdWorktreeWriter(sessionID, jobID, name, true)
+}
+
+func (p *sessionPool) holdWorktreeWriter(sessionID, jobID, name string, runnerHosted bool) {
 	if sessionID == "" || jobID == "" {
 		return
 	}
@@ -231,10 +277,10 @@ func (p *sessionPool) holdWorktreeForBackgroundJob(sessionID, jobID, name string
 	defer p.mu.Unlock()
 	jobs := p.bgJobs[sessionID]
 	if jobs == nil {
-		jobs = map[string]string{}
+		jobs = map[string]bgHold{}
 		p.bgJobs[sessionID] = jobs
 	}
-	jobs[jobID] = name
+	jobs[jobID] = bgHold{name: name, runnerHosted: runnerHosted}
 	// A shell launched mid-turn already sits behind that turn's fence. Raising it
 	// here is for the shell that starts, or survives, past the turn: park is about
 	// to hand the permit back, and the fence must not go down with it.
@@ -276,6 +322,10 @@ type sessionWorktreeHolds struct {
 
 func (h sessionWorktreeHolds) holdWorktree(jobID, name string) {
 	h.pool.holdWorktreeForBackgroundJob(h.sessionID, jobID, name)
+}
+
+func (h sessionWorktreeHolds) holdRunnerJob(jobID, name string) {
+	h.pool.holdWorktreeForRunnerJob(h.sessionID, jobID, name)
 }
 
 func (h sessionWorktreeHolds) releaseWorktree(jobID string) {
