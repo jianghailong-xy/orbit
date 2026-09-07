@@ -54,7 +54,7 @@ Design review of 2026-09-07, ahead of moving the EVIDENCE_JUDGMENT decision from
 conversation. Two questions were open; both are settled here, and the implementation tasks that
 follow are bound by these answers rather than free to re-derive them.
 
-Every line anchor below was re-read against `dc53c52b` rather than remembered. Anchors drift: quote
+Every line anchor below was re-read against `e821f967` rather than remembered. Anchors drift: quote
 the sentence as well as the number, and if a number no longer lands on the quoted sentence, trust the
 sentence and re-anchor it.
 
@@ -139,8 +139,8 @@ runner protocol reaches deliberately rather than by accident — "The app reache
 so the account owner gets the same door rather than a shorter one"
 (`runner-task-completion-evidence.controller.ts:41-49`). The fallback therefore needs no second
 write path, and cannot drift from the card's. The fallback spec must submit evidence, deliver the
-turn, never answer, and assert the row is still returned by
-`readPendingEvidenceJudgments` for an independent session — paired with a negative control on the
+turn, never answer, and assert the row is still returned by `readPendingEvidenceJudgments` for an
+independent session — paired with a negative control on the
 same fixture where a recorded decision returns zero rows, because a bare "still visible" assertion
 is also true of a read that filters nothing. And a stale `PENDING` approval must stop presenting
 itself as the live question.
