@@ -32,6 +32,35 @@ var (
 	bgLaunchPath = regexp.MustCompile(`written to:\s+(\S+\.output)`)
 )
 
+// Text that only DESCRIBES that format matches both regexes as readily as a
+// launch does, and production carried three shells scraped out of such text
+// (`${shellId}` once, `<id>…` twice). Since b.live became the set of worktree
+// writers, each was a hold with no process behind it: nothing would ever end it,
+// so the session's merges and commits stayed fenced until its engine stopped.
+//
+// bgLaunchIsPlausible is the one check an INFERRED identity gets before it is
+// registered as a writer. It asks only whether this pair could have been issued
+// rather than typed — a shell id is a single identifier token, and an output
+// path is absolute and spelled out in full. Placeholder text fails that;
+// `${shellId}`, `<id>` and an elided `/…/` are not things an id generator or a
+// filesystem produces. Every real launch passes, which is the point: the native
+// run_in_background the agent falls back to when the hook is unavailable writes
+// in the checkout for real, and has to go on being fenced.
+var (
+	bgShellIDShape = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+	// Markers of a described path rather than a path: template/shell
+	// interpolation, angle-bracket placeholders, and the ellipsis of an elided
+	// one. A marker set rather than a permitted set, so a checkout living under a
+	// directory this code has no opinion about still passes.
+	bgPathPlaceholders = "${}<>…"
+)
+
+func bgLaunchIsPlausible(shellID, outputPath string) bool {
+	return bgShellIDShape.MatchString(shellID) &&
+		filepath.IsAbs(outputPath) &&
+		!strings.ContainsAny(outputPath, bgPathPlaceholders)
+}
+
 // Fields of the <task-notification> user message Claude injects on a background state change.
 var (
 	bgNotifTaskID  = regexp.MustCompile(`<task-id>([^<]+)</task-id>`)
@@ -188,6 +217,9 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 	pathM := bgLaunchPath.FindStringSubmatch(content)
 	if idM == nil || pathM == nil {
 		return
+	}
+	if !bgLaunchIsPlausible(idM[1], pathM[1]) {
+		return // text describing the launch format, not a shell that exists
 	}
 	b.startTail(toolUseID, idM[1], pathM[1], true)
 }
