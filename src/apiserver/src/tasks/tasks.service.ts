@@ -724,9 +724,9 @@ const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
  * `task t`. Deliberately NOT the same predicate as RUNNABLE_TASK_SQL, and the two must not be
  * merged: this one is deployment-wide (no owner scope), requires status exactly OPEN rather
  * than "not DONE", only considers tasks opted into auto-run, requires the task to HAVE
- * prerequisites (a dependency-free task is never auto-run), and counts the wider
- * TASK_OCCUPYING set — which includes idle-but-live AWAITING_INPUT/INTERRUPTED sessions — as
- * "already being worked".
+ * prerequisites (a dependency-free task is not this predicate's business — it is
+ * PROJECT_INDEPENDENT_READY_SQL's, on the same sweep), and counts the wider TASK_OCCUPYING set —
+ * which includes idle-but-live AWAITING_INPUT/INTERRUPTED sessions — as "already being worked".
  *
  * The "has at least one DONE prerequisite" clause is logically implied by the two around it
  * (having prerequisites + none outstanding means they are all DONE), and is stated anyway
@@ -9248,12 +9248,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       noopCount: noop.length,
       cycle: cycle?.map((id) => ({ taskId: id, title: name(id) })) ?? null,
       changes: changes.map((c) => ({ ...c, title: name(c.taskId) })),
-      // Only READY. A task whose last prerequisite is *removed* becomes NONE, which looks like a
-      // release and is not one: the sweep requires a prerequisite that is DONE, so a task with no
-      // prerequisites left is never auto-started — it waits for a person. Counting NONE here
-      // promised runs that never happened.
+      // Only READY. A task whose last prerequisite is *removed* becomes NONE, which is a different
+      // transition and not a release by this batch: AUTO_RUN_READY_SQL anchors on the task HAVING
+      // an edge, so losing its last one takes it OUT of that scan rather than through it. Counting
+      // NONE here promised runs this restructure does not cause.
       becomingRunnable: changes.filter((c) => c.to === 'READY').length,
-      // Freed from waiting, but now nobody will start them either.
+      // Freed from waiting. Whether anything then starts them is a question about their project,
+      // not about this batch: filed under a coordinated one they are PROJECT_INDEPENDENT_READY_SQL's
+      // to release, and under no project nobody will. This count does not read the project, so it
+      // is "no longer waiting", not "waiting for a person" — the narrower claim it can support.
       becomingManual: changes.filter((c) => c.to === 'NONE').length,
       becomingBlocked: changes.filter((c) => c.to === 'BLOCKED' || c.to === 'BLOCKED_FAILED').length,
       edgesBefore: current.length,
