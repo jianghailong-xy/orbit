@@ -758,15 +758,7 @@ func runLoop(cfg *RunnerConfig) bool {
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		runHeartbeatTicks(hbStop, ticker.C, func() {
-			idle := pool.maxConcurrent() - pool.activeCount()
-			if idle < 0 {
-				idle = 0
-			}
 			draining := loopCtx.Err() != nil
-			if draining {
-				idle = 0 // draining: keep heartbeating (so the reaper spares our sessions)
-				// but advertise no capacity so the server routes no new work here
-			}
 			assetMu.Lock()
 			cmds, skills := hbCommands, hbSkills
 			assetMu.Unlock()
@@ -775,7 +767,7 @@ func runLoop(cfg *RunnerConfig) bool {
 			runtimeDefaultModels := hbRuntimeDefaultModels
 			modelSnapshotMu.Unlock()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
-				Status: "ONLINE", IdleCapacity: idle, Version: version,
+				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
@@ -1362,7 +1354,12 @@ func runLoop(cfg *RunnerConfig) bool {
 		if worktreeGC.due(time.Now()) {
 			gcWorktrees(t, pool.ids(), measureWorktreePressure(diskFloorMb.Load()))
 		}
-		if pool.activeCount() >= pool.maxConcurrent() {
+		// Saturation, counted against everything this machine is doing rather than
+		// against turn permits alone: a parked session whose runner-hosted build is
+		// still going holds no permit and no engine, and claiming another session on
+		// top of it is how a host with a global-OOM history ends up running three
+		// builds it never counted.
+		if pool.admissionIdleCapacity() <= 0 {
 			select {
 			case <-loopCtx.Done():
 			case <-time.After(500 * time.Millisecond):

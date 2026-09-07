@@ -114,9 +114,8 @@ func waitProcessGone(t *testing.T, pid int, timeout time.Duration) {
 }
 
 // evictionHarness is one session wired the way runInteractiveSession wires it:
-// a tailer on the session context (not the engine's), the pool holding the
-// engine's cancel, and the pool's only view of background work being the
-// engine-shell probe. Eviction here is the real pool path, not a stand-in.
+// a tailer on the session context (not the engine's) and the pool holding the
+// engine's cancel. Eviction here is the real pool path, not a stand-in.
 type evictionHarness struct {
 	t         *testing.T
 	pool      *sessionPool
@@ -138,10 +137,6 @@ func newEvictionHarness(t *testing.T, id string, max int) *evictionHarness {
 	sessionCtx, cancelSession := context.WithCancel(context.Background())
 	events := &bgJobEvents{}
 	bg := newBgTailer(sessionCtx, events.emit, pool.worktreeHoldsFor(id))
-	// Exactly what session.go lends the pool: a look at the engine's own shells.
-	// A runner-hosted job is deliberately not in it — it must not buy the engine
-	// more residency, because making eviction lossless is the whole point.
-	pool.setBackgroundJobProbe(live, bg.hasLiveEngineShells)
 	h := &evictionHarness{
 		t: t, pool: pool, clock: clock, live: live, bg: bg,
 		events: events, id: id, dir: t.TempDir(),
@@ -348,9 +343,7 @@ func TestEngineOwnedBackgroundShellStillDiesWithItsEngine(t *testing.T) {
 		" written to: "+output+". You will be notified when it completes.")
 
 	h.park()
-	// A live engine shell renews the warm TTL (the stage-0 deferral), so the clock
-	// has to walk past the residency hard cap for eviction to happen at all.
-	h.clock.Advance(warmResidencyHardCap + time.Second)
+	h.clock.Advance(warmEngineTTL + time.Second)
 	h.afterEngineStopped()
 
 	waitProcessGone(t, pid, 5*time.Second)

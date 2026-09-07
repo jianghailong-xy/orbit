@@ -656,13 +656,6 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			return err
 		},
 	)
-	// Stage-0 stopgap: the pool's only notion of "this session is doing something" is
-	// the active turn permit, which a parked session with a live Bash(run_in_background)
-	// child does not hold — and that child is a child of the engine, so recycling the
-	// engine reports the job killed. Lend the pool a read-only look at this tailer so
-	// warm eviction and the warm TTL can defer to it, up to warmResidencyHardCap.
-	clearBackgroundJobProbe := pool.setBackgroundJobProbe(live, bg.hasLiveEngineShells)
-	defer clearBackgroundJobProbe()
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude

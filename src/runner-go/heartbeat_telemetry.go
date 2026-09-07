@@ -196,6 +196,12 @@ type heartbeatSendFunc func(HeartbeatRequest) (*HeartbeatResponse, error)
 // sendHeartbeatCycle owns the session-related portion of the real heartbeat
 // critical path. It always attempts the POST before kicking off the next telemetry
 // scan, and returns the exact cancellation snapshot paired with that request.
+//
+// The advertised capacity is computed here, from the pool, rather than handed in by
+// the caller: what this runner is doing includes background jobs that hold no turn
+// permit, and a caller counting permits cannot see them. A draining runner offers
+// nothing whatever the account says — it keeps heartbeating only so the reaper spares
+// its sessions.
 func sendHeartbeatCycle(
 	pool *sessionPool,
 	telemetry *heartbeatTelemetryProbe,
@@ -205,6 +211,10 @@ func sendHeartbeatCycle(
 	supervisors, supervised, sessions, targets := heartbeatSessionSnapshot(pool, telemetry)
 	request.SupervisedSessionIDs = supervised
 	request.Sessions = sessions
+	request.IdleCapacity = pool.admissionIdleCapacity()
+	if request.Draining {
+		request.IdleCapacity = 0
+	}
 	response, err := send(request)
 	telemetry.trigger(targets)
 	return response, supervisors, err

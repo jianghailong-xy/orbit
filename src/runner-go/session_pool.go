@@ -11,23 +11,22 @@ import (
 // warmEngineTTL is how long an idle interactive engine is kept for a zero-startup
 // continuation. The Orbit session itself remains resumable after this expires; only
 // the local coding-runtime supervisor is recycled.
-const warmEngineTTL = 4 * time.Hour
-
-// warmResidencyHardCap is the absolute ceiling on one idle engine's warm residency,
-// every background-job renewal included. The renewal below exists because a parked
-// session's Bash(run_in_background) children are children of the engine process, so
-// recycling the engine reports them killed — but a renewal a still-running process can
-// refresh is a renewal a forgotten `vite` refreshes forever, and this host has a
-// global-OOM history (2026-08-31: five runner drops in one day, swap fully consumed).
-// Peak memory is already bounded elsewhere — warm engines never exceed the resident
-// cap — so what this bounds is how long one abandoned session may hold a slot.
 //
-// 12h = 3x warmEngineTTL: two renewals, enough for a genuinely long job to outlive a
-// session parked without a human present, and the slot still comes back inside a day.
+// Now that an agent's background jobs are the runner's own children, recycling a warm
+// engine costs nothing but the next turn's startup: it is a pure latency cache, and
+// it pays for that cache in resident memory for the whole TTL whether or not the next
+// turn ever comes. Measured on this host on 2026-09-07, over two samples of the
+// engines the runner supervised (five, then two): 265-273 MB RSS / 199-235 MB PSS
+// per engine. The host has 24 GB of RAM, its 8 GB of swap 100% consumed, and a
+// global OOM on 2026-08-31 that the kernel resolved by killing a 9.8 GB process
+// inside orbit-runner-root.service.
 //
-// Stage-0 stopgap. Stage 3 makes background jobs runner-owned rather than engine
-// children, at which point this constant, the probe, and both deferrals come out.
-const warmResidencyHardCap = 12 * time.Hour
+// Four hours meant holding ~200 MB per parked session for four hours to save one
+// engine start. Forty-five minutes still covers what the cache is for — a session
+// that gets another turn in the same sitting — and hands the rest of the day back to
+// the host. This number moves down or stays put, never up: a warm engine is a
+// convenience, and this machine has already shown what it does when memory runs out.
+const warmEngineTTL = 45 * time.Minute
 
 type poolTimer interface {
 	Stop() bool
@@ -80,12 +79,6 @@ type liveSession struct {
 	idleGeneration uint64
 	warmTimer      poolTimer
 	lastActive     time.Time // LRU key: when active -> warm most recently
-
-	// Stage-0 stopgap: read-only liveness query into this run's bgTailer, so warm
-	// eviction can see work the active turn permit does not represent. A plain
-	// func keeps the tailer out of the pool; it is called under p.mu and must
-	// therefore never re-enter the pool (bgTailer takes only its own lock).
-	bgJobsLive func() bool
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -191,8 +184,8 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // The engine counts only while it can actually write: a turn is running, or one
 // of its background shells is still alive. A parked engine with neither writes
 // nothing — being a warm process waiting for the next turn is its entire job —
-// and counting it anyway would fence every merge on a warm session for the four
-// hours of warmEngineTTL.
+// and counting it anyway would fence every merge on a warm session for the whole
+// of warmEngineTTL.
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
 	for _, hold := range p.bgJobs[id] {
@@ -219,15 +212,22 @@ func (p *sessionPool) worktreeHolders(id string) []worktreeHolder {
 	return p.worktreeHoldersLocked(id)
 }
 
-// backgroundJobCounts reports, per session, how many runner-hosted background
-// jobs are alive right now. Stage 0 could only ask "is this session doing
-// something", and only through the turn permit, which is why recycling an engine
-// could silently destroy an agent's build. This is the number, not the bit:
-// stage 3 spends it as capacity, and until then it is what makes the work
-// visible at all.
+// backgroundJobCounts reports, per session, how many runner-hosted background jobs
+// are alive right now. This is the capacity account, and it is a number rather than
+// a bit because it is spent as one: a runner-hosted job goes on running with no turn
+// permit and no engine, so activeCount() cannot see it, and a runner that admits work
+// against permits alone admits it onto a machine that is already busy.
+//
+// What it is not for is keeping an engine resident. Eviction is lossless now — that
+// is the whole of stages 1 and 2 — so a live job is a reason to take less new work,
+// never a reason to hold 200 MB of parked engine.
 func (p *sessionPool) backgroundJobCounts() map[string]int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.backgroundJobCountsLocked()
+}
+
+func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 	counts := map[string]int{}
 	for sessionID, jobs := range p.bgJobs {
 		n := 0
@@ -241,6 +241,30 @@ func (p *sessionPool) backgroundJobCounts() map[string]int {
 		}
 	}
 	return counts
+}
+
+// admissionIdleCapacity spends the account above: it reports how many more sessions
+// this runner may be given, counting a session as occupying a slot while it holds a
+// turn permit OR while runner-hosted jobs of its own are still running. Per session
+// and not per job — several jobs of one session share one checkout, and a session is
+// the unit that new work displaces.
+func (p *sessionPool) admissionIdleCapacity() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	occupied := make(map[string]bool, len(p.sessions))
+	for sessionID := range p.backgroundJobCountsLocked() {
+		occupied[sessionID] = true
+	}
+	for id, s := range p.sessions {
+		if s.active {
+			occupied[id] = true
+		}
+	}
+	idle := p.max - len(occupied)
+	if idle < 0 {
+		idle = 0
+	}
+	return idle
 }
 
 // worktreeWritersLocked reports whether a writer that no other mechanism already
@@ -484,66 +508,25 @@ func (p *sessionPool) warmCountLocked() int {
 	return n
 }
 
-// setBackgroundJobProbe installs one session run's background-job liveness query
-// and returns the deregistration func. The supervisor pointer is the epoch token:
-// a probe belonging to a superseded run can neither install onto nor uninstall
-// from its replacement.
-func (p *sessionPool) setBackgroundJobProbe(s *liveSession, probe func() bool) func() {
-	p.mu.Lock()
-	if p.sessions[s.id] == s {
-		s.bgJobsLive = probe
-	}
-	p.mu.Unlock()
-	return func() {
-		p.mu.Lock()
-		if p.sessions[s.id] == s {
-			s.bgJobsLive = nil
-		}
-		p.mu.Unlock()
-	}
-}
-
-// warmResidencyDeadlineLocked returns the instant after which this warm supervisor
-// stops being deferred for its background job, or the zero time when no deferral
-// applies at all (no probe registered, or no job running). lastActive is when the
-// supervisor went warm, so it is both the LRU key and the start of the capped window.
-//
-// This is the only place the cap is expressed. Both deferrals below read it, so a
-// supervisor cannot be spared by one and capped by the other.
-func (p *sessionPool) warmResidencyDeadlineLocked(s *liveSession) time.Time {
-	if s.bgJobsLive == nil || !s.bgJobsLive() {
-		return time.Time{}
-	}
-	return s.lastActive.Add(warmResidencyHardCap)
-}
-
-// sparedForBackgroundJobLocked reports whether this warm supervisor still earns the
-// stage-0 deferral: a live background job, and warm residency not yet spent.
-func (p *sessionPool) sparedForBackgroundJobLocked(s *liveSession) bool {
-	return p.clock.Now().Before(p.warmResidencyDeadlineLocked(s))
-}
-
 // oldestWarmLocked returns the LRU warm process that is not already on its way
 // out. Stable id ordering breaks equal-timestamp ties, making behavior and tests
 // deterministic.
 //
-// Stage-0 stopgap: a supervisor spared for a live background job sorts after every
-// supervisor that is not, so it is chosen only when nothing else is left. That is a
-// deprioritization, not an exemption — real capacity pressure still recycles it, and
-// so does warmResidencyHardCap, which ends the deferral outright.
+// Strict least-recently-active, with no exemption for any kind of work. The one
+// exemption there ever was — a deferral for a supervisor with a live background job —
+// is gone: that job is the runner's own child now, and survives the eviction it used
+// to have to be spared from. Re-evaluated alongside warmEngineTTL and deliberately
+// left at its tightest: warm engines hold only capacity no active turn is promised,
+// and the oldest one goes first.
 func (p *sessionPool) oldestWarmLocked(except string) *liveSession {
 	var oldest *liveSession
-	oldestSpared := false
 	for _, s := range p.sessions {
 		if s.id == except || !s.resident || s.active || s.evictRequested {
 			continue
 		}
-		spared := p.sparedForBackgroundJobLocked(s)
-		if oldest == nil || (oldestSpared && !spared) ||
-			(spared == oldestSpared &&
-				(s.lastActive.Before(oldest.lastActive) ||
-					(s.lastActive.Equal(oldest.lastActive) && s.id < oldest.id))) {
-			oldest, oldestSpared = s, spared
+		if oldest == nil || s.lastActive.Before(oldest.lastActive) ||
+			(s.lastActive.Equal(oldest.lastActive) && s.id < oldest.id) {
+			oldest = s
 		}
 	}
 	return oldest
@@ -789,10 +772,9 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 // moved the control-plane session to AWAITING_INPUT. The engine remains resident
 // and warm until its timer or LRU pressure recycles it.
 //
-// The timer wound here is always one warmEngineTTL; a session with a live background
-// job renews it from expireWarm rather than starting longer, so a job that finishes
-// during the first window costs nothing. lastActive, set just below, anchors both the
-// LRU order and the warmResidencyHardCap window those renewals run out of.
+// The timer wound here is one warmEngineTTL, with nothing that renews it: whatever
+// this session left running does not belong to the engine any more. lastActive, set
+// just below, is the LRU order.
 func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
@@ -827,36 +809,12 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 	return s.permitGeneration
 }
 
-// warmRenewalLocked returns how much longer a warm engine may be held for a live
-// background job, or 0 to recycle it now. One warmEngineTTL at a time, and never past
-// warmResidencyHardCap — so the renewal is a bounded number of extensions, not a loop
-// a still-running process can keep alive.
-func (p *sessionPool) warmRenewalLocked(s *liveSession) time.Duration {
-	remaining := p.warmResidencyDeadlineLocked(s).Sub(p.clock.Now())
-	if remaining <= 0 {
-		return 0
-	}
-	if remaining < warmEngineTTL {
-		return remaining
-	}
-	return warmEngineTTL
-}
-
-// expireWarm recycles a warm engine when its TTL elapses. Stage-0 stopgap: a
-// supervisor still running a background job rewinds the timer instead, under the same
-// idleGeneration — a claim that arrives meanwhile bumps that generation and defuses
-// the renewed timer exactly as it defused the original one.
+// expireWarm recycles a warm engine when its TTL elapses. Nothing defers it: a
+// supervisor's background jobs are the runner's own children and keep running.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
 		s.idleGeneration != idleGeneration {
-		p.mu.Unlock()
-		return
-	}
-	if renewal := p.warmRenewalLocked(s); renewal > 0 {
-		s.warmTimer = p.clock.AfterFunc(renewal, func() {
-			p.expireWarm(s, idleGeneration)
-		})
 		p.mu.Unlock()
 		return
 	}
@@ -990,8 +948,8 @@ func (p *sessionPool) isActive(s *liveSession) bool {
 // what its background jobs did, so it is the one that has to be told out of band.
 //
 // Takes p.mu, so a caller holding another lock must not be one the pool calls back
-// into under p.mu (bgJobsLive is exactly that) — see finishJob, which asks after
-// releasing the tailer's.
+// into under p.mu. The pool holds no callback into the tailer any more, so nothing
+// inverts today — see finishJob, which asks after releasing the tailer's anyway.
 func (p *sessionPool) engineResident(s *liveSession) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()

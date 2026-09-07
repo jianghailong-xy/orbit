@@ -162,9 +162,7 @@ func (f *providerBgFixture) engineOwnedShell(t *testing.T, toolUseID string) int
 // evictEngine runs the real pool eviction and reports what the supervisor reports.
 func (f *providerBgFixture) evictEngine() {
 	f.park()
-	// An engine-owned shell renews the warm TTL (stage 0's deferral), so the clock
-	// has to walk past the residency hard cap for the eviction to happen at all.
-	f.clock.Advance(warmResidencyHardCap + time.Second)
+	f.clock.Advance(warmEngineTTL + time.Second)
 	f.afterEngineStopped()
 }
 
@@ -310,7 +308,7 @@ func TestKimiNativeBackgroundShellIsReportedKilled(t *testing.T) {
 		"sessionUpdate": "tool_call", "toolCallId": "kimi_fg", "title": "Bash",
 		"rawInput": map[string]interface{}{"command": "ls"},
 	})
-	if f.bg.hasLiveEngineShells() {
+	if f.holdsWorktree("kimi_fg") {
 		t.Fatal("a foreground Bash call was registered as a background shell")
 	}
 
@@ -320,7 +318,7 @@ func TestKimiNativeBackgroundShellIsReportedKilled(t *testing.T) {
 			"command": "npm run build", "run_in_background": true, "description": "build",
 		},
 	})
-	if !f.bg.hasLiveEngineShells() {
+	if !f.holdsWorktree("kimi_bg") {
 		t.Fatal("Kimi's run_in_background shell was not registered, so its death stays invisible")
 	}
 
