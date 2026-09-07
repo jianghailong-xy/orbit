@@ -1,5 +1,6 @@
 import { uuidToBase62 } from '@orbit/shared';
 
+import { buildEvidenceAskProtocol, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
 import { WakeFact } from './coordinator-wake';
 
 /**
@@ -215,19 +216,26 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
  * Lines 1, 3 and 4 are properties of the carrier and are the same for every fact delivered here.
  * Line 2 is not: it is the ACTION, and the merge order above is the action `CRITERION_UNLANDED`
  * calls for. `COMPLETION_EVIDENCE_REVISED` — one new revision of a task's completion evidence,
- * delivered by the evidence ledger's own door — calls for no merge, so telling its reader to merge
- * something would be prescribing an action nothing about the fact justifies. It gets the fact and
- * the two reads that lead to the rest of it, and what it should ASK about them is not this
- * function's to invent.
+ * delivered by the evidence ledger's own door — calls for no merge. Its action is to ASK: what the
+ * evidence criterion wants is a person's judgment, and `coordinator-evidence-ask.ts` says why the
+ * coordinator is the one carrying the question rather than the one answering it. `ask` is the
+ * pending queue as it stood when the delivery was composed; a delivery with nothing this
+ * coordinator may answer passes null and the message stays what it was — the fact, and where to
+ * read the rest of it.
  */
-export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: string): string {
+export function buildCoordinatorDeliveryMessage(
+  fact: WakeFact,
+  projectTitle: string,
+  ask?: { ask: EvidenceAsk; readAt: Date } | null,
+): string {
   const projectId = uuidToBase62(fact.projectId);
   if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
     return (
       `【项目「${projectTitle}」有一条新的完成证据】\n\n`
       + `${describeWakeFact(fact)}\n\n`
+      + (ask ? `${buildEvidenceAskProtocol(ask.ask, ask.readAt)}\n\n` : '')
       + `证据自己读：task_get（taskId 传 ${uuidToBase62(fact.subjectId)}）读这个任务和它的验收标准，`
-      + `project_get（projectId 传 ${projectId}）读项目声明的标准。这条消息里除了上面那个事实，`
+      + `project_get（projectId 传 ${projectId}）读项目声明的标准。这条消息里除了上面那些，`
       + '没有这个任务或这个项目的任何其他状态。\n\n'
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
       + '所以以你自己刚读到的库里状态为准。'

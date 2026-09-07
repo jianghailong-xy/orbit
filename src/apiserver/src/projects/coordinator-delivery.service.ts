@@ -8,6 +8,8 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { buildEvidenceAsk, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
+import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
@@ -227,7 +229,9 @@ export class CoordinatorDeliveryService {
     // row goes on naming it after it ends.
     const standing = await this.prisma.session.findFirst({
       where: { id: project.coordinatorSessionId, ownerId: project.ownerId, deletedAt: null },
-      select: { id: true, status: true, cancelRequestedAt: true },
+      // `taskId` is read for the queue below and for nothing else: whether this conversation may
+      // decide a given row is the door's own question, and the door asks it of this column.
+      select: { id: true, status: true, cancelRequestedAt: true, taskId: true },
     });
     if (
       !standing
@@ -236,6 +240,15 @@ export class CoordinatorDeliveryService {
     ) {
       return { outcome: 'REFUSED', refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
     }
+
+    // The questions this turn is being sent to ask, read FOR the conversation that will ask them.
+    // It happens here rather than in the message builder because it is a read of the database, and
+    // it happens for this one event because it is this one event's action — an evidence revision
+    // is a claim waiting on a person's judgment, and nothing a coordinator session can call reads
+    // the queue that holds it (`coordinator-evidence-ask.ts`).
+    const asked = fact.event === 'COMPLETION_EVIDENCE_REVISED'
+      ? await this.evidenceAsk(project.ownerId, standing)
+      : null;
 
     // The fact's own identity, spent as the turn's idempotency key. `createTurn` holds
     // `(session_id, client_turn_id)` unique and replays the committed turn for a repeat of the
@@ -246,7 +259,7 @@ export class CoordinatorDeliveryService {
     try {
       await this.sessions.resume(project.ownerId, standing.id, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title),
+        content: buildCoordinatorDeliveryMessage(fact, project.title, asked),
       });
     } catch (e) {
       // The refusals `resume` gives for an ordinary state of the world rather than a fault: the
@@ -264,6 +277,25 @@ export class CoordinatorDeliveryService {
       throw e;
     }
     return { outcome: 'SENT', sessionId: standing.id, clientTurnId };
+  }
+
+  /**
+   * What this conversation may decide right now, or null when the answer is "nothing".
+   *
+   * The queue's own predicates decide which rows come back — this asks it nothing of its own, for
+   * the reason it has one implementation: a second opinion here would put a card in front of a
+   * person that the decision door refuses whichever button they press. `readAt` travels with the
+   * rows because the message says when the snapshot was taken, and a reader who is told that can
+   * tell a question that moved from a delivery that failed.
+   */
+  private async evidenceAsk(
+    ownerId: string,
+    standing: { id: string; taskId: string | null },
+  ): Promise<{ ask: EvidenceAsk; readAt: Date } | null> {
+    const readAt = new Date();
+    const queue = await readPendingEvidenceJudgments(this.prisma, ownerId, standing, readAt);
+    const ask = buildEvidenceAsk(queue);
+    return ask ? { ask, readAt } : null;
   }
 
   /**
