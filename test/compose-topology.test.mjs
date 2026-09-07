@@ -114,9 +114,42 @@ test('(j) the gateway service definition is unchanged and still mounts ./gateway
     /- \.\/gateway\/nginx\.conf:\/etc\/nginx\/conf\.d\/default\.conf:ro/);
 });
 
-test('pgbackup, apiserver and web are untouched by the removal as well', () => {
+/** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
+function directives(block) {
+  return block.split('\n').filter((line) => !/^\s*(#|$)/.test(line));
+}
+
+/**
+ * The directives of a service block the baseline block does not account for. Both are walked in
+ * order, each directive claiming the earliest baseline line that still matches it, so a directive
+ * the current block no longer has just moves the pointer along and costs nothing, while one that is
+ * added, duplicated, or moved earlier in the block finds nothing left to claim. An unmatched
+ * directive leaves the pointer where it was, so a single addition is reported as a single line.
+ */
+function directivesNotInBaseline(block, baselineBlock) {
+  const baselineLines = directives(baselineBlock);
+  const unaccounted = [];
+  let i = 0;
+  for (const line of directives(block)) {
+    const at = baselineLines.indexOf(line, i);
+    if (at === -1) unaccounted.push(line);
+    else i = at + 1;
+  }
+  return unaccounted;
+}
+
+// Unlike postgres and gateway, these three carry no relative bind mount to fence off, so the
+// guarantee here is one-directional on purpose: nothing may be added to a surviving service, while
+// a directive the repository has genuinely stopped needing is free to leave and the prose around
+// it is free to be rewritten. Byte equality made both of those look like the thing this file exists
+// to catch, and left this test red on main: 7334a09c dropped the dead
+// ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED env from apiserver, and 5969060e reworded a comment in
+// web. Neither can start a resident observer, which is the one thing being fenced off here.
+test('nothing was added to pgbackup, apiserver or web: their definitions only lost lines', () => {
   for (const name of ['pgbackup', 'apiserver', 'web']) {
-    assert.equal(currentServices.get(name), baselineServices.get(name));
+    assert.deepEqual(
+      directivesNotInBaseline(currentServices.get(name), baselineServices.get(name)), [],
+      `${name} declares something the baseline did not: adding to a surviving service is forbidden`);
   }
 });
 
