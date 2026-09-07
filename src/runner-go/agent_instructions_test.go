@@ -25,10 +25,15 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		" mcp` directly",
 		"durable record",
 		"returned its id",
-		"MUST proactively propose recording it as an Orbit Project",
-		"A single reported bug can still have that shape",
-		"wait for an explicit yes before calling project_create",
-		"Do not offer or create a standalone task as a substitute",
+		"Most newly discovered work is one task",
+		"4 or more steps that depend on one another",
+		"you may propose recording it as an Orbit Project",
+		"Do not stop and wait for the answer",
+		"do not propose the same body of work twice",
+		// The one clause that did NOT soften: a project is created by a yes, never by the
+		// model deciding the shape qualifies. Raising the bar changes when it asks, not
+		// whether it may act alone.
+		"never call project_create without one",
 		"from this same session",
 	} {
 		if !strings.Contains(got, phrase) {

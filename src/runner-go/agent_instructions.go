@@ -52,6 +52,15 @@ func orbitCLIInstructionExecutable(exe string) string {
 // something it can check itself, which also catches the case where it wrote no task
 // at all and merely listed one in its reply.
 //
+// The project paragraph states the default first ("one task") and only then the
+// shape worth proposing, because the previous form stated only triggers, and one
+// of them -- "will not finish in this session" -- is arguable about any non-trivial
+// work, so it fired on nearly everything. The bar is now a plan ALREADY worked out
+// and counted, not a forecast the model can talk itself into. Deliberately lopsided:
+// missing a body of work that deserved a project costs a plan that stays in the
+// conversation, while proposing one every time costs the user's attention on every
+// turn, and only the second is paid whether or not the judgement was right.
+//
 // Kept ASCII and roughly a paragraph long: codex carries this as a single
 // application-context value capped at 1,000 tokens (see codexAgentAdditionalContext).
 func orbitCLIInstructions(executable string) string {
@@ -64,11 +73,12 @@ func orbitCLIInstructions(executable string) string {
 		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
 		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
 		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
-		"Before offering or creating an Orbit task for newly discovered work, judge its scope. If it spans dependent phases, " +
-		"will need more than this session or context window, or needs several agents, you MUST proactively propose recording it " +
-		"as an Orbit Project, explain why, and wait for an explicit yes before calling project_create. A single reported bug can " +
-		"still have that shape. Do not offer or create a standalone task as a substitute while waiting. After yes, create the " +
-		"Project from this same session so the conversation becomes its coordinator; do not switch or open a session for it.\n\n" +
+		"Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
+		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
+		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
+		"keep working. Do not stop and wait for the answer, and do not propose the same body of work twice. A project is only " +
+		"ever created by an explicit yes: never call project_create without one. After yes, create the Project from this same " +
+		"session so the conversation becomes its coordinator; do not switch or open a session for it.\n\n" +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +

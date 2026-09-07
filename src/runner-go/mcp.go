@@ -1925,18 +1925,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"work: state what it is trying to achieve (goal), what would settle that the goal " +
 				"was reached (acceptanceCriteriaItems), and how the work is to be done (instructions). " +
 				"You have the authority to write these fields — record what you were asked for " +
-				"rather than waiting for somebody to type it in. Do not wait to be asked, either: " +
-				"when what you are looking at spans more than one session — it will not finish in " +
-				"this conversation, it will exhaust your context, or it runs over days — or breaks " +
-				"into steps that depend on one another, or wants several agents on different parts " +
-				"of it, then PROPOSE recording it as a project before you start working. Say why, " +
-				"because the reason is the whole point: a project moves the plan out of this " +
-				"conversation and into the task graph, so when this session ends or your context " +
-				"runs out the plan is still there and whoever picks it up next does not have to " +
-				"re-derive it. Propose, then wait for a yes — this call is the answer to that " +
-				"question, not a way around asking it. A single reported bug can still have this " +
-				"shape; one bug does not imply one task. Do not create a standalone task as a " +
-				"substitute while waiting for the answer. The " +
+				"rather than waiting for somebody to type it in. You do not have to be asked to " +
+				"propose one either, but the bar is high: most work that comes up is one task, and " +
+				"a project earns its keep only when a plan you have ALREADY worked out comes to 4 " +
+				"or more steps that depend on one another, or the work plainly wants several agents " +
+				"on different parts of it over days. Below that, file a task. Above it, say so in a " +
+				"sentence or two and say why — a project moves the plan out of this conversation " +
+				"and into the task graph, so when this session ends or your context runs out the " +
+				"plan is still there and whoever picks it up next does not have to re-derive it. " +
+				"Then carry on: do not hold the work while you wait. This call is the answer to that " +
+				"question, not a way around asking it — never make it without an explicit yes, and " +
+				"do not ask twice about the same body of work. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
 				"it is for. Created from inside a session, the project is bound to THIS session " +
@@ -2083,7 +2082,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Before using it for newly discovered work, apply project_create's scope rule: a single reported bug can still span more than one session or require dependent phases. In that case PROPOSE a project and wait for a yes; do not park the work as a standalone task while waiting. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
+			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
 			"inputSchema": func() map[string]interface{} {
 				return obj(taskCreateProps(), "title", "completionCriterion")
 			}(),

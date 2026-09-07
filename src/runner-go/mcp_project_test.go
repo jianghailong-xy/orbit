@@ -959,21 +959,28 @@ func TestMCPProjectUpdateRefusesAFenceWithNoFields(t *testing.T) {
 // carries the judgement itself — which shapes of work are worth proposing a project for, why it is
 // worth it, and that proposing is a question rather than a licence to go ahead and create one.
 //
+// The bar was deliberately RAISED after the copy proposed on nearly everything: the default answer
+// is now stated first and is a task, and the qualifying shape is a plan already worked out and
+// counted rather than a forecast — the old "will not finish in this session" trigger is arguable
+// about any non-trivial work, which is how it came to fire every time. Proposing also no longer
+// blocks: the description used to forbid recording anything while the question was open, which
+// made every proposal a halt.
+//
 // Asserted by keyword rather than by the paragraph: this copy will be reworded, and a test that
 // pins the whole of it turns every rewording into a failure that says nothing.
 func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 	description := mcpToolDescription(toolDescriptors(false, false), "project_create")
 	for _, want := range []struct{ phrase, why string }{
-		{"Do not wait to be asked", "the proposal has to be the model's own move, not a reaction"},
-		{"spans more than one session", "first trigger: the work outlives this conversation"},
-		{"depend on one another", "second trigger: the work has an order to it"},
-		{"several agents", "third trigger: the work wants to be split"},
-		{"PROPOSE", "it proposes rather than silently creating"},
-		{"wait for a yes", "and it waits — this call is the answer, not the asking"},
+		{"most work that comes up is one task", "the default answer is a task, and it is said first"},
+		{"ALREADY worked out", "the bar is a plan that exists, not one the model foresees"},
+		{"4 or more steps that depend on one another", "first qualifying shape, counted"},
+		{"several agents", "second qualifying shape: the work wants to be split"},
+		{"do not have to be asked", "the proposal is still the model's own move to make"},
 		{"task graph", "the reason to say out loud: the plan leaves the conversation"},
 		{"context", "and survives the context that would otherwise take it down"},
-		{"single reported bug", "one bug may still need durable multi-session coordination"},
-		{"Do not create a standalone task", "a task must not pre-empt the proposal"},
+		{"do not hold the work while you wait", "proposing must not halt the work it is about"},
+		{"never make it without an explicit yes", "it proposes rather than silently creating"},
+		{"do not ask twice", "one answer settles it for this body of work"},
 	} {
 		if !strings.Contains(description, want.phrase) {
 			t.Fatalf("project_create description does not mention %q (%s): %q", want.phrase, want.why, description)
@@ -981,14 +988,12 @@ func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 	}
 }
 
-func TestMCPTaskCreateDefersMultiSessionBugsToAProjectProposal(t *testing.T) {
+func TestMCPTaskCreateIsTheDefaultAndNamesTheNarrowProjectCase(t *testing.T) {
 	description := mcpToolDescription(toolDescriptors(false, false), "task_create")
 	for _, want := range []string{
-		"single reported bug",
-		"span more than one session",
-		"PROPOSE a project",
-		"wait for a yes",
-		"do not park the work as a standalone task",
+		"belongs here by default",
+		"4+ dependent steps",
+		"does not block this call",
 	} {
 		if !strings.Contains(description, want) {
 			t.Fatalf("task_create description does not mention %q: %q", want, description)
