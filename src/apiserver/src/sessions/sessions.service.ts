@@ -4899,15 +4899,61 @@ export class SessionsService {
     this.realtime.notifyInbox(sessionId);
   }
 
-  /** Pending (or all) tool-permission approvals for a session the caller owns. */
+  /**
+   * Pending (or all) tool-permission approvals for a session the caller owns.
+   *
+   * A `PENDING` row is not by itself a question somebody can still answer, and asking for the
+   * pending ones is asking which ones are. Nothing writes to the row when the asking ends: the
+   * engine polls for a decision without a wall-clock cap (`runner-go/mcp.go`) and `approval` has no
+   * expiry column, so a call the engine gave up on — and a card whose turn was reclaimed — leaves
+   * it exactly as the runner wrote it. A client that goes on offering it takes a person's answer
+   * and delivers it to nobody, because the poll loop that would have consumed it died with the
+   * turn; a surface that looks answerable and silently is not is worse than no surface
+   * (`docs/completion-input-routing.md` §A2 D1).
+   *
+   * Two committed facts therefore take a row out of the pending answer, and only those two:
+   *
+   *   - the session is not generating — `isSessionGenerating` is already the predicate for "which
+   *     sessions can be holding a live approval", and the one the per-workspace badge counts with,
+   *     so a dead card stopped being counted long before it stopped being shown;
+   *   - the tool call this approval was raised for already has a result, which is what the engine
+   *     abandoning the call writes and the only trace it leaves while the turn runs on.
+   *
+   * Neither is a clock and neither writes anything: the row is left as it stands, a listing that
+   * asks for any other status is untouched, and the question an unanswered evidence card was about
+   * is still on the decision rail's derived read (`pending-evidence-judgments.ts`).
+   */
   async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true, status: true, engineTurnActive: true },
+    });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
       where: { sessionId: id, ...(status ? { status } : {}) },
       orderBy: { createdAt: 'asc' },
     });
-    return approvals.map((a) => this.toApprovalInfo(a));
+    const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;
+    return answerable.map((a) => this.toApprovalInfo(a));
+  }
+
+  /** The `PENDING` rows an answer could still reach, on the two facts `listApprovals` names. */
+  private async stillBeingAsked<T extends { toolUseId: string | null }>(
+    session: { id: string; status: RunStatus; engineTurnActive: boolean },
+    approvals: T[],
+  ): Promise<T[]> {
+    if (approvals.length === 0) return approvals;
+    if (!isSessionGenerating(session)) return [];
+    const raised = approvals.map((a) => a.toolUseId).filter((id): id is string => id !== null);
+    if (raised.length === 0) return approvals;
+    // An old runtime sent no tool_use id, so its rows can never be paired with a result and are
+    // left alone: this drops a card on evidence that it is over, never on the absence of it.
+    const answered = await this.prisma.toolCall.findMany({
+      where: { sessionId: session.id, toolUseId: { in: raised }, finishedAt: { not: null } },
+      select: { toolUseId: true },
+    });
+    const over = new Set(answered.map((call) => call.toolUseId));
+    return approvals.filter((a) => a.toolUseId === null || !over.has(a.toolUseId));
   }
 
   /** Record a human allow/deny on a pending approval; the runner's long-poll picks

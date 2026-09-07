@@ -32,6 +32,22 @@ import {
  * and therefore cannot be in that state: the row is gone from the next read because the decision
  * exists, not because a frame arrived.
  *
+ * THIS READ IS ALSO THE FALLBACK UNDER THE COORDINATOR CARD
+ * --------------------------------------------------------
+ * Since A2 the primary surface for these questions is an `AskUserQuestion` card in the project's
+ * coordinator conversation (`coordinator-delivery.service.ts` §1.4). A card can be asked and never
+ * answered — the engine abandons the call, the turn is reclaimed, or nothing was running to pick
+ * the message up — and none of those writes a thing: the approval row stays `PENDING`, and the wake
+ * that delivered the fact is spent and holds its key, so no second delivery is coming.
+ *
+ * Because pending is a shape the rows already have rather than a row somebody wrote, the question
+ * an unanswered card left behind is still here on the next read, and the answer written from here
+ * reaches the same door the card's answer would have. Deleting this read to save the rail's fan-out
+ * would turn a missed card into permanent silence — the choice was made with that cost in mind
+ * (`docs/completion-input-routing.md` §A2 D1), and narrowing WHO the rail is read for is the way
+ * that cost was meant to come down. `coordinator-evidence-unanswered.pg.spec.ts` holds the three
+ * unanswered states against this read.
+ *
  * WHY EACH ROW CARRIES A REASON RATHER THAN A FLAG
  * ------------------------------------------------
  * Same shape `criterionSatisfaction` settled on for the criterion side: a reader who is told only

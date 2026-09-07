@@ -53,6 +53,45 @@ import { derivedUuid } from './project-dispatch-identity';
  *      reliable. What makes it reliable is that the fact is still in the ledger afterwards, and
  *      that a delivery which could not be made RELEASES the key so the fact comes round again.
  *
+ * §1.4 — AND AN UNANSWERED QUESTION IS NOT A FAILED DELIVERY
+ * ==========================================================
+ * §1.3 releases the key for a delivery that could not be MADE. A delivery that WAS made, asked a
+ * person through `AskUserQuestion`, and got no answer is outside that sentence, and it is the
+ * ordinary case rather than an exotic one: the person is asleep, the engine gives up on the tool
+ * call, or the turn is reclaimed under the runtime's TTL. The message arrived, the wake is
+ * `DELIVERED`, and the key stays held.
+ *
+ * Nothing here retries it, and this paragraph is why — it was decided
+ * (`docs/completion-input-routing.md` §A2 D1) rather than overlooked, so a later reader who finds
+ * the derived pending read "redundant" alongside the card is looking at the floor under it:
+ *
+ *   1. **"It timed out" is not a committed fact.** The deadline is the ENGINE's — `permissionPrompt`
+ *      polls without a wall-clock cap (`runner-go/mcp.go:1170`) and `approval` has no expiry column
+ *      and no clock over it — so when the tool call is abandoned nothing is written anywhere. What
+ *      a sweep could see is "an approval has been PENDING for a while", which is elapsed time, and
+ *      `coordinator-wake.ts` §0 lets a clock re-observe, lease and re-deliver a committed fact
+ *      while forbidding it to CREATE, DECIDE or RESOLVE a wake.
+ *   2. **The key cannot be given back by the mechanism that gives keys back.**
+ *      `CoordinatorWakeService.release` compare-and-sets on `CLAIMED`, and this wake is
+ *      `DELIVERED` — inside 0174's partial index by design, since it "excludes `REFUSED` and
+ *      nothing else" (`coordinator-wake.ts`). Moving a terminal success back out of that index is
+ *      the positive predicate 0174 explicitly chose against.
+ *   3. **Re-delivery would be refused by the state it is diagnosing, and the refusal feeds itself.**
+ *      Nobody answered means nobody is there; nobody there has not read the message; §2.1 refuses a
+ *      coordinator holding an unread message and hands the key back; the producer re-derives and is
+ *      refused again. One wake row per pass, no progress on any of them — `COORDINATOR_NO_PROGRESS`
+ *      rebuilt, which `coordinator-wake.ts` §0 exists to keep out.
+ *   4. **What it would buy is asking an absent person the same question on a timer**, and this path
+ *      has no timer: "There is no retry clock: the producer retries only when the same committed
+ *      fact is delivered again" (`completion-input-router.service.ts`).
+ *
+ * What catches it instead is `readPendingEvidenceJudgments` — the read this unit already calls to
+ * build the card. It is not a queue: the question is a shape the committed rows have, so an
+ * unanswered one is still there on the next read, and the answer written from the decision rail
+ * (`POST /tasks/:id/evidence/decision`) needs no live turn to receive it. The card is the delivery;
+ * the rail is the floor under it, and `coordinator-evidence-unanswered.pg.spec.ts` holds the three
+ * states in which the floor is all there is.
+ *
  * §2 — WHY DELIVERY DOES NOT REVIVE A CONVERSATION THAT ENDED
  * ===========================================================
  * `SessionsService.resume` writes to a live session and REVIVES a terminal one — correct for the
