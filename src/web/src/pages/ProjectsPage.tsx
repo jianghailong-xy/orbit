@@ -41,6 +41,7 @@ import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   panoramaBucketValue,
+  projectPanoramaQuery,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
 import {
@@ -128,6 +129,15 @@ interface ProjectCriterionStanding extends AcceptanceCriterionItem {
 interface ProjectDetail extends Project {
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
+  /** The off switch: whether this project dispatches its own ready tasks AND wakes a judgment
+   *  session when one of six producers has something to decide. Already in the payload — the
+   *  endpoint reads the project with `include`, so every scalar column comes back — and simply had
+   *  no reader here until the Automatic switch. */
+  coordinatorEnabled: boolean;
+  /** The revision every write of the authorization set is fenced against. A `bigint` column, and a
+   *  decimal STRING on the wire (main.ts gives BigInt a `toJSON`), which is also how the DTO wants
+   *  it back: `expectedConfigRevision` is compared as text, never parsed. */
+  configRevision: string;
   /** The project's stated criteria, carrying settlement and landing per criterion. The acceptance
    *  card draws its rows from this same document; the status press reads it for the evidence it
    *  puts in front of somebody about to claim the goal is met. */
@@ -1081,6 +1091,8 @@ export function ProjectDetailPage() {
               projectId={id}
               layout={narrow ? 'narrow' : 'desktop'}
               openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
+              automatic={p.coordinatorEnabled}
+              configRevision={p.configRevision}
             />
           </div>
 
@@ -1168,6 +1180,29 @@ export function openProjectCoordinator(
 }
 
 /**
+ * What flipping a project's Automatic switch WRITES — held here rather than at the call site for
+ * the reason `newProjectTaskBody` is, because the body is the unit and the path is not.
+ *
+ * `automationPolicy` rides along only on the way ON, and it is not optional there: the server
+ * refuses a bare `coordinatorEnabled: true` with a 400, because turning a project automatic
+ * without saying how far it may go would pick a level of automation on the reader's behalf.
+ * `GUARDED_AUTO` is the level every project is CREATED with, which makes this switch a return to
+ * that level and not a new decision. Turning it off names none: "stop" is unambiguous.
+ *
+ * `expectedConfigRevision` is the compare-and-swap. This field is edited from the user API and a
+ * coordinator's own session as well as from here, and last-write-wins between them is one person
+ * silently undoing another's revoke — so the write states the revision the switch was drawn from,
+ * and a project that moved since answers 409 `STALE_CONFIG_REVISION` with nothing written.
+ */
+function automaticBody(next: boolean, configRevision: string | undefined) {
+  return {
+    coordinatorEnabled: next,
+    ...(next ? { automationPolicy: 'GUARDED_AUTO' } : {}),
+    expectedConfigRevision: configRevision,
+  };
+}
+
+/**
  * The Coordinator, as the project header's right-hand column.
  *
  * Self-contained on the same terms as every other card on this page: it runs its own read, draws
@@ -1183,12 +1218,21 @@ export function ProjectCoordinatorSection({
   projectId,
   layout,
   openTaskCount,
+  automatic,
+  configRevision,
 }: {
   projectId: string;
   layout: CoordinatorCardLayout;
   /** Open tasks in this project — the card says what the conversation is FOR, and the status
    *  payload deliberately carries no task tally. */
   openTaskCount?: number;
+  /** The project's `coordinatorEnabled` and the revision it was read at, both from the project
+   *  document this section is drawn beside. Passed in rather than read again here: the page holds
+   *  that document already, and a second copy could disagree with the one the reader is looking at
+   *  — which for the revision means fencing the write against a number nothing on screen came
+   *  from. Omitted, the switch is not drawn. */
+  automatic?: boolean;
+  configRevision?: string;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -1230,6 +1274,17 @@ export function ProjectCoordinatorSection({
   // proposed: `COORDINATOR_UNAVAILABLE` is a refusal ABOUT the workspace this project is tied to,
   // and on `WORKSPACE_FORGOTTEN` there is no id left to send anyone to.
   const boundWorkspaceId = status.data?.coordination.workspaceId ?? null;
+
+  // The same query the panorama header on this page already ran, by the same key — React Query
+  // answers this from that entry rather than putting a second request on the wire. Read here so
+  // the switch's Off state can say what is standing still, in the number the meter above it shows.
+  const panorama = useQuery(projectPanoramaQuery(projectId));
+
+  const setAutomatic = useMutation({
+    mutationFn: (next: boolean) =>
+      api(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: automaticBody(next, configRevision) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
+  });
 
   const restore = useMutation({
     mutationFn: async () => {
@@ -1312,8 +1367,23 @@ export function ProjectCoordinatorSection({
             status={status.data}
             layout={layout}
             openTaskCount={openTaskCount}
+            automatic={automatic}
+            readyTaskCount={panorama.data?.buckets.ready}
+            automaticPending={setAutomatic.isPending}
             onAction={act}
+            onAutomaticChange={(next) => setAutomatic.mutate(next)}
           />
+          {/* A refused flip, in the server's own words. 409 STALE_CONFIG_REVISION is not a Retry:
+              the settings changed under the reader, and the sentence names both revisions so they
+              can see the project again before deciding a second time. */}
+          {setAutomatic.error ? (
+            <Alert
+              type="error"
+              showIcon
+              message="Automatic could not be changed"
+              description={setAutomatic.error.message}
+            />
+          ) : null}
           {/* A press that was refused. `COORDINATOR_UNAVAILABLE` is a property of committed rows,
               so the same press returns the same 409 forever — it gets the two writes that can
               actually change the answer instead of a Retry that cannot. */}

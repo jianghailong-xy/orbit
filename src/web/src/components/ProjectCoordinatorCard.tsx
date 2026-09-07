@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Button } from 'antd';
+import { Button, Switch } from 'antd';
 import { SessionRunState, type SessionLifecycleState } from '@orbit/shared';
 
 /**
@@ -13,8 +13,9 @@ import { SessionRunState, type SessionLifecycleState } from '@orbit/shared';
  *
  * Reads `GET /projects/:id/coordinator/status`, whose shape is frozen in
  * `docs/project-coordinator-status-contract.md`. Every field this card renders comes from that
- * payload; the one exception is `openTaskCount`, which the payload deliberately does not carry
- * (task tallies are the panorama's job) and the page passes in.
+ * payload; the exceptions are the task tallies (`openTaskCount`, `readyTaskCount`), which the
+ * payload deliberately does not carry, and `automatic`, which is the project's own
+ * `coordinatorEnabled` — all three are passed in by the page.
  *
  * PRESENTATIONAL, ON PURPOSE. It issues no request and performs no navigation: it reports one
  * `CoordinatorAction` and lets the caller decide what that means. A static render cannot press a
@@ -334,14 +335,29 @@ export function ProjectCoordinatorCard({
   status,
   layout = 'desktop',
   openTaskCount,
+  automatic,
+  readyTaskCount,
+  automaticPending,
   onAction,
+  onAutomaticChange,
 }: {
   status: CoordinatorStatus;
   layout?: CoordinatorCardLayout;
   /** Open tasks in this project. Not in the payload — the card is told, so it can say what the
    *  conversation is FOR. Omitted while the page's own tally is still loading. */
   openTaskCount?: number;
+  /** The project's `coordinatorEnabled`, from its own document rather than from the status read.
+   *  Omitted while that document is still loading, and then the switch is not drawn at all — an
+   *  Off-looking switch on an unread project is a lie about the project. */
+  automatic?: boolean;
+  /** Tasks that could start now, for the consequence Off has to state. Omitted while the tally is
+   *  loading, which costs the warning line and nothing else. */
+  readyTaskCount?: number;
+  automaticPending?: boolean;
   onAction?: (action: CoordinatorAction) => void;
+  /** Separate from `onAction` because this press CARRIES a value: which way the switch was moved
+   *  is the whole message, and the eight actions above are each a verb with no argument. */
+  onAutomaticChange?: (next: boolean) => void;
 }) {
   const { coordination } = status;
   const session = coordination.session;
@@ -405,12 +421,82 @@ export function ProjectCoordinatorCard({
       ) : (
         <Unavailable status={status} onAction={onAction} />
       )}
+
+      {typeof automatic === 'boolean' ? (
+        <Automatic
+          automatic={automatic}
+          readyTaskCount={readyTaskCount}
+          pending={automaticPending}
+          onChange={onAutomaticChange}
+        />
+      ) : null}
     </section>
   );
 }
 
-/** Nothing has ever coordinated this project. Two facts have to land before the button does: work
- *  here never starts on its own, and the first press decides the workspace forever. */
+/**
+ * The project's off switch — `coordinatorEnabled`, which until now had no control anywhere.
+ *
+ * Called *Automatic* and not *Auto-dispatch*, because the field gates two families and only one of
+ * them is dispatch: turning it off also stops all six producers that wake a judgment session when
+ * a criterion is ready, a task's attempt ends unsettled, or a budget runs out. A label naming only
+ * the first would read as "it still asks me things", which is exactly what it stops doing.
+ *
+ * Off states its consequence WITH the work standing behind it. "Nothing starts on its own" is a
+ * setting; "nothing starts on its own and four tasks are waiting" is the reason twelve projects in
+ * production have been silent without the page ever being able to say why.
+ */
+function Automatic({
+  automatic,
+  readyTaskCount,
+  pending,
+  onChange,
+}: {
+  automatic: boolean;
+  readyTaskCount?: number;
+  pending?: boolean;
+  onChange?: (next: boolean) => void;
+}) {
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+      >
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)' }}>Automatic</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <Switch
+            size="small"
+            checked={automatic}
+            loading={pending}
+            aria-label="Automatic"
+            onChange={(next) => onChange?.(next)}
+          />
+          <span style={{ color: 'var(--text-2)' }}>{automatic ? 'On' : 'Off'}</span>
+        </span>
+      </div>
+
+      {automatic ? (
+        <p style={{ ...MUTED, margin: '6px 0 0' }}>
+          Starts ready tasks on its own, and opens a judgment session when a criterion needs a
+          decision.
+        </p>
+      ) : (
+        <>
+          <p style={{ ...MUTED, margin: '6px 0 0' }}>Nothing here starts or asks on its own.</p>
+          {typeof readyTaskCount === 'number' && readyTaskCount > 0 ? (
+            <p style={{ ...MUTED, margin: '4px 0 0', color: 'var(--warning)' }}>
+              ⚠ {readyTaskCount} ready task{readyTaskCount === 1 ? ' is' : 's are'} waiting for
+              someone to press Run.
+            </p>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Nothing has ever coordinated this project. The fact that has to land before the button does is
+ *  that the first press decides the workspace forever. */
 function NeverOpened({
   status,
   onAction,
@@ -424,8 +510,9 @@ function NeverOpened({
   return (
     <>
       <p style={{ ...BODY, margin: '10px 0 0' }}>
-        Tasks in this project <b style={{ color: 'var(--text-1)', fontWeight: 600 }}>never start on their own</b>.
-        This conversation is where you and it decide what runs next.
+        This conversation is where you and it{' '}
+        <b style={{ color: 'var(--text-1)', fontWeight: 600 }}>decide what runs next</b> — and where
+        every judgment this project needs is answered.
       </p>
 
       <div

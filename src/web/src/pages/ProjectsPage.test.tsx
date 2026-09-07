@@ -238,10 +238,10 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE and status PATCH, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status and Automatic PATCHes, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if a ninth
+    // Fails if any call grows extra args or a query string, if a path changes, or if a tenth
     // api(...) call is added anywhere in the file (see API_CALL for what it can parse).
     const apiCalls = [...source.matchAll(API_CALL)].map(
       // A call wrapped across lines keeps its trailing comma; the URL is what this asserts on.
@@ -273,6 +273,12 @@ describe('ProjectsPage', () => {
       // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
       // what lets the server borrow the workspace this project's work already runs in.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
+      // The project's OTHER owner-only write: its Automatic switch, which is `coordinatorEnabled`
+      // and the two fields that field cannot be written without. The same PATCH door as the status
+      // write above, and the body is held in `automaticBody` for the same reason the task-create
+      // body is held in `newProjectTaskBody` — what it carries is asserted at runtime, over the
+      // request that leaves the client, in ProjectsPage.automatic.test.tsx.
+      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: automaticBody(next, configRevision) }",
       // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
       // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
       // one would be a way to REACH the state it exists to leave.

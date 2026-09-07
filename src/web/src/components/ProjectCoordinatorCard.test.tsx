@@ -255,8 +255,16 @@ function nowhereToOpen(): CoordinatorStatus {
 }
 
 describe('ProjectCoordinatorCard — NEVER_OPENED', () => {
-  it('leads with the fact that nothing here starts on its own', () => {
-    expect(text(paint(neverOpenedStatus()))).toContain('never start on their own');
+  it('leads with what the conversation is FOR, and no longer claims nothing here starts on its own', () => {
+    const body = text(paint(neverOpenedStatus()));
+    expect(body).toContain('decide what runs next');
+    // Sibling dispatch landed on 2026-09-06: a project whose `coordinatorEnabled` is on starts its
+    // own ready tasks whether or not a coordinator was ever opened here. The Automatic switch is
+    // where that is stated now, per project, from the field that decides it.
+    // The fragment, not the whole sentence: any way of putting that claim back on this card
+    // contains it, and spelling the old sentence out here would leave the copy in the tree that
+    // a grep for it is supposed to find nowhere.
+    expect(body).not.toMatch(/never start/);
   });
 
   it('names the workspace it will open in AND says the binding cannot be changed later', () => {
