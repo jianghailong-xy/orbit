@@ -5554,6 +5554,20 @@ html[data-theme='dark'] .session-tag-chip {
   font-weight: 600;
 }
 
+/* How long the wait above has been going. Rides inside the title so it shares that line, at
+   normal weight because .chat-slot-wait bolds its first child. Tabular figures so the ticking
+   second does not shift the title beside it once a second. */
+.chat-wait-elapsed {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A message queued behind the running turn: a dimmed user bubble with a withdraw
    action, shown until the runner picks it up (then it renders as a normal user turn). */
 .chat-queued {

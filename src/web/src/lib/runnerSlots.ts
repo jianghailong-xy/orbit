@@ -44,16 +44,56 @@ export const QUEUED_LABEL = 'Queued';
 // Explicit gates (offline/capacity/git) bypass this delay; they are actionable explanations.
 export const QUEUED_NOTICE_DELAY_MS = 10_000;
 
-/** Copy for a session that holds a slot but whose runtime is still coming up (sessionIsStarting).
- *  Distinct from both neighbours on purpose: unlike Queued nothing is contended and the user
- *  cannot shorten it, and unlike Running the agent has not read the prompt yet. */
+/**
+ * Copy for a session that holds a slot but whose engine has not spoken for this run yet
+ * (sessionIsStarting). Distinct from both neighbours on purpose: unlike Queued nothing is
+ * contended and the user cannot shorten it, and unlike Running the agent has not read the
+ * prompt yet.
+ *
+ * It names no cause, because the state it labels is an ABSENCE. One missing `engineStartedAt`
+ * covers a cold checkout, a warm process that is simply between turns (every claim clears the
+ * column, so a reused runtime lands here too), and an engine compacting a conversation that no
+ * longer fits before it can read the message. Naming one of the three is a guess that is wrong
+ * in the other two, and the wording this replaced — "bringing its workspace up — checkout,
+ * engine, tools" — was that guess: on a warm reuse not one of the three was happening, and on
+ * a compaction it sent people to look at a checkout for a wait that had nothing to do with one.
+ * What is actually known is who holds the session and what has not happened yet. The duration
+ * sentence survives because it is the one thing true of all three, and waitElapsedLabel below
+ * carries the rest — a line that cannot move cannot tell three seconds from thirty minutes.
+ */
 export const STARTING_LABEL = 'Starting';
-export const STARTING_TITLE = 'Starting the workspace';
+export const STARTING_TITLE = 'Getting the session ready';
 export const STARTING_DESCRIPTION =
-  'The runner has this session and is bringing its workspace up — checkout, engine, tools. Your message runs as soon as that finishes.';
+  'The runner has this session, but the engine has not started your message yet. Usually seconds — a long conversation can take several minutes to get going.';
 // Keep the first ten seconds quiet, then explain the wait only once the startup is long enough
 // for this large transcript notice to be useful rather than an immediate flash after Send.
 export const STARTING_NOTICE_DELAY_MS = 10_000;
+
+/**
+ * How long the current run has been waiting, for the notices whose whole problem is that a
+ * static line reads the same at three seconds and at thirty minutes.
+ *
+ * `since` is the session's `lastTurnAt`: the claim writes it, and for the rest of a starting
+ * stretch nothing moves it again — the events such a run does produce are session-level
+ * `system` ones, which the control plane deliberately does not count as activity.
+ *
+ * Null rather than '0s' for a missing, unparseable or future timestamp: a payload from a server
+ * too old to send the field and a skewed clock both know nothing about this wait, and a zero
+ * would claim they did.
+ */
+export function waitElapsedLabel(since: string | null | undefined, now: number): string | null {
+  if (!since) return null;
+  const at = Date.parse(since);
+  if (!Number.isFinite(at)) return null;
+  const seconds = Math.floor((now - at) / 1000);
+  if (seconds < 0) return null;
+  if (seconds < 60) return `${seconds}s`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60
+    ? `${minutes}m ${pad(seconds % 60)}s`
+    : `${Math.floor(minutes / 60)}h ${pad(minutes % 60)}m`;
+}
 
 /** Which gate the server found holding a queued session, with the numbers it judged on. */
 export interface QueuedGate {

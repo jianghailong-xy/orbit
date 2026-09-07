@@ -242,6 +242,7 @@ import {
   queuedNoticeVisible,
   queuedTitle,
   runnerSlotUsage,
+  waitElapsedLabel,
 } from '../lib/runnerSlots';
 import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
 
@@ -1003,6 +1004,27 @@ function TranscriptSkeleton() {
       ))}
     </div>
   );
+}
+
+/**
+ * How long the wait this notice describes has been going, ticking once a second.
+ *
+ * Its own component so the second hand costs one leaf re-render rather than re-rendering the
+ * whole workspace — and the transcript inside it — every second a session is starting.
+ *
+ * The elapsed time is the only thing on these notices that separates the ordinary case they were
+ * written for (a cold start, a few seconds) from the one that made them useless (an engine
+ * compacting a conversation it can no longer fit, which is minutes and can retry). Neither the
+ * copy nor the spinner can: both read identically at 3s and at 30m.
+ */
+function WaitElapsed({ since }: { since?: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const label = waitElapsedLabel(since, now);
+  return label ? <span className="chat-wait-elapsed">{label}</span> : null;
 }
 
 /**
@@ -5439,7 +5461,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     <span />
                     <span />
                   </div>
-                  <div className="chat-queued-title">{STARTING_TITLE}</div>
+                  <div className="chat-queued-title">
+                    {STARTING_TITLE}
+                    <WaitElapsed since={selectedStartingSession?.lastTurnAt} />
+                  </div>
                   <div className="chat-queued-desc">{STARTING_DESCRIPTION}</div>
                 </div>
               )}
@@ -5484,7 +5509,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 showStartingNotice &&
                 transcriptEvents.length > 0 && (
                 <div className="chat-note chat-slot-wait">
-                  <span>{STARTING_TITLE}</span>
+                  <span>
+                    {STARTING_TITLE}
+                    <WaitElapsed since={selectedStartingSession?.lastTurnAt} />
+                  </span>
                   <span>{STARTING_DESCRIPTION}</span>
                 </div>
               )}

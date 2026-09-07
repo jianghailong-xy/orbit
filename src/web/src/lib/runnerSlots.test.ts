@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   QUEUED_NOTICE_DELAY_MS,
+  STARTING_DESCRIPTION,
   STARTING_NOTICE_DELAY_MS,
+  STARTING_TITLE,
   activeSlotCount,
   pendingSlotDescription,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
   runnerSlotUsage,
+  waitElapsedLabel,
 } from './runnerSlots';
 
 const sessions = (status: string, count: number) =>
@@ -174,5 +177,65 @@ describe('when the transcript explains a queued session', () => {
     ]) {
       expect(queuedNoticeVisible({ queuedReason }, false), queuedReason).toBe(true);
     }
+  });
+});
+
+describe('what the starting notice is allowed to claim', () => {
+  const copy = () => `${STARTING_TITLE} ${STARTING_DESCRIPTION}`.toLowerCase();
+
+  // sessionIsStarting is `engineStartedAt === null` — an absence, and every claim clears the
+  // column. The same absence therefore covers a cold checkout, a warm process that is merely
+  // between turns, and an engine compacting a conversation that no longer fits before it can
+  // read the message. Whichever cause the copy names is a guess that is wrong in the two it
+  // did not name; the wording this replaced named three of them at once.
+  it('names no cause, because the state it labels is an absence', () => {
+    for (const cause of ['checkout', 'workspace up', 'tools', 'compact', 'install', 'clon'])
+      expect(copy()).not.toContain(cause);
+  });
+
+  // Paired with the clause above, which silence would also satisfy: '' names no cause either.
+  // These are the three things that ARE known from a null engineStartedAt.
+  it('still says who holds it, what has not happened, and that it may not be quick', () => {
+    expect(STARTING_DESCRIPTION).toMatch(/runner has this session/i);
+    expect(STARTING_DESCRIPTION).toMatch(/engine has not started your message yet/i);
+    expect(STARTING_DESCRIPTION).toMatch(/seconds/i);
+    expect(STARTING_DESCRIPTION).toMatch(/minutes/i);
+  });
+});
+
+describe('how long a wait the user cannot shorten has been going', () => {
+  const claimedAt = '2026-09-07T12:00:00.000Z';
+  const after = (ms: number) => Date.parse(claimedAt) + ms;
+
+  it('counts plain seconds below the first minute', () => {
+    expect(waitElapsedLabel(claimedAt, after(0))).toBe('0s');
+    expect(waitElapsedLabel(claimedAt, after(11_400))).toBe('11s');
+    expect(waitElapsedLabel(claimedAt, after(59_999))).toBe('59s');
+  });
+
+  // Zero-padded so the ticking second does not change the label's width and shove the title
+  // next to it sideways once a second.
+  it('pads the seconds once minutes are on screen', () => {
+    expect(waitElapsedLabel(claimedAt, after(60_000))).toBe('1m 00s');
+    expect(waitElapsedLabel(claimedAt, after(246_000))).toBe('4m 06s');
+    expect(waitElapsedLabel(claimedAt, after(59 * 60_000 + 59_000))).toBe('59m 59s');
+  });
+
+  it('drops to hours and minutes once seconds stop being the story', () => {
+    expect(waitElapsedLabel(claimedAt, after(3_600_000))).toBe('1h 00m');
+    expect(waitElapsedLabel(claimedAt, after(3_600_000 + 4 * 60_000))).toBe('1h 04m');
+  });
+
+  // A '0s' here would be a measurement, and neither an old payload nor a skewed clock has made
+  // one. Saying nothing is the only honest answer; the notice renders without it.
+  it('says nothing about a wait it cannot measure', () => {
+    expect(waitElapsedLabel(null, after(60_000))).toBeNull();
+    expect(waitElapsedLabel(undefined, after(60_000))).toBeNull();
+    expect(waitElapsedLabel('', after(60_000))).toBeNull();
+    expect(waitElapsedLabel('not a timestamp', after(60_000))).toBeNull();
+  });
+
+  it('does not invent a zero for a clock that runs ahead of the server', () => {
+    expect(waitElapsedLabel(claimedAt, after(-5_000))).toBeNull();
   });
 });

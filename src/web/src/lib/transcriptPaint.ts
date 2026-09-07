@@ -13,9 +13,10 @@
  * - `queued` — the session has not been claimed by a runner yet; the centered pane names whichever
  *   gate the server found holding it, and outranks everything else because it is a real status,
  *   not a loading state.
- * - `starting` — a runner has it and is building the runtime (checkout, engine, tools). Also a
- *   real status, and the reason `waiting` below is not the honest answer here: the transcript is
- *   empty because nothing has run, not because the workspace is thinking.
+ * - `starting` — a runner has it, but its engine has not spoken for this run yet. Also a real
+ *   status, and the reason `waiting` below is not the honest answer here: the transcript is
+ *   empty because nothing has run, not because the workspace is thinking. What the runner is
+ *   doing in that gap is not knowable from here — see STARTING_DESCRIPTION.
  * - `skeleton` — a tail page is in flight for a session with no cached transcript. Not knowing yet
  *   whether the session is empty or merely unloaded, the honest placeholder is "loading".
  * - `waiting` — the load finished and the session really is empty, but it is live: the workspace has
