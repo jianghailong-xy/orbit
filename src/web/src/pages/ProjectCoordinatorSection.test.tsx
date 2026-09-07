@@ -97,6 +97,24 @@ function liveStatus(): CoordinatorStatus {
   };
 }
 
+/** The conversation the pointer resolves to is over — somebody Completed it. Still LIVE, because
+ *  the four states describe the POINTER and this one leads somewhere reachable. */
+function completedStatus(): CoordinatorStatus {
+  const s = liveStatus();
+  return {
+    ...s,
+    coordination: {
+      ...s.coordination,
+      session: {
+        ...s.coordination.session!,
+        lifecycleState: SessionLifecycleState.COMPLETED,
+        filingState: 'ARCHIVED',
+        completedAt: '2026-08-24T06:52:00.000Z',
+      },
+    },
+  };
+}
+
 /** The workspace this project is tied to is disabled: the read already says no press can win. */
 function unavailableStatus(): CoordinatorStatus {
   const s = liveStatus();
@@ -265,6 +283,32 @@ const section = (): ReactElement => (
 const buttonLabels = (): string[] =>
   [...container.querySelectorAll('button')].map((b) => (b.textContent ?? '').trim());
 
+/** The same press, over the WHOLE document: an antd menu and a confirm dialog are portals, and a
+ *  container-scoped query cannot see either. `container` is inside `document.body`, so this finds
+ *  the card's own buttons too. */
+async function pressAny(label: RegExp): Promise<void> {
+  // Buttons AND menu items: an antd menu row is an `li[role=menuitem]`, so a query for `button`
+  // alone reports "no such control" about something plainly on screen.
+  const target = [...document.body.querySelectorAll<HTMLElement>('button, [role="menuitem"]')].find(
+    (el) => label.test((el.textContent ?? '').trim()),
+  );
+  expect(target, `a control matching ${label} anywhere on the page`).toBeTruthy();
+  await act(async () => {
+    target!.click();
+  });
+  await settle();
+}
+
+/** The caret beside the lead press. Found by its label rather than its glyph, which is an icon. */
+async function openCoordinatorMenu(): Promise<void> {
+  const caret = container.querySelector<HTMLButtonElement>('[aria-label="More coordinator actions"]');
+  expect(caret, 'the card draws a caret beside its lead press').toBeTruthy();
+  await act(async () => {
+    caret!.click();
+  });
+  await settle();
+}
+
 async function press(label: RegExp): Promise<void> {
   const button = [...container.querySelectorAll('button')].find((b) =>
     label.test((b.textContent ?? '').trim()),
@@ -299,6 +343,122 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
     // press used to land inside Trash: the server is the half of this that repairs a stale one.
     expect(landedOn).toBe(`/sessions/${SERVED}`);
     expect(landedOn).not.toBe(`/sessions/${POINTER}`);
+  });
+
+  it('replaces a completed coordinator through the door that replaces, never the one that resolves', async () => {
+    const posts: Array<[string, unknown]> = [];
+    serve(completedStatus(), (path) => {
+      posts.push([path, apiMock.mock.calls.at(-1)?.[1]]);
+      return Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w1' });
+    });
+    await mount(section());
+
+    // Behind the caret, and only there: the card's lead press is Open in every state.
+    expect(buttonLabels()).not.toContain('Start a new coordinator');
+    await openCoordinatorMenu();
+    await pressAny(/Start a new coordinator/);
+
+    // Nothing to ask about — this conversation was already over, and the menu said what the press
+    // costs. The confirm is for the press that ENDS something.
+    expect(document.body.textContent).not.toMatch(/Complete this conversation/i);
+
+    // The distinction this endpoint exists for: `/coordinator` would have RESOLVED, handing back
+    // the completed conversation the reader is trying to leave, and reported `created: false`.
+    expect(posts).toHaveLength(1);
+    expect(posts[0][0]).toBe(`/projects/${PROJECT}/coordinator/replace`);
+    expect(posts[0][1]).toEqual({ method: 'POST' });
+
+    expect(landedOn).toBe(`/sessions/${SERVED}`);
+    // No warning: an empty conversation is what this press asked for, and the card said so first.
+    expect(document.body.textContent ?? '').not.toMatch(/did not come with it/i);
+  });
+
+  it('opens the completed conversation without replacing it', async () => {
+    const posts: string[] = [];
+    serve(completedStatus(), (path) => {
+      posts.push(path);
+      return Promise.resolve({ sessionId: POINTER, created: false, workspaceId: 'w1' });
+    });
+    await mount(section());
+
+    await press(/^Open coordinator$/);
+
+    // Reading what was decided is still one press, and it goes to the resolve-or-create door.
+    expect(posts).toEqual([`/projects/${PROJECT}/coordinator`]);
+    expect(landedOn).toBe(`/sessions/${POINTER}`);
+  });
+
+  it('says which press failed, and retries THAT one', async () => {
+    const posts: string[] = [];
+    serve(completedStatus(), (path) => {
+      posts.push(path);
+      return Promise.reject(
+        new ApiError(
+          'this project’s coordinator changed while one was being opened for it — try again',
+          409,
+        ),
+      );
+    });
+    await mount(section());
+
+    await openCoordinatorMenu();
+    await pressAny(/Start a new coordinator/);
+
+    // Named for the press that was made. "Coordinator could not be opened" would send the reader
+    // looking for a problem with a conversation that opens perfectly well.
+    expect(container.textContent).toContain('A new coordinator could not be started');
+    expect(container.textContent).toContain('try again');
+    // Not the landing repair: nothing is wrong with the workspace here.
+    expect(buttonLabels()).not.toContain('Rebind workspace…');
+
+    // ...and Retry re-presses the REPLACEMENT. Sending it to the resolve-or-create door would
+    // answer a failed replacement by opening the conversation it was trying to leave.
+    await press(/Retry/);
+    expect(posts).toEqual([
+      `/projects/${PROJECT}/coordinator/replace`,
+      `/projects/${PROJECT}/coordinator/replace`,
+    ]);
+  });
+
+  it('asks before it ends a conversation that is still open, and says what the press does', async () => {
+    const posts: string[] = [];
+    serve(liveStatus(), (path) => {
+      posts.push(path);
+      return Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w1' });
+    });
+    await mount(section());
+
+    await openCoordinatorMenu();
+    await pressAny(/Start a new coordinator/);
+
+    // Nothing has been sent yet: the press that ends a live conversation is a question first.
+    expect(posts).toEqual([]);
+    expect(document.body.textContent).toMatch(/Complete this conversation and start a new coordinator/i);
+    // The dialog says what happens rather than asking whether the reader is sure, and its safe
+    // answer is the one that keeps the conversation.
+    expect(document.body.textContent).toMatch(/stays readable/i);
+
+    await pressAny(/Complete and start a new one/);
+    expect(posts).toEqual([`/projects/${PROJECT}/coordinator/replace`]);
+    expect(landedOn).toBe(`/sessions/${SERVED}`);
+  });
+
+  it('keeps the coordinator when the question is answered the other way', async () => {
+    const posts: string[] = [];
+    serve(liveStatus(), (path) => {
+      posts.push(path);
+      return Promise.resolve({ sessionId: SERVED, created: true, workspaceId: 'w1' });
+    });
+    await mount(section());
+
+    await openCoordinatorMenu();
+    await pressAny(/Start a new coordinator/);
+    await pressAny(/Keep this coordinator/);
+
+    // The negative control the confirm exists for: a dialog that sent the request anyway would
+    // pass every assertion in the case above.
+    expect(posts).toEqual([]);
+    expect(landedOn).toBe('/projects/x');
   });
 
   it('says a replaced conversation did not come with it — and only when one was replaced', async () => {

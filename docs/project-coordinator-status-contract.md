@@ -198,17 +198,27 @@ with the raw row and takes `runState` / `lifecycleState` / `filingState` from th
 (`0a3cb3c8:src/apiserver/src/projects/projects.service.ts:1523`): "a second mapping here is a
 second answer to *is it finished*".
 
-The card's three live sub-states are a **client-side** read of these fields, not a fifth server
-enum:
+The card's live sub-states are a **client-side** read of these fields, not a fifth server enum:
 
 | Card shows | Predicate |
 | --- | --- |
+| Completed | `lifecycleState === "COMPLETED"` — decided FIRST, ahead of every row below |
 | Working | `runState === "RUNNING"` \|\| (`runState === "AWAITING_INPUT"` && `engineTurnActive`) — i.e. `isSessionGenerating` |
 | Needs you | `pendingApprovals > 0` \|\| (`runState === "AWAITING_INPUT"` && `!engineTurnActive`) |
 | Idle | anything else with `lifecycleState !== "TRASH"` — `QUEUED`, `SUCCEEDED`, `FAILED`, `INTERRUPTED`, `ENDED` |
 
 `FAILED` sits under Idle on purpose: `coordinator()` reuses a FAILED coordinator rather than
-replacing it (`projects.service.ts:1512-1514`), so it is a conversation to reopen, not a dead one.
+replacing it, so it is a conversation to reopen, not a dead one.
+
+`Completed` is first because the rows under it are all read from the RUN, and a completed
+conversation parks at `AWAITING_INPUT` (`statusAfterTurnCompleted`) before settling terminal — so
+the run-state rows alone answer *Needs you* or *Idle* about a conversation somebody declared over,
+and both invite a reply into it. It is a sub-state rather than a `state`, because `state` is about
+the POINTER: it resolves, and the conversation is neither in Trash nor unreachable.
+
+It is also what the card asks a QUESTION about: starting a new coordinator from a `Completed` one
+costs nothing that is not already over, while the same press on any other row completes a live
+conversation on the way through. Same endpoint, same button, two different things to say first.
 
 ### `openability`
 
@@ -309,9 +319,16 @@ Per state, in words:
   `openability.landing.workspaceName` to say **where** it will open, and
   `refusalCode = NO_LANDING_WORKSPACE` + `requiredAction` for the project that has no assignee to
   borrow a workspace from, where the button would 400.
-- **`LIVE`** — links to `coordination.sessionId` and labels itself from `session.title`. The three
-  sub-states come from `runState` / `engineTurnActive` / `pendingApprovals` as tabulated above.
-  `agentName` and `workspaceName` say who coordinates and where.
+- **`LIVE`** — links to `coordination.sessionId` and labels itself from `session.title`. The
+  sub-states come from `lifecycleState` / `runState` / `engineTurnActive` / `pendingApprovals` as
+  tabulated above. `agentName` and `workspaceName` say who coordinates and where. The card carries
+  ONE control in every one of these sub-states: a lead press that goes to the conversation (*Open
+  coordinator*, or *Reply to coordinator* under `Needs you`) and a caret holding **Start a new
+  coordinator**. That item is `POST /projects/:id/coordinator/replace` and never the plain open,
+  which resolves and would hand the same conversation straight back. It opens in the workspace this
+  project is fixed to, and under `Completed` it is the only thing the press does; on a conversation
+  that is still open the server COMPLETES it first, so the client asks before sending — the
+  lifecycle state this payload serves is what decides which of the two the reader is offered.
 - **`TRASHED`** — "The coordinator conversation is in Trash." Two affordances: restore
   `coordination.sessionId` (when it is non-null), or open a replacement, which
   `openability.landing` already names and `landing.fixed = true` says cannot be redirected.
@@ -410,7 +427,10 @@ rather than one more key in the project patch:
 - before it, the column had exactly two writers, both of which *bind* rather than *rebind*: the
   insert in `create` (`src/apiserver/src/projects/projects.service.ts:541`), which writes it in the
   same statement as the project row, and the compare-and-swap in `coordinator()` (`:1814`), which
-  only fires when the pointer was null or trashed;
+  fires when the pointer was null or trashed — and, since `POST :id/coordinator/replace`, when an
+  owner explicitly replaces a COMPLETED conversation. None of those moves the workspace: the
+  replacement writes the same landing back, which is what keeps §7.5's "the SESSION is replaced;
+  the agent and the workspace are not" true of it;
 - `UpdateProjectDto` has no `coordinatorWorkspaceId` — `src/apiserver/src/projects/dto.ts:97-181`;
 - `POST /projects/:id/coordinator` refuses a different workspace with a 409 rather than moving one:
   `ProjectsService.ELSEWHERE`, thrown at `projects.service.ts:1734`, `:1860` and `:2296`, text at

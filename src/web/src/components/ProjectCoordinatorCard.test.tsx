@@ -127,6 +127,22 @@ function neverOpenedStatus(): CoordinatorStatus {
   };
 }
 
+/**
+ * The pointer resolves and the conversation is over: somebody Completed it.
+ *
+ * Still `state: 'LIVE'` — the payload's four states are about the POINTER, and this one leads to a
+ * conversation that is neither in Trash nor unreachable. `AWAITING_INPUT` is the run status a
+ * completed session really parks at, which is exactly why the card cannot read the sub-state alone:
+ * that would answer "Needs you" about a conversation nobody is waiting in.
+ */
+function completedStatus(): CoordinatorStatus {
+  return liveStatus({
+    lifecycleState: SessionLifecycleState.COMPLETED,
+    filingState: 'ARCHIVED',
+    completedAt: TWELVE_MIN_AGO,
+  });
+}
+
 /** The pointer names a session in Trash; the workspace survives, so the replacement is fixed. */
 function trashedStatus(): CoordinatorStatus {
   const s = liveStatus();
@@ -351,6 +367,14 @@ describe('ProjectCoordinatorCard — LIVE', () => {
     expect(buttonLabels(html)).toContain('Reply to coordinator');
   });
 
+  it('carries the same two-part control an open conversation has: one press, one caret', () => {
+    // The menu itself is a portal that only exists once the caret is pressed, so what it holds is
+    // asserted where a press can happen (ProjectCoordinatorSection.test.tsx). What belongs here is
+    // that the caret is DRAWN, and named, in the state where nothing has finished yet.
+    const html = paint(liveStatus());
+    expect(html).toContain('aria-label="More coordinator actions"');
+  });
+
   it('reads Needs you — not Working — while an approval card is up', () => {
     // An approval blocks INSIDE the turn, so the session is RUNNING the whole time it is waiting.
     // Answering Working there would hide the one state that is actually asking for a person.
@@ -371,6 +395,52 @@ describe('ProjectCoordinatorCard — LIVE', () => {
       }),
     );
     expect(pillOf(html)).toContain('Idle');
+  });
+});
+
+describe('ProjectCoordinatorCard — LIVE, and completed', () => {
+  it('reads Completed rather than borrowing a run sub-state that asks for a reply', () => {
+    const html = paint(completedStatus());
+    expect(pillOf(html)).toContain('Completed');
+    expect(pillOf(html)).not.toContain('Needs you');
+    expect(pillOf(html)).not.toContain('Idle');
+    expect(buttonLabels(html)).not.toContain('Reply to coordinator');
+  });
+
+  it('leads with Open and keeps the replacement behind the caret', () => {
+    const html = paint(completedStatus());
+    // The lead press is the safe one — the finished conversation is still where every decision was
+    // made, and reading it is one press.
+    expect(buttonLabels(html)).toContain('Open coordinator');
+    // The one-way door is not a button on the card: it is chosen from the menu behind the caret,
+    // which is a press further away than anything a finger lands on by accident.
+    expect(html).toContain('aria-label="More coordinator actions"');
+    for (const label of buttonLabels(html)) expect(label).not.toMatch(/Start a new coordinator/);
+  });
+
+  it('says what the replacement costs before it is pressed', () => {
+    const body = text(paint(completedStatus()));
+    expect(body).toContain('opens empty');
+    expect(body).toContain('stops being the one this project is coordinated from');
+  });
+
+  it('stops describing dispatch as though this conversation were still taking it', () => {
+    const body = text(paint(completedStatus(), { openTaskCount: 8 }));
+    expect(body).toContain('A completed conversation is told nothing new');
+    // The work itself is still named — it is the reason to start the next one — but no longer as
+    // work this conversation is doing.
+    expect(body).toContain('8 open tasks still point at it');
+    expect(body).not.toContain('coordinated from this conversation');
+    expect(body).not.toContain('Manual dispatch');
+  });
+
+  it('leaves an OPEN conversation exactly as it was', () => {
+    // The negative control for all four above: same payload, one field back to OPEN.
+    const html = paint(liveStatus());
+    expect(pillOf(html)).not.toContain('Completed');
+    expect(buttonLabels(html)).toContain('Reply to coordinator');
+    expect(text(html)).not.toContain('opens empty');
+    expect(text(html)).not.toContain('told nothing new');
   });
 });
 
@@ -515,10 +585,16 @@ describe('ProjectCoordinatorCard — layout', () => {
 });
 
 describe('ProjectCoordinatorCard — presentational', () => {
-  it('renders all four states with no ../api mock in this file', () => {
+  it('renders all four states — and a completed conversation — with no ../api mock in this file', () => {
     // Criterion 4 restated as something a run can fail on: this file mocks nothing, so a card that
     // reached for the network would throw here rather than in the page that adopts it.
-    for (const status of [neverOpenedStatus(), liveStatus(), trashedStatus(), unavailableStatus()]) {
+    for (const status of [
+      neverOpenedStatus(),
+      liveStatus(),
+      completedStatus(),
+      trashedStatus(),
+      unavailableStatus(),
+    ]) {
       expect(paint(status).length).toBeGreaterThan(0);
     }
   });

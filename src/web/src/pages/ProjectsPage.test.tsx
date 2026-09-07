@@ -238,11 +238,11 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status and Automatic PATCHes, the coordinator status GET, its two writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status and Automatic PATCHes, the coordinator status GET, its three writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if a tenth
-    // api(...) call is added anywhere in the file (see API_CALL for what it can parse).
+    // thirteenth api(...) call is added anywhere in the file (see API_CALL for what it can parse).
     const apiCalls = [...source.matchAll(API_CALL)].map(
       // A call wrapped across lines keeps its trailing comma; the URL is what this asserts on.
       (m) => m[1].trim().replace(/,$/, ''),
@@ -273,6 +273,12 @@ describe('ProjectsPage', () => {
       // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
       // what lets the server borrow the workspace this project's work already runs in.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
+      // The other half of that pair, and a SEPARATE route for the reason the card draws a separate
+      // button: the open above resolves, so pressing it on a completed conversation hands that same
+      // conversation back. This one replaces it. No body at all — where the replacement opens is
+      // the project's to decide, and a `workspaceId` here would be a move wearing a replacement's
+      // name (the rebind below is the move).
+      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' }",
       // The project's OTHER owner-only write: its Automatic switch, which is `coordinatorEnabled`
       // and the two fields that field cannot be written without. The same PATCH door as the status
       // write above, and the body is held in `automaticBody` for the same reason the task-create

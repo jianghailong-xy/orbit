@@ -17,8 +17,9 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import {
+  deriveSessionLifecycleState,
+  SessionLifecycleState,
   type SessionFilingState,
-  type SessionLifecycleState,
   type SessionRunState,
   toUuid,
 } from '@orbit/shared';
@@ -99,6 +100,16 @@ export const COORDINATOR_UNAVAILABLE_CODE = 'COORDINATOR_UNAVAILABLE';
  * declining to rotate or by an owner trying to move the landing out from under a live run.
  */
 export const COORDINATOR_SESSION_LIVE_CODE = 'COORDINATOR_SESSION_LIVE';
+
+/**
+ * Which press `coordinator` is answering.
+ *
+ * `open` resolves-or-creates and never leaves a standing conversation behind; `replace` is the
+ * owner saying that the completed one is over and this project needs the next. Two words rather
+ * than a boolean, because the second is a decision with a conversation attached to it and reads at
+ * the call site as one.
+ */
+export type CoordinatorIntent = 'open' | 'replace';
 
 /**
  * What a project created from inside a session is bound to: the conversation it is coordinated
@@ -2298,19 +2309,35 @@ export class ProjectsService {
    * about work that has already been discussed in one".
    *
    * A bound session is reused even when it has FAILED: that is a terminal state Orbit revives with
-   * a new turn, and the history is the thing worth keeping. Only a session the user put in Trash,
-   * or one deleted out from under the pointer, earns a replacement — those are the two cases where
-   * the conversation is genuinely gone rather than merely finished.
+   * a new turn, and the history is the thing worth keeping. A session the user put in Trash, or one
+   * deleted out from under the pointer, earns a replacement — those are the cases where the
+   * conversation is genuinely gone rather than merely finished.
+   *
+   * `intent` is the one other case, and the only one the caller has to ask for. A conversation that
+   * is merely finished is not gone — it is the record of everything decided in it — but the project
+   * it coordinates still has work. `replace` leaves it behind and opens the next one; `open` goes on
+   * resolving, because it is the press behind every link to a coordinator and a reader who meant to
+   * READ a conversation must never be the reason a second one exists.
+   *
+   * A `replace` aimed at a conversation that is still OPEN completes it first, in the same words its
+   * own Complete button uses. Two reasons, and neither is politeness: a project may name exactly one
+   * coordinator, so a bare pointer swap would leave a LIVE conversation silently demoted — still
+   * being written to, no longer able to act (`coordinator-authority` reads the pointer) — and the
+   * conversation being left behind deserves an ending rather than a discovery. The completion runs
+   * AFTER the landing is resolved, so a project that could not have opened a replacement anywhere
+   * does not lose the coordinator it has.
    *
    * What this deliberately will NOT do is move an existing coordinator. A request naming a
    * different workspace than the binding was made in is a 409, not a re-point: the conversation is
    * where the work was discussed, and relocating it is a decision someone has to make on purpose.
-   * Replacing a coordinator is its own endpoint, and this is not it.
+   * Moving a coordinator is `rebindCoordinator`, and this is not it — replacing one keeps the
+   * workspace exactly where §7.5 froze it.
    */
   async coordinator(
     ownerId: string,
     id: string,
     workspaceId?: string,
+    intent: CoordinatorIntent = 'open',
   ): Promise<{ sessionId: string; created: boolean; workspaceId: string | null }> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
@@ -2323,14 +2350,29 @@ export class ProjectsService {
         automationPolicy: true,
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
-        coordinatorSession: { select: { id: true, deletedAt: true } },
+        // Both halves of the fold `deriveSessionLifecycleState` takes, rather than a second reading
+        // of either: `archived_at` is the legacy mirror of `completed_at`, and a row written by an
+        // older binary carries only that one.
+        coordinatorSession: {
+          select: { id: true, deletedAt: true, completedAt: true, archivedAt: true },
+        },
       },
     });
     if (!project) throw new NotFoundException('project not found');
 
     // Trashed, not merely ended: reviving a session out of Trash behind the user's back would undo
     // a deletion they performed deliberately.
-    if (project.coordinatorSession && !project.coordinatorSession.deletedAt) {
+    const standing =
+      project.coordinatorSession && !project.coordinatorSession.deletedAt
+        ? project.coordinatorSession
+        : null;
+    // Whether the conversation this call is leaving behind has already ended. Derived rather than
+    // read off a column, so "is it finished" is answered here the way every other Session payload
+    // answers it — `archived_at` is the legacy spelling and the fold covers both.
+    const finished =
+      standing != null
+      && deriveSessionLifecycleState(standing) === SessionLifecycleState.COMPLETED;
+    if (standing && intent === 'open') {
       // Only when BOTH are known. A workspace deleted since the binding leaves `null` here (the FK
       // is SET NULL), and "different from something we no longer know" is not a conflict anyone
       // could act on — so that case returns the coordinator it has, which re-points nothing.
@@ -2342,15 +2384,24 @@ export class ProjectsService {
         throw new ConflictException(ProjectsService.ELSEWHERE);
       }
       return {
-        sessionId: project.coordinatorSession.id,
+        sessionId: standing.id,
         created: false,
         workspaceId: project.coordinatorWorkspaceId,
       };
     }
 
     // Where a coordinator opens — which on a project that has had one is not a decision this call
-    // gets to make. See `coordinatorLanding`.
+    // gets to make. See `coordinatorLanding`. Resolved BEFORE the completion below: this is the one
+    // refusal a replacement can still meet, and meeting it after ending the outgoing conversation
+    // would take a project's coordinator away and give it nothing back.
     const { workspaceId: runIn, fixed } = await this.coordinatorLanding(ownerId, project, workspaceId);
+
+    // The conversation being replaced is ENDED, in the same words and by the same method its own
+    // Complete button uses. Not a courtesy: `project.coordinator_session_id` is what says who may
+    // coordinate, so a swap that left this one open would demote a conversation still being written
+    // to — it would go on being talked to and quietly stop being able to act. Already-completed is
+    // the no-op case, and the one this call reached through the ordinary route.
+    if (standing && !finished) await this.sessions.complete(ownerId, standing.id);
 
     // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
     // sessions.create, which is the only thing that may build a session row. Re-deriving any of

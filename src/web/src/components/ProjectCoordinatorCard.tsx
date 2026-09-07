@@ -1,9 +1,11 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Button, Switch } from 'antd';
-import { SessionRunState, type SessionLifecycleState } from '@orbit/shared';
+import { DownOutlined } from '@ant-design/icons';
+import { Button, Dropdown, Space, Switch } from 'antd';
+import { SessionLifecycleState, SessionRunState } from '@orbit/shared';
 
 /**
- * A project's coordination session, drawn as the four states it can actually be in.
+ * A project's coordination session, drawn as the four states it can actually be in — and, inside
+ * LIVE, the one thing the conversation itself can say that the pointer cannot: that it is over.
  *
  * Replaces the one-button Coordinator section ProjectsPage used to carry below the fields, which
  * drew one state: a button that said *Open coordinator* whatever the truth was. Pressing it when
@@ -98,6 +100,11 @@ export interface CoordinatorStatus {
  *  press means is decided here and what it costs is decided there. */
 export type CoordinatorAction =
   | 'open'
+  /** Leave this conversation behind and open the next one. `POST :id/coordinator/replace`, never
+   *  the plain open — that one resolves, and would hand back the conversation being left. On a
+   *  conversation that is still open the server COMPLETES it first, which is why the caller asks
+   *  before it sends this one. */
+  | 'replace'
   | 'start'
   | 'restore-session'
   | 'change-workspace'
@@ -136,7 +143,8 @@ type Glyph = 'disc' | 'ring' | 'diamond';
  *
  * The third row's `lifecycleState !== "TRASH"` clause is not re-tested here: a trashed pointer is
  * the `TRASHED` state, never `LIVE` (the truth table's T column), so this is only ever asked about
- * a session that has already passed it.
+ * a session that has already passed it. A COMPLETED one never reaches this function either — it is
+ * decided before the sub-states, because every row here answers with a reply to make.
  */
 function liveSubState(session: CoordinatorSession): { label: string; tone: Tone; glyph: Glyph } {
   if (session.pendingApprovals > 0) return { label: 'Needs you', tone: 'warning', glyph: 'disc' };
@@ -361,15 +369,24 @@ export function ProjectCoordinatorCard({
 }) {
   const { coordination } = status;
   const session = coordination.session;
-  const live = status.state === 'LIVE' && session ? liveSubState(session) : null;
+  // The state the payload's four do not separate, because it is a property of the CONVERSATION and
+  // not of the pointer: `state` stays LIVE for a coordinator somebody completed. Reading it off
+  // `lifecycleState` is what keeps a finished conversation from being drawn as one that is merely
+  // between turns — the run state alone says AWAITING_INPUT or ENDED, which is "Needs you" or
+  // "Idle", and both invite a reply to a conversation that is over.
+  const finished =
+    status.state === 'LIVE' && session?.lifecycleState === SessionLifecycleState.COMPLETED;
+  const live = status.state === 'LIVE' && session && !finished ? liveSubState(session) : null;
 
   const pill: { label: string; tone: Tone; glyph: Glyph } =
     live
-    ?? (status.state === 'NEVER_OPENED'
-      ? { label: 'Not started', tone: 'neutral', glyph: 'ring' }
-      : status.state === 'TRASHED'
-        ? { label: 'Deleted', tone: 'neutral', glyph: 'diamond' }
-        : { label: 'Cannot be opened', tone: 'error', glyph: 'diamond' });
+    ?? (finished
+      ? { label: 'Completed', tone: 'neutral', glyph: 'diamond' }
+      : status.state === 'NEVER_OPENED'
+        ? { label: 'Not started', tone: 'neutral', glyph: 'ring' }
+        : status.state === 'TRASHED'
+          ? { label: 'Deleted', tone: 'neutral', glyph: 'diamond' }
+          : { label: 'Cannot be opened', tone: 'error', glyph: 'diamond' });
 
   // The whole card used to turn amber while it needed a reply, then sat beside a second amber
   // dispatch warning. A slim semantic accent preserves the state without making two large warning
@@ -414,6 +431,7 @@ export function ProjectCoordinatorCard({
           readAt={status.readAt}
           openTaskCount={openTaskCount}
           needsReply={live?.label === 'Needs you'}
+          finished={finished}
           onAction={onAction}
         />
       ) : status.state === 'TRASHED' ? (
@@ -576,6 +594,7 @@ function Live({
   readAt,
   openTaskCount,
   needsReply,
+  finished,
   onAction,
 }: {
   session: CoordinatorSession;
@@ -583,6 +602,9 @@ function Live({
   readAt: string;
   openTaskCount?: number;
   needsReply: boolean;
+  /** The conversation was COMPLETED. It is still this project's coordinator and still readable —
+   *  what changed is that it is over, so the card offers the next one instead of a reply. */
+  finished: boolean;
   onAction?: (action: CoordinatorAction) => void;
 }) {
   const age = lastActive(session, readAt);
@@ -593,6 +615,17 @@ function Live({
       : openTaskCount === 0
         ? 'No open tasks remain.'
         : `${openTaskCount} open task${openTaskCount === 1 ? ' is' : 's are'} coordinated from this conversation.`;
+  // The same tally, said the other way round. "Coordinated from this conversation" is what the open
+  // card claims and it is no longer true here: nothing is being coordinated from a conversation that
+  // is over — the work is merely still POINTED at it, which is the reason to start the next one.
+  const finishedCopy =
+    typeof openTaskCount !== 'number'
+      ? 'A completed conversation is told nothing new, and this project still points at it.'
+      : openTaskCount === 0
+        ? 'A completed conversation is told nothing new. No open tasks remain.'
+        : `A completed conversation is told nothing new — and ${openTaskCount} open task${
+            openTaskCount === 1 ? ' still points' : 's still point'
+          } at it.`;
 
   return (
     <>
@@ -600,6 +633,17 @@ function Live({
         {session.title}
       </p>
       <p style={{ ...MUTED, margin: '3px 0 0' }}>{age ? `${age} · ${which}` : which}</p>
+
+      {finished ? (
+        // The same sentence the TRASHED card makes before its Start button, and for the same
+        // reason: the press below does not carry this conversation over. What differs is that this
+        // one is not going anywhere — it stays where it is, out of the coordinator's seat.
+        <p style={{ ...BODY, margin: '10px 0 0' }}>
+          A new coordinator{' '}
+          <b style={{ color: 'var(--text-1)', fontWeight: 600 }}>opens empty</b> — this conversation
+          stays completed and readable, and stops being the one this project is coordinated from.
+        </p>
+      ) : null}
 
       <div style={{ height: 1, background: 'var(--border-subtle)', margin: '12px 0' }} />
 
@@ -618,15 +662,55 @@ function Live({
         }}
       >
         <div style={{ fontSize: 11.5, lineHeight: 1.4, color: 'var(--text-3)', marginBottom: 2 }}>
-          Manual dispatch
+          {/* Not "Completed" a second time — the pill says that. What this box is for is the work
+              standing behind the conversation, which is the reason to start the next one. */}
+          {finished ? 'Open work' : 'Manual dispatch'}
         </div>
-        <div style={{ ...BODY, lineHeight: 1.5 }}>{dispatchCopy}</div>
+        <div style={{ ...BODY, lineHeight: 1.5 }}>{finished ? finishedCopy : dispatchCopy}</div>
       </div>
 
       <div style={ACTIONS}>
-        <Button type="primary" block onClick={() => onAction?.('open')}>
-          {needsReply ? 'Reply to coordinator' : 'Open coordinator'}
-        </Button>
+        {/*
+          ONE control in every state of a reachable conversation, rather than a button here and two
+          buttons there: what the card offers stops moving around as the conversation's state
+          changes, and the way to the next coordinator is in the same place whether or not this one
+          is finished.
+
+          The lead press is the safe one — go to the conversation. Starting the next coordinator is
+          a ONE-WAY door (the pointer moves, the generation advances, and an open conversation is
+          completed on the way), so it sits behind the caret, where it is chosen rather than hit.
+          The menu states the consequence, and the page asks again before ending a live one.
+        */}
+        <Space.Compact block>
+          <Button type="primary" style={{ flex: 1 }} onClick={() => onAction?.('open')}>
+            {finished || !needsReply ? 'Open coordinator' : 'Reply to coordinator'}
+          </Button>
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            menu={{
+              style: { width: 330 },
+              items: [
+                {
+                  key: 'replace',
+                  label: (
+                    <div style={{ padding: '3px 0', maxWidth: 300 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>Start a new coordinator</div>
+                      <div style={{ ...MUTED, whiteSpace: 'normal' }}>
+                        {finished
+                          ? 'Opens empty. This conversation stays completed and readable, and stops being the one this project is coordinated from.'
+                          : 'Completes this conversation first, then opens an empty one. Nothing is deleted — it stays readable.'}
+                      </div>
+                    </div>
+                  ),
+                  onClick: () => onAction?.('replace'),
+                },
+              ],
+            }}
+          >
+            <Button type="primary" aria-label="More coordinator actions" icon={<DownOutlined />} />
+          </Dropdown>
+        </Space.Compact>
       </div>
     </>
   );

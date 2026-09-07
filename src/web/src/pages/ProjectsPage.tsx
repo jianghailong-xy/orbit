@@ -1,8 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { TaskStatus } from '@orbit/shared';
+import { SessionLifecycleState, type TaskStatus } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   Alert,
+  App as AntApp,
   Button,
   Empty,
   Input,
@@ -1180,6 +1181,24 @@ export function openProjectCoordinator(
 }
 
 /**
+ * Leave a COMPLETED coordinator behind and open this project's next one.
+ *
+ * A different route from the open above, not a flag on it, and the card is why: `openProjectCoordinator`
+ * is what every link to a coordinator presses, and it RESOLVES — pressing it on a finished
+ * conversation hands that same conversation back. Only this one replaces, and it is reachable only
+ * from the button that says it will.
+ *
+ * No body. Where the replacement opens is fixed by the project, and a workspace named here would be
+ * a move rather than a replacement — that is `rebindProjectCoordinator`.
+ *
+ * On a conversation that is still open the server COMPLETES it before the new one is created, which
+ * is the whole reason the caller asks first: this request ends a conversation that may be mid-turn.
+ */
+export function replaceProjectCoordinator(projectId: string): Promise<CoordinatorResult> {
+  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' });
+}
+
+/**
  * What flipping a project's Automatic switch WRITES — held here rather than at the call site for
  * the reason `newProjectTaskBody` is, because the body is the unit and the path is not.
  *
@@ -1237,6 +1256,7 @@ export function ProjectCoordinatorSection({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
+  const { modal } = AntApp.useApp();
   const [rebinding, setRebinding] = useState(false);
   const [choosingLanding, setChoosingLanding] = useState(false);
   // The workspace the reader named for a coordinator that has never opened. Kept rather than sent
@@ -1268,7 +1288,19 @@ export function ProjectCoordinatorSection({
     },
   });
 
-  const failure = open.error;
+  const replace = useMutation({
+    mutationKey: ['project', projectId, 'coordinator', 'replace'],
+    mutationFn: () => replaceProjectCoordinator(projectId),
+    onSuccess: (result) => {
+      // The card is read from the project document, and the pointer it draws just moved.
+      qc.invalidateQueries({ queryKey: ['project', projectId] });
+      // No warning toast, unlike the open above: landing in an empty conversation is what this
+      // press asked for, and the card said so before it was pressed.
+      navigate(coordinatorSessionPath(result.sessionId));
+    },
+  });
+
+  const failure = open.error ?? replace.error;
   const unavailable = isCoordinatorUnavailable(failure);
   // Where the reader is sent to repair a landing. The BOUND workspace, not the landing the status
   // proposed: `COORDINATOR_UNAVAILABLE` is a refusal ABOUT the workspace this project is tied to,
@@ -1302,6 +1334,33 @@ export function ProjectCoordinatorSection({
       case 'open':
       case 'start':
         open.mutate(landing);
+        return;
+      // Not `open` with a flag: the conversation this card is drawn from is still reachable, so the
+      // resolve-or-create press would hand it straight back rather than replace it.
+      //
+      // A conversation that is already finished is replaced on the press — the menu said what that
+      // costs and the answer cannot surprise anyone. One that is still OPEN is different in kind:
+      // the server completes it on the way, so the press ENDS a conversation that may be mid-turn.
+      // That is asked about first, in the words of what it does rather than "are you sure".
+      case 'replace':
+        if (status.data?.coordination.session?.lifecycleState === SessionLifecycleState.COMPLETED) {
+          replace.mutate();
+          return;
+        }
+        modal.confirm({
+          // Wider than the 416 default so the two answers stay on one line: stacked, the safe one
+          // sits above the destructive one, which is the reading order nobody expects.
+          width: 480,
+          title: 'Complete this conversation and start a new coordinator?',
+          content:
+            'The current conversation is completed — a turn in flight finishes first — and this ' +
+            'project starts coordinating from a new, empty one. Nothing is deleted: the completed ' +
+            'conversation stays readable.',
+          okText: 'Complete and start a new one',
+          cancelText: 'Keep this coordinator',
+          autoFocusButton: 'cancel',
+          onOk: () => replace.mutate(),
+        });
         return;
       // Two different things, and only the second is a write of its own. Naming the landing of a
       // coordinator that has never opened records nothing: the name rides along with the open that
@@ -1391,7 +1450,13 @@ export function ProjectCoordinatorSection({
             <Alert
               type="error"
               showIcon
-              message={unavailable ? 'The coordinator cannot be opened' : 'Coordinator could not be opened'}
+              message={
+                unavailable
+                  ? 'The coordinator cannot be opened'
+                  : replace.error
+                    ? 'A new coordinator could not be started'
+                    : 'Coordinator could not be opened'
+              }
               description={failure.message}
               action={
                 unavailable ? (
@@ -1399,7 +1464,15 @@ export function ProjectCoordinatorSection({
                     Rebind workspace…
                   </Button>
                 ) : (
-                  <Button size="small" danger onClick={() => open.mutate(landing)}>
+                  // Retries the press that FAILED, not the other one: a replacement that lost a race
+                  // ("the coordinator changed while one was being opened — try again") is retryable,
+                  // and re-pressing it must not quietly become an open. The confirm is not asked
+                  // again — this is the same decision, made once.
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() => (replace.error ? replace.mutate() : open.mutate(landing))}
+                  >
                     Retry
                   </Button>
                 )

@@ -379,6 +379,28 @@ export class ProjectsController {
   }
 
   /**
+   * Leave this project's coordinator conversation behind and open its next one.
+   *
+   * A route of its own rather than a flag on the POST above, for the reason rebind is one: the
+   * press that OPENS a coordinator is behind every link to the conversation, and it has to stay
+   * resolve-or-create. A reader who opened a conversation to read it must not be the reason the
+   * project has a second one.
+   *
+   * A conversation that is still open is COMPLETED first, by the same method its own Complete
+   * button calls. That is the whole weight of this endpoint: it ends a conversation. The card that
+   * presses it says so and asks first; nothing else may reach it by accident, which is why it is
+   * not a field on anything.
+   *
+   * No body. §7.5 freezes a rotation as "the SESSION is replaced; the agent and the workspace are
+   * not", so there is nothing here left to name — the replacement opens where the last one ran, and
+   * moving it is still `POST :id/coordinator/rebind`.
+   */
+  @Post(':id/coordinator/replace')
+  replaceCoordinator(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.coordinator(user.userId, id, undefined, 'replace');
+  }
+
+  /**
    * What this project's coordination is, and what the button above would do if pressed right now.
    *
    * A GET beside the POST it predicts, and a read in the strict sense: no body, no lock, no write.
