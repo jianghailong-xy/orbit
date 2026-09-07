@@ -321,7 +321,7 @@ export class CreateTaskDto {
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
-  // How long that command may run. Omitted is the runner's two-minute default, which is the only
+  // How long that command may run. Omitted is the runner's one-hour default, which is the only
   // budget this replaces — it buys wall-clock and decides nothing about the outcome.
   @IsOptional() @IsInt() @Min(1) @Max(MAX_TASK_ACCEPTANCE_TIMEOUT_SECONDS)
   acceptanceTimeoutSeconds?: number;

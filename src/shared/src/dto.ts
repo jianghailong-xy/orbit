@@ -1064,7 +1064,7 @@ export interface RunInboxResponse {
   taskAcceptance?: boolean;
   /** The wall-clock budget, in seconds, that this task declared for that command — read off the
    *  task as the turn is dequeued and sent with the work it bounds. Absent is the overwhelmingly
-   *  common case and leaves the runner's own two-minute default in force; meaningful only
+   *  common case and leaves the runner's own one-hour default in force; meaningful only
    *  alongside `taskAcceptance`, since an interactive `!`-shell is never run under a task's budget.
    *
    *  It buys wall-clock and nothing else. A command that outlives it is killed and reported as

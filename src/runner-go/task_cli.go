@@ -170,8 +170,8 @@ Options:
   --acceptance-expected-exit-code N
                               Exit code that derives DONE; any other exit derives FAILED
   --acceptance-timeout-seconds N
-                              How long that command may run, 1..86400. Omit for the two-minute
-                              default; raise it for a suite that legitimately runs longer
+                              How long that command may run, 1..86400. Omit for the one-hour
+                              default; declare one to bound it tighter, or to buy longer
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
@@ -244,7 +244,7 @@ task get; it is audit material, not completion evidence.
 
 For EXECUTABLE, --acceptance-command and --acceptance-expected-exit-code must be passed together.
 --acceptance-timeout-seconds is optional and bounds only that command; omitted, it runs under the
-runner's two-minute default. Exceeding whichever budget applies kills the command and reports -1,
+runner's one-hour default. Exceeding whichever budget applies kills the command and reports -1,
 which derives FAILED like any other disagreeing code, so size it above a passing run.
 After the execution turn, that same task session runs the command once and records its untrimmed
 combined output and exit code. That exit code is compared with the declared expectation: equal
@@ -415,7 +415,7 @@ Options:
                               Replace the exit code that mechanically derives DONE
   --acceptance-timeout-seconds N
                               Replace that command's wall-clock budget, 1..86400
-  --clear-acceptance-timeout  Return that command to the runner's two-minute default
+  --clear-acceptance-timeout  Return that command to the runner's one-hour default
   --clear-executable-acceptance
                               Clear the command and expected exit code together
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable. Name the SUBJECT of the
@@ -472,7 +472,7 @@ The executable acceptance declaration is --acceptance-command and --acceptance-e
 which must be set or cleared together; either flag may replace its stored half, while
 --clear-executable-acceptance clears both. --acceptance-timeout-seconds is an optional third field
 bounding how long that command may run, and --clear-acceptance-timeout returns it to the runner's
-two-minute default; clearing the pair clears the budget with it. A budget buys wall-clock and
+one-hour default; clearing the pair clears the budget with it. A budget buys wall-clock and
 nothing else — a command killed at one reports -1, which derives FAILED like any other exit code
 that disagrees with the declared expectation.
 
@@ -1270,7 +1270,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
 	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
-	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "wall-clock budget for that command (default two minutes)")
+	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "wall-clock budget for that command (default one hour)")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -2387,7 +2387,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
-				"--acceptance-timeout-seconds <n> (acceptanceTimeoutSeconds: how long that command may run, 1..86400; omit for the two-minute default)",
+				"--acceptance-timeout-seconds <n> (acceptanceTimeoutSeconds: how long that command may run, 1..86400; omit for the one-hour default)",
 			)
 		case "task_update":
 			capabilities[i].Arguments = append(
@@ -2396,7 +2396,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--completion-criterion-override-reason <text> (completionCriterionOverrideReason: non-blank reason for CHANGING the criterion, required whenever the write lands on a different one than the task carries — including a change derived from --acceptance-command rather than named; stored beside the criterion left behind)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
-				"--acceptance-timeout-seconds <n> | --clear-acceptance-timeout (acceptanceTimeoutSeconds: replace that command's wall-clock budget, or return it to the two-minute default)",
+				"--acceptance-timeout-seconds <n> | --clear-acceptance-timeout (acceptanceTimeoutSeconds: replace that command's wall-clock budget, or return it to the one-hour default)",
 				"--clear-executable-acceptance (clear both EXECUTABLE fields)",
 			)
 		}
