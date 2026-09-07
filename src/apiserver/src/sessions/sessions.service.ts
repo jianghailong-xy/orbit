@@ -594,6 +594,23 @@ export class SessionsService {
             select: { preferences: true },
           }),
         );
+    // The same shape, for the same reason, one field over: the effort a caller that named none
+    // inherits. Every surface a person picks effort on writes it back as the account default
+    // (`UserPreferences.defaultEffort`), so "no effort in this request" means "whatever I last
+    // chose", never "the engine's own default".
+    //
+    // It used to be resolved by CALLERS instead — `session_create` and the service-token bridge
+    // each call `resolveDefaultEffort` before this method — which left every other server-started
+    // session at the engine default: a task run, a coordinator, a judgment session all began at
+    // Default while the account said `max`. Resolved here, the rule holds wherever a session comes
+    // from, and the two callers above simply arrive with `dto.effort` already set.
+    //
+    // `undefined` is the only value that means "unasked": an empty string is the composer's
+    // explicit *Default*, and it must not be overwritten by a remembered pick.
+    const accountEffort =
+      dto.effort === undefined
+        ? await this.resolveDefaultEffort(ownerId, dto.workspaceId)
+        : undefined;
     // The workspace's own environment, which may carry the provider credential that makes the
     // runner's engine sign-in irrelevant — see the sign-in preflight below.
     let workspaceEnv: unknown;
@@ -805,7 +822,7 @@ export class SessionsService {
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
         permissionMode: rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode,
-        effort: normalizeEffortForProvider(runtime, dto.effort),
+        effort: normalizeEffortForProvider(runtime, dto.effort ?? accountEffort),
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
