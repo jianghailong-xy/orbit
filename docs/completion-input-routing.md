@@ -54,6 +54,10 @@ Design review of 2026-09-07, ahead of moving the EVIDENCE_JUDGMENT decision from
 conversation. Two questions were open; both are settled here, and the implementation tasks that
 follow are bound by these answers rather than free to re-derive them.
 
+Every line anchor below was re-read against `dc53c52b` rather than remembered. Anchors drift: quote
+the sentence as well as the number, and if a number no longer lands on the quoted sentence, trust the
+sentence and re-anchor it.
+
 ### D1 — the timeout fallback is (b), the derived pending read
 
 **What is actually true about the 1800s, first.** It is the *engine's* deadline, not the control
@@ -75,7 +79,7 @@ nicety:
    approval when a session is selected (`WorkspaceView.tsx:2921`) and renders each one
    (`WorkspaceView.tsx:5496`), with no filter for whether the turn that asked is still alive. So
    after the abort the card is still on screen and still clickable — and answering it reaches
-   nobody, because the poll loop that would have consumed the decision (`mcp.go:1173`) died with
+   nobody, because the poll loop that would have consumed the decision (`mcp.go:1174`) died with
    the turn. A surface that looks answerable and silently isn't is worse than no surface.
 
 **Why (a) — release the wake on timeout so the same fact can be re-delivered — is rejected.**
@@ -108,7 +112,7 @@ Four reasons, none of them a preference:
 **Why (b) holds, on the same axis (a) was reaching for.** `readPendingEvidenceJudgments`
 (`pending-evidence-judgments.ts:208`) is not a queue: "There is no row anywhere that says 'this is
 pending'. Pending is a shape the facts already have… this read cannot fall out of date with them,
-cannot be delivered twice, and cannot be lost" (lines 21-27). A question asked and never answered
+cannot be delivered twice, and cannot be lost" (lines 22-27). A question asked and never answered
 still has that shape — the task is unsettled and the latest revision has no decision bound to it
 (`pending-evidence-judgments.ts:247`). And its answer path needs no live turn: the rail writes
 `POST /tasks/:id/evidence/decision` directly (`DecisionRail.tsx:586`), touching no approval row, no
@@ -128,8 +132,14 @@ narrowing *who the rail is read for*, not by removing it. That narrowing is a se
 is not made here.
 
 **What this binds the implementation to.** The card is the primary surface, the rail is the
-fallback, and both answer through the same door, so answering either settles the row. The fallback
-spec must submit evidence, deliver the turn, never answer, and assert the row is still returned by
+fallback, and answering either settles the row because there is only one door: a single
+`TaskCompletionEvidenceService.decide` (`task-completion-evidence.service.ts:623`), which the
+runner protocol reaches deliberately rather than by accident — "The app reaches the same service at
+`POST /tasks/:taskId/evidence/decision`… and that named session is put through the identical check,
+so the account owner gets the same door rather than a shorter one"
+(`runner-task-completion-evidence.controller.ts:41-49`). The fallback therefore needs no second
+write path, and cannot drift from the card's. The fallback spec must submit evidence, deliver the
+turn, never answer, and assert the row is still returned by
 `readPendingEvidenceJudgments` for an independent session — paired with a negative control on the
 same fixture where a recorded decision returns zero rows, because a bare "still visible" assertion
 is also true of a read that filters nothing. And a stale `PENDING` approval must stop presenting
@@ -137,11 +147,12 @@ itself as the live question.
 
 ### D2 — one bounded question is not a conversation steered three hundred times
 
-The history this has to answer to is `coordinator-judgment.service.ts:12-25` (§0): the version
-removed on 2026-08-24 "failed because ONE conversation was steered three hundred times: every turn
-looked busy, the context filled with its own earlier reasoning, and it never crossed a single line
-in `attempt-budget.ts` §0 — there was no line to cross, because a budget is spent per attempt and
-the whole thing was one attempt that never ended."
+The history this has to answer to is `coordinator-judgment.service.ts:13-25` (§0), whose second
+paragraph (`:15-19`) is the accident itself: the version removed on 2026-08-24 "failed because ONE
+conversation was steered three hundred times: every turn looked busy, the context filled with its
+own earlier reasoning, and it never crossed a single line in `attempt-budget.ts` §0 — there was no
+line to cross, because a budget is spent per attempt and the whole thing was one attempt that never
+ended."
 
 Three things had to be true at once for that: the next turn was justified by the previous turn's
 output; the budget's unit was the attempt and the attempt never ended, so no bound could bind; and
@@ -166,12 +177,12 @@ first two structurally and bounds the third.
    (`coordinator-delivery.service.ts:42-44`). Extending a running turn is the literal act the
    accident consisted of, and nothing here does it.
 3. **What continues is a person's attention, not an agent's decision to keep going.**
-   `coordinator-judgment.service.ts:26-33` (§1) draws the line A2 must respect:
-   `project.coordinator_session_id` is "a person opening a long-lived conversation to drive a
-   project by hand". A2 does not move judgment into the steered loop's role; it puts one question
-   into a conversation the person already has open, and the party being asked *is* the person. The
-   unbounded quantity in the accident was an agent's own choice to continue. Here the agent's part
-   is one bounded turn per committed fact.
+   `coordinator-judgment.service.ts:27-33` (§1) draws the line A2 must respect, in its own words
+   at `:30`: `project.coordinator_session_id` is "a person opening a long-lived conversation to
+   drive a project by hand". A2 does not move judgment into the steered loop's role; it puts one
+   question into a conversation the person already has open, and the party being asked *is* the
+   person. The unbounded quantity in the accident was an agent's own choice to continue. Here the
+   agent's part is one bounded turn per committed fact.
 
 **The residual, named rather than waved away.** The coordinator conversation is long-lived, so its
 context does accumulate: §0's first named loss, "judgment quality decays with context noise", is the
@@ -194,7 +205,7 @@ do, something is generating turns from turns and claim 1 above is false.
 To be pasted by the tasks that touch these files; not applied by the review task that wrote them.
 
 `task-completion-evidence.service.ts`, replacing the "Nothing derives a judgment request from this
-fact any more" note at the `route(...)` call (lines 388-391):
+fact any more" note at the `route(...)` call (lines 389-391):
 
 > The evidence revision is delivered to the project's standing coordinator conversation, which asks
 > a person and records their answer. Nothing is derived here and no session is opened: the wake ends
