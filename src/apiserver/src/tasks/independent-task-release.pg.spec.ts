@@ -165,6 +165,50 @@ const releaseSiblings = (s: Services, ownerId: string, doneTaskId: string) =>
     dispatchIndependentSiblingsOf(ownerId: string, doneTaskId: string): Promise<void>;
   }).dispatchIndependentSiblingsOf(ownerId, doneTaskId);
 
+/**
+ * The CLOCK, called exactly as the one timer this service owns calls it.
+ *
+ * Every fixture below (7)(8)(9)(10)(11) is a project that has gone QUIET, which is the whole
+ * premise: no task in it ever reaches DONE, so `dispatchDependentsAfterCompletion` is never called
+ * and `dispatchIndependentSiblingsOf` never runs at all. That is not an artificial restriction —
+ * an agent writing DONE through task_update reaches no completion edge either, and a batch of
+ * independent tasks under one project therefore had nothing but this sweep looking at it.
+ */
+const readySweep = (s: Services) =>
+  (s.tasks as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
+
+/**
+ * Whether the sweep OFFERED this task to the run door — a different question from whether a run
+ * came of it. `execute` opens its receipt keyed on the task (`task:<id>`) before any of its own
+ * gates, and a refusal releases the lease rather than deleting the row, so this counts deliveries
+ * the candidate scan produced even when something further down said no.
+ *
+ * Read where a session count alone cannot separate "the scan did not select it" from "the scan
+ * selected it and a second gate refused" — which is exactly the difference (10) is about.
+ */
+const runRequestCount = (db: PrismaClient, ownerId: string, taskId: string) =>
+  db.taskRunRequest.count({ where: { ownerId, fingerprint: `task:${taskId}` } });
+
+/**
+ * The premise of every clock fixture, read off the database rather than asserted about itself: this
+ * owner's project has finished NOTHING. No completion edge can have fired, so whatever started is
+ * the sweep's doing and nothing else's.
+ */
+async function assertNothingFinished(db: PrismaClient, ids: World): Promise<void> {
+  assert.equal(
+    await db.task.count({ where: { ownerId: ids.ownerId, status: TaskStatus.DONE } }), 0,
+    'a task in this fixture reached DONE, so the completion edge could be what released these',
+  );
+}
+
+/** The one run that must exist, described by the door that opened it rather than by its count. */
+async function dispatchedRun(db: PrismaClient, taskId: string) {
+  const [run] = await db.session.findMany({
+    where: { taskId }, select: { dispatchOrigin: true, startsTaskWork: true },
+  });
+  return run;
+}
+
 // -------------------------------------------------------------------------------------------------
 // (1)(2)(3) The release itself, with both vetoes as controls in the same fixture.
 // -------------------------------------------------------------------------------------------------
@@ -372,6 +416,175 @@ test('a project whose coordinator is switched off releases nothing',
         'the coordinated project released nothing — the control below proves nothing on its own');
       assert.equal(await sessionCount(s.db, releasedOff), 0,
         'a project with its coordinator switched off had the next task released on its behalf');
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+// -------------------------------------------------------------------------------------------------
+// (7)(8)(9)(10)(11) The same release, reached by the CLOCK instead of by a completion.
+//
+// `dispatchIndependentSiblingsOf` above hangs off a completion, and three call sites reach that
+// edge: the runner's turn-complete ACK, an evidence judgment's confirm, and a PASS verdict on a
+// verification task. An agent writing status=DONE through task_update is none of them — so a
+// project that goes quiet keeps showing its independent tasks as ready and starts none of them,
+// while a task WITH prerequisites has had a 60-second backstop (reconcileReadyTasks) all along.
+// These cases are that asymmetry closed: the same predicate, on the clock, with every veto intact.
+// -------------------------------------------------------------------------------------------------
+
+test('(7) the ready sweep starts an independent task in a project that has finished nothing',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'sweep-quiet');
+      const projectId = await project(s.db, ids, 'sweep-quiet');
+      // The shape production has: filed under a coordinated project, opted in, waiting on nothing
+      // and waited on by nothing. Before this pass existed, only a person could start it.
+      const released = await seedTask(s.db, ids, projectId, 'released');
+      assert.equal(await prerequisiteCount(s.db, released), 0);
+      await assertNothingFinished(s.db, ids);
+
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, released), 1,
+        'a quiet project\'s independent task was never started — the clock is the only thing that '
+          + 'was ever going to look at it');
+      // ...and it is a run an automatic door opened, not merely a row: a person pressing Run would
+      // leave a USER origin behind, which would make the count above pass for the wrong reason.
+      const run = await dispatchedRun(s.db, released);
+      assert.equal(run.dispatchOrigin, SessionDispatchOrigin.LEGACY_SWEEP);
+      assert.equal(run.startsTaskWork, true);
+      // The premise still holds after the sweep: it started work, it did not finish any.
+      await assertNothingFinished(s.db, ids);
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+test('(8) the sweep does not start an independent task that opted out of auto-run',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'sweep-optin');
+      const projectId = await project(s.db, ids, 'sweep-optin');
+      // One column apart, in one project, swept in one call: whatever separates these two counts
+      // is `auto_run_when_ready` and can be nothing else.
+      const optedIn = await seedTask(s.db, ids, projectId, 'opted in');
+      const optedOut = await seedTask(s.db, ids, projectId, 'opted out', {
+        autoRunWhenReady: false,
+      });
+      await assertNothingFinished(s.db, ids);
+
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, optedOut), 0,
+        'a task that opted out of auto-run was started by the clock — the sweep\'s new scan reads '
+          + 'auto_run_when_ready for itself, and a copy of the clause in another predicate does '
+          + 'not stand in for it');
+      assert.equal(await sessionCount(s.db, optedIn), 1,
+        'the paired positive did not start, so the control above proves nothing');
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+test('(9) the sweep does not start anything in a project whose coordinator is switched off',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'sweep-switch');
+      // Two projects of one owner, identical but for the switch, swept in the same call. The
+      // switch is what says a coordinator may act for this project, and starting the next task is
+      // an action taken on the project's behalf.
+      const on = await project(s.db, ids, 'sweep-switch-on', { coordinatorEnabled: true });
+      const off = await project(s.db, ids, 'sweep-switch-off', { coordinatorEnabled: false });
+      const releasedOn = await seedTask(s.db, ids, on, 'released');
+      const releasedOff = await seedTask(s.db, ids, off, 'released');
+      await assertNothingFinished(s.db, ids);
+
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, releasedOff), 0,
+        'a project with its coordinator switched off had a task started on its behalf by the clock');
+      assert.equal(await sessionCount(s.db, releasedOn), 1,
+        'the coordinated project started nothing either, so the control above proves nothing');
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+test('(10) the sweep\'s independent scan is not what starts a task that has prerequisites',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'sweep-anchor');
+      const projectId = await project(s.db, ids, 'sweep-anchor');
+      // The prerequisite is the paired positive, and it is the perfect control: it differs from
+      // the dependent below in exactly the column under test — whether an edge names it — and it
+      // stays OPEN throughout, because a session starting is not a task finishing.
+      const prerequisite = await seedTask(s.db, ids, projectId, 'prerequisite');
+      const dependent = await seedTask(s.db, ids, projectId, 'dependent');
+      await s.db.taskDependency.create({
+        data: { taskId: dependent, dependsOnTaskId: prerequisite },
+      });
+      // Deliberately UNSATISFIED: with the prerequisite still OPEN, AUTO_RUN_READY_SQL will not
+      // select the dependent either, so a session appearing on it can only have come from the new
+      // scan reaching past its own anchor.
+      assert.equal(await prerequisiteCount(s.db, dependent), 1);
+      assert.equal(await prerequisiteCount(s.db, prerequisite), 0);
+      await assertNothingFinished(s.db, ids);
+
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, prerequisite), 1,
+        'the independent prerequisite did not start, so the control below proves nothing');
+      assert.equal(await sessionCount(s.db, dependent), 0,
+        'a task with an outstanding prerequisite was started');
+      // The sharper form of the same claim, and the one that can actually fail: `execute` refuses
+      // a task whose prerequisites are outstanding whatever selected it, so the count above stays
+      // 0 even for a scan that offered it. This says the scan never offered it — the receipt door
+      // is upstream of every gate that would have refused.
+      assert.equal(await runRequestCount(s.db, ids.ownerId, dependent), 0,
+        'the independent scan offered a task with prerequisites to the run door — the count above '
+          + 'cannot see that, because the door refuses it for a second reason');
+      assert.equal(await runRequestCount(s.db, ids.ownerId, prerequisite), 1,
+        'no run request exists for the task that DID start, so the counter above is measuring '
+          + 'nothing');
+      // Still open, still blocked: the sweep started work here, it did not settle anything.
+      await assertNothingFinished(s.db, ids);
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+test('(11) the sweep\'s independent scan does not start a task that is filed under no project',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'sweep-unfiled');
+      const projectId = await project(s.db, ids, 'sweep-unfiled');
+      const filed = await seedTask(s.db, ids, projectId, 'filed');
+      // The same task with its filing removed. It is not a smaller case: a task under no project
+      // has no coordinator switch, no concurrency budget and no goal — nothing project-level that
+      // could hold it back — which is exactly why this scan must not reach it.
+      const unfiled = await seedTask(s.db, ids, projectId, 'unfiled', { projectId: null });
+      assert.equal(await prerequisiteCount(s.db, unfiled), 0);
+      await assertNothingFinished(s.db, ids);
+
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, unfiled), 0,
+        'a task filed under no project was started by the project scan — nothing project-level '
+          + 'exists that could ever have stopped it again');
+      assert.equal(await sessionCount(s.db, filed), 1,
+        'the paired positive did not start, so the control above proves nothing');
+      assert.equal(await runRequestCount(s.db, ids.ownerId, unfiled), 0,
+        'the scan offered an unfiled task to the run door');
     } finally {
       await s.db.$disconnect();
     }

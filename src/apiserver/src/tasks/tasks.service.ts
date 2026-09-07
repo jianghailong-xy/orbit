@@ -976,6 +976,14 @@ const RECONCILE_INTERVAL_MS = 60_000;
 // rather than one that holds the timer for minutes and starves the two sweeps behind it.
 export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
 
+// How many independent project tasks one ready sweep will release (see the second scan in
+// reconcileReadyTasks). The dependency scan beside it states no bound and converges on
+// `takeBudget`, which counts per runner and per list; this scan is bounded per PROJECT instead, so
+// enough coordinated projects would still hand one sweep an unbounded list. Same bargain as the
+// scheduled sweep above: what it does not take this minute it takes the next, in the same order,
+// because the tasks it left keep their OPEN row and stay candidates.
+const INDEPENDENT_DISPATCH_MAX_PER_SWEEP = 200;
+
 /**
  * WHICH MOMENT an automatic trigger is acting on, carried into the dispatch so the dispatch can
  * tell whether that moment is still the current one.
@@ -3417,18 +3425,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         else startingNow += 1;
         continue;
       }
-      // A task with no prerequisites is never auto-run, however runnable it looks: the sweep's
-      // predicate requires a prerequisite that is DONE (AUTO_RUN_READY_SQL), because auto-run
-      // means "start when what you were waiting for finishes" — not "start because nothing is in
-      // the way". `autoRunWhenReady` says as much: ignored when there are no prerequisites.
+      // A task with no prerequisites is auto-run only UNDER A PROJECT. The dependency sweep's own
+      // predicate skips it — AUTO_RUN_READY_SQL anchors on the task HAVING an edge, satisfied or
+      // not — and what starts it instead is the independent-release pass
+      // (PROJECT_INDEPENDENT_READY_SQL), which runs on a completion in its project and once a
+      // minute on the ready sweep, and is scoped to one project throughout. Filed under no project
+      // there is still nothing that would start it, which is most of a batch.
       //
-      // Getting this wrong is not a rounding error on the card. The roots of a fresh DAG have no
-      // prerequisites, so a flat batch of fifty would have promised fifty runs within the minute
-      // and started none of them.
+      // Getting this wrong is not a rounding error on the card, in either direction. The roots of
+      // a fresh DAG have no prerequisites: outside a project, calling fifty of them "starting now"
+      // would promise fifty runs that never come, and inside one, calling them "needs manual
+      // start" would have said nothing happens while fifty ran within the minute.
+      //
+      // Read off the item, so `coordinator_enabled` — the project's switch, which decides whether
+      // that pass acts at all — is not consulted: a preview writes nothing and this is the one
+      // fact about the landing it would need a second read to learn. The residual error is
+      // therefore over-reporting under a project whose coordinator is switched off, which is the
+      // safe direction and the one this whole branch exists to keep it on.
       const hasPrerequisites =
         (item.dependsOnRefs?.length ?? 0) + (item.dependsOnTaskIds?.length ?? 0) > 0;
       if (!hasPrerequisites) {
-        needsManualStart += 1;
+        if (item.projectId && item.autoRunWhenReady !== false && runnable) startingNow += 1;
+        else needsManualStart += 1;
         continue;
       }
       if (waitsOnBatch || waitsOnExisting) {
@@ -8379,13 +8397,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Periodic backstop for the auto-run edge triggerDependents can miss. triggerDependents
+   * Periodic backstop for the auto-run edges the completion path can miss. triggerDependents
    * fires only at the instant a prerequisite reaches DONE, so a dependent that is READY
    * then but not yet runnable — no assignee, its assignee's runner offline, or a transient
    * execute() failure — is left OPEN and never revisited. This pass re-dispatches any task
    * that has since become genuinely runnable: OPEN, opted into auto-run, all prerequisites
-   * DONE (READY — it therefore HAS prerequisites; a task with none is never auto-run), its
-   * assignee bound to a runner, and not already occupied by a live/queued session.
+   * DONE (READY — it therefore HAS prerequisites), its assignee bound to a runner, and not
+   * already occupied by a live/queued session.
+   *
+   * A task with no prerequisites at all is the SECOND scan below, and it is here for exactly the
+   * same reason. `dispatchIndependentSiblingsOf` is the only thing that starts those, and it hangs
+   * off a completion the same way triggerDependents does — one that a project which has gone quiet
+   * never delivers: three call sites reach that edge, and an agent writing DONE through task_update
+   * is none of them. A project filed as a batch of independent tasks therefore showed them ready
+   * and started none of them, which is the asymmetry this backstop exists to close.
    *
    * Repeating the pass is only safe while something stops a *terminated* run from making its
    * task a candidate again: execute()'s session dedup covers a run still in flight, but the
@@ -8427,6 +8452,69 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       -- Riding on this scan rather than a second round trip.
       LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
       WHERE ${AUTO_RUN_READY_SQL}`;
+    // The sweep's SECOND candidate set, merged into the first rather than dispatched on its own:
+    // a coordinated project's tasks that depend on NOTHING. The two scans cannot select the same
+    // task — one requires an edge and the other requires none — so this is a union, not a race.
+    //
+    // Merged HERE, before the gates below, because those gates are the sweep's and not the
+    // dependency scan's: the quota gate, the failure backoff, the disk floor, the materialisation
+    // budget and the dispatch epoch fence each answer a question about starting a run, and a
+    // second starter that reached `execute` around them would be a second set of rules to keep in
+    // step. Riding this scan is also why the service still owns ONE timer rather than two: a
+    // second one is how this reconciler once ran twice a minute (see onModuleInit).
+    //
+    // The candidate predicate is PROJECT_INDEPENDENT_READY_SQL unchanged, which is the predicate
+    // the completion edge's release already applies (dispatchIndependentSiblingsOf). One clock and
+    // one completion reaching the same tasks is fine; two spellings of "may this task start on its
+    // own" is how they come to disagree, and the flags they read are on the task itself.
+    //
+    // The project join is both the gate and the entry point. `coordinator_enabled` is the switch —
+    // releasing the next task is a coordinator's action, so a project whose coordinator is off must
+    // not have one taken on its behalf — and it is also the only SELECTIVE thing this scan has,
+    // standing where AUTO_RUN_READY_SQL puts its dependency anchor: a candidate has to belong to
+    // one of the few projects whose coordinator is on, rather than be any OPEN task in the
+    // deployment. Not measured the way that anchor was (264ms -> 32ms); if this scan ever turns up
+    // in a slow log, `task_project_id_idx` is the join to look at first.
+    //
+    // `project.status` is deliberately NOT read here: no dispatch path reads it today, and adding
+    // it on one side only would fork the two predicates.
+    rows.push(...(await this.prisma.$queryRaw<typeof rows>`
+      SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             c.list_id AS "listId", e.epoch AS "dispatchEpoch"
+      FROM (
+        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at,
+               -- The project's own budget, which nothing else on this path enforces: takeBudget
+               -- below spends the RUNNER's cap and a paused list's, and neither of them knows what
+               -- one project may run at once. Ranked oldest first, so a project with more ready
+               -- tasks than room releases the one that has waited longest.
+               row_number() OVER (PARTITION BY t.project_id ORDER BY t.created_at, t.id) AS "rank",
+               -- Counted exactly as the completion edge counts it, down to the skipped statuses: a
+               -- slot is held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run
+               -- of a task that has just finished does not fill the budget it was released into.
+               p.max_concurrent_tasks - (
+                 SELECT count(*)::int FROM task o
+                  WHERE o.project_id = p.id
+                    AND o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+                    AND EXISTS (
+                      SELECT 1 FROM session s
+                       WHERE s.task_id = o.id
+                         AND s.status IN (${Prisma.join(
+                           TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+                           ', ',
+                         )})
+                    )
+               ) AS "free"
+          FROM task t
+          JOIN project p ON p.id = t.project_id AND p.coordinator_enabled = true
+         WHERE ${PROJECT_INDEPENDENT_READY_SQL}
+      ) c
+      LEFT JOIN workspace a ON a.id = c.assignee_id
+      LEFT JOIN runner r ON r.id = a.runner_id
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = c.id
+      WHERE c."rank" <= c."free"
+      ORDER BY c.created_at, c.id
+      LIMIT ${INDEPENDENT_DISPATCH_MAX_PER_SWEEP}`));
     if (rows.length === 0) return;
     // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
     // project's last interactive session. One batched lookup for the whole sweep rather than a

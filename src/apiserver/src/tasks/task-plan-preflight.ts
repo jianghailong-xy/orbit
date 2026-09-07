@@ -444,16 +444,23 @@ export function preflightPlan(facts: PlanFacts): PlanPreflightFinding[] {
       );
       continue;
     }
-    // A task with no prerequisites is never auto-run (AUTO_RUN_READY_SQL wants a prerequisite that
-    // is DONE), and one waiting on an item of this same plan is blocked by construction — its
-    // prerequisite is brand new and therefore OPEN. So what starts at once is exactly the items
-    // that opted in, have an assignee on a runner, and wait on nothing this plan creates.
+    // An item waiting on another item of this same plan is blocked by construction — its
+    // prerequisite is brand new and therefore OPEN. Nothing else here holds an item back, and in
+    // particular having no prerequisites at all does not: the dependency sweep skips those
+    // (AUTO_RUN_READY_SQL anchors on the task HAVING an edge, satisfied or not), and the
+    // independent-release pass under this very project starts them — on a sibling's completion,
+    // and once a minute on the ready sweep. Every item counted here is already filed under a
+    // project, which is that pass's whole scope. So what starts at once is exactly the items that
+    // opted in, have an assignee on a runner, and wait on nothing this plan creates.
+    //
+    // `coordinator_enabled` would narrow this further and is deliberately not read: it is the
+    // project's switch, not a property of the plan, and the direction it errs in — announcing runs
+    // for a project that will not take them — is the one a budget warning can be wrong in safely.
     const startingNow = items.filter((item) =>
       item.autoRunWhenReady
       && !!item.assigneeId
       && facts.world.workspaces[item.assigneeId]?.hasRunner
-      && item.dependsOnRefs.length === 0
-      && item.dependsOnTaskIds.length > 0).length;
+      && item.dependsOnRefs.length === 0).length;
     if (startingNow > project.maxConcurrentTasks) {
       add(
         items[0],

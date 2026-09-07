@@ -7,6 +7,7 @@ import {
   TasksService,
 } from './tasks.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { recordingQueryRaw } from './query-raw-test-helper';
 
 interface FailureHistory {
@@ -57,27 +58,36 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
   const taskIds = [...readyTaskIds, ...history.map((h) => h.taskId)];
   const executed: string[] = [];
   const prisma = {
-    // Two raw queries reach this stub. The READY-task scan arrives as a tagged template (an
-    // array of string parts); lastProviderByWorkspace — which the sweep now derives each task's
-    // provider through, the column being gone — passes a Prisma.sql object. Telling them apart
-    // by shape is what lets a test still say "these tasks run on codex" in one place.
-    $queryRaw: async (q: unknown) =>
-      Array.isArray(q)
-        ? taskIds.map((id) => ({
-            id,
-            ownerId: 'owner-1',
-            workspaceId: AGENT_ID,
-            runnerId: 'runner-1',
-            freeBytes: options.freeBytes ?? null,
-            minFreeDiskMb: options.minFreeDiskMb ?? null,
-          }))
-        : [
-            {
-              workspace_id: AGENT_ID,
-              provider: options.provider ?? 'codex',
-              provider_builtin: true,
-            },
-          ],
+    // Three raw queries reach this stub. The two candidate scans arrive as tagged templates;
+    // lastProviderByWorkspace — which the sweep now derives each task's provider through, the
+    // column being gone — passes a composed Prisma.sql. Told apart through the shared renderer, so
+    // that a double answers by what was ASKED rather than by which calling convention carried it.
+    //
+    // The independent scan — a coordinated project's tasks that depend on nothing — selects
+    // nothing here, and that is this world rather than a convenience: these fixtures have no
+    // projects at all, so no row of theirs could pass a predicate that joins one. Answering it
+    // with the READY rows would hand the sweep every task twice.
+    $queryRaw: async (...args: unknown[]) => {
+      const query = renderRawQuery(args);
+      if (query.shape !== 'tagged-template') {
+        return [
+          {
+            workspace_id: AGENT_ID,
+            provider: options.provider ?? 'codex',
+            provider_builtin: true,
+          },
+        ];
+      }
+      if (query.text.includes('coordinator_enabled')) return [];
+      return taskIds.map((id) => ({
+        id,
+        ownerId: 'owner-1',
+        workspaceId: AGENT_ID,
+        runnerId: 'runner-1',
+        freeBytes: options.freeBytes ?? null,
+        minFreeDiskMb: options.minFreeDiskMb ?? null,
+      }));
+    },
     runner: {
       findMany: async () => [{ id: 'runner-1', planUsage: options.planUsage ?? null }],
     },
