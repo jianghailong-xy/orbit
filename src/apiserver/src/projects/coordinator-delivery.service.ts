@@ -287,6 +287,12 @@ export class CoordinatorDeliveryService {
    * person that the decision door refuses whichever button they press. `readAt` travels with the
    * rows because the message says when the snapshot was taken, and a reader who is told that can
    * tell a question that moved from a delivery that failed.
+   *
+   * It is the same read the decision rail makes on every page load, and it costs what that costs:
+   * a few queries per open question. The difference is that it is now made on the way out of a
+   * write rather than on the way into a screen, and what bounds it is what bounds the rail — a
+   * question is something a person is going to be shown, so an account with a thousand of them has
+   * a problem this read is reporting rather than causing.
    */
   private async evidenceAsk(
     ownerId: string,
