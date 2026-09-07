@@ -644,6 +644,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only looked at the turn permit would rewrite the checkout under it.
 	bg := newBgTailer(sessionCtx, emit, pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
+	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
+	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
+	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
+	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
+	// discovered. The alert is the same one `orbit notify` sends, rate limit and all.
+	bg.notifyWhenCold(
+		func() bool { return pool.engineResident(live) },
+		func(message string) error {
+			_, err := t.notify(job.SessionID, message)
+			return err
+		},
+	)
 	// Stage-0 stopgap: the pool's only notion of "this session is doing something" is
 	// the active turn permit, which a parked session with a live Bash(run_in_background)
 	// child does not hold — and that child is a child of the engine, so recycling the

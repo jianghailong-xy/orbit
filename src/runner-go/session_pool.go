@@ -985,6 +985,19 @@ func (p *sessionPool) isActive(s *liveSession) bool {
 	return p.sessions[s.id] == s && s.active && !s.detaching
 }
 
+// engineResident reports whether this supervisor currently has an engine process,
+// which is the difference between warm and cold. A cold session has nobody to read
+// what its background jobs did, so it is the one that has to be told out of band.
+//
+// Takes p.mu, so a caller holding another lock must not be one the pool calls back
+// into under p.mu (bgJobsLive is exactly that) — see finishJob, which asks after
+// releasing the tailer's.
+func (p *sessionPool) engineResident(s *liveSession) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.sessions[s.id] == s && s.resident
+}
+
 func (p *sessionPool) remove(s *liveSession) {
 	p.mu.Lock()
 	if p.sessions[s.id] == s {

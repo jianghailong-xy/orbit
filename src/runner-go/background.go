@@ -80,6 +80,16 @@ type bgTailer struct {
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
 	// and "that job exited 7" are different answers.
 	jobs map[string]*bgJob
+	// engineResident answers "is there an engine to read this right now". Immutable
+	// after newBgTailer/notifyWhenCold; never called while b.mu is held, because the
+	// pool holds its own lock to answer and already calls back into this tailer.
+	// nil where no pool is at stake (parsing tests), and read as "resident" — the
+	// safe direction, since it only ever suppresses an alert.
+	engineResident func() bool
+	// notify is the existing per-account push channel (`orbit notify` / the notify
+	// MCP tool), reached here for the one thing this project exists to deliver: the
+	// job you left running finished, and nobody was here to see it. nil disables it.
+	notify func(message string) error
 }
 
 // liveShell is a background shell with a tail running. engineOwned separates the agent's
@@ -105,6 +115,14 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 		terminal: map[string]bool{},
 		jobs:     map[string]*bgJob{},
 	}
+}
+
+// notifyWhenCold installs the two halves of "tell the human": how to ask whether
+// an engine is resident, and how to reach their devices. Called once, before any
+// job can be started, so the fields stay immutable for the tailer's life.
+func (b *bgTailer) notifyWhenCold(engineResident func() bool, notify func(message string) error) {
+	b.engineResident = engineResident
+	b.notify = notify
 }
 
 // holdFor / releaseHold declare this tailer's shells to whoever fences the

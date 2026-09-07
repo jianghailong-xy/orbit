@@ -143,6 +143,7 @@ import {
   RUNTIME_STARTED_SYSTEM_SUBTYPE,
   buildResumeContinuation,
 } from './resume-continuation';
+import { appendBackgroundJobsContext } from './background-jobs-context';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { engineTurnActiveAfter } from './engine-turn';
@@ -2435,6 +2436,29 @@ export class RunnerApiController {
           // a turn, and a steer joins a turn that is already under way.
           if (t.kind !== 'steer') {
             content = (await this.listEvents?.appendFor(tx, sessionId, content)) ?? content;
+          }
+        }
+        // The background work this session left running, said to the engine that comes back to it.
+        // Outside the branch above on purpose: a re-delivery replaced the person's text with a
+        // continuation nudge, and an engine that had to be restarted is the most literal case of
+        // one that never saw its job finish.
+        //
+        // Best-effort, exactly like the list conditions: a note about a build must never be the
+        // reason the turn carrying it fails to be delivered.
+        if (t.kind !== 'steer') {
+          try {
+            content = (await appendBackgroundJobsContext(
+              tx,
+              sessionId,
+              t.id,
+              leaseGeneration,
+              content,
+            )) ?? content;
+          } catch (e) {
+            this.logger.warn(
+              `could not attach background jobs to session ${sessionId}: `
+              + `${e instanceof Error ? e.message : e}`,
+            );
           }
         }
         if (sessionContext) {

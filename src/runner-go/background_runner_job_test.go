@@ -66,6 +66,19 @@ func (e *bgJobEvents) forJob(jobID string) []map[string]interface{} {
 	return out
 }
 
+// terminalsFor is every terminal report for one job. A job also emits a durable
+// `running` background_task when it starts (that is what a replacement engine reads
+// on resume), so "the report" has to be selected rather than counted.
+func (e *bgJobEvents) terminalsFor(jobID string) []map[string]interface{} {
+	var out []map[string]interface{}
+	for _, p := range e.forJob(jobID) {
+		if isTerminalBgStatus(asString(p["status"])) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // awaitTerminal waits for the job's own terminal report — the event the runner
 // writes after its Wait returns.
 func (e *bgJobEvents) awaitTerminal(t *testing.T, jobID string, timeout time.Duration) map[string]interface{} {
@@ -363,7 +376,7 @@ func TestDrainKillsServicesAndWaitsForJobs(t *testing.T) {
 	h.bg.drainJobs(10 * time.Second)
 
 	waitProcessGone(t, service.PID, 5*time.Second)
-	serviceEvents := h.events.forJob(service.JobID)
+	serviceEvents := h.events.terminalsFor(service.JobID)
 	if len(serviceEvents) != 1 || asString(serviceEvents[0]["status"]) != "killed" {
 		t.Fatalf("service drain reports = %v, want one killed", serviceEvents)
 	}
@@ -391,7 +404,7 @@ func TestDrainKillsAJobThatOutlastsItsBudget(t *testing.T) {
 	h.bg.drainJobs(200 * time.Millisecond)
 
 	waitProcessGone(t, job.PID, 5*time.Second)
-	events := h.events.forJob(job.JobID)
+	events := h.events.terminalsFor(job.JobID)
 	if len(events) != 1 || asString(events[0]["status"]) != "killed" {
 		t.Fatalf("over-budget drain reports = %v, want one killed", events)
 	}

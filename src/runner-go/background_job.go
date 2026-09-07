@@ -258,6 +258,20 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 			"Command running in background with ID: %s. Output is being written to: %s. Read it with mcp__orbit__bg_output.",
 			jobID, outputPath),
 	})
+	// The durable half of the launch, and the only place the command and the output file are
+	// recorded as fields rather than as prose inside a tool_result. A replacement engine cannot
+	// remember a job it never saw, so what the control plane hands it on resume is folded from
+	// this event and the terminal one below — see apiserver background-jobs-context.ts. `kind`
+	// rides along as the discriminator: an engine-owned shell has none, and it died with its
+	// engine, so it must never be offered as work to pick back up.
+	b.emit(evBackgroundTask, map[string]interface{}{
+		"shellId":    jobID,
+		"toolUseId":  jobID,
+		"status":     bgStatusRunning,
+		"kind":       spec.Kind,
+		"command":    spec.Command,
+		"outputPath": outputPath,
+	})
 	// Tails the output for live UI, registers the worktree hold, and — with
 	// engineOwned false — puts this job outside killEngineShells' reach.
 	b.startTail(jobID, jobID, outputPath, false)
@@ -318,12 +332,14 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 	if b.ctx.Err() == nil || reason != "" {
 		if b.markTerminal(job.id) {
 			payload := map[string]interface{}{
-				"shellId":   job.id,
-				"toolUseId": job.id,
-				"status":    status,
-				"kind":      job.kind,
-				"summary":   summary,
-				"output":    readCapped(job.outputPath),
+				"shellId":    job.id,
+				"toolUseId":  job.id,
+				"status":     status,
+				"kind":       job.kind,
+				"command":    job.command,
+				"summary":    summary,
+				"output":     readCapped(job.outputPath),
+				"outputPath": job.outputPath,
 			}
 			if status != bgStatusKilled {
 				payload["exitCode"] = exit
@@ -332,9 +348,37 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 				payload["reason"] = reason
 			}
 			b.emit(evBackgroundTask, payload)
+			b.alertIfNobodyIsWatching(job, status, exit)
 		}
 	}
 	close(job.done)
+}
+
+// alertIfNobodyIsWatching is the whole point of stage 2b: a job that finishes while
+// the session is cold has nobody to tell. The event above is durable, but a durable
+// event is something you find when you come back — and "come back and find out" is
+// the behaviour this project is removing.
+//
+// Cold only. A resident engine is going to be handed the transcript of this event on
+// its next turn, and paying a lock-screen alert for something already on screen is
+// how a channel gets muted. A kill is not announced either: an explicit one was asked
+// for by whoever is reading the answer, and a drain kill happens while the session is
+// being torn down around it.
+//
+// Called with b.mu released — engineResident takes the pool's lock, and the pool
+// takes this tailer's.
+func (b *bgTailer) alertIfNobodyIsWatching(job *bgJob, status string, exit int) {
+	if b.notify == nil || b.engineResident == nil || b.engineResident() {
+		return
+	}
+	if status != bgStatusCompleted && status != bgStatusFailed {
+		return
+	}
+	// Read on a lock screen: what ended, how it ended, and the id that reads the rest.
+	message := fmt.Sprintf("后台%s %s 已结束（退出码 %d）：%s", job.kind, job.id, exit, job.command)
+	if err := b.notify(message); err != nil {
+		logln("could not alert the owner about background job", job.id+":", err)
+	}
 }
 
 // jobStatus reports one job, running or finished.
