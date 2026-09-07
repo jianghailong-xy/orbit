@@ -249,6 +249,11 @@ test('(q) no compose service, no resident process, and the human step is gone fr
     'src/web/src/lib/judgments.ts',
     'src/web/src/pages/JudgmentReviewPage.tsx',
   ];
+  // Say so when the history is missing, rather than measuring its absence. In a shallow clone
+  // HEAD has no parent, so `git show --numstat` reports the whole tree as additions and never
+  // mentions a deleted file at all — a wrong number where a plain error belongs.
+  assert.equal(git('rev-parse', '--is-shallow-repository'), 'false',
+    'this census reads git history: check out with full history (CI: fetch-depth: 0)');
   let numstat: string;
   const commits = git('log', '--format=%H', '--', REMOVAL_MIGRATION).split('\n').filter(Boolean);
   if (commits.length > 0) {

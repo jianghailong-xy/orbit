@@ -184,6 +184,11 @@ test('(h) no compose service, no resident process, and the files it lived in shr
 
   // And the line tally over the files the startup protocol actually lived in. Naming them is the
   // point: a whole-diff count would be dominated by the specs written to prove this removal.
+  // Say so when the history is missing, rather than measuring its absence. In a shallow clone
+  // HEAD has no parent, so `git show --numstat` reports the whole tree as additions and never
+  // mentions a deleted file at all — a wrong number where a plain error belongs.
+  assert.equal(git('rev-parse', '--is-shallow-repository'), 'false',
+    'this census reads git history: check out with full history (CI: fetch-depth: 0)');
   const commits = git('log', '--format=%H', '--', REMOVAL_MIGRATION).split('\n').filter(Boolean);
   const numstat = commits.length > 0
     ? commits.map((sha) => git('show', '--numstat', '--format=', sha)).join('\n')

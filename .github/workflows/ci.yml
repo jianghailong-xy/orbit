@@ -19,7 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Two removal censuses (evidence-judgment-removal, session-current-work-startup-removal)
+      # measure `git show --numstat` over the commit that carries their migration. A shallow
+      # checkout leaves HEAD parentless, so that reports the whole tree as additions and never
+      # mentions a deleted file at all. They need the history they read.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 26
