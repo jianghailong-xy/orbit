@@ -9,7 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
-import { WakeFact } from './coordinator-wake';
+import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
 
@@ -117,6 +117,21 @@ export const DELIVERY_COORDINATOR_SESSION_UNAVAILABLE = 'DELIVERY_COORDINATOR_SE
 /** The project went away between the claim and the delivery. The FK cascade is racing us; it wins. */
 export const DELIVERY_PROJECT_GONE = 'DELIVERY_PROJECT_GONE';
 
+/**
+ * What one MESSAGE to the standing conversation did, with nothing said about a ledger row.
+ *
+ * The refusal codes are the same three above and mean the same three things; what is missing is
+ * the wake. `send` below turns this into a `CoordinatorDeliveryOutcome` by releasing or binding
+ * the key it holds, and a caller whose fact ends against a NAMED CONSUMER instead — the evidence
+ * ledger's, through `CompletionInputRouter.routeCompletionEvidence` — has no key of its own to
+ * spend here and reads this answer directly.
+ */
+export type CoordinatorMessageOutcome =
+  /** The message is on the conversation, under the key derived from the fact. */
+  | { outcome: 'SENT'; sessionId: string; clientTurnId: string }
+  /** Nothing was written. Which state of the world it was is the code. */
+  | { outcome: 'REFUSED'; refusalCode: string };
+
 export type CoordinatorDeliveryOutcome =
   /** This delivery handed the fact to the standing conversation. Exactly one delivery ever does. */
   | {
@@ -184,25 +199,27 @@ export class CoordinatorDeliveryService {
   }
 
   /**
-   * Write the message, then bind the row — in that order, and the order is the house pattern.
+   * Put one fact's message on the project's standing conversation, and touch no ledger row.
    *
-   * Binding first would name a turn before one existed, so a send that failed would leave a ledger
-   * row claiming a delivery nobody could find. Sending first can in principle write the message and
-   * lose the bind; that costs nothing here, because the turn's key is a function of the FACT, so
-   * the delivery that wins writes the same turn rather than a second one.
+   * Everything §2, §2.1 and §3 say about the carrier is decided here, because this is where the
+   * conversation is read and written: a project with no coordinator, one whose coordinator ended
+   * or is in Trash, and every ordinary refusal `resume` gives come back as a code rather than as
+   * an exception. What is deliberately NOT here is the wake: `send` below holds a claimed key and
+   * releases or binds it around this call, while a fact whose terminal is a NAMED CONSUMER holds
+   * its key through its own router and has nothing to release.
+   *
+   * That second caller is why this is public. Both write the SAME message under the SAME key — the
+   * turn id is a function of the fact — so the two paths cannot tell one conversation the same
+   * thing twice, and neither of them can grow its own idea of when a coordinator may be written to.
    */
-  private async send(
-    fact: WakeFact,
-    wakeId: string,
-    idempotencyKey: string,
-  ): Promise<CoordinatorDeliveryOutcome> {
+  async message(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
     const project = await this.prisma.project.findUnique({
       where: { id: fact.projectId },
       select: { id: true, ownerId: true, title: true, coordinatorSessionId: true },
     });
-    if (!project) return this.refuse(wakeId, idempotencyKey, DELIVERY_PROJECT_GONE);
+    if (!project) return { outcome: 'REFUSED', refusalCode: DELIVERY_PROJECT_GONE };
     if (!project.coordinatorSessionId) {
-      return this.refuse(wakeId, idempotencyKey, DELIVERY_NO_COORDINATOR_SESSION);
+      return { outcome: 'REFUSED', refusalCode: DELIVERY_NO_COORDINATOR_SESSION };
     }
 
     // §2. Not ended, which is the line, and it is read on the standing conversation itself rather
@@ -217,24 +234,21 @@ export class CoordinatorDeliveryService {
       || standing.cancelRequestedAt !== null
       || SessionsService.TERMINAL.includes(standing.status)
     ) {
-      return this.refuse(wakeId, idempotencyKey, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE);
+      return { outcome: 'REFUSED', refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
     }
 
     // The fact's own identity, spent as the turn's idempotency key. `createTurn` holds
     // `(session_id, client_turn_id)` unique and replays the committed turn for a repeat of the
     // same payload, so "the same fact does not say the same thing twice" is a database rule here
     // as well as in 0174's index — which matters for the one window 0174 cannot cover, between
-    // this send and the bind below.
-    const clientTurnId = coordinatorDeliveryTurnId(idempotencyKey);
+    // this send and the bind in `send`.
+    const clientTurnId = coordinatorDeliveryTurnId(wakeIdempotencyKey(fact));
     try {
       await this.sessions.resume(project.ownerId, standing.id, {
         clientTurnId,
         content: buildCoordinatorDeliveryMessage(fact, project.title),
       });
     } catch (e) {
-      // §3. The key goes back BEFORE anything is decided about the error, so every path out of
-      // here — translated or re-thrown — has already released it.
-      await this.wakes.release(wakeId, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE);
       // The refusals `resume` gives for an ordinary state of the world rather than a fault: the
       // conversation is gone (Not Found), it ended or is being written right now (Conflict —
       // `SessionNotSendable` is one of these), its workspace is gone or disabled (Forbidden), or
@@ -245,15 +259,38 @@ export class CoordinatorDeliveryService {
         || e instanceof ForbiddenException
         || e instanceof BadRequestException
       ) {
-        return {
-          outcome: 'REFUSED',
-          wakeId,
-          idempotencyKey,
-          refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE,
-        };
+        return { outcome: 'REFUSED', refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
       }
       throw e;
     }
+    return { outcome: 'SENT', sessionId: standing.id, clientTurnId };
+  }
+
+  /**
+   * Write the message, then bind the row — in that order, and the order is the house pattern.
+   *
+   * Binding first would name a turn before one existed, so a send that failed would leave a ledger
+   * row claiming a delivery nobody could find. Sending first can in principle write the message and
+   * lose the bind; that costs nothing here, because the turn's key is a function of the FACT, so
+   * the delivery that wins writes the same turn rather than a second one.
+   */
+  private async send(
+    fact: WakeFact,
+    wakeId: string,
+    idempotencyKey: string,
+  ): Promise<CoordinatorDeliveryOutcome> {
+    let sent: CoordinatorMessageOutcome;
+    try {
+      sent = await this.message(fact);
+    } catch (e) {
+      // §3. The key goes back BEFORE anything is decided about the error, so every path out of
+      // here — and this one only re-raises, because `message` has already translated every
+      // refusal that is a state of the world — has already released it.
+      await this.wakes.release(wakeId, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE);
+      throw e;
+    }
+    if (sent.outcome === 'REFUSED') return this.refuse(wakeId, idempotencyKey, sent.refusalCode);
+    const { sessionId, clientTurnId } = sent;
 
     // One statement: the row lock and the write, with the status this call read as the condition.
     // `updateMany` rather than `update`, because "no row matched" must be an answer rather than an
@@ -264,12 +301,12 @@ export class CoordinatorDeliveryService {
       where: { id: wakeId, status: 'CLAIMED' },
       data: {
         status: 'DELIVERED',
-        sessionId: standing.id,
+        sessionId,
         delivery: { clientTurnId } satisfies WakeDeliveryRecord,
       },
     });
     if (bound.count === 0) return { outcome: 'ALREADY_DELIVERED', wakeId, idempotencyKey };
-    return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId: standing.id, clientTurnId };
+    return { outcome: 'DELIVERED', wakeId, idempotencyKey, sessionId, clientTurnId };
   }
 
   private async refuse(

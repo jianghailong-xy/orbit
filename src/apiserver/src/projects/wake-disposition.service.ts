@@ -16,7 +16,10 @@ import {
   blockerDisposition,
   declaredPaths,
 } from './blocker-disposition';
-import { CoordinatorDeliveryService } from './coordinator-delivery.service';
+import {
+  type CoordinatorMessageOutcome,
+  CoordinatorDeliveryService,
+} from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { WakeFact, criterionSubjectId } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
@@ -156,6 +159,24 @@ export class WakeDispositionService {
     return judged.outcome === 'REFUSED'
       ? { outcome: 'REFUSED', refusalCode: judged.refusalCode }
       : { outcome: judged.outcome };
+  }
+
+  /**
+   * The message without the terminal: put this fact on the standing conversation and leave the
+   * ledger alone.
+   *
+   * `openIfDecisive` spends a fact ON that conversation and binds its wake row to the turn. A fact
+   * whose terminal is a NAMED CONSUMER cannot end that way — one fact has one terminal — and still
+   * has something to say, which is what the evidence ledger's door asks for. Both reach the same
+   * performer through here rather than through two, because "may this conversation be written to,
+   * and under which key" is one reading and a second holder of `CoordinatorDeliveryService` would
+   * be a second place for it to drift.
+   *
+   * It authorizes nothing, exactly like the two answers above: the caller's own producer decided
+   * that before it got here.
+   */
+  notifyStandingCoordinator(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
+    return this.deliveries.message(fact);
   }
 
   /**

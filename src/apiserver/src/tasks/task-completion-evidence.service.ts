@@ -378,7 +378,10 @@ export class TaskCompletionEvidenceService {
     // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
     // facts appears in this route or its key.
     if (committed.projectId && this.completionInputs) {
-      await this.completionInputs.route(
+      // Recorded against the consumer these rows have always named, and delivered to the
+      // conversation this project is coordinated from. Which consumer, which conversation and what
+      // a project with no conversation gets instead are all that door's, not this write's.
+      await this.completionInputs.routeCompletionEvidence(
         completionEvidenceRevisedFact({
           projectId: committed.projectId,
           taskId,
@@ -386,10 +389,6 @@ export class TaskCompletionEvidenceService {
           criterionRevision: committed.evidenceRow.criterionRevision,
           evidenceDigest: committed.evidenceRow.evidenceDigest,
         }),
-        // The wake's stored consumer vocabulary, unchanged: the label is what these rows have
-        // always said and what the CHECK still accepts. Nothing derives a judgment request from
-        // this fact any more — see COMPLETION_INPUT_CONSUMERS.
-        'JUDGMENT_REQUEST_DERIVER',
       );
     }
     return committed.evidence;

@@ -146,6 +146,40 @@ export class CompletionInputRouter {
   }
 
   /**
+   * The evidence ledger's own door: one committed completion-evidence revision, recorded against
+   * its named consumer AND said out loud to the conversation coordinating this project.
+   *
+   * WHY THE DELIVERY IS HERE RATHER THAN AT THE CALL SITE
+   * ====================================================
+   * `route`'s third argument has been a no-op for this fact since the judgment machinery was
+   * removed on 2026-09-02: the revision was claimed, recorded and nothing happened next, which is
+   * a ledger entry nobody reads. This is that argument, wired. It is a door on this router rather
+   * than a closure in `TaskCompletionEvidenceService` because the performer belongs to this
+   * module's graph and not to a task write — the same argument the four doors below make.
+   *
+   * WHY THE CONSUMER IS STILL `JUDGMENT_REQUEST_DERIVER`
+   * ===================================================
+   * Unchanged, and deliberately: `completion-input.ts` says the label is what these rows have
+   * always said and what the CHECK still accepts, and a delivery is not a reason to rewrite the
+   * vocabulary of rows already written. What changed is that something now happens BEFORE the row
+   * reaches its terminal, not what the terminal is called.
+   *
+   * WHY A MESSAGE THAT COULD NOT BE SENT IS NOT AN ERROR HERE
+   * ========================================================
+   * `notifyStandingCoordinator` answers with a refusal code for every state of the world that has
+   * no recipient in it — no coordinator conversation, one that ended, one still holding a message
+   * it has not read. Throwing on those would release the key and re-raise at a caller whose write
+   * has already committed (`coordinator-delivery.service.ts` §3), so the fact is recorded either
+   * way and the refusal stays where it was decided. What a project with NO recipient at all should
+   * do about it is a question this door does not answer.
+   */
+  async routeCompletionEvidence(fact: WakeFact): Promise<CompletionInputRouteOutcome> {
+    return this.route(fact, 'JUDGMENT_REQUEST_DERIVER', async () => {
+      await this.disposition.notifyStandingCoordinator(fact);
+    });
+  }
+
+  /**
    * The second door: the projects whose task set one committed task write may have closed.
    *
    * `route` above ends a fact CONSUMED against a NAMED durable consumer. A fact that has to be

@@ -82,6 +82,11 @@ export function describeWakeFact(fact: WakeFact): string {
         `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了，但没有任何合并回执能证明这些成果` +
         `已经在默认分支上（落地判定：${String(detail.landing ?? '未知')}）。`
       );
+    case 'COMPLETION_EVIDENCE_REVISED':
+      return (
+        `任务 ${uuidToBase62(fact.subjectId)} 提交了第 ${String(detail.evidenceRevision ?? '未知')} `
+        + '版完成证据。'
+      );
     case 'COMPLETION_ACK_STALE':
       {
         const binding = detail.binding && typeof detail.binding === 'object'
@@ -204,9 +209,30 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
  *      running when this arrived reads it afterwards, by which time its own reads are newer than
  *      anything this message could have carried. A reader that assumed otherwise would act on a
  *      world that has moved.
+ *
+ * AND WHY A SECOND FACT GETS A DIFFERENT SECOND LINE
+ * =================================================
+ * Lines 1, 3 and 4 are properties of the carrier and are the same for every fact delivered here.
+ * Line 2 is not: it is the ACTION, and the merge order above is the action `CRITERION_UNLANDED`
+ * calls for. `COMPLETION_EVIDENCE_REVISED` — one new revision of a task's completion evidence,
+ * delivered by the evidence ledger's own door — calls for no merge, so telling its reader to merge
+ * something would be prescribing an action nothing about the fact justifies. It gets the fact and
+ * the two reads that lead to the rest of it, and what it should ASK about them is not this
+ * function's to invent.
  */
 export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: string): string {
   const projectId = uuidToBase62(fact.projectId);
+  if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
+    return (
+      `【项目「${projectTitle}」有一条新的完成证据】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `证据自己读：task_get（taskId 传 ${uuidToBase62(fact.subjectId)}）读这个任务和它的验收标准，`
+      + `project_get（projectId 传 ${projectId}）读项目声明的标准。这条消息里除了上面那个事实，`
+      + '没有这个任务或这个项目的任何其他状态。\n\n'
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
   return (
     `【项目「${projectTitle}」有干完但还没落 main 的成果】\n\n`
     + `${describeWakeFact(fact)}\n\n`
