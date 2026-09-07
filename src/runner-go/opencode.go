@@ -856,7 +856,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
 		job.Agent.AppendSystemPrompt,
-		openCodeOrbitCLIInstructions(executable),
+		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork()),
 	), "\n\n"))
 	if appendPrompt != "" {
 		instructionsPath := filepath.Join(scratchDir, "opencode-instructions.txt")
@@ -923,8 +923,8 @@ func nonEmptyStrings(values ...string) []string {
 	return out
 }
 
-func openCodeOrbitCLIInstructions(executable string) string {
-	return strings.Replace(orbitCLIInstructions(executable), "mcp__orbit__*", "orbit_*", 1)
+func openCodeOrbitCLIInstructions(executable string, insideRecordedWork bool) string {
+	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork), "mcp__orbit__*", "orbit_*", 1)
 }
 
 func appendConfigString(value interface{}, addition string) []string {

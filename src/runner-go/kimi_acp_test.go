@@ -1255,7 +1255,7 @@ func TestKimiPlanReviewBecomesStructuredQuestion(t *testing.T) {
 
 func TestKimiPromptCarriesAgentAndOrbitInstructions(t *testing.T) {
 	agent := AgentExecConfig{SystemPrompt: "Review carefully", AppendSystemPrompt: "Keep it short"}
-	got := kimiPromptText(agent, "/opt/orbit", "hello")
+	got := kimiPromptText(agent, "/opt/orbit", "hello", false)
 	for _, want := range []string{"<orbit-agent-instructions>", "Review carefully", "Keep it short", "/opt/orbit", "hello"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("prompt %q missing %q", got, want)

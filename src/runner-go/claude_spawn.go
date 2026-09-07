@@ -51,6 +51,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		a,
 		orbitExe,
 		job.AllowOrchestration,
+		job.insideRecordedWork(),
 	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"

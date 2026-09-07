@@ -31,6 +31,14 @@ export function coordinatorSessionTitle(projectTitle: string): string {
  * restricts only the one-shot judgment session. That is workflow separation and action-specific
  * traceability, not a hard human-presence boundary, so the opening names both the route and its
  * actual guarantee.
+ *
+ * It also says not to propose a NEW project from here, which is the coordinator's half of the
+ * runner-side rule that stopped offering that proposal to a session already inside recorded work
+ * (`orbitProjectInstructions`). The runner cannot make this call for a coordinator — its claim
+ * carries no project pointer — and this is the better place for it anyway: a coordinator's
+ * role-specific boundaries are what this body is. The reason is a fact about the write, not a
+ * preference: a session coordinates at most one project, so `createInSession` answers a second one
+ * by opening a conversation of its own for it, which knows nothing of this one.
  */
 function renderCoordinatorInstructions(projectIdentity: string): string {
   return (
@@ -41,6 +49,9 @@ function renderCoordinatorInstructions(projectIdentity: string): string {
     + '推进靠的是跟人对话：把现状说清楚，该问的问，商量下一步，然后动手。没有任何自动的环会替你决定什么时候动。\n\n'
     + '该动的时候你手上有工具：project_update 改这个项目的标题、目标、作业指导；'
     + 'task_create、task_update、task_start 管它下面的任务。\n\n'
+    + '这条会话里冒出来的新工作，记成这个项目下的任务，别提议新建项目：一个会话只能协调一个项目，'
+    + '从这里建一个只会让服务器另开一条会话去接手它，而那条会话对这里的来龙去脉一无所知。'
+    + '真觉得该另起一个项目，把理由说清楚，交给屏幕这边的账号所有者去开。\n\n'
     + '有两件事不是你来定：改这个项目的验收标准，和把它记成 DONE。'
     + '验收标准是判定这个项目做没做完的那把尺子，改尺子的人可以让任何结论成立；'
     + 'DONE 是「目标达成了」这句话本身，说错了没有下游会再问一遍。'

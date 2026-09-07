@@ -169,8 +169,8 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if !ok || orbit["kind"] != "application" {
 		t.Fatalf("orbit CLI context = %#v", additional["orbit_00000000_cli"])
 	}
-	if orbit["value"] != orbitCLIInstructions(exe) {
-		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe))
+	if orbit["value"] != orbitCLIInstructions(exe, false) {
+		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe, false))
 	}
 	owner, ok := additional["orbit_00000000_agent_append_00000000"].(map[string]interface{})
 	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {
@@ -405,7 +405,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	if len(input) != 2 || !strings.Contains(input[0]["text"].(string), "<orbit_application_context>") || input[1]["text"] != "hello" {
 		t.Fatalf("legacy input = %#v", input)
 	}
-	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit")
+	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false)
 	if len(items) != 1 || items[0]["role"] != "developer" {
 		t.Fatalf("injected items = %#v", items)
 	}
@@ -421,7 +421,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 
 func TestCodexAdditionalContextChunksLongOwnerInstructionsLosslessly(t *testing.T) {
 	want := strings.Repeat("界abc", 900)
-	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7)
+	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false)
 	keys := make([]string, 0, len(context))
 	for key := range context {
 		if strings.HasPrefix(key, "orbit_00000007_agent_append_") {

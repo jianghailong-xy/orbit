@@ -63,7 +63,7 @@ func orbitCLIInstructionExecutable(exe string) string {
 //
 // Kept ASCII and roughly a paragraph long: codex carries this as a single
 // application-context value capped at 1,000 tokens (see codexAgentAdditionalContext).
-func orbitCLIInstructions(executable string) string {
+func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 	executable = orbitCLIInstructionExecutable(executable)
 	if executable == "" {
 		return ""
@@ -73,12 +73,7 @@ func orbitCLIInstructions(executable string) string {
 		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
 		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
 		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
-		"Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
-		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
-		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
-		"keep working. Do not stop and wait for the answer, and do not propose the same body of work twice. A project is only " +
-		"ever created by an explicit yes: never call project_create without one. After yes, create the Project from this same " +
-		"session so the conversation becomes its coordinator; do not switch or open a session for it.\n\n" +
+		orbitProjectInstructions(insideRecordedWork) +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
@@ -86,8 +81,44 @@ func orbitCLIInstructions(executable string) string {
 		"absolute path. Use `--json` output. Do not run `" + command + " mcp` directly."
 }
 
-func withOrbitCLIInstructions(configured, executable string) string {
-	orbit := orbitCLIInstructions(executable)
+// orbitProjectInstructions is the paragraph about what deserves an Orbit Project, in the two
+// forms a session can be in.
+//
+// A session already running inside recorded work -- the task it was dispatched for, or a project
+// it coordinates -- gets the second form, which does not offer the proposal at all. The plan it
+// would be proposing already exists: work such a session turns up either belongs to the body of
+// work it is in (and `task_create` files it there by itself, since the server derives the project
+// from the session's scope) or is a separate undertaking that is the user's to start. Offering
+// both forms of the same paragraph to both kinds of session is what made the proposal read as
+// something to do on every turn rather than something to do rarely.
+func orbitProjectInstructions(insideRecordedWork bool) string {
+	if insideRecordedWork {
+		return "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
+			"as a task and say what you filed. It lands under the same project this one belongs to, without your naming it. " +
+			"Do not propose recording it as an Orbit Project from here -- work found while executing either belongs to the " +
+			"body of work you are already in, or is a separate undertaking that is the user's to start, and the task you " +
+			"filed is what puts it in front of them. A project is only ever created by an explicit yes: never call " +
+			"project_create without one.\n\n"
+	}
+	return "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
+		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
+		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
+		"keep working. Do not stop and wait for the answer, and do not propose the same body of work twice. A project is only " +
+		"ever created by an explicit yes: never call project_create without one. After yes, create the Project from this same " +
+		"session so the conversation becomes its coordinator; do not switch or open a session for it.\n\n"
+}
+
+// insideRecordedWork reports whether this session is already executing something Orbit has
+// recorded. Today that is exactly "was dispatched for a task" -- which covers a conversation
+// ABOUT a task as well, since the claim carries contextTaskId in the same field. A project's
+// coordinator is the other session this is true of, and it is told so by the coordinator context
+// the server attaches to its turns, which is where its role-specific instructions already live.
+func (s *ClaimedSession) insideRecordedWork() bool {
+	return s != nil && s.TaskID != ""
+}
+
+func withOrbitCLIInstructions(configured, executable string, insideRecordedWork bool) string {
+	orbit := orbitCLIInstructions(executable, insideRecordedWork)
 	if orbit == "" {
 		return configured
 	}
@@ -173,7 +204,13 @@ func appendUnique(values []string, additions ...string) []string {
 // the owner's tool policy. Session command prefixes are added only when the
 // current claimed session may orchestrate; arbitrary orbit subcommands and
 // PATH-resolved binaries do not become approval-free.
-func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, executable string, allowOrchestration bool) []string {
+func appendClaudeAgentInstructionArgs(
+	args []string,
+	agent AgentExecConfig,
+	executable string,
+	allowOrchestration bool,
+	insideRecordedWork bool,
+) []string {
 	// The raw absolute path remains safe for direct exec/MCP configuration. Only
 	// inject and auto-allow the CLI when it is also unambiguous in Claude's
 	// comma-separated Bash(...) permission grammar.
@@ -181,7 +218,7 @@ func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, exec
 	if agent.SystemPrompt != "" {
 		args = append(args, "--system-prompt", agent.SystemPrompt)
 	}
-	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable); appendPrompt != "" {
+	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
 	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable, allowOrchestration)...)
