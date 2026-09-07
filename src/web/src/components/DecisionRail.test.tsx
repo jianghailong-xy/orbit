@@ -63,8 +63,20 @@ function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
     claim: 'the web render test and the full API suite both passed',
     gaps: ['iOS is not covered by this project'],
     citations: [
-      { kind: 'TOOL_CALL', ref: 'toolu_first', resolved: true, reason: null },
-      { kind: 'COMMIT', ref: '7ad996c2', resolved: false, reason: 'no COMMIT of this task matches this reference' },
+      {
+        kind: 'TOOL_CALL',
+        ref: 'toolu_first',
+        resolved: true,
+        reason: null,
+        label: 'Bash · npm test --run DecisionRail',
+      },
+      {
+        kind: 'COMMIT',
+        ref: '7ad996c2',
+        resolved: false,
+        reason: 'no COMMIT of this task matches this reference',
+        label: null,
+      },
     ],
     decidability: { decidable: true, refusal: null, requiredAction: null },
     independence: { independent: true, disqualification: null, requiredAction: null },
@@ -168,15 +180,16 @@ function pressable(html: string, label: string): boolean {
 /** One card, on its own, in whatever state the matrix below is asking about. */
 function card(
   only: PendingDecisionRow,
-  over: { note?: string; busy?: boolean } = {},
+  over: { note?: string; busy?: boolean; citationsOpen?: boolean } = {},
 ): string {
   return render(
     <DecisionCard
       row={only}
-      narrow={false}
+      citationsOpen={over.citationsOpen ?? false}
       note={over.note ?? ''}
       busy={over.busy ?? false}
       error={null}
+      onToggleCitations={() => {}}
       onNote={() => {}}
       onDecide={() => {}}
     />,
@@ -347,7 +360,7 @@ describe('a question is put to the sessions that can answer it, and to no others
 });
 
 describe('the expanded card', () => {
-  const expanded = (over: Partial<PendingDecisionRow> = {}, narrow = false): string => {
+  const expanded = (over: Partial<PendingDecisionRow> = {}, citationsOpen = false): string => {
     const only = row({ taskId: 'task-open', ...over });
     return render(
       <DecisionStrip
@@ -360,7 +373,7 @@ describe('the expanded card', () => {
         }}
         open
         expandedTaskId="task-open"
-        narrow={narrow}
+        citationsOpen={citationsOpen}
         onToggle={() => {}}
         onExpand={() => {}}
       />,
@@ -387,26 +400,70 @@ describe('the expanded card', () => {
     expect(html).toContain('coordinator 会话有判断面');
   });
 
-  it('names the revision and what each citation resolved to', () => {
+  it('leads with the sentence the submitter wrote, ahead of everything checked about it', () => {
+    // A property about order, not about layout: what a person is being asked to confirm comes
+    // before the standard it is measured against, and both come before the machinery. The
+    // screenshot this round started from had it the other way round — twelve opaque handles above
+    // the fold, and the one sentence written for a reader trailing the provenance line after a
+    // dash, in the size that line is set in.
+    const html = expanded();
+    const claim = html.indexOf('the web render test and the full API suite both passed');
+    expect(claim).toBeGreaterThan(-1);
+    expect(claim).toBeLessThan(html.indexOf('Against criterion'));
+    expect(html.indexOf('Against criterion')).toBeLessThan(html.indexOf('Declared gaps'));
+    expect(html.indexOf('Declared gaps')).toBeLessThan(html.indexOf('Citations:'));
+  });
+
+  it('names the revision, the tally, and the citation that did not resolve', () => {
     const html = expanded();
     expect(html).toContain('Evidence rev 2');
     expect(html).toContain('1 of 2 resolved');
-    expect(html).toContain('toolu_first');
+    // The failure is the actionable half of the list, so it is on screen without being asked for.
+    expect(html).toContain('7ad996c2');
     expect(html).toContain('no COMMIT of this task matches this reference');
   });
 
-  it('never folds the declared gaps, and folds the citation list instead when narrow', () => {
-    const wide = expanded();
-    const narrow = expanded({}, true);
+  it('folds the citations that HELD, and never the gaps or the ones that did not', () => {
+    const folded = expanded();
+    const shown = expanded({}, true);
 
-    for (const html of [wide, narrow]) {
+    for (const html of [folded, shown]) {
       expect(html).toContain('Declared gaps');
       expect(html).toContain('iOS is not covered by this project');
+      // Both halves of what a reader acts on survive the fold: the tally that says how many held,
+      // and every citation that did not.
+      expect(html).toContain('1 of 2 resolved');
+      expect(html).toContain('no COMMIT of this task matches this reference');
     }
-    // What narrow gives up is the per-citation list; the tally that says how many held stays.
-    expect(narrow).toContain('1 of 2 resolved');
-    expect(narrow).not.toContain('toolu_first');
-    expect(wide).toContain('toolu_first');
+    expect(folded).not.toContain('Bash · npm test');
+    expect(shown).toContain('Bash · npm test');
+  });
+
+  it('reads a resolved tool call in words, not as the id the server pairs it by', () => {
+    // The screenshot this round started from: twelve `toolu_` ids under one green word, none of
+    // them clickable and none of them comparable to anything else on the card.
+    const html = expanded({}, true);
+    expect(html).toContain('Bash · npm test --run DecisionRail');
+    expect(html).not.toContain('toolu_first');
+    // A kind the server has nothing better for falls back to the ref, which is already readable.
+    expect(html).toContain('7ad996c2');
+  });
+
+  it('offers no disclosure on a card where nothing resolved', () => {
+    // The rule this card is otherwise held to, applied to the fold: a control that opens onto
+    // nothing is the same broken promise as an action that is always refused.
+    const html = expanded({
+      citations: [{
+        kind: 'COMMIT',
+        ref: '7ad996c2',
+        resolved: false,
+        reason: 'no COMMIT of this task matches this reference',
+        label: null,
+      }],
+    });
+    expect(html).toContain('0 of 1 resolved');
+    expect(html).toContain('no COMMIT of this task matches this reference');
+    expect(html).not.toContain('decision-card-citations-toggle');
   });
 
   it('says an empty gap list is a claim rather than an omission', () => {
@@ -784,10 +841,12 @@ describe('the revision line says when, whatever else it has', () => {
     expect(html).toContain('submitted 1h 30m ago');
   });
 
-  it('says legacy evidence states no claim rather than trailing off after the dash', () => {
+  it('says legacy evidence states no claim rather than leading with a blank', () => {
+    // The claim leads the card now, so evidence that has none leads with the sentence saying so:
+    // an empty first line reads as a broken render, not as an older submission.
     const html = card(undecidable({ ageSeconds: 50 * 3600 }));
     expect(html).toContain('submitted 2d 2h ago');
-    expect(html).toContain('this revision states no claim');
+    expect(html).toContain('This revision states no claim');
   });
 
   it('reads a fresh submission as a moment rather than as an age', () => {

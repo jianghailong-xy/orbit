@@ -71,10 +71,11 @@ describe('both cards get their actions from one component', () => {
     const decisionHtml = renderToStaticMarkup(
       <DecisionCard
         row={decisionRow()}
-        narrow={false}
+        citationsOpen={false}
         note=""
         busy={false}
         error={null}
+        onToggleCitations={() => {}}
         onNote={() => {}}
         onDecide={() => {}}
       />,
@@ -120,10 +121,11 @@ describe('both cards get their actions from one component', () => {
             requiredAction: 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
           },
         }}
-        narrow={false}
+        citationsOpen={false}
         note=""
         busy={false}
         error={null}
+        onToggleCitations={() => {}}
         onNote={() => {}}
         onDecide={() => {}}
       />,

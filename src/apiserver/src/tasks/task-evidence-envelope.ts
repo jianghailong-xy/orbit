@@ -70,6 +70,9 @@ export interface EvidenceCitation {
   resolved: boolean;
   /** Why an unresolved citation did not resolve; null once it did. */
   reason: string | null;
+  /** The cited row as a person reads it, or null when the ref is already the readable thing.
+   *  See `citationLabel`. */
+  label: string | null;
 }
 
 export interface EvidenceCriterionMatch {
@@ -210,7 +213,7 @@ interface CitationScope {
 }
 
 type ResolvedRow =
-  | { found: true; toolCall?: { input: unknown; isError: boolean } }
+  | { found: true; toolCall?: { name: string; input: unknown; isError: boolean } }
   | { found: false; foreign: boolean };
 
 /** TOOL_CALL. The handle is the tool_use id the runtime assigned, which is what pairs a call to
@@ -223,9 +226,14 @@ async function resolveToolCall(
 ): Promise<ResolvedRow> {
   const owned = await tx.toolCall.findFirst({
     where: { toolUseId: ref, session: { ownerId: scope.ownerId, taskId: scope.taskId } },
-    select: { input: true, isError: true },
+    select: { name: true, input: true, isError: true },
   });
-  if (owned) return { found: true, toolCall: { input: owned.input, isError: owned.isError } };
+  if (owned) {
+    return {
+      found: true,
+      toolCall: { name: owned.name, input: owned.input, isError: owned.isError },
+    };
+  }
   // Asked separately, and only within this owner: "does this id exist somewhere else of MINE" is
   // answerable without reading another account, and one query ordered the other way round could
   // report a foreign row while an in-scope one existed.
@@ -293,6 +301,35 @@ const RESOLVERS: Record<
   ARTIFACT: resolveArtifact,
 };
 
+const MAX_LABEL_COMMAND = 60;
+
+/**
+ * The cited row as a PERSON reads it, or null when there is nothing better than the ref.
+ *
+ * A `toolu_` id is a handle for the server — it is what pairs a call to its result — and a card
+ * that prints twelve of them beside the word `resolved` is asking its reader to take the word on
+ * faith: the id is not clickable, not comparable to anything else on screen, and says nothing
+ * about what was run. The name and the command are on the row the resolver has already fetched
+ * for layer 3, so this costs no query.
+ *
+ * Null for an UNRESOLVED citation on purpose: no row was found, so the ref is genuinely all
+ * anybody has. Null for the other kinds too — a commit sha and an artifact ref are already the
+ * readable thing, and inventing a second spelling for them would be a label that says less.
+ */
+function citationLabel(row: ResolvedRow): string | null {
+  if (!row.found || !row.toolCall) return null;
+  const command = citedCommand(row.toolCall.input);
+  if (command === null) return row.toolCall.name;
+  // One line: a heredoc or a multi-line script would otherwise put the rest of a shell program
+  // into a list item sized for a sentence.
+  const line = command.replace(/\s+/gu, ' ').trim();
+  if (line === '') return row.toolCall.name;
+  const short = line.length > MAX_LABEL_COMMAND
+    ? `${line.slice(0, MAX_LABEL_COMMAND - 1)}…`
+    : line;
+  return `${row.toolCall.name} · ${short}`;
+}
+
 function citedCommand(input: unknown): string | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const command = (input as Record<string, unknown>).command;
@@ -329,6 +366,7 @@ export async function resolveEvidenceCitations(
         ref: check.ref,
         resolved: false,
         reason: `no ${check.kind} of this task matches this reference`,
+        label: null,
       });
       continue;
     }
@@ -351,7 +389,13 @@ export async function resolveEvidenceCitations(
         'DO_NOT_CLAIM_SUCCESS_OVER_A_FAILED_TOOL_CALL',
       );
     }
-    citations.push({ kind: check.kind, ref: check.ref, resolved: true, reason: null });
+    citations.push({
+      kind: check.kind,
+      ref: check.ref,
+      resolved: true,
+      reason: null,
+      label: citationLabel(row),
+    });
   }
 
   if (!citations.some((citation) => citation.resolved)) {
@@ -392,6 +436,7 @@ export async function describeEvidenceCitations(
         : row.foreign
           ? `this ${check.kind} is recorded under another task`
           : `no ${check.kind} of this task matches this reference`,
+      label: citationLabel(row),
     });
   }
   return citations;

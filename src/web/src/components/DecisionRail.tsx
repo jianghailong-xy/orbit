@@ -4,7 +4,6 @@ import { Alert, Input, Typography } from 'antd';
 import { CardActionButton, CardActions } from './CardAction';
 import { api } from '../api';
 import { pendingDecisionsQuery } from '../lib/queries';
-import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -78,6 +77,10 @@ export interface PendingDecisionCitation {
   ref: string;
   resolved: boolean;
   reason: string | null;
+  /** The cited row in words, when the server has better than the ref: the tool's name and the
+   *  command it ran. Null for a citation that did not resolve — nothing was found to describe —
+   *  and for the kinds whose ref is already readable. */
+  label: string | null;
 }
 
 export interface PendingDecisionIndependence {
@@ -221,32 +224,83 @@ export function formatAge(seconds: number): string {
 }
 
 /**
+ * One group of citations, resolved or not, in the order the submitter wrote them.
+ *
+ * The handle is shown as the server's `label` when it has one — the tool's name and the command
+ * it ran — and as the raw ref when it does not. A `toolu_` id is how the SERVER pairs a call to
+ * its result; to a reader it is an opaque string beside the word `resolved`, which is an
+ * invitation to take the check on faith rather than to make it. A commit sha and an artifact ref
+ * carry no label because they are already the readable thing.
+ *
+ * An unresolved citation never has a label: no row was found, so the ref is genuinely all anybody
+ * has, and the reason beside it is what the reader acts on.
+ */
+function CitationList({ citations }: { citations: PendingDecisionCitation[] }) {
+  return (
+    <ul className="decision-card-citations">
+      {citations.map((citation) => (
+        <li key={`${citation.kind}:${citation.ref}`}>
+          <Typography.Text code>{citation.label ?? citation.ref}</Typography.Text>
+          {/* A resolved row says `resolved` nowhere: it is under a heading that counts them and
+              inside a list that contains nothing else, so the word was the same twelve-fold
+              repetition as the ids, one column to the right. The KIND is kept only where the ref
+              stands alone, because there it is the only thing saying what kind of handle it is. */}
+          {citation.resolved ? (
+            citation.label === null ? (
+              <>{' '}<Typography.Text type="secondary">{citation.kind}</Typography.Text></>
+            ) : null
+          ) : (
+            <>{' '}<Typography.Text type="warning">
+              {citation.reason ?? 'unresolved'}
+            </Typography.Text></>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * One card's contents.
  *
- * `narrow` is the only thing that changes shape, and what it may fold is fixed: the CITATION list
- * collapses to a tally, and the declared gaps never do. Gaps are the field most likely to change
- * the answer — a submission that says what it did not establish is telling the decider where to
- * look — so a screen that hid them to save room would be hiding the reason to press the other
- * button.
+ * One thing folds, at every width: the citations that RESOLVED. What a reader can do with them is
+ * exactly what the tally above them already says, and twelve `toolu_` ids — unclickable, and
+ * comparable to nothing else on the card — pushed the criterion, the declared gaps and the two
+ * buttons below the fold to say it a thirteenth time.
+ *
+ * The unresolved ones never fold, and neither do the gaps, for one reason: both are a reason to
+ * press SEND BACK rather than CONFIRM. A screen that hid them to save room would be hiding the
+ * reason to press the other button — which is the same rule the narrow-screen rule used to state
+ * for gaps alone, now stated for everything that carries a reason.
+ *
+ * That is also why there is no width in this any more. `narrow` folded the whole list on a phone,
+ * including the failures; a disclosure gives back the room at every width without ever taking away
+ * the half of the list that is actionable.
  */
 export function DecisionCard({
   row,
-  narrow,
+  citationsOpen,
   note,
   busy,
   error,
+  onToggleCitations,
   onNote,
   onDecide,
 }: {
   row: PendingDecisionRow;
-  narrow: boolean;
+  /** Whether the citations that resolved are being shown. Held by the strip, like the note, so a
+   *  static render can assert what each state puts on screen. */
+  citationsOpen: boolean;
   note: string;
   busy: boolean;
   error: Error | null;
+  onToggleCitations: (open: boolean) => void;
   onNote: (note: string) => void;
   onDecide: (decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
-  const resolved = row.citations.filter((citation) => citation.resolved).length;
+  const resolved = row.citations.filter((citation) => citation.resolved);
+  const unresolved = row.citations.filter((citation) => !citation.resolved);
+  const tally = `Citations: ${resolved.length} of ${row.citations.length} resolved`;
   // What the door would do, in the order it asks: a standard to measure against at all, and then
   // this reader's standing to be the one measuring. Only a row that passes both has an action that
   // could succeed, so only such a row gets one that can be pressed.
@@ -272,6 +326,27 @@ export function DecisionCard({
         </div>
       )}
 
+      {/* The sentence the submitter wrote about their own work, first and in the card's own voice.
+          It used to be a trailing clause on the provenance line, after a dash, in the type size
+          that line is set in — so the one thing on the card written FOR the reader read as
+          metadata about the row, while twelve machine handles had the width. What is being
+          confirmed is a claim somebody made; the card leads with it. */}
+      <div className="decision-card-section decision-card-claim">
+        {row.claim === '' ? (
+          // Evidence from before the envelope has no claim field at all. The line says so rather
+          // than trailing off after the dash, which is what it did on the screenshot that started
+          // this: a card of blanks reads as a broken render, not as an older submission.
+          <Typography.Text type="secondary">This revision states no claim.</Typography.Text>
+        ) : (
+          <Typography.Text>{row.claim}</Typography.Text>
+        )}
+        <div>
+          <Typography.Text type="secondary">
+            {`Evidence rev ${row.evidenceRevision} · ${formatSubmitted(row.ageSeconds)}`}
+          </Typography.Text>
+        </div>
+      </div>
+
       <div className="decision-card-section">
         <Typography.Text type="secondary">Against criterion </Typography.Text>
         {row.criterion ? (
@@ -283,39 +358,6 @@ export function DecisionCard({
           <Typography.Text>
             This evidence quotes no stated criterion, so there is nothing to measure it against.
           </Typography.Text>
-        )}
-      </div>
-
-      <div className="decision-card-section">
-        <Typography.Text type="secondary">
-          {`Evidence rev ${row.evidenceRevision} · ${formatSubmitted(row.ageSeconds)} — `}
-        </Typography.Text>
-        {row.claim === '' ? (
-          // Evidence from before the envelope has no claim field at all. The line says so rather
-          // than trailing off after the dash, which is what it did on the screenshot that started
-          // this: a card of blanks reads as a broken render, not as an older submission.
-          <Typography.Text type="secondary">this revision states no claim</Typography.Text>
-        ) : (
-          <Typography.Text>{row.claim}</Typography.Text>
-        )}
-      </div>
-
-      <div className="decision-card-section">
-        <Typography.Text type="secondary">
-          {`Citations: ${resolved} of ${row.citations.length} resolved`}
-        </Typography.Text>
-        {/* Narrow screens fold THIS, and only this. */}
-        {narrow ? null : (
-          <ul className="decision-card-citations">
-            {row.citations.map((citation) => (
-              <li key={`${citation.kind}:${citation.ref}`}>
-                <Typography.Text code>{citation.ref}</Typography.Text>{' '}
-                <Typography.Text type={citation.resolved ? 'success' : 'warning'}>
-                  {citation.resolved ? `${citation.kind} resolved` : (citation.reason ?? 'unresolved')}
-                </Typography.Text>
-              </li>
-            ))}
-          </ul>
         )}
       </div>
 
@@ -333,6 +375,30 @@ export function DecisionCard({
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="decision-card-section">
+        {/* The tally, and it is a control only when there is something behind it: a disclosure
+            that opens onto nothing is the same broken promise as an action that is always
+            refused. */}
+        {resolved.length === 0 ? (
+          <Typography.Text type="secondary">{tally}</Typography.Text>
+        ) : (
+          <button
+            className="decision-card-citations-toggle"
+            type="button"
+            aria-expanded={citationsOpen}
+            onClick={() => onToggleCitations(!citationsOpen)}
+          >
+            <Typography.Text type="secondary">{tally}</Typography.Text>
+            <span className="decision-card-citations-caret" aria-hidden="true">
+              {citationsOpen ? '▴' : '▾'}
+            </span>
+          </button>
+        )}
+        {/* Never folded: a citation that did not resolve is a reason to send this back. */}
+        {unresolved.length === 0 ? null : <CitationList citations={unresolved} />}
+        {citationsOpen ? <CitationList citations={resolved} /> : null}
       </div>
 
       <div className="decision-card-section">
@@ -400,21 +466,23 @@ export function DecisionCard({
 function DecisionRows({
   group,
   expandedTaskId,
-  narrow,
+  citationsOpen,
   note,
   busy,
   error,
   onExpand,
+  onToggleCitations,
   onNote,
   onDecide,
 }: {
   group: PendingDecisionRow[];
   expandedTaskId: string | null;
-  narrow: boolean;
+  citationsOpen: boolean;
   note: string;
   busy: boolean;
   error: Error | null;
   onExpand: (taskId: string | null) => void;
+  onToggleCitations: (open: boolean) => void;
   onNote: (note: string) => void;
   onDecide: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
@@ -440,10 +508,11 @@ function DecisionRows({
             {open ? (
               <DecisionCard
                 row={row}
-                narrow={narrow}
+                citationsOpen={citationsOpen}
                 note={note}
                 busy={busy}
                 error={error}
+                onToggleCitations={onToggleCitations}
                 onNote={onNote}
                 onDecide={(decision) => onDecide(row, decision)}
               />
@@ -470,12 +539,13 @@ export function DecisionStrip({
   queue,
   open,
   expandedTaskId,
-  narrow = false,
+  citationsOpen = false,
   note = '',
   busy = false,
   error = null,
   onToggle,
   onExpand,
+  onToggleCitations = () => {},
   onNote = () => {},
   onDecide = () => {},
 }: {
@@ -483,12 +553,15 @@ export function DecisionStrip({
   /** Expanded is a deliberate act; the default is the one line. */
   open: boolean;
   expandedTaskId: string | null;
-  narrow?: boolean;
+  /** Whether the open card is showing the citations that resolved. Default closed, for the same
+   *  reason the strip itself is. */
+  citationsOpen?: boolean;
   note?: string;
   busy?: boolean;
   error?: Error | null;
   onToggle: (open: boolean) => void;
   onExpand: (taskId: string | null) => void;
+  onToggleCitations?: (open: boolean) => void;
   onNote?: (note: string) => void;
   onDecide?: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
 }) {
@@ -505,11 +578,12 @@ export function DecisionStrip({
     <DecisionRows
       group={group}
       expandedTaskId={expandedTaskId}
-      narrow={narrow}
+      citationsOpen={citationsOpen}
       note={note}
       busy={busy}
       error={error}
       onExpand={onExpand}
+      onToggleCitations={onToggleCitations}
       onNote={onNote}
       onDecide={onDecide}
     />
@@ -594,10 +668,6 @@ export function decideEvidence(
   });
 }
 
-/** Where a card runs out of room for the per-citation list. Below this the tally stands in for it;
- *  the gaps are never what gives way. */
-export const DECISION_NARROW_QUERY = '(max-width: 640px)';
-
 /**
  * The wired strip: one query, one mutation, the fold, and the expansion the reader is holding open.
  *
@@ -614,9 +684,9 @@ export function SessionDecisionStrip({
   onDecided?: (line: string) => void;
 }) {
   const qc = useQueryClient();
-  const narrow = useMediaQuery(DECISION_NARROW_QUERY);
   const [open, setOpen] = useState(false);
   const [expandedTaskId, setExpanded] = useState<string | null>(null);
+  const [citationsOpen, setCitationsOpen] = useState(false);
   const [note, setNote] = useState('');
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
@@ -629,6 +699,7 @@ export function SessionDecisionStrip({
     onSuccess: (_result, { row, decision }) => {
       setExpanded(null);
       setNote('');
+      setCitationsOpen(false);
       onDecided?.(
         decision === 'CONFIRM'
           ? completionConfirmedLine(row.title, row.criterion?.key ?? null, row.evidenceRevision)
@@ -654,7 +725,7 @@ export function SessionDecisionStrip({
       queue={pending.data}
       open={open}
       expandedTaskId={expandedTaskId}
-      narrow={narrow}
+      citationsOpen={citationsOpen}
       note={note}
       busy={answer.isPending}
       error={answer.isError ? (answer.error as Error) : null}
@@ -666,6 +737,7 @@ export function SessionDecisionStrip({
           answer.reset();
           setNote('');
           setExpanded(null);
+          setCitationsOpen(false);
         }
       }}
       onExpand={(taskId) => {
@@ -674,7 +746,11 @@ export function SessionDecisionStrip({
         // words the reader wrote about other work into a rejection of this one.
         setNote('');
         setExpanded(taskId);
+        // Same reason, weaker: the citations shown are this card's, and a list left open would be
+        // the next card opening onto somebody else's twelve lines.
+        setCitationsOpen(false);
       }}
+      onToggleCitations={setCitationsOpen}
       onNote={setNote}
       onDecide={(row, decision) => answer.mutate({ row, decision })}
     />

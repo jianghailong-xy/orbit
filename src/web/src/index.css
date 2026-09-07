@@ -5437,7 +5437,39 @@ html[data-theme='dark'] .session-tag-chip {
   margin: 4px 0 0;
   padding-left: 18px;
 }
-/* The gaps stay legible at every width; the citation list above is what a narrow screen folds. */
+/* The claim is the card's lead: what a person is being asked to confirm, in the words the
+   submitter wrote. One step up in size is the whole of the emphasis — a heading would make it an
+   announcement, and it is a sentence somebody is standing behind. */
+.decision-card-claim {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.decision-card-claim > div {
+  margin-top: 2px;
+  font-size: 12px;
+}
+/* The tally is a disclosure, and it has to read as one without reading as an action: text-sized,
+   text-coloured, and carrying nothing but the caret to say it opens. */
+.decision-card-citations-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.decision-card-citations-toggle:hover {
+  text-decoration: underline;
+}
+.decision-card-citations-caret {
+  color: var(--text-3, var(--text-2));
+  font-size: 11px;
+}
+/* The gaps stay legible at every width, and so do the citations that did NOT resolve: both are a
+   reason to press the other button. What folds is only the list of the ones that held. */
 .decision-card-gaps {
   font-weight: 500;
 }

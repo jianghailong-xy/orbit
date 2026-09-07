@@ -366,8 +366,17 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
       assert.equal(oldest?.criterion?.text, CRITERION_TEXT[0]);
       assert.deepEqual(oldest?.gaps, ['the full suite has not been run against this branch']);
       assert.equal(oldest?.claim, 'the fast gate passed');
-      assert.deepEqual(oldest?.citations,
-        [{ kind: 'TOOL_CALL', ref: 'toolu_work_0', resolved: true, reason: null }]);
+      // `label` is what a person reads instead of the handle: the tool's name and the command it
+      // ran, off the row the resolver already fetched for the consistency layer. A card that can
+      // only print `toolu_...` beside the word `resolved` is asking its reader to take the check
+      // on faith rather than make it.
+      assert.deepEqual(oldest?.citations, [{
+        kind: 'TOOL_CALL',
+        ref: 'toolu_work_0',
+        resolved: true,
+        reason: null,
+        label: 'Bash · npm test -- work-0',
+      }]);
       // A declared-nothing-missing row says so with an empty list rather than by omitting the
       // field: "no gaps" is a claim the submitter made and a reader is entitled to see it.
       assert.deepEqual(read.pending?.[1].gaps, []);

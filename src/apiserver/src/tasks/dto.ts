@@ -146,6 +146,10 @@ export class TaskEvidenceCitationDto {
   ref!: string;
   resolved!: boolean;
   reason!: string | null;
+  /** The cited row in words — the tool's name and the command it ran — or null when the ref is
+   *  already the readable thing, which is every kind but TOOL_CALL and every citation that did
+   *  not resolve. */
+  label!: string | null;
 }
 
 /** The stated criterion the envelope named, and whether it still reads that way. */
