@@ -170,8 +170,23 @@ export class CompletionInputRouter {
    * no recipient in it — no coordinator conversation, one that ended, one still holding a message
    * it has not read. Throwing on those would release the key and re-raise at a caller whose write
    * has already committed (`coordinator-delivery.service.ts` §3), so the fact is recorded either
-   * way and the refusal stays where it was decided. What a project with NO recipient at all should
-   * do about it is a question this door does not answer.
+   * way and the refusal stays where it was decided.
+   *
+   * AND WHAT A PROJECT WITH NO RECIPIENT AT ALL FALLS BACK TO
+   * ========================================================
+   * The derived read that finds these questions from the rows themselves —
+   * `readPendingEvidenceJudgments`, behind `GET /api/tasks/evidence-decisions/pending`. Three
+   * states have no addressee and none of them is a discard: a project nobody has opened a
+   * coordinator conversation for, a task filed under no project (which never reaches this door at
+   * all, because the route is inside `if (committed.projectId ...)`), and a standing conversation
+   * that IS the run of the task being judged, which is told and then refused by the decision
+   * door's independence check. In all three the evidence is still a question in the shape the
+   * ledger already has, so it is still asked — of a session that may answer it — and answering it
+   * still takes it off the list. `coordinator-evidence-no-addressee.pg.spec.ts` holds all three.
+   *
+   * That is the same fallback this path chose for a card nobody answers, and for the same reason:
+   * a read recomputed from committed rows has no delivery to lose, so it cannot be in the state a
+   * failed delivery leaves. Nothing here is a second writer, and no clock is added.
    */
   async routeCompletionEvidence(fact: WakeFact): Promise<CompletionInputRouteOutcome> {
     return this.route(fact, 'JUDGMENT_REQUEST_DERIVER', async () => {

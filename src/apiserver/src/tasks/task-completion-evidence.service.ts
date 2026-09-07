@@ -377,6 +377,13 @@ export class TaskCompletionEvidenceService {
     // The revision itself is the trigger. A source Session may still be RUNNING or
     // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
     // facts appears in this route or its key.
+    //
+    // A task in NO project does not go down here, and nothing is lost by that: a wake row names a
+    // project, and there is no conversation coordinating a goal this work is not filed under. Such
+    // a row is settled the way it has always been — it stays a question on the derived read
+    // (`pending` below), held against its OWN `acceptanceCriteria`, until a session that took no
+    // part in the work answers it. Pinned by `coordinator-evidence-no-addressee.pg.spec.ts`, which
+    // covers the population that already exists: the write doors no longer let one be declared.
     if (committed.projectId && this.completionInputs) {
       // Recorded against the consumer these rows have always named, and delivered to the
       // conversation this project is coordinated from. Which consumer, which conversation and what
