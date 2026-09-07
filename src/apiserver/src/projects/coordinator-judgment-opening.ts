@@ -205,7 +205,10 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
  *      fact is worth interrupting anybody about. It is `settledAcceptanceProtocol`'s order, said in
  *      one line rather than five: the reader already knows the tools;
  *   3. where to read the rest, because nothing else about the project is copied in here — the
- *      state is in the database, and this message is not a snapshot of it;
+ *      state is in the database, and this message is not a snapshot of it. The one exception is
+ *      the evidence branch below, which carries the questions it is sending its reader to ask: no
+ *      tool a coordinator can call reads that queue, so a message that named it instead would be
+ *      naming a read nobody can make (`coordinator-evidence-ask.ts`);
  *   4. that this is a NOTIFICATION. Claude does not steer mid-turn, so a conversation that was
  *      running when this arrived reads it afterwards, by which time its own reads are newer than
  *      anything this message could have carried. A reader that assumed otherwise would act on a
