@@ -176,8 +176,17 @@ func (f *providerBgFixture) assertSurvivedEviction(t *testing.T, job bgJobStatus
 	if !processAlive(job.PID) {
 		t.Fatalf("the runner-hosted job (pid %d) died with the engine that asked for it", job.PID)
 	}
-	if events := f.events.forJob(job.JobID); len(events) != 0 {
-		t.Fatalf("the runner-hosted job was reported terminal by an engine eviction: %v", events)
+	// Only a TERMINAL report contradicts survival. A job that outlives its engine
+	// says so with a non-terminal report of its own, so counting every event would
+	// read that announcement as the death it denies.
+	var terminal []map[string]interface{}
+	for _, p := range f.events.forJob(job.JobID) {
+		if isTerminalBgStatus(asString(p["status"])) {
+			terminal = append(terminal, p)
+		}
+	}
+	if len(terminal) != 0 {
+		t.Fatalf("the runner-hosted job was reported terminal by an engine eviction: %v", terminal)
 	}
 	if !f.holdsWorktree(job.JobID) {
 		t.Fatalf("a job that outlived its engine no longer fences the checkout: %v",
