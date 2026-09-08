@@ -131,6 +131,7 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
 export const AUTHORITY_REFUSAL_CODES = [
   'ACCEPTANCE_CRITERIA_HUMAN_ONLY',
   'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY',
+  'PROJECT_STATUS_NOT_SESSION_WRITABLE',
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
@@ -228,6 +229,73 @@ export function refuseHumanOnlyAction(
     tier: COORDINATOR_AUTHORITY[action],
     requiredAction: 'ASK_A_PERSON',
     message: refusal.message,
+  };
+}
+
+/**
+ * `SETTLE_PROJECT_DONE`'s tier, as a rule instead of a sentence.
+ *
+ * WHAT THE TABLE ALREADY SAID, AND WHAT THE SERVER DID
+ * ---------------------------------------------------
+ * The row above grades project settlement `AUTOMATIC` and says "no principal writes it". That was
+ * a description of an intention. `UpdateProjectDto` carries `status`, `ProjectsService.update`
+ * copies it into the Prisma input whenever a request sent one, and the only role gate on that
+ * method left before it looked at anything else unless the same request was also rewriting the
+ * acceptance criteria. So every session — an execution run, the one-shot judgment session, the
+ * long-lived coordination conversation — could settle the project it was working inside, and the
+ * three tiers above were dividing an authority that had no boundary underneath it.
+ *
+ * WHY THE FIELD AND NOT THE VALUE
+ * -------------------------------
+ * The act this closes is DONE: an agent recording that the goal it was given has been met, which
+ * nothing downstream ever asks about again. A rule spelled that narrowly is one with a way round
+ * it, so all three values are refused, and each for its own reason:
+ *
+ *   DONE      the act the row is about. Settlement is derived from the work, not requested.
+ *   CANCELLED closes the project just as finally. "Abandoned" and "finished" differ in what they
+ *             say about the goal and not at all in what they do to the work, so leaving this one
+ *             writable would leave the same act available under a second name.
+ *   OPEN      puts back into circulation a project somebody settled. It claims nothing about the
+ *             goal, which is why it is the weakest of the three — and it is still an agent
+ *             overturning a decision the owner made about their own project, in a column whose
+ *             whole content is where the work stands.
+ *
+ * Refused rather than dropped, for the reason the runner door refuses the authorization set rather
+ * than stripping it: a silently ignored field reads to the caller as a write that happened, and
+ * this caller is a model that will go on to report a finished project.
+ *
+ * WHAT IT DOES NOT CLAIM
+ * ----------------------
+ * The same honesty §1 states about the rest of this table. The condition is the presence of an
+ * acting session, which arrives as the runner-injected `X-Orbit-Session-Id` header — so it binds
+ * the `project_update` tool an agent actually holds, and it does NOT establish that a request
+ * without one came from a person. A caller that omits the header, holds a runner credential, or
+ * can mint an owner JWT still reaches the write, exactly as it did before. Keeping that path is
+ * the deliberate compatibility decision: the user API, the headless CLI and internal callers write
+ * this column the way migration 0229 left them, and turning `undefined` into a refusal here would
+ * reinstate for everybody the gate the account owner chose to remove.
+ */
+export function refuseProjectStatusWrite(
+  /** `UpdateProjectDto.status` verbatim. `undefined` is "not sent", as everywhere else here. */
+  requestedStatus: string | null | undefined,
+  /** The acting session id the door resolved, or `undefined` when the request carried none. */
+  actingSessionId: string | null | undefined,
+): AuthorityRefusal | null {
+  if (requestedStatus === undefined) return null;
+  if (!actingSessionId?.trim()) return null;
+  return {
+    code: 'PROJECT_STATUS_NOT_SESSION_WRITABLE',
+    action: 'SETTLE_PROJECT_DONE',
+    tier: COORDINATOR_AUTHORITY.SETTLE_PROJECT_DONE,
+    requiredAction: 'ASK_A_PERSON',
+    message:
+      'A request made from a session cannot write a project’s `status`. Where the work stands is '
+      + 'a statement about the whole project — DONE says its goal was met and nothing downstream '
+      + 'asks again, CANCELLED drops it, OPEN reverses somebody who settled it — and an agent that '
+      + 'could write it could close the project it was given instead of finishing it. Nothing was '
+      + 'written by this request, including the other fields it carried. Report what you found and '
+      + 'let the account owner decide; that channel is a tenancy and audit boundary, not proof '
+      + 'that a person held the credential.',
   };
 }
 

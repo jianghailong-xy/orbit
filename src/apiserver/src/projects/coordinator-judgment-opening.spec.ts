@@ -144,7 +144,8 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the
   assert.match(opening, /task_comment 中升级给人/);
   // And it says the removal out loud rather than leaving the session to infer it from an absence.
   assert.match(opening, /没有任何东西会判定这些验收标准/);
-  assert.match(opening, /status 已无守卫/);
+  assert.match(opening, /status 你也写不了/);
+  assert.match(opening, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
   assert.match(opening, /不是对“真人在场”的密码学证明/);
 });
 

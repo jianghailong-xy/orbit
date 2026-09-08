@@ -54,7 +54,11 @@ import {
   buildDelegatedCoordinatorNotice,
   coordinatorSessionTitle,
 } from './coordinator-opening';
-import { authorityPrincipal, refuseHumanOnlyAction } from './coordinator-authority';
+import {
+  authorityPrincipal,
+  refuseHumanOnlyAction,
+  refuseProjectStatusWrite,
+} from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
@@ -669,6 +673,29 @@ export class ProjectsService {
         'acceptanceCriteriaItems must be an array; use [] to clear it or omit it to leave it unchanged',
       );
     }
+  }
+
+  /**
+   * `SETTLE_PROJECT_DONE` is graded `AUTOMATIC` — "no principal writes it" — so a request made
+   * from a session may not write `status`. The rule, the code and the reasoning for all three
+   * values live in `refuseProjectStatusWrite`; this is the one place it is checked, because it is
+   * the one place the column is written.
+   *
+   * Static and query-free, and checked BEFORE the session lookup next door: the answer depends on
+   * whether there is an acting session at all and not on what kind it is, so a refused request
+   * costs no round trip. It is a WIDER boundary than the HUMAN_ONLY rows for that same reason —
+   * those restrict the one-shot judgment role, while an ordinary execution session settling its
+   * own project is the same act by a different principal.
+   *
+   * Before the transaction, so a refusal writes nothing — including the other fields the same
+   * request carried, which is what stops this reading as "the field was ignored".
+   */
+  private static assertStatusIsNotWrittenFromASession(
+    dto: UpdateProjectDto,
+    actingSessionId: string | undefined,
+  ): void {
+    const refusal = refuseProjectStatusWrite(dto.status, actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
   }
 
   /**
@@ -1878,6 +1905,7 @@ export class ProjectsService {
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
+    ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock

@@ -190,44 +190,59 @@ for (const [what, dto, code] of PROJECT_WRITES) {
   });
 }
 
-// Migration 0229 removed the DONE gate from the database and `refuseDirectDone` from the service
-// in one change, on the account owner's explicit choice between a narrower guard and none. So this
-// is the same call from the same three principals, asserted from the other side: every one of them
-// reaches the write. The negative control matters more here than anywhere else in this file —
-// "nobody can write DONE" and "everybody can" are one refusal apart, and only one of them is what
-// the owner asked for.
-test('a judgment session may write status=DONE on a project', async () => {
-  await reachesTheWrite(
-    () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION));
-});
-
-test('every other caller may write a direct DONE too, because nothing derives it', async () => {
-  for (const actingSessionId of [undefined, RUN]) {
-    await reachesTheWrite(
+// `SETTLE_PROJECT_DONE` is graded AUTOMATIC and the row says no principal writes it. It was a
+// sentence until `refuseProjectStatusWrite`: the DTO carries `status`, the service copied it
+// through, and the gate above it left early on any request that was not also rewriting the
+// criteria. The boundary is WIDER than the HUMAN_ONLY rows and keyed on a different fact — the
+// presence of an acting session, not its dispatch_origin — so both session roles are asserted.
+for (const [who, actingSessionId] of [['judgment', SESSION], ['USER-origin', RUN]] as const) {
+  test(`a ${who} session cannot write status=DONE on a project`, async () => {
+    const body = await refusalOf(
       () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, actingSessionId));
-  }
+
+    assert.equal(body.code, 'PROJECT_STATUS_NOT_SESSION_WRITABLE');
+    assert.equal(body.action, 'SETTLE_PROJECT_DONE');
+    assert.equal(body.tier, 'AUTOMATIC', 'the tier is the row this refusal enforces');
+    assert.equal(body.requiredAction, 'ASK_A_PERSON');
+  });
+}
+
+// The negative control, and it matters more here than anywhere else in this file: "nobody can
+// write DONE" and "only sessions cannot" are one condition apart, and migration 0229 removed the
+// gate that meant the first one on the account owner's explicit choice. A request with no acting
+// session — the user API, the headless CLI, an internal caller — writes the column as it did.
+test('a caller with no acting session may still write a direct DONE', async () => {
+  await reachesTheWrite(
+    () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never));
 });
 
 // §0's replacement claim, end to end. The three-level dial used to be the answer to "how far may
 // this coordinator go"; if any of it still were, the same write would come out differently at the
-// three levels. It does not — and since 0229 it does not come out as a refusal at any of them.
+// three levels. It does not: the refusal below is the same one at every policy.
 test('the outcome does not depend on the project automation policy', async () => {
   for (const policy of Object.values(ProjectAutomationPolicy)) {
-    await reachesTheWrite(
+    const body = await refusalOf(
       () => projectFixture(policy).update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION));
+    assert.equal(body.code, 'PROJECT_STATUS_NOT_SESSION_WRITABLE');
   }
 });
 
 test('a judgment session may still write the prose that says what the work is', async () => {
-  // The bound is on the exam and on the verdict, not on coordinating. Reporting a goal more
-  // clearly, or recording instructions, is exactly what a coordinator is for.
+  // The bound is on the exam, on the verdict and on the column that says where the work stands —
+  // not on coordinating. Reporting a goal more clearly, or recording instructions, is exactly
+  // what a coordinator is for, and this is the case that keeps the refusal above from being a
+  // gate that simply refuses every session write.
   await reachesTheWrite(
     () => projectFixture().update(OWNER, PROJECT, { goal: 'what this is for' } as never, SESSION),
   );
-  // CANCELLED is not this boundary either: dropping work is not claiming its goal was met.
-  await reachesTheWrite(
-    () => projectFixture().update(OWNER, PROJECT, { status: 'CANCELLED' } as never, SESSION),
-  );
+  // CANCELLED and OPEN meet the same refusal as DONE, each for its own reason: dropping the work
+  // closes the project just as finally, and reopening it overturns somebody who settled it. A
+  // rule that named only DONE would leave the same act available under a second value.
+  for (const status of ['CANCELLED', 'OPEN'] as const) {
+    const body = await refusalOf(
+      () => projectFixture().update(OWNER, PROJECT, { status } as never, SESSION));
+    assert.equal(body.code, 'PROJECT_STATUS_NOT_SESSION_WRITABLE', `${status} was allowed`);
+  }
 });
 
 // ═══ acceptance runs: a PASS is what a project's DONE is bound to ═════════════════════════════
@@ -608,6 +623,7 @@ test('the judgment opening states the boundaries, and that nothing judges the cr
   // verdict a one-shot session would go looking for a tool to submit.
   assert.equal(opening.includes('PASS'), false);
   assert.match(opening, /没有任何东西会判定这些标准/);
-  assert.match(opening, /status 已无守卫/);
+  assert.match(opening, /status 你也写不了/);
+  assert.match(opening, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
   assert.match(opening, /不是对“真人在场”的密码学证明/);
 });
