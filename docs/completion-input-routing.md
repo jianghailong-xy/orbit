@@ -53,7 +53,11 @@ by whoever records the last landing rather than by the next Task write that happ
 message rather than a steer: a conversation running a turn reads it after that turn ends. Delivery
 is refused, with the key released, when there is no such conversation, when it has ended, and when
 it has not yet read the last thing it was told. Every other fact kind is unchanged — recorded, or
-judged in a one-shot session opened for it — and nothing here steers a running turn.
+judged in a one-shot session opened for it — and nothing here steers a running turn. The receipt edge
+does one thing more, off this rail: it re-projects `project.status`, whose derivation reads the
+criteria's landing as well as their satisfaction (`projects/project-done-derived.ts`), so a receipt
+is the last input to arrive whenever the owner confirmed the criteria before the final branch
+landed.
 
 `PROJECT_TASKS_SETTLED` therefore no longer has two terminals. A settled Project whose stated
 criteria are all satisfied and landed derives `PROJECT_ACCEPTANCE_LANDED` and is carded; any other

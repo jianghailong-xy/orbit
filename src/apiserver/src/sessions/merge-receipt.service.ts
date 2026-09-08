@@ -23,6 +23,7 @@ import {
   resultLanded,
 } from './merge-receipt';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import {
   checkpointIdForCommit,
   checkpointLandingGate,
@@ -131,16 +132,23 @@ export class MergeReceiptService {
    * briefly unreachable" into "your merge was not recorded", which is the one outcome this table
    * exists to prevent. The same fact is re-derived from the same rows by the next delivery.
    *
-   * WHAT THIS EDGE STILL DOES NOT DO
-   * ================================
-   * `TasksService.deliverSettledProjects` re-projects `project.status` on the same post-commit
-   * edge (`storeDerivedProjectStatus`), and this one does not. That projection reads the criteria's
-   * satisfaction AND their landing, so a merge receipt is one of its inputs too, and the hole left
-   * is narrow but real: an owner who confirms the criteria BEFORE the last branch lands leaves the
-   * column asserting OPEN until a task write or a second confirmation re-derives it. It is left out
-   * here rather than folded in because it is a different projection with a different writer, and
-   * wiring it blind — with nothing in either pg spec that would notice — is how a second edge ends
-   * up disagreeing with the first. Filed as its own task, 34LCIWq2wmmoZp4k3fAwc.
+   * AND THE PROJECTION, WHICH IS THE FOURTH THING THIS EDGE DOES
+   * ===========================================================
+   * `project.status` is derived rather than written: every stated criterion satisfied AND landed,
+   * plus an owner's confirmation naming the version of the criteria that stands
+   * (`projects/project-done-derived.ts`). A merge receipt is the whole of the landing half, so this
+   * edge re-projects it exactly as `TasksService.deliverSettledProjects` re-projects it on the task
+   * write path — the same function, not a second opinion about what DONE means.
+   *
+   * Until it did, the hole was narrow and real: an owner who confirmed the criteria BEFORE the last
+   * branch landed was left with a column asserting OPEN until a task write or a second confirmation
+   * happened along, which in the order this repository runs in is "until something unrelated
+   * happens". `project-done-derived.pg.spec.ts` case (5) is what holds this to it — it records the
+   * last receipt through `record` and then touches nothing else at all.
+   *
+   * LAST, and logged like its siblings. It is a read of committed rows followed by a compare-and-
+   * set, so a delivery that failed above does not make it wrong; and a projection that could not be
+   * stored must no more un-record a merge than a wake that could not be delivered.
    */
   async deliverProjectFactsAfterCommit(projectId: string | null | undefined): Promise<void> {
     if (!this.completionInputs) return;
@@ -154,6 +162,30 @@ export class MergeReceiptService {
     );
     await this.completionInputs.routeUnlandedCriteria(projectIds).catch((e) =>
       this.logger.warn(`unlanded-criterion delivery failed after a merge receipt: ${e?.message ?? e}`),
+    );
+    await this.reprojectProjectStatus(projectId);
+  }
+
+  /**
+   * Store what `project.status` projects from the rows this receipt is now part of.
+   *
+   * `TasksService.reprojectProjectStatus`, over one project instead of many: the owner is read from
+   * the project row rather than taken from the receipt, because the projection is scoped to the
+   * tenant whose project it is and a receipt's own `ownerId` is provenance about who recorded it.
+   * A project that has been deleted between the commit and this line simply has nothing to project.
+   *
+   * Behind the same `completionInputs` check as the doors above, for the reason the constructor
+   * gives: a fixture that wires no router is a fixture about the receipt row, and a read it never
+   * asked for would be a query its doubles have to answer.
+   */
+  private async reprojectProjectStatus(projectId: string): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { ownerId: true },
+    }).catch(() => null);
+    if (!project) return;
+    await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId).catch((e) =>
+      this.logger.warn(`derived project status not reconciled after a merge receipt: ${e?.message ?? e}`),
     );
   }
 

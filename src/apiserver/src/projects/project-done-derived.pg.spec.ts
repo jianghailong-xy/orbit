@@ -36,6 +36,22 @@
  * fixtures: four independent set-ups can each be wrong in their own way and still agree, while a
  * single change of one input that moves the column is evidence about that input.
  *
+ * WHY A FIFTH CASE, WHICH IS ABOUT AN EDGE AND NOT ABOUT AN INPUT
+ * ---------------------------------------------------------------
+ * (1) to (4) show what the projection READS. None of them says anything about who performs it,
+ * because every one of them reaches the column over a task write or the owner's confirmation —
+ * the two edges that carried it. A merge receipt is an input to the same projection and had no
+ * edge at all: an owner who confirmed the criteria BEFORE the last branch landed was left with a
+ * column asserting OPEN until some unrelated task write happened along.
+ *
+ * So (5) walks to the position (3) walks to, records the missing receipt through
+ * `MergeReceiptService.record` — the method all three writers of one go through — and then does
+ * nothing whatever: no task write, no confirmation, no call to the projection. Its paired negative
+ * is the reading taken immediately before that receipt, in the same case and over the same rows:
+ * OPEN, with `CRITERION_UNLANDED` the only clause outstanding. Without that reading, a DONE
+ * afterwards would be equally true of a column that already said DONE and of an implementation
+ * that never projects anything at all.
+ *
  * WHY A `.pg.spec`
  * ----------------
  * Every fact is produced the way the product produces it. Criteria are stated through
@@ -43,7 +59,7 @@
  * the confirmation is written through `ProjectAcceptanceService.confirmStandardSet`, r3's one
  * writer; serving tasks reach DONE through 0193/0230's BEFORE UPDATE fence; receipts are written
  * by `MergeReceiptService`. The projection is never invoked directly — it is driven only from the
- * two production edges that carry it, so a green here is evidence that those edges carry it.
+ * three production edges that carry it, so a green here is evidence that those edges carry it.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-done-derived.pg.spec.ts
  */
@@ -61,6 +77,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import type { CompletionInputRouter } from './completion-input-router.service';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { readDerivedProjectDone, type DerivedDoneWithheld } from './project-done-derived';
@@ -97,28 +114,34 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
 
   const acceptance = new ProjectAcceptanceService(prisma as unknown as PrismaService);
   const projects = new ProjectsService(prisma as unknown as PrismaService, acceptance);
-  const receipts = new MergeReceiptService(prisma as unknown as PrismaService);
   /**
-   * A `TasksService` with a completion-input router present.
+   * The completion-input router BOTH post-commit edges are held behind.
    *
-   * The router is a stand-in and its one method answers with nothing, because what a settled
-   * project WAKES is a different unit's question and is covered where that unit is tested. What it
-   * is here for is the guard those deliveries share — `if (!this.completionInputs) return` — which
-   * is also what holds the projection off the ~40 fixtures that build this service directly. A
+   * A stand-in, and its methods answer with nothing, because what a settled project or a landed
+   * criterion WAKES is a different unit's question and is covered where that unit is tested. What
+   * it is here for is the guard those deliveries share — `if (!this.completionInputs) return` —
+   * which is also what holds the projection off the fixtures that build these services directly. A
    * spec that left it out would exercise no post-commit edge at all and could then only reach the
    * projection by calling it, which is the one thing this file must not do.
+   *
+   * One object for the task writer and the receipt writer alike: the projection rides both edges,
+   * and a fixture that wired only one of them would decide by omission which of the two this file
+   * is allowed to notice.
    */
+  const completionInputs = {
+    routeSettledProjects: async () => [],
+    routeReadyCriteria: async () => [],
+    routeUnlandedCriteria: async () => [],
+    routeTaskExceptions: async () => [],
+  } as unknown as CompletionInputRouter;
+
+  const receipts = new MergeReceiptService(prisma as unknown as PrismaService, completionInputs);
   const tasks = new TasksService(
     prisma as never,
     {} as never,
     { publishTaskChanged() {}, publishForUser() {}, publishTaskResync() {} } as never,
     undefined,
-    {
-      routeSettledProjects: async () => [],
-      routeReadyCriteria: async () => [],
-      routeUnlandedCriteria: async () => [],
-      routeTaskExceptions: async () => [],
-    } as never,
+    completionInputs,
   );
 
   const ownerId = randomUUID();
@@ -203,15 +226,38 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
     return id;
   }
 
-  /** A merge of that session's branch into the default branch: the landing lane's whole input. */
+  /**
+   * A merge of that session's branch into the default branch: the landing lane's whole input, and
+   * — because the writer above holds the router — a post-commit edge in its own right.
+   *
+   * What it recorded is handed back rather than discarded, so (5) can say that the receipt it is
+   * about is a NEW one: this method is idempotent, and a re-report of a landing already on file
+   * would leave the landing lane reading exactly as it read before.
+   */
   async function landOnMain(sessionId: string, nibble: string) {
-    await receipts.record(ownerId, sessionId, {
+    return receipts.record(ownerId, sessionId, {
       result: 'MERGED',
       sourceSha: sha(nibble),
       targetBranch: 'main',
       targetShaBefore: sha('a'),
       targetShaAfter: sha('b'),
     }, 'AGENT');
+  }
+
+  /**
+   * Every task row of this project, in the columns a task write moves.
+   *
+   * Read either side of the receipt in (5). The projection's other edges are a TASK write and a
+   * confirmation, and this is what makes that case a statement about the third one rather than
+   * about a rename that happened to be standing nearby.
+   */
+  async function taskFingerprint(): Promise<Array<Record<string, string>>> {
+    const { rows } = await sql.query<Record<string, string>>(
+      `SELECT "id"::text, "title", "status"::text, "updated_at"::text
+         FROM "task" WHERE "project_id" = $1::uuid ORDER BY "id"`,
+      [projectId],
+    );
+    return rows;
   }
 
   const EXECUTABLE_DECLARATION = {
@@ -357,6 +403,52 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
       'the projection restores DONE from the same rows that took it away — it is a reading of '
         + 'the facts each time, not a decision recorded once');
   });
+
+  // ═══ (5) the last input is a RECEIPT, and the edge that records one is what projects it ═══════
+
+  await t.test('(5) recording the last receipt is what projects DONE, with no task write anywhere',
+    async () => {
+      // The position (3) reaches, walked to once more by the same three steps: a new task under a
+      // criterion that was met, settled in its own worktree, on a branch, with no receipt anywhere.
+      // The rename below is the LAST task write this case makes — everything after it happens on a
+      // project whose task rows do not move again, which is what leaves the receipt as the only
+      // candidate for whatever moves the column.
+      const last = await servingTask(second.key, 'the work whose receipt arrives last', 'orbit/last');
+      await settleExecutable(last.id);
+      await nextTaskWrite(last.id);
+
+      // The negative half of the pair, and the reason the positive half below is evidence at all:
+      // without it, a DONE afterwards would be equally true of a column that already said DONE,
+      // and of an implementation that projects nothing on any edge whatever.
+      assert.equal(await storedStatus(), ProjectStatus.OPEN,
+        'this case has to start from a column that does NOT say DONE, or nothing after it is a '
+          + 'statement about what moved it');
+      assert.deepEqual(await withheld(), ['CRITERION_UNLANDED'],
+        'and the one clause outstanding is the receipt: the work is settled and the owner’s '
+          + 'confirmation from (1) still names the version of the criteria that stands, so the '
+          + 'landing of this one branch is the whole of what is left');
+
+      const before = await taskFingerprint();
+
+      // ── the receipt, through the door production records one through, and nothing else ────────
+      // No task write, no confirmation, no call to the projection. This is the order this
+      // repository actually runs in: the last task settles on a branch, the owner is carded and
+      // confirms, and a session then merges and records the receipt — after which nothing writes a
+      // task again.
+      const recorded = await landOnMain(last.sessionId, '4');
+      assert.equal(recorded.created, true,
+        'the door recorded no new receipt, so nothing below is a statement about one');
+
+      assert.equal(await storedStatus(), ProjectStatus.DONE,
+        'a merge receipt is the whole of the landing half of this projection, and recording one '
+          + 'is what re-projects it — an owner who confirms before the last branch lands would '
+          + 'otherwise be left with a column asserting OPEN until some unrelated task write '
+          + 'happened along');
+      assert.deepEqual(await withheld(), []);
+      assert.deepEqual(await taskFingerprint(), before,
+        'a task row moved between the two readings, so the DONE above says nothing about the '
+          + 'receipt edge');
+    });
 
   // ═══ (4, the other half) a criterion is reopened after the project was DONE ═══════════════════
 
