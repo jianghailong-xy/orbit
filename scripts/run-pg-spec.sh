@@ -83,6 +83,7 @@ PASSWORD=pccspec_pw
 TEMPLATE=pccspec_tpl
 SPEC_TIMEOUT="${RUN_PG_SPEC_TIMEOUT:-600}"
 NODE="${NODE:-node}"
+
 die() { echo "run-pg-spec: $*" >&2; exit 2; }
 [ "$#" -ge 1 ] || die "usage: $(basename "$0") <path/to/x.pg.spec.ts> [more...]"
 
@@ -111,13 +112,19 @@ echo "==> overlaying node_modules from $MAIN"
 link "$MAIN/node_modules"                "$REPO/node_modules"
 link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
 link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
-
 # TypeScript 7 and Prisma 7 are installed per workspace; the repo root still hoists the 5.9.3 that
-# @nestjs/cli pins, so prefer the apiserver's copy of each. Resolved here rather than at the top of
-# the file because in a worktree neither exists until the links above are made.
+# @nestjs/cli pins, so prefer the apiserver's copy of each. Resolved HERE and not up with the other
+# constants, because "prefer" is a question about the links above: a worktree that has none of them
+# yet answers "not executable" to both preferred paths, and both fallbacks then lie. The root has no
+# prisma at all, so the run died at `prisma migrate deploy` with the container already up; and the
+# root's tsc IS that 5.9.3, so the guard below passed and a first run compiled the whole test tree
+# with the wrong compiler without saying so. Hence also the version echo: which compiler built this
+# tree is the thing that failed silently, so it is printed rather than assumed.
 TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
-[ -x "$TSC" ] || die "no tsc under $MAIN — run npm install in the main checkout first"
+[ -x "$TSC" ]    || die "no tsc under $MAIN — run npm install in the main checkout first"
+[ -x "$PRISMA" ] || die "no prisma under $MAIN — run npm install in the main checkout first"
+echo "==> tsc $TSC ($("$TSC" --version))"
 
 # The branch's own Prisma client — see the header for why it cannot be the main checkout's. The
 # whole-directory link above is undone for the apiserver and rebuilt as one symlink per package, so
