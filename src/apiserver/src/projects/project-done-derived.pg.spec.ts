@@ -52,14 +52,33 @@
  * afterwards would be equally true of a column that already said DONE and of an implementation
  * that never projects anything at all.
  *
+ * WHY A CASE ABOUT THE EDIT ITSELF, WHICH IS AN EDGE AND NOT AN INPUT
+ * -------------------------------------------------------------------
+ * (1) to (4) show what the projection READS. None of them says anything about WHO performs it,
+ * because every one of them reaches the column over a task write or the owner's confirmation. An
+ * EDIT of the criteria moves an input over neither: `ProjectsService.update` is the one writer
+ * that states them, the digest moves under the confirmation already on record, and that write
+ * re-projected nothing. A settled project whose owner reworded one assertion went on asserting
+ * DONE in the column until some unrelated task write happened along — which, in the order this
+ * repository runs in, is until something that has nothing to do with the edit happens.
+ *
+ * So the last case before CANCELLED walks back to DONE over the two edges that already carried
+ * the projection, and then does exactly one thing: the edit. No task write, no confirmation, no
+ * call to the projection. Its paired positive control is the reading taken immediately before the
+ * edit and over the same rows — DONE — without which an OPEN afterwards would be equally true of
+ * a column that already said OPEN and of an implementation that projects nothing on any edge
+ * whatever; and the project's task rows are fingerprinted either side of the edit, so "no task
+ * write" is asserted rather than described.
+ *
  * WHY A `.pg.spec`
  * ----------------
  * Every fact is produced the way the product produces it. Criteria are stated through
  * `ProjectsService.update` (the only thing that advances a definition's revision, in a trigger);
  * the confirmation is written through `ProjectAcceptanceService.confirmStandardSet`, r3's one
  * writer; serving tasks reach DONE through 0193/0230's BEFORE UPDATE fence; receipts are written
- * by `MergeReceiptService`. The projection is never invoked directly — it is driven only from the
- * three production edges that carry it, so a green here is evidence that those edges carry it.
+ * by `MergeReceiptService`; and the criteria are EDITED through `ProjectsService.update` as well.
+ * The projection is never invoked directly — it is driven only from the production edges that
+ * carry it, so a green here is evidence that those edges carry it.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-done-derived.pg.spec.ts
  */
@@ -247,9 +266,10 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
   /**
    * Every task row of this project, in the columns a task write moves.
    *
-   * Read either side of the receipt in (5). The projection's other edges are a TASK write and a
-   * confirmation, and this is what makes that case a statement about the third one rather than
-   * about a rename that happened to be standing nearby.
+   * Read either side of the receipt in (5), and either side of the edit in the last case. The
+   * projection's other edges are a TASK write and a confirmation, and this is what makes those
+   * cases statements about the edge each one exercises rather than about a rename that happened
+   * to be standing nearby.
    */
   async function taskFingerprint(): Promise<Array<Record<string, string>>> {
     const { rows } = await sql.query<Record<string, string>>(
@@ -488,6 +508,62 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
         + 'this ruler',
     );
   });
+
+  // ═══ the EDIT is an edge of its own: nothing else has to happen for the column to follow ══════
+
+  await t.test('editing the criteria re-projects the column by itself, with no task write anywhere',
+    async () => {
+      // Back to DONE over the two edges that already carried the projection, and no further: the
+      // tasks re-declare the criteria at the revision the edit above left standing, and the owner
+      // confirms the ruler as it reads today. These are the LAST task writes this case makes —
+      // everything below happens on a project whose task rows do not move again, which is what
+      // leaves the edit as the only candidate for whatever moves the column.
+      for (const [taskId, key] of servingDeclarations) {
+        await tasks.update(ownerId, taskId, { criterionKey: key } as never);
+      }
+      const standing = await acceptance.standardSetConfirmation(ownerId, projectId);
+      await acceptance.confirmStandardSet(ownerId, projectId, {
+        criteriaDigest: standing.currentVersion.digest,
+      });
+
+      // The positive half of the pair, and the reason the reading after the edit is evidence at all:
+      // without it, an OPEN below would be equally true of a column that already said OPEN, and of
+      // an implementation that projects nothing on any edge whatever.
+      assert.equal(await storedStatus(), ProjectStatus.DONE,
+        'this case has to start from a column that DOES say DONE, or nothing after it is a '
+          + 'statement about what took it away');
+
+      const before = await taskFingerprint();
+
+      // ── the edit, through the one door that states criteria, and nothing else ──────────────────
+      // No task write, no confirmation, no call to the projection. This is the order the product
+      // runs in: a project settles, and the owner then rewords one of the assertions it settled
+      // against — an edit nobody follows with anything, because from the owner's side there is
+      // nothing left to do.
+      await projects.update(ownerId, projectId, {
+        acceptanceCriteriaItems: [
+          { id: first.definitionId, text: `${FIRST}, reworded once it had settled`, verificationMethod: METHOD },
+          { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
+        ],
+      } as never);
+
+      assert.equal(await storedStatus(), ProjectStatus.OPEN,
+        'the criteria this project was settled against are not the criteria it states now, so the '
+          + 'column may not go on asserting DONE until something unrelated happens along to '
+          + 're-derive it: the write that moves an input is the edge that re-projects it');
+      assert.deepEqual(await taskFingerprint(), before,
+        'a task row moved between the two readings, so the OPEN above says nothing about the edit');
+      assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED', 'STANDARD_SET_UNCONFIRMED'],
+        'and BOTH halves of the conjunction moved on the one edit, which is what an edit does: the '
+          + 'confirmation on record names a version that no longer stands, and every task that '
+          + 'declared the reworded criterion declared a revision that is no longer the one it '
+          + 'carries — either clause alone would be enough to take DONE away');
+      assert.equal(
+        (await acceptance.standardSetConfirmation(ownerId, projectId)).state, 'STALE',
+        'and the confirmation is STALE rather than gone: the row is still on record, it just no '
+          + 'longer names this ruler',
+      );
+    });
 
   // ═══ CANCELLED is a person's decision about the project, not a reading of its work ════════════
 

@@ -29,8 +29,10 @@ built. So this is a re-deliberation of that decision and not the correction of a
 A project that states no criteria is never projected `DONE`: "every one of zero criteria holds" is
 the vacuous truth `NO_WORK_SERVES_IT` refuses one level down.
 
-It is recomputed on two edges, both of which have no requester asking for a status: after the
-owner's confirmation is written, and on the post-commit edge of any task write in the project. It
+It is recomputed on three edges, none of which has a requester asking for a status: after the
+owner's confirmation is written, on the post-commit edge of any task write in the project, and
+after a write that restates the criteria themselves — an edit moves the version the confirmation
+names, so the write that makes it is the write that has to re-derive from it. It
 moves the column in BOTH directions — reopening a task or filing a new one against a met criterion
 takes `DONE` away again — because a projection that could only ever set `DONE` would be a decision
 recorded once rather than a reading of the facts. `CANCELLED` is never written and never overwritten:

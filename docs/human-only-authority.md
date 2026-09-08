@@ -351,8 +351,9 @@ The coordinator card's role under (B) is a prompt with a link, not an answer sur
 > given about; the paragraphs below describe the position BEFORE it, and the differences now are:
 >
 > - the two inputs are read by `readDerivedProjectDone` and stored by
->   `storeDerivedProjectStatus`, recomputed after the owner's confirmation and on the
->   post-commit edge of any task write in the project, in both directions;
+>   `storeDerivedProjectStatus`, recomputed after the owner's confirmation, on the
+>   post-commit edge of any task write in the project, and after a write that restates the
+>   criteria, in both directions;
 > - nothing about it refuses a write, so "an agent PATCHes a project to DONE today" is still true
 >   except for the one condition `refuseProjectStatusWrite` adds — the projection is what makes the
 >   column come back to what the facts say, not a gate that stops the PATCH;

@@ -58,7 +58,10 @@ import { readCriterionSatisfaction } from './project-criterion-satisfaction';
  *       `project_standard_set_confirmation`, compared against `criteriaSemanticRevision` by
  *       `standardSetConfirmationStanding`, which is r3's comparison and not a copy of it. Editing
  *       an assertion or its verification method moves the digest, so the confirmation stops
- *       counting and this projection stops saying DONE — with no flag anybody has to clear.
+ *       counting and this projection stops saying DONE — with no flag anybody has to clear. Of
+ *       the STORED column as well as of a live read: the write that states the criteria
+ *       (`ProjectsService.update`) re-projects on its own post-commit edge, so an edit does not
+ *       leave the column asserting DONE until something unrelated happens along.
  *
  * (b) is the half a person supplies, and it is what keeps `SETTLE_PROJECT_DONE` honestly AUTOMATIC
  * in `coordinator-authority.ts`: what the owner writes is the CONFIRMATION, and DONE is the

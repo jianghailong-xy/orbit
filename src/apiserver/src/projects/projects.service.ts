@@ -78,6 +78,7 @@ import {
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
 import { type CriterionLanding, readCriterionLanding } from './project-criterion-landing';
+import { storeDerivedProjectStatus } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -2054,6 +2055,11 @@ export class ProjectsService {
       if (!projectResult) throw new CoordinatorBindingChanged();
       const { project, changedSessionId } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
+      // The criteria a project states are one of the two facts its `status` is projected from, and
+      // this write is the only thing that moves them.
+      if (dto.acceptanceCriteriaItems !== undefined) {
+        await this.reprojectProjectStatus(ownerId, id);
+      }
       return withAcceptanceDefinitions(withCoordination(project));
     } catch (e) {
       // The partial unique index behind "one coordinator per project", reached only by a second
@@ -2073,6 +2079,43 @@ export class ProjectsService {
     }
   }
 
+  /**
+   * Re-project `project.status` from the criteria and the owner's confirmation, on the post-commit
+   * edge of the write that just restated those criteria.
+   *
+   * WHY AN EDIT NEEDS AN EDGE AT ALL
+   * --------------------------------
+   * `project-done-derived.ts` projects the column from two committed facts, and the second of them
+   * is a confirmation naming THE VERSION OF THE CRITERIA THAT STANDS TODAY. Replacing the
+   * definitions moves that version, so a confirmation that was current one statement ago has
+   * stopped counting and the projection stops saying DONE. The derivation says so either way —
+   * `get` reads it live — but the STORED column is what `project_list` and the scope contract
+   * consult, and without this it would go on asserting DONE until some unrelated task write or a
+   * second confirmation happened along.
+   *
+   * ONLY WHEN THE CRITERIA WERE WRITTEN, which is where this differs from its siblings on the task
+   * and merge-receipt edges. Those re-project every project their write touched, because which
+   * projects a task write settled or unsettled is not something that write knows. This one does
+   * know: the criteria are the only input to that projection any field of `UpdateProjectDto`
+   * reaches, and re-projecting after an ordinary rename would also re-decide the column behind an
+   * owner who had just written it by hand — a write r2 still allows, and not this method's to take
+   * back.
+   *
+   * AFTER THE COMMIT and outside every transaction, for the reason `storeDerivedProjectStatus`
+   * gives at length: it reads rows that have already committed, and anything landing between its
+   * read and its statement only means the next edge re-derives from the newer rows. It carries no
+   * `status` from any caller either, which is what lets it stand in the very method that hosts
+   * r2's refusal — the DTO path above is untouched, and a session still cannot ask for this column.
+   *
+   * Logged, never raised: the criteria are already stated, and a projection that could not be
+   * stored must no more un-state them than a wake that could not be delivered un-records a merge.
+   */
+  private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((e) =>
+      this.logger.warn(`derived project status not re-projected after a criteria edit: ${
+        (e as { message?: string })?.message ?? String(e)}`),
+    );
+  }
 
   /**
    * The compare-and-swap every control write goes through, or nothing if the caller did not state
