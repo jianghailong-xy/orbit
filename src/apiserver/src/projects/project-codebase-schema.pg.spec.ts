@@ -388,9 +388,18 @@ test('0231 · S1 数据模型', { skip, timeout: 180_000 }, async (t) => {
       [id('102'), SHA('e'), RUNNER]);
     assert.equal(won.rowCount, 1);
 
+    // 写回去的时刻要与库里那一个**保证**可区分。守卫问的是 `IS DISTINCT FROM`，而这一列是
+    // TIMESTAMP(3)：一个 `new Date()` 会和上面那句 `now()` 落进同一毫秒（TZ=UTC 下直连实测 300 次
+    // 里 12 次），于是这条写入什么都没改变，守卫正确地保持沉默 —— 而下面的 refuses() 会把这份沉默
+    // 读成"本该被拒绝却成功了"。从库里读回来再加一秒，是唯一不依赖 JS 时钟与库时钟相对关系的写法：
+    // 读回值按宿主时区解析、写回去按同一时区序列化，两次抵消，只剩那 1000ms。
+    const pinnedAt = await client.query<{ at: Date }>(
+      `SELECT "source_resolved_at" AS at FROM "session" WHERE "id" = $1`, [id('102')]);
+    const oneSecondLater = new Date(pinnedAt.rows[0].at.getTime() + 1_000);
+
     for (const [column, value] of Object.entries({
       source_base_sha: SHA('f'),
-      source_resolved_at: new Date(),
+      source_resolved_at: oneSecondLater,
       source_resolved_by_runner_id: null,
     })) {
       await refuses(
