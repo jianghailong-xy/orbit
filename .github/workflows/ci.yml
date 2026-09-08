@@ -134,6 +134,11 @@ jobs:
         run: npm run prisma:generate
       - name: Run every pg spec against a real PostgreSQL
         env:
+          # NEGATIVE CONTROL, TEMPORARY — reverted in the next commit. No URL reaches any child
+          # under any of its three names, which is the condition this job was written to end. Every
+          # case must report `# SKIP`, every `node --test` must exit 0, and this job must still
+          # fail. If it goes green under this, every green it has ever printed is worth nothing.
+          PCC_PG_CONTROL: omit-url
           # The matrix prints one summary line per spec and keeps each child's own output only if
           # told where to put it. Without this a red reads `fail=6` and nothing else — which
           # assertion, and what it saw, would be in a buffer the run threw away.
