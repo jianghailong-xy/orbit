@@ -3088,6 +3088,44 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     };
   }, [selectedId, measure]);
 
+  /**
+   * Which approvals in hand are still questions somebody can answer.
+   *
+   * `SessionsService.listApprovals` already drops a dead card on two committed facts and no clock
+   * (`stillBeingAsked`), but that filter is only reachable by a fetch — and this component fetches
+   * approvals exactly twice: when a session is opened, and after one is answered. The card a person
+   * sees mid-turn came neither way. It arrived as an `approval_request` frame and went straight
+   * into `approvals`, and when the engine abandons the call it publishes no `approval_resolved` and
+   * writes nothing anywhere, so nothing takes it back out again: it stays on screen and stays
+   * pressable, and the answer reaches nobody because the poll loop that would have consumed it died
+   * with the turn (`docs/completion-input-routing.md` §A2 D1). Nothing polls it back to the truth.
+   *
+   * So the same pair of facts is recomputed here, from rows this component already holds: the
+   * session is still generating, and the call this approval was raised for has no result yet. The
+   * failure direction is the server's — a card is taken out of the answerable set on evidence that
+   * it is over, never on the absence of evidence — so a session row that has not arrived yet, and
+   * an old runtime's approval with no tool_use id to pair, both stay answerable. Not a clock:
+   * elapsed time is not a committed fact (`coordinator-wake.ts` §0).
+   */
+  const settledToolUseIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const ev of transcriptEvents) {
+      if (ev.type !== 'tool_result') continue;
+      const id = (ev.payload as { toolUseId?: unknown } | undefined)?.toolUseId;
+      if (typeof id === 'string') ids.add(id);
+    }
+    return ids;
+  }, [transcriptEvents]);
+  const turnStillGenerating =
+    !selectedSession || isGenerating(selectedSession, sessionRunStateOf(selectedSession));
+  const answerableApprovalIds = new Set(
+    approvals
+      .filter((a) => turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId)))
+      .map((a) => a.id),
+  );
+  // The card that owns the ⌘/Ctrl+Enter shortcut is the first one the key could actually reach.
+  const activeApprovalId = approvals.find((a) => answerableApprovalIds.has(a.id))?.id;
+
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
   const decide = async (
@@ -5521,14 +5559,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ))}
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
-              {!selectedTrashed && approvals.map((a, i) => (
-                // Only the first (oldest) pending card owns the ⌘/Ctrl+Enter shortcut; once
-                // it's decided the next card becomes first, so the key walks the queue in order.
+              {!selectedTrashed && approvals.map((a) => (
+                // Only the first (oldest) still-answerable card owns the ⌘/Ctrl+Enter shortcut;
+                // once it's decided the next one becomes first, so the key walks the queue in
+                // order — stepping over any card whose question is already over.
                 <ApprovalPanel
                   key={a.id}
                   approval={a}
                   onDecide={decide}
-                  active={i === 0}
+                  active={a.id === activeApprovalId}
+                  answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
                 />
               ))}

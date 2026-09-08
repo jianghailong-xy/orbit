@@ -7005,6 +7005,14 @@ html[data-theme='dark'] .session-tag-chip {
   padding: 10px 14px;
   border-top: 1px solid var(--brand-border);
 }
+/* The line a card carries once its turn is over and its actions are all disabled. Muted and
+   above the dead row, so it reads as the reason they are dead rather than as another ask. */
+.approval-stale {
+  margin: 0;
+  padding: 8px 14px 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
 .card-action {
   padding: 6px 16px;
   border-radius: 6px;

@@ -4,8 +4,34 @@ import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
+import { STRIP_LABEL } from './DecisionRail';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { bashCommandRules } from '@orbit/shared';
+
+/**
+ * What the card says once nothing is listening for its answer.
+ *
+ * A card is `answerable={false}` when the turn that raised it is over — see WorkspaceView, which
+ * computes it from the same two committed facts the server filters `listApprovals` on. Nothing was
+ * written to the approval when that happened (the engine writes nothing at all when it abandons a
+ * call), so the row still says PENDING and always will; what changed is that the poll loop which
+ * would have carried a decision back died with the turn.
+ *
+ * The card stays on screen rather than vanishing. It is the only place the question is written
+ * down, and a card that silently disappears mid-read is indistinguishable from one somebody else
+ * answered. So it keeps its content, loses every action (`CardAction`'s one rule: an action that
+ * cannot succeed is `disabled`) and carries this line — which names the pinned strip by the
+ * strip's own label, because that read is answered by writing a decision directly and needs no
+ * live turn (`docs/completion-input-routing.md` §A2 D1).
+ */
+export const UNANSWERABLE_NOTE =
+  `This turn has ended, so an answer here would reach nobody. Anything still waiting on a ` +
+  `decision is under "${STRIP_LABEL}" above.`;
+
+/** The line a dead card carries in place of its actions. */
+function UnanswerableNote(): JSX.Element {
+  return <p className="approval-stale">{UNANSWERABLE_NOTE}</p>;
+}
 
 // claude routes plan-mode "exit?" through the same permission tool as any other gated
 // call; ExitPlanMode is the one worth a rich render (its input carries the plan).
@@ -153,14 +179,20 @@ export function ApprovalPanel({
   approval,
   onDecide,
   active = false,
+  answerable = true,
   onChatAbout,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
   active?: boolean;
+  /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
+  answerable?: boolean;
   onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
+  // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
+  // choosing the active card, and this holds even when something else calls it directly.
+  const armed = active && answerable;
   // "Always allow" — the running session stops asking (claude's engine matches future calls),
   // and the rule is kept on this session's workspace so its other sessions start with it too.
   // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line
@@ -168,13 +200,18 @@ export function ApprovalPanel({
   const rules = isQuestion ? [] : rememberRulesFor(approval);
   // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
   // Questions have no submit hotkey — they submit only via the Submit button.
-  useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'), { requireMod: false });
-  useApproveHotkey(active && !isQuestion && rules.length > 0, () => {
+  useApproveHotkey(armed && !isQuestion, () => onDecide(approval.id, 'allow'), { requireMod: false });
+  useApproveHotkey(armed && !isQuestion && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
   });
   if (isQuestion) {
     return (
-      <QuestionForm approval={approval} onDecide={onDecide} onChatAbout={onChatAbout} />
+      <QuestionForm
+        approval={approval}
+        onDecide={onDecide}
+        answerable={answerable}
+        onChatAbout={onChatAbout}
+      />
     );
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
@@ -202,22 +239,32 @@ export function ApprovalPanel({
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
       </div>
+      {!answerable && <UnanswerableNote />}
       <CardActions className="approval-actions">
-        <CardActionButton tone="primary" onClick={() => onDecide(approval.id, 'allow')}>
+        <CardActionButton
+          tone="primary"
+          disabled={!answerable}
+          onClick={() => onDecide(approval.id, 'allow')}
+        >
           {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : batch ? 'Create them' : 'Approve'}
-          {active && <span className="approval-kbd">{ENTER_HINT}</span>}
+          {armed && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
           <CardActionButton
             tone="accent"
+            disabled={!answerable}
             title={`Stop asking about calls like this — here and in this workspace's other sessions: ${ruleNames(rules).join(', ')}. Revocable in the workspace's settings.`}
             onClick={() => onDecide(approval.id, 'allow', undefined, undefined, rules)}
           >
             Always allow <code className="approval-rule">{rememberLabel(rules)}</code>
-            {active && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
+            {armed && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
           </CardActionButton>
         )}
-        <CardActionButton tone="secondary" onClick={() => onDecide(approval.id, 'deny')}>
+        <CardActionButton
+          tone="secondary"
+          disabled={!answerable}
+          onClick={() => onDecide(approval.id, 'deny')}
+        >
           {isPlan(approval)
             ? 'Keep planning'
             : dag
@@ -397,10 +444,12 @@ function questionsOf(input: unknown): QItem[] {
 function QuestionForm({
   approval,
   onDecide,
+  answerable,
   onChatAbout,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
+  answerable: boolean;
   onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const questions = questionsOf(approval.input);
@@ -473,6 +522,7 @@ function QuestionForm({
                         type="button"
                         className={`chat-q-opt chat-q-opt-btn${on ? ' is-picked' : ''}`}
                         key={j}
+                        disabled={!answerable}
                         onClick={() => toggle(q, label, multi)}
                       >
                         <span className="chat-q-opt-label">{label}</span>
@@ -486,6 +536,7 @@ function QuestionForm({
                   className="chat-q-custom"
                   placeholder="Or type your own answer…"
                   value={custom[q] ?? ''}
+                  disabled={!answerable}
                   onChange={(e) => onCustom(q, e.target.value, multi)}
                 />
                 {multi && <div className="chat-q-multi">Multiple choice</div>}
@@ -494,13 +545,20 @@ function QuestionForm({
           })}
         </div>
       </div>
+      {!answerable && <UnanswerableNote />}
       <CardActions className="approval-actions">
         {/* Unanswered questions cannot be submitted, so the control that would submit them is not
             pressable — the same rule the decision card's Confirm is under. */}
-        <CardActionButton tone="primary" disabled={!complete} onClick={submit}>
+        <CardActionButton tone="primary" disabled={!answerable || !complete} onClick={submit}>
           Submit
         </CardActionButton>
-        <CardActionButton tone="outline" onClick={() => onChatAbout?.(approval.id, chatLabel)}>
+        {/* Chatting about it is not a way around a dead card: the reply rides back as a `deny` on
+            this same approval, through the same poll loop that is no longer there to read it. */}
+        <CardActionButton
+          tone="outline"
+          disabled={!answerable}
+          onClick={() => onChatAbout?.(approval.id, chatLabel)}
+        >
           💬 Chat about this
         </CardActionButton>
       </CardActions>
