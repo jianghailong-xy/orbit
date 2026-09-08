@@ -48,6 +48,24 @@
 # rewrites the client every concurrent session is compiling against. Same overlay, and for the same
 # reasons, as the one in `scripts/run-pg-spec.sh`.
 #
+# `@orbit/shared` is a workspace link to `src/shared`, and what a consumer reads is its `dist/` —
+# the package's `main`/`types` — not its sources. Nothing here used to build it, so both the compiler
+# and every child process read whatever `dist/` the main checkout happened to have lying around. On
+# 2026-09-08 that was four days older than `src/shared/src` and this script printed seven TS2339 and
+# TS2353 errors naming `refreshModelCatalog`, `minFreeDiskMb` and `enginePhase` in files no branch
+# had touched. The compile noise is the visible half. The quiet half is the one
+# `scripts/outcome-reconciler-full-api.sh` names — "a clean candidate can compile correctly and then
+# execute tests against an older codec/protocol implementation" — because `tsc` emits anyway and the
+# specs then ran against that same stale `dist/`. So it is built below and linked TWICE: once under
+# `src/` for the compiler and once under `build/` for the child, as `scripts/run-pg-spec.sh` does it.
+#
+# Both `tsc` invocations end in `|| die`. Without that they were advisory: the errors above scrolled
+# past and the run continued against whatever tree tsc had emitted regardless. An emit that produced
+# no `build/**/*.pg.spec.js` at all was worse than red — the loop body ran zero times and the script
+# printed `tests=0 pass=0 fail=0 … spec-level-red=0`, then `==> OK`, and exited 0. A green that has
+# run nothing is the one outcome this script must not be able to report, so the list is taken once
+# now and an empty one is fatal.
+#
 # A spec FAILS if node exits non-zero for any reason — a failing assertion, a crash, a timeout, or a
 # process that will not exit because something left a handle open. The timeout is a backstop and
 # never a pass; the script exits non-zero if anything was red.
@@ -158,14 +176,25 @@ echo "==> prisma migrate deploy (template $TMPL)"
 echo "==> $(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$TMPL" -tAc \
   'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL') migrations applied"
 
+echo "==> building @orbit/shared"
+"$TSC" -p "$REPO/src/shared/tsconfig.json" || die "src/shared failed to compile"
+mkdir -p "$REPO/src/node_modules/@orbit"
+link "$REPO/src/shared" "$REPO/src/node_modules/@orbit/shared"          # compile time
+
 echo "==> building the test tree"
-( cd "$API" && "$TSC" -p tsconfig.test.json )
+( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+mkdir -p "$API/build/node_modules/@orbit"
+link "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"          # run time
 echo "==> building the fault-injection tree"
-( cd "$API" && "$TSC" -p tsconfig.project-reconcile-faults.json )
+( cd "$API" && "$TSC" -p tsconfig.project-reconcile-faults.json ) ||
+  die "tsconfig.project-reconcile-faults.json failed to compile"
 
 cd "$API"
+# Taken once, and empty is fatal: a loop that never runs reports the same zeroes as a clean run.
+SPECS="$(ls build/**/*.pg.spec.js 2>/dev/null | sort)"
+[ -n "$SPECS" ] || die "no build/**/*.pg.spec.js to run — the test tree compiled nothing"
 n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; MISSING=0; RED=()
-for f in $(ls build/**/*.pg.spec.js | sort); do
+for f in $SPECS; do
   n=$((n+1)); DB="pcc_matrix_s$n"; base="$(basename "$f")"
   [ "$base" = "project-reconcile-fault-injection.pg.spec.js" ] &&
     f="build-project-reconcile-faults/projects/$base"
