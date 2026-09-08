@@ -6650,6 +6650,195 @@ html[data-theme='dark'] .session-tag-chip {
   content: '✓ ';
   color: var(--brand);
 }
+/* ── The evidence-decision card ───────────────────────────────────────────────────────────
+   One AskUserQuestion is not a form: the completion decision (`ApprovalPanel`,
+   EvidenceDecisionForm) is a judgment about a row the server publishes in full, so it is laid
+   out as the reader decides — what is claimed, what is admitted missing, what was checked for
+   them — with the actions stacked underneath instead of hidden behind a pick-then-Submit. */
+.decision-ask-body {
+  padding-bottom: 12px;
+}
+.decision-ask-q + .decision-ask-q {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--brand-border);
+}
+.decision-ask-chip {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+  margin: 8px 0 4px;
+}
+/* The claim is the card's lead: it is the sentence somebody is standing behind, and everything
+   below it is evidence about that sentence. */
+.decision-ask-claim {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
+.decision-ask-quiet {
+  font-weight: 400;
+  color: var(--text-3);
+}
+.decision-ask-meta {
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  word-break: break-all;
+}
+/* What the submitter says they did NOT establish. Amber because it is the reason to press the
+   other button, and never folded for the same reason. */
+.decision-ask-gaps {
+  margin-top: 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+  padding: 8px 10px;
+}
+.decision-ask-gaps-head {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--warning);
+}
+.decision-ask-gaps-list,
+.decision-ask-gaps-rest {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.decision-ask-gaps-list li + li,
+.decision-ask-gaps-rest li + li {
+  margin-top: 4px;
+}
+.decision-ask-checks,
+.decision-ask-full {
+  margin-top: 8px;
+}
+/* A disclosure has to read as one without reading as an action: text-sized, text-coloured, and
+   carrying nothing but the caret to say it opens. Same shape the decision rail's tally has. */
+.decision-ask-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-2);
+  text-align: left;
+}
+.decision-ask-toggle:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.decision-ask-caret {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.decision-ask-check-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.decision-ask-check-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-2);
+}
+.decision-ask-check-list li.is-held .decision-ask-check-mark {
+  color: var(--success);
+}
+.decision-ask-check-list li.is-broken .decision-ask-check-mark {
+  color: var(--warning);
+}
+.decision-ask-check-detail {
+  flex-basis: 100%;
+  color: var(--text-3);
+  white-space: pre-wrap;
+}
+/* The string the tool actually carries, and the one place on this card it is shown. `pre-wrap`
+   is the whole of the old card's bug: `.chat-q-text` set no white-space at all, so eight hundred
+   words of claim, criterion and gaps ran together into one paragraph. */
+.decision-ask-full-body {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-2);
+}
+/* The actions stack: a verdict is a full-width choice, not one of three things on a toolbar.
+   Written against `.card-actions` too, because that class sets `align-items: center` further down
+   this file and the later rule would otherwise decide the layout of a card it knows nothing about. */
+.card-actions.decision-ask-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 12px;
+}
+.decision-ask-back {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.decision-ask-why {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.decision-ask-why-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.decision-ask-note {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  outline: none;
+  resize: vertical;
+}
+.decision-ask-note:focus {
+  border-color: var(--brand);
+}
+.decision-ask-note::placeholder {
+  color: var(--text-4);
+}
+.card-actions.decision-ask-send {
+  flex-direction: column;
+  align-items: stretch;
+}
+/* What one row's answer looks like while the card waits on the others it was raised with. */
+.decision-ask-picked {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
 /* Free-text answer field: lets the user type their own answer to a question. */
 .chat-q-custom {
   margin-top: 4px;

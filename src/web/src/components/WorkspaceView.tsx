@@ -66,6 +66,7 @@ import {
   type SessionListView,
   sessionsQuery,
   sessionTagsQuery,
+  pendingDecisionsQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
 import {
@@ -3126,6 +3127,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   // The card that owns the ⌘/Ctrl+Enter shortcut is the first one the key could actually reach.
   const activeApprovalId = approvals.find((a) => answerableApprovalIds.has(a.id))?.id;
+  // The same read the pinned strip is made of, handed to the cards as well. A completion decision
+  // reaches this session twice — as a row in that queue and as an `AskUserQuestion` raised over it
+  // — and the card is the one that blocks a turn, so it is the one that must render the ROW rather
+  // than the string the question flattened it into (`ApprovalPanel`, EvidenceDecisionForm). Same
+  // query key the strip uses, so the two share one cached read and this adds no request.
+  const pendingDecisions = useQuery({
+    ...pendingDecisionsQuery(selectedId ?? ''),
+    enabled: Boolean(selectedId) && !selectedTrashed,
+  });
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -5580,6 +5590,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
+                  decisions={pendingDecisions.data ?? null}
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => (

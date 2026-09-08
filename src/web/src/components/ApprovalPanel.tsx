@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
-import { STRIP_LABEL } from './DecisionRail';
+import {
+  CONFIRM_LABEL,
+  SEND_BACK_LABEL,
+  STRIP_LABEL,
+  type PendingDecisionQueue,
+  type PendingDecisionRow,
+} from './DecisionRail';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { bashCommandRules } from '@orbit/shared';
 
@@ -181,6 +187,7 @@ export function ApprovalPanel({
   active = false,
   answerable = true,
   onChatAbout,
+  decisions,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
@@ -188,6 +195,9 @@ export function ApprovalPanel({
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
   onChatAbout?: (id: string, question: string) => void;
+  /** This session's pending evidence decisions, as the rail reads them. Present only so a question
+   *  that IS one of those rows can be rendered FROM the row; every other card ignores it. */
+  decisions?: PendingDecisionQueue | null;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
@@ -205,7 +215,20 @@ export function ApprovalPanel({
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
   });
   if (isQuestion) {
-    return (
+    // The one question this file recognises by what it is about rather than by its shape — see
+    // EvidenceDecisionForm's header for why there is exactly one, and what it would take to add
+    // a second. Everything else, including a two-option question that merely resembles it, is a
+    // form over options and is rendered as one.
+    const decisionRows = evidenceDecisionRows(approval, decisions);
+    return decisionRows ? (
+      <EvidenceDecisionForm
+        approval={approval}
+        rows={decisionRows}
+        onDecide={onDecide}
+        answerable={answerable}
+        onChatAbout={onChatAbout}
+      />
+    ) : (
       <QuestionForm
         approval={approval}
         onDecide={onDecide}
@@ -563,5 +586,423 @@ function QuestionForm({
         </CardActionButton>
       </CardActions>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+   THE EVIDENCE-DECISION CARD
+   ─────────────────────────────────────────────────────────────────────────────────────────────
+
+   THE GENERIC FORM STAYS THE DEFAULT, AND THIS IS THE ONE EXCEPTION TO IT
+   -----------------------------------------------------------------------
+   Everything below fires for a single shape: the card `coordinator-evidence-ask.ts` raises so a
+   person can answer "is this work finished". Every other AskUserQuestion — including one whose two
+   options happen to read alike — falls through to `QuestionForm` above, which is what the tool
+   actually is: a form over options nobody has seen before.
+
+   Recognising a question by what it is ABOUT is a cost, and it was taken deliberately rather than
+   drifted into. A client that grows one card per kind of question ends up with N surfaces for one
+   fact, and this account has already paid for that: two decision surfaces raced on 2026-09-09 and
+   the loser came back `EVIDENCE_JUDGMENT_ALREADY_DECIDED`. So the rule is written down here instead
+   of left to taste — ONE special case, this one, and a second one needs a better reason than "this
+   question would look nicer as a card". What earns this one its exception is that it is not
+   multiple choice at all: it is a judgment about a row the server already publishes in full, and
+   the generic form was throwing that row away.
+
+   THE CARD READS THE ROW, NOT THE QUESTION TEXT
+   ---------------------------------------------
+   `evidenceQuestionBody` flattens the claim, the criterion and the gaps into one string because a
+   tool input is all AskUserQuestion carries. Rendering THAT is what produced the wall of text this
+   card replaces. So the string is used for exactly two things — to say WHICH row is being asked
+   about, and, verbatim and folded away, as the full text — while every line above that fold is
+   read off `PendingDecisionRow`: the same row `DecisionRail` renders, out of the same
+   `?decidingSessionId=` read, scoped by the same server rule. Nothing on the card is summarised,
+   re-worded or inferred; each visible string is a field of that row or a count of one.
+*/
+
+/** The card's heading. */
+export const DECISION_ASK_HEADING = '需要你裁决';
+/** `确认完成` submits on the click itself. The generic form's pick-then-Submit exists for a form
+ *  with several questions and several picks per question; in a two-way judgment it buys nothing
+ *  but one more click between a reader and the thing they already decided. */
+export const DECISION_CONFIRM_ACTION = '确认完成';
+export const DECISION_SEND_BACK_ACTION = '退回重做';
+/** The send-back's own submit, behind the reason box rather than beside it. */
+export const DECISION_SEND_ACTION = '退回';
+/** The third answer, and deliberately the third: not judging yet is useful (it rides back as a
+ *  `deny` with a message, exactly as the generic form's does) but it is not a verdict, so it does
+ *  not get a verdict's weight. */
+export const DECISION_CHAT_ACTION = '💬 先聊聊，暂不裁决';
+/** Why the reason is required rather than a placeholder somebody may ignore: the decision door
+ *  refuses a SEND_BACK carrying no note and writes nothing at all. The generic form could not know
+ *  that, so it offered a permanently-present `Or type your own answer…` that reads like an
+ *  invitation to say something rather than like the one thing that makes the button work. */
+export const DECISION_NOTE_LABEL = '下一版证据要给出什么？这句话是下一次尝试唯一能瞄准的东西。';
+export const DECISION_NOTE_PLACEHOLDER = '例如：把 pg spec 跑一遍，并给出改前先红的原始输出…';
+/** The gaps that did not fit, counted rather than dropped: they are the body of this card. */
+export const decisionGapsMore = (rest: number): string => `还有 ${rest} 条`;
+/** Evidence from before the envelope has no claim at all; the line says so rather than rendering
+ *  a blank where the card's lead should be. */
+export const DECISION_NO_CLAIM = '这一版证据没有写下主张。';
+export const DECISION_NO_CRITERION = '未引用验收条目';
+export const DECISION_NO_GAPS = '提交者声明没有缺口';
+export const DECISION_FULL_LABEL = '完整证据正文';
+
+/** How many gaps the card shows before it starts counting. Three is what fits on a phone above the
+ *  actions; the rest are one press away and the count is never hidden. */
+const DECISION_GAPS_SHOWN = 3;
+/** Where a claim starts being folded. A claim is one sentence in the good case and a paragraph in
+ *  the bad one, and the bad one must not push the gaps and the actions off the screen. */
+const DECISION_CLAIM_CLAMP = 120;
+
+/**
+ * The identity `evidenceQuestionBody` writes into the end of every decision question.
+ *
+ * The server puts it there so two rows whose claims read alike cannot collapse onto one `answers`
+ * key. It is the ONLY part of that body this file reads, and it is read as a handle: which row is
+ * this question about. A question that names no row this session may decide is not a decision card
+ * and renders as the ordinary form — which is also what happens if the server ever words that line
+ * differently, so the failure is a card that looks like it did yesterday rather than a wrong one.
+ */
+function askIdentity(row: PendingDecisionRow): string {
+  return `task ${row.taskId}, evidence rev ${row.evidenceRevision}`;
+}
+
+/** The row one question is about, or null when it is not one of these questions at all. */
+function decisionRowFor(question: QItem, rows: PendingDecisionRow[]): PendingDecisionRow | null {
+  const labels = (question.options ?? []).map((option) => option?.label ?? '');
+  // The two options the server raises, by the labels `DecisionRail` declares and the ask copies.
+  if (labels.length !== 2) return null;
+  if (!labels.includes(CONFIRM_LABEL) || !labels.includes(SEND_BACK_LABEL)) return null;
+  const body = question.question ?? '';
+  const matched = rows.filter((row) => body.includes(askIdentity(row)));
+  return matched.length === 1 ? matched[0] : null;
+}
+
+/**
+ * The rows this approval is asking about, or null for every other question in the world.
+ *
+ * All or nothing on purpose: a card that rendered some of its questions as judgments and the rest
+ * as a form would be two cards in one, with one Submit between them. Either the whole ask is the
+ * one shape this file knows, or none of it is.
+ */
+export function evidenceDecisionRows(
+  approval: ApprovalInfo,
+  decisions: PendingDecisionQueue | null | undefined,
+): PendingDecisionRow[] | null {
+  if (approval.toolName !== 'AskUserQuestion') return null;
+  const questions = questionsOf(approval.input);
+  if (questions.length === 0) return null;
+  // `pending` and nothing else: those are the rows the door would take an answer to from this
+  // session, which is the same set the server built the ask from.
+  const rows = decisions?.pending ?? [];
+  const matched = questions.map((question) => decisionRowFor(question, rows));
+  return matched.every((row) => row !== null) ? (matched as PendingDecisionRow[]) : null;
+}
+
+/** One machine-checkable statement about the row, in the row's own fields. */
+interface DecisionCheck {
+  ok: boolean;
+  text: string;
+  /** What the reader would go and look at: the standard itself, or the door's words for a check
+   *  that did not hold. Null when the line says everything there is. */
+  detail: string | null;
+}
+
+/**
+ * The three things nobody has to take on faith, folded into one line.
+ *
+ * Each is a structured field the server already computed, so this is a reading of the row rather
+ * than an opinion about it — which is exactly why they fold and the gaps do not: a check that held
+ * is a reason to stop reading, and a gap is a reason to keep going.
+ */
+function decisionChecks(row: PendingDecisionRow): DecisionCheck[] {
+  const resolved = row.citations.filter((citation) => citation.resolved);
+  const unresolved = row.citations.filter((citation) => !citation.resolved);
+  return [
+    {
+      ok: row.decidability.decidable,
+      text: '引用的验收条目仍是线上那一条',
+      detail: row.decidability.decidable
+        ? (row.criterion ? `${row.criterion.key} · ${row.criterion.text}` : null)
+        : row.decidability.refusal,
+    },
+    {
+      ok: row.citations.length > 0 && unresolved.length === 0,
+      text: `${resolved.length}/${row.citations.length} 条引用解析成功`,
+      detail:
+        unresolved.length === 0
+          ? null
+          : unresolved.map((citation) => `${citation.ref}：${citation.reason ?? '未解析'}`).join('\n'),
+    },
+    {
+      ok: row.independence.independent,
+      text: '裁决人独立于这次提交',
+      detail: row.independence.independent ? null : row.independence.disqualification,
+    },
+  ];
+}
+
+/**
+ * The card: one section per row, and the actions of a judgment rather than of a form.
+ *
+ * `answers` still goes back the way `evidenceDecisionFromAnswers` reads it — keyed by the question's
+ * own text, carrying the server's own option label. What changed is what a reader does to produce
+ * it, not what arrives. A send-back carries its reason as the second entry, which is the same shape
+ * the generic form has always used for a typed answer beside a picked one.
+ */
+function EvidenceDecisionForm({
+  approval,
+  rows,
+  onDecide,
+  answerable,
+  onChatAbout,
+}: {
+  approval: ApprovalInfo;
+  rows: PendingDecisionRow[];
+  onDecide: OnDecide;
+  answerable: boolean;
+  onChatAbout?: (id: string, question: string) => void;
+}): JSX.Element {
+  const questions = questionsOf(approval.input);
+  // Usually there is one row, and then the first press IS the submit. A delivery that found three
+  // rows waiting asks about three in one call and a tool call is answered once, so an answer is
+  // held until the last one is made rather than sent as a partial the other two are lost from.
+  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  const answer = (question: string, picks: string[]): void => {
+    const next = { ...answers, [question]: picks };
+    if (questions.every((item) => (next[item.question ?? '']?.length ?? 0) > 0)) {
+      onDecide(approval.id, 'allow', next);
+      return;
+    }
+    setAnswers(next);
+  };
+  return (
+    <div className="approval-card decision-ask">
+      <div className="approval-head decision-ask-head">{DECISION_ASK_HEADING}</div>
+      <div className="approval-body is-questions decision-ask-body">
+        {questions.map((question, index) => {
+          const body = question.question ?? '';
+          return (
+            <EvidenceDecisionQuestion
+              key={index}
+              row={rows[index]}
+              body={body}
+              index={index}
+              total={questions.length}
+              picked={answers[body]?.[0] ?? null}
+              answerable={answerable}
+              onAnswer={(picks) => answer(body, picks)}
+              onChat={() => onChatAbout?.(approval.id, rows[index].title)}
+            />
+          );
+        })}
+      </div>
+      {!answerable && <UnanswerableNote />}
+    </div>
+  );
+}
+
+/** One row, in the order a person decides in: what is claimed, what is admitted missing, what was
+ *  checked for them, and only then the full text they can go and read. */
+function EvidenceDecisionQuestion({
+  row,
+  body,
+  index,
+  total,
+  picked,
+  answerable,
+  onAnswer,
+  onChat,
+}: {
+  row: PendingDecisionRow;
+  /** The question's own text — the identity of this question on the way back, and the card's
+   *  bottom fold. Never the source of anything above it. */
+  body: string;
+  index: number;
+  total: number;
+  /** The option label already chosen for this row, while the card waits on its other rows. */
+  picked: string | null;
+  answerable: boolean;
+  onAnswer: (picks: string[]) => void;
+  onChat: () => void;
+}): JSX.Element {
+  const noteId = useId();
+  const [claimOpen, setClaimOpen] = useState(false);
+  const [gapsOpen, setGapsOpen] = useState(false);
+  const [checksOpen, setChecksOpen] = useState(false);
+  const [fullOpen, setFullOpen] = useState(false);
+  const [backOpen, setBackOpen] = useState(false);
+  const [note, setNote] = useState('');
+
+  const claim = row.claim.trim();
+  const longClaim = claim.length > DECISION_CLAIM_CLAMP;
+  const shownGaps = row.gaps.slice(0, DECISION_GAPS_SHOWN);
+  const restGaps = row.gaps.slice(DECISION_GAPS_SHOWN);
+  const checks = decisionChecks(row);
+  const held = checks.filter((check) => check.ok).length;
+
+  return (
+    <section className="decision-ask-q">
+      <div className="decision-ask-chip">{`证据 ${index + 1}/${total}`}</div>
+      <div className="decision-ask-claim">
+        {claim === '' ? (
+          <span className="decision-ask-quiet">{DECISION_NO_CLAIM}</span>
+        ) : longClaim && !claimOpen ? (
+          `${claim.slice(0, DECISION_CLAIM_CLAMP)}…`
+        ) : (
+          claim
+        )}
+      </div>
+      {longClaim && (
+        <button
+          type="button"
+          className="decision-ask-toggle"
+          aria-expanded={claimOpen}
+          onClick={() => setClaimOpen(!claimOpen)}
+        >
+          {claimOpen ? '收起' : '展开全文'}
+        </button>
+      )}
+      <div className="decision-ask-meta">
+        {`${row.taskId} · rev ${row.evidenceRevision} · `}
+        {row.criterion ? row.criterion.key : DECISION_NO_CRITERION}
+      </div>
+
+      {/* The body of the card. What the submitter says they did NOT establish is the part most
+          likely to change the answer, so a narrow screen gives up the full text and the machine's
+          checks before it gives up any of this — and what does not fit is COUNTED rather than
+          dropped, one press from being read. */}
+      <div className="decision-ask-gaps">
+        <div className="decision-ask-gaps-head">
+          {row.gaps.length === 0 ? DECISION_NO_GAPS : `提交者声明的缺口 · ${row.gaps.length} 条`}
+        </div>
+        {row.gaps.length > 0 && (
+          <ul className="decision-ask-gaps-list">
+            {shownGaps.map((gap, k) => (
+              <li key={k}>{gap}</li>
+            ))}
+          </ul>
+        )}
+        {restGaps.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="decision-ask-toggle"
+              aria-expanded={gapsOpen}
+              onClick={() => setGapsOpen(!gapsOpen)}
+            >
+              {gapsOpen ? '收起' : decisionGapsMore(restGaps.length)}
+            </button>
+            {gapsOpen && (
+              <ul className="decision-ask-gaps-rest">
+                {restGaps.map((gap, k) => (
+                  <li key={k}>{gap}</li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="decision-ask-checks">
+        <button
+          type="button"
+          className="decision-ask-toggle"
+          aria-expanded={checksOpen}
+          onClick={() => setChecksOpen(!checksOpen)}
+        >
+          {`${held} 项机器已核`}
+          {held === checks.length ? '' : ` · ${checks.length - held} 项没过`}
+          <span className="decision-ask-caret" aria-hidden="true">{checksOpen ? '▴' : '▾'}</span>
+        </button>
+        {checksOpen && (
+          <ul className="decision-ask-check-list">
+            {checks.map((check, k) => (
+              <li key={k} className={check.ok ? 'is-held' : 'is-broken'}>
+                <span className="decision-ask-check-mark" aria-hidden="true">
+                  {check.ok ? '✓' : '!'}
+                </span>
+                {check.text}
+                {check.detail !== null && (
+                  <div className="decision-ask-check-detail">{check.detail}</div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Last, and folded: the string the tool actually carries. Nothing above it is derived from
+          this — it is here so that "the card shows less" never means "the card hides something". */}
+      <div className="decision-ask-full">
+        <button
+          type="button"
+          className="decision-ask-toggle"
+          aria-expanded={fullOpen}
+          onClick={() => setFullOpen(!fullOpen)}
+        >
+          {DECISION_FULL_LABEL}
+          <span className="decision-ask-caret" aria-hidden="true">{fullOpen ? '▴' : '▾'}</span>
+        </button>
+        {fullOpen && <pre className="decision-ask-full-body">{body}</pre>}
+      </div>
+
+      {picked !== null ? (
+        <div className="decision-ask-picked">
+          {`已选「${picked === CONFIRM_LABEL ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION}」`}
+        </div>
+      ) : (
+        <CardActions className="decision-ask-actions">
+          <CardActionButton
+            tone="primary"
+            disabled={!answerable}
+            onClick={() => onAnswer([CONFIRM_LABEL])}
+          >
+            {DECISION_CONFIRM_ACTION}
+          </CardActionButton>
+          <div className="decision-ask-back">
+            <CardActionButton
+              tone="secondary"
+              disabled={!answerable}
+              onClick={() => setBackOpen(!backOpen)}
+            >
+              {DECISION_SEND_BACK_ACTION}
+            </CardActionButton>
+            {backOpen && (
+              <div className="decision-ask-why">
+                <label className="decision-ask-why-label" htmlFor={noteId}>
+                  {DECISION_NOTE_LABEL}
+                </label>
+                <textarea
+                  id={noteId}
+                  className="decision-ask-note"
+                  rows={3}
+                  placeholder={DECISION_NOTE_PLACEHOLDER}
+                  value={note}
+                  disabled={!answerable}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+                {/* The one rule both cards are under: an action that cannot succeed is disabled.
+                    A send-back with no note is refused by the door and writes nothing, so the
+                    control that would send it is not pressable until there is one. */}
+                <CardActions className="decision-ask-send">
+                  <CardActionButton
+                    tone="secondary"
+                    disabled={!answerable || note.trim() === ''}
+                    onClick={() => onAnswer([SEND_BACK_LABEL, note.trim()])}
+                  >
+                    {DECISION_SEND_ACTION}
+                  </CardActionButton>
+                </CardActions>
+              </div>
+            )}
+          </div>
+          <CardActionButton tone="outline" disabled={!answerable} onClick={onChat}>
+            {DECISION_CHAT_ACTION}
+          </CardActionButton>
+        </CardActions>
+      )}
+    </section>
   );
 }
