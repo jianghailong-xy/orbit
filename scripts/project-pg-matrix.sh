@@ -20,9 +20,13 @@
 #     `DROP TABLE "session"` hits the dependent objects of every migration. It gets an EMPTY one.
 #
 # `COORDINATOR_PG_RESTART_COMMAND` is supplied too: the disposable container IS restartable, and
-# without it project-dispatch-boundary-verification's "a real server restart does not duplicate or
-# lose an applied dispatch" reports `# SKIP` — a silent hole in exactly the property that most needs
-# a real server.
+# without it the only two specs that read it report `# SKIP` — a silent hole in exactly the property
+# that most needs a real server:
+#
+#   * task-dispatch-epoch-aba's
+#     "a real server restart does not change what a moment named or what it answered"
+#   * task-run-winner-recovery's
+#     "a real server restart does not change which Session a press answers with"
 #
 # `ORBIT_DB_CONFLICT_ORIGIN=fault_injection` is supplied for the reason `scripts/deadlock-barrier.sh`
 # supplies it: every spec here makes conflicts on purpose. The label is a property of the PROCESS —
