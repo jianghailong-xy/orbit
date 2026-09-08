@@ -38,6 +38,16 @@
 #     process — because with only the first one the child resolves the main checkout's older
 #     `dist/` and reports missing fields on types like RunnerHeartbeatResponse. That red is the
 #     harness, not the product.
+#   * The branch's own Prisma client, in a worktree only. `@prisma/client` in the main checkout is
+#     whatever the last `prisma generate` in THAT tree left behind, and it does not know this
+#     branch's schema: a branch that adds a model compiles into `Property 'x' does not exist on
+#     type 'PrismaService'` and the acceptance command goes red on an implementation that is right.
+#     Same class of harness red as the `@orbit/shared` link above, so it gets the same answer —
+#     `@prisma/client` and `.prisma` are copied and generated rather than linked (node resolves a
+#     linked package by its realpath and would read the main checkout's client straight back), and
+#     the client is regenerated whenever this branch's schema.prisma is the newer of the two. In
+#     the main checkout the whole thing is skipped: generating there rewrites the client every
+#     concurrent session is compiling against.
 #   * `rm -rf build` before compiling. `tsc` does not delete outputs whose sources are gone, so a
 #     tree left by an earlier branch runs deleted specs and imports deleted modules.
 #   * PGDATA on tmpfs. A throwaway PostgreSQL's data volume is what fills the root disk; on tmpfs
@@ -73,11 +83,6 @@ PASSWORD=pccspec_pw
 TEMPLATE=pccspec_tpl
 SPEC_TIMEOUT="${RUN_PG_SPEC_TIMEOUT:-600}"
 NODE="${NODE:-node}"
-# TypeScript 7 and Prisma 7 are installed per workspace; the repo root still hoists the 5.9.3 that
-# @nestjs/cli pins, so prefer the apiserver's copy of each.
-TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
-PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
-
 die() { echo "run-pg-spec: $*" >&2; exit 2; }
 [ "$#" -ge 1 ] || die "usage: $(basename "$0") <path/to/x.pg.spec.ts> [more...]"
 
@@ -106,7 +111,47 @@ echo "==> overlaying node_modules from $MAIN"
 link "$MAIN/node_modules"                "$REPO/node_modules"
 link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
 link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+
+# TypeScript 7 and Prisma 7 are installed per workspace; the repo root still hoists the 5.9.3 that
+# @nestjs/cli pins, so prefer the apiserver's copy of each. Resolved here rather than at the top of
+# the file because in a worktree neither exists until the links above are made.
+TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
+PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
 [ -x "$TSC" ] || die "no tsc under $MAIN — run npm install in the main checkout first"
+
+# The branch's own Prisma client — see the header for why it cannot be the main checkout's. The
+# whole-directory link above is undone for the apiserver and rebuilt as one symlink per package, so
+# that the two entries which have to be ours can be real directories. Never in the main checkout:
+# generating there is how every concurrent session's tree goes red.
+if [ "$MAIN" != "$REPO" ]; then
+  NM="$API/node_modules"; MAIN_NM="$MAIN/src/apiserver/node_modules"
+  [ -L "$NM" ] && rm -f "$NM"
+  mkdir -p "$NM/@prisma" "$NM/.prisma"
+  for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
+    [ -e "$d" ] || continue
+    case "$(basename "$d")" in @prisma|.prisma) continue ;; esac
+    link "$d" "$NM/$(basename "$d")"
+  done
+  for d in "$MAIN_NM/@prisma"/*; do
+    [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
+  done
+  # A copy, ~75MB, once per worktree: `prisma generate` finds the package by walking up from the
+  # schema's directory, and through a link it would find — and write beside — the main checkout's.
+  # It also has to be in place BEFORE generating, which otherwise fails with `Could not resolve
+  # @prisma/client`.
+  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ]; then
+    echo "==> copying @prisma/client out of $MAIN (this worktree needs its own)"
+    rm -rf "$NM/@prisma/client"
+    cp -r "$MAIN_NM/@prisma/client" "$NM/@prisma/client" || die "could not copy @prisma/client"
+  fi
+  # ~6s, so only when this branch's schema is newer than what was generated from it last time.
+  GENERATED="$NM/.prisma/client/index.d.ts"
+  if [ ! -f "$GENERATED" ] || [ "$API/prisma/schema.prisma" -nt "$GENERATED" ]; then
+    echo "==> generating this branch's Prisma client"
+    ( cd "$API" && "$PRISMA" generate >/dev/null ) || die "prisma generate failed"
+    [ -f "$GENERATED" ] || die "prisma generate wrote no $GENERATED"
+  fi
+fi
 
 echo "==> building @orbit/shared"
 "$TSC" -p "$REPO/src/shared/tsconfig.json" || die "src/shared failed to compile"
