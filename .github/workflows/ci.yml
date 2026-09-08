@@ -94,22 +94,34 @@ jobs:
   # complement of it is exactly what the JavaScript job's `Test API server` step runs. Nothing in
   # the tree is collected-then-skipped by either job.
   #
-  # The control that holds this to it is the script's own, and it is one line here:
+  # This job is RED on main the day it lands, and that is the finding rather than a regression it
+  # introduced: `project-criterion-satisfaction.pg.spec` has been failing since 36e62c76 added a
+  # reader its census does not name, and nothing was running it. 822 assertions, 820 of them
+  # passing. The repair is task 34LChICOPrNfBwmKdqjE2, not this file.
+  #
+  # The control that holds this to it is the script's own, and it is one line in the step below:
   #
   #     env:
   #       PCC_PG_CONTROL: omit-url
   #
-  # With that set, everything below happens exactly as it normally does except that no URL reaches
-  # a child under any of its three names — the condition this job was written to end. Every case
-  # then reports `# SKIP`, every `node --test` exits 0, and this job must still fail. It was pushed
-  # once in that state to prove it does; if a future change makes that knob go green, every green
-  # this job has ever printed is worth nothing.
+  # With that set, everything happens exactly as it normally does except that no URL reaches a child
+  # under any of its three names — this workflow's own condition until today. It was pushed in that
+  # state once, on this branch, and run 34216156128 reported
+  #
+  #     ==== tests=409 pass=20 fail=0 skipped=389 missing-summary=0 spec-level-red=113 ====
+  #     RED: agent-identity-migration.pg.spec.js: 6 SKIPPED — those assertions were not witnessed
+  #
+  # and FAILED. Note `fail=0`: not one assertion failed, every `node --test` exited 0, and the job
+  # went red anyway — which is the whole claim. Note also `skipped=389`, the same 389 the JavaScript
+  # job used to print under a green check. If that knob ever goes green, every green this job has
+  # ever printed is worth nothing.
   #
   # WHAT IT COSTS
   # =============
-  # Its own runner, ~13 minutes of it, in parallel with the JavaScript job rather than after it.
-  # The JavaScript job is unchanged in shape and slightly shorter, because it no longer loads 113
-  # files in order to skip them.
+  # Its own runner for about six and a half minutes, in parallel with the JavaScript job rather than
+  # after it: 113 specs, 822 assertions, `skipped 0` (run 34215251448, 6m28s). The JavaScript job
+  # got shorter rather than longer — 3m03s before this change, 2m30s after, because `Test API
+  # server` no longer loads 113 files in order to skip them (73s -> 48s).
   postgres:
     name: PostgreSQL specs
     runs-on: ubuntu-latest
@@ -134,11 +146,6 @@ jobs:
         run: npm run prisma:generate
       - name: Run every pg spec against a real PostgreSQL
         env:
-          # NEGATIVE CONTROL, TEMPORARY — reverted in the next commit. No URL reaches any child
-          # under any of its three names, which is the condition this job was written to end. Every
-          # case must report `# SKIP`, every `node --test` must exit 0, and this job must still
-          # fail. If it goes green under this, every green it has ever printed is worth nothing.
-          PCC_PG_CONTROL: omit-url
           # The matrix prints one summary line per spec and keeps each child's own output only if
           # told where to put it. Without this a red reads `fail=6` and nothing else — which
           # assertion, and what it saw, would be in a buffer the run threw away.
