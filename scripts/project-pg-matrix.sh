@@ -74,6 +74,22 @@
 # run nothing is the one outcome this script must not be able to report, so the list is taken once
 # now and an empty one is fatal.
 #
+# `prisma migrate deploy` ends in `|| die` for the same reason, and the count it produces is now
+# READ rather than printed. It was the last unguarded step: `set -e` is not available here (see
+# below), so a deploy that failed — a migration that will not apply, a template `CREATE DATABASE`
+# that did not happen, a server that never came up — printed its error, and the very next line
+# printed `==> 0 migrations applied` and the run went on to clone that empty template 100-odd times.
+# What comes back is not red: on 2026-09-08 the first seventeen specs run that way reported
+# `pass=6 fail=0` for one of them and `fail=N` for the rest, which is a matrix reporting on its own
+# template rather than on the branch. So the applied count is compared against the number of
+# migration directories this branch actually has, and anything short of the frontier stops the run
+# where the fault is, before a single database is cloned from it.
+#
+# `set -e` is deliberately NOT set. It cannot be: the spec loop's `out=$(… node --test …)` followed
+# by `rc=$?` is the whole mechanism by which a failing spec is RECORDED instead of fatal, and under
+# `-e` the first red spec aborts the script before `rc` is read — no per-spec line, no `RED[]`, no
+# footer. Every step that must not be advisory therefore says `|| die` itself.
+#
 # A SKIP IS RED, AND THERE IS NO ALLOWLIST
 # ========================================
 # `node --test` exits 0 on a file whose every case skipped, and until 2026-09-08 this script folded
@@ -217,9 +233,14 @@ psql_admin "DROP DATABASE IF EXISTS $TMPL" >/dev/null
 psql_admin "CREATE DATABASE $TMPL" >/dev/null
 echo "==> prisma migrate deploy (template $TMPL)"
 ( cd "$API" && DATABASE_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$TMPL" \
-    "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null )
-echo "==> $(psql_db "$TMPL" \
-  'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL') migrations applied"
+    "$PRISMA" migrate deploy --schema prisma/schema.prisma >/dev/null ) ||
+  die "prisma migrate deploy failed against template $TMPL — see the error above"
+APPLIED="$(psql_db "$TMPL" \
+  'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')"
+FRONTIER="$(ls -d "$API"/prisma/migrations/*/ | wc -l)"
+echo "==> ${APPLIED:-0} migrations applied"
+[ "$APPLIED" = "$FRONTIER" ] ||
+  die "template $TMPL is at ${APPLIED:-no} of $FRONTIER migrations — a clone is not this schema"
 
 echo "==> building @orbit/shared"
 "$TSC" -p "$REPO/src/shared/tsconfig.json" || die "src/shared failed to compile"
