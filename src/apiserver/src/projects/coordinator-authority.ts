@@ -120,6 +120,11 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   // against, every stated criterion must be answered in the same call, and the project-level
   // verdict is derived from that conjunction rather than supplied.
   CONCLUDE_VERDICT_PASS: 'COORDINATOR_BOUNDED',
+  // AUTOMATIC because nothing asks for it: `projects/project-done-derived.ts` projects the column
+  // from a current standard-set confirmation and criteria that are all satisfied and landed. The
+  // owner's act is CONFIRM_ACCEPTANCE_CRITERIA above; settlement is what those rows then say. Until
+  // 2026-09-08 this row described an intention rather than the server — see that file's header for
+  // the decision it was built on, and `refuseProjectStatusWrite` below for what a session may ask.
   SETTLE_PROJECT_DONE: 'AUTOMATIC',
 };
 

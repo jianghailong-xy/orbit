@@ -15,10 +15,15 @@ import { test } from 'node:test';
  * comparison goes on passing while the property it was written for has quietly gone.
  *
  * So this file makes the OTHER claim, and it has to be a different file to make it: the frozen
- * array is character-for-character what it was at `59f674e2`, the revision this project started
- * from. Between the two, "no write site was added by this work" is checkable by someone who was
- * not here — the sibling compares the tree against the list, this compares the list against
- * history, and neither can be satisfied by editing the other.
+ * array is character-for-character a declaration written down here, with the revision each of its
+ * entries came from beside it. Between the two, "no write site was added by this work" is
+ * checkable by someone who was not here — the sibling compares the tree against the list, this
+ * compares the list against history, and neither can be satisfied by editing the other.
+ *
+ * That is a claim about EDITS TO THE LIST, not a claim that the list can never change. It has
+ * changed exactly once, and the paragraph on `BASELINE_DECLARATION` below is what that cost: an
+ * entry cannot appear in the sibling without this comparison failing first, so every entry has a
+ * decision written beside it by whoever added it.
  *
  * WHY THE COMPARISON IS ON TEXT
  * =============================
@@ -45,17 +50,42 @@ const SRC = path.resolve(__dirname, '../../src');
 const CENSUS = 'projects/project-status-write-sites.spec.ts';
 
 /**
- * The declaration, byte for byte, as it stood at `59f674e2`.
+ * The declaration, byte for byte.
  *
- * One entry, and it is the endpoint an owner calls. Reproduced here rather than referenced,
- * because a baseline that reads the current file to find out what the baseline is has no opinion
- * at all — the copy IS the evidence, and a reviewer checks it with `git show`.
+ * Reproduced here rather than referenced, because a baseline that reads the current file to find
+ * out what the baseline is has no opinion at all — the copy IS the evidence, and a reviewer checks
+ * it with `git show`.
+ *
+ * TWO ENTRIES, AND WHY THE SECOND ONE IS NOT WHAT THIS FILE WAS WATCHING FOR
+ * =========================================================================
+ * For the coordinator-autonomy work this was one entry, the endpoint an owner calls, held to
+ * `59f674e2`. That claim was kept: none of that work added a status writer, and a reviewer can
+ * still check it — the single-entry declaration is at `59f674e2` and it is unchanged through
+ * `c27745bd`, the last commit before the projection below.
+ *
+ * The second entry is a REVERSAL MADE ABOVE THIS FILE, and it is the only kind of edit that may
+ * ever land here. Migration 0229 recorded that the account owner had been offered a narrower DONE
+ * guard and chose the other option; on 2026-09-08 the owner was asked again with that sentence
+ * quoted back to them and answered that `project.status = 'DONE'` should be projected from
+ * confirmed criteria that landed. `projects/project-done-derived.ts#storeDerivedProjectStatus`
+ * is that projection: it takes no `status` from any caller, and what a session may ASK for is
+ * unchanged and still refused by `refuseProjectStatusWrite`.
+ *
+ * What this file goes on doing is unchanged too, and it is the reason the entry could not be added
+ * quietly: the sibling census could not have grown by one entry without this comparison failing
+ * and somebody having to write down which decision the new entry came from. A third entry needs
+ * the same, and re-baselining without that paragraph is the failure this file exists to make
+ * visible.
  */
 const BASELINE_DECLARATION =
-  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/projects.service.ts#update'];";
+  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
 
-/** The revision the copy above was taken from, so the check a reviewer runs is written down. */
+/**
+ * The revisions the copy above was taken from, so the checks a reviewer runs are written down:
+ * the one-entry declaration at the first, and the entry added by the projection at the second.
+ */
 const BASELINE_REVISION = '59f674e2';
+const PROJECTION_REVISION = 'the 2026-09-08 project-done-derived unit';
 
 /**
  * The whole `FROZEN_WRITE_SITES` statement in a source, or `null` when it declares none.
@@ -83,7 +113,8 @@ test('(a) the frozen write-site list is what it was before this work started', (
   assert.equal(
     declared,
     BASELINE_DECLARATION,
-    `${CENSUS}'s frozen list differs from the one at ${BASELINE_REVISION}; a project that added a `
+    `${CENSUS}'s frozen list differs from the one written down here (the owner endpoint at `
+    + `${BASELINE_REVISION}, the projection from ${PROJECTION_REVISION}); a project that added a `
     + 'way to write project.status and appended it here would read exactly like this',
   );
 
@@ -91,20 +122,23 @@ test('(a) the frozen write-site list is what it was before this work started', (
   // result for ever, so the sibling's comparison is only worth something while this holds.
   const entries = entriesOf(declared);
   assert.ok(entries.length > 0, 'the frozen baseline is empty');
-  assert.deepEqual(entries, ['projects/projects.service.ts#update']);
+  assert.deepEqual(entries, [
+    'projects/project-done-derived.ts#storeDerivedProjectStatus',
+    'projects/projects.service.ts#update',
+  ]);
 });
 
 // (b) ---------------------------------------------------------------------------------------------
 test('(b) the reader notices an edit to the list, and says so about the list alone', () => {
   // An entry appended — the exact shape a project that grew a status writer would leave behind.
-  const grown =
-    "const FROZEN_WRITE_SITES: readonly string[] = ["
-    + "'projects/projects.service.ts#update', 'projects/project-wake.service.ts#settle'];";
+  const grown = BASELINE_DECLARATION.replace(
+    "];", ", 'projects/project-wake.service.ts#settle'];",
+  );
   assert.notEqual(frozenDeclaration(grown), BASELINE_DECLARATION);
-  assert.equal(entriesOf(grown).length, 2);
+  assert.equal(entriesOf(grown).length, entriesOf(BASELINE_DECLARATION).length + 1);
 
-  // The same entry, held less firmly. A parsed comparison would call this unchanged.
-  const widened = "const FROZEN_WRITE_SITES: string[] = ['projects/projects.service.ts#update'];";
+  // The same entries, held less firmly. A parsed comparison would call this unchanged.
+  const widened = BASELINE_DECLARATION.replace('readonly string[]', 'string[]');
   assert.notEqual(frozenDeclaration(widened), BASELINE_DECLARATION);
   assert.deepEqual(entriesOf(widened), entriesOf(BASELINE_DECLARATION));
 

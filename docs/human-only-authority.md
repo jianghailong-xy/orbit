@@ -28,6 +28,15 @@ request is refused.
 > two `HUMAN_ONLY` rows restrict. A request with no acting Session is untouched, so the owner REST
 > API, the headless CLI and internal callers are exactly as 0229 left them, and this is a boundary
 > on the tool an agent holds rather than a claim about who is on the other end of a credential.
+>
+> **And one clause of the correction above is itself now superseded (2026-09-08).** "There is
+> nothing that projects `DONE`" was true until the account owner was asked to revisit the
+> 2026-09-03 decision and answered that the derivation should be built:
+> `projects/project-done-derived.ts` projects the column from a current standard-set confirmation
+> and criteria that are all satisfied and landed. What has NOT come back is the refusal — the
+> matrix's "direct write refused; evaluator only" is still wrong for every row. A projection is not
+> a gate: a caller with no acting Session still writes the column directly, and the projection
+> overwrites it the next time either of its two edges fires. See `docs/project-done-gate.md`.
 > The rest of this column has not been reconciled with 0229; read it as history.
 
 It is deliberately limited to those actions. It does not redesign authentication.
@@ -328,9 +337,25 @@ and when, so "this confirmation is no longer current" is visible rather than inf
 
 The coordinator card's role under (B) is a prompt with a link, not an answer surface.
 
-### What is true today about project DONE, and what would derive it
+### What is true today about project DONE, and what derives it
 
-Nothing derives it. `project.status = 'DONE'` is an ordinary column write
+> **Answered, 2026-09-08.** The last paragraph of this section said the deriver must not be built
+> on this review's authority and that it needed the owner to say the 2026-09-03 decision was being
+> revisited. The owner was asked, with 0229's sentence quoted back to them, and answered: continue.
+> `projects/project-done-derived.ts` is that deriver, built to the two-input shape described below
+> and to nothing wider. The section is kept as written because the reasoning is what the answer was
+> given about; the paragraphs below describe the position BEFORE it, and the differences now are:
+>
+> - the two inputs are read by `readDerivedProjectDone` and stored by
+>   `storeDerivedProjectStatus`, recomputed after the owner's confirmation and on the
+>   post-commit edge of any task write in the project, in both directions;
+> - nothing about it refuses a write, so "an agent PATCHes a project to DONE today" is still true
+>   except for the one condition `refuseProjectStatusWrite` adds — the projection is what makes the
+>   column come back to what the facts say, not a gate that stops the PATCH;
+> - `coordinator-authority.ts`'s "Project settlement remains AUTOMATIC — no principal writes it" is
+>   no longer prose describing a deleted machine. It describes this one.
+
+Nothing derived it before that. `project.status = 'DONE'` is an ordinary column write
 (`docs/project-done-gate.md:11-17`): `projects.service.ts:1899` copies `dto.status` through, and the
 runner door refuses only the four authorization fields plus `coordinatorAgentId`
 (`runner-projects.controller.ts:230-243`) — `status` is not among them, so an agent PATCHes a
@@ -364,6 +389,11 @@ added later that quietly reinstates an equivalent protection under another name"
 an unsatisfied criterion blocks anything "is the owner's decision and is not smuggled in here".
 Deriving DONE from `satisfied` is that reinstatement under another name. It needs the owner to say
 the 2026-09-03 decision is being revisited.
+
+*(They did, on 2026-09-08 — see the note at the head of this section. What was built is a
+projection and not the gate this paragraph refused to build without them: an unsatisfied criterion
+still blocks nothing, and no write is refused that was not already refused by
+`refuseProjectStatusWrite`.)*
 
 The other two follow-ups do not depend on that and may proceed. Recording a confirmation adds a
 fact and gates nothing. Closing the agent's `status` door is a ROLE boundary of the kind

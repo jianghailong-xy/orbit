@@ -1,4 +1,4 @@
-# Project DONE: there is no gate
+# Project DONE: there is still no gate, and it is now a projection
 
 A project's `DONE` used to mean that its stated acceptance criteria were satisfied — decided by a
 database trigger and re-checked by the service before the write. Migration
@@ -8,18 +8,55 @@ than no page.
 
 ## What decides a project's DONE
 
-Nothing. `project.status = 'DONE'` is an ordinary column write:
+Since 2026-09-08, a PROJECTION — `projects/project-done-derived.ts`. It is not the gate 0229
+removed, and the difference is the whole of this section: a gate refuses somebody's write, and this
+refuses nobody. It re-reads facts that are already committed and stores what they project.
+
+The account owner was asked again, with 0229's own sentence — "The owner was offered a narrower
+guard and chose the other option" — quoted back to them, and answered that the derivation should be
+built. So this is a re-deliberation of that decision and not the correction of an oversight.
+
+`project.status` is projected as `DONE` when, and only while, BOTH hold:
+
+- every criterion the project states reads `satisfied` **and** `landing = 'LANDED'`, from the two
+  readers `project_get` already serves (`project-criterion-satisfaction.ts`,
+  `project-criterion-landing.ts`) — not a second definition of either; and
+- one `project_standard_set_confirmation` row names the version of the criteria that stands today
+  (migration 0245, r3), compared by `criteriaSemanticRevision`. Editing a criterion's assertion or
+  its verification method moves that digest, so the confirmation stops counting with no flag
+  anybody has to clear.
+
+A project that states no criteria is never projected `DONE`: "every one of zero criteria holds" is
+the vacuous truth `NO_WORK_SERVES_IT` refuses one level down.
+
+It is recomputed on two edges, both of which have no requester asking for a status: after the
+owner's confirmation is written, and on the post-commit edge of any task write in the project. It
+moves the column in BOTH directions — reopening a task or filing a new one against a met criterion
+takes `DONE` away again — because a projection that could only ever set `DONE` would be a decision
+recorded once rather than a reading of the facts. `CANCELLED` is never written and never overwritten:
+that says a person dropped the project, which is not a claim the work can settle.
+
+What 0229 removed stays removed, and none of it comes back to do this:
 
 - there is no database trigger on `project` that inspects it (0150's `project_acceptance_done_gate`
-  / `_advance_epoch` / `_epoch_audit` and 0172's `_criteria_fact` are all dropped);
+  / `_advance_epoch` / `_epoch_audit` and 0172's `_criteria_fact` are all dropped, and so is 0150's
+  alphabetical firing-order constraint, whose disappearance 0229 records as its intent);
 - there is no application-layer refusal (`ProjectsService.refuseDirectDone` and its
   `PROJECT_DONE_AUTOMATIC_ONLY` 409 are removed);
-- there is no acceptance epoch, no accepted-run pointer and no legacy-acceptance stamp on the row.
+- there is no acceptance epoch, no accepted-run pointer and no legacy-acceptance stamp on the row;
+- the four acceptance tables and the `project_acceptance_verdict` enum stay dropped. The projection
+  adds no migration and no table of its own.
 
-Any actor that may write the project — the account owner, a runner credential, a coordinator
-session, raw SQL — may set it, and nothing is consulted first. Eleven projects were `DONE` when this
-landed; ten of them stood on an acceptance run that no longer exists. Their `status` was not
-rewritten. They are `DONE`, and the evidence for it is gone.
+Who may still WRITE the column directly is a separate question with a separate answer: every actor
+that could write it after 0229 can still write it, except that a request carrying an acting session
+is refused `PROJECT_STATUS_NOT_SESSION_WRITABLE` (`refuseProjectStatusWrite`, 2026-09-08). The
+projection is not such a request — it carries no `status` from any caller and no session — which is
+why the two coexist rather than the second refusing the first. `project-status-write-sites.spec.ts`
+holds the complete list of places production code can set the column to those two.
+
+Eleven projects were `DONE` when 0229 landed; ten of them stood on an acceptance run that no longer
+exists. Their `status` was not rewritten then, and the projection does not rewrite it now unless one
+of its two edges fires for that project.
 
 ## What the acceptance criteria are now
 

@@ -31,15 +31,31 @@ import { test } from 'node:test';
 const SRC = path.resolve(__dirname, '../../src');
 
 /**
- * Every place production code under `src/apiserver/src` can set `project.status`, as the tree
- * stood at f3f403bf -- before the first line of coordinator-wake work.
+ * Every place production code under `src/apiserver/src` can set `project.status`.
  *
- * One entry, and it is the endpoint an owner calls: `ProjectsService.update` copies `dto.status`
- * into the Prisma input when the request carried one. No background job writes the column, and no
- * raw statement does either. A second entry here means this project grew a status writer, which is
- * the one thing it said it would not do; the entry has to be explained before it is added.
+ * The first entry is the endpoint an owner calls: `ProjectsService.update` copies `dto.status`
+ * into the Prisma input when the request carried one. It stood alone at f3f403bf -- before the
+ * first line of coordinator-wake work -- and this file said then that a second entry means the
+ * project grew a status writer, "which is the one thing it said it would not do; the entry has to
+ * be explained before it is added". So here is the explanation.
+ *
+ * THE SECOND ENTRY, AND THE DECISION THAT PUT IT THERE
+ * ====================================================
+ * `projects/project-done-derived.ts#storeDerivedProjectStatus` is a PROJECTION, added on
+ * 2026-09-08. It takes no `status` from any caller: it re-reads two facts that are already
+ * committed -- every stated criterion satisfied and landed on the default branch, and the account
+ * owner's confirmation of the version of the criteria that stands today -- and stores what they
+ * project, in a compare-and-set between OPEN and DONE that never touches CANCELLED.
+ *
+ * The promise this list was taken to keep was that the coordinator-autonomy work would add no
+ * status writer, and it did not. What changed is a decision above it. Migration 0229 recorded that
+ * the account owner had been offered a narrower DONE guard and chose the other option; on
+ * 2026-09-08 the owner was asked again, with that sentence quoted back to them, and answered that
+ * the derivation should be built. This entry is that reversal, not an erosion of the
+ * promise: what a session may ASK for is unchanged and still refused by r2's
+ * `refuseProjectStatusWrite`, and a third entry still has to be explained before it is added.
  */
-const FROZEN_WRITE_SITES: readonly string[] = ['projects/projects.service.ts#update'];
+const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
 
 /** The Prisma model writes whose input can carry a `status`. Reads are absent on purpose. */
 const PRISMA_PROJECT_WRITE =

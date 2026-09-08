@@ -75,6 +75,7 @@ import {
   type HandoffDeclaration,
 } from '../projects/project-handoff.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import {
 } from '../projects/completion-input';
 import {
@@ -1419,6 +1420,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.completionInputs.routeSettledProjects(projectIds).catch((e) =>
       this.logger.warn(`settled-project delivery failed: ${e?.message ?? e}`),
     );
+    await this.reprojectProjectStatus(projectIds);
+  }
+
+  /**
+   * Re-project `project.status` from the criteria and the owner's confirmation, on the same
+   * post-commit edge.
+   *
+   * This is a READ of rows that have already committed, followed by storing what they project —
+   * `project-done-derived.ts` says at length why that is not the acceptance gate 0229 removed. It
+   * is here rather than beside the owner's confirmation alone because the projection has to be
+   * able to take DONE AWAY: reopening a task or filing a new one against a criterion moves the
+   * work side of the answer, and a projection only recomputed when somebody confirms would leave
+   * the column asserting a goal its own inputs no longer support.
+   *
+   * Behind the same `completionInputs` check as its siblings, for the reason
+   * `deliverProjectFactsOfTask` gives: the ~40 fixtures that build this service directly wire no
+   * router, and a read they never asked for would be a query their doubles have to answer.
+   *
+   * Every project is passed, not only the ones that look finished. Which projects this write
+   * settled or unsettled is not something the write knows, and the derivation re-reads each one
+   * from committed rows anyway — the same generosity, and for the same reason, as the deliveries
+   * above. Logged rather than raised: the task write is committed, and the next one re-derives
+   * the same answer from the same rows.
+   */
+  private async reprojectProjectStatus(
+    projectIds: ReadonlyArray<string | null | undefined>,
+  ): Promise<void> {
+    for (const projectId of new Set(projectIds.filter((id): id is string => !!id))) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true },
+      }).catch(() => null);
+      if (!project) continue;
+      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId).catch((e) =>
+        this.logger.warn(`derived project status not reconciled: ${e?.message ?? e}`),
+      );
+    }
   }
 
   /**

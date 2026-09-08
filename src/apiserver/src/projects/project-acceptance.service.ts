@@ -17,6 +17,7 @@ import {
   standardSetVersion,
 } from './project-acceptance';
 import { refuseSessionAuthoredConfirmation } from './coordinator-authority';
+import { storeDerivedProjectStatus } from './project-done-derived';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -201,6 +202,17 @@ export class ProjectAcceptanceService {
         criteriaMaterial: currentVersion.material as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // The confirmation is one of the two inputs `project-done-derived.ts` projects `status` from,
+    // and it is the one that changes here — so the projection is recomputed on the spot rather
+    // than waiting for the project's next task write. Deliberately after the INSERT and outside
+    // any transaction: it reads committed rows, it decides nothing about whether this
+    // confirmation was allowed, and a projection that could not be recomputed must not undo a
+    // confirmation that was.
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((error) =>
+      this.logger.warn(`derived project status not re-projected after confirmation: ${
+        (error as { message?: string })?.message ?? String(error)}`),
+    );
 
     return standardSetConfirmationStanding(
       currentVersion,
