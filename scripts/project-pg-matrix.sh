@@ -31,6 +31,14 @@
 # 40001s counted as `origin="service"`, the value that means a real incident. transaction-retry.pg is
 # the spec that asserts the label, and without this it reports 4/6 for a property of this script.
 #
+# `WORK_OVERVIEW_PG_URL` is the same per-spec clone under a third name. project-work-overview-readiness
+# is the one spec in the tree that reads it — `COORDINATOR_PG_URL` covers 109 of the others and
+# `ORBIT_TEST_PG_URL` the last one — and until 2026-09-08 nothing here handed it over, so that spec
+# reported `ok 1 … # SKIP` on every run this script has ever made while the line it printed read like
+# a spec that had run. It gets the clone rather than a database of its own because the spec's own
+# isolation guard and identity check read the `COORDINATOR_PG_EXPECTED_*` this loop already set for
+# that clone.
+#
 # The reporter every child prints its summary with, and the parser that reads it, are pinned in
 # `scripts/pg-matrix-summary.lib.sh` — Node 23 made `spec` the default and the TAP counters this
 # script reads went to zero without anything going red. Nothing about that is the caller's to
@@ -66,6 +74,28 @@
 # run nothing is the one outcome this script must not be able to report, so the list is taken once
 # now and an empty one is fatal.
 #
+# A SKIP IS RED, AND THERE IS NO ALLOWLIST
+# ========================================
+# `node --test` exits 0 on a file whose every case skipped, and until 2026-09-08 this script folded
+# those cases into a `skipped=N` in the footer that nothing then read: `FAIL` and `RED[]` were both
+# 0 and the run went green. That is how the hole above stayed open for as long as it did — the count
+# was in front of every reader the whole time and cost nothing.
+#
+# The choice, over an allowlist of specs that are permitted to skip: EVERY skip is red and nothing
+# in the tree is exempt. What makes that affordable is what the paragraphs above are. Each of them
+# is a variable this script supplies so that some spec does not skip — the restart command, the
+# conflict origin, and now the third URL name — so the alternative to a name on a list has always
+# been a variable the harness can hand over, and handing it over is strictly better: it buys the
+# assertions instead of excusing them. With the third name supplied the whole matrix reports
+# `skipped=0`, so a list would have been empty on the day it was written, and thereafter a place for
+# the next hole to sit quietly with a name beside it.
+#
+# `PCC_PG_CONTROL=omit-url` is the control that holds this script to it, as
+# `RUN_PG_SPEC_CONTROL=omit-url` does for `scripts/run-pg-spec.sh`: everything below happens exactly
+# as it normally does, except that no URL reaches a child under any of its three names. Every case
+# reports `# SKIP`, every `node --test` exits 0, and this script must still exit non-zero. The day
+# it goes green under that knob, every green it has ever printed is worth nothing.
+#
 # A spec FAILS if node exits non-zero for any reason — a failing assertion, a crash, a timeout, or a
 # process that will not exit because something left a handle open. The timeout is a backstop and
 # never a pass; the script exits non-zero if anything was red.
@@ -85,6 +115,7 @@ SPEC_TIMEOUT="${PCC_PG_SPEC_TIMEOUT:-600}"
 NODE="${NODE:-node}"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
+CONTROL="${PCC_PG_CONTROL:-}"
 die() { echo "project-pg-matrix: $*" >&2; exit 2; }
 
 # --- the worktree overlays ----------------------------------------------------------------------
@@ -154,6 +185,8 @@ trap cleanup EXIT
 
 psql_admin() { docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc "$1"; }
 
+[ "$CONTROL" = "omit-url" ] &&
+  echo "==> CONTROL omit-url: no URL is handed to any child; every case should SKIP and this run must be RED"
 echo "==> provisioning $CONTAINER ($IMAGE) on 127.0.0.1:$PORT"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 docker run -d --name "$CONTAINER" \
@@ -204,15 +237,16 @@ for f in $SPECS; do
     *)                        psql_admin "CREATE DATABASE $DB TEMPLATE $TMPL" >/dev/null ;;
   esac
   URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
-  out=$(COORDINATOR_PG_URL="$URL" \
-        COORDINATOR_PG_EXPECTED_DATABASE="$DB" \
-        COORDINATOR_PG_EXPECTED_USER="$ADMIN" \
-        COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID" \
-        COORDINATOR_PG_CONTAINER="$CONTAINER" \
-        ORBIT_TEST_PG_URL="$URL" \
-        COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER" \
-        ORBIT_DB_CONFLICT_ORIGIN=fault_injection \
-        NODE_OPTIONS="$(pg_matrix_child_node_options)" \
+  child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
+         COORDINATOR_PG_EXPECTED_USER="$ADMIN"
+         COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
+         COORDINATOR_PG_CONTAINER="$CONTAINER"
+         COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER"
+         ORBIT_DB_CONFLICT_ORIGIN=fault_injection
+         NODE_OPTIONS="$(pg_matrix_child_node_options)")
+  [ "$CONTROL" = "omit-url" ] ||
+    child+=(COORDINATOR_PG_URL="$URL" ORBIT_TEST_PG_URL="$URL" WORK_OVERVIEW_PG_URL="$URL")
+  out=$(env "${child[@]}" \
         timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$f" 2>&1)
   rc=$?
   IFS=$'\t' read -r t p fl sk unreadable < <(printf '%s\n' "$out" | pg_matrix_summary)
@@ -221,6 +255,8 @@ for f in $SPECS; do
   if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then why="TIMEOUT/KILLED rc=$rc (hang or leaked handle)"
   elif [ "$rc" != "0" ]; then why="rc=$rc"; fi
   if [ -n "$unreadable" ]; then MISSING=$((MISSING+1)); why="${why:+$why; }$unreadable"; fi
+  # The silence this script used to print and pass on: see "A SKIP IS RED" in the header.
+  [ "$sk" -gt 0 ] && why="${why:+$why; }$sk SKIPPED — those assertions were not witnessed"
   [ -n "$why" ] && RED+=("$base: $why")
   printf '%-58s tests=%-4s pass=%-4s fail=%-3s skip=%-3s %s\n' "$base" "$t" "$p" "$fl" "$sk" "$why"
   [ -n "${PCC_PG_LOG_DIR:-}" ] && echo "$out" > "$PCC_PG_LOG_DIR/$base.txt"
