@@ -389,12 +389,13 @@ project to DONE today. `assertHumanOnlyProjectWrites` returns at its first line 
 carries no `acceptanceCriteriaItems` (`projects.service.ts:690`), so it never sees a status write.
 `dto.ts:219-221` states this plainly.
 
-Three places described the deleted machine when this was written, and two no longer do:
+Three places described the deleted machine when this was written, and none of them does now:
 `coordinator-authority.ts`'s `SETTLE_PROJECT_DONE` comment ("Project settlement remains AUTOMATIC
-— no principal writes it") was rewritten to name the projection when it landed, and this page's
-own opening paragraph and matrix column were reconciled on 2026-09-08. The one still naming it is
-`ProjectsService.update`'s "DONE is not a request here at all, but the evaluator's acceptance
-projection" — prose to correct, not machinery to re-implement.
+— no principal writes it") was rewritten to name the projection when it landed, this page's own
+opening paragraph and matrix column were reconciled on 2026-09-08, and `ProjectsService.update`'s
+header comment now says what its door does with a requested `status` — refused whole with an
+acting session on the request, written verbatim without one — and leaves what DONE says to the
+projection. All three were prose to correct; no machinery was re-implemented.
 
 A derived DONE would have exactly two inputs, and only the first is a person's:
 
