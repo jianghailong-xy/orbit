@@ -25,8 +25,8 @@
 # command: the same empty green, with the `# skipped 3` no longer in front of whoever reads it.
 #
 # `RUN_PG_SPEC_CONTROL=omit-url` is the control that holds this to it: everything below happens
-# exactly as it normally does, except COORDINATOR_PG_URL is not handed to the child — the
-# acceptance environment's own condition. Every case reports `# SKIP`, `node --test` exits 0, and
+# exactly as it normally does, except that none of the three URL names is handed to the child —
+# the acceptance environment's own condition. Every case reports `# SKIP`, `node --test` exits 0, and
 # this script must still exit non-zero. The day it goes green under that knob, every green it has
 # ever printed is worth nothing.
 #
@@ -205,7 +205,7 @@ echo "==> $(psql_template 'SELECT count(*) FROM _prisma_migrations WHERE finishe
 # --- run them -----------------------------------------------------------------------------------
 CONTROL="${RUN_PG_SPEC_CONTROL:-}"
 [ "$CONTROL" = "omit-url" ] &&
-  echo "==> CONTROL omit-url: COORDINATOR_PG_URL withheld; every case should SKIP and this run should be RED"
+  echo "==> CONTROL omit-url: all three URL names withheld; every case should SKIP and this run should be RED"
 
 n=0; RED=()
 for spec in "${SPECS[@]}"; do
@@ -215,12 +215,24 @@ for spec in "${SPECS[@]}"; do
   DB="pccspec_$n"
   psql_admin "CREATE DATABASE $DB TEMPLATE $TEMPLATE" >/dev/null || die "could not clone $TEMPLATE into $DB"
 
+  URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
   child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
          COORDINATOR_PG_EXPECTED_USER="$ADMIN"
          COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
          NODE_OPTIONS="$(pg_matrix_child_node_options)")
+  # One database, under all three names a pg spec in this tree looks for. Of the 113, 111 read
+  # COORDINATOR_PG_URL; `runner-api/steer-dequeue.pg.spec` reads ORBIT_TEST_PG_URL and
+  # `projects/project-work-overview-readiness.pg.spec` reads WORK_OVERVIEW_PG_URL. A spec whose
+  # name is unset skips every case, and a skip here is red — so handing over one name made those
+  # two permanently red on THIS path while they passed under scripts/project-pg-matrix.sh, which
+  # has handed over all three since d021cc0e. That red was the harness, not the product. The extra
+  # names need nothing else: the isolation guard and identity check read the expectations set
+  # above, whichever name carried the URL to the child.
+  # All three are withheld together under the control, and that is the whole point of withholding:
+  # dropping only COORDINATOR_PG_URL would leave those two specs connected and running, and the
+  # control would go quietly green off the very specs it exists to keep honest.
   [ "$CONTROL" = "omit-url" ] ||
-    child+=(COORDINATOR_PG_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB")
+    child+=(COORDINATOR_PG_URL="$URL" ORBIT_TEST_PG_URL="$URL" WORK_OVERVIEW_PG_URL="$URL")
 
   echo "########## $base ##########"
   out="$(cd "$API" && env "${child[@]}" \
