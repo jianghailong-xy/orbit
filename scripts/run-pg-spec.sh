@@ -104,14 +104,21 @@ done
 
 # --- the worktree overlays ----------------------------------------------------------------------
 # Refresh a symlink, create a missing one, never touch a real directory: in the main checkout every
-# one of these already exists and this whole block is a no-op.
+# one of these already exists and the block is skipped. That guard is the block's, not a nicety —
+# when MAIN falls back to REPO source and target are the same path, and on a tree that has no
+# node_modules at all the target does not exist yet, so `ln -sfn` made `node_modules -> node_modules`.
+# The run still stopped at the `no tsc` below, but a second one left anyone checking by hand reading
+# `Too many levels of symbolic links` instead, which is a broken environment rather than a missing
+# `npm install`, and three self-referential links in the caller's tree that this script had made.
 link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
 [ -d "$MAIN/node_modules" ] || MAIN="$REPO"
-echo "==> overlaying node_modules from $MAIN"
-link "$MAIN/node_modules"                "$REPO/node_modules"
-link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
-link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+if [ "$MAIN" != "$REPO" ]; then
+  echo "==> overlaying node_modules from $MAIN"
+  link "$MAIN/node_modules"                "$REPO/node_modules"
+  link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
+  link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+fi
 # TypeScript 7 and Prisma 7 are installed per workspace; the repo root still hoists the 5.9.3 that
 # @nestjs/cli pins, so prefer the apiserver's copy of each. Resolved HERE and not up with the other
 # constants, because "prefer" is a question about the links above: a worktree that has none of them
