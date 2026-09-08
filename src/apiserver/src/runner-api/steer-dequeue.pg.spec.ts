@@ -18,7 +18,7 @@ import { RunnerApiController } from './runner-api.controller';
  * against real rows, which is the only way "the ordinary message is still gated" is a fact
  * rather than a regex.
  *
- * Needs a database: set ORBIT_TEST_PG_URL (any empty Postgres — the three tables the predicate
+ * Needs a database: set ORBIT_TEST_PG_URL (any empty Postgres — the two tables the predicate
  * touches are created here, not the application schema). Without it the file reports that it
  * did not run, rather than passing quietly.
  */
