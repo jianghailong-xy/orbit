@@ -44,7 +44,11 @@ satisfied with its work on the branch — whose action is to put the criteria in
 owner for the one act reserved to them (`CONFIRM_ACCEPTANCE_CRITERIA`). It is a separate event from
 `PROJECT_TASKS_SETTLED` rather than a branch of it because merge receipts are written by paths the
 Task write path does not touch: keyed on the settlement alone, the card would share a key the
-judgment branch spends first and could then never be sent at all. The wake ends
+judgment branch spends first and could then never be sent at all. Those receipt paths now DELIVER
+as well as write — `MergeReceiptService.deliverProjectFactsAfterCommit` knocks on the settled,
+readiness and unlanded doors once a receipt has committed, for all three writers of one (the user
+API, the agent door, and the Runner's own merge-result) — so the key this event derives is claimed
+by whoever records the last landing rather than by the next Task write that happens along. The wake ends
 `DELIVERED`, naming that conversation and creating no Session row, and the message is a NEXT_TURN
 message rather than a steer: a conversation running a turn reads it after that turn ends. Delivery
 is refused, with the key released, when there is no such conversation, when it has ended, and when

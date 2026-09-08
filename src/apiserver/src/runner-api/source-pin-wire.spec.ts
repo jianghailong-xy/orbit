@@ -12,6 +12,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -80,10 +81,11 @@ async function mount(prisma: PrismaService) {
       { provide: ListEventsService, useValue: {} },
       // Optional in the constructor's signature, but Nest still resolves every parameter from the
       // module, so an unregistered one is a bootstrap failure rather than an undefined field. None
-      // of the three is on the pin route; they are here because the controller is mounted whole.
+      // of the four is on the pin route; they are here because the controller is mounted whole.
       { provide: AttemptBudgetMeterService, useValue: {} },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: TasksService, useValue: {} },
+      { provide: MergeReceiptService, useValue: {} },
     ],
   })
   class WireModule {}

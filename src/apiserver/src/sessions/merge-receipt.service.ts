@@ -1,12 +1,16 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import {
   MERGE_RECEIPT_MAX_CONFLICTS,
   MergeReceiptRecorder,
@@ -60,7 +64,98 @@ export interface RecordMergeReceiptInput {
 export class MergeReceiptService {
   private readonly logger = new Logger(MergeReceiptService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    /**
+     * The completion-input doors a committed receipt has to knock on, and the whole of why this
+     * class has a second constructor parameter.
+     *
+     * WHY IT IS INJECTED HERE AND NOT REACHED FROM THE THREE CALL SITES
+     * ================================================================
+     * There are three writers of a merge receipt — the user API, the agent door, and the runner's
+     * own merge-result — and until this parameter existed not one of them delivered anything. The
+     * only driver of `routeSettledProjects` / `routeReadyCriteria` / `routeUnlandedCriteria` was a
+     * TASK write (`TasksService.deliverProjectFactsOfTask`), so the order this repository actually
+     * runs in — last task settles, judgment session opens, it merges and records the receipt, and
+     * then nothing writes a task again — left the facts a receipt moves derived by nobody. Putting
+     * the knock on the one class all three writers already go through is what makes that a single
+     * answer rather than three that can drift.
+     *
+     * WHY `forwardRef`, AND WHY BOTH MODULES CARRY ONE
+     * ===============================================
+     * `CoordinatorJudgmentModule` imports `SessionsModule`, because the router's producers reach
+     * `SessionsService` to open a judgment session and to write a turn on the standing
+     * conversation. Injecting the router back into a SessionsModule provider closes that ring, so
+     * both sides declare it with `forwardRef` and Nest resolves the pair after both are defined.
+     *
+     * The alternative shapes were considered and are worse. Wiring only the two RUNNER controllers
+     * (they see `CompletionInputRouter` already, through `ProjectsModule`'s re-export, with no ring
+     * at all) leaves the user's own `POST /sessions/:id/merge-receipts` — the door a person clicks
+     * — driving nothing, because `SessionsController` is a SessionsModule controller and needs the
+     * very same `forwardRef` to see the router. And a small provider owned by neither module cannot
+     * exist: everything that reaches these doors reaches `SessionsService` through them, so such a
+     * provider would be a second name for this same ring rather than a way out of it.
+     *
+     * `@Optional()`, and last in the signature, for the pg fixtures that construct this service
+     * directly over one client. A fixture that wires no router is a fixture about the receipt row,
+     * and `deliverProjectFactsAfterCommit` below is a no-op for it — the same shape, and for the
+     * same reason, as `TasksService`'s own optional router.
+     */
+    @Optional()
+    @Inject(forwardRef(() => CompletionInputRouter))
+    private readonly completionInputs?: CompletionInputRouter,
+  ) {}
+
+  /**
+   * Deliver the project facts one COMMITTED merge receipt may have moved.
+   *
+   * AFTER THE COMMIT, for the two reasons `TasksService.deliverSettledProjects` gives about its own
+   * position: each fact's version is a digest of rows that actually committed, so deriving it from
+   * inside the transaction would key it on a world no reader can see; and a delivery may open a
+   * judgment session or write a turn, which is heavy enough to queue a runner and is not something
+   * a receipt write may hold a row lock across.
+   *
+   * ALL THREE DOORS, and the same generosity the task write path shows. A receipt is exactly what
+   * `CRITERION_UNLANDED` is defined over and exactly the last missing input of
+   * `PROJECT_ACCEPTANCE_LANDED`, so those two are the point. `CRITERION_READY` is knocked beside
+   * them rather than skipped because deciding here that a receipt cannot have moved it would be
+   * this door holding an opinion about a predicate that belongs to that producer — and because a
+   * readiness delivery that an earlier task write logged and swallowed is re-derived from the same
+   * rows by whoever knocks next. Which is what this is.
+   *
+   * Nothing is decided here and no project is filtered out: the producers re-read the committed
+   * rows and answer for themselves, exactly as they do for the task write path.
+   *
+   * A failed delivery is LOGGED, never raised. The receipt is already committed and is not undone
+   * by a wake that could not be recorded — an exception here would turn "the coordinator was
+   * briefly unreachable" into "your merge was not recorded", which is the one outcome this table
+   * exists to prevent. The same fact is re-derived from the same rows by the next delivery.
+   *
+   * WHAT THIS EDGE STILL DOES NOT DO
+   * ================================
+   * `TasksService.deliverSettledProjects` re-projects `project.status` on the same post-commit
+   * edge (`storeDerivedProjectStatus`), and this one does not. That projection reads the criteria's
+   * satisfaction AND their landing, so a merge receipt is one of its inputs too, and the hole left
+   * is narrow but real: an owner who confirms the criteria BEFORE the last branch lands leaves the
+   * column asserting OPEN until a task write or a second confirmation re-derives it. It is left out
+   * here rather than folded in because it is a different projection with a different writer, and
+   * wiring it blind — with nothing in either pg spec that would notice — is how a second edge ends
+   * up disagreeing with the first. Filed as its own task, 34LCIWq2wmmoZp4k3fAwc.
+   */
+  async deliverProjectFactsAfterCommit(projectId: string | null | undefined): Promise<void> {
+    if (!this.completionInputs) return;
+    if (!projectId) return;
+    const projectIds = [projectId];
+    await this.completionInputs.routeSettledProjects(projectIds).catch((e) =>
+      this.logger.warn(`settled-project delivery failed after a merge receipt: ${e?.message ?? e}`),
+    );
+    await this.completionInputs.routeReadyCriteria(projectIds).catch((e) =>
+      this.logger.warn(`ready-criterion delivery failed after a merge receipt: ${e?.message ?? e}`),
+    );
+    await this.completionInputs.routeUnlandedCriteria(projectIds).catch((e) =>
+      this.logger.warn(`unlanded-criterion delivery failed after a merge receipt: ${e?.message ?? e}`),
+    );
+  }
 
   /**
    * Record one merge. Idempotent by MR4's key: the same merge reported twice returns the FIRST
@@ -230,12 +325,25 @@ export class MergeReceiptService {
       return { receipt: mergeReceiptRow(created as unknown as MergeReceiptRow), created: true };
     };
 
+    // A caller holding its own transaction owns the commit, and therefore owns the delivery too.
+    // Knocking here would read a world this receipt is not yet part of and derive the facts
+    // WITHOUT it — worse than not knocking, because it would spend each key on the old answer.
+    // `deliverProjectFactsAfterCommit` is public for exactly that caller to call once it commits;
+    // `runner-api.controller.ts`'s merge-result is the one that does.
     if (tx) return run(tx);
     // Retried whole, but only on the branch that OWNS the transaction. When a caller passes `tx`
     // this is part of THEIR unit of work and theirs to re-run — a nested retry would re-run a
     // closure inside a transaction the server has already thrown away. The receipt is keyed by
     // `idempotencyKey`, computed above and outside, so every attempt writes the same row.
-    return withTransactionRetry(this.prisma, run, loggedRetry(this.logger, 'sessionMergeReceipt.record'));
+    const recorded = await withTransactionRetry(
+      this.prisma, run, loggedRetry(this.logger, 'sessionMergeReceipt.record'));
+    // The project the receipt was denormalised onto, which is `session.task.projectId` read under
+    // the same transaction that wrote the row. Delivered for a redelivery (`created: false`) as
+    // well as for a new row: an idempotent replay is exactly the state a caller retrying a request
+    // whose response was lost is in, and the first attempt's delivery is the one that may have been
+    // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read.
+    await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId);
+    return recorded;
   }
 
   /** One session's receipts, newest first. */

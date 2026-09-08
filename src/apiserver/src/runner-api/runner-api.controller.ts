@@ -459,6 +459,17 @@ export class RunnerApiController {
      * fixtures; RunnerApiModule imports the one shared TasksService instance in production.
      */
     private readonly tasks?: TasksService,
+    /**
+     * The receipt writer, held for its post-commit delivery alone — the row itself is written by
+     * `MergeReceiptService.fromRunnerMergeResult` inside `mergeResult`'s own transaction.
+     *
+     * Injected rather than reaching `CompletionInputRouter` directly (which this module CAN see,
+     * through ProjectsModule's re-export) so that all three receipt writers knock on the delivery
+     * doors through one method: three call sites deciding for themselves which doors a receipt
+     * moves is how two of them end up moving different ones. Optional for the ~40 specs that
+     * construct this controller directly, exactly as `tasks` above is.
+     */
+    private readonly mergeReceipts?: MergeReceiptService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -4206,6 +4217,12 @@ export class RunnerApiController {
     // Set by the §7 authority below, and read by the receipt writer further down. Declared out here
     // because `withTransactionRetry` may run the closure again, and each run re-derives it.
     let landedCheckpointId: string | null = null;
+    // The project a receipt was actually WRITTEN for, carried out of the transaction so its
+    // completion-input facts can be delivered once it has committed. A set rather than a variable
+    // because `withTransactionRetry` may run the closure again and would otherwise leave a project
+    // named by an attempt that was thrown away — re-adding the same id is a no-op, and the closure
+    // adds nothing on the paths that write no receipt.
+    const receiptProjects = new Set<string>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -4342,6 +4359,7 @@ export class RunnerApiController {
               select: { projectId: true },
             })
           : null;
+        if (task?.projectId) receiptProjects.add(task.projectId);
         await MergeReceiptService.fromRunnerMergeResult(tx, {
           ownerId: current.ownerId,
           sessionId,
@@ -4381,6 +4399,16 @@ export class RunnerApiController {
         });
       }
     }, loggedRetry(this.logger, 'runnerApi.mergeResult'));
+    // The third receipt writer's own post-commit edge, and the reason it is written out here rather
+    // than inside the closure above: `fromRunnerMergeResult` writes the receipt in THIS
+    // transaction, so a delivery made from inside it would derive every fact from a world the
+    // receipt is not yet in. `MergeReceiptService.record` takes this same edge for the other two
+    // writers; here the transaction is ours, so the call is too. Failures are logged inside it —
+    // the merge and the receipt are committed and a coordinator that could not be reached does not
+    // un-record them.
+    for (const projectId of receiptProjects) {
+      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId);
+    }
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is

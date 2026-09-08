@@ -42,6 +42,7 @@ import { WakeDispositionService } from '../projects/wake-disposition.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from './tasks.service';
 
@@ -70,6 +71,16 @@ import { TasksService } from './tasks.service';
  * the version really moved is not asserted by inspection: `CRITERION_READY` is derived from the
  * same serving set at the same moment by a predicate identical to this one except for the landing
  * clause, and it writes its second row while this event writes none.
+ *
+ * AND WHY THE LAST CASE HAS NO TASK WRITE IN IT AT ALL
+ * ====================================================
+ * Every case but the last reaches this event through a task write, because that was the only
+ * driver it had: no writer of a merge receipt — not the user API, not the agent door, not the
+ * runner's own merge-result — knocked on any delivery door. So "the criterion that landed stops
+ * producing this fact" was only ever witnessed by filing MORE work and settling it, which is the
+ * task write path answering a question about merges. The last case records one receipt through
+ * `MergeReceiptService.record` and writes no task at all, and its paired positive is the sibling
+ * criterion that has no receipt anywhere — one call, two criteria, one difference between them.
  *
  * WHAT SETTLES THE WORK
  * =====================
@@ -122,6 +133,15 @@ interface Stack {
   projects: ProjectsService;
   /** The same service over a router of the caller's choosing, for the post-commit probe. */
   tasksWith: (router: CompletionInputRouter) => TasksService;
+  /**
+   * The production writer of a merge receipt, over the SAME router the write path holds.
+   *
+   * A receipt is the whole input this event is defined over, and for one commit no writer of one
+   * knocked on any delivery door — so the only thing that ever re-asked the landing question was
+   * a later task write. The last case in this file is about that door, and it is the only case
+   * that uses this.
+   */
+  receipts: MergeReceiptService;
 }
 
 /**
@@ -133,6 +153,17 @@ interface Stack {
  */
 async function connect(options: {
   convergence?: CoordinatorConvergenceService;
+  /**
+   * Whether the TASK write path delivers anything.
+   *
+   * `true` everywhere but the last case, which needs a world where the work is finished and its
+   * landing question has never been asked. That is not a contrived world: `deliverUnlandedCriteria`
+   * logs a failed delivery and swallows it precisely so a committed task write is never undone by
+   * an unreachable coordinator, and says in as many words that the same fact is re-derived from the
+   * same rows by the next delivery. A write path with no router is what "the next delivery" has to
+   * repair, and the receipt door is what performs it.
+   */
+  deliverTaskWrites?: boolean;
 } = {}): Promise<Stack> {
   await verifyDisposableDatabase();
   const db = prismaClientFor(URL!);
@@ -158,7 +189,10 @@ async function connect(options: {
     ),
     new CriterionUnlandedProducer(prisma, convergence),
   );
-  const tasks = new TasksService(prisma, sessions, realtime, undefined, router);
+  const tasks = new TasksService(
+    prisma, sessions, realtime, undefined,
+    options.deliverTaskWrites === false ? undefined : router,
+  );
   const api = new RunnerApiController(
     prisma,
     queue,
@@ -178,6 +212,7 @@ async function connect(options: {
     tasks,
     projects,
     tasksWith: (wired) => new TasksService(prisma, sessions, realtime, undefined, wired),
+    receipts: new MergeReceiptService(prisma, router),
   };
 }
 
@@ -448,6 +483,16 @@ async function settleByAcceptance(stack: Stack, f: Fixture, taskId: string, labe
   );
 }
 
+/** Every task row of a project, with the column a write of any kind would move. */
+async function taskFingerprint(db: PrismaClient, projectId: string) {
+  const rows = await db.task.findMany({
+    where: { projectId },
+    select: { id: true, status: true, updatedAt: true },
+    orderBy: { id: 'asc' },
+  });
+  return rows.map((row) => [row.id, row.status, row.updatedAt.toISOString()]);
+}
+
 function wakesOf(db: PrismaClient, projectId: string, event: string) {
   return db.projectCoordinatorWake.findMany({
     where: { projectId, event },
@@ -682,6 +727,134 @@ test('the landing delivery happens after the write it is about has committed',
       }
     } finally {
       await outside.$disconnect();
+      await stack.db.$disconnect();
+    }
+  });
+
+/**
+ * The receipt path is a driver of this event, not just an input to it.
+ *
+ * Every case above reaches this event through a TASK write, which is the only driver it had: the
+ * three writers of a merge receipt — the user API, the agent door, and the runner's own
+ * merge-result — knocked on no completion-input door at all. So "the criterion that landed stops
+ * producing this fact" was only ever witnessed by filing MORE work and settling it, which is the
+ * task write path answering a question about merges. This case removes the task write entirely.
+ *
+ * WHY THE NEGATIVE IS NOT ALONE
+ * =============================
+ * "The landed criterion produced nothing" is true of a working landing clause, of a deleted
+ * producer, and of a door nobody knocked on — and the last of those is the defect. So the same
+ * `record()` call carries a paired positive that could only have come from the same knock: the
+ * SIBLING criterion, finished and with no receipt anywhere, gets its `CRITERION_UNLANDED` row here
+ * and its card on the standing conversation. Two criteria, one call, one difference between them.
+ *
+ * `CRITERION_READY` is the second half of the same argument, and it is what tells "the door ran
+ * over both criteria" from "the door only ever saw one": it is derived from the same serving sets
+ * at the same moment by a predicate identical to this event's except for the landing clause, and
+ * it writes a row for BOTH.
+ */
+test('a receipt recorded through the door delivers the landing question, and answers it for the criterion that landed',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect({ deliverTaskWrites: false });
+    try {
+      const f = await fixture(stack, 'receipt-drives-the-door');
+      const [landed, stranded] = await state(stack, f, [
+        '这条标准的活会拿到回执', '这条标准的活干完了，永远没有回执',
+      ]);
+
+      const onMain = await serve(stack, f, landed!.key, '会拿到回执的那件活');
+      const onBranch = await serve(stack, f, stranded!.key, '永远没有回执的那件活');
+      await settleByAcceptance(stack, f, onMain, 'first-of-two');
+      await settleByAcceptance(stack, f, onBranch, 'second-of-two');
+
+      // The state the repair is for: the work is finished and its landing question has never been
+      // asked. Asserted rather than assumed — if a task write delivered anything here, every row
+      // below would be about that write instead of about the receipt.
+      assert.deepEqual(
+        await unlandedWakes(stack.db, f.projectId), [],
+        'a task write delivered the landing question, so nothing below is about the receipt',
+      );
+      assert.deepEqual(await wakesOf(stack.db, f.projectId, 'CRITERION_READY'), []);
+      assert.deepEqual(await coordinatorMessages(stack.db, f), []);
+
+      const tasksBefore = await taskFingerprint(stack.db, f.projectId);
+
+      // ── one receipt, through the door production records one through ─────────────────────────
+      const sessionId = randomUUID();
+      await stack.db.session.create({
+        data: {
+          id: sessionId,
+          ownerId: f.ownerId,
+          creatorId: f.ownerId,
+          taskId: onMain,
+          workspaceId: f.workspaceId,
+          assignedRunnerId: f.runnerId,
+          title: 'through-the-door-merge',
+          prompt: 'through-the-door-merge',
+          provider: 'claude',
+          status: RunStatus.SUCCEEDED,
+          dispatchOrigin: SessionDispatchOrigin.USER,
+          branch: 'orbit/through-the-door',
+        },
+      });
+      const recorded = await stack.receipts.record(
+        f.ownerId,
+        sessionId,
+        {
+          result: 'MERGED',
+          sourceBranch: 'orbit/through-the-door',
+          sourceSha: 'd'.repeat(40),
+          targetBranch: 'main',
+          targetShaBefore: 'e'.repeat(40),
+          targetShaAfter: 'f'.repeat(40),
+        },
+        'AGENT',
+      );
+      assert.equal(recorded.created, true, 'the door recorded no receipt');
+      assert.equal(recorded.receipt.landed, true);
+
+      // ── what that one call produced ──────────────────────────────────────────────────────────
+      const wakes = await unlandedWakes(stack.db, f.projectId);
+      assert.equal(
+        wakes.length, 1,
+        'the receipt path knocked on no landing door: the criterion with no receipt anywhere was '
+        + 'never reported unlanded',
+      );
+      assert.equal(
+        wakes[0]!.subjectId, criterionSubjectId(f.projectId, stranded!.key),
+        'the fact is about the criterion whose work has no receipt',
+      );
+      assert.notEqual(
+        wakes[0]!.subjectId, criterionSubjectId(f.projectId, landed!.key),
+        'the criterion this very receipt landed was reported unlanded anyway',
+      );
+      assert.equal((wakes[0]!.detail as Record<string, unknown>).criterionKey, stranded!.key);
+      assert.equal(wakes[0]!.status, 'DELIVERED');
+      assert.equal(wakes[0]!.sessionId, f.coordinatorSessionId);
+      assert.equal((await coordinatorMessages(stack.db, f)).length, 1);
+
+      // Both criteria were READY at that moment, and the readiness door — knocked by the same call
+      // — wrote a row for each. That is what makes the single unlanded row above a statement about
+      // the receipt: the doors saw both criteria and answered differently about them.
+      assert.equal(
+        (await wakesOf(stack.db, f.projectId, 'CRITERION_READY')).length, 2,
+        'the receipt did not reach the readiness door, so it may never have reached either',
+      );
+
+      // ── and no task write is anywhere near it ────────────────────────────────────────────────
+      assert.deepEqual(
+        await taskFingerprint(stack.db, f.projectId), tasksBefore,
+        'a task row moved while the receipt was recorded, so the driver is not established',
+      );
+      assert.equal(
+        (await stack.db.task.findUniqueOrThrow({ where: { id: f.choreTaskId } })).status,
+        TaskStatus.OPEN,
+      );
+      assert.deepEqual(
+        await wakesOf(stack.db, f.projectId, 'PROJECT_TASKS_SETTLED'), [],
+        'the project has not settled, and a criterion was answered about anyway',
+      );
+    } finally {
       await stack.db.$disconnect();
     }
   });

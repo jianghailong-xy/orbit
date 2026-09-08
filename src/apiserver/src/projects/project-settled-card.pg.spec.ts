@@ -15,9 +15,11 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { completeHumanTaskForPgTest } from '../tasks/task-completion-test-helper';
 import { TasksService } from '../tasks/tasks.service';
+import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import {
   CoordinatorDeliveryService,
@@ -30,6 +32,8 @@ import {
 } from './coordinator-pg-test-safety';
 import { projectAcceptanceLandedFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService } from './coordinator-wake.service';
+import { CriterionReadyProducer } from './criterion-ready.producer';
+import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criteriaFromDefinitions, criterionKeyOf } from './project-acceptance';
 import { criterionLanding } from './project-criterion-landing';
 import { ProjectAcceptanceService } from './project-acceptance.service';
@@ -38,6 +42,8 @@ import {
   SETTLED_WAKE_COORDINATOR_DISABLED,
 } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
+import { TaskExceptionInputProducer } from './task-exception-input.producer';
+import { WakeDispositionService } from './wake-disposition.service';
 import { criterionCoverage } from './wake-disposition';
 
 /**
@@ -57,8 +63,13 @@ import { criterionCoverage } from './wake-disposition';
  * and what the turn it becomes actually says.
  *
  * The producer is called directly, exactly as `project-tasks-settled.pg.spec.ts` calls it. That
- * every committed task write reaches this producer is that spec's and the router specs' subject,
+ * every committed TASK write reaches this producer is that spec's and the router specs' subject,
  * and re-proving it here would be measuring the write path rather than the card.
+ *
+ * The fourth case below is the one exception, and it is an exception because the write path it
+ * measures had nobody measuring it: a merge receipt is the last missing input of this fact, and no
+ * writer of one called any delivery door. So that case alone records its receipt through
+ * `MergeReceiptService.record` and never touches the producer.
  *
  * WHY "TASKS SETTLED" IS NOT ENOUGH ON ITS OWN
  * ============================================
@@ -80,6 +91,14 @@ import { criterionCoverage } from './wake-disposition';
  * the third case moves NOTHING but the receipt, fingerprints the task rows either side of it, and
  * asserts the card goes out anyway. It is the one case here that would still be red if the card
  * shared `PROJECT_TASKS_SETTLED`'s key.
+ *
+ * AND WHY A FOURTH CASE EXISTS BESIDE THAT ONE
+ * ============================================
+ * The third case proves the fact CAN be moved by a receipt; it proves nothing about whether
+ * anybody moves it, because it derives the fact by hand. For one commit the answer was that nobody
+ * did — the key was there to be claimed and the three receipt writers knocked on no door. So the
+ * fourth case records the last receipt through the door production records one through and then
+ * calls nothing: no `afterCommit`, no task write, no second derivation.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own project.
  */
@@ -110,6 +129,15 @@ interface Stack {
   tasks: TasksService;
   projects: ProjectsService;
   producer: ProjectTasksSettledProducer;
+  /**
+   * The production writer of a merge receipt, holding the production router.
+   *
+   * The last case in this file is the only one that uses it, and it is the whole difference
+   * between "the fact CAN be moved by a receipt" and "a receipt moves it": every case above drives
+   * the producer by hand, which proves what the derivation does and nothing at all about whether
+   * anybody performs it.
+   */
+  receipts: MergeReceiptService;
 }
 
 /** The production wiring of unit T7, over one client and with no seam. */
@@ -121,11 +149,24 @@ async function connect(): Promise<Stack> {
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
   const wakes = new CoordinatorWakeService(prisma);
+  const judgments = new CoordinatorJudgmentService(prisma, wakes, sessions);
+  const deliveries = new CoordinatorDeliveryService(prisma, wakes, sessions);
   const producer = new ProjectTasksSettledProducer(
     prisma,
-    new CoordinatorJudgmentService(prisma, wakes, sessions),
+    judgments,
     new CoordinatorConvergenceService(prisma),
-    new CoordinatorDeliveryService(prisma, wakes, sessions),
+    deliveries,
+  );
+  // The router the receipt writer knocks on, wired exactly as `CoordinatorJudgmentModule` wires it
+  // — the same producer instance the cases above drive by hand, so a card sent through the receipt
+  // door and a card sent by hand are the same code reaching the same ledger.
+  const router = new CompletionInputRouter(
+    wakes,
+    producer,
+    new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new CriterionReadyProducer(prisma, new CoordinatorConvergenceService(prisma)),
+    new WakeDispositionService(prisma, judgments, deliveries),
+    new CriterionUnlandedProducer(prisma, new CoordinatorConvergenceService(prisma)),
   );
   return {
     db,
@@ -133,6 +174,7 @@ async function connect(): Promise<Stack> {
     projects: new ProjectsService(prisma, new ProjectAcceptanceService(prisma)),
     // No router: this spec drives the producer itself, so nothing settles a task by side effect.
     tasks: new TasksService(prisma, sessions, realtime),
+    receipts: new MergeReceiptService(prisma, router),
   };
 }
 
@@ -256,22 +298,7 @@ async function serve(
  * writers of one write it: a session of the task, a `MERGED` result, and a default target branch.
  */
 async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: string) {
-  const sessionId = randomUUID();
-  await stack.db.session.create({
-    data: {
-      id: sessionId,
-      ownerId: f.ownerId,
-      creatorId: f.ownerId,
-      taskId,
-      workspaceId: f.workspaceId,
-      assignedRunnerId: f.runnerId,
-      title: `${label}-merge`,
-      prompt: `${label}-merge`,
-      provider: 'claude',
-      status: RunStatus.SUCCEEDED,
-      dispatchOrigin: SessionDispatchOrigin.USER,
-    },
-  });
+  const sessionId = await mergeSession(stack, f, taskId, label);
   await stack.db.sessionMergeReceipt.create({
     data: {
       ownerId: f.ownerId,
@@ -288,6 +315,61 @@ async function recordLanding(stack: Stack, f: Fixture, taskId: string, label: st
       idempotencyKey: `landed:${taskId}`,
     },
   });
+}
+
+/** The session whose branch the merge is about — a session OF the task, ended, on this workspace. */
+async function mergeSession(
+  stack: Stack, f: Fixture, taskId: string, label: string,
+): Promise<string> {
+  const sessionId = randomUUID();
+  await stack.db.session.create({
+    data: {
+      id: sessionId,
+      ownerId: f.ownerId,
+      creatorId: f.ownerId,
+      taskId,
+      workspaceId: f.workspaceId,
+      assignedRunnerId: f.runnerId,
+      title: `${label}-merge`,
+      prompt: `${label}-merge`,
+      provider: 'claude',
+      status: RunStatus.SUCCEEDED,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      branch: `orbit/${label}`,
+    },
+  });
+  return sessionId;
+}
+
+/**
+ * The same landing, recorded through the door that PRODUCTION records one through.
+ *
+ * `recordLanding` above writes the row directly, which is right for every case whose subject is
+ * what the derivation does with a receipt. It is exactly wrong for the case whose subject is
+ * whether recording one drives anything: a row written behind the service's back cannot knock on a
+ * door, so a spec that wrote it that way would be green over a receipt path that delivers nothing
+ * — which is the state this file was in for one commit.
+ *
+ * `record(..., 'AGENT')` is the method `runner-sessions.controller.ts` calls; the user door calls
+ * the same method with `'USER'`, and neither of them adds anything this helper leaves out.
+ */
+async function recordLandingThroughTheDoor(
+  stack: Stack, f: Fixture, taskId: string, label: string,
+) {
+  const sessionId = await mergeSession(stack, f, taskId, label);
+  return stack.receipts.record(
+    f.ownerId,
+    sessionId,
+    {
+      result: 'MERGED',
+      sourceBranch: `orbit/${label}`,
+      sourceSha: 'd'.repeat(40),
+      targetBranch: 'main',
+      targetShaBefore: 'e'.repeat(40),
+      targetShaAfter: 'f'.repeat(40),
+    },
+    'AGENT',
+  );
 }
 
 /**
@@ -705,6 +787,116 @@ test('the receipt alone cards the project, with no task row touched',
       const delivered = wakes.filter((wake) => wake.status === 'DELIVERED');
       assert.equal(
         delivered[0]!.sessionId, f.coordinatorSessionId,
+        'the card was bound to a session that is not the one this project is coordinated from',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/**
+ * The other half of the hole, and the one this file could not see until now.
+ *
+ * The case above proves the FACT can be moved by a receipt: derive it by hand after the receipt is
+ * in the table, and the card is sent. What it cannot prove is that anybody derives it — every case
+ * above calls `producer.afterCommit` itself, and for one commit that call had no counterpart in
+ * production at all. The three writers of a merge receipt — the user API, the agent door, and the
+ * runner's own merge-result — knocked on no delivery door, so the key was there to be claimed and
+ * nobody knocked. `merge-receipt.service.ts`'s constructor carries the repair.
+ *
+ * So this case records the last receipt through `MergeReceiptService.record`, the method the agent
+ * door calls, and then does NOTHING: no `afterCommit`, no task write, no second derivation. The
+ * card either arrived because recording a receipt delivers, or it did not arrive.
+ */
+test('recording the last receipt through the door that writes one is what sends the card',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const f = await fixture(stack, 'receipt-door-cards');
+      const [landed, offBranch] = await state(stack, f, [
+        '这条标准的活已经合进 main',
+        '这条标准的活干完了，回执还没录',
+      ]);
+
+      const onMain = await serve(stack, f, landed!.key, '已经合进 main 的那件活');
+      const onBranch = await serve(stack, f, offBranch!.key, '回执还没录的那件活');
+      await recordLanding(stack, f, onMain, 'on-main');
+      await completeHumanTaskForPgTest(stack.db, f.ownerId, onMain, 'on-main-work');
+      await completeHumanTaskForPgTest(stack.db, f.ownerId, onBranch, 'on-branch-work');
+
+      // The order production actually runs in, up to the receipt: the last task settles while one
+      // criterion is still off the branch, and the settled fact is spent on a judgment session.
+      // That session is the one that goes and merges — so everything after this line happens with
+      // no task write anywhere near it.
+      assert.deepEqual(
+        await stack.producer.afterCommit([f.projectId]),
+        [{ projectId: f.projectId, outcome: 'OPENED' }],
+        'the settled project was carded while one criterion was still off the branch',
+      );
+      assert.deepEqual(await coordinatorMessages(stack.db, f), []);
+
+      const tasksBefore = await taskFingerprint(stack.db, f.projectId);
+      const judgedBefore = await judgmentSessions(stack.db, f.ownerId);
+
+      // ── the receipt, through the door that records one, and nothing else ─────────────────────
+      const recorded = await recordLandingThroughTheDoor(stack, f, onBranch, 'caught-up');
+      assert.equal(
+        recorded.created, true,
+        'the door recorded no new receipt, so nothing below is a statement about one',
+      );
+      assert.equal(recorded.receipt.landed, true);
+      assert.equal(recorded.receipt.projectId, f.projectId);
+
+      // The card comes first, because it is what this case exists to witness: a red here has to
+      // read "no card was sent", not "the delivery reported the wrong word".
+      const said = await coordinatorMessages(stack.db, f);
+      assert.equal(
+        said.length, 1,
+        'the last receipt was recorded through the door production records one through, and the '
+        + 'coordinator was never carded — the receipt path knocks on no delivery door',
+      );
+      assert.match(said[0]!.content ?? '', /CONFIRM_ACCEPTANCE_CRITERIA/);
+      assert.ok((said[0]!.content ?? '').includes(offBranch!.text),
+        'the card omits the criterion whose receipt produced it');
+
+      // ── nothing else drove it ────────────────────────────────────────────────────────────────
+      // No task row moved, so no task write can be what delivered; and no judgment session was
+      // opened, so the card is on the standing conversation rather than a new one.
+      assert.deepEqual(
+        await taskFingerprint(stack.db, f.projectId), tasksBefore,
+        'a task row moved, so the card above says nothing about the receipt path',
+      );
+      assert.deepEqual(
+        await judgmentSessions(stack.db, f.ownerId), judgedBefore,
+        'the receipt opened a conversation instead of writing to the one that already existed',
+      );
+
+      // ── and the ledger says which doors the receipt knocked on ───────────────────────────────
+      // Three, the same three a committed task write knocks on, in the order it knocks on them.
+      // The settled door produced the card; the readiness door produced one fact per criterion,
+      // recorded rather than delivered because a backed criterion owes nobody a judgment; the
+      // unlanded door produced nothing, because after this receipt nothing is unlanded. That last
+      // one is the assertion that would be vacuous on its own — the two rows above it are what
+      // make "no CRITERION_UNLANDED" a statement about the receipt rather than about a door
+      // nobody knocked on.
+      const wakes = await projectWakes(stack.db, f.projectId);
+      assert.deepEqual(
+        wakes.map((wake) => [wake.event, wake.status]),
+        [
+          ['PROJECT_TASKS_SETTLED', 'SESSION_OPENED'],
+          ['PROJECT_ACCEPTANCE_LANDED', 'DELIVERED'],
+          ['CRITERION_READY', 'CONSUMED'],
+          ['CRITERION_READY', 'CONSUMED'],
+        ],
+        'the receipt did not knock on all three completion-input doors',
+      );
+      assert.equal(
+        wakes.filter((wake) => wake.event === 'CRITERION_UNLANDED').length, 0,
+        'a criterion whose every serving task has a MERGED receipt was reported unlanded',
+      );
+      assert.equal(
+        wakes.find((wake) => wake.event === 'PROJECT_ACCEPTANCE_LANDED')!.sessionId,
+        f.coordinatorSessionId,
         'the card was bound to a session that is not the one this project is coordinated from',
       );
     } finally {

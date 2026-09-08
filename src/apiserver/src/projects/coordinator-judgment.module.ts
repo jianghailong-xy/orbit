@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 
 import { SessionsModule } from '../sessions/sessions.module';
 import { CompletionInputRouter } from './completion-input-router.service';
@@ -46,7 +46,10 @@ import { WakeDispositionService } from './wake-disposition.service';
  * a coordinator, which is this module's subject, and SessionsModule is imported here already.
  */
 @Module({
-  imports: [SessionsModule],
+  // `forwardRef` because SessionsModule now imports this one back: `MergeReceiptService` delivers
+  // through `CompletionInputRouter` after a receipt commits, which is the other half of the edge
+  // this module's producers are derived on. Both sides declare it; neither can be resolved first.
+  imports: [forwardRef(() => SessionsModule)],
   providers: [
     CoordinatorWakeService,
     CompletionInputRouter,
