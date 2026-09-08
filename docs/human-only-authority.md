@@ -53,17 +53,30 @@ must be read per authenticated door:
 
 | Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project criterion `PASS` | Project `DONE` |
 | --- | --- | --- | --- | --- | --- | --- |
-| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; owner credential is recorded | allowed | allowed | allowed; this door carries no acting session |
-| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | allowed; runner credential is recorded | allowed | allowed since N26, under machine attribution | allowed with no session header; refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` when one is sent |
-| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | allowed since N26 | allowed since N26 | **refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE`**, `DONE`, `CANCELLED` and `OPEN` alike |
-| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed when it names its credentialed actor | allowed | allowed unless it explicitly supplies machine attribution | allowed; writes the column directly |
+| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; the only door there is, and it passes no acting session | allowed | allowed | allowed; this door carries no acting session |
+| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | no route at all; a call reaching the service with its session header would be refused | allowed | allowed since N26, under machine attribution | allowed with no session header; refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` when one is sent |
+| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY`** — for carrying a session at all, not for its origin | allowed since N26 | allowed since N26 | **refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE`**, `DONE`, `CANCELLED` and `OPEN` alike |
+| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed; it names no actor — the row records the account owner | allowed | allowed unless it explicitly supplies machine attribution | allowed; writes the column directly |
 | Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | allowed, and indistinguishable from the owner REST row |
 
-The project standard-set confirmation row is the N22 addition. Its refusal is real for an
-attributed `dispatch_origin = PROJECT_COORDINATOR` Session. For a runner call that omits the acting
-Session header, or a caller that can mint/borrow an owner JWT, the row provides **audit visibility
-only** (`confirmedByType`, `confirmedById`, optional acting Session, time, digest). It is not a hard
-human boundary and must not be described as one. The identity-independent protection is elsewhere:
+The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
+action its one writer, the rule it states is no longer about a role.
+`refuseSessionAuthoredConfirmation` refuses ANY request that carries an acting session — code
+`PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY`, required action `ASK_A_PERSON`, whatever that
+session's `dispatch_origin` — so the standing coordinator conversation meets it on the same line
+as the one-shot judgment session. It lives in `ProjectAcceptanceService.confirmStandardSet` rather
+than at a door, which is why the runner cell above says what it says twice over: the runner API
+exposes no confirmation route, and a call that did reach the service carrying the injected
+`X-Orbit-Session-Id` would be refused there. The other code,
+`PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`, states the judgment-ROLE rule and nothing on this path
+raises it any more; they are two rules and not two spellings of one.
+
+What is left once every session is refused is a credential question, and there the row provides
+**audit visibility only**: it records `confirmedById`, `confirmedAt`, and which version was
+confirmed (`criteriaDigest` and its material). It has no actor-type column and no acting-Session
+column — the request that would fill one is refused — so a caller that can mint or borrow an owner
+JWT reaches the same door as owner login and writes the same row. It is not a hard human boundary
+and must not be described as one. The identity-independent protection is elsewhere:
 the confirmation names the exact, revision-bearing standard-set digest, so any semantic edit makes
 it non-current and the projection stops deriving `DONE` until that new digest is confirmed — it
 takes the column back on its next edge rather than refusing anybody's write.
@@ -94,8 +107,11 @@ Tests lock this matrix in `coordinator-authority-boundary.spec.ts`:
 - `an agent-held runner credential with no acting session can edit explicit structured criteria`;
 - `an agent-held runner credential with no acting session can write task verdict=PASS`;
 - `an agent-held runner credential with no acting session records acceptance PASS`;
-- `a no-acting-session runner edit changes the digest and immediately invalidates the prior set confirmation`;
-- `a PROJECT_COORDINATOR judgment session is refused when it tries to confirm the criteria set`;
+- and, for the confirmation column, in `project-acceptance-confirmation.pg.spec.ts`:
+  `(1) the owner channel records a confirmation, and the row says which version`,
+  `(2) a call carrying an acting session is refused, whatever its dispatch origin` — which runs
+  `USER` and `PROJECT_COORDINATOR` alike — `(3) rewording one criterion returns the project to
+  unconfirmed`, and `(4) changing only a verification method also retires the confirmation`;
 - `a headless runner can still record a conservative acceptance conclusion`;
 - the generated `a no-session owner/internal caller ...` controls for project updates and PASS;
 - the three `an owner JWT minted with the shared secret ...` cases for the owner REST API.
@@ -141,9 +157,10 @@ privilege boundary. In the co-located/shared-secret deployment described above, 
    - a project-acceptance conclusion is append-only and records `decidedBy`, `decidedById`, acting
      Session id, decision time, evidence version, and submitted evidence. This is credential/channel
      attribution, and a minted owner JWT produces the same `USER`/owner-id record as owner login;
-   - a standard-set confirmation is append-only and records the complete set digest,
-     `confirmedByType`, `confirmedById`, optional acting Session, and time. A headless runner or
-     minted owner JWT can still produce it, exactly as the matrix says;
+   - a standard-set confirmation is append-only and records the complete set digest, the material
+     it was taken over, `confirmedById`, and time. No actor type and no acting Session: a request
+     carrying one is refused rather than recorded. A minted or borrowed owner JWT can still produce
+     it, exactly as the matrix says;
    - a projected `DONE` records nothing of its own. The `done_bound` audit row with source
      `AUTOMATIC_CRITERIA_EVALUATOR` that used to bind it to an accepted run went with the rest of
      that machinery in 0229, and the projection added no table to replace it: what a reviewer
@@ -211,15 +228,21 @@ primarily defense in depth.
 ## N22 result
 
 N22 binds each confirmation to the exact revision-bearing standard-set digest and retains the
-credentialed actor id and time. This mechanically guarantees that a later criterion text,
-criterion kind, command, expected exit code, evidence Task, or verification method edit leaves no
-standing confirmation, so the projection will not derive `DONE` until the new digest is confirmed,
-and takes `DONE` back if it had already derived it. What it does not do is refuse anybody's direct
-write of the column; the only rule that does is the session condition above. It guarantees workflow
-separation for an attributed judgment Session and audit visibility for other credentials. It does
-**not** guarantee that a human
-personally performed the confirmation; that still requires one of the isolated, action-bound
-step-up or external-signature designs above.
+credentialed actor id and time. This mechanically guarantees that a later edit of a criterion's
+assertion or of its verification method leaves no standing confirmation, so the projection will not
+derive `DONE` until the new digest is confirmed, and takes `DONE` back if it had already derived it.
+Those two are the whole list, because they are what a criterion definition still holds: the digest
+is the multiset of `definitionId:revision:contentHash`, and the database trigger that maintains
+both advances `revision` and recomputes `contentHash` from the assertion and the method together.
+The criterion kind, the command, the expected exit code and the evidence Task were dropped from the
+definition row by migration 0233, and 0234 removed the evaluation-plan lane that stood beside the
+semantic one — so none of those is a field anybody can still edit. What deliberately does NOT
+retire a confirmation is reordering the criteria and the advisory override prose beside them;
+neither changes what the set says. What N22 does not do is refuse anybody's direct write of the
+column; the only rule that does is the session condition above. It guarantees workflow separation
+for every session, attributed or not, and audit visibility for the credentials that remain. It does
+**not** guarantee that a human personally performed the confirmation; that still requires one of
+the isolated, action-bound step-up or external-signature designs above.
 
 ## A2 follow-up (2026-09-08): can an answered card carry a HUMAN_ONLY permission?
 
@@ -231,10 +254,8 @@ permission, or **(B)** the card only prompts and the act happens on an owner-aut
 The `Project DONE` column above was reconciled on 2026-09-08 and now states what the server does:
 a request with no acting session writes the column directly, a request carrying one is refused
 whole, and the value itself is projected. What migration `0229_project_acceptance_judgment_removal`
-deleted on 2026-09-03 stays deleted. The confirmation column beside it and the paragraph under the
-table still describe the N22 shape and predate `refuseSessionAuthoredConfirmation`, so read THAT
-column as history. §"What is true today" below is the reasoning the DONE answer came out of, and
-`docs/project-done-gate.md` is the live page.
+deleted on 2026-09-03 stays deleted. §"What is true today" below is the reasoning the DONE answer
+came out of, and `docs/project-done-gate.md` is the live page.
 
 ### The premise being tested is false, and that is the finding
 
