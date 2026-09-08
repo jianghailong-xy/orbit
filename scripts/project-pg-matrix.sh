@@ -9,11 +9,19 @@
 # runs its DDL and everything scheduled after it is measured against a schema that spec left behind.
 # Six figures of that is not a signal; it is the harness reporting on itself.
 #
-# One spec needs something other than the migrated clone, and says so in its own header:
+# Every spec gets that same migrated clone. steer-dequeue was the one exception until 2026-09-08,
+# and why it stopped being one is written down here so that it does not come back:
 #
 #   * steer-dequeue is schema-owning: it creates the two columns-only tables its WHERE clause reads
-#     ("any empty Postgres … not the application schema"). Handed a migrated clone, its
-#     `DROP TABLE "session"` hits the dependent objects of every migration. It gets an EMPTY one.
+#     ("any empty Postgres … not the application schema"), so it needs nothing FROM the clone. It
+#     used to have to be kept AWAY from one as well — its fixture's tables were unqualified, and the
+#     `DROP TABLE` in front of them hit what the migrations had made depend on the application's
+#     own — so this loop handed it an empty database. 9c9a79c8 (2026-08-30) moved the fixture into a
+#     `steer_dequeue_test` schema it creates and drops: the DROPs name `steer_dequeue_test."session"`
+#     now, and the rest resolve through `search_path`. Measured on one throwaway server: empty
+#     database 25/25, migrated clone 25/25, and the same spec with that qualification stripped back
+#     off red on its first case, `2BP01 cannot drop table conversation_turn because other objects
+#     depend on it`. That third run is what makes the second one worth anything.
 #
 # `COORDINATOR_PG_RESTART_COMMAND` is supplied too: the disposable container IS restartable, and
 # without it the only two specs that read it report `# SKIP` — a silent hole in exactly the property
@@ -32,7 +40,7 @@
 # the spec that asserts the label, and without this it reports 4/6 for a property of this script.
 #
 # `WORK_OVERVIEW_PG_URL` is the same per-spec clone under a third name. project-work-overview-readiness
-# is the one spec in the tree that reads it — `COORDINATOR_PG_URL` covers 109 of the others and
+# is the one spec in the tree that reads it — `COORDINATOR_PG_URL` covers 111 of the others and
 # `ORBIT_TEST_PG_URL` the last one — and until 2026-09-08 nothing here handed it over, so that spec
 # reported `ok 1 … # SKIP` on every run this script has ever made while the line it printed read like
 # a spec that had run. It gets the clone rather than a database of its own because the spec's own
@@ -260,10 +268,7 @@ n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; MISSING=0; RED=()
 for f in $SPECS; do
   n=$((n+1)); DB="pcc_matrix_s$n"; base="$(basename "$f")"
   psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null
-  case "$base" in
-    steer-dequeue.pg.spec.js) psql_admin "CREATE DATABASE $DB" >/dev/null ;;
-    *)                        psql_admin "CREATE DATABASE $DB TEMPLATE $TMPL" >/dev/null ;;
-  esac
+  psql_admin "CREATE DATABASE $DB TEMPLATE $TMPL" >/dev/null
   URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
   child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
          COORDINATOR_PG_EXPECTED_USER="$ADMIN"
