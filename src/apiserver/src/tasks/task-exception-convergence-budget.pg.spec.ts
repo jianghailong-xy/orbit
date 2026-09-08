@@ -132,6 +132,7 @@ async function connect(): Promise<Stack> {
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
       convergence,
+      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
     new TaskExceptionInputProducer(prisma, convergence),
     new CriterionReadyProducer(prisma, convergence),

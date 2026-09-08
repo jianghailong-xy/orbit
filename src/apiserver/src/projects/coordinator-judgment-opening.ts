@@ -1,7 +1,7 @@
 import { uuidToBase62 } from '@orbit/shared';
 
 import { buildEvidenceAskProtocol, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
-import { WakeFact } from './coordinator-wake';
+import { SettledCriterionReport, WakeFact } from './coordinator-wake';
 
 /**
  * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
@@ -183,6 +183,28 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
   );
 }
 
+/** The roster the settled fact carries, read out of `detail` and trusted for nothing else. */
+function settledCriteriaOf(fact: WakeFact): SettledCriterionReport[] {
+  const criteria = (fact.detail ?? {}).criteria;
+  return Array.isArray(criteria) ? criteria as SettledCriterionReport[] : [];
+}
+
+/** One line per criterion, then one per criterion for the work that served it. */
+function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): string {
+  return criteria
+    .map((criterion, index) => {
+      const serving = criterion.serving
+        .map((task) => `${task.title}（${uuidToBase62(task.taskId)}，${task.status}）`)
+        .join('、');
+      return (
+        `${index + 1}. ${criterion.text}\n`
+        + `   满足：${criterion.satisfied ? '是' : '否'}；落地：${criterion.landing}；`
+        + `服务它的任务：${serving || '无'}`
+      );
+    })
+    .join('\n');
+}
+
 /**
  * The message the project's STANDING coordinator conversation is sent.
  *
@@ -227,6 +249,21 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
  * pending queue as it stood when the delivery was composed; a delivery with nothing this
  * coordinator may answer passes null and the message stays what it was — the fact, and where to
  * read the rest of it.
+ *
+ * AND WHY THE THIRD ONE CARRIES A SNAPSHOT THE OTHERS REFUSE TO
+ * ============================================================
+ * `PROJECT_TASKS_SETTLED`, delivered when every stated criterion is also satisfied and landed, is
+ * the one message here that copies project state into itself: every criterion's words, its two
+ * dimensions, and the work that served it. Line 3's rule is not being broken so much as met head
+ * on — the question this card asks is "do THESE N conditions, together, express the goal", and a
+ * question about a set that does not carry the set is one its reader cannot answer without going
+ * to fetch what it is being asked about. So the roster is in the card and the card says out loud
+ * that it is the snapshot at the moment the fact became true; everything else is still a read.
+ *
+ * What it must NOT do is answer. `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY
+ * (`coordinator-authority.ts`), so the action line here is to put the list in front of the account
+ * owner rather than to conclude anything from it — and in particular not to write `project.status`,
+ * which 0223 and 0229 left unguarded and which a card is not authorization to touch.
  */
 export function buildCoordinatorDeliveryMessage(
   fact: WakeFact,
@@ -234,6 +271,25 @@ export function buildCoordinatorDeliveryMessage(
   ask?: { ask: EvidenceAsk; readAt: Date } | null,
 ): string {
   const projectId = uuidToBase62(fact.projectId);
+  if (fact.event === 'PROJECT_TASKS_SETTLED') {
+    const criteria = settledCriteriaOf(fact);
+    return (
+      `【项目「${projectTitle}」的验收标准已全部满足并落地，请确认它们表达的是你要的目标】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `这 ${criteria.length} 条标准，每一条都已满足、且有合并回执证明成果在默认分支上：\n`
+      + `${renderSettledCriteria(criteria)}\n\n`
+      + `要回答的不是「这些标准满足了吗」——上面那份清单已经是这个问题的答案。要回答的是 `
+      + `CONFIRM_ACCEPTANCE_CRITERIA 那一句：这 ${criteria.length} 条合起来，表达的是当初要的那个目标吗？\n\n`
+      + '这一句你答不了，它是 HUMAN_ONLY：确认只走账号所有者认证的通道，任何带 acting session 的调用'
+      + '都会被服务端拒掉。你要做的是把上面这份清单交给账号所有者，让他在网页上确认；'
+      + '确认会绑定当前这一版标准，之后任何一条标准被改动，那次确认就自动不算数了。\n\n'
+      + 'project_update 的 status 没有守卫，这不是让你去写 DONE 的授权：写不写由账号所有者决定。\n\n'
+      + `全量状态自己读，上面那份清单是事实成立那一刻的快照：project_get（projectId 传 ${projectId}）`
+      + `读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
   if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
     return (
       `【项目「${projectTitle}」有一条新的完成证据】\n\n`

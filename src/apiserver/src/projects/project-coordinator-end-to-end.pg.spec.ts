@@ -44,6 +44,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
+import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
@@ -82,7 +83,12 @@ function buildStack(db: PrismaClient): Stack {
     sessions,
   );
   const attemptEnded = new AttemptEndedUnsettledProducer(prisma, judgments, convergence);
-  const settled = new ProjectTasksSettledProducer(prisma, judgments, convergence);
+  const settled = new ProjectTasksSettledProducer(
+    prisma,
+    judgments,
+    convergence,
+    new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
+  );
   const tasks = new TasksService(prisma, sessions, realtime);
   return {
     db,

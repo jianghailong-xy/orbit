@@ -311,15 +311,43 @@ export function attemptBudgetSpentFact(spent: {
 }
 
 /**
+ * One stated criterion as the settled fact REPORTS it — display and diagnosis, like every `detail`.
+ *
+ * Not part of the fact's identity, and it must not become part of one: the version this event is
+ * keyed on is the task settlement, so a criterion whose landing arrives later is the SAME settled
+ * project rather than a second one. What the roster is for is the message — a question about "these
+ * N conditions" that does not carry them is a question nobody can answer — and the wake row a
+ * reader later opens to find out which of them was missing.
+ *
+ * `satisfied` is a boolean rather than a coverage word because it is the only value the reader is
+ * shown; which of the three coverages produced it belongs to the unit that decided it.
+ */
+export interface SettledCriterionReport {
+  /** The criterion's stable key, as `project_get` spells it. */
+  key: string;
+  /** The condition itself. */
+  text: string;
+  /** Every task serving it is DONE, and at least one does. */
+  satisfied: boolean;
+  landing: CriterionLanding;
+  /** The work that serves it, named so the reader can see what the claim rests on. */
+  serving: ReadonlyArray<{ taskId: string; title: string; status: string }>;
+}
+
+/**
  * `PROJECT_TASKS_SETTLED` — every task filed under the project reached a terminal status.
  *
  * `null` when one has not, and `null` for a project with no tasks at all: an empty project has not
  * finished its work, it has not been given any, and waking a coordinator to judge the acceptance
  * of nothing is the emptiest possible version of §0's loop.
+ *
+ * `criteria` defaults to empty because it is display only: a caller with nothing to say about the
+ * project's stated conditions still derives exactly the same fact, with exactly the same key.
  */
 export function projectTasksSettledFact(
   projectId: string,
   tasks: readonly TaskSettlement[],
+  criteria: readonly SettledCriterionReport[] = [],
 ): WakeFact | null {
   if (tasks.length === 0) return null;
   if (!tasks.every((task) => isSettledTaskStatus(task.status))) return null;
@@ -329,7 +357,7 @@ export function projectTasksSettledFact(
     subjectType: 'PROJECT',
     subjectId: projectId,
     subjectVersion: settlementVersion(tasks),
-    detail: { taskCount: tasks.length },
+    detail: { taskCount: tasks.length, criteria },
   };
 }
 

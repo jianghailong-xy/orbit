@@ -136,7 +136,12 @@ async function connect(): Promise<Stack> {
   );
   const router = new CompletionInputRouter(
     wakes(),
-    new ProjectTasksSettledProducer(prisma, judgments, new CoordinatorConvergenceService(prisma)),
+    new ProjectTasksSettledProducer(
+      prisma,
+      judgments,
+      new CoordinatorConvergenceService(prisma),
+      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
+    ),
     new TaskExceptionInputProducer(prisma, new CoordinatorConvergenceService(prisma)),
     new CriterionReadyProducer(prisma, new CoordinatorConvergenceService(prisma)),
     disposition,

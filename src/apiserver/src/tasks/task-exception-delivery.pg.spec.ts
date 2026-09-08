@@ -137,6 +137,7 @@ async function connect(options: {
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
       new CoordinatorConvergenceService(prisma),
+      new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
     ),
     new TaskExceptionInputProducer(prisma, convergence),
     new CriterionReadyProducer(prisma, convergence),

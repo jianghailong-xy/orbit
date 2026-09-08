@@ -24,6 +24,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
@@ -85,6 +86,7 @@ async function connect(): Promise<Stack> {
     prisma,
     judgments,
     new CoordinatorConvergenceService(prisma),
+    new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
   );
   return {
     db,
