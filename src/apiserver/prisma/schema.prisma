@@ -1053,6 +1053,12 @@ model Session {
   // Display only, like engineTurnActive: slot accounting stays on `status`. Doubles as the
   // server-side startup measurement (engineStartedAt - lastTurnAt).
   engineStartedAt      DateTime? @map("engine_started_at")
+  // What the engine is doing while engineStartedAt is still null — the one thing that tells a
+  // three-second cold start from an engine compacting a conversation that no longer fits, which
+  // is minutes and emits nothing at all while it runs. NULL is "no named phase", which is also
+  // what an unrecognised value must degrade to: runners self-update on their own schedule, so
+  // this is text and not an enum. Cleared by every claim and by any engine output (0244).
+  enginePhase          String?   @map("engine_phase")
   // ── SOURCE snapshot: which commit this run starts from ──────────────────────
   // `docs/project-source-contract.md` §3.2, migration 0231. Fifteen columns, two seals, and the
   // seals are what make "may this column still be written" have exactly one answer:

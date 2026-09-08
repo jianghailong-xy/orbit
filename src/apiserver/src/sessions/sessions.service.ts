@@ -2055,6 +2055,7 @@ export class SessionsService {
       runningSubagentCount: number;
       engineTurnActive: boolean;
       engineStartedAt: Date | null;
+      enginePhase: string | null;
       workspaceId: string | null;
       workspaceName: string | null;
       workspaceModel: string | null;
@@ -2116,6 +2117,7 @@ export class SessionsService {
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
         s.engine_started_at AS "engineStartedAt",
+        s.engine_phase AS "enginePhase",
         a.id    AS "workspaceId",
         a.name  AS "workspaceName",
         a.model AS "workspaceModel",
@@ -2237,6 +2239,9 @@ export class SessionsService {
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
         engineStartedAt: r.engineStartedAt,
+        // What the list row needs to tell a three-second cold start from an engine that has been
+        // compacting for four minutes; both are RUNNING with a null engineStartedAt.
+        enginePhase: r.enginePhase,
         workspace: r.workspaceId
           ? { id: r.workspaceId, name: r.workspaceName, model: r.workspaceModel, effort: r.workspaceEffort }
           : null,

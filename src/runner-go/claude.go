@@ -56,6 +56,13 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 		if md := msg["compact_metadata"]; md != nil {
 			sys["compactMetadata"] = md
 		}
+		// What the engine is doing in a stretch where it produces nothing else. Carried on the
+		// same event because it IS the same frame; see claudeEnginePhase for why only one phase
+		// is named. A named phase also lifts the event out of the control plane's system-noise
+		// filter, which drops anything holding nothing but subtype/model/sessionId.
+		if phase := claudeEnginePhase(msg); phase != "" {
+			sys["enginePhase"] = phase
+		}
 		emit(evSystem, sys)
 	case "assistant":
 		message, _ := msg["message"].(map[string]interface{})
@@ -131,6 +138,42 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 			emit(evThinkingDelta, map[string]interface{}{"text": delta["thinking"]})
 		}
 	}
+}
+
+// Engine phases Orbit names. Deliberately its own small vocabulary rather than the CLI's: the
+// clients read this, and passing a provider's internal spinner states straight through would make
+// every one of them a compatibility surface.
+const (
+	enginePhaseCompacting = "compacting"
+	enginePhaseNone       = "none"
+)
+
+// claudeEnginePhase reads the engine-phase ping the CLI emits as a `system`/`status` frame and
+// returns the phase Orbit names for it, or "" for the ones it does not name.
+//
+// Most phases — `requesting`, `responding` — fire on every turn and say nothing the transcript is
+// not about to say anyway, so they stay unnamed and their bare three-key event keeps being
+// filtered as noise. Compaction is the one that has to cross: when a conversation no longer fits,
+// the CLI summarizes it BEFORE reading the message it was sent, and for those minutes it emits
+// nothing else at all. That silence is the whole window the clients had to describe blind, and
+// what they used to say about it was that a workspace was being checked out.
+//
+// The frame that ENDS a compaction reports `status: null` and carries the outcome, so it is
+// matched on `compact_result` rather than on a phase name. The outcome itself is not forwarded —
+// only that the phase is over. A compaction that ends by succeeding is followed immediately by
+// real engine output, which ends the starting state on its own; this exists for the one that
+// ends without any.
+func claudeEnginePhase(msg map[string]interface{}) string {
+	if msg["subtype"] != "status" {
+		return ""
+	}
+	if _, ended := msg["compact_result"]; ended {
+		return enginePhaseNone
+	}
+	if status, _ := msg["status"].(string); status == enginePhaseCompacting {
+		return enginePhaseCompacting
+	}
+	return ""
 }
 
 // compactSummaryMarker opens the summary Claude writes after compacting a conversation.

@@ -776,6 +776,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         status: true,
         engineTurnActive: true,
         engineStartedAt: true,
+        enginePhase: true,
         endReason: true,
         completedAt: true,
         archivedAt: true,
@@ -837,6 +838,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Null is a value here, not "unchanged": it is how a row learns that a claim reset the
       // session to starting again, which is exactly the transition this field exists to show.
       engineStartedAt: s.engineStartedAt ? s.engineStartedAt.toISOString() : null,
+      // Also null-as-a-value: a phase ending is a transition the clients have to see, and it is
+      // reported by this key going null rather than by any event they could watch for.
+      enginePhase: s.enginePhase ?? null,
     };
   }
 

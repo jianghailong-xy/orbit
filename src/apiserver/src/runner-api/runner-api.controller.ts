@@ -146,7 +146,7 @@ import {
 import { appendBackgroundJobsContext } from './background-jobs-context';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
-import { engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { normalizeToolOutputEvent } from './tool-output';
@@ -3747,6 +3747,11 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
+      // What the engine is doing in a stretch where it produces nothing else — see
+      // Session.enginePhase. Reduced separately from engineTurnActive above because the two
+      // answer different questions off overlapping events: a compaction is not a turn, and the
+      // output that ends one is exactly what makes the turn active.
+      const enginePhase = enginePhaseAfter(durable);
       // When the engine first spoke for this run — see Session.engineStartedAt. `undefined`
       // from the reducer above means nothing in this batch came from the engine at all, which
       // is the case that matters: the runner emits the user turn itself (seq 1) seconds before
@@ -3764,6 +3769,9 @@ export class RunnerApiController {
         ...(context ? { contextTokens: context.tokens } : {}),
         ...(context?.window ? { contextWindow: context.window } : {}),
         ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        // null is a decision here (the phase is over), undefined is "this batch said nothing
+        // about it" — so only the first may be written over the stored value.
+        ...(enginePhase !== undefined ? { enginePhase } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
         // message rather than writing null over it.
         ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),

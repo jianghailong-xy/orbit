@@ -64,3 +64,49 @@ export function engineTurnActiveAfter(events: EventLike[]): boolean | undefined 
   }
   return decided?.active;
 }
+
+/** The phases a runtime may name. One member: see Session.enginePhase for why it is not an enum. */
+const NAMED_PHASES: ReadonlySet<string> = new Set<string>(['compacting']);
+
+/**
+ * What one event says about the engine's phase — a name, `null` for "the phase is over", or
+ * `undefined` for "says nothing".
+ *
+ * Any engine output ends a phase, because a phase names a stretch in which the engine produces
+ * nothing else: output is proof that stretch is over. That matters more than it sounds. The frame
+ * that closes a compaction is not guaranteed to arrive — a compaction that ends by simply getting
+ * on with the turn goes straight to generating — and without this the session would read as
+ * compacting until the next claim cleared it.
+ *
+ * A runner shell tool is excluded for the same reason it is excluded above: runner activity is
+ * not engine activity, and it can run while the engine is genuinely mid-phase.
+ */
+const enginePhaseOf = (e: EventLike): string | null | undefined => {
+  if (isRunnerShellTool(e)) return undefined;
+  if (GENERATING.has(e.type)) return null;
+  if (e.type !== RunEventType.SYSTEM) return undefined;
+  const named = (e.payload as { enginePhase?: unknown } | null)?.enginePhase;
+  if (typeof named !== 'string') return undefined;
+  if (NAMED_PHASES.has(named)) return named;
+  // 'none' is the runner saying a phase ended. Anything else is a runner newer than this server
+  // naming a phase it has never heard of, which must read as "no named phase" rather than be
+  // stored and shown to a client that would not know what to say about it either.
+  return null;
+};
+
+/**
+ * The engine phase this batch leaves the session in — see Session.enginePhase.
+ *
+ * Highest-seq wins, like engineTurnActiveAfter above and for the same reason: a single batch
+ * routinely carries a compaction starting and the output that ends it. Returns undefined when
+ * nothing in the batch decides, so the stored value stands.
+ */
+export function enginePhaseAfter(events: EventLike[]): string | null | undefined {
+  let decided: { seq: number; phase: string | null } | undefined;
+  for (const e of events) {
+    const phase = enginePhaseOf(e);
+    if (phase === undefined) continue;
+    if (!decided || e.seq > decided.seq) decided = { seq: e.seq, phase };
+  }
+  return decided?.phase;
+}

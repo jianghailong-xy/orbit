@@ -69,6 +69,51 @@ export const STARTING_DESCRIPTION =
 // for this large transcript notice to be useful rather than an immediate flash after Send.
 export const STARTING_NOTICE_DELAY_MS = 10_000;
 
+/** Which phase the runner reported for a starting session, if it reported one. */
+export interface EnginePhase {
+  enginePhase?: string | null;
+}
+
+/**
+ * Copy for the one phase a runtime names: the engine is compacting a conversation that no longer
+ * fits, before it can read the message it was sent.
+ *
+ * This is allowed to name a cause where STARTING_DESCRIPTION is not, and the difference is the
+ * whole point — the runner said so. It is also the case the generic wording served worst: a cold
+ * start is seconds, and this is minutes, so "starting" set an expectation that then broke.
+ */
+export const COMPACTING_LABEL = 'Compacting';
+export const COMPACTING_TITLE = 'Compacting the conversation';
+export const COMPACTING_DESCRIPTION =
+  'The conversation no longer fits, so the engine is summarizing it before it can read your message. This can take a few minutes.';
+
+/**
+ * What a starting session is doing, in the user's terms.
+ *
+ * The runner names the phase, because only it can — the same division of labour as queuedReason
+ * above, where the server names the gate. From a session row there is no way to tell a checkout
+ * from a warm handover from a compaction; they are one absent timestamp.
+ *
+ * An unrecognised phase falls back to the generic copy rather than being shown. A runner
+ * self-updates on its own schedule and outlives a release, so it can name a phase this client has
+ * never heard of, and printing a word it cannot explain is worse than the honest generic line.
+ */
+const isCompacting = (session?: EnginePhase | null): boolean =>
+  session?.enginePhase === 'compacting';
+
+export function startingTitle(session?: EnginePhase | null): string {
+  return isCompacting(session) ? COMPACTING_TITLE : STARTING_TITLE;
+}
+
+/** The short chip form of startingTitle, for the session list. */
+export function startingLabel(session?: EnginePhase | null): string {
+  return isCompacting(session) ? COMPACTING_LABEL : STARTING_LABEL;
+}
+
+export function startingDescription(session?: EnginePhase | null): string {
+  return isCompacting(session) ? COMPACTING_DESCRIPTION : STARTING_DESCRIPTION;
+}
+
 /**
  * How long the current run has been waiting, for the notices whose whole problem is that a
  * static line reads the same at three seconds and at thirty minutes.

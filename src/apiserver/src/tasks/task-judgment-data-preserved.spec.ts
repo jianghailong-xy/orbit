@@ -281,6 +281,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        the index only narrows what it constrains, so no stored row can be refused by it and it
   //        needs no backfill; every existing wake reads NULL for the new column, which its CHECK
   //        permits unconditionally.
+  //   0244 gave `session` one nullable TEXT column, `engine_phase`: what the engine is doing in a
+  //        stretch where it produces nothing else, so a compaction is distinguishable from a cold
+  //        start. Read against every claim above: unlike 0240-0243 it does ALTER a relation this
+  //        file preserves, which is what this ledger entry is for. The alteration is confined to
+  //        that one table and is pure addition — one `ALTER TABLE ... ADD COLUMN` and one
+  //        `COMMENT ON COLUMN`, both DDL. It names no `task` object, neither 0177 relation,
+  //        `task_executable_acceptance_pair` nor any `project_acceptance_*` object. It creates no
+  //        table, index, enum or trigger, drops nothing, carries no `ALTER TYPE` and no `DROP
+  //        TYPE` — so all three `task_completion_criterion` labels survive — and has no `CREATE
+  //        OR REPLACE FUNCTION` at all, so it is not a fourth writer of the DONE fence. Above all
+  //        it has no INSERT/UPDATE/DELETE: a preserved session row is neither read nor written by
+  //        it, and gains only a column reading NULL, which is exactly "no named phase", so it
+  //        needs no backfill and no stored row can be refused by it.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -294,7 +307,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0240_runner_model_catalog_refresh_request',
       '0241_task_attachments',
       '0242_criterion_unlanded_wake',
-      '0243_coordinator_wake_delivered'],
+      '0243_coordinator_wake_delivered',
+      '0244_session_engine_phase'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

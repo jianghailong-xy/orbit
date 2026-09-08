@@ -232,16 +232,16 @@ import {
 } from '../lib/sessionCapabilities';
 import {
   QUEUED_NOTICE_DELAY_MS,
-  STARTING_DESCRIPTION,
-  STARTING_LABEL,
   STARTING_NOTICE_DELAY_MS,
-  STARTING_TITLE,
   type QueuedGate,
   pendingSlotDescription,
   queuedLabel,
   queuedNoticeVisible,
   queuedTitle,
   runnerSlotUsage,
+  startingDescription,
+  startingLabel,
+  startingTitle,
   waitElapsedLabel,
 } from '../lib/runnerSlots';
 import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
@@ -712,7 +712,7 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // Outranks the generating preview below, which would otherwise echo the message back as
   // though it had been read. It has not: the runtime is still being built (see
   // sessionIsStarting). Blue, because this is progress — just not the agent's yet.
-  if (live && sessionIsStarting(s)) return { text: `${STARTING_LABEL}…`, tone: 'running' };
+  if (live && sessionIsStarting(s)) return { text: `${startingLabel(s)}…`, tone: 'running' };
   if (live && isGenerating(s, state)) {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
@@ -844,7 +844,7 @@ export function SessionTagChips({
 export function statusLabel(session: any): string {
   const state = sessionRunStateOf(session);
   if (state === 'SUCCEEDED') return 'Succeeded';
-  if (sessionIsStarting(session)) return STARTING_LABEL;
+  if (sessionIsStarting(session)) return startingLabel(session);
   if (isGenerating(session, state))
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
@@ -877,7 +877,7 @@ export function StatusIcon({ session }: { session: any }) {
   // glyph would read as a fourth outcome for something that is two seconds long.
   if (sessionIsStarting(session))
     return (
-      <Tooltip title={STARTING_TITLE}>
+      <Tooltip title={startingTitle(session)}>
         <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
       </Tooltip>
     );
@@ -5462,10 +5462,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     <span />
                   </div>
                   <div className="chat-queued-title">
-                    {STARTING_TITLE}
+                    {startingTitle(selectedStartingSession)}
                     <WaitElapsed since={selectedStartingSession?.lastTurnAt} />
                   </div>
-                  <div className="chat-queued-desc">{STARTING_DESCRIPTION}</div>
+                  <div className="chat-queued-desc">{startingDescription(selectedStartingSession)}</div>
                 </div>
               )}
               {/* An unvisited session's history is still in flight: hold the shape of a
@@ -5510,10 +5510,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 transcriptEvents.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>
-                    {STARTING_TITLE}
+                    {startingTitle(selectedStartingSession)}
                     <WaitElapsed since={selectedStartingSession?.lastTurnAt} />
                   </span>
-                  <span>{STARTING_DESCRIPTION}</span>
+                  <span>{startingDescription(selectedStartingSession)}</span>
                 </div>
               )}
               {localStatusCards.map((card) => (

@@ -159,6 +159,24 @@ describe('sessionLine while the engine is starting', () => {
     });
   });
 
+  // The row the phase column exists for. Both of these are RUNNING with a null engineStartedAt —
+  // one is six seconds into a cold start, the other has been compacting for four minutes — and
+  // until the runner named the phase the list called them the same thing, so there was no way to
+  // tell from here which session was worth opening.
+  it('names the phase the runner reported, so a compaction is not just another start', () => {
+    expect(
+      sessionLine({ status: 'RUNNING', engineStartedAt: null, enginePhase: 'compacting' }, true),
+    ).toEqual({ text: 'Compacting…', tone: 'running' });
+  });
+
+  // A phase this client cannot explain falls back rather than printing a word nobody can read:
+  // runners self-update on their own schedule and outlive a release.
+  it('falls back to the generic line for a phase it does not know', () => {
+    expect(
+      sessionLine({ status: 'RUNNING', engineStartedAt: null, enginePhase: 'reticulating' }, true),
+    ).toEqual({ text: 'Starting…', tone: 'running' });
+  });
+
   // Starting is a refinement of RUNNING; a queued session has no engine to be starting. The row
   // carries `queuedReason: null` because that is what a current server sends for an ungated
   // queued session — omitting it here would exercise the old-server fallback instead.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   QUEUED_NOTICE_DELAY_MS,
+  COMPACTING_TITLE,
   STARTING_DESCRIPTION,
   STARTING_NOTICE_DELAY_MS,
   STARTING_TITLE,
@@ -10,6 +11,9 @@ import {
   queuedNoticeVisible,
   queuedTitle,
   runnerSlotUsage,
+  startingDescription,
+  startingLabel,
+  startingTitle,
   waitElapsedLabel,
 } from './runnerSlots';
 
@@ -237,5 +241,36 @@ describe('how long a wait the user cannot shorten has been going', () => {
 
   it('does not invent a zero for a clock that runs ahead of the server', () => {
     expect(waitElapsedLabel(claimedAt, after(-5_000))).toBeNull();
+  });
+});
+
+describe('when the runner names what a starting session is doing', () => {
+  // Allowed to name a cause exactly because the runner said so — the same division of labour as
+  // queuedReason, where only the server can see which gate holds a queued row.
+  it('says compaction when compaction is what it is', () => {
+    const compacting = { enginePhase: 'compacting' };
+    expect(startingTitle(compacting)).toBe(COMPACTING_TITLE);
+    expect(startingLabel(compacting)).toBe('Compacting');
+    expect(startingDescription(compacting)).toMatch(/no longer fits/i);
+    expect(startingDescription(compacting)).toMatch(/few minutes/i);
+  });
+
+  // The generic copy is what an unnamed phase gets, and it must stay reachable: it is the answer
+  // for a cold checkout, a warm handover, and every runner too old to name anything at all.
+  it('falls back to the copy that names nothing when no phase was reported', () => {
+    for (const session of [null, undefined, {}, { enginePhase: null }]) {
+      expect(startingTitle(session)).toBe(STARTING_TITLE);
+      expect(startingLabel(session)).toBe('Starting');
+      expect(startingDescription(session)).toBe(STARTING_DESCRIPTION);
+    }
+  });
+
+  // A runner self-updates on its own schedule and outlives a release, so it can name a phase this
+  // client has never heard of. Printing a word it cannot explain is worse than the generic line.
+  it('does not print a phase it cannot explain', () => {
+    const unknown = { enginePhase: 'reticulating' };
+    expect(startingTitle(unknown)).toBe(STARTING_TITLE);
+    expect(startingLabel(unknown)).toBe('Starting');
+    expect(startingDescription(unknown)).toBe(STARTING_DESCRIPTION);
   });
 });

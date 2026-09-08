@@ -102,3 +102,59 @@ func TestCoordinatorContextBoundaryEventsEnterTheCompletionFlushBarrier(t *testi
 		t.Fatal("a non-system event entered the compaction flush barrier")
 	}
 }
+
+// The pre-turn compaction window: the CLI summarizes a conversation that no longer fits BEFORE
+// it reads the message it was sent, and emits nothing else for however long that takes. These
+// frames are the only thing that crosses during it.
+func TestEnginePhaseCrossesOnlyForCompaction(t *testing.T) {
+	statusFrame := func(extra map[string]interface{}) map[string]interface{} {
+		msg := map[string]interface{}{"type": "system", "subtype": "status", "session_id": "s1"}
+		for k, v := range extra {
+			msg[k] = v
+		}
+		return msg
+	}
+
+	emit, got := collect()
+	handleMessage(statusFrame(map[string]interface{}{"status": "compacting"}), emit, nil)
+	if len(*got) != 1 || (*got)[0].payload["enginePhase"] != "compacting" {
+		t.Fatalf("compaction was not named: %v", *got)
+	}
+
+	// The frame that closes one reports `status: null` and the outcome; only "it is over"
+	// crosses. Without it a compaction that ends producing nothing would read as still running.
+	emitEnd, gotEnd := collect()
+	handleMessage(statusFrame(map[string]interface{}{
+		"status": nil, "compact_result": "failed", "compact_error": "Not enough messages to compact.",
+	}), emitEnd, nil)
+	if len(*gotEnd) != 1 || (*gotEnd)[0].payload["enginePhase"] != "none" {
+		t.Fatalf("the end of a compaction was not named: %v", *gotEnd)
+	}
+
+	// The negative that matters, and the reason this is not just "forward `status`": the other
+	// phases fire on every single turn. Naming one would put a key outside the ping set on that
+	// event, which is exactly what lifts it out of the control plane's noise filter — and the
+	// filter exists because these are ~92% of all stored events.
+	for _, phase := range []string{"requesting", "responding", "thinking", "tool-use"} {
+		emitOther, gotOther := collect()
+		handleMessage(statusFrame(map[string]interface{}{"status": phase}), emitOther, nil)
+		if len(*gotOther) != 1 {
+			t.Fatalf("%s produced %d events", phase, len(*gotOther))
+		}
+		if _, named := (*gotOther)[0].payload["enginePhase"]; named {
+			t.Fatalf("%s escaped the noise filter: %v", phase, (*gotOther)[0].payload)
+		}
+		for key := range (*gotOther)[0].payload {
+			if key != "subtype" && key != "model" && key != "sessionId" {
+				t.Fatalf("%s grew a non-ping key %q: %v", phase, key, (*gotOther)[0].payload)
+			}
+		}
+	}
+
+	// A handshake is not a phase ping and must not grow one.
+	emitInit, gotInit := collect()
+	handleMessage(map[string]interface{}{"type": "system", "subtype": "init", "session_id": "s1"}, emitInit, nil)
+	if _, named := (*gotInit)[0].payload["enginePhase"]; named {
+		t.Fatalf("init grew a phase: %v", (*gotInit)[0].payload)
+	}
+}

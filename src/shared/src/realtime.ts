@@ -140,6 +140,11 @@ export interface ControlSessionSummary {
    *  means only that an older control plane does not know about it, and a client that has
    *  never seen it simply keeps today's two-state behaviour. */
   engineStartedAt?: string | null;
+  /** What the engine is doing while engineStartedAt is still null — see Session.enginePhase.
+   *  Null is "no named phase", and so is an absent key from an older control plane. A value a
+   *  client does not recognise must read as null too: runners self-update on their own schedule
+   *  and may name a phase before any client knows what to say about it. */
+  enginePhase?: string | null;
 }
 
 /** `data` for `session.ended`. */

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunEventType } from '@orbit/shared';
-import { engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, engineTurnActiveAfter } from './engine-turn';
 
 test('a turn ending leaves the engine idle', () => {
   assert.equal(
@@ -152,5 +152,109 @@ test('the engine calling Bash still reads as generating', () => {
   assert.equal(
     engineTurnActiveAfter([{ seq: 2, type: RunEventType.TOOL_USE, payload: { name: 'Bash' } }]),
     true,
+  );
+});
+
+/**
+ * The window this exists for: a conversation that no longer fits is compacted BEFORE the engine
+ * reads the message it was sent, and for those minutes the runtime emits nothing else. Both
+ * neighbours of that stretch are RUNNING with a null engineStartedAt, so nothing but this can
+ * tell it from a three-second cold start.
+ */
+test('a compaction that has started is the phase the session is in', () => {
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.USER, payload: { text: 'carry on' } },
+      { seq: 2, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'compacting' } },
+    ]),
+    'compacting',
+  );
+});
+
+/**
+ * A phase names a stretch in which the engine produces nothing else, so anything it did produce
+ * ends the stretch. Load-bearing rather than tidy: a compaction that finishes by getting on with
+ * the turn goes straight to generating, and the frame that would have announced the end is not
+ * guaranteed to arrive at all. Without this the session would read as compacting until the next
+ * claim cleared it — which for a long turn is hours.
+ */
+test('engine output ends a phase even when nothing announced the end', () => {
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'compacting' } },
+      { seq: 2, type: RunEventType.ASSISTANT, payload: { text: 'right, the dispatch pass' } },
+    ]),
+    null,
+  );
+  // Highest seq wins, so the same two events in the other order leave it compacting: one batch
+  // routinely carries a turn ending and the next turn's pre-turn compaction.
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.ASSISTANT, payload: { text: 'done' } },
+      { seq: 2, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'compacting' } },
+    ]),
+    'compacting',
+  );
+});
+
+test('the frame that announces the end clears it', () => {
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'compacting' } },
+      { seq: 2, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'none' } },
+    ]),
+    null,
+  );
+});
+
+/**
+ * undefined and null are different answers and neither may be folded into the other: undefined
+ * leaves the stored phase alone, null overwrites it. A batch of ordinary traffic that named no
+ * phase must not clear one that a previous batch established — which is every batch of streamed
+ * deltas arriving while a compaction runs.
+ */
+test('a batch that names no phase decides nothing', () => {
+  assert.equal(enginePhaseAfter([]), undefined);
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.SYSTEM, payload: { subtype: 'init' } },
+      { seq: 2, type: RunEventType.SYSTEM, payload: { subtype: 'status' } },
+      { seq: 3, type: RunEventType.BACKGROUND_TASK, payload: { status: 'completed' } },
+    ]),
+    undefined,
+  );
+});
+
+/**
+ * A runner self-updates on its own schedule and outlives a release, so it may name a phase this
+ * server has never heard of. Storing it would put a word on the clients' screen that no client
+ * knows what to say about; "no named phase" is the honest reading, and it is also what the
+ * runner's own end-of-phase marker means.
+ */
+test('a phase this server does not know reads as no phase, not as itself', () => {
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'compacting' } },
+      { seq: 2, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'reticulating' } },
+    ]),
+    null,
+  );
+  // A non-string is a malformed payload, not a phase ending: it decides nothing.
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 7 } },
+    ]),
+    undefined,
+  );
+});
+
+/** Runner activity is not engine activity — the same exemption engineTurnActiveAfter makes. */
+test('a shell the runner ran itself does not end a compaction', () => {
+  assert.equal(
+    enginePhaseAfter([
+      { seq: 1, type: RunEventType.SYSTEM, payload: { subtype: 'status', enginePhase: 'compacting' } },
+      { seq: 2, type: RunEventType.TOOL_RESULT, payload: { toolUseId: 'shell-01a05756-f00e-713b' } },
+    ]),
+    'compacting',
   );
 });

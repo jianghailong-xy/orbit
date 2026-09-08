@@ -134,6 +134,10 @@ export class QueueService {
           -- unconditional: COALESCE here would leave a resumed session permanently reading
           -- "ready" and hide exactly the cold-start it exists to show.
           "engine_started_at" = NULL,
+          -- A phase belongs to a run, and this claim starts a new one. Cleared unconditionally
+          -- for the same reason as the column above: a resumed session must not inherit what the
+          -- previous run's engine happened to be doing when it stopped.
+          "engine_phase" = NULL,
           "updated_at" = now()
         WHERE id = (
           SELECT s.id FROM "session" s

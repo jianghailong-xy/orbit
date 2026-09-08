@@ -59,6 +59,8 @@ export interface SessionStateSource {
   retryAt?: string | null;
   /** When the engine first spoke for the current run. See sessionIsStarting. */
   engineStartedAt?: string | null;
+  /** What that engine is doing while engineStartedAt is still null. See startingTitle. */
+  enginePhase?: string | null;
 }
 
 const SESSION_RUN_STATE_SET = new Set<string>(SESSION_RUN_STATES);
