@@ -142,9 +142,15 @@ function directivesNotInBaseline(block, baselineBlock) {
 // guarantee here is one-directional on purpose: nothing may be added to a surviving service, while
 // a directive the repository has genuinely stopped needing is free to leave and the prose around
 // it is free to be rewritten. Byte equality made both of those look like the thing this file exists
-// to catch, and left this test red on main: 7334a09c dropped the dead
-// ORBIT_SESSION_CURRENT_WORK_ROUTING_ENABLED env from apiserver, and 5969060e reworded a comment in
-// web. Neither can start a resident observer, which is the one thing being fenced off here.
+// to catch, and left this test red on main: 7334a09c dropped a rollout-gate env the apiserver had
+// stopped reading, and 5969060e reworded a comment in web. Neither can start a resident observer,
+// which is the one thing being fenced off here.
+//
+// That env is cited by its SHA rather than spelled out on purpose. 0225's removal census
+// (src/apiserver/src/sessions/session-current-work-startup-removal.spec.ts, case (c)) asserts the
+// repository holds no mention of that identifier outside the migration that dropped it, and it
+// cannot tell a READER of the flag from prose about its removal — which is exactly why it carves
+// out the migration's own comment. Naming it here put main's only red on the board.
 test('nothing was added to pgbackup, apiserver or web: their definitions only lost lines', () => {
   for (const name of ['pgbackup', 'apiserver', 'web']) {
     assert.deepEqual(
