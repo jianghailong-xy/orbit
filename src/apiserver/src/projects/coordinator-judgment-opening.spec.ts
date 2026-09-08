@@ -8,6 +8,7 @@ import { uuidToBase62 } from '@orbit/shared';
 
 import { buildCoordinatorOpening } from './coordinator-opening';
 import {
+  buildCoordinatorDeliveryMessage,
   buildJudgmentOpening,
   describeWakeFact,
   judgmentSessionTitle,
@@ -17,6 +18,7 @@ import {
   attemptBudgetSpentFact,
   attemptEndedUnsettledFact,
   criterionReadyFact,
+  projectAcceptanceLandedFact,
   projectTasksSettledFact,
 } from './coordinator-wake';
 
@@ -147,6 +149,44 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the
   assert.match(opening, /status 你也写不了/);
   assert.match(opening, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
   assert.match(opening, /不是对“真人在场”的密码学证明/);
+});
+
+/**
+ * The confirmation card's `status` line, checked against what the server does with that column.
+ *
+ * It used to say `project_update` 的 status「没有守卫」, and that stopped being true twice over.
+ * r2 gave the field a guard whose condition is an acting session — which is precisely what this
+ * card is delivered to — so the write it described as merely unauthorized is refused outright.
+ * And DONE stopped being anybody's write at all: `project-done-derived.ts` projects it from the
+ * criteria and the owner's confirmation. A card still describing the old world would send its
+ * reader first at a 403 and then looking for a writer that does not exist.
+ *
+ * Asserted over the paragraph that talks about `status` rather than over the whole card: the
+ * roster above it already prints `LANDED` for every criterion, so a predicate over the card would
+ * be answered by the snapshot instead of by the sentence under test.
+ */
+test('the confirmation card refuses status from a session, and derives DONE rather than writing it', () => {
+  const landed = projectAcceptanceLandedFact(
+    PROJECT,
+    [{ taskId: TASK, status: 'DONE' }],
+    [{ key: 'ab12', text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] }],
+  )!;
+  const card = buildCoordinatorDeliveryMessage(landed, '验收闭环');
+  const [status] = card.split('\n\n').filter((para) => para.includes('project_update 的 status'));
+
+  assert.ok(status, 'the card says nothing about project_update 的 status');
+  assert.doesNotMatch(card, /没有守卫/);
+  // The refusal, spelled with the code the reader would meet as an HTTP 403.
+  assert.match(status, /写不了|拒掉/);
+  assert.match(status, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
+  // And DONE as the projection of its three inputs, named so the reader stops looking for a writer.
+  assert.match(status, /投影/);
+  assert.match(status, /满足/);
+  assert.match(status, /LANDED/);
+  assert.match(status, /账号所有者[^。]*这一版标准集|这一版标准集[^。]*账号所有者/);
+  // None of which this conversation performs: the card may not read as an invitation to write it.
+  assert.doesNotMatch(status, /你去写|你来写|由你/);
+  assert.doesNotMatch(status, /写不写由账号所有者决定/);
 });
 
 test('a judgment session is filed under a different title from the conversation', () => {

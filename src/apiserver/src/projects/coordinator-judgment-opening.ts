@@ -270,7 +270,13 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * What it must NOT do is answer. `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY
  * (`coordinator-authority.ts`), so the action line here is to put the list in front of the account
  * owner rather than to conclude anything from it — and in particular not to write `project.status`,
- * which 0223 and 0229 left unguarded and which a card is not authorization to touch.
+ * which this card cannot write and nobody writes by hand any more. r2's `refuseProjectStatusWrite`
+ * refuses the whole request when it carries an acting session, which every delivery of this card
+ * does; and `project-done-derived.ts` projects `DONE` from criteria that are satisfied and landed
+ * onto the owner's confirmation of the standard set as it stands. So the line about `status` names
+ * the refusal and the projection rather than an absence of a guard: a reader told the field is
+ * merely unauthorized spends a turn on a 403, and one told a person writes it goes looking for a
+ * writer that does not exist.
  */
 export function buildCoordinatorDeliveryMessage(
   fact: WakeFact,
@@ -290,7 +296,9 @@ export function buildCoordinatorDeliveryMessage(
       + '这一句你答不了，它是 HUMAN_ONLY：确认只走账号所有者认证的通道，任何带 acting session 的调用'
       + '都会被服务端拒掉。你要做的是把上面这份清单交给账号所有者，让他在网页上确认；'
       + '确认会绑定当前这一版标准，之后任何一条标准被改动，那次确认就自动不算数了。\n\n'
-      + 'project_update 的 status 没有守卫，这不是让你去写 DONE 的授权：写不写由账号所有者决定。\n\n'
+      + 'project_update 的 status 你也写不了：带会话的请求写这个字段会被整条拒掉'
+      + '（PROJECT_STATUS_NOT_SESSION_WRITABLE）。DONE 也不是谁写的一列——上面每条都满足、都 LANDED，'
+      + '再加上账号所有者对这一版标准集的确认，服务端自己把它投影出来。\n\n'
       + `全量状态自己读，上面那份清单是事实成立那一刻的快照：project_get（projectId 传 ${projectId}）`
       + `读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
