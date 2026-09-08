@@ -132,6 +132,7 @@ export const AUTHORITY_REFUSAL_CODES = [
   'ACCEPTANCE_CRITERIA_HUMAN_ONLY',
   'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY',
   'PROJECT_STATUS_NOT_SESSION_WRITABLE',
+  'PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY',
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
@@ -296,6 +297,50 @@ export function refuseProjectStatusWrite(
       + 'written by this request, including the other fields it carried. Report what you found and '
       + 'let the account owner decide; that channel is a tenancy and audit boundary, not proof '
       + 'that a person held the credential.',
+  };
+}
+
+/**
+ * The one door `CONFIRM_ACCEPTANCE_CRITERIA` has, as a rule: a request with NO acting session.
+ *
+ * This is strictly narrower than `refuseHumanOnlyAction` above, and the difference is deliberate.
+ * That function refuses one session ROLE because widening it would have changed what already
+ * working doors accept — §1's compatibility decision, which is about not turning a role
+ * restriction into a new authentication requirement for callers that predate it. Confirmation has
+ * no such caller to preserve: it had no writer at all, so its door can be the shape the tier
+ * describes from the first day rather than the shape compatibility leaves.
+ *
+ * What that buys is the deliverable `docs/human-only-authority.md` names for this tier — an
+ * action-specific, durable record of who said the standard set expresses the goal — reached
+ * through the owner-authenticated channel and nothing else. An acting session is refused whatever
+ * its dispatch origin, so a coordinator conversation that has a person answering a card in it
+ * prompts and links rather than presses the button on their behalf; what reaches the server that
+ * way would be the agent's report of an answer, not the answer.
+ *
+ * Its own code, not the HUMAN_ONLY one above: a caller told `PROJECT_CRITERIA_CONFIRMATION_
+ * HUMAN_ONLY` has met the judgment-role boundary, and a caller told this one has met a different
+ * rule — it may be any role at all and still have no path here. §12 E2 forbids two spellings of
+ * one rule; these are two rules, and each is raised by exactly one predicate.
+ *
+ * NOT a claim that a person is present. The owner channel is a credential like any other; this
+ * says only that no acting session authored the write.
+ */
+export function refuseSessionAuthoredConfirmation(
+  actingSessionId: string | null | undefined,
+): AuthorityRefusal | null {
+  if (!actingSessionId) return null;
+  return {
+    code: 'PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY',
+    action: 'CONFIRM_ACCEPTANCE_CRITERIA',
+    tier: COORDINATOR_AUTHORITY.CONFIRM_ACCEPTANCE_CRITERIA,
+    requiredAction: 'ASK_A_PERSON',
+    message:
+      'Confirming that a project’s acceptance standard set expresses its goal is not something a '
+      + 'session does. It says the exam is the right exam, so it is the account owner’s to make '
+      + 'through an owner-authenticated channel with no acting session — report what should be '
+      + 'confirmed and let a person do it. Orbit records the credentialed actor and the exact '
+      + 'version of the standard set that was confirmed; neither is proof that a human held the '
+      + 'credential.',
   };
 }
 

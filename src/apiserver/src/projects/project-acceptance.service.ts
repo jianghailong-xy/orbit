@@ -1,10 +1,24 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  RecordedStandardSetConfirmation,
+  StandardSetConfirmationStanding,
   StatedAcceptanceCriterion,
   criteriaFromDefinitions,
+  standardSetConfirmationStanding,
+  standardSetVersion,
 } from './project-acceptance';
+import { refuseSessionAuthoredConfirmation } from './coordinator-authority';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -102,6 +116,129 @@ export class ProjectAcceptanceService {
         text: criterion.text,
         ordinal: criterion.ordinal,
       })),
+    };
+  }
+
+  /**
+   * Where this project stands on owner confirmation of its acceptance standard set.
+   *
+   * Two reads and a comparison, and no third stored fact between them: the criteria as they are
+   * now, the newest confirmation on record, and whether the second names the first. That is the
+   * whole of "a confirmation stops counting once the criteria move" — there is no flag an edit
+   * has to remember to clear, so there is no way for an edit to forget.
+   */
+  async standardSetConfirmation(
+    ownerId: string,
+    projectId: string,
+  ): Promise<StandardSetConfirmationStanding> {
+    await this.assertProject(ownerId, projectId);
+    const stated = await ProjectAcceptanceService.statedCriteria(
+      this.prisma as unknown as Prisma.TransactionClient,
+      projectId,
+    );
+    return standardSetConfirmationStanding(
+      standardSetVersion(stated),
+      await this.latestConfirmation(projectId),
+    );
+  }
+
+  /**
+   * `CONFIRM_ACCEPTANCE_CRITERIA`: the account owner says this exact version of the standard set
+   * expresses the goal. The one writer this HUMAN_ONLY action has.
+   *
+   * Two rules, in the order a caller can act on them.
+   *
+   * 1. NO ACTING SESSION. `refuseSessionAuthoredConfirmation` is the whole of the authority check
+   *    and it lives here rather than at a controller, so the runner door, the user door and a
+   *    direct call all meet it — §2 of `coordinator-authority.ts`, and the reason a rule enforced
+   *    at one door is not a boundary.
+   * 2. THE CALLER NAMES THE VERSION IT IS CONFIRMING. Without that, "confirm the criteria" means
+   *    "confirm whatever they say when this request lands", and an edit that arrives between the
+   *    render and the click would be confirmed by somebody who never read it. That is precisely
+   *    the move this tier exists to refuse, so a digest that is no longer current is a 409 telling
+   *    the caller to read the set again — not a confirmation of something else.
+   *
+   * Deliberately not in a transaction and deliberately taking no project lock. An edit landing
+   * between the comparison and the INSERT can only make the row it writes non-current, which the
+   * read above already reports honestly: the row says which version was confirmed, and it is the
+   * read, never the write, that decides whether that version is the one standing.
+   */
+  async confirmStandardSet(
+    ownerId: string,
+    projectId: string,
+    input: { criteriaDigest: string },
+    actingSessionId?: string,
+  ): Promise<StandardSetConfirmationStanding> {
+    const refusal = refuseSessionAuthoredConfirmation(actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+    await this.assertProject(ownerId, projectId);
+
+    const currentVersion = standardSetVersion(await ProjectAcceptanceService.statedCriteria(
+      this.prisma as unknown as Prisma.TransactionClient,
+      projectId,
+    ));
+    if (input.criteriaDigest !== currentVersion.digest) {
+      throw new ConflictException({
+        code: 'PROJECT_CRITERIA_CONFIRMATION_VERSION_MOVED',
+        currentDigest: currentVersion.digest,
+        message:
+          'The acceptance criteria changed after the version being confirmed was read. Read them '
+          + 'again and confirm the set that stands now: a confirmation carried over an edit would '
+          + 'say a person approved wording they never saw.',
+      });
+    }
+
+    await this.prisma.projectStandardSetConfirmation.create({
+      data: {
+        id: randomUUID(),
+        projectId,
+        // The credentialed actor. On the owner door this is the same row as `ownerId` — the
+        // controller passes the authenticated user as both — and it is stored separately because
+        // it records WHO acted, not whose project it is.
+        ownerId,
+        confirmedById: ownerId,
+        criteriaDigest: currentVersion.digest,
+        // Prisma types a JSON column as an object-or-scalar union; the array shape is the one
+        // the CHECK constraint on the column requires, so the cast is the type system catching up
+        // with the database rather than a widening.
+        criteriaMaterial: currentVersion.material as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return standardSetConfirmationStanding(
+      currentVersion,
+      await this.latestConfirmation(projectId),
+    );
+  }
+
+  /** This project, or a 404. Tenancy, before either half of the confirmation path reads anything. */
+  private async assertProject(ownerId: string, projectId: string): Promise<void> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+  }
+
+  /** The newest confirmation on record — current or not; deciding which is the caller's read. */
+  private async latestConfirmation(
+    projectId: string,
+  ): Promise<RecordedStandardSetConfirmation | null> {
+    const row = await this.prisma.projectStandardSetConfirmation.findFirst({
+      where: { projectId },
+      orderBy: { confirmedAt: 'desc' },
+      select: {
+        criteriaDigest: true,
+        criteriaMaterial: true,
+        confirmedAt: true,
+        confirmedById: true,
+      },
+    });
+    return row === null ? null : {
+      criteriaDigest: row.criteriaDigest,
+      criteriaMaterial: row.criteriaMaterial as unknown as RecordedStandardSetConfirmation['criteriaMaterial'],
+      confirmedAt: row.confirmedAt,
+      confirmedById: row.confirmedById,
     };
   }
 

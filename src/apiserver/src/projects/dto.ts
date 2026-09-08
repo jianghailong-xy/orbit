@@ -328,6 +328,23 @@ export const MAX_MERGE_REQUIREMENT_CHARS = 200;
  *  a `git branch --contains` boolean (§13.4 clause 6: both are false negatives after a squash). */
 export const CONTENT_HASH_PATTERN = /^[0-9a-fA-F]{64}$/;
 
+/**
+ * `CONFIRM_ACCEPTANCE_CRITERIA`: the account owner confirming that ONE version of a project's
+ * stated acceptance criteria expresses its goal.
+ *
+ * One field, and it is required. Naming the version is what makes the act a confirmation OF
+ * something rather than a confirmation of whatever the criteria happen to say when the request
+ * lands: an edit that arrives between reading the set and confirming it is a 409, not a signature
+ * on wording the person never read. The value is the digest `project_get` reports for the set —
+ * `criteriaSemanticRevision` over each criterion's `definitionId:revision:contentHash`.
+ */
+export class ConfirmAcceptanceCriteriaDto {
+  @Matches(SHA256_DIGEST_PATTERN, {
+    message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being confirmed',
+  })
+  criteriaDigest!: string;
+}
+
 export class RecordMergeEvidenceDto {
   /** What was required, in the words whoever wrote the acceptance criteria used. */
   @IsString() @MinLength(1) @MaxLength(MAX_MERGE_REQUIREMENT_CHARS) requirementId!: string;

@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
+  ConfirmAcceptanceCriteriaDto,
   CreateProjectDto,
   DecideProjectHandoffDto,
   OpenProjectCoordinatorDto,
@@ -328,6 +329,32 @@ export class ProjectsController {
     @Body() dto: RecordMergeEvidenceDto,
   ) {
     return this.acceptance.recordMergeEvidence(user.userId, id, dto);
+  }
+
+  /**
+   * Where this project stands on owner confirmation of its acceptance standard set, and the door
+   * that records one.
+   *
+   * The owner-authenticated channel is the whole of `CONFIRM_ACCEPTANCE_CRITERIA`'s reach — the
+   * decision recorded in `docs/human-only-authority.md` §"A2 follow-up (2026-09-08)". This
+   * controller carries no acting session, so it is the shape the service asks for; the refusal for
+   * a request that DOES carry one is inside the service, reached identically from every door.
+   */
+  @Get(':id/acceptance/confirmation')
+  standardSetConfirmation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.acceptance.standardSetConfirmation(user.userId, id);
+  }
+
+  @Post(':id/acceptance/confirmation')
+  confirmStandardSet(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ConfirmAcceptanceCriteriaDto,
+  ) {
+    return this.acceptance.confirmStandardSet(user.userId, id, dto);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

@@ -129,3 +129,89 @@ export function criteriaSemanticRevision(
     .sort();
   return sha256(hashes.join(','));
 }
+
+/**
+ * ── The standard set as a VERSION, which is what a confirmation is about ───────────────────────
+ *
+ * `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY because whoever moves the ruler can make any
+ * conclusion come out right. A confirmation that named no version would move with the ruler and
+ * so would protect nothing: the point of the tier is that a set the owner approved cannot become
+ * a different set without being approved again.
+ *
+ * The version is `criteriaSemanticRevision` above — the multiset of
+ * `definitionId:revision:contentHash` — and not a second spelling of it. Both halves of an edit
+ * are covered: `project_acceptance_definition_normalize` advances `revision` when either the
+ * assertion or the verification method changes, and rewrites `content_hash` from both.
+ */
+
+/** One criterion as a confirmation names it: exactly the three values the digest is taken over. */
+export interface ConfirmedCriterionVersion {
+  definitionId: string;
+  revision: number;
+  contentHash: string;
+}
+
+/** Which version of a project's stated criteria is on the table, in both spellings. */
+export interface StandardSetVersion {
+  /** Is it still this one? */
+  digest: string;
+  /** Which one was it? Ordered by definition id so two readers produce the same array. */
+  material: ConfirmedCriterionVersion[];
+}
+
+export function standardSetVersion(criteria: StatedAcceptanceCriterion[]): StandardSetVersion {
+  return {
+    digest: criteriaSemanticRevision(criteria),
+    material: criteria
+      .map((criterion) => ({
+        definitionId: criterion.definitionId,
+        revision: criterion.definitionRevision,
+        contentHash: criterion.contentHash,
+      }))
+      .sort((a, b) => (a.definitionId < b.definitionId ? -1 : a.definitionId > b.definitionId ? 1 : 0)),
+  };
+}
+
+/**
+ * Where a project stands on owner confirmation.
+ *
+ * Three states rather than a boolean, because "nobody has ever said this" and "somebody said it
+ * about criteria that have since been rewritten" are different things to show a reader — and
+ * because only the second one has a version to display. Neither of them is confirmed.
+ */
+export type StandardSetConfirmationState = 'UNCONFIRMED' | 'CONFIRMED' | 'STALE';
+
+/** A recorded confirmation, narrowed to what deciding the standing needs. */
+export interface RecordedStandardSetConfirmation {
+  criteriaDigest: string;
+  criteriaMaterial: ConfirmedCriterionVersion[];
+  confirmedAt: Date;
+  confirmedById: string;
+}
+
+export interface StandardSetConfirmationStanding {
+  state: StandardSetConfirmationState;
+  /** `state === 'CONFIRMED'`, carried beside it so a caller cannot get the comparison wrong. */
+  confirmed: boolean;
+  /** The version standing today — what a confirmation would have to name to be current. */
+  currentVersion: StandardSetVersion;
+  /** The newest confirmation on record, current or not. Null when there has never been one. */
+  confirmation: RecordedStandardSetConfirmation | null;
+}
+
+/**
+ * The whole rule: a confirmation counts while, and only while, it names the version that stands.
+ *
+ * Decided at READ time from two facts that are both stored, rather than by a flag somebody has to
+ * remember to clear when the criteria are edited. An edit therefore cannot leave a stale
+ * confirmation behind it — there is nothing to forget.
+ */
+export function standardSetConfirmationStanding(
+  currentVersion: StandardSetVersion,
+  confirmation: RecordedStandardSetConfirmation | null,
+): StandardSetConfirmationStanding {
+  const state: StandardSetConfirmationState = confirmation === null
+    ? 'UNCONFIRMED'
+    : confirmation.criteriaDigest === currentVersion.digest ? 'CONFIRMED' : 'STALE';
+  return { state, confirmed: state === 'CONFIRMED', currentVersion, confirmation };
+}

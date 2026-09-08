@@ -294,6 +294,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        it has no INSERT/UPDATE/DELETE: a preserved session row is neither read nor written by
   //        it, and gains only a column reading NULL, which is exactly "no named phase", so it
   //        needs no backfill and no stored row can be refused by it.
+  //   0245 gave `CONFIRM_ACCEPTANCE_CRITERIA` — HUMAN_ONLY in the authority table since unit T6 and
+  //        with no writer anywhere until now — one place to be recorded: a new table,
+  //        `project_standard_set_confirmation`, holding the account owner's statement that ONE
+  //        version of a project's acceptance criteria expresses its goal, plus one index. Read
+  //        against every claim above: it is pure addition and `project_standard_set_confirmation`
+  //        is not a relation this file preserves. It ALTERs nothing — not `task`, not `project`,
+  //        not `project_acceptance_criterion_definition` — so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It REFERENCES
+  //        `project(id, owner_id)`, which changes nothing about a project row: being pointed at is
+  //        not being written, and that unique constraint is neither created, dropped nor rewritten
+  //        here. It names no `project_acceptance_*` object and none of the six preserved
+  //        triggers/functions; it creates no enum, no function and no trigger — so it is not
+  //        another writer of the DONE fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all
+  //        three `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE,
+  //        so no preserved row is read or written. It is also not 0189's confirmation coming back:
+  //        that relation, its two indexes and its BEFORE UPDATE guard were dropped by 0226 and are
+  //        named by no statement here, and nothing reads this new row to allow or refuse anything,
+  //        so the acceptance DONE gate 0229 removed is not reinstated under another name.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -308,7 +327,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0241_task_attachments',
       '0242_criterion_unlanded_wake',
       '0243_coordinator_wake_delivered',
-      '0244_session_engine_phase'],
+      '0244_session_engine_phase',
+      '0245_project_standard_set_confirmation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

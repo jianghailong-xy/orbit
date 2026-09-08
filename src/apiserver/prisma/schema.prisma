@@ -1805,6 +1805,7 @@ model Project {
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
+  standardSetConfirmations       ProjectStandardSetConfirmation[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
@@ -1978,6 +1979,42 @@ model ProjectAcceptanceCriterionDefinition {
   @@unique([projectId, ordinal], map: "project_acceptance_definition_ordinal_idx")
   @@index([projectId, contentHash], map: "project_acceptance_definition_content_idx")
   @@map("project_acceptance_criterion_definition")
+}
+
+/// The account owner saying, of ONE version of a project's stated criteria, that the complete set
+/// expresses the goal — `CONFIRM_ACCEPTANCE_CRITERIA`, which was graded HUMAN_ONLY by unit T6 and
+/// had no writer anywhere in the repository until migration 0245 gave it this row.
+///
+/// A fact and not a gate. Nothing reads it to allow or refuse anything, and in particular
+/// `project.status` is decided exactly as it was before: 0229 removed the acceptance DONE gate on
+/// the account owner's instruction and this row does not bring it back under another name.
+///
+/// Append-only by construction rather than by trigger: the one writer inserts, no code path
+/// updates or deletes, and re-confirming after an edit is a SECOND row rather than a rewrite of
+/// the first. What is current is decided by comparing the newest row's digest with the criteria as
+/// they stand now, so history costs the reader nothing.
+model ProjectStandardSetConfirmation {
+  id        String  @id @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  ownerId   String  @map("owner_id") @db.Uuid
+  project   Project @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+
+  /// Which version was confirmed, as `criteriaSemanticRevision` spells it: each criterion's
+  /// `definitionId:revision:contentHash`, sorted, joined and hashed. Editing a criterion's
+  /// assertion OR its verification method advances that criterion's `revision` and rewrites its
+  /// `contentHash`, so this digest stops matching and the confirmation stops being current.
+  criteriaDigest String @map("criteria_digest") @db.Char(64)
+  /// The same vector in readable form, one object per criterion. The digest answers "is it still
+  /// this version"; the material answers "which version was it", without recomputing anything.
+  criteriaMaterial Json @map("criteria_material")
+
+  confirmedAt DateTime @default(now()) @map("confirmed_at")
+  /// The credentialed actor. Audit provenance, and — as `docs/human-only-authority.md` says of
+  /// every HUMAN_ONLY row — not proof that a person held the credential.
+  confirmedById String @map("confirmed_by_id") @db.Uuid
+
+  @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
+  @@map("project_standard_set_confirmation")
 }
 
 /// Rebuildable current projection of the Project completion contract. The owner decision is the
