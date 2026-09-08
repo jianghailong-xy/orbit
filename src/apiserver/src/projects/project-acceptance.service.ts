@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import {
   BadRequestException,
   ConflictException,
@@ -190,7 +188,6 @@ export class ProjectAcceptanceService {
 
     await this.prisma.projectStandardSetConfirmation.create({
       data: {
-        id: randomUUID(),
         projectId,
         // The credentialed actor. On the owner door this is the same row as `ownerId` — the
         // controller passes the authenticated user as both — and it is stored separately because
@@ -226,7 +223,9 @@ export class ProjectAcceptanceService {
   ): Promise<RecordedStandardSetConfirmation | null> {
     const row = await this.prisma.projectStandardSetConfirmation.findFirst({
       where: { projectId },
-      orderBy: { confirmedAt: 'desc' },
+      // `id` is uuid(7), so it breaks a tie inside one stored millisecond in the order the rows
+      // were written rather than arbitrarily.
+      orderBy: [{ confirmedAt: 'desc' }, { id: 'desc' }],
       select: {
         criteriaDigest: true,
         criteriaMaterial: true,

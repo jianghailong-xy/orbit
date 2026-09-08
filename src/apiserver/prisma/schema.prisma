@@ -1994,7 +1994,9 @@ model ProjectAcceptanceCriterionDefinition {
 /// the first. What is current is decided by comparing the newest row's digest with the criteria as
 /// they stand now, so history costs the reader nothing.
 model ProjectStandardSetConfirmation {
-  id        String  @id @db.Uuid
+  /// uuid(7) rather than a random one: it is monotonic, so ordering by (confirmedAt, id) has a
+  /// total order even for two confirmations that land inside the same stored millisecond.
+  id        String  @id @default(uuid(7)) @db.Uuid
   projectId String  @map("project_id") @db.Uuid
   ownerId   String  @map("owner_id") @db.Uuid
   project   Project @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)

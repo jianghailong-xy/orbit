@@ -177,7 +177,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     const { rows } = await sql.query<StoredConfirmation>(
       `SELECT "project_id", "owner_id", "confirmed_by_id", "criteria_digest", "criteria_material"
          FROM "project_standard_set_confirmation"
-        WHERE "project_id" = $1::uuid ORDER BY "confirmed_at"`,
+        WHERE "project_id" = $1::uuid ORDER BY "confirmed_at", "id"`,
       [projectId],
     );
     return rows;
