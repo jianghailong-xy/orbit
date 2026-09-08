@@ -196,3 +196,163 @@ new confirmation before DONE. It guarantees workflow separation for an attribute
 Session and audit visibility for other credentials. It does **not** guarantee that a human
 personally performed the confirmation; that still requires one of the isolated, action-bound
 step-up or external-signature designs above.
+
+## A2 follow-up (2026-09-08): can an answered card carry a HUMAN_ONLY permission?
+
+Design review for the chain that starts at Orbit task `34L0zqmhLgBeimGOgZ6Fh`. It asked whether a
+person answering an `AskUserQuestion` card inside the project's standing coordinator session
+constitutes the "human" of `CONFIRM_ACCEPTANCE_CRITERIA` — **(A)** the answered approval row IS the
+permission, or **(B)** the card only prompts and the act happens on an owner-authenticated door.
+
+Everything above this heading between lines 15–17 and 43–83 describes the N22 confirmation row and
+the automatic DONE projection. Migration `0229_project_acceptance_judgment_removal` deleted both on
+2026-09-03. Those passages are stale and are left as written rather than edited here; §"What is
+true today" below states the current facts and `docs/project-done-gate.md` is the live page.
+
+### The premise being tested is false, and that is the finding
+
+`refuseHumanOnlyAction` does not refuse "an agent". It refuses one dispatch origin:
+`coordinator-authority.ts:223` returns null unless `principal === 'JUDGMENT'`, and
+`authorityPrincipal` (`:181-187`) answers `JUDGMENT` only for
+`dispatch_origin = 'PROJECT_COORDINATOR'`. §1 (`:31-34`) names "a long-lived coordination
+conversation" as NON_JUDGMENT explicitly. Only `coordinator-judgment.service.ts:243,259` writes
+`PROJECT_COORDINATOR`; the standing coordinator session is opened at
+`projects.service.ts:2419-2427` with no `dispatchOrigin` option, so it takes the default `USER`
+(`sessions.service.ts:832`).
+
+So the A2 coordinator session is NON_JUDGMENT and is **not** refused. It could call `project_update`
+with `acceptanceCriteriaItems` today: `assertHumanOnlyProjectWrites`
+(`projects.service.ts:684-698`) reads that session's origin, gets NON_JUDGMENT, and
+`refuseHumanOnlyAction` returns null. What is missing at the project level is therefore not
+authority. It is a PLACE TO PUT THE ANSWER: `CONFIRM_ACCEPTANCE_CRITERIA` has no writer at all —
+the name appears only in the table (`coordinator-authority.ts:87,118,190,203`), its refusal
+message, and two specs (`coordinator-authority.spec.ts:62,100`,
+`evidence-judgment-removal.pg.spec.ts:335`). `SETTLE_PROJECT_DONE` is the same
+(`coordinator-authority.ts:89,123`, `coordinator-authority.spec.ts:66`).
+
+### Decision: (B). The card prompts; the confirmation is written through an owner-authenticated door.
+
+Not because an agent cannot press it — per §"What HUMAN_ONLY actually provides" (`:137-143`) this
+tier has never claimed "impossibility of an agent performing the action", and the review above
+shows the coordinator is not even refused. (B) is chosen for what it records.
+
+**1. The approval row cannot name the act it would authorize.** `Approval`
+(`schema.prisma:1456-1481`) has `sessionId`, `toolName`, `input`, `toolUseId`, `status`, `message`,
+`answers`, `rememberRule`, `decidedById`, `createdAt`, `decidedAt`. There is no project column, no
+action column, no digest column. The only field that could say WHICH write is being authorized is
+`input`, and `input` is stored verbatim from the runner's create body
+(`runner-api.controller.ts:2636`) — that is, from the agent's own tool call. A permission carried
+here would be a permission whose subject is agent-authored text. The one server-held link is
+`session_id` → `project.coordinator_session_id`, which reaches a PROJECT but never an ACTION or a
+version, so it cannot distinguish "confirm the current standard set" from any other pending write.
+
+**2. HUMAN_ONLY's real deliverable is exactly what (A) discards.** §"What HUMAN_ONLY actually
+provides" (`:112-135`) lists three: judgment-role separation, action-specific traceability, and
+tenancy/scope. (A) keeps the first for free (the coordinator was never the restricted role) and
+destroys the second, because the row it would rely on records nothing about the action. The
+identity-independent protection this page already identified (`:60-62`) — "the confirmation names
+the exact, revision-bearing standard-set digest, so any semantic edit makes it non-current" — has a
+live home that survived 0229 and 0234: `semanticRevision` / `semanticHash` on
+`ProjectAcceptanceCriterionDefinition` (`schema.prisma:1961-1968`), already returned by
+`project_get`. An approval row has nowhere to put that digest.
+
+**3. Self-issued and self-answered.** Issuing: unconditional. Any tool call the engine raises
+becomes an approval row (`runner-api.controller.ts:2612-2642`); nothing asks who asked or why.
+Answering: today only through `POST /sessions/:id/approvals/:approvalId/decision` behind
+`JwtAuthGuard` (`sessions.controller.ts:251,582-590`), and `sessions.service.ts:4982-4998` is the
+sole writer of `answers` and `decidedById`. That is a real door — but it is not a boundary shaped to
+be leaned on, and it has two holes already:
+
+- the standing-grant path writes `status:'ALLOWED'` with `decidedById` NULL and `answers` NULL and
+  no person involved (`runner-api.controller.ts:2629-2642`), matching non-shell tools by NAME
+  (`permission-rules.ts:226-229`). It is unreachable for a claude session only because
+  `SERVER_MATCHED_RUNTIMES` is `{CODEX, KIMI}` (`permission-rules.ts:117-120`), keyed on the
+  session's provider — a setting, not a boundary;
+- `rememberForWorkspace` (`sessions.service.ts:5022-5039`) applies no tool-name filter. "Questions
+  are not repeatable" is enforced in the browser only (`ApprovalPanel.tsx:100-108`).
+
+**4. Nothing on the server reads the answer.** `Approval.answers` is read in exactly one place, the
+runner long-poll (`runner-api.controller.ts:2721`), and is not projected into `ApprovalInfo`
+(`sessions.service.ts:5042-5064`). `evidenceDecisionFromAnswers`
+(`coordinator-evidence-ask.ts:141-150`) has zero production callers. A2's card is server-WORDED and
+agent-EXECUTED: the server writes the text into the opening message
+(`coordinator-judgment-opening.ts:239` via `coordinator-evidence-ask.ts:168`) and the agent copies
+it into its own `AskUserQuestion`, reads the result, and calls `task_evidence_decide`. So "the
+person answered the card" reaches the apiserver only as the agent's report of it. That is
+acceptable for A2, where the door's own independence check is the guarantee; it is not a thing to
+promote into a permission.
+
+**5. What the disclaimer means here.** `coordinator-authority.ts:36-45` and `:103-104`, and
+`runner-projects.controller.ts:223-225`, all say the credentialed channel is not proof a human held
+it. That is true of the web door too. It is not an argument for (A): it is the reason the tier's
+value is route separation plus a durable, action-bound record. (A) gives up the record and gains
+nothing on presence.
+
+**If (A) is ever revisited, the approval row is still the wrong carrier.** The right-shaped one
+already exists and is unwired: `ProjectRatifiedActionIntent` (`schema.prisma:2005-2029`) binds
+`action` + `actionDigest` + `contractDigest` + `contractRevision` + `principalType`/`principalId`
+with a single-use `commitToken`, under an immutability trigger
+(`common/db-write-inventory.ts:1136-1137`), and migration
+`0195_project_owner_ratification/migration.sql:1-6` describes precisely this act. It has no
+application caller in the repository. That, not `Approval`, is what a card-as-permission design
+would have to become — and it is a much larger undertaking than this chain.
+
+### (B)'s cost, and where the web entry goes
+
+The cost is real: there is no web control for `CONFIRM_ACCEPTANCE_CRITERIA` today, so choosing (B)
+means building one.
+
+It belongs on `ProjectAcceptanceCard.tsx`, the only web surface that reads
+`acceptanceCriteriaItems`, mounted at `pages/ProjectsPage.tsx:1124`. Placement is constrained by
+that file's own header (`:23-45`): "NO PRINCIPAL WROTE ANY OF IT. There is no field anybody sets,
+no decision anybody records and nothing to overrule", plus the no-ratio / no-meter / no-per-row-
+badge rules 0229 implies. A confirmation is about the complete SET — that is what
+`coordinator-authority.ts:96-101` says the row grades — so it goes in its own region BELOW the
+derived list, never as a per-row control, and the derived list keeps saying what it says now. The
+region shows the semantic digest it would confirm, and after confirmation the digest it did confirm
+and when, so "this confirmation is no longer current" is visible rather than inferred.
+
+The coordinator card's role under (B) is a prompt with a link, not an answer surface.
+
+### What is true today about project DONE, and what would derive it
+
+Nothing derives it. `project.status = 'DONE'` is an ordinary column write
+(`docs/project-done-gate.md:11-17`): `projects.service.ts:1899` copies `dto.status` through, and the
+runner door refuses only the four authorization fields plus `coordinatorAgentId`
+(`runner-projects.controller.ts:230-243`) — `status` is not among them, so an agent PATCHes a
+project to DONE today. `assertHumanOnlyProjectWrites` returns at its first line when the request
+carries no `acceptanceCriteriaItems` (`projects.service.ts:690`), so it never sees a status write.
+`dto.ts:219-221` states this plainly.
+
+Three places still describe the deleted machine and should be corrected as prose, not re-implemented:
+`coordinator-authority.ts:101` ("Project settlement remains AUTOMATIC — no principal writes it"),
+`projects.service.ts:1870-1873` ("DONE is not a request here at all, but the evaluator's acceptance
+projection"), and this page's own lines 15-17 and matrix rows 50-54.
+
+A derived DONE would have exactly two inputs, and only the first is a person's:
+
+1. a CURRENT confirmation of the standard set — a confirmation row whose digest equals today's
+   semantic digest (`schema.prisma:1961-1968`);
+2. every stated criterion `satisfied` with `landing = LANDED`, already computed with no principal's
+   opinion in it by `project-criterion-satisfaction.ts` (clauses at `:55-58`) and already returned
+   by `project_get`.
+
+Under that shape "no principal writes it" is true again in the only sense available: the human
+writes the CONFIRMATION, which is a HUMAN_ONLY act about the RULER, and DONE is a projection with
+no requester — which is why `SETTLE_PROJECT_DONE` stays AUTOMATIC rather than becoming a third
+HUMAN_ONLY row.
+
+**This chain must not build that deriver on this review's authority.** It reinstates a gate the
+account owner declined: `0229_project_acceptance_judgment_removal/migration.sql:31-33` — "The DONE
+gate is not replaced. The owner was offered a narrower guard and chose the other option" — and
+`project-criterion-satisfaction.ts:31-38` carries the standing instruction that "nothing should be
+added later that quietly reinstates an equivalent protection under another name" and that whether
+an unsatisfied criterion blocks anything "is the owner's decision and is not smuggled in here".
+Deriving DONE from `satisfied` is that reinstatement under another name. It needs the owner to say
+the 2026-09-03 decision is being revisited.
+
+The other two follow-ups do not depend on that and may proceed. Recording a confirmation adds a
+fact and gates nothing. Closing the agent's `status` door is a ROLE boundary of the kind
+`runner-projects.controller.ts:216-229` already draws — "statements about the agent's own authority
+... stay with the account-owner channel" — and not the acceptance gate 0229 removed, which refused
+the owner's own direct write too.
