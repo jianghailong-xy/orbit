@@ -133,7 +133,19 @@ jobs:
       - name: Generate Prisma Client
         run: npm run prisma:generate
       - name: Run every pg spec against a real PostgreSQL
-        run: bash scripts/project-pg-matrix.sh
+        env:
+          # The matrix prints one summary line per spec and keeps each child's own output only if
+          # told where to put it. Without this a red reads `fail=6` and nothing else — which
+          # assertion, and what it saw, would be in a buffer the run threw away.
+          PCC_PG_LOG_DIR: ${{ runner.temp }}/pg-spec-logs
+        run: mkdir -p "$PCC_PG_LOG_DIR" && bash scripts/project-pg-matrix.sh
+      - name: Keep the failing specs' output
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pg-spec-logs
+          path: ${{ runner.temp }}/pg-spec-logs
+          if-no-files-found: warn
 
   go-runner:
     name: Go runner
