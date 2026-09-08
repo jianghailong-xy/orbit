@@ -1338,9 +1338,12 @@ export class ProjectsService {
    * mean. Beside each stated criterion this now also says whether the WORK filed under it has met
    * it — `criterionSatisfaction`'s three clauses, and for each one that does not hold, the tasks
    * holding it up. That is a reading of work rows, not a verdict on the criterion's text: nothing
-   * judges what a criterion says, and this read remains the only consumer of the answer. It is
-   * served, not acted on: `project.status = 'DONE'` is not gated by it here or anywhere, which is
-   * the decision 0223 and 0229 recorded and is not quietly reopened by making the answer visible.
+   * judges what a criterion says. This read was the answer's only consumer until 2026-09-08, when
+   * `project-done-derived.ts` became a second one — it folds the same answer together with
+   * `landing` and the owner's standard-set confirmation and stores what the three project into
+   * `project.status`. HERE it is still served and not acted on, and `project.status = 'DONE'` is
+   * still gated by it nowhere: the projection refuses no write, which is the decision 0223 and
+   * 0229 recorded and is not quietly reopened by making the answer visible.
    *
    * `landing` is a FOURTH fact beside those, and the one that keeps `satisfied` honest: settling
    * happens in a task session's own worktree and says nothing about the default branch, so a

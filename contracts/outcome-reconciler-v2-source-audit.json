@@ -92,6 +92,11 @@
           "authority": "ANY_ACTOR_UNGUARDED_SINCE_0229"
         },
         {
+          "path": "src/apiserver/src/projects/project-done-derived.ts",
+          "symbol": "storeDerivedProjectStatus",
+          "authority": "DERIVED_PROJECTION_WRITER_WITH_NO_REQUESTER_SINCE_2026_09_08"
+        },
+        {
           "path": "src/apiserver/prisma/migrations/0229_project_acceptance_judgment_removal/migration.sql",
           "symbol": "DROP TRIGGER \"project_acceptance_done_gate\" ON \"project\"",
           "authority": "REMOVAL_OF_THE_DATABASE_GATE"

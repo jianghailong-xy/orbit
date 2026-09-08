@@ -1985,9 +1985,20 @@ model ProjectAcceptanceCriterionDefinition {
 /// expresses the goal — `CONFIRM_ACCEPTANCE_CRITERIA`, which was graded HUMAN_ONLY by unit T6 and
 /// had no writer anywhere in the repository until migration 0245 gave it this row.
 ///
-/// A fact and not a gate. Nothing reads it to allow or refuse anything, and in particular
-/// `project.status` is decided exactly as it was before: 0229 removed the acceptance DONE gate on
-/// the account owner's instruction and this row does not bring it back under another name.
+/// A fact and not a gate. Nothing reads it to allow or refuse anything: no write is turned away
+/// for want of one, and none is let through by having one.
+///
+/// The rest of that sentence used to say `project.status` is decided exactly as it was before,
+/// and since 2026-09-08 it is not. This row is one of the two inputs that
+/// `projects/project-done-derived.ts` PROJECTS the column from — the other being every stated
+/// criterion satisfied and landed — which is also why a confirmation stops counting by itself:
+/// editing an assertion or a verification method moves the semantic digest, the newest row stops
+/// matching, and the projection stops saying DONE with no flag for anybody to clear.
+///
+/// That is not 0229's gate under another name: 0229 removed a machine that REFUSED, this refuses
+/// nobody, everything that could write `status` before it still can, and the owner was asked
+/// again on 2026-09-08 with 0229's own sentence quoted back to them and answered that the
+/// projection should be built.
 ///
 /// Append-only by construction rather than by trigger: the one writer inserts, no code path
 /// updates or deletes, and re-confirming after an edit is a SECOND row rather than a rewrite of
