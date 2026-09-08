@@ -7,11 +7,14 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../api';
 import {
   ACCEPTANCE_PHONE_QUERY,
   CRITERIA_PREVIEW,
+  DIGEST_PREVIEW,
   MOBILE_CRITERIA_PREVIEW,
   ProjectAcceptanceCard,
+  acceptanceConfirmationKey,
   criteriaPreview,
   type AcceptanceCriterionItem,
 } from './ProjectAcceptanceCard';
@@ -365,10 +368,18 @@ describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
     const qc = client();
     seed(qc, FIVE);
 
-    // No second request: the card renders from the cache the project page filled.
+    // No second read of the DOCUMENT: the criteria render from the cache the project page filled.
+    // The owner confirmation is a different document with its own lifetime — it has to refresh
+    // after a confirmation without re-reading the project — so it gets its own key, and what is
+    // asserted here is that the card holds exactly those two and no duplicate of the first.
     expect(paint(qc)).toContain('The runner reconnects after a restart');
-    expect(qc.getQueryCache().getAll().map((query) => query.queryKey))
-      .toEqual([['project', PROJECT]]);
+    const keys = qc.getQueryCache().getAll()
+      .map((query) => JSON.stringify(query.queryKey))
+      .sort();
+    expect(keys).toEqual([
+      JSON.stringify(['project', PROJECT]),
+      JSON.stringify(acceptanceConfirmationKey(PROJECT)),
+    ].sort());
   });
 
   it('carries the process-versus-outcome note under the list', () => {
@@ -445,6 +456,264 @@ const UNANSWERED_CRITERION: AcceptanceCriterionItem =
 const DERIVED = [
   MET_CRITERION, MET_UNRECEIPTED_CRITERION, HELD_UP_CRITERION, UNANSWERED_CRITERION,
 ];
+
+// ── The owner's confirmation of the standard set ────────────────────────────────────────────
+//
+// `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY because whoever moves the ruler can make any
+// conclusion come out right, so the whole of what these assertions are about is the VERSION: the
+// region names the one it would confirm, names the one it did confirm, and an edit puts it back to
+// asking. A confirmation that did not name a version would move with the criteria and protect
+// nothing, which is why "the digest went out on the wire, and it was the current one" is asserted
+// on the request rather than on the button's label.
+
+/** The version standing now, and the one standing after somebody edits a criterion. Distinct in
+ *  their first characters so a short form cannot pass for the other one. */
+const DIGEST_NOW = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+const DIGEST_AFTER_EDIT = '0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0';
+const CONFIRMED_AT = '2026-09-08T03:20:55.083Z';
+
+/** The instant as the reader's own clock shows it, computed the way the card computes it: the
+ *  suite runs in whatever timezone the machine is in, and the exact instant is asserted
+ *  separately off the `datetime` attribute. */
+const CONFIRMED_AT_LOCAL = new Date(CONFIRMED_AT).toLocaleString([], {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+function versionOf(digest: string, criteria: AcceptanceCriterionItem[]) {
+  return {
+    digest,
+    material: criteria.map((item) => ({
+      definitionId: item.id,
+      revision: item.revision,
+      contentHash: `${item.id}-content`,
+    })),
+  };
+}
+
+function confirmationRow(digest: string, criteria: AcceptanceCriterionItem[]) {
+  return {
+    criteriaDigest: digest,
+    criteriaMaterial: versionOf(digest, criteria).material,
+    confirmedAt: CONFIRMED_AT,
+    confirmedById: 'owner-public-id',
+  };
+}
+
+/** Nobody has ever confirmed this set. */
+const unconfirmed = (criteria: AcceptanceCriterionItem[] = FIVE) => ({
+  state: 'UNCONFIRMED',
+  confirmed: false,
+  currentVersion: versionOf(DIGEST_NOW, criteria),
+  confirmation: null,
+});
+
+/** Confirmed, and the criteria have not moved since. */
+const confirmedCurrent = (criteria: AcceptanceCriterionItem[] = FIVE) => ({
+  state: 'CONFIRMED',
+  confirmed: true,
+  currentVersion: versionOf(DIGEST_NOW, criteria),
+  confirmation: confirmationRow(DIGEST_NOW, criteria),
+});
+
+/** The same confirmation, after a criterion was edited: the row still says DIGEST_NOW and the set
+ *  now says DIGEST_AFTER_EDIT, which is the whole of what makes it stale. */
+const confirmedThenEdited = (criteria: AcceptanceCriterionItem[]) => ({
+  state: 'STALE',
+  confirmed: false,
+  currentVersion: versionOf(DIGEST_AFTER_EDIT, criteria),
+  confirmation: confirmationRow(DIGEST_NOW, FIVE),
+});
+
+function seedConfirmation(qc: QueryClient, standing: unknown) {
+  qc.setQueryData(acceptanceConfirmationKey(PROJECT), standing);
+}
+
+/** A clean call log with the suite's never-settling default put back, so a test that inspects
+ *  what went out is not reading another test's calls — and so `restoreAllMocks` between tests
+ *  cannot leave the module mock without an implementation. */
+function apiCalls() {
+  const mock = vi.mocked(api);
+  mock.mockClear();
+  mock.mockImplementation((() => new Promise(() => {})) as unknown as typeof api);
+  return mock;
+}
+
+/** Every write the card put on the wire, as `(path, options)` — reads are one-argument calls. */
+function writes(): Array<[string, { method?: string; body?: unknown }]> {
+  return vi.mocked(api).mock.calls
+    .filter((call): call is [string, { method?: string; body?: unknown }] =>
+      typeof call[1] === 'object' && call[1] !== null && 'method' in call[1])
+    .map((call) => [call[0] as string, call[1] as { method?: string; body?: unknown }]);
+}
+
+/** Just the criteria list, so an assertion about what the DERIVED rows draw cannot be answered
+ *  by markup from the confirmation region below them. */
+function criteriaList(html: string): string {
+  const list = /<ul[^>]*class="acceptance-criteria"[\s\S]*?<\/ul>/u.exec(html);
+  if (list === null) throw new Error('no criteria list rendered');
+  return list[0];
+}
+
+const CONFIRM_BUTTON = 'Confirm these criteria';
+
+describe('ProjectAcceptanceCard on the owner confirmation', { timeout: 20_000 }, () => {
+  it('offers the confirmation below the list, and sends the version standing now', async () => {
+    const mock = apiCalls();
+    const qc = client();
+    seed(qc, FIVE);
+    seedConfirmation(qc, unconfirmed());
+
+    const html = paint(qc);
+    // A region of its own, BELOW the derived list — never a per-row control, because the action
+    // grades the complete set rather than any one criterion.
+    expect(html).toContain('Owner confirmation');
+    // Static markup escapes an apostrophe, so the assertions stop short of one.
+    expect(html).toContain('Nobody has confirmed that these 5 criteria express');
+    expect(html.indexOf('acceptance-confirmation')).toBeGreaterThan(html.lastIndexOf('<li class="acceptance-row'));
+    expect(criteriaList(html)).not.toContain('acceptance-confirmation');
+    // One control for the whole set.
+    expect(html.split(CONFIRM_BUTTON)).toHaveLength(2);
+    // It says which version it is about before it is pressed.
+    expect(html).toContain(DIGEST_NOW.slice(0, DIGEST_PREVIEW));
+    expect(html).toContain(`title="${DIGEST_NOW}"`);
+
+    const { container, cleanup } = await mount(qc);
+    try {
+      const button = [...container.querySelectorAll('button')]
+        .find((each) => each.textContent?.includes(CONFIRM_BUTTON));
+      expect(button).toBeDefined();
+      mock.mockClear();
+      await click(button!);
+
+      // The door the prerequisite unit built, with the version named in the body. A confirmation
+      // that named nothing would be a signature on whatever the criteria said when it landed.
+      expect(writes()).toEqual([
+        [
+          `/projects/${PROJECT}/acceptance/confirmation`,
+          { method: 'POST', body: { criteriaDigest: DIGEST_NOW } },
+        ],
+      ]);
+      const [, options] = writes()[0];
+      const sent = (options.body as { criteriaDigest: string }).criteriaDigest;
+      expect(sent).not.toBe('');
+      expect(sent).toHaveLength(64);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('says which version was confirmed and when, and stops offering to confirm it again', () => {
+    apiCalls();
+    const qc = client();
+    seed(qc, FIVE);
+    seedConfirmation(qc, confirmedCurrent());
+
+    const html = paint(qc);
+    expect(html).toContain('Confirmed by the account owner');
+    expect(html).toContain('These 5 criteria were confirmed to express');
+    // The version it confirmed, and the instant — machine-readable beside the reader's own clock,
+    // so "this confirmation is no longer current" stays a comparison a person can make.
+    expect(html).toContain(DIGEST_NOW.slice(0, DIGEST_PREVIEW));
+    const stamp = /<time[^>]*>([^<]*)<\/time>/u.exec(html);
+    expect(stamp).not.toBeNull();
+    expect(stamp![0]).toContain(CONFIRMED_AT);
+    expect(stamp![1]).toBe(CONFIRMED_AT_LOCAL);
+    // Nothing to press: there is nothing left to confirm while the criteria say what they said.
+    expect(html).not.toContain(CONFIRM_BUTTON);
+  });
+
+  it('goes back to asking once a criterion is edited, and then confirms the NEW version', async () => {
+    const mock = apiCalls();
+    const qc = client();
+    seed(qc, FIVE);
+    seedConfirmation(qc, confirmedCurrent());
+
+    const before = paint(qc);
+    expect(before).toContain('Confirmed by the account owner');
+    expect(before).not.toContain(CONFIRM_BUTTON);
+
+    // Somebody edits a criterion, in this same fixture. Both documents move together, which is
+    // what the server does: the definition's revision advances, so the set's digest is a
+    // different one, and the recorded confirmation still names the digest it was about.
+    const edited = [
+      { ...FIVE[0], text: 'The runner reconnects after a restart, within 30 seconds', revision: 2 },
+      ...FIVE.slice(1),
+    ];
+    seed(qc, edited);
+    seedConfirmation(qc, confirmedThenEdited(edited));
+
+    const after = paint(qc);
+    expect(after).toContain('The criteria changed after they were confirmed');
+    // The superseded confirmation is still named — it is a fact, not an error — and it is named
+    // as the OLD version, beside the new one the button would record.
+    expect(after).toContain(`Confirmed version <code class="acceptance-confirmation-digest" title="${DIGEST_NOW}">${DIGEST_NOW.slice(0, DIGEST_PREVIEW)}</code>`);
+    expect(after).toContain(DIGEST_AFTER_EDIT.slice(0, DIGEST_PREVIEW));
+
+    const { container, cleanup } = await mount(qc);
+    try {
+      const button = [...container.querySelectorAll('button')]
+        .find((each) => each.textContent?.includes(CONFIRM_BUTTON));
+      expect(button).toBeDefined();
+      mock.mockClear();
+      await click(button!);
+
+      // It reads the digest of the criteria AS THEY NOW STAND. Sending the confirmed-and-now-stale
+      // one would confirm wording nobody is looking at, which is the move this tier refuses.
+      expect(writes()).toEqual([
+        [
+          `/projects/${PROJECT}/acceptance/confirmation`,
+          { method: 'POST', body: { criteriaDigest: DIGEST_AFTER_EDIT } },
+        ],
+      ]);
+      expect(JSON.stringify(writes())).not.toContain(DIGEST_NOW);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('leaves the derived list without a ratio, a meter or a per-row badge', () => {
+    apiCalls();
+    const qc = client();
+    seed(qc, DERIVED);
+    seedConfirmation(qc, unconfirmed(DERIVED));
+
+    const html = paint(qc);
+    // The region really is on the card, so this negative is about a list drawn BESIDE a written
+    // decision rather than about a card that never grew one.
+    expect(html).toContain('acceptance-confirmation');
+
+    // The drawing rules the card's own header states, checked against the list itself: no ratio,
+    // no meter, no per-row badge. A row states its condition and then says in words what its work
+    // has done — a pill anywhere in here is the verdict rail 0229 deleted, coming back.
+    const list = criteriaList(html);
+    for (const shape of [
+      'ant-tag', 'ant-badge', 'ant-ribbon', 'ant-progress', 'role="progressbar"',
+      '<progress', '<meter', 'acceptance-row-badge', 'acceptance-row-verdict',
+      'acceptance-meter', 'Unjudged',
+    ]) {
+      expect(list).not.toContain(shape);
+    }
+    expect(list).not.toMatch(/\d+\s*(?:\/|of)\s*\d+/u);
+    // And no meter or gauge anywhere on the card, region included.
+    expect(html).not.toContain('acceptance-meter');
+    expect(html).not.toContain('role="progressbar"');
+    expect(html).not.toContain('<progress');
+  });
+
+  it('draws nothing to confirm while the standing has not been read', () => {
+    apiCalls();
+    const qc = client();
+    seed(qc, FIVE);
+
+    const html = paint(qc);
+    expect(html).toContain('acceptance-confirmation');
+    expect(html).not.toContain(CONFIRM_BUTTON);
+  });
+});
 
 describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 }, () => {
   it('draws its three states as three shapes before it uses any colour', () => {

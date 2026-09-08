@@ -10589,6 +10589,53 @@ html[data-theme='dark'] .session-tag-chip {
 .acceptance-note-compact {
   display: none;
 }
+/* The account owner's confirmation of the whole stated set: the one region on this card anybody
+   writes, kept a region and never a per-row control. Separated from the note above it by its own
+   rule so a reader cannot take it for another derived line, and set at the standing line's size
+   because it answers the list rather than competing with it. */
+.acceptance-confirmation {
+  padding: 12px 24px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.acceptance-confirmation-head {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.acceptance-confirmation-state {
+  margin-top: 2px;
+  color: var(--text-2);
+}
+.acceptance-confirmation-prior,
+.acceptance-confirmation-unread {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.acceptance-confirmation-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.acceptance-confirmation-version {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* A digest is compared character by character or not at all, so it is the one value here that is
+   drawn monospaced. */
+.acceptance-confirmation-digest {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.acceptance-confirmation-failure {
+  margin-top: 10px;
+}
 /* On a phone Acceptance becomes a compact, inspectable summary rather than a long table. Four
    complete rows establish the shape of the criteria and the list disclosure names everything
    that is not initially on screen. Complete means complete: a row draws the whole criterion and

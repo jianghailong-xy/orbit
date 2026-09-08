@@ -165,9 +165,9 @@ const attributionKeys = (projectUuid: string) => [['project', encodeId(projectUu
 //
 // Four, not six: the acceptance card reads the project document under `['project', id]` — the
 // entry the page already holds — and the chain strip deliberately shares the overview's `panorama`
-// key, so neither adds a request. The judgment-request summary was a fifth until 2026-09-02, when
-// the judgment machinery it read was removed. Spelled out rather than imported, for the same
-// reason tasksKey is: a key the page changed unilaterally should break these tests.
+// key, so neither adds a request for the criteria. The judgment-request summary was a fifth until
+// 2026-09-02, when the judgment machinery it read was removed. Spelled out rather than imported,
+// for the same reason tasksKey is: a key the page changed unilaterally should break these tests.
 const headerKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
@@ -177,6 +177,14 @@ const headerKeys = (projectUuid: string) => {
     ['project', id, 'panorama', 'ready', 5],
   ];
 };
+
+// The acceptance card's ONE entry of its own, added 2026-09-08 with the owner's confirmation of
+// the stated criteria. The criteria are still read from the document above; the confirmation is a
+// second document with its own lifetime, because it has to refresh after a confirmation without
+// re-reading the project.
+const acceptanceKeys = (projectUuid: string) => [
+  ['project', encodeId(projectUuid), 'acceptance-confirmation'],
+];
 
 const task = (over: Record<string, unknown> = {}) => ({
   id: 't1',
@@ -1330,6 +1338,7 @@ describe('ProjectDetailPage — top-level tasks', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
+      ...acceptanceKeys(P1),
       ...attributionKeys(P1),
     ]);
   });
@@ -1520,6 +1529,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
+      ...acceptanceKeys(P1),
       ...attributionKeys(P1),
     ]);
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();
