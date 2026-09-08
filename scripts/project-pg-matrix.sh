@@ -9,12 +9,8 @@
 # runs its DDL and everything scheduled after it is measured against a schema that spec left behind.
 # Six figures of that is not a signal; it is the harness reporting on itself.
 #
-# Two specs need something other than the migrated clone, and both say so in their own headers:
+# One spec needs something other than the migrated clone, and says so in its own header:
 #
-#   * project-reconcile-fault-injection spawns a child that requires
-#     ./build-project-reconcile-faults/… — an artifact of its OWN tsconfig. From `build/` the child
-#     dies with MODULE_NOT_FOUND before the injected SIGKILL happens and the spec reports 5/7 for a
-#     reason that has nothing to do with the product. The build step is done here.
 #   * steer-dequeue is schema-owning: it creates the two columns-only tables its WHERE clause reads
 #     ("any empty Postgres … not the application schema"). Handed a migrated clone, its
 #     `DROP TABLE "session"` hits the dependent objects of every migration. It gets an EMPTY one.
@@ -222,9 +218,6 @@ echo "==> building the test tree"
 ( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
 mkdir -p "$API/build/node_modules/@orbit"
 link "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"          # run time
-echo "==> building the fault-injection tree"
-( cd "$API" && "$TSC" -p tsconfig.project-reconcile-faults.json ) ||
-  die "tsconfig.project-reconcile-faults.json failed to compile"
 
 cd "$API"
 # Taken once, and empty is fatal: a loop that never runs reports the same zeroes as a clean run.
@@ -233,8 +226,6 @@ SPECS="$(ls build/**/*.pg.spec.js 2>/dev/null | sort)"
 n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; MISSING=0; RED=()
 for f in $SPECS; do
   n=$((n+1)); DB="pcc_matrix_s$n"; base="$(basename "$f")"
-  [ "$base" = "project-reconcile-fault-injection.pg.spec.js" ] &&
-    f="build-project-reconcile-faults/projects/$base"
   psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null
   case "$base" in
     steer-dequeue.pg.spec.js) psql_admin "CREATE DATABASE $DB" >/dev/null ;;
@@ -266,10 +257,6 @@ for f in $SPECS; do
   [ -n "${PCC_PG_LOG_DIR:-}" ] && echo "$out" > "$PCC_PG_LOG_DIR/$base.txt"
   psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null
 done
-
-# The fault-injection tree is a build artifact of this script, not of the repo. Removing it here
-# keeps `git status` after an acceptance run showing source changes and nothing else.
-rm -rf "$API/build-project-reconcile-faults"
 
 echo "==== tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP missing-summary=$MISSING spec-level-red=${#RED[@]} ===="
 for r in "${RED[@]:-}"; do [ -n "$r" ] && echo "RED: $r"; done
