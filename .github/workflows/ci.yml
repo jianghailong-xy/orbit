@@ -40,12 +40,100 @@ jobs:
         run: npm run build
       - name: Test shared
         run: npm test -w @orbit/shared
+      # This step does NOT collect `*.pg.spec.js`, and that is the repair rather than an omission.
+      # It used to: the glob took all 441 compiled specs, 113 of them pg specs, every one of which
+      # skips itself when COORDINATOR_PG_URL is unset — and this workflow has never set it. The last
+      # green on main before this change (run 34201926745) reported `tests 3479 / pass 3090 /
+      # skipped 389` and was a success. A spec that is collected and then skipped is the hole; a
+      # spec that is not collected is a spec another job owns, and the `postgres` job below owns
+      # these. What is left here is 328 specs that need no database and now report `skipped 0`, so
+      # a skip appearing in this step again is a fact about this step rather than about PostgreSQL.
       - name: Test API server
         run: npm test -w @orbit/apiserver
       - name: Test web
         run: npm test -w @orbit/web
       - name: Test upgrade source SHA propagation
         run: npm run test:upgrade-source-sha
+
+  # Every `*.pg.spec` in the apiserver, against a real PostgreSQL, with a skip counted red.
+  #
+  # WHY THIS JOB EXISTS
+  # ===================
+  # Before it, no CI run had ever witnessed a single assertion in a single pg spec. There was no
+  # `services:` block anywhere in this file, so COORDINATOR_PG_URL was always unset, so all 113 of
+  # them skipped themselves, and `node --test` exits 0 on a file whose every case skipped. "CI is
+  # green" therefore said nothing about coordinator delivery, the completion gates, the migrations,
+  # or any lock or concurrency property — every one of those is held by a pg spec and by nothing
+  # else. The count was printed on every run (`skipped 389`) and cost nothing to read.
+  #
+  # WHY IT PROVISIONS ITS OWN CONTAINER RATHER THAN USING `services: postgres:`
+  # ==========================================================================
+  # A `services:` block is one database, and one database is the wrong shape for this tree three
+  # times over. `scripts/project-pg-matrix.sh` is the shape that fits, and it already exists:
+  #
+  #   * Specs own schema. Sharing a database means one spec's DDL is the schema the next one is
+  #     measured against. The script migrates a template once and hands every spec its own clone.
+  #   * `steer-dequeue` needs an EMPTY database, not a migrated one — its `DROP TABLE "session"`
+  #     would otherwise hit the dependent objects of every migration. The script special-cases it.
+  #   * Two specs (`task-dispatch-epoch-aba`, `task-run-winner-recovery`) assert what survives a
+  #     real server restart, and skip without COORDINATOR_PG_RESTART_COMMAND. A container this job
+  #     owns can be restarted; a service container's name is not this job's to know.
+  #
+  # It also hands over the three URL names the tree reads (COORDINATOR_PG_URL, ORBIT_TEST_PG_URL,
+  # WORK_OVERVIEW_PG_URL), the three COORDINATOR_PG_EXPECTED_* the specs' own isolation guard
+  # demands, and ORBIT_DB_CONFLICT_ORIGIN=fault_injection. Each of those is there so that some spec
+  # does not skip, which is why the run below has no allowlist: the alternative to excusing a spec
+  # has always been a variable the harness can supply.
+  #
+  # A SKIP IS RED, AND EVERY PG SPEC IS IN
+  # ======================================
+  # The script parses each child's TAP summary with `pg_matrix_summary`
+  # (`scripts/pg-matrix-summary.lib.sh`) and goes red on a skip, a failure, `tests=0`, or a summary
+  # it cannot vouch for. No subset was carved out, so there is no "these did not make it" list to
+  # keep honest: `ls build/**/*.pg.spec.js` is the roster, an empty roster is fatal, and the
+  # complement of it is exactly what the JavaScript job's `Test API server` step runs. Nothing in
+  # the tree is collected-then-skipped by either job.
+  #
+  # The control that holds this to it is the script's own, and it is one line here:
+  #
+  #     env:
+  #       PCC_PG_CONTROL: omit-url
+  #
+  # With that set, everything below happens exactly as it normally does except that no URL reaches
+  # a child under any of its three names — the condition this job was written to end. Every case
+  # then reports `# SKIP`, every `node --test` exits 0, and this job must still fail. It was pushed
+  # once in that state to prove it does; if a future change makes that knob go green, every green
+  # this job has ever printed is worth nothing.
+  #
+  # WHAT IT COSTS
+  # =============
+  # Its own runner, ~13 minutes of it, in parallel with the JavaScript job rather than after it.
+  # The JavaScript job is unchanged in shape and slightly shorter, because it no longer loads 113
+  # files in order to skip them.
+  postgres:
+    name: PostgreSQL specs
+    runs-on: ubuntu-latest
+    # Above a passing run rather than at it: a budget is not a second chance.
+    timeout-minutes: 45
+    steps:
+      # No `fetch-depth: 0` here, unlike the JavaScript job: the two removal censuses that read this
+      # repository's history are plain specs, and the only pg specs that run `git` at all build
+      # their own throwaway repositories.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # The matrix compiles `@orbit/shared` and `tsconfig.test.json` itself, but it deliberately
+      # does NOT generate the Prisma client in a plain checkout — generating there rewrites the
+      # client every concurrent tree is compiling against. On a runner there is no other tree, so
+      # the generation it skips has to happen here or `tsc` compiles against nothing.
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+      - name: Run every pg spec against a real PostgreSQL
+        run: bash scripts/project-pg-matrix.sh
 
   go-runner:
     name: Go runner
