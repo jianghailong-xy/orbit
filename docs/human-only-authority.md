@@ -16,6 +16,20 @@ Project `DONE` is no longer a `HUMAN_ONLY` write in N22. It is an automatic proj
 confirmed standard set whose peer criteria are all satisfied; every direct `status=DONE`
 request is refused.
 
+> **Stale, and in two different directions — the `Project DONE` column below predates migration
+> 0229.** That migration removed the database gate and the application-layer refusal together, on
+> the account owner's explicit choice, and with them the evaluator this paragraph names. So
+> "refused; evaluator only" is no longer true of any row: there is nothing that projects `DONE`,
+> and a caller with no acting Session writes the column directly.
+>
+> What IS true, as of `refuseProjectStatusWrite`: a request carrying `status` **from a session**
+> is refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` / `ASK_A_PERSON`, whatever the value
+> and whatever the session's `dispatch_origin` — a wider condition than the `JUDGMENT` role the
+> two `HUMAN_ONLY` rows restrict. A request with no acting Session is untouched, so the owner REST
+> API, the headless CLI and internal callers are exactly as 0229 left them, and this is a boundary
+> on the tool an agent holds rather than a claim about who is on the other end of a credential.
+> The rest of this column has not been reconciled with 0229; read it as history.
+
 It is deliberately limited to those actions. It does not redesign authentication.
 
 ## Decision
