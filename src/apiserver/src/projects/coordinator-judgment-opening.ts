@@ -72,6 +72,12 @@ export function describeWakeFact(fact: WakeFact): string {
       );
     case 'PROJECT_TASKS_SETTLED':
       return `这个项目下的 ${String(detail.taskCount ?? '全部')} 个任务都到了终态（DONE 或 CANCELLED）。`;
+    case 'PROJECT_ACCEPTANCE_LANDED':
+      return (
+        `这个项目下的 ${String(detail.taskCount ?? '全部')} 个任务都到了终态，`
+        + `而且它声明的 ${settledCriteriaOf(fact).length} 条验收标准每一条都已满足、`
+        + '并且有合并回执证明成果在默认分支上。'
+      );
     case 'CRITERION_READY':
       return (
         `服务验收标准 ${String(detail.criterionKey ?? fact.subjectId)} 的 ` +
@@ -183,7 +189,7 @@ export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): stri
   );
 }
 
-/** The roster the settled fact carries, read out of `detail` and trusted for nothing else. */
+/** The roster the two project-scoped facts carry, read out of `detail` and trusted for nothing else. */
 function settledCriteriaOf(fact: WakeFact): SettledCriterionReport[] {
   const criteria = (fact.detail ?? {}).criteria;
   return Array.isArray(criteria) ? criteria as SettledCriterionReport[] : [];
@@ -252,12 +258,13 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  *
  * AND WHY THE THIRD ONE CARRIES A SNAPSHOT THE OTHERS REFUSE TO
  * ============================================================
- * `PROJECT_TASKS_SETTLED`, delivered when every stated criterion is also satisfied and landed, is
- * the one message here that copies project state into itself: every criterion's words, its two
- * dimensions, and the work that served it. Line 3's rule is not being broken so much as met head
- * on — the question this card asks is "do THESE N conditions, together, express the goal", and a
- * question about a set that does not carry the set is one its reader cannot answer without going
- * to fetch what it is being asked about. So the roster is in the card and the card says out loud
+ * `PROJECT_ACCEPTANCE_LANDED` — every task terminal and every stated criterion satisfied AND on
+ * the default branch — is the one message here that copies project state into itself: every
+ * criterion's words, its two dimensions, and the work that served it. Line 3's rule is not being
+ * broken so much as met head on — the question this card asks is "do THESE N conditions, together,
+ * express the goal", and a question about a set that does not carry the set is one its reader
+ * cannot answer without going to fetch what it is being asked about. So the roster is in the card
+ * and the card says out loud
  * that it is the snapshot at the moment the fact became true; everything else is still a read.
  *
  * What it must NOT do is answer. `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY
@@ -271,7 +278,7 @@ export function buildCoordinatorDeliveryMessage(
   ask?: { ask: EvidenceAsk; readAt: Date } | null,
 ): string {
   const projectId = uuidToBase62(fact.projectId);
-  if (fact.event === 'PROJECT_TASKS_SETTLED') {
+  if (fact.event === 'PROJECT_ACCEPTANCE_LANDED') {
     const criteria = settledCriteriaOf(fact);
     return (
       `【项目「${projectTitle}」的验收标准已全部满足并落地，请确认它们表达的是你要的目标】\n\n`

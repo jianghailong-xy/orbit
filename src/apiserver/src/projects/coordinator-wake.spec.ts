@@ -14,6 +14,7 @@ import {
   criterionReadyFact,
   criterionSubjectId,
   isSettledTaskStatus,
+  projectAcceptanceLandedFact,
   projectTasksSettledFact,
   settlementVersion,
   wakeIdempotencyKey,
@@ -181,6 +182,95 @@ test('a project settles only when every task did, and never when it has none', (
   assert.notEqual(wakeIdempotencyKey(later), wakeIdempotencyKey(settled));
 });
 
+/** One stated criterion as the two project-scoped facts report it, with the two dimensions moved. */
+function reported(key: string, satisfied: boolean, landing: 'LANDED' | 'UNKNOWN') {
+  return { key, text: `条件 ${key}`, satisfied, landing, serving: [] };
+}
+
+const SETTLED_PAIR = [
+  { taskId: 'b1', status: 'DONE' },
+  { taskId: 'b2', status: 'CANCELLED' },
+];
+
+test('acceptance lands only when every stated criterion is satisfied AND on the branch', () => {
+  assert.equal(
+    projectAcceptanceLandedFact(PROJECT, [], [reported('c1', true, 'LANDED')]), null,
+    'an empty project has not finished its work — it has not been given any',
+  );
+  assert.equal(
+    projectAcceptanceLandedFact(
+      PROJECT,
+      [{ taskId: 'b1', status: 'DONE' }, { taskId: 'b2', status: 'FAILED' }],
+      [reported('c1', true, 'LANDED')],
+    ),
+    null,
+    'a FAILED task is work in progress here too',
+  );
+  assert.equal(
+    projectAcceptanceLandedFact(PROJECT, SETTLED_PAIR, []), null,
+    '[].every is vacuously true: "these zero conditions express your goal" is unanswerable',
+  );
+  assert.equal(
+    projectAcceptanceLandedFact(
+      PROJECT, SETTLED_PAIR,
+      [reported('c1', true, 'LANDED'), reported('c2', false, 'LANDED')],
+    ),
+    null,
+    'a criterion nothing backs is not one to ask about',
+  );
+  assert.equal(
+    projectAcceptanceLandedFact(
+      PROJECT, SETTLED_PAIR,
+      [reported('c1', true, 'LANDED'), reported('c2', true, 'UNKNOWN')],
+    ),
+    null,
+    'one criterion off the branch is enough — the fact admits no partial landing',
+  );
+
+  const landed = projectAcceptanceLandedFact(
+    PROJECT, SETTLED_PAIR,
+    [reported('c1', true, 'LANDED'), reported('c2', true, 'LANDED')],
+  )!;
+  assert.equal(landed.event, 'PROJECT_ACCEPTANCE_LANDED');
+  assert.equal(landed.subjectType, 'PROJECT');
+  assert.equal(landed.subjectId, PROJECT);
+  assert.equal(
+    wakeIdempotencyKey(landed),
+    `${WAKE_KEY_VERSION}:PROJECT_ACCEPTANCE_LANDED:PROJECT:${PROJECT}:${landed.subjectVersion}`,
+  );
+  // The roster's ORDER is the query planner's business, so it is not part of the identity.
+  assert.equal(
+    wakeIdempotencyKey(projectAcceptanceLandedFact(
+      PROJECT, SETTLED_PAIR,
+      [reported('c2', true, 'LANDED'), reported('c1', true, 'LANDED')],
+    )!),
+    wakeIdempotencyKey(landed),
+  );
+});
+
+test('the settled fact and the landed one are two facts about one project, never one', () => {
+  const criteria = [reported('c1', true, 'LANDED'), reported('c2', true, 'LANDED')];
+  const settled = projectTasksSettledFact(PROJECT, SETTLED_PAIR, criteria)!;
+  const landed = projectAcceptanceLandedFact(PROJECT, SETTLED_PAIR, criteria)!;
+
+  // Same subject, same task set, two keys. A judgment already spent on the settled fact therefore
+  // cannot spend the card's, which is the whole repair: the settled project reached its judgment
+  // while one criterion was off the branch, and the card is still available afterwards.
+  assert.equal(settled.subjectId, landed.subjectId);
+  assert.notEqual(wakeIdempotencyKey(settled), wakeIdempotencyKey(landed));
+  assert.notEqual(settled.subjectVersion, landed.subjectVersion);
+
+  // And the version the card is keyed on is NOT the task settlement: the same settled task set
+  // with a different roster is a different question to ask. This is the assertion that goes red if
+  // the landing digest is ever dropped back to `settlementVersion`.
+  const half = projectAcceptanceLandedFact(PROJECT, SETTLED_PAIR, [
+    reported('c1', true, 'LANDED'),
+  ])!;
+  assert.notEqual(half.subjectVersion, landed.subjectVersion,
+    'a roster that lost a criterion derives the key the fuller one already used');
+  assert.notEqual(landed.subjectVersion, settled.subjectVersion);
+});
+
 test('a criterion is ready only when every task serving it is DONE', () => {
   const key = 'b3f4c000a5e9d01bd5cfa6078b57cdb0';
   assert.equal(criterionReadyFact(PROJECT, key, []), null);
@@ -207,12 +297,12 @@ test('the events this unit knows about are exactly those the latest migration ac
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0242_criterion_unlanded_wake/migration.sql',
+      '../../prisma/migrations/0246_project_acceptance_landed_wake/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0242 no longer constrains the event column');
+  assert.ok(check, 'migration 0246 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,

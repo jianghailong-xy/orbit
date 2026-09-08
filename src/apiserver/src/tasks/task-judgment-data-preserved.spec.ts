@@ -313,6 +313,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        that relation, its two indexes and its BEFORE UPDATE guard were dropped by 0226 and are
   //        named by no statement here, and nothing reads this new row to allow or refuse anything,
   //        so the acceptance DONE gate 0229 removed is not reinstated under another name.
+  //   0246 widened `project_coordinator_wake`'s event CHECK by one more spelling —
+  //        `PROJECT_ACCEPTANCE_LANDED`, a project whose every task is terminal AND whose every
+  //        stated criterion is satisfied with its work on the default branch — so the confirmation
+  //        card has a fact of its own instead of riding a key the judgment branch spends first.
+  //        Read against every claim above: it is 0242 again, statement for statement. One
+  //        `ALTER TABLE "project_coordinator_wake" DROP CONSTRAINT / ADD CONSTRAINT` over a table
+  //        this file does not preserve and cannot reach one from — it names no `task` object,
+  //        neither 0177 relation, `task_executable_acceptance_pair` nor any `project_acceptance_*`
+  //        object. Despite the event's SPELLING it touches no acceptance relation: the string
+  //        appears only inside the CHECK's list of permitted values, and no criterion's `text` or
+  //        `verification_method` is read, written or constrained by it. It creates no table,
+  //        column, index, enum, type or trigger, drops nothing but the constraint it immediately
+  //        restates, carries no `ALTER TYPE` and no `DROP TYPE` — so all three
+  //        `task_completion_criterion` labels survive — has no `CREATE OR REPLACE FUNCTION` at
+  //        all, so it is not another writer of the DONE fence, and has no INSERT/UPDATE/DELETE, so
+  //        no preserved row is read or written. The set only grows, so no stored event can be
+  //        refused by it and it needs no backfill. Nothing reads the new event to allow or refuse
+  //        a status: it is delivered as a message and decides nothing.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -328,7 +346,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0242_criterion_unlanded_wake',
       '0243_coordinator_wake_delivered',
       '0244_session_engine_phase',
-      '0245_project_standard_set_confirmation'],
+      '0245_project_standard_set_confirmation',
+      '0246_project_acceptance_landed_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

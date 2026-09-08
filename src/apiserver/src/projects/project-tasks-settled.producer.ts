@@ -10,7 +10,11 @@ import {
   CoordinatorJudgmentService,
   type JudgmentOutcome,
 } from './coordinator-judgment.service';
-import { type SettledCriterionReport, projectTasksSettledFact } from './coordinator-wake';
+import {
+  type SettledCriterionReport,
+  projectAcceptanceLandedFact,
+  projectTasksSettledFact,
+} from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { criterionKeyOf } from './project-acceptance';
 import { criterionLanding } from './project-criterion-landing';
@@ -36,7 +40,9 @@ export interface SettledProjectDelivery {
 }
 
 /**
- * Unit T7: turn committed task rows into `PROJECT_TASKS_SETTLED` wakes.
+ * Unit T7: turn committed task rows into the two facts a finished project can be in — a settled
+ * task set (`PROJECT_TASKS_SETTLED`), or that AND every stated criterion on the default branch
+ * (`PROJECT_ACCEPTANCE_LANDED`). §1 is what decides between them and §3 is why they are two.
  *
  * This deliberately lives on the post-commit side of a task write. Reaching a coordinator is heavy
  * — it may queue a runner — and cannot be part of the transaction which changes the task. More
@@ -60,15 +66,19 @@ export interface SettledProjectDelivery {
  * finished, `criterionLanding` for whether a merge receipt puts it on the default branch. Neither
  * is recomputed here; a second reading of "landed" is a second answer a person could be shown.
  *
- *   * Every stated criterion satisfied AND landed → the confirmation card, DELIVERED to the
- *     conversation this project is already coordinated from. What is being asked is the one act
- *     reserved to the account owner (`CONFIRM_ACCEPTANCE_CRITERIA`): do these conditions, together,
- *     express the goal. A conversation opened for that question would be a conversation with
- *     nobody in it, and the project already names the one a person is in.
- *   * Anything else → the judgment session this event has always opened, on the protocol that
- *     tells it to go and look at `main`. That branch is untouched, because it is the branch the
- *     card is NOT for: a project whose work is not all on the branch has something to do before
- *     anybody is asked to confirm anything.
+ *   * Every stated criterion satisfied AND landed → `PROJECT_ACCEPTANCE_LANDED`, the confirmation
+ *     card, DELIVERED to the conversation this project is already coordinated from. What is being
+ *     asked is the one act reserved to the account owner (`CONFIRM_ACCEPTANCE_CRITERIA`): do these
+ *     conditions, together, express the goal. A conversation opened for that question would be a
+ *     conversation with nobody in it, and the project already names the one a person is in.
+ *   * Anything else → `PROJECT_TASKS_SETTLED`, and the judgment session that event has always
+ *     opened, on the protocol that tells it to go and look at `main`. That branch is untouched,
+ *     because it is the branch the card is NOT for: a project whose work is not all on the branch
+ *     has something to do before anybody is asked to confirm anything.
+ *
+ * The two are two EVENTS rather than two terminals of one, and §3 is why. Both are derived from
+ * the same two reads and at most one of them exists at a time, so no project is both carded and
+ * judged for one pass.
  *
  * §2 — WHY THE ROSTER IS READ BEFORE THE CLAIM
  * ============================================
@@ -80,10 +90,32 @@ export interface SettledProjectDelivery {
  * inside 0174's partial unique index, so whichever one a delivery takes it claims the same key and
  * loses the same races.
  *
- * That the roster is outside the key is also what makes the pair honest over time: a criterion
- * whose receipt arrives later is the SAME settled task set, so the card is not a second fact about
- * it. What produces the card in that case is the next settlement — which is why the branch that
- * did not send one still leaves the fact, and its roster, in the ledger for a reader.
+ * §3 — WHY THE CARD IS ITS OWN FACT, AND WHAT THE ONE-COMMIT VERSION COST
+ * ======================================================================
+ * For one commit the card was a BRANCH of `PROJECT_TASKS_SETTLED`: one fact, two terminals, the
+ * roster deciding between them. §2's argument above is what made that look safe — the roster is
+ * outside the key, so a criterion whose receipt arrives later is the same settled task set and the
+ * card is not a second fact about it.
+ *
+ * Every clause of that is true and the conclusion did not follow. If the card is not a second fact
+ * about the settled task set, then when the receipt arrives there is NO fact left to derive: the
+ * task set is unchanged, so the key is the one the judgment branch already spent, and re-deriving
+ * answers ALREADY_AWAKE. Not "the card is late" — the card is never sent, until some unrelated
+ * task write happens to move the digest. And the order this repository actually runs in is exactly
+ * that order: the last task settles while the work is still on a branch, and the receipt is
+ * recorded afterwards by `session_merge`, by a runner or by an agent, none of which calls this
+ * door at all. `project-settled-card.pg.spec.ts` had to file a chore task and cancel it to get a
+ * second derivation, and said so in a comment; that comment was the defect, written down.
+ *
+ * So the card is `PROJECT_ACCEPTANCE_LANDED` — its own event, keyed on the settlement AND the
+ * roster's landings together. It admits no partial state, so it spends no key while the answer is
+ * incomplete, and the moment the last receipt lands it derives a key nothing has ever claimed.
+ * `coordinator-wake.ts` carries the full argument, including why this is not the receipts-folded-
+ * into-`settlementVersion` shape that `criterionUnlandedFact` refuses.
+ *
+ * What remains true from §2 is the reason the ROSTER READ is where it is: it cannot change either
+ * key's identity ahead of the claim, because both facts are total functions of the rows, and it
+ * cannot refuse either wake.
  */
 @Injectable()
 export class ProjectTasksSettledProducer {
@@ -106,11 +138,10 @@ export class ProjectTasksSettledProducer {
         select: { id: true, status: true },
       });
       const criteria = await this.statedCriteria(projectId);
-      const fact = projectTasksSettledFact(
-        projectId,
-        tasks.map((task) => ({ taskId: task.id, status: task.status })),
-        criteria,
-      );
+      // The two columns both facts are defined over, folded once: two `map`s over one query would
+      // be two chances for the pair to disagree about what they were derived from.
+      const settlements = tasks.map((task) => ({ taskId: task.id, status: task.status }));
+      const fact = projectTasksSettledFact(projectId, settlements, criteria);
       if (!fact) {
         deliveries.push({ projectId, outcome: 'NOT_SETTLED' });
         continue;
@@ -134,8 +165,12 @@ export class ProjectTasksSettledProducer {
         return this.convergence.authorizeWake(claimedFact, claim);
       };
 
-      const outcome = confirmable(criteria)
-        ? await this.deliveries.deliver(fact, authorize)
+      // §1: two facts, and which one this project HAS decides which terminal it gets. The card's
+      // fact is derived from the same two reads rather than from a flag on the settled one — see
+      // §3 for what that buys and what it cost to learn.
+      const landed = projectAcceptanceLandedFact(projectId, settlements, criteria);
+      const outcome = landed
+        ? await this.deliveries.deliver(landed, authorize)
         : await this.judgments.wake(fact, authorize);
       deliveries.push({ projectId, outcome: outcome.outcome });
     }
@@ -184,17 +219,4 @@ export class ProjectTasksSettledProducer {
       })),
     }));
   }
-}
-
-/**
- * Whether this settled project may be asked to confirm its own ruler.
- *
- * A project that states NO criteria is not confirmable, and the emptiness is the reason rather
- * than an oversight: `[].every` is vacuously true, and "these zero conditions express your goal"
- * is not a question anybody can answer. It goes to the judgment branch like any other project
- * whose stated conditions are not all met and landed.
- */
-function confirmable(criteria: readonly SettledCriterionReport[]): boolean {
-  return criteria.length > 0
-    && criteria.every((criterion) => criterion.satisfied && criterion.landing === 'LANDED');
 }

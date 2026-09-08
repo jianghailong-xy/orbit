@@ -56,14 +56,17 @@ import type { CriterionLanding } from './project-criterion-landing';
  *     the row — and it is not moved by anything, because a primary key cannot be moved at all. Two
  *     attempts on one task are two ids and therefore two facts; one attempt's end redelivered ten
  *     times is one id and therefore one fact. That is exactly the identity wanted.
- *   * The two project-scoped facts have no such column: nothing in the schema versions "this
- *     project's task set is now settled". So they take a DIGEST of the rows the fact is defined
- *     over — `(taskId, status)` and nothing else (`settlementVersion`). That is the shape
- *     `project_blocker` already uses for `condition_version` ("a digest of the snapshot FACTS that
- *     produced this row"), and it is NOT the anti-pattern `attempt-budget.ts` warns about: that
- *     one hashes the whole world a decision was made from, so an unrelated column moves it.
- *     Hashing exactly the closed projection the event is defined over cannot be moved by an
- *     unrelated write, because no unrelated column is in it.
+ *   * The project-scoped facts have no such column: nothing in the schema versions "this project's
+ *     task set is now settled". So they take a DIGEST of the rows the fact is defined over —
+ *     `(taskId, status)` and nothing else for the two cut on the task set alone
+ *     (`settlementVersion`), and those pairs TOGETHER with each criterion's `(key, satisfied,
+ *     landing)` for the one that is also a claim about the criteria (`acceptanceLandingVersion`).
+ *     That is the shape `project_blocker` already uses for `condition_version` ("a digest of the
+ *     snapshot FACTS that produced this row"), and it is NOT the anti-pattern `attempt-budget.ts`
+ *     warns about: that one hashes the whole world a decision was made from, so an unrelated
+ *     column moves it. Hashing exactly the closed projection the event is defined over cannot be
+ *     moved by an unrelated write, because no unrelated column is in it — which is a rule about
+ *     matching the digest to the FACT, not a licence to hash one projection for every event.
  *
  *     The price is stated rather than hidden: a digest is not monotone, so a project that settles,
  *     reopens a task and settles again to a BYTE-IDENTICAL task set derives the key it already
@@ -80,6 +83,8 @@ export const COORDINATOR_WAKE_EVENTS = [
   'ATTEMPT_BUDGET_SPENT',
   /** Every task filed under a project reached a terminal status. */
   'PROJECT_TASKS_SETTLED',
+  /** That, AND every criterion the project states is satisfied with its work on the branch. */
+  'PROJECT_ACCEPTANCE_LANDED',
   /** The last task serving one acceptance criterion reached DONE. */
   'CRITERION_READY',
   /** A criterion's work is finished and no merge receipt puts it on the default branch. */
@@ -311,13 +316,19 @@ export function attemptBudgetSpentFact(spent: {
 }
 
 /**
- * One stated criterion as the settled fact REPORTS it — display and diagnosis, like every `detail`.
+ * One stated criterion as the two project-scoped facts REPORT it.
  *
- * Not part of the fact's identity, and it must not become part of one: the version this event is
- * keyed on is the task settlement, so a criterion whose landing arrives later is the SAME settled
- * project rather than a second one. What the roster is for is the message — a question about "these
- * N conditions" that does not carry them is a question nobody can answer — and the wake row a
- * reader later opens to find out which of them was missing.
+ * In `PROJECT_TASKS_SETTLED`'s `detail` it is display and diagnosis like every other `detail`, and
+ * it must not become part of THAT fact's identity: the version that event is keyed on is the task
+ * settlement, so a criterion whose landing arrives later is the SAME settled project rather than a
+ * second one. What the roster is for there is the message — a question about "these N conditions"
+ * that does not carry them is a question nobody can answer — and the wake row a reader later opens
+ * to find out which of them was missing.
+ *
+ * `PROJECT_ACCEPTANCE_LANDED` is the fact this roster is a CLAIM in rather than a note beside one,
+ * so `acceptanceLandingVersion` hashes it. The two readings do not conflict: one event is about a
+ * task set and mentions the criteria, the other is about the criteria and cannot be stated without
+ * them.
  *
  * `satisfied` is a boolean rather than a coverage word because it is the only value the reader is
  * shown; which of the three coverages produced it belongs to the unit that decided it.
@@ -357,6 +368,99 @@ export function projectTasksSettledFact(
     subjectType: 'PROJECT',
     subjectId: projectId,
     subjectVersion: settlementVersion(tasks),
+    detail: { taskCount: tasks.length, criteria },
+  };
+}
+
+/**
+ * §2's digest for the fact below: the settled task set AND what every stated criterion reports.
+ *
+ * Two independently moving projections in one version, which §2 permits for exactly the reason it
+ * permits `settlementVersion`: both are inside the closed projection the event is defined over,
+ * and no column outside it is hashed. `PROJECT_ACCEPTANCE_LANDED` is a claim about a task set AND
+ * about a criteria roster, so a version naming only one of them would stand still while the other
+ * moved — which is the whole of the defect this fact exists to repair.
+ *
+ * `satisfied` and `landing` are constant TODAY, because the predicate below admits the fact only
+ * when every criterion reports `true` and `LANDED`. They are hashed anyway, and that is not
+ * decoration: a predicate later loosened to admit some other combination must not be able to
+ * derive a key an earlier, stricter reading already spent. The criterion KEY is what does the work
+ * in the meantime — a ruler that gains or loses a condition is a different question to ask.
+ *
+ * A criterion whose WORDS were rewritten under the same key is deliberately not in here. That
+ * changes which ruler a confirmation is about rather than whether this fact holds, and
+ * `standardSetVersion` / `criteriaSemanticRevision` already answer it where it is asked: the
+ * project's confirmation read reports "confirmed, about criteria that have since been rewritten"
+ * as its own state. Folding it in here would raise this fact again for an edit that changed
+ * nothing about where the work is.
+ */
+export function acceptanceLandingVersion(
+  tasks: readonly TaskSettlement[],
+  criteria: readonly SettledCriterionReport[],
+): string {
+  const landings = criteria
+    .map((criterion): [string, boolean, CriterionLanding] =>
+      [criterion.key, criterion.satisfied, criterion.landing])
+    // Sorted here for `settlementVersion`'s reason: the roster arrives in a query's row order, and
+    // two readers of the same rows must not derive two versions of one fact.
+    .sort((left, right) => compare(left[0], right[0]));
+  return createHash('sha256')
+    .update(canonicalJson([settlementVersion(tasks), landings]))
+    .digest('hex');
+}
+
+/**
+ * `PROJECT_ACCEPTANCE_LANDED` — every task is terminal AND every stated criterion is satisfied
+ * with its work on the default branch.
+ *
+ * WHY THIS IS AN EVENT AND NOT A BRANCH OF `PROJECT_TASKS_SETTLED`
+ * ===============================================================
+ * It was a branch, for one commit, and the branch could not deliver. `PROJECT_TASKS_SETTLED` is
+ * keyed on `settlementVersion` — the task set and nothing else — which is right for what that
+ * event says. But merge receipts are written by paths the task write path does not touch, and the
+ * order they actually arrive in is: the last task settles while the work is still on a branch, the
+ * fact is derived and SPENT on a judgment session, and the receipt lands afterwards with no task
+ * write anywhere near it. The roster has flipped; the task set has not moved a byte; the key is
+ * the one already spent. The card could then never be sent — not "later", never — until some
+ * unrelated task write happened to move the digest.
+ *
+ * `criterionUnlandedFact` below has the sentence this is the other half of: "When the receipts
+ * complete, the answer stops being this fact at all." What it stops being is that one. What it
+ * starts being is this one, and that is a second FACT rather than a second version of the first,
+ * which is the distinction that paragraph draws when it refuses to fold receipts into
+ * `settlementVersion`: doing so would make PARTIAL landing a second fact about one unfinished
+ * situation. This event admits no partial state. Every criterion satisfied and landed, or nothing
+ * — so a project on its way to landing derives it zero times, and the moment it arrives it derives
+ * a key nothing has ever claimed. No key is spent early, because there is nothing to spend until
+ * the answer is complete.
+ *
+ * `null` for a project that states NO criteria, and the emptiness is the reason rather than an
+ * oversight: `[].every` is vacuously true, and "these zero conditions express your goal" is not a
+ * question anybody can answer. Such a project is `PROJECT_TASKS_SETTLED` and nothing more.
+ *
+ * The roster reaches `detail` and the version from the same argument, and they take different
+ * things out of it. `detail` gets all of it, because the card has to carry the question it is
+ * asking. The version takes `key`, `satisfied` and `landing` and leaves `text` and `serving`
+ * behind — so re-titling a task that served a criterion changes what the card SAYS and cannot
+ * change which fact it is.
+ */
+export function projectAcceptanceLandedFact(
+  projectId: string,
+  tasks: readonly TaskSettlement[],
+  criteria: readonly SettledCriterionReport[],
+): WakeFact | null {
+  if (tasks.length === 0) return null;
+  if (!tasks.every((task) => isSettledTaskStatus(task.status))) return null;
+  if (criteria.length === 0) return null;
+  if (!criteria.every((criterion) => criterion.satisfied && criterion.landing === 'LANDED')) {
+    return null;
+  }
+  return {
+    event: 'PROJECT_ACCEPTANCE_LANDED',
+    projectId,
+    subjectType: 'PROJECT',
+    subjectId: projectId,
+    subjectVersion: acceptanceLandingVersion(tasks, criteria),
     detail: { taskCount: tasks.length, criteria },
   };
 }

@@ -163,6 +163,11 @@ test('a settled project whose criteria are all satisfied and landed is carded, n
   ]);
   assert.equal(fixture.facts.length, 0, 'the confirmation card opened a judgment session');
   assert.equal(fixture.carded.length, 1);
+  assert.equal(
+    fixture.carded[0].event, 'PROJECT_ACCEPTANCE_LANDED',
+    'the card rode PROJECT_TASKS_SETTLED, whose key the judgment branch spends first when a '
+    + 'criterion is still off the branch — so the receipt that arrives later finds it gone',
+  );
   assert.deepEqual(
     (fixture.carded[0].detail as { criteria: Array<{ satisfied: boolean; landing: string }> })
       .criteria.map((criterion) => [criterion.satisfied, criterion.landing]),

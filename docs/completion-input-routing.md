@@ -32,16 +32,29 @@ There is no scheduler, timeout, startup sweep or elapsed-time interpretation in 
 people and use the request/inbox surface. Only VERIFICATION uses its deterministic verifier Task
 and the ordinary one-shot task execution machinery.
 
-Since migration 0243 one fact kind, and one only, does reach the Project's person-opened
-`coordinator_session_id` conversation: `CRITERION_UNLANDED`, whose work is finished and is on
-nobody's default branch. What it needs done is a merge — irreversible and owed exactly once — so
-opening a conversation per such fact would mean two coordinators racing for one branch, and the
-conversation already coordinating the project is the one that should be told. The wake ends
+Since migration 0243 some fact kinds do reach the Project's person-opened `coordinator_session_id`
+conversation, and each one is there because what it needs is an ACTION rather than a judgment. The
+first was `CRITERION_UNLANDED`, whose work is finished and is on nobody's default branch: what it
+needs done is a merge — irreversible and owed exactly once — so opening a conversation per such
+fact would mean two coordinators racing for one branch, and the conversation already coordinating
+the project is the one that should be told. `COMPLETION_EVIDENCE_REVISED` joined it through the
+evidence ledger's own door, carrying the questions its reader is being sent to ask. Migration 0246
+added the third, `PROJECT_ACCEPTANCE_LANDED` — every Task terminal AND every stated criterion
+satisfied with its work on the branch — whose action is to put the criteria in front of the account
+owner for the one act reserved to them (`CONFIRM_ACCEPTANCE_CRITERIA`). It is a separate event from
+`PROJECT_TASKS_SETTLED` rather than a branch of it because merge receipts are written by paths the
+Task write path does not touch: keyed on the settlement alone, the card would share a key the
+judgment branch spends first and could then never be sent at all. The wake ends
 `DELIVERED`, naming that conversation and creating no Session row, and the message is a NEXT_TURN
 message rather than a steer: a conversation running a turn reads it after that turn ends. Delivery
 is refused, with the key released, when there is no such conversation, when it has ended, and when
 it has not yet read the last thing it was told. Every other fact kind is unchanged — recorded, or
 judged in a one-shot session opened for it — and nothing here steers a running turn.
+
+`PROJECT_TASKS_SETTLED` therefore no longer has two terminals. A settled Project whose stated
+criteria are all satisfied and landed derives `PROJECT_ACCEPTANCE_LANDED` and is carded; any other
+settled Project derives `PROJECT_TASKS_SETTLED` and is judged. At most one of the two exists per
+derivation, so no Project is both carded and judged for one pass.
 
 The N6 exit for the durable open question remains `OPEN_JUDGMENT_REQUEST`: it closes when the
 bound N11 request is `DECIDED` or `SUPERSEDED`. Wake rows are delivery receipts, not open blockers,

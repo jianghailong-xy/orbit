@@ -99,9 +99,10 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Five kinds, ten controls. The mapping is many-to-one in both directions on purpose: one kind is
- * reached by more than one write path and is controlled once per path, and one control can cover
- * two kinds when the same run drives both.
+ * Six kinds, eleven controls. The mapping is many-to-one in both directions on purpose: one kind is
+ * reached by more than one write path and is controlled once per path, one control can cover two
+ * kinds when the same run drives both, and one PRODUCER can build two kinds when which fact a
+ * committed world justifies is the thing it decides.
  */
 const WIRED: readonly WiredWakeFact[] = [
   {
@@ -125,6 +126,28 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'tasks/task-executable-settled-delivery.pg.spec.ts',
         test: 'a derived DONE under a switched-off coordinator wakes nobody',
+      },
+    ],
+  },
+  {
+    // The other half of the settled project, and the reason it is a second KIND rather than a
+    // second terminal of the one above: the card is keyed on the criteria's landings as well as on
+    // the task set, so it survives a judgment that already spent the settled fact's key. Same
+    // producer method, so the census reports `afterCommit` under both — which is correct and is
+    // exactly what the many-to-one mapping is for.
+    //
+    // One control, and it can be one because the whole switch story for this kind is told in a
+    // single case: the same authorizer, the same claim-then-authorize order, and both terminals
+    // asserted absent — nothing said to the standing conversation, no session opened.
+    event: 'PROJECT_ACCEPTANCE_LANDED',
+    producedBy: [
+      'projects/coordinator-wake.ts#projectAcceptanceLandedFact',
+      'projects/project-tasks-settled.producer.ts#afterCommit',
+    ],
+    negatives: [
+      {
+        spec: 'projects/project-settled-card.pg.spec.ts',
+        test: 'a settled and landed project whose coordinator is switched off is refused, told nothing, and opens nothing',
       },
     ],
   },
