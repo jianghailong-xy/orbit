@@ -11,7 +11,8 @@
   ],
   "overrides": {
     "deepmerge-ts": "^8.0.2",
-    "mysql2": "^3.24.3"
+    "mysql2": "^3.24.3",
+    "multer": "^2.3.0"
   },
   "scripts": {
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
