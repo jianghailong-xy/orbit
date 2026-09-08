@@ -209,10 +209,19 @@ async function mount(): Promise<void> {
   });
 }
 
-/** Publish the frames the way the server does: one `message` per event, in seq order. */
+/** Publish the frames the way the server does: one `message` per event, in seq order.
+ *
+ *  The stream is opened behind WorkspaceView's session-switch debounce (`SWITCH_DEBOUNCE_MS`), a
+ *  real timer that `act` does not run — and the wait above this call is satisfied by the seed,
+ *  which lands at t=0. So whether an EventSource exists by the time frames are pushed is a
+ *  question about how long the mount happened to take, not about the page. Waiting for it is the
+ *  same assertion, held until the machine can answer it. */
 async function publish(events: ReadonlyArray<Record<string, unknown>>): Promise<void> {
-  const stream = FakeEventSource.open.find((es) => !es.closed && es.url.startsWith(`/api/sessions/${SESSION_PUBLIC}/events`));
-  expect(stream, 'the session opened no event stream').toBeTruthy();
+  let stream: FakeEventSource | undefined;
+  await waitForUi(() => {
+    stream = FakeEventSource.open.find((es) => !es.closed && es.url.startsWith(`/api/sessions/${SESSION_PUBLIC}/events`));
+    expect(stream, 'the session opened no event stream').toBeTruthy();
+  });
   await act(async () => {
     for (const event of events) stream!.onmessage?.({ data: JSON.stringify(event) });
   });
