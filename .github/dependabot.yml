@@ -10,6 +10,27 @@ updates:
       timezone: Europe/Berlin
     open-pull-requests-limit: 10
     groups:
+      # These two groups come first because a dependency joins the first group it
+      # matches, and both families below straddle the production/development line
+      # that the catch-all groups sort on — which is exactly what broke them.
+      #
+      # `@prisma/client` and `@prisma/adapter-pg` are dependencies while the `prisma`
+      # CLI is a devDependency, so the catch-alls put them in two different PRs. Each
+      # one alone leaves the CLI and the client on different versions and re-hoists
+      # one of them, and `npm run prisma:generate` then fails with "Could not resolve
+      # @prisma/client" — it did, on both PRs. They only make sense as one update.
+      prisma:
+        patterns:
+          - "prisma"
+          - "@prisma/*"
+      # Same shape: `@nestjs/cli` and `@nestjs/schematics` are devDependencies and the
+      # other five are dependencies. On top of that the catch-alls take only minor and
+      # patch, so a major arrived as seven single-package PRs — and `@nestjs/core` 12
+      # declares `@nestjs/common` ^12 as a peer, so no one of them can go in on its
+      # own. No `update-types` here: the majors are the case that needs the grouping.
+      nestjs:
+        patterns:
+          - "@nestjs/*"
       npm-production:
         dependency-type: production
         update-types:
