@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# One `*.pg.spec` (or several), run against a PostgreSQL this script creates and destroys — and
+# RED when nothing was witnessed.
+#
+#   scripts/run-pg-spec.sh src/apiserver/src/tasks/coordinator-evidence-inbox.pg.spec.ts
+#   scripts/run-pg-spec.sh src/apiserver/src/tasks/coordinator-evidence-{inbox,ask}.pg.spec.ts
+#
+# WHY THIS EXISTS
+# ===============
+# Four tasks in this repo settled DONE on an EXECUTABLE acceptance command shaped like
+#
+#     cd src/apiserver && npx tsc -p tsconfig.test.json && node --test build/tasks/<x>.pg.spec.js
+#
+# and every one of those greens was empty. A `*.pg.spec` skips itself when COORDINATOR_PG_URL is
+# unset; the acceptance environment does not set it. The inbox spec's green was `pass 0 /
+# skipped 3` — the command proved the test tree compiles and the file loads, and nothing about a
+# single assertion inside it. So an acceptance command that names this script instead gets the two
+# things that one was missing: a PostgreSQL to run against, and the refusal below.
+#
+# A SKIP IS RED
+# =============
+# `node --test` exits 0 on a file whose every case skipped, which is exactly how the hole stayed
+# open. This script exits non-zero when the TAP summary reports ANY skip, any failure, tests=0, or
+# a summary it cannot vouch for. Wrapping the old command without that would be worse than the old
+# command: the same empty green, with the `# skipped 3` no longer in front of whoever reads it.
+#
+# `RUN_PG_SPEC_CONTROL=omit-url` is the control that holds this to it: everything below happens
+# exactly as it normally does, except COORDINATOR_PG_URL is not handed to the child — the
+# acceptance environment's own condition. Every case reports `# SKIP`, `node --test` exits 0, and
+# this script must still exit non-zero. The day it goes green under that knob, every green it has
+# ever printed is worth nothing.
+#
+# WHAT IT SETS UP, AND WHY EACH PIECE IS THERE
+# ============================================
+#   * The worktree overlays. A git worktree has no node_modules of its own, and `npm install`
+#     inside one tears the symlinks back down, so the main checkout's are borrowed. `@orbit/shared`
+#     is linked TWICE — once under `src/` for the compiler and once under `build/` for the child
+#     process — because with only the first one the child resolves the main checkout's older
+#     `dist/` and reports missing fields on types like RunnerHeartbeatResponse. That red is the
+#     harness, not the product.
+#   * `rm -rf build` before compiling. `tsc` does not delete outputs whose sources are gone, so a
+#     tree left by an earlier branch runs deleted specs and imports deleted modules.
+#   * PGDATA on tmpfs. A throwaway PostgreSQL's data volume is what fills the root disk; on tmpfs
+#     there is nothing to leak, and the `docker rm -f -v` below takes the rest. `-v` is not
+#     optional. The trap fires on the failure paths too — a script that goes red still cleans up.
+#     The trade is that this cluster does not survive `docker restart`, so
+#     COORDINATOR_PG_RESTART_COMMAND is deliberately NOT supplied: a spec that needs a real server
+#     restart will skip, and a skip here is red, which is the honest answer rather than a restart
+#     that silently returns an empty data directory.
+#   * A template database migrated once, cloned per spec. Specs that own schema would otherwise
+#     hand the next one a database they left rearranged.
+#   * Readiness over TCP, from inside the container. The entrypoint runs an init server that
+#     listens on the unix socket only, so `psql` without `-h` answers while the real server is
+#     still down; and the host-side port answers before either, because docker's proxy binds it
+#     at once. Neither is the server the spec will talk to.
+#
+# Only the container named below is ever touched. Other sessions on this host have their own
+# throwaway PostgreSQLs and their own volumes, and none of them are this script's to reap.
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+API="$REPO/src/apiserver"
+# The reporter the child is pinned to, and the parser that decides whether its summary can be
+# believed at all. Both are shared with scripts/project-pg-matrix.sh and covered by
+# scripts/pg-matrix-summary-selftest.sh.
+# shellcheck source=scripts/pg-matrix-summary.lib.sh
+. "$REPO/scripts/pg-matrix-summary.lib.sh" || exit 1
+
+IMAGE="${RUN_PG_SPEC_IMAGE:-postgres:16-alpine}"
+CONTAINER="pccspec-pg-$$-$RANDOM"   # never a fixed name: sibling sessions run their own
+ADMIN=pccspec_          # the pcc_* naming the specs' own isolation guard demands of role and database
+PASSWORD=pccspec_pw
+TEMPLATE=pccspec_tpl
+SPEC_TIMEOUT="${RUN_PG_SPEC_TIMEOUT:-600}"
+NODE="${NODE:-node}"
+# TypeScript 7 and Prisma 7 are installed per workspace; the repo root still hoists the 5.9.3 that
+# @nestjs/cli pins, so prefer the apiserver's copy of each.
+TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
+PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
+
+die() { echo "run-pg-spec: $*" >&2; exit 2; }
+[ "$#" -ge 1 ] || die "usage: $(basename "$0") <path/to/x.pg.spec.ts> [more...]"
+
+# Accept a path relative to the caller's directory or to the repo root; the acceptance harness
+# uses the latter.
+SPECS=()
+for arg in "$@"; do
+  if   [ -f "$arg" ];        then SPECS+=("$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")")
+  elif [ -f "$REPO/$arg" ];  then SPECS+=("$REPO/$arg")
+  else die "no such spec: $arg"; fi
+done
+for spec in "${SPECS[@]}"; do
+  case "$spec" in
+    "$API/src/"*.pg.spec.ts) ;;
+    *) die "not an apiserver pg spec: $spec" ;;
+  esac
+done
+
+# --- the worktree overlays ----------------------------------------------------------------------
+# Refresh a symlink, create a missing one, never touch a real directory: in the main checkout every
+# one of these already exists and this whole block is a no-op.
+link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
+MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
+[ -d "$MAIN/node_modules" ] || MAIN="$REPO"
+echo "==> overlaying node_modules from $MAIN"
+link "$MAIN/node_modules"                "$REPO/node_modules"
+link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
+link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+[ -x "$TSC" ] || die "no tsc under $MAIN — run npm install in the main checkout first"
+
+echo "==> building @orbit/shared"
+"$TSC" -p "$REPO/src/shared/tsconfig.json" || die "src/shared failed to compile"
+mkdir -p "$REPO/src/node_modules/@orbit"
+link "$REPO/src/shared" "$REPO/src/node_modules/@orbit/shared"          # compile time
+
+echo "==> building the test tree (rm -rf build first)"
+rm -rf "$API/build"
+( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+mkdir -p "$API/build/node_modules/@orbit"
+link "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"          # run time
+
+# --- the throwaway server -----------------------------------------------------------------------
+cleanup() { echo "==> removing $CONTAINER"; docker rm -f -v "$CONTAINER" >/dev/null 2>&1 || true; }
+trap cleanup EXIT INT TERM
+
+echo "==> provisioning $CONTAINER ($IMAGE, PGDATA on tmpfs)"
+docker run -d --name "$CONTAINER" \
+  -e "POSTGRES_USER=$ADMIN" -e "POSTGRES_PASSWORD=$PASSWORD" -e POSTGRES_DB=postgres \
+  -e PGDATA=/pgdata --tmpfs /pgdata:size=2g \
+  -p 127.0.0.1::5432 "$IMAGE" >/dev/null || die "docker run failed"
+PORT="$(docker port "$CONTAINER" 5432/tcp | head -1 | sed 's/.*://')"
+[ -n "$PORT" ] || die "docker did not publish a host port"
+
+psql_db() {
+  docker exec -e "PGPASSWORD=$PASSWORD" "$CONTAINER" \
+    psql -h 127.0.0.1 -p 5432 -U "$ADMIN" -d "$1" -v ON_ERROR_STOP=1 -tAc "$2"
+}
+psql_admin()    { psql_db postgres "$1"; }
+psql_template() { psql_db "$TEMPLATE" "$1"; }
+for _ in $(seq 1 120); do psql_admin 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+psql_admin 'SELECT 1' >/dev/null || die "$CONTAINER never accepted a TCP connection"
+
+SYSTEM_ID="$(psql_admin 'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+VERSION="$(psql_admin 'SHOW server_version' | tr -d '[:space:]')"
+echo "==> PostgreSQL $VERSION on 127.0.0.1:$PORT, system_identifier=$SYSTEM_ID"
+
+psql_admin "CREATE DATABASE $TEMPLATE" >/dev/null || die "could not create the template database"
+echo "==> prisma migrate deploy (template $TEMPLATE)"
+( cd "$API" && DATABASE_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$TEMPLATE" \
+    "$PRISMA" migrate deploy >/dev/null ) || die "prisma migrate deploy failed"
+echo "==> $(psql_template 'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL') migrations applied"
+
+# --- run them -----------------------------------------------------------------------------------
+CONTROL="${RUN_PG_SPEC_CONTROL:-}"
+[ "$CONTROL" = "omit-url" ] &&
+  echo "==> CONTROL omit-url: COORDINATOR_PG_URL withheld; every case should SKIP and this run should be RED"
+
+n=0; RED=()
+for spec in "${SPECS[@]}"; do
+  n=$((n+1))
+  rel="${spec#"$API/src/"}"; js="build/${rel%.ts}.js"; base="$(basename "$spec")"
+  [ -f "$API/$js" ] || die "$base compiled to no $js"
+  DB="pccspec_$n"
+  psql_admin "CREATE DATABASE $DB TEMPLATE $TEMPLATE" >/dev/null || die "could not clone $TEMPLATE into $DB"
+
+  child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
+         COORDINATOR_PG_EXPECTED_USER="$ADMIN"
+         COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
+         NODE_OPTIONS="$(pg_matrix_child_node_options)")
+  [ "$CONTROL" = "omit-url" ] ||
+    child+=(COORDINATOR_PG_URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB")
+
+  echo "########## $base ##########"
+  out="$(cd "$API" && env "${child[@]}" \
+    timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$js" 2>&1)"
+  rc=$?
+  printf '%s\n' "$out"
+  echo "SPEC_EXIT=$rc"
+
+  IFS=$'\t' read -r t p f s unreadable < <(printf '%s\n' "$out" | pg_matrix_summary)
+  why=""
+  if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then why="TIMEOUT/KILLED rc=$rc (hang or leaked handle)"
+  elif [ "$rc" != "0" ];                      then why="node exited rc=$rc"; fi
+  [ -n "$unreadable" ] && why="${why:+$why; }$unreadable"
+  [ "$f" -gt 0 ]       && why="${why:+$why; }$f failing"
+  # The one this script exists for.
+  [ "$s" -gt 0 ]       && why="${why:+$why; }$s SKIPPED — those assertions were not witnessed"
+  [ -n "$why" ] && RED+=("$base: $why")
+  printf '==== %s tests=%s pass=%s fail=%s skipped=%s %s\n' "$base" "$t" "$p" "$f" "$s" "$why"
+  psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null 2>&1
+done
+
+for r in ${RED[@]+"${RED[@]}"}; do echo "RED: $r"; done
+[ "${#RED[@]}" -gt 0 ] && exit 1
+echo "==> OK: $n spec(s) witnessed against PostgreSQL $VERSION, no skips"
+exit 0
