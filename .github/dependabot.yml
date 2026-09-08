@@ -36,6 +36,17 @@ updates:
       #   `@nestjs/common@^12` as a peer, so not one of them can land alone.
       #
       # No `update-types` on these two: for nestjs the major IS the case that needs it.
+      #
+      # One more thing the first attempt at this walked into, worth writing down: a
+      # group is skipped when a group processed BEFORE it already claimed its packages
+      # — `Skipping @prisma/client in group prisma as it has already been handled by a
+      # previous group`. The catch-alls are handled first, and "handled" counts the
+      # membership of the PR that is already open, not the membership the current
+      # config would give it. So on the run right after these exclusions were added,
+      # the still-open pre-exclusion npm-production/npm-development PRs held the prisma
+      # packages and the prisma group came out empty. It only forms on the NEXT full
+      # run, once those PRs have been replaced by ones that no longer name them.
+      # Changing group membership therefore costs two update runs, not one.
       prisma:
         patterns:
           - "prisma"
