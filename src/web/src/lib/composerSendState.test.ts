@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api';
 import {
   composerDraftAfterSend,
+  isCurrentWorkUnavailable,
   logicalSendToken,
   resolveConflictLogicalSendToken,
 } from './composerSendState';
@@ -14,6 +16,33 @@ describe('composer draft after CURRENT_WORK routing', () => {
 
   it('preserves the draft after an explicit 409 rejection', () => {
     expect(composerDraftAfterSend('adjust this', false)).toBe('adjust this');
+  });
+});
+
+describe('the refusal the composer re-files instead of reporting', () => {
+  it('re-files a CURRENT_WORK refusal, whatever the server\'s reason for it', () => {
+    for (const reason of ['NO_CURRENT_WORK', 'TARGET_LEASE_EXPIRED', 'STEER_UNSUPPORTED']) {
+      const refusal = new ApiError('no live turn', 409, 'CURRENT_WORK_UNAVAILABLE', {
+        code: 'CURRENT_WORK_UNAVAILABLE',
+        reason,
+      });
+      expect(isCurrentWorkUnavailable(refusal)).toBe(true);
+    }
+  });
+
+  it('leaves every other 409 to be reported, since the status alone decides nothing', () => {
+    expect(isCurrentWorkUnavailable(new ApiError('settled', 409, 'PROJECT_SETTLED'))).toBe(false);
+    expect(isCurrentWorkUnavailable(new ApiError('conflict', 409))).toBe(false);
+  });
+
+  it('never re-files a failure that cannot prove nothing was placed', () => {
+    // The whole safety of sending it again rests on the refusal being the server's own answer,
+    // which only ever follows a rolled-back transaction. A transport failure carries no such
+    // claim: the turn may be committed and merely unacknowledged, and re-sending it there is how
+    // one message is delivered twice.
+    expect(isCurrentWorkUnavailable(new TypeError('Failed to fetch'))).toBe(false);
+    expect(isCurrentWorkUnavailable(new ApiError('gateway timeout', 504))).toBe(false);
+    expect(isCurrentWorkUnavailable({ status: 409, code: 'CURRENT_WORK_UNAVAILABLE' })).toBe(false);
   });
 });
 

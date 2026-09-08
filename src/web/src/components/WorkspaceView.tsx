@@ -217,6 +217,7 @@ import { turnPlacementOf } from '../lib/turnPlacement';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
 import {
   composerDraftAfterSend,
+  isCurrentWorkUnavailable,
   logicalSendToken,
   resolveConflictLogicalSendToken,
   type LogicalSendToken,
@@ -3471,9 +3472,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // session that's already back in Open.
       qc.invalidateQueries({ queryKey: ['session', id] });
     },
-    onError: (e: Error) => {
-      // In particular, a CURRENT_WORK 409 means nothing was placed. Keep the exact draft so the
-      // person can retry or explicitly choose NEXT_TURN.
+    onError: (e: Error, vars) => {
+      // A CURRENT_WORK refusal placed nothing and needs no decision: the message becomes the
+      // ordinary next turn it would have been had it been typed a moment later. This is the
+      // synchronous half of a fallback the delivery path already performs on its own — a steer
+      // the runner can prove never reached the engine is re-filed as a NEXT_TURN message on the
+      // same row — so the two ways of missing the turn now read the same to whoever sent one.
+      //
+      // Terminates: the retry carries NEXT_TURN, which the server never answers with this code.
+      if (isCurrentWorkUnavailable(e) && vars.intent === 'CURRENT_WORK') {
+        send.mutate({ ...vars, intent: 'NEXT_TURN' });
+        return;
+      }
       setText((draft) => composerDraftAfterSend(draft, false));
       message.error(e.message);
     },
@@ -6206,50 +6216,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             </Tooltip>
           ) : (
-            <span className="composer-send-actions">
-              <Tooltip
-                title={
-                  sameSessionSendBlocked
-                    ? sameSessionSendBlockedCopy
-                    : defaultSendIntent === 'CURRENT_WORK'
-                      ? 'Add to current work'
-                      : 'Send as next turn'
-                }
-              >
-                <Button
-                  className={defaultSendIntent === 'CURRENT_WORK' ? 'composer-send-current' : undefined}
-                  type="primary"
-                  icon={<ArrowUpOutlined />}
-                  disabled={!canSend}
-                  loading={send.isPending}
-                  onClick={() => onSend()}
-                  aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
-                />
-              </Tooltip>
-              {defaultSendIntent === 'CURRENT_WORK' && (
-                <Dropdown
-                  trigger={['click']}
-                  placement="topRight"
-                  menu={{
-                    items: [
-                      {
-                        key: 'next-turn',
-                        label: 'Queue for next turn',
-                        onClick: () => onSend('NEXT_TURN'),
-                      },
-                    ],
-                  }}
-                >
-                  <Button
-                    className="composer-send-next-menu"
-                    type="primary"
-                    icon={<DownOutlined />}
-                    disabled={!canSend || send.isPending}
-                    aria-label="Choose send placement"
-                  />
-                </Dropdown>
-              )}
-            </span>
+            <Tooltip
+              title={
+                sameSessionSendBlocked
+                  ? sameSessionSendBlockedCopy
+                  : defaultSendIntent === 'CURRENT_WORK'
+                    ? 'Add to current work'
+                    : 'Send as next turn'
+              }
+            >
+              <Button
+                type="primary"
+                icon={<ArrowUpOutlined />}
+                disabled={!canSend}
+                loading={send.isPending}
+                onClick={() => onSend()}
+                aria-label={defaultSendIntent === 'CURRENT_WORK' ? 'Add to current work' : 'Send'}
+              />
+            </Tooltip>
           )}
         </div>
         <div className="composer-pills">
