@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -27,17 +29,51 @@ import {
  * 都是 —— 每条语句都带 `IF NOT EXISTS` / `duplicate_object` 守卫 / `CREATE OR REPLACE`。最后一段断言
  * 的正是后一半：重跑既不改 schema，也不碰数据，更不把一条绑定的 `configRevision` 推高。
  *
- * 设计上具有破坏性：它 DROP 0231 的对象再重建，所以需要一个属于自己的数据库。
- * `scripts/project-pg-matrix.sh` 给每个 pg spec 一个。
+ * 在哪个数据库上重放（2026-09-08 改）
+ * ==================================
+ * 本文件原来的做法是：拿 harness 给的**前沿库**（每条迁移都应用过），先按名字把 0231 建的东西一件件
+ * DROP 掉，再把 `migration.sql` 重放上去。那次拆卸从 2026-09-07 起恒红：
+ *
+ *     cannot drop index project_id_owner_id_key because other objects depend on it   (2BP01)
+ *
+ * 0245 给 `project_standard_set_confirmation` 加了 `FOREIGN KEY ("project_id", "owner_id")
+ * REFERENCES "project"("id", "owner_id")`，而这条复合外键唯一能挂的目标，就是 0231 建的那个
+ * `project_id_owner_id_key`。红的是拆卸，不是被测的性质：0231 依然原子、依然幂等。
+ *
+ * 三条路，选第三条：
+ *
+ *   (A) 拆卸时先按名 DROP 掉 0245 那条外键，重放完再建回来。要写死 0245 的定义，于是**下一条**指向
+ *       这批对象的迁移会让同一处再烂一次 —— 而这正是刚发生过的事。
+ *   (B) `DROP INDEX … CASCADE`，再断言那条外键回来了。CASCADE 删掉的是**别人的**约束，重放 0231 不会
+ *       把它带回来（0231 从来没建过它），所以要么这条断言恒红，要么本文件得替 0245 重建它 —— 也就是
+ *       退回 (A)，还多附赠一个"悄悄拆掉别人东西"的动作。
+ *   (C) 不拆卸：另起一个**只应用到 0231 之前**的库，在那上面重放。
+ *
+ * 选 (C)。理由不是它更省事（它更贵：要多建一个库、多跑一遍前缀迁移），而是它换掉的是**性质本身**：
+ * "0231 应用到它当年面对的那个数据库上"是一个不随后来的迁移改变的命题，而"前沿库拆掉 0231 再装回去"
+ * 是一个每加一条迁移就要重新验算一次的命题。(A)/(B) 只修这一次的 2BP01，(C) 让这一族红不再发生。
+ *
+ * 顺带掉了两个坑：
+ *   * 拆卸里那份 `project_blocker_kind_chk` 的取值表是第三份冻结副本（另两份在 `migration.sql` 和
+ *     `down.sql` 里）。以后哪条迁移新加一个 kind，这份副本会**静默**把它从库里抹掉 —— 不是红，是错。
+ *   * harness 交给本用例的那个库不再被拆开。最后一条断言就是这句话的可执行形态：跑完之后它的约束和
+ *     索引与跑之前逐字相同。
+ *
+ * 仍然需要一个属于自己的数据库：本用例会在旁边建库、删库。`scripts/project-pg-matrix.sh` 与
+ * `scripts/run-pg-spec.sh` 都给每个 pg spec 一个。
  */
 
-const URL = process.env.COORDINATOR_PG_URL;
-const skip = !URL;
+const PG_URL = process.env.COORDINATOR_PG_URL;
+const skip = !PG_URL;
 
-const MIGRATION = readFileSync(
-  path.join(__dirname, '../../prisma/migrations/0231_project_codebase_session_source/migration.sql'),
-  'utf8',
-);
+const API = path.resolve(__dirname, '../..');
+const MIGRATIONS = path.join(API, 'prisma', 'migrations');
+const PRISMA = path.join(API, 'node_modules', 'prisma', 'build', 'index.js');
+
+/** 被测的那一条。前沿在它**之前**停下，所以重放开始时这个库从没听说过它。 */
+const UNIT = '0231_project_codebase_session_source';
+
+const MIGRATION = readFileSync(path.join(MIGRATIONS, UNIT, 'migration.sql'), 'utf8');
 
 /** 0231 建的每一样东西，按"它在不在"这个问题分类。 */
 const OBJECTS = {
@@ -84,47 +120,135 @@ async function present(client: Client) {
   };
 }
 
-/** 回到一个从没见过 0231 的数据库 —— 失败用例必须从那里开始度量。 */
-async function drop0231(client: Client) {
-  await client.query(`DROP TRIGGER IF EXISTS "session_source_freeze_guard" ON "session"`);
-  await client.query(`DROP TRIGGER IF EXISTS "project_codebase_config_guard" ON "project_codebase"`);
-  await client.query(`DROP TABLE IF EXISTS "project_codebase"`);
-  for (const fn of OBJECTS.functions) await client.query(`DROP FUNCTION IF EXISTS "${fn}"() CASCADE`);
-  for (const c of OBJECTS.sessionColumns) await client.query(`ALTER TABLE "session" DROP COLUMN IF EXISTS "${c}"`);
-  for (const c of OBJECTS.taskColumns) await client.query(`ALTER TABLE "task" DROP COLUMN IF EXISTS "${c}"`);
-  for (const i of OBJECTS.indexes) await client.query(`DROP INDEX IF EXISTS "${i}"`);
-  await client.query(`ALTER TABLE "project_blocker" DROP CONSTRAINT IF EXISTS "project_blocker_kind_chk"`);
-  await client.query(`ALTER TABLE "project_blocker" ADD CONSTRAINT "project_blocker_kind_chk"
-    CHECK ("kind" IN (
-      'WHO_UNRESOLVED', 'WHO_NOT_IN_TEAM', 'WHO_DISABLED', 'PROVIDER_UNAVAILABLE',
-      'RUNTIME_REQUIREMENT_UNMET', 'NO_PROJECT_WORKSPACE', 'NO_MATCHING_RUNNER',
-      'MERGE_CONFLICT', 'TEST_FAILED', 'VERIFICATION_FAILED', 'BUDGET_EXHAUSTED',
-      'AWAITING_USER_APPROVAL', 'AWAITING_USER_INPUT', 'POLICY_MANUAL_HOLD',
-      'DEPENDENCY_CYCLE', 'COORDINATOR_UNAVAILABLE', 'COORDINATOR_NO_PROGRESS',
-      'AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED',
-      'VERIFICATION_CANNOT_CONCLUDE', 'ENVIRONMENT_BROKEN', 'HUMAN_DECISION_REQUIRED',
-      'VERDICT_APPLY_EXHAUSTED', 'COMPLETION_ACK_STALE', 'UNKNOWN_FAILURE'))`);
-}
-
 const NOTHING = {
   tables: [], triggers: [], functions: [], sessionColumns: [], taskColumns: [], indexes: [],
   sourceUnresolved: false,
 };
 
-test('0231 在有数据的库上原子地应用，失败什么也不留', { skip, timeout: 180_000 }, async (t) => {
-  assertCoordinatorPgUrlIsIsolated(URL!);
-  const client = new Client({ connectionString: URL!, connectionTimeoutMillis: 5_000 });
+/** 0231 之前的那段历史，按目录名排序取。名字变了就说出来，别悄悄少跑一半。 */
+function baselineMigrations(): string[] {
+  const all = readdirSync(MIGRATIONS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  assert.ok(all.includes(UNIT), `${UNIT} 不再是一个迁移目录`);
+  const baseline = all.filter((name) => name < UNIT);
+  assert.ok(baseline.length > 0, '0231 之前一条迁移都没有 —— 那不是这份历史');
+  return baseline;
+}
+
+function prisma(args: string[], env: NodeJS.ProcessEnv): void {
+  try {
+    execFileSync(process.execPath, [PRISMA, ...args], {
+      cwd: API,
+      timeout: 240_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, CHECKPOINT_DISABLE: '1', PRISMA_HIDE_UPDATE_MESSAGE: 'true', ...env },
+    });
+  } catch (error) {
+    const failure = error as { stdout?: Buffer; stderr?: Buffer };
+    assert.fail(`prisma ${args.join(' ')} failed:\n` +
+      `${failure.stdout?.toString() ?? ''}\n${failure.stderr?.toString() ?? ''}`);
+  }
+}
+
+async function connect(connectionString: string): Promise<Client> {
+  const client = new Client({ connectionString, connectionTimeoutMillis: 10_000 });
   await client.connect();
-  await verifyCoordinatorPgIdentity(client);
+  return client;
+}
+
+/**
+ * 用例库旁边的另一个库，名字从用例库派生 —— harness 为前者证明过的 pcc* 隔离因此也覆盖后者。
+ * 空建（`template0`）而不是从模板克隆：整件事的前提就是"从 0231 之前开始"。
+ */
+async function replayDatabase(): Promise<{ url: string; drop: () => Promise<void> }> {
+  assertCoordinatorPgUrlIsIsolated(PG_URL);
+  const url = new URL(PG_URL);
+  const name = `${decodeURIComponent(url.pathname.replace(/^\//, ''))}_0231`;
+  assert.ok(name.length <= 63, `重放库名 ${name} 超过 PostgreSQL 的标识符上限`);
+  assert.match(name, /^pcc[0-9a-z]*[_-]/, '重放库必须继承用例库的 pcc* 前缀');
+
+  const maintenance = new URL(PG_URL);
+  maintenance.pathname = '/postgres';
+  const admin = await connect(maintenance.href);
+  const drop = async (): Promise<void> => {
+    await admin.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+        WHERE datname = $1 AND pid <> pg_backend_pid()`, [name]);
+    await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
+  };
+  await drop();
+  await admin.query(`CREATE DATABASE "${name}" TEMPLATE template0`);
+
+  const replay = new URL(PG_URL);
+  replay.pathname = `/${name}`;
+  return {
+    url: replay.href,
+    drop: async () => { await drop(); await admin.end(); },
+  };
+}
+
+/** 迁移目录在 0231 之前那一刻的样子，用仓库里发出去的那些文件拼出来。 */
+function baselineTree(baseline: string[]): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'project-codebase-0231-'));
+  cpSync(path.join(API, 'prisma', 'schema.prisma'), path.join(dir, 'schema.prisma'));
+  mkdirSync(path.join(dir, 'migrations'));
+  cpSync(path.join(MIGRATIONS, 'migration_lock.toml'), path.join(dir, 'migrations', 'migration_lock.toml'));
+  for (const name of baseline) {
+    cpSync(path.join(MIGRATIONS, name), path.join(dir, 'migrations', name), { recursive: true });
+  }
+  return dir;
+}
+
+/** 一个库的约束与索引全集，用来说"这个库没被动过"。 */
+async function shape(client: Client) {
+  const q = async (sql: string) => (await client.query<{ n: string }>(sql)).rows.map((r) => r.n);
+  return {
+    constraints: await q(
+      `SELECT c.conname AS n FROM pg_constraint c JOIN pg_namespace ns ON ns.oid = c.connamespace
+        WHERE ns.nspname = 'public' ORDER BY 1`),
+    indexes: await q(`SELECT indexname AS n FROM pg_indexes WHERE schemaname = 'public' ORDER BY 1`),
+  };
+}
+
+test('0231 在有数据的库上原子地应用，失败什么也不留', { skip, timeout: 300_000 }, async (t) => {
+  assertCoordinatorPgUrlIsIsolated(PG_URL);
+  const caseClient = await connect(PG_URL);
+  // 钩子在第一个连接之后**立刻**注册，而不是等夹具搭完：中间任何一步抛出，这个连接都会留在事件循环
+  // 里，`node --test` 于是不退出 —— harness 把那种情况报成 TIMEOUT 而不是一条读得懂的红。
+  // 钩子内部的顺序也要紧：删库会掐掉它上面的每一个 backend，还握着连接的客户端会在断言早就跑完之后
+  // 把这次断连报成一个没人接的错误。
+  let replayClient: Client | null = null;
+  let replay: { drop: () => Promise<void> } | null = null;
+  let tree: string | null = null;
   t.after(async () => {
-    await client.query(`DELETE FROM "session" WHERE "id"::text LIKE $1`, [`${FIX}%`]).catch(() => undefined);
-    await client.query(`DELETE FROM "task" WHERE "id"::text LIKE $1`, [`${FIX}%`]).catch(() => undefined);
-    await client.query(`DELETE FROM "project" WHERE "id"::text LIKE $1`, [`${FIX}%`]).catch(() => undefined);
-    await client.query(`DELETE FROM "user" WHERE "id"::text LIKE $1`, [`${FIX}%`]).catch(() => undefined);
-    await client.end().catch(() => undefined);
+    await replayClient?.end().catch(() => undefined);
+    await replay?.drop().catch(() => undefined);
+    await caseClient.end().catch(() => undefined);
+    if (tree) rmSync(tree, { recursive: true, force: true });
   });
 
-  await drop0231(client);
+  await verifyCoordinatorPgIdentity(caseClient);
+  const caseShapeBefore = await shape(caseClient);
+
+  const baseline = baselineMigrations();
+  const database = await replayDatabase();
+  replay = database;
+  tree = baselineTree(baseline);
+
+  prisma(['migrate', 'deploy', '--config', path.join(API, 'prisma.frontier.config.ts')], {
+    DATABASE_URL: database.url,
+    ORBIT_FRONTIER_PRISMA_SCHEMA: path.join(tree, 'schema.prisma'),
+    ORBIT_FRONTIER_PRISMA_MIGRATIONS: path.join(tree, 'migrations'),
+  });
+
+  const client = await connect(database.url);
+  replayClient = client;
+  const applied = (await client.query<{ name: string }>(
+    `SELECT "migration_name" AS name FROM "_prisma_migrations"
+      WHERE "finished_at" IS NOT NULL ORDER BY "migration_name"`)).rows.map((row) => row.name);
+  assert.deepEqual(applied, baseline, '前沿没有停在它被要求停下的地方');
   assert.deepEqual(await present(client), NOTHING, '夹具从一个没有 0231 的数据库开始');
 
   // 存量数据。迁移**之后**这些行必须一行未改，且全部读作 Legacy —— 这是 SR45 在真实历史数据上的
@@ -199,5 +323,10 @@ test('0231 在有数据的库上原子地应用，失败什么也不留', { skip
   const revision = await client.query<{ v: string }>(
     `SELECT "config_revision"::text AS v FROM "project_codebase" WHERE "id" = $1`, [id('40')]);
   assert.equal(revision.rows[0].v, '0', '重跑迁移把一条绑定的 configRevision 推高了');
-  await client.query(`DELETE FROM "project_codebase" WHERE "id" = $1`, [id('40')]);
+
+  // 而 harness 交给本用例的那个前沿库，从头到尾一件东西也没被拆走 —— 包括后来的迁移挂在 0231 那些
+  // 索引上的外键。这条断言是上面"不拆卸"那个决定的可执行形态：它不点名任何一条迁移，所以哪条迁移
+  // 加了或撤了依赖都不会让它变红。
+  assert.deepEqual(await shape(caseClient), caseShapeBefore,
+    '本用例拆掉了 harness 交给它的那个库里的东西');
 });
