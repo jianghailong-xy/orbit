@@ -120,6 +120,35 @@ const CRITERION_READY_SPEC = 'src/apiserver/src/tasks/task-criterion-ready-deliv
  */
 const SERVICE = 'src/apiserver/src/projects/projects.service.ts';
 const SERVICE_SPEC = 'src/apiserver/src/projects/project-get-criterion-satisfaction.pg.spec.ts';
+/**
+ * The second reader that is not a test, and the one that made half the sentence below stop being
+ * true.
+ *
+ * WHAT IT DOES WITH THE ANSWER. `readDerivedProjectDone` folds `satisfied` into a conjunction —
+ * every stated criterion satisfied AND `landing === 'LANDED'`, plus one confirmation naming the
+ * version of the criteria that stands today — and `storeDerivedProjectStatus` writes what that
+ * conjunction projects into `project.status`, in both directions between OPEN and DONE, on the two
+ * edges that have no requester (after the owner's confirmation, and the post-commit edge of a task
+ * write). So this answer does now reach a status write, which is the half of the assertion below
+ * that had to be rewritten rather than kept and made to pass.
+ *
+ * WHY IT IS STILL NOT A GATE, AND WHY THAT IS CHECKED RATHER THAN SAID. A gate refuses somebody's
+ * write; this refuses nobody. Everything that could set `status` before can still set it, and the
+ * one rule that turns any of them away is `refuseProjectStatusWrite`, which is about who is asking
+ * and predates it. That distinction is the whole load-bearing claim of the file, so the case below
+ * reads it out of the projection's source: a refusal added there later would leave every sentence
+ * here intact while making them false.
+ *
+ * WHOSE DECISION THAT WAS. 0229 removed the DONE gate on the owner's decision of 2026-09-03, and
+ * `MODULE`'s own header forbids reinstating an equivalent protection under another name; a design
+ * review then barred the deriver outright. None of that was overruled by whoever wrote 36e62c76:
+ * that review barred it ON ITS OWN AUTHORITY and named re-deliberation with the owner as the way
+ * through, and on 2026-09-08 the owner was asked with 0229's sentence quoted back and answered
+ * that it should be built (`docs/project-done-gate.md`, `docs/human-only-authority.md` §"What is
+ * true today about project DONE"). A census entry is not where that is settled — it is where a
+ * reader of this derivation can find that it was.
+ */
+const DONE_PROJECTION = 'src/apiserver/src/projects/project-done-derived.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -533,16 +562,27 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.deepEqual(
       mentions,
       [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
-        SERVICE, SERVICE_SPEC].sort(),
+        SERVICE, SERVICE_SPEC, DONE_PROJECTION].sort(),
       'the readers of the derivation are exactly these, each named above with what it does with '
-        + 'the answer: four tests of it, one read endpoint that serves it, and that endpoint’s '
-        + 'own test. Not one of them is a gate — nothing turns the answer into a status write, '
-        + 'and a file arriving here is a consumer somebody has to come and write down');
+        + 'the answer: four tests of it, one read endpoint that serves it, that endpoint’s own '
+        + 'test, and — since the owner’s 2026-09-08 re-deliberation of 0229 — one projection that '
+        + 'folds it into `project.status`. Not one of them is a gate: none refuses anybody’s '
+        + 'write, and a file arriving here is a consumer somebody has to come and write down');
 
     const source = readFileSync(path.join(REPO_ROOT, MODULE), 'utf8');
     assert.doesNotMatch(
       source, /\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/u,
       'the derivation writes nothing');
     assert.doesNotMatch(source, /\$execute/u, 'and it has no raw escape hatch either');
+
+    // The one member that does turn the answer into a status write, held to the difference the
+    // sentence above now rests on. Comments are stripped first: this projection argues about gates
+    // at length in its own header, and a case that read the argument instead of the code would go
+    // red for a paragraph and green for a refusal.
+    const projection = readFileSync(path.join(REPO_ROOT, DONE_PROJECTION), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '');
+    assert.doesNotMatch(projection, /\bthrow\b/u,
+      'the projection refuses nobody: it recomputes the column from committed rows and stores the '
+        + 'answer, so there is no write for it to turn away');
   });
 });

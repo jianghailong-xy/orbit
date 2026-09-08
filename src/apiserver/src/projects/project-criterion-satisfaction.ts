@@ -28,11 +28,16 @@ import {
  *
  * A READ, AND NOTHING ELSE
  * ------------------------
- * Nothing here gates a write, and in particular nothing here is consulted by `project.status =
- * 'DONE'`. 0229 said "The DONE gate is not replaced. The owner was offered a narrower guard and
+ * Nothing here gates a write. Since 2026-09-08 this answer IS consulted by `project.status =
+ * 'DONE'` — `project-done-derived.ts` folds it into a projection of that column — and the sentence
+ * that used to stand here said it was not. That is a change of fact and not a loosening of the
+ * rule below. 0229 said "The DONE gate is not replaced. The owner was offered a narrower guard and
  * chose the other option", and 0223 said the protection it removed was removed, not relocated, so
  * "nothing should be added later that quietly reinstates an equivalent protection under another
- * name". Whether an unsatisfied criterion should block anything is the owner's decision and is not
+ * name". Neither was routed around: the owner was asked again on 2026-09-08 with 0229's own
+ * sentence quoted back to them and answered that the projection should be built, and a projection
+ * refuses nobody — everything that could set `status` before can still set it. Whether an
+ * unsatisfied criterion should BLOCK anything is still the owner's decision and is still not
  * smuggled in here. What this buys instead is visibility: a coordinator or an owner can see WHICH
  * clause is missing and WHICH task is holding it up, which is why every unmet clause carries the
  * work that holds it rather than only a boolean.
