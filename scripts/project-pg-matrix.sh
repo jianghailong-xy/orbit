@@ -36,6 +36,18 @@
 # script reads went to zero without anything going red. Nothing about that is the caller's to
 # choose, so the child's `--test*` NODE_OPTIONS are dropped and argv says `--test-reporter=tap`.
 #
+# In a git worktree there is no node_modules at all — only the tracked files are there — so `$TSC`
+# and `$PRISMA` named paths that did not exist and this script died before it provisioned anything.
+# The main checkout's are borrowed below, one link per package for the apiserver so that the two
+# entries which cannot be shared are real: `@prisma/client` is copied (node, tsc and prisma all
+# resolve a linked package by its realpath and would read the main checkout's client straight back)
+# and `.prisma/client` is generated from THIS branch's schema, which is what `tsc -p
+# tsconfig.test.json` below is compiled against — borrowing the main checkout's leaves a branch that
+# adds a model failing with `Property 'x' does not exist on type 'PrismaService'`, a red that is the
+# harness rather than the product. In the main checkout the whole block is skipped: generating there
+# rewrites the client every concurrent session is compiling against. Same overlay, and for the same
+# reasons, as the one in `scripts/run-pg-spec.sh`.
+#
 # A spec FAILS if node exits non-zero for any reason — a failing assertion, a crash, a timeout, or a
 # process that will not exit because something left a handle open. The timeout is a backstop and
 # never a pass; the script exits non-zero if anything was red.
@@ -53,15 +65,64 @@ IMAGE="${PCC_PG_IMAGE:-postgres:16-alpine}"
 TMPL="${PCC_PG_TEMPLATE:-pcc_matrix_tmpl}"
 SPEC_TIMEOUT="${PCC_PG_SPEC_TIMEOUT:-600}"
 NODE="${NODE:-node}"
-# TypeScript 7 is installed per workspace: the repo root still hoists the 5.9.3 that
-# @nestjs/cli pins, so take the apiserver copy when it is there.
-TSC="$API/node_modules/.bin/tsc"
-[ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
-# Prisma 7 is installed per workspace too — npm no longer hoists it to the repo root.
-PRISMA="$API/node_modules/.bin/prisma"
-[ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
+die() { echo "project-pg-matrix: $*" >&2; exit 2; }
+
+# --- the worktree overlays ----------------------------------------------------------------------
+# Refresh a symlink, create a missing one, never touch a real directory: in the main checkout every
+# one of these already exists and this whole block is a no-op.
+link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
+MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
+[ -d "$MAIN/node_modules" ] || MAIN="$REPO"
+echo "==> overlaying node_modules from $MAIN"
+link "$MAIN/node_modules"                "$REPO/node_modules"
+link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
+link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+
+# TypeScript 7 is installed per workspace: the repo root still hoists the 5.9.3 that
+# @nestjs/cli pins, so take the apiserver copy when it is there. Prisma 7 is installed per workspace
+# too — npm no longer hoists it to the repo root. Resolved HERE rather than at the top of the file
+# because in a worktree neither binary exists until the links above are made.
+TSC="$API/node_modules/.bin/tsc"
+[ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
+PRISMA="$API/node_modules/.bin/prisma"
+[ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
+[ -x "$TSC" ] || die "no tsc under $MAIN — run npm install in the main checkout first"
+[ -x "$PRISMA" ] || die "no prisma under $MAIN — run npm install in the main checkout first"
+
+# The branch's own Prisma client — see the header for why it cannot be the main checkout's. The
+# whole-directory link above is undone for the apiserver and rebuilt as one symlink per package, so
+# that the two entries which have to be ours can be real directories.
+if [ "$MAIN" != "$REPO" ]; then
+  NM="$API/node_modules"; MAIN_NM="$MAIN/src/apiserver/node_modules"
+  [ -L "$NM" ] && rm -f "$NM"
+  mkdir -p "$NM/@prisma" "$NM/.prisma"
+  for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
+    [ -e "$d" ] || continue
+    case "$(basename "$d")" in @prisma|.prisma) continue ;; esac
+    link "$d" "$NM/$(basename "$d")"
+  done
+  for d in "$MAIN_NM/@prisma"/*; do
+    [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
+  done
+  # A copy, ~75MB, once per worktree: `prisma generate` finds the package by walking up from the
+  # schema's directory, and through a link it would find — and write beside — the main checkout's.
+  # It also has to be in place BEFORE generating, which otherwise fails with `Could not resolve
+  # @prisma/client`.
+  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ]; then
+    echo "==> copying @prisma/client out of $MAIN (this worktree needs its own)"
+    rm -rf "$NM/@prisma/client"
+    cp -r "$MAIN_NM/@prisma/client" "$NM/@prisma/client" || die "could not copy @prisma/client"
+  fi
+  # ~6s, so only when this branch's schema is newer than what was generated from it last time.
+  GENERATED="$NM/.prisma/client/index.d.ts"
+  if [ ! -f "$GENERATED" ] || [ "$API/prisma/schema.prisma" -nt "$GENERATED" ]; then
+    echo "==> generating this branch's Prisma client"
+    ( cd "$API" && "$PRISMA" generate >/dev/null ) || die "prisma generate failed"
+    [ -f "$GENERATED" ] || die "prisma generate wrote no $GENERATED"
+  fi
+fi
 
 cleanup() {
   if [ "$KEEP" = "1" ]; then
