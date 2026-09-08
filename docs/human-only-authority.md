@@ -12,32 +12,15 @@ machine may do it. What bounds it is unchanged — the conclusion names the immu
 version it judged, every stated criterion must be answered in the same call, and the project-level
 verdict is derived from that conjunction rather than supplied.
 
-Project `DONE` is no longer a `HUMAN_ONLY` write in N22. It is an automatic projection of a
-confirmed standard set whose peer criteria are all satisfied; every direct `status=DONE`
-request is refused.
-
-> **Stale, and in two different directions — the `Project DONE` column below predates migration
-> 0229.** That migration removed the database gate and the application-layer refusal together, on
-> the account owner's explicit choice, and with them the evaluator this paragraph names. So
-> "refused; evaluator only" is no longer true of any row: there is nothing that projects `DONE`,
-> and a caller with no acting Session writes the column directly.
->
-> What IS true, as of `refuseProjectStatusWrite`: a request carrying `status` **from a session**
-> is refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` / `ASK_A_PERSON`, whatever the value
-> and whatever the session's `dispatch_origin` — a wider condition than the `JUDGMENT` role the
-> two `HUMAN_ONLY` rows restrict. A request with no acting Session is untouched, so the owner REST
-> API, the headless CLI and internal callers are exactly as 0229 left them, and this is a boundary
-> on the tool an agent holds rather than a claim about who is on the other end of a credential.
->
-> **And one clause of the correction above is itself now superseded (2026-09-08).** "There is
-> nothing that projects `DONE`" was true until the account owner was asked to revisit the
-> 2026-09-03 decision and answered that the derivation should be built:
-> `projects/project-done-derived.ts` projects the column from a current standard-set confirmation
-> and criteria that are all satisfied and landed. What has NOT come back is the refusal — the
-> matrix's "direct write refused; evaluator only" is still wrong for every row. A projection is not
-> a gate: a caller with no acting Session still writes the column directly, and the projection
-> overwrites it the next time either of its two edges fires. See `docs/project-done-gate.md`.
-> The rest of this column has not been reconciled with 0229; read it as history.
+Project `DONE` is not a `HUMAN_ONLY` write, and since 2026-09-08 it is not, in the ordinary case,
+anybody's write at all: `projects/project-done-derived.ts` PROJECTS the column from a standing
+confirmation of today's standard set and criteria that are every one satisfied and landed,
+recomputing it on two edges that have no requester. A projection is not a gate — it refuses
+nothing, and none of what migration `0229_project_acceptance_judgment_removal` took away on
+2026-09-03 comes back with it: no trigger on `project`, no acceptance run, and no 409 that turns a
+direct `status=DONE` request into a refusal. Who may still write the column BY HAND is the last
+column of the matrix below, and it turns on one condition — whether the request carries an acting
+session. `docs/project-done-gate.md` is the live page for what decides the value.
 
 It is deliberately limited to those actions. It does not redesign authentication.
 
@@ -70,11 +53,11 @@ must be read per authenticated door:
 
 | Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project criterion `PASS` | Project `DONE` |
 | --- | --- | --- | --- | --- | --- | --- |
-| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; owner credential is recorded | allowed | allowed | direct write refused; evaluator only |
-| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | allowed; runner credential is recorded | allowed | allowed since N26, under machine attribution | direct write refused; evaluator only |
-| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | allowed since N26 | allowed since N26 | direct write refused |
-| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed when it names its credentialed actor | allowed | allowed unless it explicitly supplies machine attribution | direct write refused; evaluator only |
-| Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | direct write refused; evaluator only |
+| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; owner credential is recorded | allowed | allowed | allowed; this door carries no acting session |
+| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | allowed; runner credential is recorded | allowed | allowed since N26, under machine attribution | allowed with no session header; refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` when one is sent |
+| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY`** | allowed since N26 | allowed since N26 | **refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE`**, `DONE`, `CANCELLED` and `OPEN` alike |
+| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed when it names its credentialed actor | allowed | allowed unless it explicitly supplies machine attribution | allowed; writes the column directly |
+| Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | allowed, and indistinguishable from the owner REST row |
 
 The project standard-set confirmation row is the N22 addition. Its refusal is real for an
 attributed `dispatch_origin = PROJECT_COORDINATOR` Session. For a runner call that omits the acting
@@ -82,7 +65,19 @@ Session header, or a caller that can mint/borrow an owner JWT, the row provides 
 only** (`confirmedByType`, `confirmedById`, optional acting Session, time, digest). It is not a hard
 human boundary and must not be described as one. The identity-independent protection is elsewhere:
 the confirmation names the exact, revision-bearing standard-set digest, so any semantic edit makes
-it non-current and the database refuses DONE until that new digest is confirmed.
+it non-current and the projection stops deriving `DONE` until that new digest is confirmed — it
+takes the column back on its next edge rather than refusing anybody's write.
+
+The `Project DONE` column is not a rule about DONE at all. It records ONE condition, and that
+condition is the presence of an acting session rather than the session's role:
+`refuseProjectStatusWrite` turns away any request that carries `status` while a session is on it —
+`DONE`, `CANCELLED` and `OPEN` alike, whatever that session's `dispatch_origin` — and it refuses
+the request WHOLE, so the other fields it carried are not written either. That is WIDER than the
+two `HUMAN_ONLY` rows, which restrict only the `JUDGMENT` role. A request with no acting session
+reaches the column exactly as 0229 left it: the owner REST door passes no session at all, and the
+headless and internal paths write it directly. So this is a boundary on the tool an agent holds,
+not a claim about who is on the other end of a credential — and it is not what makes the column
+say `DONE`: no request does that, the projection does.
 
 There is currently no production cron job that writes these three facts. The no-Session service
 default remains available for trusted internal/cron composition; adding such a writer must still
@@ -149,9 +144,11 @@ privilege boundary. In the co-located/shared-secret deployment described above, 
    - a standard-set confirmation is append-only and records the complete set digest,
      `confirmedByType`, `confirmedById`, optional acting Session, and time. A headless runner or
      minted owner JWT can still produce it, exactly as the matrix says;
-   - automatic `DONE` records a `done_bound` audit row with source
-     `AUTOMATIC_CRITERIA_EVALUATOR`, the accepted run, criteria digest, and time. No requester
-     identity exists because no requester supplies the status transition.
+   - a projected `DONE` records nothing of its own. The `done_bound` audit row with source
+     `AUTOMATIC_CRITERIA_EVALUATOR` that used to bind it to an accepted run went with the rest of
+     that machinery in 0229, and the projection added no table to replace it: what a reviewer
+     reconstructs the settlement from is the confirmation and criterion rows above, re-read. No
+     requester identity exists because no requester supplies the status transition.
    These records let reviewers reconstruct the standards, evidence, and settlement binding. Only
    the conclusion event answers which credentialed principal submitted the decision.
 3. **Tenancy and scope enforcement.** A valid credential remains limited to its account and the
@@ -166,8 +163,9 @@ It does **not** provide:
   write access, or the owner-token signing secret.
 
 Where an actor is stored, it is attributable to a credentialed channel, not incontrovertibly to a
-person. Criteria and DONE currently retain fact/binding evidence rather than an actor. Both forms
-of traceability are valuable, but prompts, refusals, API help, and operator documentation must name
+person. Criteria retain fact/binding evidence rather than an actor, and a projected DONE retains
+neither — it is re-derivable from those rows rather than recorded anywhere. Both forms of
+traceability are valuable, but prompts, refusals, API help, and operator documentation must name
 the difference.
 
 ## Stronger options and their costs
@@ -214,9 +212,12 @@ primarily defense in depth.
 
 N22 binds each confirmation to the exact revision-bearing standard-set digest and retains the
 credentialed actor id and time. This mechanically guarantees that a later criterion text,
-criterion kind, command, expected exit code, evidence Task, or verification method edit requires a
-new confirmation before DONE. It guarantees workflow separation for an attributed judgment
-Session and audit visibility for other credentials. It does **not** guarantee that a human
+criterion kind, command, expected exit code, evidence Task, or verification method edit leaves no
+standing confirmation, so the projection will not derive `DONE` until the new digest is confirmed,
+and takes `DONE` back if it had already derived it. What it does not do is refuse anybody's direct
+write of the column; the only rule that does is the session condition above. It guarantees workflow
+separation for an attributed judgment Session and audit visibility for other credentials. It does
+**not** guarantee that a human
 personally performed the confirmation; that still requires one of the isolated, action-bound
 step-up or external-signature designs above.
 
@@ -227,10 +228,13 @@ person answering an `AskUserQuestion` card inside the project's standing coordin
 constitutes the "human" of `CONFIRM_ACCEPTANCE_CRITERIA` — **(A)** the answered approval row IS the
 permission, or **(B)** the card only prompts and the act happens on an owner-authenticated door.
 
-Everything above this heading between lines 15–17 and 43–83 describes the N22 confirmation row and
-the automatic DONE projection. Migration `0229_project_acceptance_judgment_removal` deleted both on
-2026-09-03. Those passages are stale and are left as written rather than edited here; §"What is
-true today" below states the current facts and `docs/project-done-gate.md` is the live page.
+The `Project DONE` column above was reconciled on 2026-09-08 and now states what the server does:
+a request with no acting session writes the column directly, a request carrying one is refused
+whole, and the value itself is projected. What migration `0229_project_acceptance_judgment_removal`
+deleted on 2026-09-03 stays deleted. The confirmation column beside it and the paragraph under the
+table still describe the N22 shape and predate `refuseSessionAuthoredConfirmation`, so read THAT
+column as history. §"What is true today" below is the reasoning the DONE answer came out of, and
+`docs/project-done-gate.md` is the live page.
 
 ### The premise being tested is false, and that is the finding
 
@@ -363,10 +367,12 @@ project to DONE today. `assertHumanOnlyProjectWrites` returns at its first line 
 carries no `acceptanceCriteriaItems` (`projects.service.ts:690`), so it never sees a status write.
 `dto.ts:219-221` states this plainly.
 
-Three places still describe the deleted machine and should be corrected as prose, not re-implemented:
-`coordinator-authority.ts:101` ("Project settlement remains AUTOMATIC — no principal writes it"),
-`projects.service.ts:1870-1873` ("DONE is not a request here at all, but the evaluator's acceptance
-projection"), and this page's own lines 15-17 and matrix rows 50-54.
+Three places described the deleted machine when this was written, and two no longer do:
+`coordinator-authority.ts`'s `SETTLE_PROJECT_DONE` comment ("Project settlement remains AUTOMATIC
+— no principal writes it") was rewritten to name the projection when it landed, and this page's
+own opening paragraph and matrix column were reconciled on 2026-09-08. The one still naming it is
+`ProjectsService.update`'s "DONE is not a request here at all, but the evaluator's acceptance
+projection" — prose to correct, not machinery to re-implement.
 
 A derived DONE would have exactly two inputs, and only the first is a person's:
 
