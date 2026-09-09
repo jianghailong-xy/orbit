@@ -6537,6 +6537,12 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 13px;
   color: var(--text-1);
   margin-bottom: 6px;
+  /* The question is one plain-text string the agent wrote, line breaks and all, and both renderers
+     (`QuestionForm`, and `Questions` in the transcript) put it here unchanged — so this is the only
+     place that decides whether they survive. `word-break` because an id or a URL with no break
+     opportunity in it would otherwise widen the card past its column. */
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .chat-q-opts {
   display: flex;
