@@ -53,13 +53,13 @@ requester identity.
 The distinction is intentionally about route and role, not biological identity. Current behavior
 must be read per authenticated door:
 
-| Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project criterion `PASS` | Project `DONE` |
-| --- | --- | --- | --- | --- | --- | --- |
-| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; the only door there is, and it passes no acting session | allowed | allowed | allowed; this door carries no acting session |
-| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | no route at all; a call reaching the service with its session header would be refused | allowed | allowed since N26, under machine attribution | allowed with no session header; refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` when one is sent |
-| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY`** — for carrying a session at all, not for its origin | allowed since N26 | allowed since N26 | **refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE`**, `DONE`, `CANCELLED` and `OPEN` alike |
-| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed; it names no actor — the row records the account owner | allowed | allowed unless it explicitly supplies machine attribution | allowed; writes the column directly |
-| Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed | allowed, and indistinguishable from the owner REST row |
+| Request path | No acting Session | Acceptance criteria | Project standard-set confirmation | Task verdict `PASS` | Project `DONE` |
+| --- | --- | --- | --- | --- | --- |
+| Owner REST API with a user JWT | `NON_JUDGMENT` | allowed | allowed; the only door there is, and it passes no acting session | allowed | allowed; this door carries no acting session |
+| Headless CLI/MCP with the runner credential | no judgment role | structured items allowed; legacy text refused | no route at all; a call reaching the service with its session header would be refused | allowed | allowed with no session header; refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE` when one is sent |
+| One-shot judgment Session | `JUDGMENT` | refused | **refused with `PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY`** — for carrying a session at all, not for its origin | allowed since N26 | **refused whole with `PROJECT_STATUS_NOT_SESSION_WRITABLE`**, `DONE`, `CANCELLED` and `OPEN` alike |
+| Trusted direct/internal caller with no Session | `NON_JUDGMENT` | allowed | allowed; it names no actor — the row records the account owner | allowed | allowed; writes the column directly |
+| Borrowed or minted owner JWT | indistinguishable from the owner REST row | allowed | allowed and indistinguishable from owner confirmation | allowed | allowed, and indistinguishable from the owner REST row |
 
 The project standard-set confirmation row is the N22 addition, and since migration 0245 gave the
 action its one writer, the rule it states is no longer about a role.
@@ -98,11 +98,24 @@ There is currently no production cron job that writes these three facts. The no-
 default remains available for trusted internal/cron composition; adding such a writer must still
 document its authority and the traceability fields it persists.
 
-The PASS row has two service surfaces. Project acceptance records criterion conclusions; task
-verification records a task verdict. Neither refuses a judgment Session any more. The project
-acceptance runner endpoint still supplies a fallback machine id when the acting Session header is
-absent — that is now attribution rather than a gate, so a headless runner records `PASS`, `FAIL`
-and `INCONCLUSIVE` alike, and each conclusion says which evaluator produced it.
+The `PASS` column is task verification, and only task verification. It had a second service
+surface until 2026-09-03: a project-level one that read a stated criterion and recorded what it
+concluded about it. The matrix carried a column for that one until 2026-09-09, and its runner cell
+read "allowed since N26, under machine attribution". Migration
+`0229_project_acceptance_judgment_removal` took the surface away whole — the tables a conclusion
+was written into, the enum its result was typed as, the evaluator that produced one, and the route
+that reached any of it — so those cells are gone from the table above rather than restated. Nothing
+replaced them. The only acceptance routes either controller exposes are merge-evidence and
+confirmation (`projects.controller.ts:325,343,351`, `runner-projects.controller.ts:145`), and the
+five methods left on `ProjectAcceptanceService` summarise the stated criteria, read and write the
+standard-set confirmation, refresh the completion contract, and record merge evidence — none of
+them concludes anything. That silence is the rule and not an omission: a project detail read
+carries no verdict, no pass count and no last-judged time, because reporting one "would mean
+inventing the evaluator 0229 removed" (`project-acceptance.service.ts:98-104`).
+
+What is left in the column is the task verdict, and it does not refuse a judgment Session: since
+N26 a one-shot judgment session writes `PASS`, `FAIL` and `INCONCLUSIVE` alike, and so does an
+agent-held runner credential carrying no acting session at all.
 
 Tests lock most of this matrix in `coordinator-authority-boundary.spec.ts`:
 
@@ -123,16 +136,14 @@ Tests lock most of this matrix in `coordinator-authority-boundary.spec.ts`:
 - the two `an owner JWT minted with the shared secret ...` cases for the owner REST API — editing
   the criteria (`:285`) and writing `status=DONE` (`:299`).
 
-The `Project criterion PASS` column is the one column no test locks, and this list said otherwise
-until 2026-09-09. Migration `0229_project_acceptance_judgment_removal` removed the service surface
-that recorded a criterion conclusion, and every case in that file which exercised the column went
-with it: two the list named, the generated no-session control for it, and a third minted-JWT case.
-Nothing replaced them because there is nothing left to call — the only acceptance routes either
-controller exposes are merge-evidence and confirmation (`projects.controller.ts:325,343,351`,
-`runner-projects.controller.ts:145`). So that column is unverified prose about the N26 server; what
-the repository asserts in its place is, in `project-criterion-automation.pg.spec.ts`,
-`a project criterion is still declarable, and nothing about the work concludes it`. Reconciling
-the column itself is work this page has not done.
+Two things here described the N26 server until 2026-09-09. This list named three cases 0229 had
+deleted along with the surface they exercised — two for the criterion column and a third
+minted-JWT case — and the generated no-session control it claimed for that column went the same
+way. The matrix carried the column itself. Both are now reconciled with the file and with the
+routes, and neither has a replacement to name, because a criterion conclusion is not a thing this
+server records. The statement the repository does make about it is not on this page: it is
+`a project criterion is still declarable, and nothing about the work concludes it`, in
+`project-criterion-automation.pg.spec.ts`.
 
 ## Why credentials cannot prove "human" in a co-located deployment
 
