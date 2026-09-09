@@ -104,19 +104,35 @@ acceptance runner endpoint still supplies a fallback machine id when the acting 
 absent — that is now attribution rather than a gate, so a headless runner records `PASS`, `FAIL`
 and `INCONCLUSIVE` alike, and each conclusion says which evaluator produced it.
 
-Tests lock this matrix in `coordinator-authority-boundary.spec.ts`:
+Tests lock most of this matrix in `coordinator-authority-boundary.spec.ts`:
 
 - `an agent-held runner credential with no acting session can edit explicit structured criteria`;
-- `an agent-held runner credential with no acting session can write task verdict=PASS`;
-- `an agent-held runner credential with no acting session records acceptance PASS`;
+- `an agent-held runner credential with no acting session can write task verdict=PASS`, and beside
+  it the three role cases for the same column:
+  `a judgment session may conclude a verification PASS`,
+  `a judgment session may conclude FAIL or INCONCLUSIVE`, and
+  `the same PASS from a USER-origin session is written`;
 - and, for the confirmation column, in `project-acceptance-confirmation.pg.spec.ts`:
   `(1) the owner channel records a confirmation, and the row says which version`,
   `(2) a call carrying an acting session is refused, whatever its dispatch origin` — which runs
   `USER` and `PROJECT_COORDINATOR` alike — `(3) rewording one criterion returns the project to
   unconfirmed`, and `(4) changing only a verification method also retires the confirmation`;
-- `a headless runner can still record a conservative acceptance conclusion`;
-- the generated `a no-session owner/internal caller ...` controls for project updates and PASS;
-- the three `an owner JWT minted with the shared secret ...` cases for the owner REST API.
+- the generated `a no-session owner/internal caller ...` control, which is ONE case and covers
+  project updates only: `PROJECT_WRITES` (`:170-173`) has had a single entry since 0229 left one
+  authoring shape;
+- the two `an owner JWT minted with the shared secret ...` cases for the owner REST API — editing
+  the criteria (`:285`) and writing `status=DONE` (`:299`).
+
+The `Project criterion PASS` column is the one column no test locks, and this list said otherwise
+until 2026-09-09. Migration `0229_project_acceptance_judgment_removal` removed the service surface
+that recorded a criterion conclusion, and every case in that file which exercised the column went
+with it: two the list named, the generated no-session control for it, and a third minted-JWT case.
+Nothing replaced them because there is nothing left to call — the only acceptance routes either
+controller exposes are merge-evidence and confirmation (`projects.controller.ts:325,343,351`,
+`runner-projects.controller.ts:145`). So that column is unverified prose about the N26 server; what
+the repository asserts in its place is, in `project-criterion-automation.pg.spec.ts`,
+`a project criterion is still declarable, and nothing about the work concludes it`. Reconciling
+the column itself is work this page has not done.
 
 ## Why credentials cannot prove "human" in a co-located deployment
 
@@ -279,6 +295,17 @@ the name appears only in the table (`coordinator-authority.ts:87,118,190,203`), 
 message, and two specs (`coordinator-authority.spec.ts:62,100`,
 `evidence-judgment-removal.pg.spec.ts:335`). `SETTLE_PROJECT_DONE` is the same
 (`coordinator-authority.ts:89,123`, `coordinator-authority.spec.ts:66`).
+
+> **Built, 2026-09-08 — the paragraph above is the state the decision was made in, not today's.**
+> `CONFIRM_ACCEPTANCE_CRITERIA` has a writer now, which is (B) below carried out: migration
+> `0245_project_standard_set_confirmation` created the table (commit `480b0ef1`),
+> `ProjectAcceptanceService.confirmStandardSet` (`project-acceptance.service.ts:165`, writing the
+> row at `:190`) is its only writer, and the owner door is
+> `POST /projects/:id/acceptance/confirmation` (`projects.controller.ts:351`). The reasoning is
+> kept as written because it is what the decision was taken on — read "no writer at all" as the
+> finding of 2026-09-08, not as a description of the server. The `SETTLE_PROJECT_DONE` sentence
+> beside it is NOT covered by this note and still holds: that column is projected, and no principal
+> writes it.
 
 ### Decision: (B). The card prompts; the confirmation is written through an owner-authenticated door.
 
