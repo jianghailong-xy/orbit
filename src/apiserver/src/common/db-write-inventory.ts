@@ -826,6 +826,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/projects.service.ts#lockLiveAgent', under: 'projects.update, .remove' },
   { at: 'projects/projects.service.ts#recordExplicitIdentity', under: 'projects.update' },
   { at: 'projects/projects.service.ts#replaceAcceptanceDefinitions', under: 'projects.update — the project row is already locked at rank 40 before these definition child rows are changed' },
+  { at: 'projects/projects.service.ts#holdWeakeningAcceptanceEdit', under: 'projects.update — the loosening edit that is NOT applied; one proposal row under the same rank-40 project lock the classification was made under, so the baseline it names is the set that stood when it was composed' },
   { at: 'projects/projects.service.ts#writeCoordinatorAgent', under: 'projects.update' },
   { at: 'projects/task-aggregation-writer.ts#applyTaskAggregations', under: 'projectReconcile.repeatableRead' },
   { at: 'runner-api/runner-api.controller.ts#lockSessionLeaseOwner', under: 'runnerApi.events, .turnComplete, .finalize' },

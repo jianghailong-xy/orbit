@@ -244,18 +244,25 @@ test('a project’s acceptance criteria can be authored, re-read and replaced ov
       [[FIRST.text, FIRST.verificationMethod]],
     );
 
+    // The whole collection restated, with the criterion already on record retained and a second
+    // one added. It is the same whole-collection write any edit makes; it ADDS rather than drops
+    // because a criteria edit that loosens the ruler no longer lands at all — it is held as a
+    // proposal (`criteria-weakening-intent.pg.spec.ts`), which is a fact about direction and not
+    // about the two-field shape this file is here to check.
     const patched = await send(base, 'PATCH', `/api/projects/${id}`, {
-      acceptanceCriteriaItems: [SECOND],
+      acceptanceCriteriaItems: [{ id: items[0].id, ...FIRST }, SECOND],
     });
     assert.equal(patched.status, 200, `PATCH answered ${patched.status}: ${patched.body}`);
     assert.doesNotMatch(patched.body, /was removed by migration 0233/);
     const patchedItems = patched.json.acceptanceCriteriaItems as Array<Record<string, unknown>>;
     assert.deepEqual(
       patchedItems.map((item) => [item.text, item.verificationMethod]),
-      [[SECOND.text, SECOND.verificationMethod]],
+      [[FIRST.text, FIRST.verificationMethod], [SECOND.text, SECOND.verificationMethod]],
     );
-    assert.equal(state.criteria.length, 1);
-    assert.equal(state.criteria[0].text, SECOND.text);
+    assert.equal(state.criteria.length, 2);
+    assert.equal(state.criteria[1].text, SECOND.text);
+    // Nothing was held: the edit took effect where it was made.
+    assert.equal('acceptanceCriteriaHold' in patched.json, false);
   });
 
   // The guard on the repair: making omission pass must not make sending one pass with it. Over

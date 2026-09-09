@@ -103,12 +103,21 @@ const PROJECT_TRIGGERS: Record<string, string> = {
 };
 
 /** The verification method every criterion here states; never the thing under test. */
-const METHOD = 'Somebody reads it and says whether it holds';
+/**
+ * The verification method every criterion here declares; never the thing under test.
+ *
+ * A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder, with `STRICTER` the next rung up, and
+ * that is what makes the one edit below an edit that TAKES EFFECT: a criteria edit lands only when
+ * it walks the ruler toward strictness, and a rewritten `text` is a direction nothing can read, so
+ * it is held for the account owner instead (`criteria-weakening-intent.pg.spec.ts`).
+ */
+const METHOD = 'VERIFICATION';
+/** The rung the moved criterion is promoted TO — a stricter exam for the same assertion. */
+const STRICTER = 'EXECUTABLE';
 
 const UNSERVED = 'nobody has filed any work against this one';
 const UNSETTLED = 'the work filed against this one has not settled by its own criterion';
 const MOVES = 'the wording of this one is about to be corrected';
-const MOVED = 'the wording of this one has been corrected under work that already settled';
 
 /**
  * One criterion as the project read states it, narrowed to what this control needs.
@@ -203,12 +212,12 @@ test('a project with every stated criterion unmet still settles DONE through the
   });
 
   /** State the whole collection through the owner's path, and read the keys back. */
-  async function state(items: Array<{ id?: string; text: string }>) {
+  async function state(items: Array<{ id?: string; text: string; verificationMethod?: string }>) {
     const written = await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: items.map((item) => ({
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
-        verificationMethod: METHOD,
+        verificationMethod: item.verificationMethod ?? METHOD,
       })),
     } as never);
     return criteriaFromDefinitions(written.acceptanceCriteriaItems);
@@ -276,15 +285,15 @@ test('a project with every stated criterion unmet still settles DONE through the
   const [, , moved] = await state([
     { id: unservedAtFirst.definitionId, text: UNSERVED },
     { id: unsettledAtFirst.definitionId, text: UNSETTLED },
-    { id: movingAtFirst.definitionId, text: MOVED },
+    { id: movingAtFirst.definitionId, text: MOVES, verificationMethod: STRICTER },
   ]);
   assert.equal(moved.definitionRevision, 2,
-    'the wording moved once, and nothing here wrote a revision by hand');
+    'the exam moved once, and nothing here wrote a revision by hand');
 
   // ═══ the premise ═════════════════════════════════════════════════════════════════════════════
   await t.test('every criterion this project states is unmet, each for its own reason', async () => {
     const items = await stated();
-    assert.deepEqual(items.map((item) => item.text), [UNSERVED, UNSETTLED, MOVED],
+    assert.deepEqual(items.map((item) => item.text), [UNSERVED, UNSETTLED, MOVES],
       'the read states the criteria in the project’s own order');
     assert.deepEqual(items.map((item) => answerOf(item).satisfied), [false, false, false],
       'the premise of this control is that NOTHING here is met — a project with a satisfied '

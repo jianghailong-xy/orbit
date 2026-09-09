@@ -49,7 +49,17 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 /** The verification method every criterion here declares; never the thing under test. */
-const METHOD = 'Read it and say whether it holds';
+/**
+ * The verification method every criterion here declares; never the thing under test.
+ *
+ * A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder, with `STRICTER` the next rung up, and
+ * that is what makes the one edit below an edit that TAKES EFFECT: a criteria edit lands only when
+ * it walks the ruler toward strictness, and a rewritten `text` is a direction nothing can read, so
+ * it is held for the account owner instead (`criteria-weakening-intent.pg.spec.ts`).
+ */
+const METHOD = 'VERIFICATION';
+/** The rung the moved criterion is promoted TO — a stricter exam for the same assertion. */
+const STRICTER = 'EXECUTABLE';
 /** The four columns on the CRITERION that T4 removed, spelled as the database spells them. */
 const WIRING_COLUMNS = [
   'evidence_task_id',
@@ -201,12 +211,12 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
   });
 
   /** State the whole collection through the owner's path, and read the keys back. */
-  async function state(items: Array<{ id?: string; text: string }>) {
+  async function state(items: Array<{ id?: string; text: string; verificationMethod?: string }>) {
     const written = await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: items.map((item) => ({
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
-        verificationMethod: METHOD,
+        verificationMethod: item.verificationMethod ?? METHOD,
       })),
     } as never);
     return criteriaFromDefinitions(written.acceptanceCriteriaItems);
@@ -244,7 +254,6 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
   const NOBODY_SERVES = 'nobody has filed any work against this one';
   const ONE_OUTSTANDING = 'two pieces of work serve this one and only one of them has settled';
   const MOVES = 'the wording of this one is about to be corrected';
-  const MOVED = 'the wording of this one has been corrected';
 
   const [metAtFirst, unservedAtFirst, partialAtFirst, movingAtFirst] = await state([
     { text: ALL_MET }, { text: NOBODY_SERVES }, { text: ONE_OUTSTANDING }, { text: MOVES },
@@ -329,7 +338,7 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     { id: metAtFirst.definitionId, text: ALL_MET },
     { id: unservedAtFirst.definitionId, text: NOBODY_SERVES },
     { id: partialAtFirst.definitionId, text: ONE_OUTSTANDING },
-    { id: movingAtFirst.definitionId, text: MOVED },
+    { id: movingAtFirst.definitionId, text: MOVES, verificationMethod: STRICTER },
   ]);
   assert.equal(moved.definitionId, movingAtFirst.definitionId,
     'the criterion must be the same row: an edit, not a replacement');

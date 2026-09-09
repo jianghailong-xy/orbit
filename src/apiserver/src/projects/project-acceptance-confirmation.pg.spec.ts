@@ -67,12 +67,22 @@ import { ProjectsService } from './projects.service';
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
-/** The verification method the criteria declare. Never the thing under test — except in `(4)`. */
-const METHOD = 'A person reads the criterion and says whether it holds';
+/**
+ * The verification method the criteria declare. Never the thing under test — except in `(4)`.
+ *
+ * A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder rather than prose, because `(4)` needs an
+ * edit that TAKES EFFECT: since the weakening door was wired, a criteria edit lands only when it
+ * walks the ruler toward strictness, and rewriting either the words or a prose method is a
+ * direction nothing can read, so it is held as a proposal instead
+ * (`criteria-weakening-intent.pg.spec.ts`). That is also why `(3)` below ADDS a criterion rather
+ * than rewording one: the two shapes of edit that still land are an addition and a promotion, and
+ * this file uses one of each.
+ */
+const METHOD = 'VERIFICATION';
 
 const FIRST = 'the confirmation door exists and records what was confirmed';
 const SECOND = 'no acting session can walk through it';
-const REWORDED = 'the confirmation door exists, and records the exact version it confirmed';
+const ADDED = 'the confirmation names the exact version it confirmed';
 
 /** One stored confirmation, read back from the table rather than from the service that wrote it. */
 interface StoredConfirmation {
@@ -276,25 +286,28 @@ test('the owner confirms one version of a project’s acceptance standard set, a
 
   // ═══ (3) an edit lands, and the confirmation stops counting ════════════════════════════════════
 
-  await t.test('(3) rewording one criterion returns the project to unconfirmed', async () => {
+  await t.test('(3) adding a criterion returns the project to unconfirmed', async () => {
     const confirmed = await acceptance.standardSetConfirmation(ownerId, projectId);
     assert.equal(confirmed.state, 'CONFIRMED', 'the fixture is confirmed before the edit');
     const digestBefore = confirmed.currentVersion.digest;
 
-    // One criterion, reworded. The other is restated byte for byte, so what moves is one row.
+    // A third criterion, with both existing ones restated byte for byte: the set the owner
+    // confirmed is not the set that stands, and no row of it was rewritten to make that true.
     const [first, second] = atFirst;
-    const reworded = first.text === FIRST ? first : second;
-    const untouched = reworded === first ? second : first;
+    const confirmedAt = first.text === FIRST ? first : second;
+    const untouched = confirmedAt === first ? second : first;
     await state([
-      { id: reworded.definitionId, text: REWORDED },
+      { id: confirmedAt.definitionId, text: confirmedAt.text },
       { id: untouched.definitionId, text: untouched.text },
+      { text: ADDED },
     ]);
 
     const moved = await definitions();
+    assert.equal(moved.length, 3, 'the set grew by exactly one criterion');
     assert.deepEqual(
-      moved.map((row) => [row.definitionId, row.revision]).sort(),
-      [[reworded.definitionId, 2], [untouched.definitionId, 1]].sort(),
-      'exactly one criterion moved, and the database is what moved it',
+      moved.map((row) => row.revision),
+      [1, 1, 1],
+      'and it grew without moving either of the criteria that were already there',
     );
 
     const standing = await acceptance.standardSetConfirmation(ownerId, projectId);
@@ -307,12 +320,14 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     // "no longer current" readable rather than inferred.
     assert.ok(standing.confirmation, 'the confirmation is not deleted, it is superseded');
     assert.equal(standing.confirmation.criteriaDigest, digestBefore);
+    assert.equal(standing.confirmation.criteriaMaterial.length, 2,
+      'the stored material names the set that was confirmed, which had two criteria in it');
     assert.deepEqual(
       standing.confirmation.criteriaMaterial.find(
-        (item) => item.definitionId === reworded.definitionId,
+        (item) => item.definitionId === confirmedAt.definitionId,
       ),
-      { definitionId: reworded.definitionId, revision: 1, contentHash: reworded.contentHash },
-      'the stored material names the revision that was confirmed, not the one standing now',
+      { definitionId: confirmedAt.definitionId, revision: 1, contentHash: confirmedAt.contentHash },
+      'and the version of each, as it stood then rather than as it stands now',
     );
 
     // And confirming the version that is gone is refused rather than recorded against the new one:
@@ -342,13 +357,13 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     const confirmed = await acceptance.standardSetConfirmation(ownerId, projectId);
     assert.equal(confirmed.state, 'CONFIRMED', 'the fixture is confirmed before this edit too');
 
+    // Every word restated byte for byte; only the first criterion's exam moves, and it moves UP
+    // the ladder — which is what makes this an edit that lands rather than one that is held.
     const current = await definitions();
     await state(current.map((criterion, index) => ({
       id: criterion.definitionId,
       text: criterion.text,
-      verificationMethod: index === 0
-        ? 'Run the suite the criterion names and read its exit code'
-        : METHOD,
+      verificationMethod: index === 0 ? 'EXECUTABLE' : METHOD,
     })));
 
     const standing = await acceptance.standardSetConfirmation(ownerId, projectId);

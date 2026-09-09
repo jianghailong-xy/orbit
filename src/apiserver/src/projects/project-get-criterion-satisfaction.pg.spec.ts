@@ -59,7 +59,17 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 /** The verification method every criterion here declares; never the thing under test. */
-const METHOD = 'Read it and say whether it holds';
+/**
+ * The verification method every criterion here declares; never the thing under test.
+ *
+ * A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder, with `STRICTER` the next rung up, and
+ * that is what makes the one edit below an edit that TAKES EFFECT: a criteria edit lands only when
+ * it walks the ruler toward strictness, and a rewritten `text` is a direction nothing can read, so
+ * it is held for the account owner instead (`criteria-weakening-intent.pg.spec.ts`).
+ */
+const METHOD = 'VERIFICATION';
+/** The rung the moved criterion is promoted TO — a stricter exam for the same assertion. */
+const STRICTER = 'EXECUTABLE';
 
 /**
  * One criterion as the outward read states it, narrowed to what this spec reads.
@@ -124,12 +134,12 @@ test('GET /projects/:id says, beside each criterion, whether the work has met it
   });
 
   /** State the whole collection through the owner's path, and read the keys back. */
-  async function state(items: Array<{ id?: string; text: string }>) {
+  async function state(items: Array<{ id?: string; text: string; verificationMethod?: string }>) {
     const written = await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: items.map((item) => ({
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
-        verificationMethod: METHOD,
+        verificationMethod: item.verificationMethod ?? METHOD,
       })),
     } as never);
     return criteriaFromDefinitions(written.acceptanceCriteriaItems);
@@ -165,7 +175,6 @@ test('GET /projects/:id says, beside each criterion, whether the work has met it
   const UNSERVED = 'nobody has filed any work against this one';
   const UNSETTLED = 'the work filed against this one has not settled by its own criterion';
   const MOVES = 'the wording of this one is about to be corrected';
-  const MOVED = 'the wording of this one has been corrected';
 
   const [metAtFirst, unservedAtFirst, unsettledAtFirst, movingAtFirst] = await state([
     { text: MET }, { text: UNSERVED }, { text: UNSETTLED }, { text: MOVES },
@@ -209,7 +218,7 @@ test('GET /projects/:id says, beside each criterion, whether the work has met it
     { id: metAtFirst.definitionId, text: MET },
     { id: unservedAtFirst.definitionId, text: UNSERVED },
     { id: unsettledAtFirst.definitionId, text: UNSETTLED },
-    { id: movingAtFirst.definitionId, text: MOVED },
+    { id: movingAtFirst.definitionId, text: MOVES, verificationMethod: STRICTER },
   ]);
   assert.deepEqual(
     [met.definitionRevision, unserved.definitionRevision,
@@ -289,7 +298,7 @@ test('GET /projects/:id says, beside each criterion, whether the work has met it
   await t.test('one read answers for every criterion, and never with another one’s answer',
     async () => {
       const items = await detail();
-      assert.deepEqual(items.map((item) => item.text), [MET, UNSERVED, UNSETTLED, MOVED],
+      assert.deepEqual(items.map((item) => item.text), [MET, UNSERVED, UNSETTLED, MOVES],
         'the read states the criteria in the project’s own order');
       assert.deepEqual(items.map((item) => answerOf(item).satisfied), [true, false, false, false],
         'four criteria, four outcomes, one call — a merge by position or by nothing would have '

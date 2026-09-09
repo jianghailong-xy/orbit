@@ -213,17 +213,24 @@ test('T6: the criterion evaluation-plan lane is removed, and the contract-level 
       // declaration move, so both counters advance: `revision` is still the combined identity of
       // the assertion and the method that decides it, and losing the plan lane does not make the
       // method stop counting towards it.
+      //
+      // Written straight at the row rather than through `projects.update`, and that is the point
+      // of this case: the subject is the TRIGGER, and rewriting a criterion's assertion is an edit
+      // the service no longer applies — its direction cannot be read, so it is held for the
+      // account owner (`criteria-weakening-intent.pg.spec.ts`) and no UPDATE would reach the
+      // trigger at all. The semantic lane is a function of the words alone, so nothing the service
+      // still applies could move it.
       const [stored] = await sql.query<{ id: string }>(
         `SELECT "id" FROM "project_acceptance_criterion_definition" WHERE "project_id" = $1::uuid`,
         [projectId],
       ).then((result) => result.rows);
-      await projects.update(ownerId, projectId, {
-        acceptanceCriteriaItems: [{
-          id: stored.id,
-          text: 'The suite is green on Linux',
-          verificationMethod: 'Run the suite on Linux and require a clean exit',
-        }],
-      } as never);
+      await sql.query(
+        `UPDATE "project_acceptance_criterion_definition"
+            SET "text" = $2, "verification_method" = $3
+          WHERE "id" = $1::uuid`,
+        [stored.id, 'The suite is green on Linux',
+          'Run the suite on Linux and require a clean exit'],
+      );
       const [rewritten] = await lanes(projectId);
       for (const lane of ['content_hash', 'semantic_hash'] as const) {
         assert.match(rewritten[lane] ?? '', /^[0-9a-f]{64}$/, `${lane} was not computed on update`);

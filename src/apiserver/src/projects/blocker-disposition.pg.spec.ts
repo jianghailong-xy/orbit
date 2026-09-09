@@ -89,11 +89,19 @@ import { WakeDispositionService } from './wake-disposition.service';
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
-/** The verification method every criterion here declares; never the thing under test. */
-const METHOD = 'Read it and say whether it holds';
+/**
+ * The verification method every criterion here declares; never the thing under test.
+ *
+ * A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder rather than prose, and that is load
+ * bearing: a criteria edit is applied only when it walks the ruler TOWARD strictness, and prose on
+ * both sides of an edit is a direction nothing can read, so it would be held for the account owner
+ * instead of landing (`criteria-weakening-intent.pg.spec.ts`). Naming rungs is what lets
+ * `moveTheStandard` below be an edit that takes effect.
+ */
+const METHOD = 'VERIFICATION';
 
-/** The one the standard is MOVED to in case (a) — a different method, the same words. */
-const REWORDED_METHOD = 'Read it again and say whether it still holds';
+/** The one the standard is MOVED to in case (a) — a stricter method, the same words. */
+const PROMOTED_METHOD = 'EXECUTABLE';
 
 /** A declaration whose command reads the delivery tree, and passes there. */
 const CHECK = { acceptanceCommand: 'test -f README', acceptanceExpectedExitCode: 0 };
@@ -367,6 +375,10 @@ async function state(stack: Stack, f: Fixture, texts: string[]) {
  * The words are left alone and the verification method is what changes, which is enough to
  * advance `revision` and is the smallest edit that does: it makes "the exam moved after this work
  * was declared against it" true without also making the work serve different words.
+ *
+ * It moves the method UP the ladder, which is the only shape of edit that still lands where it is
+ * made: rewording the criterion would be held as a proposal and the standard would not move at all,
+ * which the assertion below would then report as this fixture failing to set itself up.
  */
 async function moveTheStandard(stack: Stack, f: Fixture, texts: string[], moved: string) {
   const before = await stack.projects.get(f.ownerId, f.projectId);
@@ -375,7 +387,7 @@ async function moveTheStandard(stack: Stack, f: Fixture, texts: string[], moved:
     acceptanceCriteriaItems: items.map((item, index) => ({
       id: item.key,
       text: texts[index]!,
-      verificationMethod: item.key === moved ? REWORDED_METHOD : METHOD,
+      verificationMethod: item.key === moved ? PROMOTED_METHOD : METHOD,
     })),
   } as never);
   const after = criteriaFromDefinitions(written.acceptanceCriteriaItems)

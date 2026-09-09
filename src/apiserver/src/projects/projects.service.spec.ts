@@ -502,6 +502,13 @@ test('an update writes only the fields it was sent, and null clears one', async 
   assert.deepEqual(writes[1], { title: 'Renamed', goal: null });
 });
 
+// The edit under test is a REORDER plus a promotion of one criterion's verification method up the
+// HUMAN → VERIFICATION → EXECUTABLE ladder. It has to be a promotion rather than the reworded text
+// it used to be, because a rewriting's direction cannot be read and an edit whose direction cannot
+// be read no longer lands at all — it is held as a proposal, which
+// `criteria-weakening-intent.pg.spec.ts` covers. A step UP the ladder is the tightening this write
+// path still applies, and it moves `revision` for the same reason a reworded text did: the
+// definition changed.
 test('a structured update preserves ids and revisions across reorder, and increments only an edit', async () => {
   const definitionWrites: any[] = [];
   const projectWrites: any[] = [];
@@ -512,7 +519,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
       revision: 1, contentHash: 'b'.repeat(64),
     },
     {
-      id: CRITERION_A_ID, ordinal: 2, text: 'Build with docs', verificationMethod: 'Run npm test',
+      id: CRITERION_A_ID, ordinal: 2, text: 'Build succeeds', verificationMethod: 'EXECUTABLE',
       completionCriterionOverrideReason: 'This fixture exercises structured persistence',
       revision: 3, contentHash: 'a'.repeat(64),
     },
@@ -537,7 +544,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [
         {
-          id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'Run npm test',
+          id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'VERIFICATION',
           completionCriterionOverrideReason: 'This fixture exercises structured persistence',
           revision: 2,
         },
@@ -567,7 +574,7 @@ test('a structured update preserves ids and revisions across reorder, and increm
         completionCriterionOverrideReason: 'A person judges the visible product behaviour',
       },
       {
-        id: CRITERION_A_ID, text: 'Build with docs', verificationMethod: 'Run npm test',
+        id: CRITERION_A_ID, text: 'Build succeeds', verificationMethod: 'EXECUTABLE',
         completionCriterionOverrideReason: 'This fixture exercises structured persistence',
       },
     ],
@@ -587,12 +594,14 @@ test('a structured update preserves ids and revisions across reorder, and increm
   }]);
   assert.deepEqual(definitionWrites[3], ['update', CRITERION_A_ID, {
     ordinal: 2,
-    text: 'Build with docs',
-    verificationMethod: 'Run npm test',
+    text: 'Build succeeds',
+    verificationMethod: 'EXECUTABLE',
     completionCriterionOverrideReason: 'This fixture exercises structured persistence',
     contentHash: definitionWrites[3][2].contentHash,
     revision: 3,
   }]);
+  // And it landed: an ADDITIVE edit is applied where it is made, so there is no hold beside it.
+  assert.equal('acceptanceCriteriaHold' in updated, false);
   assert.deepEqual(updated.acceptanceCriteriaItems.map((item: any) => ({
     id: item.id, ordinal: item.ordinal, text: item.text,
     verificationMethod: item.verificationMethod,

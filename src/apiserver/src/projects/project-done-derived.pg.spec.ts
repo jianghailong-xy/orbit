@@ -106,7 +106,19 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 /** The verification method every criterion here declares; never the thing under test. */
-const METHOD = 'Read it and say whether it holds';
+/**
+ * The rungs of the HUMAN → VERIFICATION → EXECUTABLE ladder, in the order this fixture climbs them.
+ *
+ * The two edits below move a criterion UP the ladder rather than rewording it, and they have to:
+ * a criteria edit takes effect only when it walks the ruler toward strictness, and a rewriting is
+ * a direction nothing can read, so it is held as a proposal for the account owner and the
+ * criterion does not move at all (`criteria-weakening-intent.pg.spec.ts`). What both cases below
+ * need is a criterion that MOVED — the seal is the same either way, because it is taken over
+ * `revision` and `content_hash` and the trigger rewrites both from the method as well as the words.
+ */
+const METHOD = 'HUMAN';
+const STRICTER = 'VERIFICATION';
+const STRICTEST = 'EXECUTABLE';
 
 /** A full 40-hex object name, which is the only kind a receipt accepts. */
 const sha = (nibble: string) => nibble.repeat(40);
@@ -493,7 +505,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
 
     await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: [
-        { id: first.definitionId, text: `${FIRST}, and says which version it read`, verificationMethod: METHOD },
+        { id: first.definitionId, text: FIRST, verificationMethod: STRICTER },
         { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
       ],
     } as never);
@@ -537,12 +549,12 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
 
       // ── the edit, through the one door that states criteria, and nothing else ──────────────────
       // No task write, no confirmation, no call to the projection. This is the order the product
-      // runs in: a project settles, and the owner then rewords one of the assertions it settled
-      // against — an edit nobody follows with anything, because from the owner's side there is
-      // nothing left to do.
+      // runs in: a project settles, and the owner then tightens how one of the assertions it
+      // settled against is to be judged — an edit nobody follows with anything, because from the
+      // owner's side there is nothing left to do.
       await projects.update(ownerId, projectId, {
         acceptanceCriteriaItems: [
-          { id: first.definitionId, text: `${FIRST}, reworded once it had settled`, verificationMethod: METHOD },
+          { id: first.definitionId, text: FIRST, verificationMethod: STRICTEST },
           { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
         ],
       } as never);

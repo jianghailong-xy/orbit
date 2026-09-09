@@ -46,8 +46,22 @@ import {
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
+import {
+  CRITERIA_WEAKENING_EFFECT_CLASS,
+  type CriteriaWeakeningAction,
+  type CriteriaWeakeningSupersession,
+  criteriaUnchangedNotice,
+  criteriaWeakeningActionDigest,
+  criteriaWeakeningRequest,
+  criteriaWeakeningSupersessionReason,
+} from './criteria-weakening-intent';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { criterionKeyOf, sha256 } from './project-acceptance';
+import {
+  criteriaFromDefinitions,
+  criterionKeyOf,
+  sha256,
+  standardSetVersion,
+} from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import {
   buildCoordinatorInstructions,
@@ -301,6 +315,56 @@ const ACCEPTANCE_DEFINITIONS_INCLUDE = {
     semanticHash: true,
   },
 };
+
+/**
+ * A criteria edit resolved against the rows on record, before any of it is written.
+ *
+ * `existing` is the whole definition row because the baseline seal a held proposal names is taken
+ * over `revision` and `contentHash` as well as the words; `desired` is what the edit asks for,
+ * with `retainedId` recording which of those ids the REQUEST named and which this server invented
+ * for a criterion being added.
+ */
+interface ResolvedAcceptanceEdit {
+  existing: Array<{
+    id: string;
+    ordinal: number;
+    text: string;
+    verificationMethod: string;
+    completionCriterionOverrideReason: string | null;
+    revision: number;
+    contentHash: string;
+  }>;
+  desired: Array<{
+    id: string;
+    retainedId: string | null;
+    ordinal: number;
+    text: string;
+    verificationMethod: string;
+    completionCriterionOverrideReason: string | null;
+  }>;
+  direction: CriteriaEditDirection;
+}
+
+/**
+ * What a caller is told when its criteria edit was HELD rather than applied.
+ *
+ * Returned beside the project on the very response to the write, and beside criteria that are the
+ * UNCHANGED ones: `applied: false` is the machine-readable half of that and `notice` is the half a
+ * person reads. No `commitToken` — see `criteria-weakening-intent.ts`.
+ *
+ * Named `acceptanceCriteriaHold` on the wire and not after the word "proposal": migrations 0217
+ * and 0223 built and then removed a whole criteria-change channel, and its removal spec scans the
+ * entire tree for that channel's identifiers. A field reusing one of them would read to everyone
+ * downstream — and to that scan — as the removed channel coming back.
+ */
+export interface HeldCriteriaEdit {
+  applied: false;
+  intentId: string;
+  actionDigest: string;
+  baselineSeal: string;
+  supersededIntentId: string | null;
+  notice: string;
+}
 
 type ProjectMutationPayload = Prisma.ProjectGetPayload<{
   include: typeof COORDINATION_INCLUDE & {
@@ -826,31 +890,36 @@ export class ProjectsService {
     return normalized;
   }
 
-  /** Apply a whole structured collection while preserving every id the caller retained. Existing
-   * ordinals are first moved out of the way so swapping two rows never transiently violates the
-   * unique `(project, ordinal)` constraint.
+  /**
+   * Resolve a whole structured collection against the rows on record, WITHOUT WRITING ANYTHING.
    *
-   * Returns WHICH WAY the edit moved the ruler, read off the two lists this function already
-   * holds — the rows on record and the rows asked for, both after id resolution and both
-   * normalised the same way, which is the only place in the write path where those two exist side
-   * by side. It is reported rather than acted on here: what an ADDITIVE edit does is land, which
-   * is what this function does anyway, and there is nothing to re-seal afterwards because the
-   * standard set's seal is a function of the rows this leaves behind. */
-  private static async replaceAcceptanceDefinitions(
+   * Separated from the write below because the answer decides whether the write happens at all: an
+   * edit that loosens the ruler is held as a proposal instead of applied, and "held" has to mean
+   * that no definition row was touched — which is only checkable if classifying and writing are
+   * two steps rather than one function that has already overwritten `existing` by the time it
+   * reports what direction the edit went.
+   *
+   * `retainedId` is kept beside the resolved `id` because they are different facts: the resolved
+   * id of an ADDED criterion is a fresh uuid this function invented, and a proposal's digest may
+   * only be taken over values the request itself named.
+   */
+  private static async resolveAcceptanceEdit(
     tx: Prisma.TransactionClient | PrismaService,
     projectId: string,
     items: UpdateProjectAcceptanceCriterionDto[],
-  ): Promise<CriteriaEditDirection> {
+  ): Promise<ResolvedAcceptanceEdit> {
     const normalized = ProjectsService.normalizeAcceptanceItems(items);
     const existing = await tx.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId },
       orderBy: { ordinal: 'asc' },
       select: {
         id: true,
+        ordinal: true,
         text: true,
         verificationMethod: true,
         completionCriterionOverrideReason: true,
         revision: true,
+        contentHash: true,
       },
     });
     const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
@@ -876,12 +945,30 @@ export class ProjectsService {
         throw new BadRequestException(`acceptance criterion id ${supplied ?? id} is repeated`);
       }
       used.add(id);
-      return { ...criterion, id, ordinal: index + 1 };
+      return { ...criterion, id, retainedId: supplied === undefined ? null : id, ordinal: index + 1 };
     });
+    // Classified against the rows as they still stand, which is the only state they are ever
+    // classified against: nothing below this line writes.
+    return { existing, desired, direction: classifyCriteriaEdit(existing, desired) };
+  }
 
-    // Classified before anything is written, against the rows as they still stand: afterwards
-    // `existing` is history and the comparison would have nothing to be a comparison with.
-    const direction = classifyCriteriaEdit(existing, desired);
+  /** Apply a resolved collection while preserving every id the caller retained. Existing
+   * ordinals are first moved out of the way so swapping two rows never transiently violates the
+   * unique `(project, ordinal)` constraint.
+   *
+   * Reached only by an edit `resolveAcceptanceEdit` classified `ADDITIVE` — the ruler walking
+   * toward strictness, which is the walk it may take on its own. There is nothing to re-seal
+   * afterwards: the standard set's seal is a function of the rows this leaves behind, and the
+   * definition trigger has already moved `revision` and `content_hash` by the time anybody reads
+   * it. */
+  private static async replaceAcceptanceDefinitions(
+    tx: Prisma.TransactionClient | PrismaService,
+    projectId: string,
+    edit: ResolvedAcceptanceEdit,
+  ): Promise<void> {
+    const { existing, desired } = edit;
+    const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
+    const used = desired.map((criterion) => criterion.id);
 
     if (existing.length > 0) {
       await tx.projectAcceptanceCriterionDefinition.updateMany({
@@ -890,7 +977,7 @@ export class ProjectsService {
       });
     }
     await tx.projectAcceptanceCriterionDefinition.deleteMany({
-      where: { projectId, ...(used.size > 0 ? { id: { notIn: [...used] } } : {}) },
+      where: { projectId, ...(used.length > 0 ? { id: { notIn: used } } : {}) },
     });
     for (const criterion of desired) {
       const previous = byId.get(criterion.id);
@@ -926,7 +1013,164 @@ export class ProjectsService {
         });
       }
     }
-    return direction;
+  }
+
+  /**
+   * File a loosening edit as a PROPOSAL and change nothing else.
+   *
+   * The row goes into `project_ratified_action_intent` directly rather than through 0195's
+   * `project_submit_ratified_action`: that function refuses everything with
+   * `OWNER_RATIFICATION_REQUIRED` because it consults `project_owner_ratification`, a table with
+   * no Prisma model and no writer anywhere in this tree, so no project is ratified and none can
+   * become so. Going around it keeps both guarantees that matter — the BEFORE INSERT trigger still
+   * demands the project's CURRENT `contract_digest`, and the BEFORE UPDATE OR DELETE trigger still
+   * makes what is filed unrewritable.
+   *
+   * ONE PENDING PROPOSAL PER PROJECT, and the newer one wins. That is enforced here by SUPERSEDING
+   * rather than by the unique key: the intent row cannot be updated or deleted, so a proposal is
+   * displaced by the arrival of a later one naming it, with the reason recorded in the row that
+   * did the displacing. A proposal identical to the one already pending displaces nothing and
+   * files nothing — the caller gets the proposal it already has, which is what makes every
+   * recorded supersession an ask that genuinely changed.
+   */
+  private static async holdWeakeningAcceptanceEdit(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    projectId: string,
+    edit: ResolvedAcceptanceEdit,
+    actingSessionId: string | undefined,
+  ): Promise<HeldCriteriaEdit> {
+    const request = criteriaWeakeningRequest(projectId, edit.desired.map((criterion) => ({
+      id: criterion.retainedId,
+      ordinal: criterion.ordinal,
+      text: criterion.text,
+      verificationMethod: criterion.verificationMethod,
+      completionCriterionOverrideReason: criterion.completionCriterionOverrideReason,
+    })));
+    const actionDigest = criteriaWeakeningActionDigest(request);
+    // The seal of the set that stands, computed off the same rows and by the same function the
+    // confirmation read path uses, so the baseline a proposal names is the value a reader of
+    // `GET /projects/:id/acceptance/confirmation` sees beside it.
+    const baseline = standardSetVersion(criteriaFromDefinitions(edit.existing));
+
+    const pending = await ProjectsService.pendingWeakeningProposal(tx, projectId);
+    if (pending && pending.actionDigest === actionDigest && pending.seal === baseline.digest) {
+      // The same ask against the same ruler: this is the proposal already on record, not a second
+      // one. Re-filing it would displace a proposal with a copy of itself.
+      return {
+        applied: false,
+        intentId: pending.id,
+        actionDigest,
+        baselineSeal: baseline.digest,
+        supersededIntentId: null,
+        notice: criteriaUnchangedNotice(pending.id),
+      };
+    }
+    const supersedes: CriteriaWeakeningSupersession | null = pending
+      ? {
+        intentId: pending.id,
+        actionDigest: pending.actionDigest,
+        reason: criteriaWeakeningSupersessionReason(actionDigest),
+      }
+      : null;
+
+    // Every digest the row binds comes from the contract as it stands. The BEFORE INSERT trigger
+    // re-derives `contract_revision` from `(project_id, contract_digest)` and raises
+    // RATIFIED_ACTION_BINDING_STALE if that pair no longer resolves, which is what makes a
+    // proposal filed against a contract that has since moved impossible rather than merely wrong.
+    const contract = await tx.projectCompletionContract.findUnique({
+      where: { projectId },
+      select: {
+        contractDigest: true,
+        contractRevision: true,
+        evaluationPlanDigest: true,
+        riskPolicyDigest: true,
+        permissionDigest: true,
+        budgetDigest: true,
+        recipientDigest: true,
+      },
+    });
+    if (!contract) {
+      throw new ConflictException(
+        'this project has no completion contract to file a criteria proposal against — '
+        + 're-read it and try again',
+      );
+    }
+
+    const action: CriteriaWeakeningAction = {
+      request,
+      baseline: { seal: baseline.digest, material: baseline.material },
+      supersedes,
+    };
+    const intentId = randomUUID();
+    await tx.projectRatifiedActionIntent.create({
+      data: {
+        id: intentId,
+        projectId,
+        ownerId,
+        // WHO asked, in the vocabulary the column's CHECK allows. A request with no acting session
+        // reached the API as the account owner's own; one with a session is that session's ask,
+        // and neither classification is proof of who held a credential.
+        principalType: actingSessionId ? 'AGENT' : 'OWNER',
+        principalId: actingSessionId ?? ownerId,
+        triggerKind: 'MANUAL',
+        effectClass: CRITERIA_WEAKENING_EFFECT_CLASS,
+        ...contract,
+        // Nothing has been spent: a proposal grants no effect. The column is read when an intent
+        // is committed — copied onto the commit row and checked against the project's limit — and
+        // 0195 then sums those commit rows over a rolling 24 hours. Zero keeps a proposal, and any
+        // later commit of it, out of a budget that is about actions that HAPPENED.
+        budgetCharge: 0,
+        action: action as unknown as Prisma.InputJsonValue,
+        actionDigest,
+        // Per WRITE, not per content. A proposal can be displaced and then made again — proposing
+        // A, then B, then A once more is an ordinary change of mind — and a key derived from the
+        // ask would make that third write collide with the first proposal's dead row. What "one
+        // pending proposal" is enforced by is the supersession above, which a repeat can perform
+        // and a unique key cannot.
+        idempotencyKey: randomUUID(),
+        // The second key, and the proposer never sees it: `criteriaUnchangedNotice` returns the
+        // proposal's address and nothing that could act on it.
+        commitToken: randomUUID(),
+      },
+    });
+    return {
+      applied: false,
+      intentId,
+      actionDigest,
+      baselineSeal: baseline.digest,
+      supersededIntentId: pending?.id ?? null,
+      notice: criteriaUnchangedNotice(intentId),
+    };
+  }
+
+  /**
+   * The project's one pending weakening proposal, or null.
+   *
+   * "Pending" is DERIVED and has to be: the intent row has no status column and cannot be updated,
+   * so nothing can mark one settled in place. It is the proposal no later proposal supersedes —
+   * read off the supersession links themselves rather than off `created_at`, because two
+   * transactions can share a timestamp and "the newest row" would then be a coin toss where the
+   * invariant needs an answer.
+   */
+  private static async pendingWeakeningProposal(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<{ id: string; actionDigest: string; seal: string } | null> {
+    const rows = await tx.$queryRaw<Array<{ id: string; action_digest: string; seal: string }>>(Prisma.sql`
+      SELECT i."id", i."action_digest", i."action"->'baseline'->>'seal' AS "seal"
+        FROM "project_ratified_action_intent" i
+       WHERE i."project_id" = ${projectId}::uuid
+         AND i."effect_class" = ${CRITERIA_WEAKENING_EFFECT_CLASS}
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_ratified_action_intent" s
+            WHERE s."project_id" = i."project_id"
+              AND s."effect_class" = i."effect_class"
+              AND s."action"->'supersedes'->>'intentId' = i."id"::text)
+       ORDER BY i."created_at" DESC
+       LIMIT 1`);
+    const [row] = rows;
+    return row ? { id: row.id, actionDigest: row.action_digest, seal: row.seal } : null;
   }
 
   /**
@@ -1015,10 +1259,17 @@ export class ProjectsService {
 
         if (structuredCriteria !== undefined) {
           // In the same transaction as the project row, so no project can commit half-authored.
+          // Always applied and never held: a project stating its criteria for the first time has
+          // no earlier ruler to have loosened, so `resolveAcceptanceEdit` classifies every one of
+          // these ADDITIVE.
           await ProjectsService.replaceAcceptanceDefinitions(
             client,
             created.id,
-            dto.acceptanceCriteriaItems ?? [],
+            await ProjectsService.resolveAcceptanceEdit(
+              client,
+              created.id,
+              dto.acceptanceCriteriaItems ?? [],
+            ),
           );
           finalProject = await client.project.findUniqueOrThrow({
             where: { id: created.id },
@@ -1974,6 +2225,9 @@ export class ProjectsService {
     // the winner left rather than an aborted attempt's row.
     const writeProject = (expectedSessionId: string | null) =>
       withTransactionRetry(this.prisma, async (tx) => {
+        // Declared inside the closure, so a retried attempt reports the proposal IT filed rather
+        // than one an aborted attempt wrote and PostgreSQL threw away.
+        let held: HeldCriteriaEdit | null = null;
         if (dto.title !== undefined && expectedSessionId) {
           await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
             SELECT "id" FROM "session"
@@ -2019,15 +2273,21 @@ export class ProjectsService {
         // so the next read of the standard set's seal is already the new one and an owner
         // confirmation of the old one reads STALE from that moment. Nothing re-seals, and nothing
         // carries a confirmation forward — a set the owner has not seen is not a set the owner
-        // confirmed. A WEAKENING edit still lands here today; the door that holds one for the
-        // owner to decide is a write path of its own, and this is where it hooks in.
+        // confirmed.
+        //
+        // A WEAKENING edit does not reach the write at all. It becomes one proposal row under the
+        // same project lock — so the baseline it names is the set that stood when it was composed,
+        // and not one a concurrent edit moved between the classification and the filing — and the
+        // criteria this method goes on to return are the ones that were already there.
         if (dto.acceptanceCriteriaItems !== undefined) {
-          const direction = await ProjectsService.replaceAcceptanceDefinitions(
+          const edit = await ProjectsService.resolveAcceptanceEdit(
             tx, id, dto.acceptanceCriteriaItems,
           );
-          if (direction === 'WEAKENING') {
-            this.logger.warn(
-              `project ${id}: an acceptance criteria edit that loosens the ruler landed unheld`,
+          if (edit.direction === 'ADDITIVE') {
+            await ProjectsService.replaceAcceptanceDefinitions(tx, id, edit);
+          } else {
+            held = await ProjectsService.holdWeakeningAcceptanceEdit(
+              tx, ownerId, id, edit, actingSessionId,
             );
           }
         }
@@ -2057,12 +2317,13 @@ export class ProjectsService {
           // Publish after commit so list/detail clients refresh the backlink as well as the title.
           changedSessionId = locked.coordinator_session_id;
         }
-        return { project, changedSessionId };
+        return { project, changedSessionId, held };
       }, loggedRetry(this.logger, 'projects.update'));
     try {
       let projectResult: {
         project: ProjectMutationPayload;
         changedSessionId: string | null;
+        held: HeldCriteriaEdit | null;
       } | null = null;
       for (let bindingAttempt = 1; bindingAttempt <= 4; bindingAttempt += 1) {
         try {
@@ -2084,14 +2345,20 @@ export class ProjectsService {
         }
       }
       if (!projectResult) throw new CoordinatorBindingChanged();
-      const { project, changedSessionId } = projectResult;
+      const { project, changedSessionId, held } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
       // The criteria a project states are one of the two facts its `status` is projected from, and
-      // this write is the only thing that moves them.
-      if (dto.acceptanceCriteriaItems !== undefined) {
+      // this write is the only thing that moves them — when it moves them at all. A HELD edit
+      // moved none of them, so there is nothing to re-project and no reason to re-decide a column
+      // the owner may have just written by hand.
+      if (dto.acceptanceCriteriaItems !== undefined && !held) {
         await this.reprojectProjectStatus(ownerId, id);
       }
-      return withAcceptanceDefinitions(withCoordination(project));
+      // Spread rather than nested, and only when there IS one: a caller whose edit was applied
+      // sees exactly the response it saw before this existed, and a caller whose edit was held
+      // cannot read the criteria in this body without the field that says they are the OLD ones.
+      const updated = withAcceptanceDefinitions(withCoordination(project));
+      return held ? { ...updated, acceptanceCriteriaHold: held } : updated;
     } catch (e) {
       // The partial unique index behind "one coordinator per project", reached only by a second
       // writer that got between the read and the write above. Reported as the rule it is rather

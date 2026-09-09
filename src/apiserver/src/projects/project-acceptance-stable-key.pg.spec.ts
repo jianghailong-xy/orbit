@@ -53,7 +53,15 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 /** The verification method every criterion here declares; never the thing under test. */
-const METHOD = 'Read it and say whether it holds';
+/**
+ * The verification method the criteria declare, and the rung the edit below promotes one of them
+ * TO. Rungs of the HUMAN → VERIFICATION → EXECUTABLE ladder rather than prose, because case 1
+ * needs an edit that TAKES EFFECT: a criteria edit lands only when it walks the ruler toward
+ * strictness, and a rewritten `text` is a direction nothing can read, so it is held as a proposal
+ * for the account owner and the row does not move at all (`criteria-weakening-intent.pg.spec.ts`).
+ */
+const METHOD = 'VERIFICATION';
+const STRICTER = 'EXECUTABLE';
 
 /** build/projects -> build -> apiserver -> src -> repository root. */
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
@@ -98,6 +106,7 @@ interface StatedItem {
   key: string;
   ordinal: number;
   text: string;
+  verificationMethod: string;
   revision: number;
   contentHash: string;
 }
@@ -132,12 +141,14 @@ test('T5: a criterion key is its stable id, and no read derives it from the cont
   await prisma.project.create({ data: { id: projectId, ownerId, title: 'T5 subject project' } });
 
   /** State the whole collection through the owner's path — the only thing that moves `revision`. */
-  async function state(items: Array<{ id?: string; text: string }>): Promise<void> {
+  async function state(
+    items: Array<{ id?: string; text: string; verificationMethod?: string }>,
+  ): Promise<void> {
     await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: items.map((item) => ({
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
-        verificationMethod: METHOD,
+        verificationMethod: item.verificationMethod ?? METHOD,
       })),
     } as never);
   }
@@ -180,7 +191,6 @@ test('T5: a criterion key is its stable id, and no read derives it from the cont
   }
 
   const FIRST = 'the dispatcher starts a ready task';
-  const REWORDED = 'the dispatcher starts a ready task, and says so';
   const SECOND = 'the boundary is decided server-side';
 
   await state([{ text: FIRST }, { text: SECOND }]);
@@ -198,13 +208,21 @@ test('T5: a criterion key is its stable id, and no read derives it from the cont
   const [firstBefore, secondBefore] = before;
 
   // ═══ 1. rewriting the words moves the revision and not the key ════════════════════════════
-  await t.test('rewriting a criterion’s text leaves its key alone and increments its revision',
+  await t.test('rewriting a criterion’s exam leaves its key alone and increments its revision',
     async () => {
-      await state([{ id: firstBefore.id, text: REWORDED }, { id: secondBefore.id, text: SECOND }]);
+      // The exam rather than the words, because a rewritten assertion is an edit whose direction
+      // cannot be read and so no longer lands at all. Both halves of a criterion feed `revision`
+      // and `content_hash`, so promoting the method moves exactly what rewording used to move.
+      await state([
+        { id: firstBefore.id, text: FIRST, verificationMethod: STRICTER },
+        { id: secondBefore.id, text: SECOND },
+      ]);
       const after = await outward();
       const [firstAfter, secondAfter] = after;
 
-      assert.equal(firstAfter.text, REWORDED, 'the fixture must actually have rewritten the words');
+      assert.equal(firstAfter.verificationMethod, STRICTER,
+        'the fixture must actually have rewritten how the criterion is judged');
+      assert.equal(firstAfter.text, FIRST, 'and it must have left the assertion itself alone');
       // The content hash MOVED. Without this, "the key did not change" would also be satisfied by
       // a fixture whose edit never reached the database — the negative would be about nothing.
       const storedNow = await stored(firstBefore.id);
@@ -291,7 +309,13 @@ test('T5: a criterion key is its stable id, and no read derives it from the cont
     const original = await outward();
     const [one, two] = original;
 
-    await state([{ id: two.id, text: two.text }, { id: one.id, text: one.text }]);
+    // Each criterion restated with its OWN exam, not with the fixture's default: case 1 promoted
+    // one of them, and re-sending `METHOD` for that row would be a step back DOWN the ladder —
+    // a loosening, which is held rather than applied, and the swap would simply not happen.
+    await state([
+      { id: two.id, text: two.text, verificationMethod: two.verificationMethod },
+      { id: one.id, text: one.text, verificationMethod: one.verificationMethod },
+    ]);
     const reordered = await outward();
 
     assert.deepEqual(reordered.map((item) => item.ordinal), [1, 2]);
@@ -303,7 +327,10 @@ test('T5: a criterion key is its stable id, and no read derives it from the cont
       'and a reorder is not an edit, so nothing counts as a new wording');
 
     // Put them back, so the scan below reads a tree the earlier cases still describe.
-    await state([{ id: one.id, text: one.text }, { id: two.id, text: two.text }]);
+    await state([
+      { id: one.id, text: one.text, verificationMethod: one.verificationMethod },
+      { id: two.id, text: two.text, verificationMethod: two.verificationMethod },
+    ]);
   });
 
   // ═══ 5. nothing derives the outward key from the content hash ═════════════════════════════

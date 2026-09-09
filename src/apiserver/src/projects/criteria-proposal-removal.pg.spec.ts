@@ -104,10 +104,16 @@ async function base(db: PrismaClient, label: string) {
   return { ownerId, projectId };
 }
 
-function criterion(text: string) {
+function criterion(text: string, verificationMethod?: string) {
   return {
     text,
-    verificationMethod: 'A person reads the delivered work against this assertion.',
+    // A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder where a case needs an edit that
+    // TAKES EFFECT. Since the weakening door was wired, the ordinary write path applies an edit
+    // only when it walks the ruler toward strictness; the cases below therefore state criteria by
+    // ADDING or by PROMOTING, and the ones that drop a criterion assert what a held edit leaves
+    // behind. None of that is the proposal channel coming back — see the header.
+    verificationMethod:
+      verificationMethod ?? 'A person reads the delivered work against this assertion.',
   };
 }
 
@@ -187,31 +193,39 @@ test('project_update writes acceptance criteria directly: one call, in force, no
       // still diverted criteria into a proposal would reach a function that no longer exists.
       const controller = new RunnerProjectsController(projects, acceptance, {} as never, {} as never);
 
-      await projects.update(target.ownerId, target.projectId, {
+      const first: any = await projects.update(target.ownerId, target.projectId, {
         acceptanceCriteriaItems: [criterion('The corpus is indexed end to end.')],
       } as never);
       assert.deepEqual(await inForce(db, target.projectId),
         ['The corpus is indexed end to end.']);
 
-      // ONE call through the agent's own door, with no acting session and no second step.
+      // ONE call through the agent's own door, with no acting session and no second step. The
+      // whole collection restated with one criterion added — a tightening, which is the walk the
+      // ruler may take on its own and so the shape that still lands in one call. The criterion
+      // already on record is restated UNDER ITS OWN ID: an item with no id is one being added, so
+      // omitting it would read as dropping that criterion and adding a lookalike, which is a
+      // loosening and would be held.
       const response = await controller.updateProject(runner, target.projectId, undefined, {
-        acceptanceCriteriaItems: [criterion('The corpus is indexed AND deduplicated.')],
+        acceptanceCriteriaItems: [
+          { id: first.acceptanceCriteriaItems[0].id, ...criterion('The corpus is indexed end to end.') },
+          criterion('The corpus is deduplicated.'),
+        ],
       } as never) as Record<string, unknown>;
 
       // In force immediately: read straight back, with nothing approved in between.
       assert.deepEqual(await inForce(db, target.projectId),
-        ['The corpus is indexed AND deduplicated.'],
+        ['The corpus is indexed end to end.', 'The corpus is deduplicated.'],
         'the acceptance criteria an agent sent are the ones now judging this project');
       // And the response says so plainly rather than reporting a pending card.
-      for (const key of
-        ['acceptanceCriteriaProposal', 'acceptanceCriteriaApplied', 'acceptanceCriteriaNote']) {
+      for (const key of ['acceptanceCriteriaProposal', 'acceptanceCriteriaApplied',
+        'acceptanceCriteriaNote', 'acceptanceCriteriaHold']) {
         assert.equal(key in response, false, `the response still reports ${key}`);
       }
       assert.equal(response.id, target.projectId);
       assert.deepEqual(
         (response.acceptanceCriteriaItems as Array<{ text: string }> | undefined)
           ?.map((item) => item.text),
-        ['The corpus is indexed AND deduplicated.'],
+        ['The corpus is indexed end to end.', 'The corpus is deduplicated.'],
       );
 
     } finally {
@@ -231,20 +245,30 @@ test('a second write replaces the set rather than appending to it', { skip }, as
     } as never);
     assert.deepEqual(await inForce(db, target.projectId), ['First', 'Second']);
 
-    // Whole-collection replacement is what both the MCP and CLI copy now promise. A set that
-    // grew to three here would mean the copy was wrong in the other direction.
-    await controller.updateProject(runner, target.projectId, undefined, {
+    // Whole-collection replacement is what both the MCP and CLI copy now promise, and this is the
+    // write that tells replacement from appending: a path that APPENDED would leave three
+    // criteria here. It leaves two — the two that were already there — because a replacement that
+    // drops a criterion is a loosening, and a loosening is held for the account owner rather than
+    // applied (`criteria-weakening-intent.pg.spec.ts`). What it is NOT, either way, is a criterion
+    // this call added to the set.
+    const response = await controller.updateProject(runner, target.projectId, undefined, {
       acceptanceCriteriaItems: [criterion('Only this one')],
-    } as never);
-    assert.deepEqual(await inForce(db, target.projectId), ['Only this one']);
+    } as never) as Record<string, unknown>;
+    assert.deepEqual(await inForce(db, target.projectId), ['First', 'Second'],
+      'the collection is stated whole; nothing was appended to it');
+    const held = response.acceptanceCriteriaHold as { applied: boolean } | undefined;
+    assert.ok(held, 'and the caller is told its edit did not take effect');
+    assert.equal(held.applied, false);
   } finally {
     await db.$disconnect();
   }
 });
 
 // `[]` was refused for as long as `acceptanceCriteriaItems` had to be a proposal an owner could
-// answer, and a project measured by nothing was not one. It is a clear again.
-test('an empty structured set clears the criteria instead of being refused', { skip }, async () => {
+// answer, and a project measured by nothing was not one. It is not refused any more — the
+// refusal 0223 removed has not come back. Clearing every criterion is the largest loosening
+// there is, so what the call gets is a 200 and a held edit, not a 400.
+test('an empty structured set is accepted rather than refused, and is held', { skip }, async () => {
   const { db, acceptance, projects } = await connect();
   try {
     const target = await base(db, 'empty-clears');
@@ -256,9 +280,15 @@ test('an empty structured set clears the criteria instead of being refused', { s
     } as never);
     assert.deepEqual(await inForce(db, target.projectId), ['Something to clear']);
 
-    await controller.updateProject(runner, target.projectId, undefined,
-      { acceptanceCriteriaItems: [] } as never);
-    assert.deepEqual(await inForce(db, target.projectId), []);
+    const response = await controller.updateProject(runner, target.projectId, undefined,
+      { acceptanceCriteriaItems: [] } as never) as Record<string, unknown>;
+    // Not a refusal: the call answered with the project, as it has since 0223.
+    assert.equal(response.id, target.projectId);
+    const held = response.acceptanceCriteriaHold as { applied: boolean } | undefined;
+    assert.ok(held, 'an emptied ruler is held for the account owner rather than refused');
+    assert.equal(held.applied, false);
+    assert.deepEqual(await inForce(db, target.projectId), ['Something to clear'],
+      'and the criteria that were in force still are');
   } finally {
     await db.$disconnect();
   }
@@ -277,21 +307,32 @@ test('the project read still reports the criteria set, and it is the one just wr
       const runner = { id: randomUUID(), ownerId: target.ownerId } as never;
       const controller = new RunnerProjectsController(projects, acceptance, {} as never, {} as never);
 
+      // Stated on a RUNG of the ladder, because the second write below promotes it: a method that
+      // is free prose on either side of an edit is a direction nothing can read, and an edit whose
+      // direction cannot be read is held rather than applied.
       await controller.updateProject(runner, target.projectId, undefined, {
-        acceptanceCriteriaItems: [criterion('The first standard')],
+        acceptanceCriteriaItems: [criterion('The first standard', 'VERIFICATION')],
       } as never);
       const before: any = await projects.get(target.ownerId, target.projectId);
       assert.deepEqual(
         before.acceptanceCriteriaItems.map((c: { text: string }) => c.text),
         ['The first standard']);
 
+      // The exam rather than the assertion, promoted up the ladder and under the criterion's own
+      // id: that is the edit that still lands, and it moves `content_hash`, which is what this
+      // case is really reading.
       await controller.updateProject(runner, target.projectId, undefined, {
-        acceptanceCriteriaItems: [criterion('The standard an agent chose instead')],
+        acceptanceCriteriaItems: [{
+          id: before.acceptanceCriteriaItems[0].id,
+          ...criterion('The first standard', 'EXECUTABLE'),
+        }],
       } as never);
       const after: any = await projects.get(target.ownerId, target.projectId);
       assert.deepEqual(
-        after.acceptanceCriteriaItems.map((c: { text: string }) => c.text),
-        ['The standard an agent chose instead'],
+        after.acceptanceCriteriaItems.map(
+          (c: { text: string; verificationMethod: string }) => [c.text, c.verificationMethod],
+        ),
+        [['The first standard', 'EXECUTABLE']],
         'the read must show the set the write left, not the one it replaced');
       assert.notEqual(after.acceptanceCriteriaItems[0].contentHash,
         before.acceptanceCriteriaItems[0].contentHash,

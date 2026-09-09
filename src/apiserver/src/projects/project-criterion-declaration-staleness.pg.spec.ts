@@ -52,8 +52,18 @@ const HOUSE_ADJECTIVE = 'STALE';
 const MARKER = `${SNAPSHOT_COLUMN.replace(/_([a-z])/gu, (_, c: string) => c.toUpperCase())}`
   + `${HOUSE_ADJECTIVE[0]}${HOUSE_ADJECTIVE.slice(1).toLowerCase()}`;
 
-/** The verification method every criterion here declares; never the thing under test. */
-const METHOD = 'Read it and say whether it holds';
+/**
+ * The verification method every criterion here declares; never the thing under test.
+ *
+ * A rung of the HUMAN → VERIFICATION → EXECUTABLE ladder, and `STRICTER` below is the next rung up.
+ * That is what makes the edit in the middle of this fixture one that TAKES EFFECT: since the
+ * weakening door was wired, a criteria edit lands only when it walks the ruler toward strictness,
+ * and a rewritten `text` is a direction nothing can read, so it is held for the account owner
+ * instead of moving the row (`criteria-weakening-intent.pg.spec.ts`).
+ */
+const METHOD = 'VERIFICATION';
+/** The rung the moved criterion is promoted TO — a stricter exam for the same assertion. */
+const STRICTER = 'EXECUTABLE';
 
 test('T2: a declaration whose criterion moved is marked, and stays attached', {
   skip, concurrency: 1, timeout: 180_000,
@@ -95,12 +105,12 @@ test('T2: a declaration whose criterion moved is marked, and stays attached', {
   });
 
   /** State the whole collection, and read back what a caller would be told to name each one by. */
-  async function state(items: Array<{ id?: string; text: string }>) {
+  async function state(items: Array<{ id?: string; text: string; verificationMethod?: string }>) {
     const written = await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: items.map((item) => ({
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
-        verificationMethod: METHOD,
+        verificationMethod: item.verificationMethod ?? METHOD,
       })),
     } as never);
     return criteriaFromDefinitions(written.acceptanceCriteriaItems);
@@ -128,9 +138,8 @@ test('T2: a declaration whose criterion moved is marked, and stays attached', {
     return criterion.servingTasks;
   }
 
-  const MOVED = 'the wording of this criterion is about to be corrected';
-  const CORRECTED = 'the wording of this criterion has been corrected';
-  const UNTOUCHED = 'the wording of this criterion is left alone';
+  const MOVED = 'the exam for this criterion is about to be made stricter';
+  const UNTOUCHED = 'the exam for this criterion is left alone';
 
   const [movedAtFirst, untouched] = await state([{ text: MOVED }, { text: UNTOUCHED }]);
   assert.equal(movedAtFirst.definitionRevision, 1);
@@ -150,19 +159,23 @@ test('T2: a declaration whose criterion moved is marked, and stays attached', {
     { criterion_definition_id: movedAtFirst.definitionId, criterion_revision: 1 });
 
   // ═══ the product path that moves the ruler ════════════════════════════════════════════════
-  // One edit of one criterion's text, through the same call the owner's client makes, carrying
-  // every criterion's id so this is an EDIT rather than a delete and a re-create. That
-  // distinction is the test's foundation: a re-created criterion would be a new row, the task's
-  // FK would have gone to NULL by ON DELETE SET NULL, and everything below would be measuring
-  // detachment while claiming to measure staleness.
+  // One edit of one criterion's verification method, through the same call the owner's client
+  // makes, carrying every criterion's id so this is an EDIT rather than a delete and a re-create.
+  // That distinction is the test's foundation: a re-created criterion would be a new row, the
+  // task's FK would have gone to NULL by ON DELETE SET NULL, and everything below would be
+  // measuring detachment while claiming to measure staleness.
+  //
+  // The method is promoted UP the ladder rather than the words being rewritten, because that is
+  // the edit that still LANDS: a rewriting has no readable direction and is held as a proposal, so
+  // it would leave the criterion where it was and this fixture would be measuring nothing.
   const [moved, stillUntouched] = await state([
-    { id: movedAtFirst.definitionId, text: CORRECTED },
+    { id: movedAtFirst.definitionId, text: MOVED, verificationMethod: STRICTER },
     { id: untouched.definitionId, text: UNTOUCHED },
   ]);
   assert.equal(moved.definitionId, movedAtFirst.definitionId,
     'the criterion must be the same row: an edit, not a replacement');
   assert.equal(moved.definitionRevision, 2,
-    'editing the assertion increments the revision — nothing here wrote that column by hand');
+    'editing how the assertion is judged increments the revision — nothing wrote that column by hand');
   assert.equal(stillUntouched.definitionRevision, 1,
     'and it increments only the criterion that changed');
 
