@@ -59,4 +59,4 @@ EXPOSE 3000
 # `require.resolve` runs the ordinary Node lookup from that same directory, so the CLI is found in
 # the workspace's node_modules or in the root one, whichever this install produced; no dependency
 # bump can move it somewhere this command refuses to look.
-CMD ["sh", "-c", "cd src/apiserver && node \"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy && cd /app && node src/apiserver/dist/main.js"]
+CMD ["sh", "-c", "cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy && cd /app && node src/apiserver/dist/main.js"]
