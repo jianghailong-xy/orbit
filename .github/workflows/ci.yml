@@ -250,23 +250,36 @@ jobs:
   # WHAT IT COSTS
   # =============
   # Its own runner, in parallel with the four jobs above rather than after them. Measured on this
-  # branch: apiserver image PLACEHOLDER_API_BUILD, web image PLACEHOLDER_WEB_BUILD, boot
-  # PLACEHOLDER_BOOT, PLACEHOLDER_TOTAL for the job. CI's wall clock is set by its slowest job,
-  # and that is still `PostgreSQL specs` at about six and a half minutes, so the run as a whole
-  # PLACEHOLDER_VERDICT. No layer cache is configured on purpose: `cache-to: type=gha` would have
-  # to run in `mode=max` to reach the `npm ci` layer at all (it lives in a build stage that never
-  # ships), the two images are about 1.5 GB together, and the repository's 10 GB Actions cache is
-  # already carrying the npm cache four other jobs restore from. A cache that evicts that to
-  # store this is a net loss while the uncached build already fits inside the run.
+  # branch, uncached, on a cold runner (run 34332742998): apiserver image 55s, web image 93s,
+  # boot 16s, 2m50s for the job. CI's wall clock is set by its slowest job, and that is still
+  # `PostgreSQL specs` — 7m12s in that same run, inside a 7m18s run total. So the price is one
+  # runner and no wall clock, and no money either: this repository is public, where GitHub's
+  # standard runners are free.
+  #
+  # No layer cache is configured, and that is a decision rather than an omission. `cache-to:
+  # type=gha` would have to run in `mode=max` to reach the `npm ci` layer at all — that layer
+  # lives in a build stage which never ships, so `mode=min` would not see it — the two images
+  # are about 1.5 GB together, and this repository's 10 GB Actions cache is already carrying the
+  # npm cache that two other jobs here restore from. Evicting that to save 148 seconds inside a
+  # seven-minute run is a trade worth making only once the cold build stops fitting.
   #
   # ITS NEGATIVE CONTROL IS THE DEFECT ITSELF
   # =========================================
   # The `postgres` job above needs a knob to prove it can fail, because its failure mode is a
-  # silent skip. This job has no such mode: it either builds and boots or it does not. It was
-  # proven red by putting the accident back — CMD returned to the hardcoded
-  # `node_modules/prisma/build/index.js` under src/apiserver, against this branch's lock, which
-  # is already the 7.10.0 that hoisted that file away — and green again with it removed.
-  # PLACEHOLDER_RUNS
+  # silent skip. This job has no such mode: it either builds and boots or it does not. So the
+  # control was the accident itself, put back and pushed on this branch — CMD returned to the
+  # hardcoded `node_modules/prisma/build/index.js` under src/apiserver, against a lock that is
+  # already the 7.10.0 which hoisted that file to the root. Run 34334289908:
+  #
+  #     Build the apiserver image   success   59s
+  #     Build the web image         success   98s
+  #     Boot both images            FAILURE    8s
+  #       !! apiserver exited (code 1) instead of listening
+  #       Error: Cannot find module '/app/src/apiserver/node_modules/prisma/build/index.js'
+  #
+  # Read the first line again: the build was GREEN on a tree that cannot start. That is why this
+  # job boots what it builds, and it is the whole claim. In that same run JavaScript, PostgreSQL
+  # specs, Go runner and Swift core were all green — which is exactly the shape of 2026-09-09.
   images:
     name: Container images
     runs-on: ubuntu-latest
