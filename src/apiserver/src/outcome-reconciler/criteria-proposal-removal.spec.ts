@@ -216,6 +216,11 @@ test('no live source names the proposal relation, a proposal function or the cha
       // history rather than a use of it: `prisma/migrations` is append-only, so a manifest may
       // still take a digest of 0217 after the objects it describes are gone.
       if (line.includes('prisma/migrations/')) return;
+      // And citing one of the witnesses BY PATH is the same category: their filenames are built
+      // out of the very vocabulary this scan hunts, so a survey that lists which specs prove the
+      // removal cannot name them without tripping it. Narrow on purpose — only the paths already
+      // enumerated above are exempt, so this cannot grow into a hole the way a pattern would.
+      if (REMOVAL_WITNESSES.some((witness) => line.includes(witness))) return;
       for (const name of names) {
         if (line.includes(name)) offenders.push(`${rel}:${index + 1}: ${name}`);
       }
