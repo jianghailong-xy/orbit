@@ -30,7 +30,13 @@ import {
 
 const API = path.resolve(__dirname, '..', '..');
 const SRC = path.join(API, 'src');
-const TSC = path.join(API, 'node_modules', '.bin', 'tsc');
+// Resolved, not named. npm puts `typescript` under this workspace on one lockfile and
+// at the repo root on the next — the nestjs group bump hoists it — and a hard
+// `node_modules/.bin/tsc` path just becomes ENOENT when it moves. `@prisma/client` in
+// `compileFixture` is already resolved this way. The deep path is not exported, so
+// resolve the package and walk to its bin, and run it through node rather than relying
+// on a `.bin` shim existing at any particular level.
+const TSC = path.join(path.dirname(require.resolve('typescript')), '..', 'bin', 'tsc');
 
 /**
  * The delegate names come from the generated client, never from a list kept here. A model that is
@@ -244,11 +250,22 @@ function compileFixture(body: string): { ok: boolean; output: string } {
       files: ['fixture.ts'],
     }));
     try {
-      execFileSync(TSC, ['-p', path.join(dir, 'tsconfig.json')], { encoding: 'utf8', stdio: 'pipe' });
+      execFileSync(process.execPath, [TSC, '-p', path.join(dir, 'tsconfig.json')], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
       return { ok: true, output: '' };
     } catch (error) {
       const failure = error as { stdout?: string; stderr?: string };
-      return { ok: false, output: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
+      const output = `${failure.stdout ?? ''}${failure.stderr ?? ''}`;
+      // tsc prints a diagnostic for every compile it rejects, so empty output means the
+      // compiler never ran. Handing that back as an ordinary `{ ok: false }` makes a
+      // harness that cannot start tsc look exactly like a fixture that failed to
+      // compile — which is precisely how the hard-coded path above stayed invisible
+      // until all seven assertions failed at once, each of them "passing" its own
+      // expectation of a compile error while tsc had said nothing at all.
+      if (output.trim() === '') throw error;
+      return { ok: false, output };
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
