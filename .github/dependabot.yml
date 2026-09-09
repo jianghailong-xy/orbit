@@ -47,6 +47,14 @@ updates:
       # packages and the prisma group came out empty. It only forms on the NEXT full
       # run, once those PRs have been replaced by ones that no longer name them.
       # Changing group membership therefore costs two update runs, not one.
+      # This group has one more cost than the others, and it is not visible to CI.
+      # 7.10.0 moved the `prisma` CLI out of the workspace and up to the root
+      # node_modules, and four places named the workspace path outright — the
+      # apiserver image's boot command among them, which runs `migrate deploy`
+      # before the server binds. So `2eead690` merged green and took the site down
+      # with a crash loop until `003abb91` reverted it. All four now ask node where
+      # the CLI is, and no CI job here builds an image, so a green run still says
+      # nothing about whether one boots. Before landing this group, check that.
       prisma:
         patterns:
           - "prisma"
