@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest';
  *
  * The rule the strip exists to satisfy is about layout, not about markup: what is recomputed every
  * turn is pinned under the header and does not move when the conversation does, and what happened
- * once stays in the log and scrolls with it. Rendering the strip on its own cannot tell you which
- * side of that line it ended up on — only the composition can, and the composition lives in a
- * component that needs a router, a query client and a live session to render at all.
+ * once stays in the transcript and scrolls with it. Rendering the strip on its own cannot tell you
+ * which side of that line it ended up on — only the composition can, and the composition lives in
+ * a component that needs a router, a query client and a live session to render at all.
  *
  * So this reads the composition as text. It is a weaker instrument than a render and it is the
  * right one here: the failure it has to catch is somebody moving one JSX element a few lines down,
@@ -24,7 +24,7 @@ const SOURCE = readFileSync(new URL('./WorkspaceView.tsx', import.meta.url), 'ut
  *  scrolling element rather than merely the one with the messages in it. */
 const SCROLL_WRAP = '<div className="workspace-scroll-wrap">';
 
-describe('the pending strip is pinned, and the decision log is not', () => {
+describe('the pending strip is pinned above the conversation', () => {
   it('mounts the strip above the element that scrolls', () => {
     const strip = SOURCE.indexOf('<SessionDecisionStrip');
     const scroller = SOURCE.indexOf(SCROLL_WRAP);
@@ -50,23 +50,5 @@ describe('the pending strip is pinned, and the decision log is not', () => {
     // transcript, so nothing between those two points can be the strip.
     const insideScroller = SOURCE.slice(SOURCE.indexOf(SCROLL_WRAP));
     expect(insideScroller).not.toContain('<SessionDecisionStrip');
-  });
-
-  it('keeps the decision log inside the scroller, where the rest of the history is', () => {
-    const scroller = SOURCE.indexOf(SCROLL_WRAP);
-    const log = SOURCE.indexOf('<DecisionLog');
-    const transcript = SOURCE.indexOf('<Transcript');
-
-    expect(log, 'a decision leaves nothing behind in the log').toBeGreaterThan(-1);
-    // An event, in the flow, after the conversation it happened during.
-    expect(log).toBeGreaterThan(scroller);
-    expect(log).toBeGreaterThan(transcript);
-  });
-
-  it('scopes the log to the session it was decided in', () => {
-    // One tab can answer questions belonging to several sessions in turn. Keyed by session id, so
-    // switching does not carry one conversation's answers into another's transcript.
-    expect(SOURCE).toMatch(/decisionEvents\[selectedId\]/);
-    expect(SOURCE).toMatch(/useState<Record<string, string\[\]>>/);
   });
 });

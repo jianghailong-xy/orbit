@@ -160,7 +160,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel, answerableDecisionCards } from './ApprovalPanel';
-import { DecisionLog, SessionDecisionStrip } from './DecisionRail';
+import { SessionDecisionStrip } from './DecisionRail';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -1218,17 +1218,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
-  /**
-   * The decisions answered from this tab, per session, in the order they were answered.
-   *
-   * A decision is an event: it happened once and goes on having happened. The pinned strip above
-   * says only what is TRUE NOW and is re-derived from the ledger every read, so an answered
-   * question leaves it — and if that were the whole story, a decision would be a thing that made a
-   * row silently vanish. These lines are what it leaves behind, rendered in the transcript where it
-   * happened. Kept per session id so switching sessions does not carry one conversation's answers
-   * into another's log.
-   */
-  const [decisionEvents, setDecisionEvents] = useState<Record<string, string[]>>({});
   // Controlled because the multi-select tag items stay open after a choice; ordinary actions
   // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -5551,9 +5540,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
-              {/* In the flow, at the bottom, scrolling with everything else that happened: what a
-                  decision made from this session left behind. */}
-              <DecisionLog lines={decisionEvents[selectedId] ?? []} />
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&

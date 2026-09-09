@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   CONFIRM_LABEL,
-  DecisionLog,
   DecisionStrip,
   NEEDS_DECISION_LABEL,
   NO_CARD_NOTE,
@@ -12,11 +11,9 @@ import {
   SEND_BACK_LABEL,
   WAITING_ON_YOU_ACTION,
   WAITING_ON_YOU_LABEL,
-  completionConfirmedLine,
   decisionRowKey,
   formatAge,
   needsDecisionCount,
-  sentBackLine,
   waitingOnYouCount,
   type PendingDecisionQueue,
   type PendingDecisionRow,
@@ -555,52 +552,6 @@ describe('there is no way to answer more than one at a time', () => {
   it('never says Mark complete, because nothing here writes a status', () => {
     expect(three).not.toContain('Mark complete');
     expect(three.toLowerCase()).not.toContain('mark complete');
-  });
-});
-
-/**
- * A decision is an EVENT. It happened once, and it goes on having happened.
- *
- * The pinned strip says what is true NOW, so an answered question leaves it on the next read. If
- * that were the whole story a decision would be a thing that made a row silently vanish — so the
- * sentence describing it belongs in the log, where the rest of what happened is.
- *
- * Its writer went with the strip's mutation this round and it has none today — deliberately, and
- * for the reason written on `DecisionLog` itself. What is asserted here is unchanged and still
- * worth asserting: the sentences say which version was answered, they render in the log, and the
- * strip has no channel that could put one in the pinned area.
- */
-describe('what a decision leaves behind', () => {
-  it('names the task, the standard and the exact version that was answered', () => {
-    expect(completionConfirmedLine('the stalled inventory', '3t4PyphGUWQtzDGfvOLY9R', '3')).toBe(
-      'Completion confirmed — the stalled inventory against 3t4PyphGUWQtzDGfvOLY9R, bound to rev 3',
-    );
-    // Legacy evidence has no key to name; the line says so rather than leaving a blank.
-    expect(completionConfirmedLine('the SOURCE contract rebase', null, '1')).toContain(
-      'no stated criterion',
-    );
-    expect(sentBackLine('the stalled inventory', '3')).toBe(
-      'Sent back — the stalled inventory, bound to rev 3',
-    );
-  });
-
-  it('renders in the log rather than in the pinned strip', () => {
-    const line = completionConfirmedLine('the stalled inventory', '3t4PyphGUWQtzDGfvOLY9R', '3');
-    const log = render(<DecisionLog lines={[line]} />);
-    expect(log).toContain('decision-log-line');
-    expect(log).toContain(line);
-
-    // And the strip has no channel for it at all: there is no prop that would put a past answer in
-    // the pinned area, so one cannot accumulate there.
-    expect(expandedStrip(queue())).not.toContain('Completion confirmed');
-    expect(render(<DecisionLog lines={[]} />)).toBe('');
-  });
-
-  it('keeps them in the order they happened', () => {
-    const first = completionConfirmedLine('the decision door', 'C2', '1');
-    const second = sentBackLine('the evidence envelope', '4');
-    const html = render(<DecisionLog lines={[first, second]} />);
-    expect(html.indexOf(first)).toBeLessThan(html.indexOf(second));
   });
 });
 

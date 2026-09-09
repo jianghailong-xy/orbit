@@ -6,15 +6,24 @@ import { pendingDecisionsQuery } from '../lib/queries';
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
  *
- * STATE IS PINNED; EVENTS STAY IN THE LOG
- * ---------------------------------------
+ * STATE IS PINNED; WHAT HAPPENED STAYS IN THE TRANSCRIPT
+ * ------------------------------------------------------
  * The transcript is a record of what happened. This is not that: it is recomputed from the ledger
  * on every read, and a row leaves it because a decision now exists, not because a frame arrived.
  * Putting it in the vertical flow of the transcript put a thing that changes every turn between
  * two things that never change again, with no boundary of its own — it read as a message nobody
  * sent. So the two kinds of content are separated by kind: what is true now is pinned here and
- * does not scroll, and what HAPPENED — a decision, once made — is a line in the log where it
- * happened (`DecisionLog`, rendered inside the transcript scroller).
+ * does not scroll, and what HAPPENED scrolls with the conversation it happened in.
+ *
+ * NOTHING IS WRITTEN INTO THAT RECORD FROM HERE
+ * ---------------------------------------------
+ * Not by this file and not by the view that mounts it. Answering the card DELIVERS an answer to
+ * the engine; it is the engine's `task_evidence_decide` that reaches the door, so a sentence
+ * written from the browser at the moment of the click would be this tab asserting a compare-and-set
+ * it did not witness — right when the door agreed and a lie when it refused. It would also be a
+ * third copy of what the server has already written twice: the answered card, which names the task
+ * and the revision and marks the option the person picked, and the call beneath it, which is the
+ * only one of the three that can report whether the door agreed at all.
  *
  * ONE DECISION SURFACE, AND THIS IS NOT IT
  * ----------------------------------------
@@ -215,63 +224,6 @@ export function revealDecisionCard(
   if (!card) return false;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   return true;
-}
-
-/**
- * What a decision leaves behind, as a sentence in the log rather than a row that stopped existing.
- *
- * A decision is an EVENT: it happened once, at a moment, and it is still true afterwards that it
- * happened. So it does not belong in the pinned area, which says what is true NOW and is recomputed
- * every read — it belongs where the rest of the session's history is. Naming the task, the standard
- * and the exact version answered is what makes it readable a week later: `bound to rev N` is the
- * whole of the compare-and-set the door performed, in the words the door uses.
- */
-export function completionConfirmedLine(
-  title: string,
-  criterionKey: string | null,
-  revision: string,
-): string {
-  return `Completion confirmed — ${title} against ${criterionKey ?? 'no stated criterion'}, `
-    + `bound to rev ${revision}`;
-}
-
-/** The other answer, said the same way: nothing was settled, and this version was the one answered. */
-export function sentBackLine(title: string, revision: string): string {
-  return `Sent back — ${title}, bound to rev ${revision}`;
-}
-
-/**
- * The decisions made in this session, in the transcript, in place.
- *
- * Rendered INSIDE the scroller, under the conversation, because that is what "an event" means
- * here: it stays where it happened and scrolls with everything else that happened. The pinned
- * strip above never shows it — a settled question is not a pending one, and a pinned area that
- * accumulated past answers would be a log that refuses to scroll.
- *
- * NOTHING FEEDS IT TODAY, AND THAT IS NOT AN OVERSIGHT. Its one writer was this strip's mutation,
- * which was deleted when the strip stopped being a decision surface. The surviving surface is the
- * `AskUserQuestion` card, and answering that DELIVERS an answer to the engine — it is the engine's
- * `task_evidence_decide` that reaches the door, so a line appended here on the click would be the
- * browser asserting a compare-and-set it did not witness. The transcript already records what
- * actually happened, from the server. Whether to feed this from that record or to remove it is
- * filed as its own task rather than guessed at here.
- */
-export function DecisionLog({ lines }: { lines: string[] }) {
-  if (lines.length === 0) return null;
-  return (
-    // One live region for the lot, on the container: each answer announces itself as it lands
-    // without turning every past one into a region of its own.
-    <div className="decision-log" role="status">
-      {/* Keyed by position because the list is append-only — nothing is inserted, removed or
-          reordered, and two decisions can carry the same sentence only if the same version of the
-          same task was answered twice, which the door refuses. */}
-      {lines.map((line, index) => (
-        <div className="decision-log-line" key={index}>
-          {line}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 /** Age as a reader reads it. Whole units only: a queue is not a stopwatch. */

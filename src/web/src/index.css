@@ -5325,16 +5325,6 @@ html[data-theme='dark'] .session-tag-chip {
   overflow-y: auto;
   border-top: 1px solid var(--border-subtle);
 }
-/* What one decision left behind, in the transcript, in place: an event among events. */
-.decision-log {
-  display: grid;
-  gap: 4px;
-  padding: 8px 16px 0;
-}
-.decision-log-line {
-  font-size: 12px;
-  color: var(--text-2);
-}
 .decision-rail-head {
   display: flex;
   align-items: baseline;
