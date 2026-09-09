@@ -105,6 +105,10 @@ import {
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
 import { type CriterionLanding, readCriterionLanding } from './project-criterion-landing';
+import {
+  readCriterionIndependence,
+  type CriterionIndependenceAnswer,
+} from './project-criterion-independence';
 import { storeDerivedProjectStatus } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { readProjectTaskWorkStates } from './project-task-work-state';
@@ -527,6 +531,31 @@ function criterionAnswer(
   derived: CriterionSatisfaction | undefined,
 ): Partial<Pick<CriterionSatisfaction, 'satisfied' | 'unmet'>> {
   return derived === undefined ? {} : { satisfied: derived.satisfied, unmet: derived.unmet };
+}
+
+/**
+ * What the independence lane says about one stated criterion, carried onto the same row.
+ *
+ * Always present, and defaulted rather than omitted — the shape `landing` takes and not the shape
+ * `satisfied` takes, because the two absences mean different things. A criterion the satisfaction
+ * derivation did not answer for has no answer to state; a criterion this lane did not answer for
+ * HAS one, and it is `INDEPENDENT`: the predicate needs a session on both sides of an equality, so
+ * an author nobody recorded cannot make it true, and reading that absence as a violation is the
+ * thing `project-criterion-independence.ts` refuses at length under "WHY AN UNKNOWN AUTHOR IS NOT
+ * A VIOLATION". Omitting the fields instead would leave each client to re-decide that for itself,
+ * which is how the three of them would come to disagree.
+ *
+ * The remedy sentence is COPIED off the answer, never composed here. It is stated once in
+ * `criterionIndependenceRemedy()` so a card, a strip and this read quote the same words; a second
+ * copy in the service layer is a second thing to keep in step, and the drift would be invisible —
+ * the field would still be there, still non-null, still wrong.
+ */
+function criterionIndependenceAnswer(
+  derived: CriterionIndependenceAnswer | undefined,
+): Pick<CriterionIndependenceAnswer, 'independence' | 'conflicts' | 'remedy'> {
+  return derived === undefined
+    ? { independence: 'INDEPENDENT', conflicts: [], remedy: null }
+    : { independence: derived.independence, conflicts: derived.conflicts, remedy: derived.remedy };
 }
 
 /**
@@ -2089,6 +2118,14 @@ export class ProjectsService {
    * additive — no value of it moves `satisfied` — and it is three-valued for the reason its module
    * gives at length, of which the short version is that "no receipt" means "no evidence", never
    * "not merged".
+   *
+   * `independence`, with `conflicts` and `remedy`, is the FIFTH, and it is here because it is the
+   * only one of the five that can withhold settlement while the other four all read green: a
+   * criterion whose author is also the conversation producing its evidence is satisfied, landed,
+   * confirmed — and does not count. `project-done-derived.ts` folds that into `project.status`,
+   * and a stored OPEN says nothing about WHICH criterion or WHY. Served here, the reason travels
+   * with the criterion it is about, which is what lets a card name the conversation and the work
+   * that collide instead of showing a project that will not go green for no stated reason.
    */
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
@@ -2100,7 +2137,7 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, satisfaction, landing] = await Promise.all([
+    const [byStatus, satisfaction, landing, independence] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId: id },
@@ -2115,9 +2152,17 @@ export class ProjectsService {
       // reach of it; its cost is one findMany whose nested select carries every serving task's
       // merge receipts, so it is bounded by this project's criteria and not by its work.
       readCriterionLanding(this.prisma, ownerId, id),
+      // And the independence lane, in the same batch and on the same terms. Two findManys rather
+      // than one — the criteria with their serving work's sessions, and this project's authorship
+      // rows — because 0251 deliberately puts no foreign key on `definition_id`, so Prisma has no
+      // relation to walk and the join is made in the fold. Neither is per criterion: the four
+      // statements the pair costs are one per relation, counted and argued one by one in
+      // `project-get-query-count.pg.spec.ts`.
+      readCriterionIndependence(this.prisma, ownerId, id),
     ]);
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
     const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
+    const independent = new Map(independence.map((row) => [row.definitionId, row]));
     const stated = withAcceptanceDefinitions({
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
@@ -2132,6 +2177,12 @@ export class ProjectsService {
         // claim, and UNKNOWN is the absence of one — the honest answer for a criterion this lane
         // has no receipt about is the same as for one it never saw.
         landing: landed.get(item.id) ?? ('UNKNOWN' satisfies CriterionLanding),
+        // The fifth fact, and the only one that WITHHOLDS settlement without any of the other
+        // four being able to show why: a criterion can read satisfied, landed and confirmed and
+        // still not count. `project-done-derived.ts` already folds it into the stored column; this
+        // is where the reason itself leaves the server, so that a reader who is shown a project
+        // that will not settle is shown which criterion, which conversation, and what to do.
+        ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
     };
   }

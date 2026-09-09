@@ -159,6 +159,12 @@ function fakePrisma() {
       },
     },
     projectCriteriaAuthorship: {
+      // The detail read asks this relation who wrote the version of each criterion that stands
+      // today. Rows this probe wrote through the door above, filtered the way the lane filters
+      // them — copies again, for the reason the criteria store gives.
+      findMany: async ({ where }: { where: { projectId: string } }) => state.authorship
+        .filter((row) => row.projectId === where.projectId)
+        .map((row) => ({ ...row })),
       // `skipDuplicates`, modelled rather than ignored: a criterion whose text is restated
       // unchanged keeps its revision, and the write must land on the row already there.
       createMany: async ({ data }: { data: AuthorshipRow[] }) => {

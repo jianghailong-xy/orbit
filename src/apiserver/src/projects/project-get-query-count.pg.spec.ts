@@ -5,10 +5,11 @@
  * WHY THIS EXISTS
  * ---------------
  * The project page is a page people leave open. Before this project's work it made two reads —
- * `project.findFirst` and one `task.groupBy` — neither of which grows with anything. Then two
+ * `project.findFirst` and one `task.groupBy` — neither of which grows with anything. Then three
  * derived facts were bolted onto the same read, each of which is ABOUT the project's criteria and
- * about the work filed under them: whether each stated criterion is satisfied, and whether that
- * work reached the default branch. Both are the shape of thing that is written as one query per
+ * about the work filed under them: whether each stated criterion is satisfied, whether that work
+ * reached the default branch, and whether the conversation that wrote the criterion is also the
+ * one producing its evidence. All three are the shape of thing that is written as one query per
  * criterion by accident, and a per-criterion query is invisible in every test that asserts on the
  * answer — the answer is identical either way. Only the statement count tells them apart.
  *
@@ -16,11 +17,11 @@
  * -------------------------------------------
  * Statements, not Prisma calls. `project-list-rollup.audit.pg.spec.ts` counts `$queryRaw` property
  * gets, which is the right instrument for a read written as raw SQL and the wrong one here: this
- * read is one `findMany` whose nested `select` reaches four relations, and how many statements
- * that becomes — and whether the number moves with the rows — is precisely the question. Nothing
- * in the repository could answer it, so `countingPrismaClientFor` taps the driver adapter every
- * statement passes through. The first case below is the control that proves the tap is live before
- * any number from it is trusted.
+ * read is a handful of `findMany`s whose nested `select`s reach several relations apiece, and how
+ * many statements that becomes — and whether the number moves with the rows — is precisely the
+ * question. Nothing in the repository could answer it, so `countingPrismaClientFor` taps the
+ * driver adapter every statement passes through. The first case below is the control that proves
+ * the tap is live before any number from it is trusted.
  *
  * WHY THE ABSOLUTE NUMBER IS PINNED TOO
  * -------------------------------------
@@ -63,22 +64,51 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Thirteen statements, and every one of them is per RELATION rather than per row:
+ * Seventeen statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally (`task.groupBy`);
  *   5  the satisfaction derivation — its criteria, their serving tasks, and, off those tasks, the
  *      verifications pointed at them, their newest completion evidence, and that evidence's
  *      decisions;
- *   3  the landing lane — its criteria, their serving tasks, and those tasks' merge receipts.
+ *   3  the landing lane — its criteria, their serving tasks, and those tasks' merge receipts;
+ *   4  the independence lane, which is the one that is not shaped like the other two.
  *
- * Measured, not asserted from the code: the two derivations are each written as ONE `findMany`,
- * and Prisma resolves a nested `select` with one statement per relation level, so the fan-out is
- * bounded by the shape of the read rather than by the size of the project. This number is what
- * that costs today. It is not a budget anybody is entitled to spend up to — a change that moves it
- * should move this line, in the same commit, with the reason written down.
+ * Measured, not asserted from the code: the derivations are each written as ONE `findMany` (two,
+ * for the lane below), and Prisma resolves a nested `select` with one statement per relation
+ * level, so the fan-out is bounded by the shape of the read rather than by the size of the
+ * project. This number is what that costs today. It is not a budget anybody is entitled to spend
+ * up to — a change that moves it should move this line, in the same commit, with the reason
+ * written down.
+ *
+ * WHY THE INDEPENDENCE LANE IS FOUR AND NOT TWO
+ * --------------------------------------------
+ * It reads two roots rather than one, and the first of them is three relation levels deep. Each
+ * of the four is still per relation, and the argument is per statement:
+ *
+ *   1  ITS CRITERIA. One `findMany` over this project's definitions, filtered by `projectId` —
+ *      the same root the two lanes above start from, and bounded the same way: one statement
+ *      whatever the project states, including none.
+ *   2  THEIR SERVING WORK. A nested `select` on that query, so Prisma issues one statement for
+ *      the whole relation level with every parent id in a single `IN` — not one per criterion.
+ *      This is the level the count is here to protect: `servingTasks` is exactly the relation a
+ *      later edit would be tempted to walk in a loop, and at five criteria a loop would send five.
+ *   3  THE SESSIONS THAT RAN THAT WORK. A second nested level under the same select, and the same
+ *      argument one level down: `session.task_id` is what "produced this criterion's evidence"
+ *      means, and it is fetched for every serving task at once. The fifteen tasks of the large
+ *      fixture cost this one statement, as the one task of the small one does.
+ *   4  THIS PROJECT'S AUTHORSHIP ROWS. A `findMany` of its own, and it has to be: migration 0251
+ *      deliberately puts NO foreign key on `project_criteria_authorship.definition_id`, so that
+ *      who wrote a criterion survives the criterion being deleted. With no relation, Prisma has
+ *      nothing to nest, and the join onto `(definitionId, revision)` is made in the fold. It is
+ *      one statement because it is filtered by `projectId` — the criteria are not iterated to
+ *      build it, which is the mistake a foreign-key-shaped reflex would make here.
+ *
+ * The measurement below is what holds all four to that, and it holds them at two sizes: the third
+ * and fourth would BOTH be five statements at the large fixture and one at the small one if they
+ * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 13;
+const STATEMENTS_PER_READ = 17;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,
@@ -190,12 +220,15 @@ test('the project detail read costs the same number of statements at either size
     return projectId;
   }
 
-  /** One criterion as the outward read states it, narrowed to what this spec reads. */
+  /** One criterion as the outward read states it, narrowed to what this spec reads. Optional
+   *  throughout, so a lane that stopped answering fails an assertion below rather than the
+   *  compile — a red that kills the build proves nothing about the statements. */
   interface StatedCriterion {
     text: string;
     satisfied?: boolean;
     unmet?: Array<{ clause: string; heldUpBy: Array<{ title: string }> }>;
     landing?: string;
+    independence?: string;
   }
 
   /** The read under test, with the statements it sent. */
@@ -228,7 +261,7 @@ test('the project detail read costs the same number of statements at either size
     // number of the wrong things would satisfy every assertion after this one.
     const { sent } = await measure(large);
     for (const table of ['"project"', '"task"', '"project_acceptance_criterion_definition"',
-      '"session_merge_receipt"']) {
+      '"session_merge_receipt"', '"project_criteria_authorship"']) {
       assert.ok(sent.some((text) => text.includes(table)),
         `the project detail read must reach ${table}; it sent:\n${listing(sent)}`);
     }
@@ -261,8 +294,8 @@ test('the project detail read costs the same number of statements at either size
 
     assert.deepEqual(one.criteria.map((item) => ({
       satisfied: item.satisfied, clauses: item.unmet?.map((reason) => reason.clause),
-      landing: item.landing,
-    })), [{ satisfied: true, clauses: [], landing: 'LANDED' }]);
+      landing: item.landing, independence: item.independence,
+    })), [{ satisfied: true, clauses: [], landing: 'LANDED', independence: 'INDEPENDENT' }]);
 
     // Five criteria, each naming the two tasks of its own that have not settled — which is the
     // per-task work a read could have dropped to make itself cheap, and did not. `landing` is
@@ -272,6 +305,13 @@ test('the project detail read costs the same number of statements at either size
       assert.equal(item.satisfied, false, `criterion ${position + 1} has unsettled work`);
       assert.equal(item.landing, 'UNKNOWN',
         `criterion ${position + 1} has two serving tasks that no receipt mentions`);
+      // The four statements the independence lane spends are spent on an ANSWER. A lane that
+      // issued them and dropped the result would still cost seventeen, and this is the line that
+      // would notice — `buildProject` states its criteria through the owner's own door, so every
+      // one of them is authored USER, and USER is never a conflict.
+      assert.equal(item.independence, 'INDEPENDENT',
+        `criterion ${position + 1} was stated through the owner's door, so nobody wrote it and `
+          + 'served it: the field has to be there, and it has to say so');
       assert.deepEqual(item.unmet?.map((reason) => reason.clause), ['SERVING_WORK_UNSETTLED']);
       assert.deepEqual(item.unmet?.[0].heldUpBy.map((held) => held.title), [
         `five: work 2 for criterion ${position + 1}`,

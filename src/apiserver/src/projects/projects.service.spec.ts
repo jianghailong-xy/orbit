@@ -351,12 +351,16 @@ test('the detail read reports progress without loading the project’s tasks', a
       },
       findMany: async () => assert.fail('the detail read must not load the project’s tasks'),
     },
-    // A project with no stated criteria has nothing for the satisfaction read, or for the landing
-    // lane beside it, to answer about. Both are still asked, and both ask THIS delegate: the
-    // serving work each folds — its settlement facts, and its merge receipts — arrives as a nested
-    // select on a criterion query rather than as a task read, which is why the refusal above still
-    // holds with them in place.
+    // A project with no stated criteria has nothing for the satisfaction read, the landing lane
+    // beside it, or the independence lane beside that, to answer about. All three are still
+    // asked, and all three ask THIS delegate: the serving work each folds — its settlement facts,
+    // its merge receipts, and the sessions that ran it — arrives as a nested select on a criterion
+    // query rather than as a task read, which is why the refusal above still holds with them in
+    // place.
     projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    // The independence lane's second statement: who wrote each criterion, which cannot be a
+    // nested select because 0251 puts no foreign key on `definition_id`.
+    projectCriteriaAuthorship: { findMany: async () => [] },
   });
 
   const project = await service.get(OWNER_ID, PROJECT_ID);
@@ -394,6 +398,7 @@ test('the detail read serves the authored criteria and no second representation 
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
+    projectCriteriaAuthorship: { findMany: async () => [] },
   });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
@@ -431,6 +436,9 @@ test('the detail item is the authored declaration, with no derived verdict besid
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },
+    // Nobody recorded who wrote this criterion, which is the case the independence lane reports
+    // as INDEPENDENT rather than as a fourth kind of doubt — see the assertion below.
+    projectCriteriaAuthorship: { findMany: async () => [] },
   });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
@@ -451,6 +459,15 @@ test('the detail item is the authored declaration, with no derived verdict besid
     // no receipt to have read: UNKNOWN, which is the absence of evidence and not a claim that
     // nothing merged.
     landing: 'UNKNOWN',
+    // And whether the conversation that wrote this criterion is also the one producing its
+    // evidence — the one fact of the five that can withhold settlement while the rest read green,
+    // so it has to leave the server rather than only reach `project.status`. This fixture records
+    // no author, and an author nobody recorded cannot stand on both sides of an equality: it is
+    // INDEPENDENT, with nothing to name and nothing to repair. Unlike `satisfied`, the fields are
+    // present rather than omitted — the absence of an author is an ANSWER here, not a gap.
+    independence: 'INDEPENDENT',
+    conflicts: [],
+    remedy: null,
   });
   assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
 });

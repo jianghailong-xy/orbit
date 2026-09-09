@@ -416,6 +416,70 @@ test('a criterion written by the session producing its evidence does not count, 
         + 'carrying advice about a problem it does not have');
   });
 
+  // ═══ (1b) and the same answer leaves the server on the read a client actually makes ══════════
+
+  await t.test('(1b) the project detail read carries the conflict, its sessions and its repair', async () => {
+    // `readDerivedProjectDone` is not a response. Its only other caller stores one enum on
+    // `project.status`, so everything (1) just asserted — WHICH criterion does not count, WHICH
+    // conversation and work collide, and WHAT would repair it — stops at the service boundary
+    // unless the detail read serves it too. A strip that has to explain why a project satisfied,
+    // landed and confirmed still will not settle cannot read any of it from an OPEN.
+    //
+    // Read through a view whose new fields are OPTIONAL, deliberately. Annotating with the real
+    // return type would turn a missing implementation into `TS2339` and kill the compile for
+    // every spec in the tree; this way "the field is not there" arrives as a failed assertion in
+    // this case, which is what a negative control has to be able to become.
+    interface ServedCriterion {
+      id: string;
+      satisfied?: boolean;
+      landing?: string;
+      independence?: string;
+      conflicts?: Array<{ sessionId: string; taskId: string; taskTitle: string }>;
+      remedy?: { requiredAction: string; instruction: string } | null;
+    }
+    const served = await projects.get(ownerId, projectId) as unknown as {
+      acceptanceCriteriaItems: ServedCriterion[];
+    };
+    const servedCriterion = (definitionId: string): ServedCriterion => {
+      const row = served.acceptanceCriteriaItems.find((item) => item.id === definitionId);
+      assert.ok(row, 'a criterion that does not count is still one this project states, and the '
+        + 'detail read drops nothing');
+      return row;
+    };
+
+    const withheldItem = servedCriterion(marked.definitionId);
+    // The same three green facts (1) established, restated off THIS read: without them the
+    // assertions below would be about a criterion the detail read had simply failed to settle for
+    // some other reason, and the conflict would be proving nothing.
+    assert.equal(withheldItem.satisfied, true, 'the response says its work has settled');
+    assert.equal(withheldItem.landing, 'LANDED', 'and that the work is on the default branch');
+
+    assert.equal(withheldItem.independence, 'AUTHORED_BY_ITS_OWN_EVIDENCE',
+      'and, in the response body rather than only in the projection behind it, that the '
+        + 'conversation which wrote the version standing today is the conversation whose work is '
+        + 'counted as its evidence');
+    assert.deepEqual(withheldItem.conflicts, [{
+      sessionId: authorAndRunner,
+      taskId: markedWork.id,
+      taskTitle: 'the work filed against the criterion its own session rewrote',
+    }], 'naming both sides of the equality over the wire: a card that says a criterion does not '
+      + 'count has to be able to link the conversation and the work that collide');
+    assert.deepEqual(withheldItem.remedy, criterionIndependenceRemedy(),
+      'and the repair, quoted from the one place it is stated — a service layer that retyped the '
+        + 'sentence here would drift from the card and the strip without any of them going red');
+
+    // ── the paired positive control, in the SAME response ──────────────────────────────────────
+    const cleanItem = servedCriterion(control.definitionId);
+    assert.equal(cleanItem.independence, 'INDEPENDENT',
+      'the sibling was rewritten by that same session and is served by work that session did not '
+        + 'run, so a lane that marked everything it read would be caught by this line and not by '
+        + 'the one above');
+    assert.deepEqual(cleanItem.conflicts, []);
+    assert.equal(cleanItem.remedy, null,
+      'and a criterion that already counts is offered no repair, or every card in the list would '
+        + 'arrive carrying advice about a problem that criterion does not have');
+  });
+
   // ═══ (2) the same read, with the evidence produced by another conversation → DONE ═════════════
 
   await t.test('(2) hand the work to another conversation and the same read settles the project', async () => {
