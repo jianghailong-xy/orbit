@@ -276,15 +276,33 @@ jobs:
       DOCKER_BUILDKIT: '1'
     steps:
       - uses: actions/checkout@v7
+      # Five base images come from Docker Hub over an IP this runner shares with everyone else's,
+      # and its 502s are the one failure in this job that says nothing about this tree — run
+      # 34333514813 died two seconds in on `unexpected status from HEAD request to
+      # registry-1.docker.io/v2/library/node/manifests/26-slim: 502 Bad Gateway`. Hence the
+      # retry, and hence a retry around the build rather than a swallowed error: a Dockerfile
+      # that is genuinely broken fails all three attempts and the step is still red.
       - name: Build the apiserver image
-        run: docker build -f src/apiserver/Dockerfile -t orbit-apiserver:ci .
-      # The commit stamped into the runner binaries. A checkout has .git, but naming the commit
-      # is what upgrade.sh does too, and it is the one input build-binaries.sh refuses to guess.
+        run: |
+          for i in 1 2 3; do
+            docker build -f src/apiserver/Dockerfile -t orbit-apiserver:ci . && exit 0
+            echo "::warning::apiserver image build attempt $i failed; retrying in 20s"
+            sleep 20
+          done
+          exit 1
+      # ORBIT_SOURCE_SHA is the commit stamped into the runner binaries. A checkout has .git, but
+      # naming the commit is what upgrade.sh does too, and it is the one input that
+      # scripts/build-binaries.sh refuses to guess.
       - name: Build the web image
         run: |
-          docker build -f src/web/Dockerfile \
-            --build-arg ORBIT_SOURCE_SHA="${{ github.sha }}" \
-            -t orbit-web:ci .
+          for i in 1 2 3; do
+            docker build -f src/web/Dockerfile \
+              --build-arg ORBIT_SOURCE_SHA="${{ github.sha }}" \
+              -t orbit-web:ci . && exit 0
+            echo "::warning::web image build attempt $i failed; retrying in 20s"
+            sleep 20
+          done
+          exit 1
       - name: Boot both images
         env:
           ORBIT_APISERVER_IMAGE: orbit-apiserver:ci
