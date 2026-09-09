@@ -331,6 +331,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        no preserved row is read or written. The set only grows, so no stored event can be
   //        refused by it and it needs no backfill. Nothing reads the new event to allow or refuse
   //        a status: it is delivered as a message and decides nothing.
+  //   0249 added `project_criteria_decision`, one row per answered criteria proposal: the account
+  //        owner's APPROVE or REJECT of an edit that was held because it does not plainly tighten
+  //        the ruler, keyed by the `project_ratified_action_intent` row that asked. Read against
+  //        every claim above: it is pure addition and `project_criteria_decision` is not a relation
+  //        this file preserves. It ALTERs nothing — not `task`, not `project`, not
+  //        `project_acceptance_criterion_definition` — so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It REFERENCES
+  //        `project(id)`, `user(id)` and `project_ratified_action_intent(id)`, which changes
+  //        nothing about any of those rows: being pointed at is not being written. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no enum, no function and no trigger — so it is not another writer of the DONE
+  //        fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE, so no
+  //        preserved row is read or written. It is also not the criteria proposal channel 0217
+  //        built coming back: that relation, its six indexes and its nine functions were dropped
+  //        by 0223, and not one of their names appears in any statement here. Nothing reads this
+  //        new row to allow or refuse a status — a decision is what moves the criteria, and
+  //        `status` stays a projection of the same two inputs it was a projection of before.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -347,7 +366,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0243_coordinator_wake_delivered',
       '0244_session_engine_phase',
       '0245_project_standard_set_confirmation',
-      '0246_project_acceptance_landed_wake'],
+      '0246_project_acceptance_landed_wake',
+      '0249_project_criteria_decision'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

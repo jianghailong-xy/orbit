@@ -200,6 +200,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
+    at: 'projects/projects.service.ts#decideCriteriaChange',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40) — the same lock and the same order projects.update takes before touching definitions — then, for an APPROVE only, project_acceptance_criterion_definition children (rank 60), and inserts into project_criteria_decision and project_ratified_action_commit keyed by the intent this transaction already read.',
+    identity: 'The project id, the intent id and the commit token, all three outside the closure. `project_criteria_decision.intent_id` is the primary key, so a second decision for one proposal is refused by the database rather than by the read above.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every input is re-read under the project lock on each attempt: the intent, whether it is already settled, and the seal the decision is checked against. A retried attempt that finds the seal moved or the proposal settled refuses instead of applying — which is the same answer a first attempt would have given against those rows.',
+    effects: 'None inside. The derived-status re-projection and the confirmation read are after this resolves; neither can undo the decision.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
     at: 'projects/projects.service.ts#coordinator',
     shape: 'TX_RETRIED',
     locks: 'After the candidate Session is created, its landing workspace FOR SHARE (rank 15), candidate and previous Session rows FOR UPDATE in UUID order (rank 30), then Project FOR NO KEY UPDATE (rank 40), followed by writes only to those held rows.',

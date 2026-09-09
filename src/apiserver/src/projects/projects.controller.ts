@@ -18,6 +18,7 @@ import { PublicIdPipe } from '../common/public-id';
 import {
   ConfirmAcceptanceCriteriaDto,
   CreateProjectDto,
+  DecideCriteriaChangeDto,
   DecideProjectHandoffDto,
   OpenProjectCoordinatorDto,
   RebindProjectCoordinatorDto,
@@ -355,6 +356,28 @@ export class ProjectsController {
     @Body() dto: ConfirmAcceptanceCriteriaDto,
   ) {
     return this.acceptance.confirmStandardSet(user.userId, id, dto);
+  }
+
+  /**
+   * The account owner answering ONE held criteria proposal — the decision door.
+   *
+   * On the same rail as the confirmation above and for the same reason: this controller carries no
+   * acting session, so a request that reaches it is already the shape the service asks for, and
+   * the refusal for one that DOES carry a session lives in the service where every door meets it.
+   *
+   * `intentId` is piped like any other address in a URL. The other key is NOT here — `commitToken`
+   * arrives in the body, because it is a capability compared byte for byte rather than an address,
+   * and `PublicIdPipe` on it would try to decode a base62 spelling of the very value the database
+   * stores verbatim.
+   */
+  @Post(':id/acceptance/criteria-decisions/:intentId')
+  decideCriteriaChange(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('intentId', PublicIdPipe) intentId: string,
+    @Body() dto: DecideCriteriaChangeDto,
+  ) {
+    return this.projects.decideCriteriaChange(user.userId, id, intentId, dto);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

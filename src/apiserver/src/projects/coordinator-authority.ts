@@ -138,6 +138,7 @@ export const AUTHORITY_REFUSAL_CODES = [
   'PROJECT_CRITERIA_CONFIRMATION_HUMAN_ONLY',
   'PROJECT_STATUS_NOT_SESSION_WRITABLE',
   'PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY',
+  'PROJECT_CRITERIA_DECISION_OWNER_CHANNEL_ONLY',
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
@@ -346,6 +347,47 @@ export function refuseSessionAuthoredConfirmation(
       + 'confirmed and let a person do it. Orbit records the credentialed actor and the exact '
       + 'version of the standard set that was confirmed; neither is proof that a human held the '
       + 'credential.',
+  };
+}
+
+/**
+ * The one door a criteria DECISION has, as a rule: a request with NO acting session.
+ *
+ * The same shape as `refuseSessionAuthoredConfirmation` above and deliberately not the same
+ * function. They guard two different acts — one says an exam is the right exam, the other decides
+ * whether an edit to that exam takes effect — and a caller refused here has met a rule about
+ * MOVING the ruler, not about approving it. §12 E2 forbids two spellings of one rule; this is a
+ * second rule, and giving it the confirmation's code would tell a caller it met a boundary it
+ * never came near.
+ *
+ * Why it matters more here than there. The party that filed the proposal is the party asking for a
+ * looser ruler, and it is running in a session. If a session could answer, the two keys the door
+ * asks for would collapse into one: the proposer would hold the ask AND the answer, and the whole
+ * arrangement would be a formality it performs on itself. The commit token is withheld from the
+ * proposer for the same reason, and this rule is what makes withholding it worth anything —
+ * without it, a session that learned a token by any means would be a decider.
+ *
+ * NOT a claim that a person is present. The owner channel is a credential like any other; this
+ * says only that no acting session authored the decision.
+ */
+export function refuseSessionAuthoredCriteriaDecision(
+  actingSessionId: string | null | undefined,
+): AuthorityRefusal | null {
+  if (!actingSessionId) return null;
+  return {
+    code: 'PROJECT_CRITERIA_DECISION_OWNER_CHANNEL_ONLY',
+    action: 'EDIT_ACCEPTANCE_CRITERIA',
+    tier: COORDINATOR_AUTHORITY.EDIT_ACCEPTANCE_CRITERIA,
+    requiredAction: 'ASK_A_PERSON',
+    message:
+      'Deciding a held criteria change is not something a session does. The edit was held '
+      + 'precisely because it does not plainly tighten the ruler, and whoever answers decides '
+      + 'whether the project’s exam gets easier — so it is the account owner’s to answer through '
+      + 'an owner-authenticated channel with no acting session. Nothing was written by this '
+      + 'request: the proposal is still pending and the criteria are still the ones on record. '
+      + 'Report which proposal is waiting and let a person decide it. Orbit records the '
+      + 'credentialed actor and the exact version of the standard set that was on the table; '
+      + 'neither is proof that a human held the credential.',
   };
 }
 

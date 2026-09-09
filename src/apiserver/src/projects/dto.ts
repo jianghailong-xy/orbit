@@ -345,6 +345,44 @@ export class ConfirmAcceptanceCriteriaDto {
   criteriaDigest!: string;
 }
 
+/** The two spellings a criteria decision can have. `REJECT` settles the proposal and applies
+ *  nothing; there is deliberately no third answer that leaves it pending. */
+export const CRITERIA_DECISIONS = ['APPROVE', 'REJECT'] as const;
+export type CriteriaDecision = (typeof CRITERIA_DECISIONS)[number];
+
+/**
+ * The account owner answering ONE held criteria proposal.
+ *
+ * Three bindings, and they are not the same kind of thing. `commitToken` is a KEY: the proposal's
+ * one-time secret, which the proposer never receives, binding the answer to WHAT is being decided.
+ * The owner credential the controller authenticates is the other key, binding it to WHO decided.
+ * `baseSeal` is not a key at all — it is FRESHNESS, binding the answer to the version of the
+ * standard set that was on the table when it was given, which is why its refusal is its own code
+ * rather than the token's.
+ *
+ * The validators here are the ordinary DTO ones and they are not where the rules live: the service
+ * restates every one of them, so a direct call and a controller call meet the same door. See
+ * `ProjectsService.decideCriteriaChange`.
+ */
+export class DecideCriteriaChangeDto {
+  /** The proposal's one-time key. A uuid, and compared byte for byte — never a public id. */
+  @Matches(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, {
+    message: 'commitToken must be the proposal’s one-time commit token',
+  })
+  commitToken!: string;
+
+  @IsIn(CRITERIA_DECISIONS, { message: `decision must be one of ${CRITERIA_DECISIONS.join(', ')}` })
+  decision!: CriteriaDecision;
+
+  /** The seal that was on the table when this answer was composed. */
+  @Matches(SHA256_DIGEST_PATTERN, {
+    message: 'baseSeal must be the 64-character sha256 digest of the standard set being decided',
+  })
+  baseSeal!: string;
+
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(4_000) note?: string;
+}
+
 export class RecordMergeEvidenceDto {
   /** What was required, in the words whoever wrote the acceptance criteria used. */
   @IsString() @MinLength(1) @MaxLength(MAX_MERGE_REQUIREMENT_CHARS) requirementId!: string;

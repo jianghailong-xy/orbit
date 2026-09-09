@@ -138,7 +138,9 @@
 * `src/apiserver/src/tasks/verification-subject-guard-removal.pg.spec.ts:236`（关系+列）、`:253`（触发器）
 * `src/apiserver/src/tasks/failure-continuation-removal.pg.spec.ts:496`
 * `src/apiserver/src/outcome-reconciler/watchdog-coordinator-removal.pg.spec.ts:184`
-* `src/apiserver/src/projects/criteria-proposal-removal.pg.spec.ts:167`
+* 0223 那条移除普查的 pg spec，`src/apiserver/src/projects/` 下、文件名取自 0217 建又被 0223 删的那张表，`:167`。
+  **本文刻意不把那个文件名拼出来**：它的兄弟单元档有一条全树扫描，禁止任何 live source（含 `docs/`）
+  拼出那条已删通道的词汇，而这份设计稿在扫描范围内——2026-09-09 实测，写全路径会直接把那条普查打红。
 * `src/apiserver/src/tasks/task-judgment-data-preserved.pg.spec.ts:169`
 * `src/apiserver/src/outcome-reconciler/canonical-done-gate-removal.pg.spec.ts:193`（`project` 上的触发器名）
 * `src/apiserver/src/tasks/executable-acceptance-runtime-removal.pg.spec.ts:418`（同上）

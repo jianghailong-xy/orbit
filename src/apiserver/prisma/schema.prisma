@@ -2090,6 +2090,64 @@ model ProjectRatifiedActionCommit {
   @@map("project_ratified_action_commit")
 }
 
+/// The account owner's ANSWER to one held criteria proposal — migration 0249.
+///
+/// The intent table above holds the ask and, by its BEFORE UPDATE OR DELETE trigger, holds it
+/// unrewritably; what it has no room for is the answer. It carries no status column, and even if
+/// it did the trigger refuses every UPDATE, so `PENDING -> APPROVED/REJECTED` cannot be written
+/// there at all. `project_ratified_action_commit` says only that something WAS committed, which
+/// leaves a rejected proposal with a live `commitToken` and a card that never clears.
+///
+/// The primary key IS the intent: one proposal, at most one answer, and the second decision is
+/// refused by the database rather than by a service comparison with a window in it. That also
+/// makes "is this proposal still pending" one query with one predicate for both outcomes — a row
+/// here means settled, whichever way it was settled.
+///
+/// Bound to the SEAL and not to `contractDigest`: the decision is about a version of the standard
+/// set, and the contract digest covers the whole completion contract, so a change to
+/// `maxConcurrentTasks` would invalidate a card the owner is looking at while saying nothing about
+/// which criteria were on the table. `baseSeal` is the version that stood when the answer was
+/// given — the same version the proposal was composed against, since the door refuses to decide
+/// when those two have come apart — and `resultingSeal` is what stands afterwards, READ BACK
+/// rather than recomputed, because `content_hash` is written by a BEFORE trigger from both the
+/// assertion and its verification method.
+///
+/// Append-only by construction rather than by trigger, for 0245's reason: the one writer inserts,
+/// nothing updates or deletes, and "at most one" is already the primary key.
+model ProjectCriteriaDecision {
+  /// The proposal being answered, and this row's identity. Scalar rather than a Prisma relation,
+  /// as on the two 0195 tables beside it: the foreign keys are in the migration, and modelling
+  /// them here would add back-reference fields to `Project`, `User` and the intent for a row
+  /// nothing navigates to.
+  intentId  String @id @map("intent_id") @db.Uuid
+  projectId String @map("project_id") @db.Uuid
+  ownerId   String @map("owner_id") @db.Uuid
+
+  /// `APPROVE` applied the edit the proposal asks for; `REJECT` settled the proposal and left the
+  /// criteria exactly as they were. Text with a CHECK rather than an enum: the closed set lives in
+  /// one migration, and adding a third answer would be a decision about this door rather than a
+  /// label somebody can append to a type from anywhere.
+  decision String
+
+  /// The credentialed actor who answered. Audit provenance, and — as every HUMAN_ONLY row in this
+  /// schema says — not proof that a person held the credential.
+  decidedById String @map("decided_by_id") @db.Uuid
+
+  /// The version of the standard set this answer was given against.
+  baseSeal String @map("base_seal") @db.Char(64)
+  /// The version standing afterwards. Equal to `baseSeal` for a REJECT, which the migration also
+  /// states as a CHECK.
+  resultingSeal String @map("resulting_seal") @db.Char(64)
+
+  /// What the owner wanted a later reader to know. Optional: most answers are just an answer.
+  note String?
+
+  decidedAt DateTime @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  @@index([projectId, decidedAt(sort: Desc)], map: "project_criteria_decision_recent_idx")
+  @@map("project_criteria_decision")
+}
+
 /// One agent's membership of one project's team, and the only place a project's COORDINATOR is
 /// recorded.
 ///

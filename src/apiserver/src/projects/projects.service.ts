@@ -36,7 +36,10 @@ import {
 } from '../tasks/tasks.service';
 import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
 import {
+  CRITERIA_DECISIONS,
   CreateProjectDto,
+  type CriteriaDecision,
+  type DecideCriteriaChangeDto,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS,
   MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS,
   MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS,
@@ -57,6 +60,7 @@ import {
 } from './criteria-weakening-intent';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import {
+  type StandardSetConfirmationStanding,
   criteriaFromDefinitions,
   criterionKeyOf,
   sha256,
@@ -73,6 +77,7 @@ import {
   authorityPrincipal,
   refuseHumanOnlyAction,
   refuseProjectStatusWrite,
+  refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
@@ -366,6 +371,30 @@ export interface HeldCriteriaEdit {
   notice: string;
 }
 
+/**
+ * What the decision door answers with.
+ *
+ * It carries the criteria and the confirmation standing as well as the decision, because an
+ * APPROVE has three consequences and a caller that reads only `applied: true` will see one of
+ * them: the edit landed, the seal moved, and the owner's confirmation of the previous set is
+ * therefore STALE. `resultingSeal` equals `baseSeal` exactly when nothing was applied.
+ */
+export interface CriteriaDecisionResult {
+  intentId: string;
+  decision: CriteriaDecision;
+  decidedAt: Date;
+  decidedById: string;
+  /** The version that stood when this was decided, which is also the one the proposal named. */
+  baseSeal: string;
+  /** The version standing afterwards, read back off the rows rather than recomputed. */
+  resultingSeal: string;
+  /** True for an APPROVE and only an APPROVE: whether any criterion moved. */
+  applied: boolean;
+  /** The criteria in force at this moment, in `project_get`'s spelling. */
+  acceptanceCriteriaItems: ReturnType<typeof acceptanceCriteriaItemsOf>;
+  confirmation: StandardSetConfirmationStanding;
+}
+
 type ProjectMutationPayload = Prisma.ProjectGetPayload<{
   include: typeof COORDINATION_INCLUDE & {
     acceptanceCriterionDefinitions: typeof ACCEPTANCE_DEFINITIONS_INCLUDE;
@@ -416,35 +445,48 @@ type WithAcceptanceDefinitions = {
   }>;
 };
 
+/**
+ * The author-facing array itself, out of the storage rows.
+ *
+ * Separated from the fold below so that a surface which returns the criteria WITHOUT returning a
+ * project — the criteria-decision door — reports them in the same spelling `project_get` uses. A
+ * second mapping would be a second answer to "what are this project's criteria" and the one that
+ * drifts.
+ */
+export function acceptanceCriteriaItemsOf(
+  definitions: NonNullable<WithAcceptanceDefinitions['acceptanceCriterionDefinitions']>,
+) {
+  return definitions.map((criterion) => ({
+    id: criterion.id,
+    ordinal: criterion.ordinal,
+    text: criterion.text,
+    verificationMethod: criterion.verificationMethod,
+    completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
+    // The name `criterionKey` carries, beside the revision that says which wording it names.
+    // Two fields rather than one content hash: `criterionKeyOf` has why. `contentHash` stays on
+    // the projection — it is still what the row stores — and nothing derives the key from it.
+    key: criterionKeyOf(criterion.id),
+    revision: criterion.revision,
+    contentHash: criterion.contentHash,
+    // Rolling/mock compatibility: old readers can omit the semantic digest lane. Real rows on
+    // migration 0195 always contain it, and then its two fields are returned together as one
+    // coherent projection rather than leaking `undefined` keys into legacy API shapes. The
+    // evaluation-plan lane that stood beside it went with migration 0234.
+    ...(criterion.semanticRevision === undefined ? {} : {
+      semanticRevision: criterion.semanticRevision,
+      semanticHash: criterion.semanticHash,
+    }),
+  }));
+}
+
 /** Fold the storage relation into the author-facing array. Migration 0229 removed the legacy text
  * column and its parser, so this array is the whole of a project's stated criteria — there is no
  * second representation for it to disagree with, and nothing that judges the items in it. */
 function withAcceptanceDefinitions<T extends WithAcceptanceDefinitions>(project: T) {
   const { acceptanceCriterionDefinitions, ...rest } = project;
-  const definitions = acceptanceCriterionDefinitions ?? [];
   return {
     ...rest,
-    acceptanceCriteriaItems: definitions.map((criterion) => ({
-      id: criterion.id,
-      ordinal: criterion.ordinal,
-      text: criterion.text,
-      verificationMethod: criterion.verificationMethod,
-      completionCriterionOverrideReason: criterion.completionCriterionOverrideReason ?? null,
-      // The name `criterionKey` carries, beside the revision that says which wording it names.
-      // Two fields rather than one content hash: `criterionKeyOf` has why. `contentHash` stays on
-      // the projection — it is still what the row stores — and nothing derives the key from it.
-      key: criterionKeyOf(criterion.id),
-      revision: criterion.revision,
-      contentHash: criterion.contentHash,
-      // Rolling/mock compatibility: old readers can omit the semantic digest lane. Real rows on
-      // migration 0195 always contain it, and then its two fields are returned together as one
-      // coherent projection rather than leaking `undefined` keys into legacy API shapes. The
-      // evaluation-plan lane that stood beside it went with migration 0234.
-      ...(criterion.semanticRevision === undefined ? {} : {
-        semanticRevision: criterion.semanticRevision,
-        semanticHash: criterion.semanticHash,
-      }),
-    })),
+    acceptanceCriteriaItems: acceptanceCriteriaItemsOf(acceptanceCriterionDefinitions ?? []),
   };
 }
 
@@ -613,6 +655,14 @@ type LandingAbsentReason = 'COORDINATOR_ALREADY_LIVE' | 'LANDING_REFUSED' | null
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
   private readonly listSingleFlight = new SingleFlight();
+
+  /**
+   * A commit token, as a shape. Anchored and case-insensitive: it is compared byte for byte
+   * against a `uuid` column, never resolved as a public id — `NEVER_PUBLIC_ID_FIELDS` classifies
+   * it, and decoding a base62 spelling of one here would break exactly the fencing it exists for.
+   */
+  private static readonly COMMIT_TOKEN_PATTERN =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
   /**
    * The fields that decide whether an action the coordinator wants to take may happen — and the
@@ -1171,6 +1221,274 @@ export class ProjectsService {
        LIMIT 1`);
     const [row] = rows;
     return row ? { id: row.id, actionDigest: row.action_digest, seal: row.seal } : null;
+  }
+
+  /**
+   * Every stated criterion as the rows hold it — the input both the seal and the response items
+   * are taken over.
+   *
+   * One read for both, deliberately: the seal is `criteriaSemanticRevision` of these rows and the
+   * response's `acceptanceCriteriaItems` is `acceptanceCriteriaItemsOf` of the same ones, so a
+   * caller cannot be handed a digest of one moment beside a list from another.
+   */
+  private static async acceptanceDefinitions(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ) {
+    return tx.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId },
+      orderBy: { ordinal: 'asc' },
+      select: {
+        id: true,
+        ordinal: true,
+        text: true,
+        verificationMethod: true,
+        completionCriterionOverrideReason: true,
+        revision: true,
+        contentHash: true,
+        semanticRevision: true,
+        semanticHash: true,
+      },
+    });
+  }
+
+  /**
+   * ── THE DECISION DOOR ──────────────────────────────────────────────────────────────────────
+   *
+   * The account owner answering one held criteria proposal. `APPROVE` applies the edit that was
+   * held, advances the seal and records the approval, all inside ONE transaction; `REJECT`
+   * settles the proposal and touches no criterion.
+   *
+   * TWO KEYS, AND THEY BIND DIFFERENT THINGS
+   * ----------------------------------------
+   * `commitToken` binds WHAT is being decided: it is the proposal's own one-time secret, the
+   * proposer never receives it (`criteriaUnchangedNotice` returns an address and nothing that
+   * could act on one), and it is compared byte for byte. The owner credential the caller arrived
+   * with binds WHO decided, and `refuseSessionAuthoredCriteriaDecision` is the whole of that rule.
+   * Either one alone is not a decision: a token without the credential is the proposer answering
+   * itself, and the credential without the token is an owner approving whatever happens to be
+   * pending, which is not the same as approving what they read.
+   *
+   * `baseSeal` is a THIRD binding and is not a key. It binds WHEN — the version of the standard
+   * set the answer was composed against — so its refusal is its own code. A caller that holds both
+   * keys and answers a card rendered against a ruler that has since moved has done nothing wrong;
+   * it has answered a stale question, and the answer to that is "read it again", not "you may not".
+   *
+   * THE ORDER IS FIXED: credential, key, already-settled, seal
+   * ---------------------------------------------------------
+   * The same order `confirmStandardSet` refuses in, for the same reason: answer "do you have any
+   * standing to ask this" before "is what you are asking about still there". A caller with no
+   * standing must not be able to learn, from the shape of the refusal, whether a given proposal
+   * exists or how it was settled.
+   *
+   * NOTHING IS WRITTEN BY ANY REFUSAL. Every one of them is raised before the first write, and the
+   * three that are raised inside the transaction abort it, so "refused" and "no effective row" are
+   * the same fact rather than two that have to be kept in step.
+   */
+  async decideCriteriaChange(
+    ownerId: string,
+    projectId: string,
+    intentId: string,
+    dto: DecideCriteriaChangeDto,
+    actingSessionId?: string,
+  ): Promise<CriteriaDecisionResult> {
+    // (1) THE CREDENTIAL. In the service and not at a controller, so the runner door, the user
+    // door and a direct call all meet it — `coordinator-authority.ts` §2.
+    const refusal = refuseSessionAuthoredCriteriaDecision(actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+
+    // (2) THE KEY, as a shape. Restated here rather than left to the DTO's validators for the
+    // reason above: a direct caller has no pipe in front of it, and "the token was missing" has
+    // to be one typed answer wherever the call came from rather than a class-validator sentence
+    // on one door and an undefined comparison on another.
+    const commitToken = typeof dto?.commitToken === 'string' ? dto.commitToken.trim() : '';
+    if (!ProjectsService.COMMIT_TOKEN_PATTERN.test(commitToken)) {
+      throw new BadRequestException({
+        code: 'PROJECT_CRITERIA_DECISION_KEY_MISSING',
+        message:
+          'This decision carried no usable commitToken. The token is the proposal’s own one-time '
+          + 'key and it says WHICH held edit is being answered — without it the request is “apply '
+          + 'whatever is pending”, which is not something anybody read. Read the proposal again '
+          + 'and send the token beside the decision. Nothing was written.',
+      });
+    }
+    const decision = dto?.decision as CriteriaDecision;
+    if (!CRITERIA_DECISIONS.includes(decision)) {
+      throw new BadRequestException(
+        `decision must be one of ${CRITERIA_DECISIONS.join(', ')}`,
+      );
+    }
+    const baseSeal = typeof dto?.baseSeal === 'string' ? dto.baseSeal.trim().toLowerCase() : '';
+    const note = dto?.note?.trim() ? dto.note.trim() : null;
+
+    const decided = await withTransactionRetry(this.prisma, async (tx) => {
+      // The project row, under the same lock and in the same order as every other writer of this
+      // project's definitions — `projects.update` takes it at rank 40 before touching them.
+      const [locked] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT p."id" FROM "project" p
+         WHERE p."id" = ${projectId}::uuid AND p."owner_id" = ${ownerId}::uuid
+         FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('project not found');
+
+      const intent = await tx.projectRatifiedActionIntent.findFirst({
+        where: {
+          id: intentId,
+          projectId,
+          ownerId,
+          effectClass: CRITERIA_WEAKENING_EFFECT_CLASS,
+        },
+        select: { id: true, commitToken: true, contractDigest: true, action: true },
+      });
+      // A 404 and not a refusal: an id that names no proposal OF THIS PROJECT is an address that
+      // does not resolve, and answering anything else would let a caller enumerate other tenants'
+      // proposals by the difference between two error bodies.
+      if (!intent) throw new NotFoundException('no such criteria proposal on this project');
+
+      // (3) THE KEY, as a fact. Byte for byte against the row.
+      if (intent.commitToken !== commitToken) {
+        throw new ForbiddenException({
+          code: 'PROJECT_CRITERIA_DECISION_TOKEN_INVALID',
+          message:
+            'That commitToken is not this proposal’s. The token binds a decision to the exact edit '
+            + 'it answers, so one that does not match is either a different proposal’s key or a '
+            + 'guess — and neither is an approval of what is actually pending here. Nothing was '
+            + 'written; read the proposal again and answer it with its own token.',
+        });
+      }
+
+      // (4) ALREADY SETTLED. One row, one predicate, both outcomes: `project_criteria_decision`
+      // is keyed by the intent, so "has this been answered" needs no case analysis — and the
+      // primary key is also the backstop for two requests that get past this read at once.
+      const settled = await tx.projectCriteriaDecision.findUnique({
+        where: { intentId },
+        select: { decision: true, decidedAt: true },
+      });
+      if (settled) {
+        throw new ConflictException({
+          code: 'PROJECT_CRITERIA_DECISION_ALREADY_SETTLED',
+          settledAs: settled.decision,
+          decidedAt: settled.decidedAt.toISOString(),
+          message:
+            `This proposal was already settled as ${settled.decision}. A proposal gets one answer: `
+            + 'the first one is the decision, and a second would either re-apply an edit that is '
+            + 'already in force or quietly overwrite an answer somebody gave. Nothing was written '
+            + 'by this request. If the criteria should change again, edit them — a new edit that '
+            + 'loosens the ruler files a new proposal of its own.',
+        });
+      }
+
+      // (5) THE SEAL. Read under the lock, off the rows themselves.
+      const before = await ProjectsService.acceptanceDefinitions(tx, projectId);
+      const currentSeal = standardSetVersion(criteriaFromDefinitions(before)).digest;
+      const action = intent.action as unknown as CriteriaWeakeningAction;
+      const proposalSeal = action?.baseline?.seal ?? '';
+      // Two comparisons, ONE rule: the ruler that stands has to be the ruler this decision is
+      // about. The caller's `baseSeal` says which version was in front of whoever answered; the
+      // proposal's own `baseline.seal` says which version it was composed against. Checking only
+      // the first would let a freshly-rendered card approve a proposal written against an older
+      // set — which would silently undo whatever tightening landed in between, and that is exactly
+      // the walk this whole arrangement exists to forbid.
+      if (currentSeal !== baseSeal || currentSeal !== proposalSeal) {
+        throw new ConflictException({
+          code: 'PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED',
+          currentSeal,
+          proposalSeal,
+          message:
+            'The acceptance criteria moved after this proposal was composed or after the decision '
+            + 'was read. A decision names the version of the standard set it was given against, '
+            + 'because applying an edit written for an older set would take back whatever was '
+            + 'stated in the meantime. Nothing was written and the proposal is still pending. Read '
+            + 'the criteria again; if the change is still wanted against the set that stands now, '
+            + 'make it again and answer the proposal that files.',
+        });
+      }
+
+      // ── APPROVE: apply, re-read the seal, record — all three or none of them ─────────────────
+      let resultingSeal = currentSeal;
+      if (decision === 'APPROVE') {
+        // The proposal is replayed through the ordinary write path rather than a second one. What
+        // makes it land where the original write did not is only that the owner answered: the
+        // classification is not consulted here, because it already was, and its answer is what
+        // filed this proposal in the first place.
+        const edit = await ProjectsService.resolveAcceptanceEdit(
+          tx,
+          projectId,
+          action.request.proposed.map((criterion) => ({
+            ...(criterion.id === null ? {} : { id: criterion.id }),
+            text: criterion.text,
+            verificationMethod: criterion.verificationMethod,
+            ...(criterion.completionCriterionOverrideReason === null
+              ? {}
+              : { completionCriterionOverrideReason: criterion.completionCriterionOverrideReason }),
+          })),
+        );
+        await ProjectsService.replaceAcceptanceDefinitions(tx, projectId, edit);
+        // READ BACK, never recomputed in TypeScript: `content_hash` and `revision` are written by
+        // the definition's BEFORE trigger out of the assertion AND its verification method, and
+        // the hash this service computes elsewhere covers the assertion alone. A `resultingSeal`
+        // calculated here would be a second recipe, and the one that disagrees.
+        resultingSeal = standardSetVersion(criteriaFromDefinitions(
+          await ProjectsService.acceptanceDefinitions(tx, projectId),
+        )).digest;
+      }
+
+      const row = await tx.projectCriteriaDecision.create({
+        data: {
+          intentId,
+          projectId,
+          ownerId,
+          decision,
+          // The credentialed actor. Same row as `ownerId` on the owner door, stored separately
+          // because it records WHO answered rather than whose project it is.
+          decidedById: ownerId,
+          baseSeal: currentSeal,
+          resultingSeal,
+          note,
+        },
+        select: { decision: true, decidedAt: true, decidedById: true, baseSeal: true, resultingSeal: true },
+      });
+
+      if (decision === 'APPROVE') {
+        // 0195's own table, so that its two-phase machine is self-consistent on the proposals this
+        // door commits: the intent has a commit row, and its primary key refuses a second one even
+        // if this whole method were somehow reached twice. `budgetCharge` is 0 for the reason the
+        // proposal carried 0 — the 24-hour ratified-action budget sums these rows, and moving a
+        // criteria decision into that sum would spend an allowance that is about something else.
+        await tx.projectRatifiedActionCommit.create({
+          data: {
+            intentId,
+            projectId,
+            ownerId,
+            contractDigest: intent.contractDigest,
+            budgetCharge: 0,
+          },
+        });
+      }
+
+      return { row, definitions: await ProjectsService.acceptanceDefinitions(tx, projectId) };
+    }, loggedRetry(this.logger, 'projects.decideCriteriaChange'));
+
+    // After the commit, and outside it, for `confirmStandardSet`'s reason: the projection reads
+    // committed rows, it decides nothing about whether this decision was allowed, and a projection
+    // that could not be recomputed must not undo a decision that was. Only for an APPROVE — a
+    // REJECT moved no criterion, so there is nothing whose projection could have changed.
+    if (decided.row.decision === 'APPROVE') await this.reprojectProjectStatus(ownerId, projectId);
+
+    return {
+      intentId,
+      decision: decided.row.decision as CriteriaDecision,
+      decidedAt: decided.row.decidedAt,
+      decidedById: decided.row.decidedById,
+      baseSeal: decided.row.baseSeal,
+      resultingSeal: decided.row.resultingSeal,
+      applied: decided.row.decision === 'APPROVE',
+      acceptanceCriteriaItems: acceptanceCriteriaItemsOf(decided.definitions),
+      // The second consequence of an APPROVE, handed back on the same response so the caller sees
+      // it rather than discovering it: the seal moved, so the confirmation that named the old one
+      // is STALE and the project has stopped projecting DONE. That is not an extra; it is the half
+      // of this decision the caller did not ask for.
+      confirmation: await this.acceptance.standardSetConfirmation(ownerId, projectId),
+    };
   }
 
   /**
