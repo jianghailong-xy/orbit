@@ -29,10 +29,14 @@ built. So this is a re-deliberation of that decision and not the correction of a
 A project that states no criteria is never projected `DONE`: "every one of zero criteria holds" is
 the vacuous truth `NO_WORK_SERVES_IT` refuses one level down.
 
-It is recomputed on three edges, none of which has a requester asking for a status: after the
-owner's confirmation is written, on the post-commit edge of any task write in the project, and
-after a write that restates the criteria themselves — an edit moves the version the confirmation
-names, so the write that makes it is the write that has to re-derive from it. It
+It is recomputed on four edges, none of which has a requester asking for a status: after the
+owner's confirmation is written, on the post-commit edge of any task write in the project, after a
+merge receipt is recorded (`sessions/merge-receipt.service.ts`), and after a write that restates the
+criteria themselves — an edit moves the version the confirmation names, so the write that makes it
+is the write that has to re-derive from it. The receipt is an EDGE and not a third input: `landing`
+above is the input, and recording the receipt is the write that moves it, so without that edge an
+owner who confirmed the criteria before the last branch landed keeps a column reading OPEN until
+some unrelated task write happens along. It
 moves the column in BOTH directions — reopening a task or filing a new one against a met criterion
 takes `DONE` away again — because a projection that could only ever set `DONE` would be a decision
 recorded once rather than a reading of the facts. `CANCELLED` is never written and never overwritten:
@@ -58,7 +62,7 @@ holds the complete list of places production code can set the column to those tw
 
 Eleven projects were `DONE` when 0229 landed; ten of them stood on an acceptance run that no longer
 exists. Their `status` was not rewritten then, and the projection does not rewrite it now unless one
-of its two edges fires for that project.
+of its four edges fires for that project.
 
 ## What the acceptance criteria are now
 

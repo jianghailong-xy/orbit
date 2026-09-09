@@ -15,8 +15,9 @@ verdict is derived from that conjunction rather than supplied.
 Project `DONE` is not a `HUMAN_ONLY` write, and since 2026-09-08 it is not, in the ordinary case,
 anybody's write at all: `projects/project-done-derived.ts` PROJECTS the column from a standing
 confirmation of today's standard set and criteria that are every one satisfied and landed,
-recomputing it on three edges that have no requester: the owner's confirmation, the post-commit
-edge of any task write in the project, and a write that restates the criteria themselves.
+recomputing it on four edges that have no requester: the owner's confirmation, the post-commit
+edge of any task write in the project, a merge receipt being recorded, and a write that restates the
+criteria themselves.
 A projection is not a gate — it refuses nothing, and none of what migration
 `0229_project_acceptance_judgment_removal` took away on
 2026-09-03 comes back with it: no trigger on `project`, no acceptance run, and no 409 that turns a
@@ -412,9 +413,9 @@ The coordinator card's role under (B) is a prompt with a link, not an answer sur
 > given about; the paragraphs below describe the position BEFORE it, and the differences now are:
 >
 > - the two inputs are read by `readDerivedProjectDone` and stored by
->   `storeDerivedProjectStatus`, recomputed after the owner's confirmation, on the
->   post-commit edge of any task write in the project, and after a write that restates the
->   criteria, in both directions;
+>   `storeDerivedProjectStatus`, recomputed on four edges — after the owner's confirmation, on the
+>   post-commit edge of any task write in the project, after a merge receipt is recorded, and after
+>   a write that restates the criteria — in both directions;
 > - nothing about it refuses a write, so "an agent PATCHes a project to DONE today" is still true
 >   except for the one condition `refuseProjectStatusWrite` adds — the projection is what makes the
 >   column come back to what the facts say, not a gate that stops the PATCH;
