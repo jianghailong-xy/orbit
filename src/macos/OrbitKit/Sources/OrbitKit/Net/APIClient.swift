@@ -294,6 +294,49 @@ public final class APIClient: @unchecked Sendable {
                       query: [URLQueryItem(name: "decidingSessionId", value: decidingSessionID)])
     }
 
+    // MARK: a project's ruler — the two standing questions its owner answers
+
+    /// The loosening proposals this project's owner is being asked to decide, each carrying the
+    /// one-time `commitToken` that answers it.
+    ///
+    /// Owner-authenticated and nothing else: what comes back is not a description of a proposal but
+    /// the ability to answer one, so the rule that governs the decision door governs this read too.
+    /// A client re-reads it to decide whether its own buttons are still live rather than trusting
+    /// the frame a card was rendered from — see `CriteriaDecision.swift`.
+    public func pendingCriteriaDecisions(projectID: String) async throws -> PendingCriteriaDecisionQueue {
+        try await get("projects/\(projectID)/acceptance/criteria-decisions/pending")
+    }
+
+    /// The decision door. Two keys: the proposal's `commitToken`, which says WHAT is being decided,
+    /// and this request's own credential, which says who decided — no agent between the press and
+    /// the door.
+    public func decideCriteriaChange(projectID: String, intentID: String,
+                                     _ req: CriteriaDecisionRequest) async throws -> CriteriaDecisionResult {
+        try await post("projects/\(projectID)/acceptance/criteria-decisions/\(intentID)", body: req)
+    }
+
+    /// Whether the account owner has confirmed that the standard set as it stands expresses what
+    /// this project is for, and — when they confirmed an earlier wording — that it no longer does.
+    public func acceptanceConfirmation(projectID: String) async throws -> StandardSetConfirmationStanding {
+        try await get("projects/\(projectID)/acceptance/confirmation")
+    }
+
+    /// Confirm the set. The digest is required by the door and is the whole point of it: without
+    /// naming a version, "confirm the criteria" would mean "confirm whatever they say when this
+    /// request lands", and an edit arriving between the render and the press would be signed unread.
+    public func confirmAcceptanceCriteria(projectID: String,
+                                          criteriaDigest: String) async throws -> StandardSetConfirmationStanding {
+        try await post("projects/\(projectID)/acceptance/confirmation",
+                       body: ConfirmAcceptanceCriteriaRequest(criteriaDigest: criteriaDigest))
+    }
+
+    /// The criteria themselves, for the card that asks somebody to confirm them: a confirmation of
+    /// a set the reader cannot read is the "signed unread" this whole path exists to prevent.
+    /// Decoded through a narrow view of the project document — this client has no project screen.
+    public func projectCriteria(projectID: String) async throws -> ProjectCriteriaDocument {
+        try await get("projects/\(projectID)")
+    }
+
     // MARK: agents / runners
 
     public func agents() async throws -> [Agent] { try await get("agents") }

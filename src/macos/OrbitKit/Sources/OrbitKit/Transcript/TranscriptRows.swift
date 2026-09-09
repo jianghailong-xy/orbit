@@ -31,6 +31,44 @@ public struct LocalStatusCard: Identifiable, Equatable, Sendable {
     }
 }
 
+/// A standing question about a project's ruler, delivered into the conversation it belongs to:
+/// the held weakening proposal, and the settlement confirmation. Neither is an `Approval` and
+/// neither stops a turn, so neither can be rendered at the tail the way a pending approval is —
+/// they sit where they arrived and later messages push them up, which is exactly why the
+/// cross-session "needs you" bar now also points DOWN at them inside their own session.
+///
+/// It carries an address and never any content: what the card shows is re-derived from the server
+/// on every render (see OrbitKit's `CriteriaDecision.swift`), and a copy kept here would be the one
+/// thing that design is buying its way out of.
+public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
+    public enum Kind: Equatable, Sendable {
+        /// One held loosening proposal, by the address the pending read publishes.
+        case criteriaDecision(intentID: String)
+        /// The one confirmation question a project has. There is never more than one.
+        case acceptanceConfirmation
+    }
+
+    public let kind: Kind
+    /// The transcript item that was last when this card arrived — the same anchoring
+    /// `LocalStatusCard` uses, and for the same reason: a question delivered an hour ago must not
+    /// walk back down to the tail every time somebody says something.
+    public let afterItemID: String?
+
+    public init(kind: Kind, afterItemID: String? = nil) {
+        self.kind = kind
+        self.afterItemID = afterItemID
+    }
+
+    public var id: String {
+        switch kind {
+        // The web card's DOM id, in the same spelling, because both clients are pointed at it by
+        // something else on screen and one vocabulary is cheaper than two.
+        case .criteriaDecision(let intentID): return "criteria-decision-\(intentID)"
+        case .acceptanceConfirmation:         return "acceptance-confirmation"
+        }
+    }
+}
+
 /// One rendered transcript row, whatever it was assembled from.
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case loadOlder(cursor: Int)
@@ -38,6 +76,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// A run of consecutive tool calls, folded into one row (see `TranscriptRows.groupToolRuns`).
     case toolGroup([ToolCard])
     case statusCard(LocalStatusCard)
+    case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
     case working
     case queued(UserBubble)
@@ -57,6 +96,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .item(let item):        return item.id
         case .toolGroup(let cards):  return cards.first?.id ?? "tool-group-empty"
         case .statusCard(let card):  return "local-status-\(card.id)"
+        case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
         case .working:               return "working-indicator"
         case .queued(let bubble):    return "queued-\(bubble.id)"
@@ -71,7 +111,8 @@ public enum TranscriptRows {
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
-                             showWorkingIndicator: Bool) -> [TranscriptRow] {
+                             showWorkingIndicator: Bool,
+                             decisionCards: [DeliveredDecisionCard] = []) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         // Scroll-up history paging: while older pages remain, the first row is a spinner that pulls
         // the previous page in when it scrolls into view. Its id moves with the cursor, so a page
@@ -85,6 +126,16 @@ public enum TranscriptRows {
             guard let anchor = card.afterItemID else { rows.append(.statusCard(card)); continue }
             anchored[anchor, default: []].append(card)
         }
+        // A delivered decision card anchors the same way — but one whose anchor it cannot place
+        // trails at the TAIL rather than leading at the head. A `/status` result with no anchor ran
+        // before the conversation and belongs above it; an unanswered question belongs where it can
+        // be found.
+        var anchoredDecisions: [String: [DeliveredDecisionCard]] = [:]
+        var trailingDecisions: [DeliveredDecisionCard] = []
+        for card in decisionCards {
+            guard let anchor = card.afterItemID else { trailingDecisions.append(card); continue }
+            anchoredDecisions[anchor, default: []].append(card)
+        }
         for item in state.items {
             // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive approval
             // rendered below while the prompt still awaits an answer — show only the interactive
@@ -94,12 +145,21 @@ public enum TranscriptRows {
                 rows.append(.item(item))
             }
             for card in anchored.removeValue(forKey: item.id) ?? [] { rows.append(.statusCard(card)) }
+            for card in anchoredDecisions.removeValue(forKey: item.id) ?? [] {
+                rows.append(.decisionCard(card))
+            }
         }
         // An anchor no longer in the window (its item was dropped — e.g. an optimistic bubble whose
         // send failed) would otherwise take the card down with it. Trail those instead of losing them.
         for card in statusCards where card.afterItemID.map({ anchored[$0] != nil }) == true {
             rows.append(.statusCard(card))
         }
+        // Same for a question whose anchor has been paged out of the window: it is still waiting on
+        // somebody, so it is shown at the tail rather than dropped with the item it arrived after.
+        for card in decisionCards where card.afterItemID.map({ anchoredDecisions[$0] != nil }) == true {
+            trailingDecisions.append(card)
+        }
+        rows.append(contentsOf: trailingDecisions.map(TranscriptRow.decisionCard))
 
         // Approvals render as the agent's latest turn (web's AgentView puts the panel right after
         // the messages), the working indicator belongs to the RUNNING turn, and queued sends wait

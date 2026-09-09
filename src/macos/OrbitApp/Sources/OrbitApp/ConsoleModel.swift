@@ -412,6 +412,10 @@ final class ConsoleModel {
                 // suspended emits no replayable event (its background_output tail is broadcast-only), so
                 // the authoritative server list is how those changes surface after a reconnect.
                 Task { [weak self] in await self?.refreshBackground() }
+                // And the project's two standing questions, for the reason the approvals above are
+                // re-read: one of them can be answered in a browser while this phone is asleep, and
+                // nothing replays that — a card only learns it went stale by asking again.
+                Task { [weak self] in await self?.refreshRulerQuestions() }
             }
             isReconnect = true
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
@@ -757,6 +761,11 @@ final class ConsoleModel {
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
+        // The project this conversation coordinates, if any. It is what decides whether the two
+        // standing questions about that project's ruler are asked here at all — an ordinary session
+        // has no project and makes neither read.
+        projectID = s.projectId
+        if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
         provider = s.provider ?? "claude"
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
@@ -1743,6 +1752,170 @@ final class ConsoleModel {
         guard let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID)
         else { return }
         pendingDecisions = queue
+    }
+
+    // MARK: the project's ruler — two standing questions
+
+    /// The project this session coordinates, adopted from the session payload. Nil for an ordinary
+    /// session, and then nothing below here ever makes a request: these two questions belong to a
+    /// project, and a conversation that coordinates none has neither.
+    private(set) var projectID: String?
+
+    /// The held loosening proposals, as the owner's read publishes them, or nil while the read has
+    /// not come back. Nil is NOT "nothing is pending" — it is `unread`, which shows a delivered
+    /// card with dead buttons rather than one that quietly claims the question went away.
+    private(set) var criteriaDecisions: PendingCriteriaDecisionQueue?
+    /// Whether the account owner has confirmed the standard set as it stands.
+    private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
+    /// The criteria themselves, for the fold on the confirmation card: confirming a set the reader
+    /// cannot read is the "signed unread" the whole path exists to prevent.
+    private(set) var projectCriteria: [ProjectCriteriaDocument.Item] = []
+
+    /// The questions delivered into THIS window, in arrival order, each anchored to the item that
+    /// was last when it arrived. Addresses only — every word a card shows is re-derived from the
+    /// reads above on each render (see OrbitKit's `CriteriaDecision.swift`).
+    ///
+    /// They are kept even after the read stops publishing them, which is the point: a card that
+    /// silently vanished mid-read is indistinguishable, to the person reading it, from a render
+    /// that broke. It goes stale in place instead, and says which of the ways it went stale.
+    private(set) var decisionCards: [DeliveredDecisionCard] = []
+    /// Cards answered or set aside HERE. They do not come back in this window: what is true now is
+    /// a fact about the criteria, and what happened is the line left in the conversation.
+    private var closedCards: Set<String> = []
+    private var loadingRuler = false
+
+    /// The open questions below the reader, oldest first — what the "needs you" bar counts and
+    /// where a tap on it goes.
+    var openQuestionRowIDs: [String] { decisionCards.map(\.id) }
+
+    /// A row the transcript has been asked to scroll to. The tick rides along so pressing the bar
+    /// twice scrolls twice, which a bare id could not express.
+    struct ScrollRequest: Equatable {
+        let rowID: String
+        let tick: Int
+    }
+    private(set) var scrollRequest: ScrollRequest?
+    private var scrollTick = 0
+
+    func requestScroll(to rowID: String) {
+        scrollTick += 1
+        scrollRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
+    }
+
+    /// Re-read both questions from the server.
+    ///
+    /// Driven by the console rather than by a card's own `.task`, unlike the completion queue: a
+    /// card here EXISTS because the read found something, so a read that only ran when a card was
+    /// on screen could never find the first one. It runs when the session's context loads, when the
+    /// stream reconnects (the iOS-specific gap — a suspended socket misses everything), when a card
+    /// scrolls into view, and after any press. What it may never do is remove a card.
+    func refreshRulerQuestions() async {
+        guard !isDraft, let projectID, !loadingRuler else { return }
+        loadingRuler = true
+        defer { loadingRuler = false }
+
+        // Three independent reads. One failing must not blank what the others answered, and none
+        // failing may close a card — an unreadable standing is a card that says so.
+        if let queue = try? await api.pendingCriteriaDecisions(projectID: projectID) {
+            criteriaDecisions = queue
+            for row in queue.pending { deliver(.criteriaDecision(intentID: row.intentId)) }
+        }
+        if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
+            acceptanceConfirmation = standing
+        }
+        if let document = try? await api.projectCriteria(projectID: projectID) {
+            projectCriteria = document.acceptanceCriteriaItems ?? []
+        }
+        if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
+    }
+
+    /// Whether the owner's confirmation is the LAST thing settlement is waiting on.
+    ///
+    /// The confirmation is deliberately lazy — it is asked at the last moment rather than the first
+    /// — so a card offered while half the criteria are unmet would be a standing interruption in
+    /// every coordinator conversation from the day it was created. The condition is read off the
+    /// project document (every stated criterion met by its work) and is knowingly WEAKER than the
+    /// server's own `PROJECT_ACCEPTANCE_LANDED`, which also requires a merge receipt this client
+    /// cannot read: weaker means this card can appear a little early, never late, and confirming
+    /// early is not wrong — a confirmation binds to a VERSION, and any later edit ends it.
+    private var settlementHeldOnConfirmation: Bool {
+        guard AcceptanceConfirmations.answerable(acceptanceConfirmation) else { return false }
+        guard !projectCriteria.isEmpty else { return false }
+        return projectCriteria.allSatisfy { $0.satisfied == true }
+    }
+
+    /// Put a question into this conversation once, anchored where it arrived.
+    private func deliver(_ kind: DeliveredDecisionCard.Kind) {
+        let card = DeliveredDecisionCard(kind: kind, afterItemID: state.items.last?.id)
+        guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
+        else { return }
+        decisionCards.append(card)
+    }
+
+    /// Where one delivered proposal stands right now — the whole of what decides whether its
+    /// buttons may be pressed, and never a frame this card kept.
+    func criteriaStanding(_ intentID: String) -> CriteriaDecisionStanding {
+        CriteriaDecisions.standing(queue: criteriaDecisions, intentId: intentID)
+    }
+
+    /// Answer one held proposal, with this device's own credential and the proposal's one-time key.
+    ///
+    /// The card is NOT dropped optimistically, unlike an approval: the interesting outcomes here
+    /// are the door's refusals, and a card that vanished before the answer landed would take the
+    /// explanation with it. It goes when the door says it went.
+    func decideCriteria(_ row: PendingCriteriaDecisionRow, _ decision: CriteriaDecisionAnswer) async {
+        guard let projectID else { return }
+        do {
+            let result = try await api.decideCriteriaChange(
+                projectID: projectID, intentID: row.intentId,
+                CriteriaDecisions.request(row: row, decision: decision))
+            close(.criteriaDecision(intentID: row.intentId))
+            // The card that was answered HERE gives way to the line describing what it did: left on
+            // screen it would go stale into "answered at another end", which is the one reading of
+            // its own answer this window can be sure is wrong.
+            appendDecisionLine(CriteriaDecisions.decisionLine(result))
+        } catch {
+            statusMessage = "That decision was not recorded — \(error)"
+        }
+        await refreshRulerQuestions()
+    }
+
+    /// Confirm the standard set as it stands. The digest is what makes this a confirmation of the
+    /// wording just read: an edit landing in between is refused rather than signed unread.
+    func confirmStandardSet() async {
+        guard let projectID, let digest = acceptanceConfirmation?.currentVersion.digest else { return }
+        do {
+            let standing = try await api.confirmAcceptanceCriteria(projectID: projectID,
+                                                                   criteriaDigest: digest)
+            acceptanceConfirmation = standing
+            close(.acceptanceConfirmation)
+            appendDecisionLine(AcceptanceConfirmations.confirmedLine(standing))
+        } catch {
+            statusMessage = "That confirmation was not recorded — \(error)"
+            await refreshRulerQuestions()
+        }
+    }
+
+    /// "Not yet": set the question aside for this sitting. It writes nothing — the standing is a
+    /// derived read and the question is still open — so it comes back when this console is opened
+    /// again, which is what "not yet" means and what a written-down "no" would not.
+    func setAsideConfirmation() {
+        close(.acceptanceConfirmation)
+    }
+
+    private func close(_ kind: DeliveredDecisionCard.Kind) {
+        let id = DeliveredDecisionCard(kind: kind).id
+        closedCards.insert(id)
+        decisionCards.removeAll { $0.id == id }
+    }
+
+    /// What a decision leaves behind, in the flow, where it happened — the same place web's
+    /// `DecisionLog` line goes. "Now it is true" is a fact about the project; "this is what
+    /// happened" is an event in this conversation.
+    private func appendDecisionLine(_ line: String) {
+        let card = LocalStatusCard(rows: [ComposerStatusRow(label: "Decision", value: line)],
+                                   afterItemID: state.items.last?.id)
+        localStatusCards = Array((localStatusCards + [card]).suffix(5))
     }
 
     /// Fetch durable pending approvals (the REST source of truth) and reconcile them into the

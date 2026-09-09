@@ -24,10 +24,52 @@ public struct NeedsYouBanner: Equatable, Sendable {
     }
 }
 
+/// Questions waiting in the conversation ON SCREEN, and where in it they are.
+///
+/// The bar was cross-session only, and the reason it excluded the session you were looking at was
+/// that "its own approval card is already at the tail of its transcript, so a bar pointing at it
+/// would point at itself". That reason holds for an APPROVAL — it stops the turn, so nothing can
+/// arrive below it — and it does not hold for the two cards a project's ruler is decided from
+/// (`DeliveredDecisionCard`): those stop nothing, the conversation goes on underneath them, and a
+/// question delivered forty messages ago is off-screen and unfindable. So the bar stays, changes
+/// what it says, and points DOWN instead of away.
+public struct OpenQuestionsBelow: Equatable, Sendable {
+    public let count: Int
+    /// The row to scroll to — the first of them in flow order, which is the oldest.
+    public let rowID: String
+    /// The one line the bar shows.
+    public let text: String
+
+    public init(count: Int, rowID: String, text: String) {
+        self.count = count
+        self.rowID = rowID
+        self.text = text
+    }
+}
+
 /// Pure logic behind the "needs you" surfaces, derived from the cross-agent Open snapshot the
 /// clients already hold (every row carries `pendingApprovals` under the same rule the server's
 /// `GET /sessions/counts` applies) — so neither surface costs a request.
 public enum NeedsYouLogic {
+
+    /// The bar for questions in THIS conversation, or nil when it holds none.
+    ///
+    /// `rowIDs` are the delivered decision cards in the order they appear, so the destination is
+    /// the oldest one — the same FIFO the cross-session bar picks its target by. It reports what is
+    /// ON SCREEN rather than what the server has pending: a card the reader dismissed with "Not
+    /// yet" is not below them any more, and a bar that counted it would be pointing at nothing.
+    public static func below(rowIDs: [String]) -> OpenQuestionsBelow? {
+        guard let first = rowIDs.first else { return nil }
+        return OpenQuestionsBelow(count: rowIDs.count, rowID: first,
+                                  text: belowText(count: rowIDs.count))
+    }
+
+    /// "1 open question below" — never a bare number. The count is the useful part here (unlike the
+    /// cross-session bar, where "1" told you nothing and the workspace name told you everything),
+    /// because the destination is already known: it is this conversation.
+    static func belowText(count: Int) -> String {
+        "\(count) open question\(count == 1 ? "" : "s") below"
+    }
     /// agentID → how many of that agent's sessions are blocked on an approval, for the drawer's
     /// per-agent badge. Agents with nothing waiting are absent rather than zero, so a lookup that
     /// misses means "nothing" without the caller filtering. The agent id is read the way
@@ -45,9 +87,12 @@ public enum NeedsYouLogic {
     ///
     /// - Parameters:
     ///   - waiting: the blocked sessions — `SessionGrouping.group(...).needsYou`.
-    ///   - focused: the session on screen, excluded from the count. Its approval card already
-    ///     renders inline at the tail of its own transcript, so a bar pointing at it would point
-    ///     at itself. Pass nil from a list, which shows no single session.
+    ///   - focused: the session on screen, excluded from the count. Its APPROVAL card already
+    ///     renders inline at the tail of its own transcript — an approval stops the turn, so
+    ///     nothing can arrive below it — and a bar pointing at that would point at itself. Pass nil
+    ///     from a list, which shows no single session. What this exclusion does NOT cover is a
+    ///     question that stops no turn and can therefore be pushed out of view by the messages
+    ///     after it: that one is `below(rowIDs:)`, which points down into this same conversation.
     public static func banner(waiting: [Session], excluding focused: String? = nil) -> NeedsYouBanner? {
         let elsewhere = waiting.filter { $0.id != focused }
         // Longest-waiting first (FIFO). Ordered on the same parsed recency key Recents uses rather

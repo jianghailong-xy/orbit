@@ -837,3 +837,293 @@ struct PlanCard: View {
         .buttonStyle(.bordered)
     }
 }
+
+// MARK: - the two cards a project's ruler is moved from
+
+/// One question the server delivered into this conversation about the project's acceptance
+/// criteria, dispatched by kind.
+///
+/// These wear the `ApprovalCard` shape — the same toned surface, the same header, the same
+/// full-width actions — because they are answered the same way and by the same person, and a
+/// second card language for "Orbit is asking you something" would be a second thing to learn. What
+/// they are NOT is approvals: no `Approval` row exists behind them, nothing stops a turn waiting
+/// for one, and the conversation goes on underneath them. That is why they are a row of their own
+/// (`DeliveredDecisionCard`) anchored where they arrived, and why the amber bar at the top of this
+/// console now points DOWN at them instead of leaving this session out.
+///
+/// Nothing here is composed from anything an agent said, and nothing is kept between renders except
+/// the address: `console` re-derives the standing from the server's read on every body pass, which
+/// is what makes the disabled state honest rather than a guess (OrbitKit `CriteriaDecision.swift`).
+struct DeliveredDecisionCardView: View {
+    let console: ConsoleModel
+    let card: DeliveredDecisionCard
+
+    var body: some View {
+        Group {
+            switch card.kind {
+            case .criteriaDecision(let intentID):
+                CriteriaDecisionCard(console: console, intentID: intentID)
+            case .acceptanceConfirmation:
+                AcceptanceConfirmationCard(console: console)
+            }
+        }
+        // A card re-derives itself when it comes into view, on top of the reads the console runs
+        // when it loads and when the stream reconnects: the question this card is about can be
+        // answered in a browser while a phone is asleep, and the phone has to find that out by
+        // asking rather than by being told.
+        .task { await console.refreshRulerQuestions() }
+    }
+}
+
+/// The held loosening proposal: what an agent asked for, and the two answers only the account
+/// owner can give.
+///
+/// Orange, like the tool-approval card, because it is the same kind of moment — something wants
+/// permission to change something — and the badge says which kind of permission. The provenance is
+/// on the META line and not in the badge slot: `ApprovalHeader` gives the title `layoutPriority(1)`
+/// and truncates the badge in the middle, so `FROM ORBIT` would render as `FR…IT`.
+private struct CriteriaDecisionCard: View {
+    let console: ConsoleModel
+    let intentID: String
+    @State private var deciding = false
+    @State private var proposalOpen = false
+
+    private var standing: CriteriaDecisionStanding { console.criteriaStanding(intentID) }
+
+    var body: some View {
+        let standing = self.standing
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "exclamationmark.triangle.fill",
+                           title: CriteriaDecisions.title,
+                           tone: .orange,
+                           badge: CriteriaDecisions.badge(standing))
+            Text(CriteriaDecisions.heading(standing))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // The mark, and which ruler this was drafted against — the one line that says this card
+            // is the server's rather than the conversation's.
+            Text(CriteriaDecisions.meta(standing))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let row = standing.row {
+                proposal(row)
+                Text(CriteriaDecisions.nothingIsOnHold)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if case .unread = standing.state {
+                // Nothing: the explanation below is the whole of what can be said.
+                EmptyView()
+            } else {
+                // Deliberately blank of content. A settled or displaced proposal is not published
+                // any more, and this card kept no copy — that is the property being bought.
+                Text(CriteriaDecisions.goneBody)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Above the dead buttons, so it reads as the reason they are dead.
+            if let stale = CriteriaDecisions.staleExplanation(standing) {
+                Text(stale)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            }
+
+            ApprovalActions {
+                approveButton(standing)
+                refuseButton(standing)
+            }
+        }
+        .approvalChrome(.orange)
+    }
+
+    /// What the proposal asks for, numbered as the server numbers it. Folded, because the whole set
+    /// is restated even when one line moved: the summary is the decision's size, and the rows are
+    /// what it says.
+    private func proposal(_ row: PendingCriteriaDecisionRow) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(CriteriaDecisions.proposedSummary(row))
+                .font(.orbitLabel.bold()).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(CriteriaDecisions.proposedLines(row).enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // The reason the proposer gave, when the edit carried one — quoted, never summarised.
+            ForEach(Array(reasons(row).enumerated()), id: \.offset) { _, reason in
+                Text("“\(reason)”")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            }
+            // How each proposed criterion would be judged. Behind a fold: it is the instruction, not
+            // the decision, and on a phone it doubles the card.
+            DisclosureToggle(open: proposalOpen,
+                             label: proposalOpen ? "Hide how each would be judged"
+                                                 : "How each would be judged") {
+                proposalOpen.toggle()
+            }
+            if proposalOpen {
+                ForEach(Array(row.proposed.enumerated()), id: \.offset) { index, criterion in
+                    Text("\(criterion.ordinal > 0 ? criterion.ordinal : index + 1). \(criterion.verificationMethod)")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    /// The reasons carried by the proposed criteria, in their order. Hoisted out of the view so the
+    /// chain is type-checked once rather than inside a `ForEach`.
+    private func reasons(_ row: PendingCriteriaDecisionRow) -> [String] {
+        row.proposed.compactMap { nonEmpty($0.completionCriterionOverrideReason) }
+    }
+
+    /// The one rule both clients are under: an action that cannot succeed is disabled rather than
+    /// lit and refused.
+    private func approveButton(_ standing: CriteriaDecisionStanding) -> some View {
+        Button { decide(standing, .approve) } label: {
+            Text(CriteriaDecisions.approveLabel).approvalActionLabel()
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(deciding || !standing.answerable)
+    }
+
+    private func refuseButton(_ standing: CriteriaDecisionStanding) -> some View {
+        Button { decide(standing, .reject) } label: {
+            Text(CriteriaDecisions.refuseLabel).approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+        .disabled(deciding || !standing.answerable)
+    }
+
+    private func decide(_ standing: CriteriaDecisionStanding, _ answer: CriteriaDecisionAnswer) {
+        guard let row = standing.row, standing.answerable, !deciding else { return }
+        PlatformHaptics.tap()
+        deciding = true
+        Task {
+            await console.decideCriteria(row, answer)
+            deciding = false
+        }
+    }
+}
+
+/// The settlement gate: whether this set of criteria, together, is what "done" means here.
+///
+/// Blue and question-shaped — the same shape as `A question for you` and `Review this plan`, and
+/// with no badge — because that is what it is: a question about meaning, which no machine answers.
+/// The two ticks above the actions are not a verdict on the work; they say what holds and what is
+/// still open, and the open one is the question itself.
+private struct AcceptanceConfirmationCard: View {
+    let console: ConsoleModel
+    @State private var confirming = false
+    @State private var criteriaOpen = false
+
+    private var standing: StandardSetConfirmationStanding? { console.acceptanceConfirmation }
+
+    var body: some View {
+        let standing = self.standing
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.seal.fill",
+                           title: AcceptanceConfirmations.title,
+                           tone: .blue)
+            Text(AcceptanceConfirmations.meta(standing))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let standing {
+                ForEach(AcceptanceConfirmations.checks(standing)) { check in
+                    checkRow(check)
+                }
+            }
+            if let stale = AcceptanceConfirmations.staleExplanation(standing) {
+                Text(stale)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.blue.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            }
+            criteria
+
+            ApprovalActions {
+                confirmButton(standing)
+                notYetButton
+            }
+        }
+        .approvalChrome(.blue)
+    }
+
+    private func checkRow(_ check: AcceptanceConfirmationCheck) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: check.ok ? "checkmark" : "questionmark")
+                .font(.orbitGlyph)
+                .foregroundStyle(check.ok ? Color.green : Color.orange)
+            Text(check.text).font(.orbitProse).foregroundStyle(.primary)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The set itself, behind a fold. Load-bearing rather than decorative: this card sits alone in
+    /// a transcript, and confirming a set the reader cannot read is exactly the "signed unread" the
+    /// version digest exists to prevent. The web card is under the project page's own criteria
+    /// list, which is where its reader reads them.
+    @ViewBuilder private var criteria: some View {
+        let items = console.projectCriteria.sorted { $0.ordinal < $1.ordinal }
+        if !items.isEmpty {
+            DisclosureToggle(open: criteriaOpen,
+                             label: criteriaOpen ? "Hide the criteria"
+                                                 : AcceptanceConfirmations.readLabel(count: items.count)) {
+                criteriaOpen.toggle()
+            }
+            if criteriaOpen {
+                ForEach(items) { item in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\(item.ordinal)")
+                            .font(.orbitMonoFine).foregroundStyle(.secondary)
+                            .frame(minWidth: 14, alignment: .trailing)
+                        Text(item.text).font(.orbitProse)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private func confirmButton(_ standing: StandardSetConfirmationStanding?) -> some View {
+        Button {
+            guard AcceptanceConfirmations.answerable(standing), !confirming else { return }
+            PlatformHaptics.tap()
+            confirming = true
+            Task {
+                await console.confirmStandardSet()
+                confirming = false
+            }
+        } label: {
+            Text(AcceptanceConfirmations.confirmLabel).approvalActionLabel()
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(confirming || !AcceptanceConfirmations.answerable(standing))
+    }
+
+    /// Writes nothing: the standing is a derived read and the question stays open, so this sets the
+    /// card aside for this sitting rather than answering it. Never disabled — putting a question
+    /// down is available whatever the server says about it.
+    private var notYetButton: some View {
+        Button(role: .cancel) {
+            PlatformHaptics.tap()
+            console.setAsideConfirmation()
+        } label: {
+            Text(AcceptanceConfirmations.notYetLabel).approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+    }
+}

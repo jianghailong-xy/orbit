@@ -173,4 +173,55 @@ final class TranscriptRowsTests: XCTestCase {
 
         XCTAssertEqual(Set(r.map(\.id)).count, r.count)
     }
+
+    // MARK: delivered decision cards
+
+    private func decision(_ intentID: String, after: String?) -> DeliveredDecisionCard {
+        DeliveredDecisionCard(kind: .criteriaDecision(intentID: intentID), afterItemID: after)
+    }
+
+    /// A question about the project's ruler sits where it ARRIVED, so the messages that came after
+    /// it push it up — the property the "N open questions below" bar exists to answer. An approval
+    /// cannot do this: it stops the turn, so it is always last.
+    func testADeliveredDecisionCardStaysWhereItArrivedAndLaterMessagesGoBelowIt() {
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1")), .user(user("i2"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [decision("in-1", after: "i1")])
+        XCTAssertEqual(rows.map(\.id), ["i1", "criteria-decision-in-1", "i2", "transcript-bottom"])
+    }
+
+    /// Its id is the web card's DOM id, because the two clients are pointed at it by something else
+    /// on screen — a bar here, a strip row there — and one vocabulary is cheaper than two.
+    func testTheConfirmationCardHasTheOneIdAProjectEverHasForIt() {
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [DeliveredDecisionCard(kind: .acceptanceConfirmation, afterItemID: "i1")])
+        XCTAssertEqual(rows.map(\.id), ["i1", "acceptance-confirmation", "transcript-bottom"])
+    }
+
+    /// An unanswered question whose anchor is not in the window — nothing loaded yet, or the item
+    /// paged out — trails at the tail instead of being dropped or led with. A `/status` card with
+    /// no anchor still leads, which is the case this deliberately does not copy.
+    func testAQuestionWhoseAnchorIsMissingIsShownAtTheTailRatherThanLost() {
+        let lead = card(nil)
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1"))]),
+            statusCards: [lead], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [decision("in-1", after: nil), decision("in-2", after: "gone")])
+        XCTAssertEqual(rows.map(\.id),
+                       ["local-status-\(lead.id)", "i1",
+                        "criteria-decision-in-1", "criteria-decision-in-2", "transcript-bottom"])
+    }
+
+    /// The rule the crash taught: every row the List is handed carries a unique id, whatever the
+    /// sources do. A card delivered twice must not become two rows with one id.
+    func testARepeatedDecisionCardYieldsExactlyOneRow() {
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [decision("in-1", after: "i1"), decision("in-1", after: "i1")])
+        XCTAssertEqual(rows.map(\.id), ["i1", "criteria-decision-in-1", "transcript-bottom"])
+    }
 }

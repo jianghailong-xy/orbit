@@ -1,0 +1,288 @@
+import Foundation
+import XCTest
+@testable import OrbitKit
+
+/// The two cards a project's ruler is moved from, tested where they actually decide anything: the
+/// derivation of WHERE a delivered card stands, which is the only thing that says whether its
+/// buttons may be pressed.
+///
+/// Every assertion here is about a conclusion drawn from the SERVER's read. The card holds an
+/// address and nothing else, so "this card is stale" is never local state — it is what the read
+/// says now, and these tests are the place that claim is checked without a phone.
+final class CriteriaDecisionTests: XCTestCase {
+
+    // MARK: fixtures
+
+    private func row(_ intentID: String,
+                     decidable: Bool = true,
+                     baseline: String = "6b1d02ea11223344",
+                     current: String? = nil,
+                     supersedes: String? = nil,
+                     proposed: [ProposedCriterion] = []) -> PendingCriteriaDecisionRow {
+        PendingCriteriaDecisionRow(
+            intentId: intentID,
+            projectId: "proj-1",
+            commitToken: "tok-\(intentID)",
+            actionDigest: "digest-\(intentID)",
+            filedAt: "2026-09-09T12:00:00.000Z",
+            ageSeconds: 240,
+            baselineSeal: baseline,
+            currentSeal: current ?? baseline,
+            proposed: proposed,
+            supersededIntentId: supersedes,
+            decidability: decidable
+                ? CriteriaDecisionDecidability(decidable: true)
+                : CriteriaDecisionDecidability(
+                    decidable: false,
+                    refusal: CriteriaDecisions.baseSealMovedRefusal,
+                    requiredAction: "REFILE_AGAINST_THE_CURRENT_STANDARD_SET"))
+    }
+
+    private func queue(_ rows: [PendingCriteriaDecisionRow]) -> PendingCriteriaDecisionQueue {
+        PendingCriteriaDecisionQueue(
+            readAt: "2026-09-09T12:04:00.000Z",
+            projectId: "proj-1",
+            count: rows.count,
+            oldestAgeSeconds: rows.first?.ageSeconds,
+            decidableCount: rows.filter { $0.decidability.decidable }.count,
+            pending: rows)
+    }
+
+    // MARK: the five standings
+
+    func testARowThatIsPendingAndDecidableIsTheOnlyAnswerableCard() {
+        let standing = CriteriaDecisions.standing(queue: queue([row("i-1")]), intentId: "i-1")
+        XCTAssertTrue(standing.answerable)
+        XCTAssertNotNil(standing.row)
+        XCTAssertNil(CriteriaDecisions.staleExplanation(standing))
+        XCTAssertEqual(CriteriaDecisions.badge(standing), CriteriaDecisions.liveBadge)
+        XCTAssertEqual(CriteriaDecisions.heading(standing), CriteriaDecisions.liveHeading)
+    }
+
+    func testABaseSealThatMovedIsShownAndRefusedRatherThanHidden() {
+        let moved = row("i-1", decidable: false, baseline: "6b1d02ea1122", current: "9c4f7a1bb001")
+        let standing = CriteriaDecisions.standing(queue: queue([moved]), intentId: "i-1")
+        XCTAssertFalse(standing.answerable)
+        // The row IS still published — that is the whole reason this state exists — so the card
+        // can explain itself instead of vanishing.
+        XCTAssertNotNil(standing.row)
+        let why = CriteriaDecisions.staleExplanation(standing) ?? ""
+        XCTAssertTrue(why.contains(CriteriaDecisions.baseSealMovedRefusal), why)
+        XCTAssertTrue(why.contains("REFILE_AGAINST_THE_CURRENT_STANDARD_SET"), why)
+        XCTAssertTrue(why.contains("Nothing was applied"), why)
+    }
+
+    func testAProposalIsSupersededWhenAPendingOneNamesItRatherThanWhenItIsMerelyOlder() {
+        let replacement = row("i-2", supersedes: "i-1")
+        let standing = CriteriaDecisions.standing(queue: queue([replacement]), intentId: "i-1")
+        XCTAssertFalse(standing.answerable)
+        XCTAssertNil(standing.row, "a displaced proposal is not published, so the card shows no diff")
+        XCTAssertEqual(CriteriaDecisions.badge(standing), "replaced")
+        XCTAssertTrue((CriteriaDecisions.staleExplanation(standing) ?? "").contains("Superseded"))
+
+        // The negative control for the same read: without the supersession link the identical
+        // queue means "answered", which is a different sentence and a different badge.
+        let settled = CriteriaDecisions.standing(queue: queue([row("i-2")]), intentId: "i-1")
+        XCTAssertEqual(CriteriaDecisions.badge(settled), "settled")
+        let why = CriteriaDecisions.staleExplanation(settled) ?? ""
+        XCTAssertTrue(why.contains(CriteriaDecisions.alreadySettledRefusal), why)
+    }
+
+    func testAnEmptyQueueMeansAnsweredAndNoQueueAtAllMeansUnread() {
+        let answered = CriteriaDecisions.standing(queue: queue([]), intentId: "i-1")
+        if case .alreadySettled = answered.state {} else { XCTFail("expected alreadySettled") }
+
+        // nil is this CLIENT's state, not the proposal's, and it must not be read as "nothing is
+        // pending": a card that cannot re-derive itself has no idea what the door would accept.
+        let unread = CriteriaDecisions.standing(queue: nil, intentId: "i-1")
+        if case .unread = unread.state {} else { XCTFail("expected unread") }
+        XCTAssertFalse(unread.answerable)
+        XCTAssertEqual(CriteriaDecisions.heading(unread), CriteriaDecisions.unreadHeading)
+    }
+
+    func testNoStandingButTheDecidableOneOffersAnAnswer() {
+        let standings: [CriteriaDecisionStanding] = [
+            CriteriaDecisions.standing(queue: queue([row("i-1")]), intentId: "i-1"),
+            CriteriaDecisions.standing(queue: queue([row("i-1", decidable: false)]), intentId: "i-1"),
+            CriteriaDecisions.standing(queue: queue([row("i-2", supersedes: "i-1")]), intentId: "i-1"),
+            CriteriaDecisions.standing(queue: queue([]), intentId: "i-1"),
+            CriteriaDecisions.standing(queue: nil, intentId: "i-1"),
+        ]
+        XCTAssertEqual(standings.map(\.answerable), [true, false, false, false, false])
+        // And every unanswerable one says why: a disabled button with no sentence beside it is the
+        // bug this rule exists to prevent.
+        for standing in standings.dropFirst() {
+            XCTAssertNotNil(CriteriaDecisions.staleExplanation(standing))
+        }
+    }
+
+    // MARK: what the card shows
+
+    func testTheMetaLineCarriesTheProvenanceAndWhichRulerThisWasDraftedAgainst() {
+        let live = CriteriaDecisions.meta(
+            CriteriaDecisions.standing(queue: queue([row("i-1", baseline: "6b1d02ea1122")]),
+                                       intentId: "i-1"))
+        XCTAssertTrue(live.hasPrefix(CriteriaDecisions.provenanceLabel), live)
+        XCTAssertTrue(live.contains("not the requesting agent"), live)
+        XCTAssertTrue(live.contains("6b1d02ea1122"), live)
+        XCTAssertTrue(live.contains("unchanged since it was drafted"), live)
+
+        let moved = CriteriaDecisions.meta(
+            CriteriaDecisions.standing(
+                queue: queue([row("i-1", decidable: false,
+                                  baseline: "6b1d02ea1122", current: "9c4f7a1bb001")]),
+                intentId: "i-1"))
+        XCTAssertTrue(moved.contains("the set in force is now 9c4f7a1bb001"), moved)
+    }
+
+    func testASealIsShortenedForComparisonAndAnUnreadableOneSaysSo() {
+        XCTAssertEqual(CriteriaDecisions.shortSeal("6b1d02ea112233445566"), "6b1d02ea1122")
+        XCTAssertEqual(CriteriaDecisions.shortSeal(""), "(unreadable)")
+    }
+
+    func testTheProposedSetIsNumberedAndAnAdditionIsMarkedAsOne() {
+        let proposal = row("i-1", proposed: [
+            ProposedCriterion(id: "c-3", ordinal: 1, text: "Full API is green", verificationMethod: "run it"),
+            ProposedCriterion(id: nil, ordinal: 2, text: "The scheduled nodes pass", verificationMethod: "run it"),
+        ])
+        let lines = CriteriaDecisions.proposedLines(proposal)
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines[0].hasPrefix("1. Full API is green"), lines[0])
+        XCTAssertFalse(lines[0].contains("new in this proposal"))
+        XCTAssertTrue(lines[1].contains("new in this proposal"), lines[1])
+        XCTAssertEqual(CriteriaDecisions.proposedSummary(proposal),
+                       "2 criteria, as this project’s standard set")
+    }
+
+    // MARK: what one press sends
+
+    func testThePressCarriesTheOneTimeKeyAndTheVersionItWasComposedAgainst() throws {
+        let proposal = row("i-1", baseline: "6b1d02ea1122")
+        let request = CriteriaDecisions.request(row: proposal, decision: .approve)
+        XCTAssertEqual(request.commitToken, "tok-i-1")
+        XCTAssertEqual(request.baseSeal, "6b1d02ea1122")
+        // The door's spelling, not the client's: REJECT is the wire word behind "Refuse".
+        let refusal = CriteriaDecisions.request(row: proposal, decision: .reject)
+        let json = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(refusal)) as? [String: Any]
+        XCTAssertEqual(json?["decision"] as? String, "REJECT")
+    }
+
+    func testTheLineLeftBehindNamesBothSealsForAnApprovalAndOneForARefusal() {
+        let approved = CriteriaDecisionResult(intentId: "i-1", decision: .approve,
+                                              decidedAt: "2026-09-09T12:05:00.000Z",
+                                              baseSeal: "6b1d02ea1122", resultingSeal: "9c4f7a1bb001",
+                                              applied: true)
+        let line = CriteriaDecisions.decisionLine(approved)
+        XCTAssertTrue(line.contains("6b1d02ea1122 → 9c4f7a1bb001"), line)
+
+        let refused = CriteriaDecisionResult(intentId: "i-1", decision: .reject,
+                                             decidedAt: "2026-09-09T12:05:00.000Z",
+                                             baseSeal: "6b1d02ea1122", resultingSeal: "6b1d02ea1122",
+                                             applied: false)
+        XCTAssertTrue(CriteriaDecisions.decisionLine(refused).contains("nothing was applied"))
+    }
+
+    // MARK: the wire
+
+    func testTheOwnerReadDecodesTheServersOwnShape() throws {
+        // Field-for-field what `readPendingCriteriaDecisionsForOwner` publishes, so a rename on the
+        // server is a red test here rather than a card that silently renders nothing.
+        let json = """
+        {"readAt":"2026-09-09T12:04:00.000Z","projectId":"p1","count":1,"oldestAgeSeconds":240,
+         "decidableCount":0,
+         "pending":[{"intentId":"i1","projectId":"p1","commitToken":"tok","actionDigest":"d",
+           "filedAt":"2026-09-09T12:00:00.000Z","ageSeconds":240,"baselineSeal":"aaa",
+           "currentSeal":"bbb",
+           "proposed":[{"id":null,"ordinal":1,"text":"t","verificationMethod":"v",
+                        "completionCriterionOverrideReason":null}],
+           "supersededIntentId":null,
+           "decidability":{"decidable":false,"refusal":"PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED",
+                           "requiredAction":"REFILE_AGAINST_THE_CURRENT_STANDARD_SET"}}]}
+        """
+        let decoded = try JSONDecoder().decode(PendingCriteriaDecisionQueue.self,
+                                               from: Data(json.utf8))
+        XCTAssertEqual(decoded.pending.count, 1)
+        XCTAssertEqual(decoded.pending[0].commitToken, "tok")
+        XCTAssertNil(decoded.pending[0].proposed[0].id)
+        XCTAssertFalse(decoded.pending[0].decidability.decidable)
+        let standing = CriteriaDecisions.standing(queue: decoded, intentId: "i1")
+        XCTAssertFalse(standing.answerable)
+    }
+
+    func testTheConfirmationStandingDecodesItsThreeStates() throws {
+        let json = """
+        {"state":"STALE","confirmed":false,
+         "currentVersion":{"digest":"9c4f7a1bb001","material":[
+            {"definitionId":"d1","revision":2,"contentHash":"h1"},
+            {"definitionId":"d2","revision":1,"contentHash":"h2"}]},
+         "confirmation":{"criteriaDigest":"6b1d02ea1122","criteriaMaterial":[],
+                         "confirmedAt":"2026-09-08T10:00:00.000Z","confirmedById":"u1"}}
+        """
+        let standing = try JSONDecoder().decode(StandardSetConfirmationStanding.self,
+                                                from: Data(json.utf8))
+        XCTAssertEqual(standing.state, .stale)
+        XCTAssertEqual(standing.currentVersion.material.count, 2)
+        XCTAssertTrue(AcceptanceConfirmations.answerable(standing))
+    }
+
+    // MARK: the confirmation card
+
+    private func confirmation(_ state: StandardSetConfirmationStanding.State,
+                              criteria: Int = 10) -> StandardSetConfirmationStanding {
+        let material = (0..<criteria).map {
+            ConfirmedCriterionVersion(definitionId: "d\($0)", revision: 1, contentHash: "h\($0)")
+        }
+        let prior = RecordedStandardSetConfirmation(
+            criteriaDigest: state == .confirmed ? "9c4f7a1bb001" : "6b1d02ea1122",
+            criteriaMaterial: material,
+            confirmedAt: "2026-09-08T10:00:00.000Z", confirmedById: "u1")
+        return StandardSetConfirmationStanding(
+            state: state,
+            confirmed: state == .confirmed,
+            currentVersion: StandardSetVersion(digest: "9c4f7a1bb001", material: material),
+            confirmation: state == .unconfirmed ? nil : prior)
+    }
+
+    func testTheConfirmationCardNamesTheSetAndTheVersionSettlementIsHeldOn() {
+        let meta = AcceptanceConfirmations.meta(confirmation(.unconfirmed))
+        XCTAssertTrue(meta.hasPrefix(CriteriaDecisions.provenanceLabel), meta)
+        XCTAssertTrue(meta.contains("the set of 10 at seal 9c4f7a1bb001"), meta)
+        XCTAssertTrue(meta.contains("Settlement is held on this"), meta)
+        XCTAssertEqual(AcceptanceConfirmations.readLabel(count: 10), "Read the 10 criteria")
+        XCTAssertEqual(AcceptanceConfirmations.readLabel(count: 1), "Read the 1 criterion")
+    }
+
+    func testBothUnconfirmedStatesOfferTheButtonAndAConfirmedOneDoesNot() {
+        XCTAssertTrue(AcceptanceConfirmations.answerable(confirmation(.unconfirmed)))
+        XCTAssertTrue(AcceptanceConfirmations.answerable(confirmation(.stale)))
+        XCTAssertFalse(AcceptanceConfirmations.answerable(confirmation(.confirmed)))
+        // A standing that could not be read offers nothing, for the reason the other card's
+        // `unread` does: nobody can say whether the door would take it.
+        XCTAssertFalse(AcceptanceConfirmations.answerable(nil))
+        XCTAssertNotNil(AcceptanceConfirmations.staleExplanation(nil))
+        XCTAssertNil(AcceptanceConfirmations.staleExplanation(confirmation(.unconfirmed)))
+        XCTAssertNotNil(AcceptanceConfirmations.staleExplanation(confirmation(.confirmed)))
+    }
+
+    func testTheOpenQuestionIsNeverDroppedFromTheBodyWhileItIsStillOpen() {
+        for state in [StandardSetConfirmationStanding.State.unconfirmed, .stale] {
+            let checks = AcceptanceConfirmations.checks(confirmation(state))
+            XCTAssertEqual(checks.count, 2)
+            XCTAssertTrue(checks.allSatisfy { !$0.ok }, "nothing holds while the set is unconfirmed")
+            XCTAssertTrue(checks.last!.text.contains("will not derive DONE"), checks.last!.text)
+            XCTAssertTrue(checks.last!.text.contains("this set of 10"), checks.last!.text)
+        }
+        // Confirmed: the same two lines, both holding, and the mechanism is now the warning that a
+        // single edit ends it.
+        let done = AcceptanceConfirmations.checks(confirmation(.confirmed))
+        XCTAssertTrue(done.allSatisfy(\.ok))
+        XCTAssertTrue(done.last!.text.contains("Editing any criterion ends this confirmation"))
+    }
+
+    func testAStaleConfirmationSaysWhichVersionWasConfirmedBefore() {
+        let checks = AcceptanceConfirmations.checks(confirmation(.stale))
+        XCTAssertTrue(checks[0].text.contains("no longer stands"), checks[0].text)
+        XCTAssertTrue(checks[0].text.contains("6b1d02ea1122"), checks[0].text)
+    }
+}

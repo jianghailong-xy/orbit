@@ -100,4 +100,31 @@ final class NeedsYouLogicTests: XCTestCase {
         let bare = session("s2", approvals: 1, agentID: "dev")
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [bare])?.text, "A session needs you")
     }
+
+    // MARK: questions in the conversation on screen
+
+    /// The bar used to have nothing to say inside the session you were reading, because the only
+    /// thing it knew about was an approval — which stops the turn and therefore sits at the tail
+    /// where you cannot miss it. A held criteria proposal stops nothing, so the conversation runs
+    /// on underneath it and it leaves the screen. This is that case.
+    func testOneQuestionInThisConversationNamesItAndPointsAtIt() {
+        let below = NeedsYouLogic.below(rowIDs: ["criteria-decision-in-1"])
+        XCTAssertEqual(below?.count, 1)
+        XCTAssertEqual(below?.text, "1 open question below")
+        XCTAssertEqual(below?.rowID, "criteria-decision-in-1")
+    }
+
+    /// Several collapse to a count, and the destination is the FIRST in flow order — the oldest,
+    /// the same FIFO the cross-session bar picks its target by.
+    func testSeveralQuestionsCountAndTheTapGoesToTheOldest() {
+        let below = NeedsYouLogic.below(rowIDs: ["criteria-decision-in-1", "acceptance-confirmation"])
+        XCTAssertEqual(below?.text, "2 open questions below")
+        XCTAssertEqual(below?.rowID, "criteria-decision-in-1")
+    }
+
+    /// Nothing below means no bar at all — absent from the layout rather than present and empty,
+    /// the same rule the cross-session bar answers nil for.
+    func testNoQuestionsBelowIsNoBar() {
+        XCTAssertNil(NeedsYouLogic.below(rowIDs: []))
+    }
 }

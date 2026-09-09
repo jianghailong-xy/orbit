@@ -94,8 +94,16 @@ struct ConsoleView: View {
         // "Another session needs you", below the nav bar and above the transcript. Compact only:
         // the regular-width split keeps the session list on screen beside this console, and that
         // list carries the bar — showing it in both columns would state one fact twice.
+        // …and, when this session is itself holding a question that does NOT stop its turn, the same
+        // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
         .safeAreaInset(edge: .top, spacing: 0) {
-            if hSize == .compact { NeedsYouBannerView(excluding: sessionID) }
+            if hSize == .compact {
+                let console = registry.peek(sessionID)
+                NeedsYouBannerView(
+                    excluding: sessionID,
+                    below: NeedsYouLogic.below(rowIDs: console?.openQuestionRowIDs ?? []),
+                    onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+            }
         }
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
         // carries no title, so iOS would reserve a *large* — and empty — title bar: a big blank band
@@ -340,6 +348,28 @@ struct TranscriptView: View {
                 atBottom = true
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
+            // The "N open questions below" bar, pressed. It sits outside this reader (it is an
+            // inset of the whole console, above the nav bar's content), so the request crosses on
+            // the model — with a tick, so pressing it twice scrolls twice. `.center` rather than
+            // `.top`: a decision card is an object to read whole, not a place to resume reading
+            // from.
+            .onChange(of: console.scrollRequest) { _, request in
+                guard let request else { return }
+                #if os(iOS)
+                // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
+                // deceleration swallows the scroll.
+                transcriptScroll.halt()
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(request.rowID, anchor: .center)
+                    }
+                }
+                #else
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(request.rowID, anchor: .center)
+                }
+                #endif
+            }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {
@@ -413,7 +443,8 @@ struct TranscriptView: View {
         TranscriptRows.build(state: console.state,
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
-                             showWorkingIndicator: console.showWorkingIndicator)
+                             showWorkingIndicator: console.showWorkingIndicator,
+                             decisionCards: console.decisionCards)
     }
 
     /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.
@@ -446,6 +477,11 @@ struct TranscriptView: View {
             ToolGroupCardView(cards: cards, fullPayload: console.fullPayload)
         case .statusCard(let card):
             SessionStatusCardView(card: card)
+        case .decisionCard(let card):
+            // No `AnchorRow`: a question about the project's ruler isn't a "Your question" the
+            // sticky header names. Unlike an approval it stops no turn, so later messages render
+            // BELOW it — which is why the bar at the top of this console points down at it.
+            DeliveredDecisionCardView(console: console, card: card)
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval)
