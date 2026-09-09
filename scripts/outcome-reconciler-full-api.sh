@@ -121,7 +121,7 @@ PG_VERSION="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d postgres -tAc \
   'SHOW server_version' | tr -d '[:space:]')"
 
 echo '==> full-api: deploy every migration'
-( cd "$API" && DATABASE_URL="$URL" node node_modules/prisma/build/index.js \
+( cd "$API" && DATABASE_URL="$URL" node "$(node -p 'require.resolve("prisma/build/index.js")')" \
   migrate deploy --schema prisma/schema.prisma >/dev/null )
 MIGRATIONS="$(docker exec "$CONTAINER" psql -U "$ADMIN" -d "$DATABASE" -tAc \
   'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"

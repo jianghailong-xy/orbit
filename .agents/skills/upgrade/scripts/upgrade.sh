@@ -109,8 +109,10 @@ else
 fi
 
 echo "==> Applying migrations before recreating services"
+# Same command the image's CMD runs, and for the same reason it resolves the CLI instead of naming
+# its path: npm's choice between the workspace tree and the hoisted root one is not a contract.
 $DC run --rm --no-deps apiserver /bin/sh -c \
-  'cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy'
+  'cd src/apiserver && node "$(node -p '"'"'require.resolve("prisma/build/index.js")'"'"')" migrate deploy'
 
 if [ "$PULL_BASE" -eq 1 ]; then
   echo "==> Refreshing base images (postgres, gateway)"

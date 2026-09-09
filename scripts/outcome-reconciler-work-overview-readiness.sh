@@ -128,7 +128,7 @@ PG_URL="postgresql://$PG_USER:$PG_PASSWORD@127.0.0.1:$PG_PORT/$PG_DATABASE"
 PG_SYSTEM_IDENTIFIER="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABASE" -tAc \
   'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
 echo '==> work-overview: migrate disposable database'
-( cd "$API" && DATABASE_URL="$PG_URL" node node_modules/prisma/build/index.js \
+( cd "$API" && DATABASE_URL="$PG_URL" node "$(node -p 'require.resolve("prisma/build/index.js")')" \
   migrate deploy --schema prisma/schema.prisma >/dev/null )
 MIGRATION_COUNT="$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DATABASE" -tAc \
   'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL' | tr -d '[:space:]')"

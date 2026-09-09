@@ -35,9 +35,12 @@ ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# node_modules carries the generated Prisma client + the prisma CLI used at boot. npm keeps
-# `prisma` and `@prisma/client` in the workspace's own node_modules rather than hoisting them,
-# so that tree ships too — without it neither the boot migration nor the server can resolve them.
+# node_modules carries the generated Prisma client + the prisma CLI used at boot. WHICH tree npm
+# puts them in is a resolution outcome and not a contract: 7.9.1 kept `prisma`/`@prisma/client` in
+# the workspace's own node_modules, 7.10.0 hoisted them to the root, and the boot command — which
+# named the workspace path outright — then could not find the CLI at all (2026-09-09, every start
+# died on `Cannot find module '/app/src/apiserver/node_modules/prisma/build/index.js'`). Both trees
+# therefore ship, and the CMD below asks Node to find the CLI instead of saying where it is.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/src/apiserver/node_modules ./src/apiserver/node_modules
 COPY --from=build /app/package.json ./package.json
@@ -53,4 +56,7 @@ COPY scripts/executable-acceptance-dead-man.mjs ./scripts/executable-acceptance-
 EXPOSE 3000
 # Apply migrations, then start the API. Prisma 7 takes the connection URL from prisma.config.ts
 # instead of the schema, and finds that file relative to the working directory — hence the `cd`.
-CMD ["sh", "-c", "cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy && cd /app && node src/apiserver/dist/main.js"]
+# `require.resolve` runs the ordinary Node lookup from that same directory, so the CLI is found in
+# the workspace's node_modules or in the root one, whichever this install produced; no dependency
+# bump can move it somewhere this command refuses to look.
+CMD ["sh", "-c", "cd src/apiserver && node \"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy && cd /app && node src/apiserver/dist/main.js"]
