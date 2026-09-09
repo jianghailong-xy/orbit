@@ -897,9 +897,14 @@ private struct CriteriaDecisionCard: View {
                            title: CriteriaDecisions.title,
                            tone: .orange,
                            badge: CriteriaDecisions.badge(standing))
-            Text(CriteriaDecisions.heading(standing))
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // The browser's longer heading, kept for the states where it is the VERDICT rather than
+            // a restatement: on a live card the title already asked the question, and saying it
+            // twice is how a card teaches its reader to skip the top of it.
+            if !standing.answerable {
+                Text(CriteriaDecisions.heading(standing))
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             // The mark, and which ruler this was drafted against — the one line that says this card
             // is the server's rather than the conversation's.
             Text(CriteriaDecisions.meta(standing))
@@ -1052,8 +1057,11 @@ private struct AcceptanceConfirmationCard: View {
             }
             criteria
 
+            // Three stacked actions, at the system's default height — the shape signed off on
+            // 2026-08-14, where `.controlSize(.large)`'s 50pt bars read as bulky three deep.
             ApprovalActions {
                 confirmButton(standing)
+                readButton
                 notYetButton
             }
         }
@@ -1071,29 +1079,25 @@ private struct AcceptanceConfirmationCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The set itself, behind a fold. Load-bearing rather than decorative: this card sits alone in
-    /// a transcript, and confirming a set the reader cannot read is exactly the "signed unread" the
-    /// version digest exists to prevent. The web card is under the project page's own criteria
-    /// list, which is where its reader reads them.
+    private var items: [ProjectCriteriaDocument.Item] {
+        console.projectCriteria.sorted { $0.ordinal < $1.ordinal }
+    }
+
+    /// The set itself, opened by the middle action. Load-bearing rather than decorative: this card
+    /// sits alone in a transcript, and confirming a set the reader cannot read is exactly the
+    /// "signed unread" the version digest exists to prevent. The web card is under the project
+    /// page's own criteria list, which is where its reader reads them; a phone has to carry them.
     @ViewBuilder private var criteria: some View {
-        let items = console.projectCriteria.sorted { $0.ordinal < $1.ordinal }
-        if !items.isEmpty {
-            DisclosureToggle(open: criteriaOpen,
-                             label: criteriaOpen ? "Hide the criteria"
-                                                 : AcceptanceConfirmations.readLabel(count: items.count)) {
-                criteriaOpen.toggle()
-            }
-            if criteriaOpen {
-                ForEach(items) { item in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("\(item.ordinal)")
-                            .font(.orbitMonoFine).foregroundStyle(.secondary)
-                            .frame(minWidth: 14, alignment: .trailing)
-                        Text(item.text).font(.orbitProse)
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        if criteriaOpen {
+            ForEach(items) { item in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(item.ordinal)")
+                        .font(.orbitMonoFine).foregroundStyle(.secondary)
+                        .frame(minWidth: 14, alignment: .trailing)
+                    Text(item.text).font(.orbitProse)
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -1112,6 +1116,23 @@ private struct AcceptanceConfirmationCard: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(confirming || !AcceptanceConfirmations.answerable(standing))
+    }
+
+    /// Opens the set this card is about, in place. Not a navigation: there is no project screen on
+    /// this client to navigate TO, and a question about a set is best answered beside it. Absent
+    /// while the criteria could not be read, because a control that would open nothing is not one.
+    @ViewBuilder private var readButton: some View {
+        if !items.isEmpty {
+            Button {
+                PlatformHaptics.tap()
+                criteriaOpen.toggle()
+            } label: {
+                Text(criteriaOpen ? "Hide the criteria"
+                                  : AcceptanceConfirmations.readLabel(count: items.count))
+                    .approvalActionLabel()
+            }
+            .buttonStyle(.bordered)
+        }
     }
 
     /// Writes nothing: the standing is a derived read and the question stays open, so this sets the
