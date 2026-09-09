@@ -45,6 +45,7 @@ import {
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
+import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { criterionKeyOf, sha256 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
@@ -827,12 +828,19 @@ export class ProjectsService {
 
   /** Apply a whole structured collection while preserving every id the caller retained. Existing
    * ordinals are first moved out of the way so swapping two rows never transiently violates the
-   * unique `(project, ordinal)` constraint. */
+   * unique `(project, ordinal)` constraint.
+   *
+   * Returns WHICH WAY the edit moved the ruler, read off the two lists this function already
+   * holds — the rows on record and the rows asked for, both after id resolution and both
+   * normalised the same way, which is the only place in the write path where those two exist side
+   * by side. It is reported rather than acted on here: what an ADDITIVE edit does is land, which
+   * is what this function does anyway, and there is nothing to re-seal afterwards because the
+   * standard set's seal is a function of the rows this leaves behind. */
   private static async replaceAcceptanceDefinitions(
     tx: Prisma.TransactionClient | PrismaService,
     projectId: string,
     items: UpdateProjectAcceptanceCriterionDto[],
-  ): Promise<void> {
+  ): Promise<CriteriaEditDirection> {
     const normalized = ProjectsService.normalizeAcceptanceItems(items);
     const existing = await tx.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId },
@@ -870,6 +878,10 @@ export class ProjectsService {
       used.add(id);
       return { ...criterion, id, ordinal: index + 1 };
     });
+
+    // Classified before anything is written, against the rows as they still stand: afterwards
+    // `existing` is history and the comparison would have nothing to be a comparison with.
+    const direction = classifyCriteriaEdit(existing, desired);
 
     if (existing.length > 0) {
       await tx.projectAcceptanceCriterionDefinition.updateMany({
@@ -914,6 +926,7 @@ export class ProjectsService {
         });
       }
     }
+    return direction;
   }
 
   /**
@@ -2000,8 +2013,23 @@ export class ProjectsService {
 
         // Definitions change under the already-held project lock. Nothing derives from them any
         // more: 0229 removed the evaluator that used to re-judge a project when its exam changed.
+        //
+        // An ADDITIVE edit — the ruler walking toward strictness — takes effect where it is made,
+        // and takes effect completely: the definition trigger moves `revision` and `content_hash`,
+        // so the next read of the standard set's seal is already the new one and an owner
+        // confirmation of the old one reads STALE from that moment. Nothing re-seals, and nothing
+        // carries a confirmation forward — a set the owner has not seen is not a set the owner
+        // confirmed. A WEAKENING edit still lands here today; the door that holds one for the
+        // owner to decide is a write path of its own, and this is where it hooks in.
         if (dto.acceptanceCriteriaItems !== undefined) {
-          await ProjectsService.replaceAcceptanceDefinitions(tx, id, dto.acceptanceCriteriaItems);
+          const direction = await ProjectsService.replaceAcceptanceDefinitions(
+            tx, id, dto.acceptanceCriteriaItems,
+          );
+          if (direction === 'WEAKENING') {
+            this.logger.warn(
+              `project ${id}: an acceptance criteria edit that loosens the ruler landed unheld`,
+            );
+          }
         }
 
         if (agentId !== undefined) {
