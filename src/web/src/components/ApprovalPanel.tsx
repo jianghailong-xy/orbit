@@ -8,6 +8,7 @@ import {
   CONFIRM_LABEL,
   SEND_BACK_LABEL,
   STRIP_LABEL,
+  decisionRowKey,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -26,13 +27,16 @@ import { bashCommandRules } from '@orbit/shared';
  * The card stays on screen rather than vanishing. It is the only place the question is written
  * down, and a card that silently disappears mid-read is indistinguishable from one somebody else
  * answered. So it keeps its content, loses every action (`CardAction`'s one rule: an action that
- * cannot succeed is `disabled`) and carries this line — which names the pinned strip by the
- * strip's own label, because that read is answered by writing a decision directly and needs no
- * live turn (`docs/completion-input-routing.md` §A2 D1).
+ * cannot succeed is `disabled`) and carries this line.
+ *
+ * It names the pinned strip because the strip still COUNTS what is waiting — and no longer because
+ * the strip is somewhere else to answer it. That is the whole of the 2026-09-09 change: the rail
+ * was the second decision surface and now it is a pointer, so the sentence that used to send a
+ * reader there to press a button says instead that the question comes back.
  */
 export const UNANSWERABLE_NOTE =
-  `This turn has ended, so an answer here would reach nobody. Anything still waiting on a ` +
-  `decision is under "${STRIP_LABEL}" above.`;
+  `This turn has ended, so an answer here would reach nobody. It is still waiting — ` +
+  `"${STRIP_LABEL}" above counts it, and the coordinator session raises it again when it runs.`;
 
 /** The line a dead card carries in place of its actions. */
 function UnanswerableNote(): JSX.Element {
@@ -700,6 +704,40 @@ export function evidenceDecisionRows(
   return matched.every((row) => row !== null) ? (matched as PendingDecisionRow[]) : null;
 }
 
+/**
+ * Which waiting rows have a decision card on screen that could still be answered.
+ *
+ * This is the whole answer to "what does the rail's pointer point at when there is no card", and
+ * it is one computation rather than four special cases. Every way a row can lack a live card comes
+ * out of the same two facts the cards themselves are drawn from:
+ *
+ *  - the coordinator session is not running, or has not reached the call yet — no approval is held
+ *    for it at all, so nothing here adds a key;
+ *  - the turn that raised the card is over — the approval is still held but is not in `answerable`
+ *    (`WorkspaceView` recomputes that from the session's run state and the tool result), and a card
+ *    nobody is listening to is not a place to send a reader;
+ *  - it was answered seconds ago and the strip is still holding its 20s-old read — the approval was
+ *    dropped optimistically on the answer, so the key goes with it and the stale row loses its
+ *    pointer rather than keeping one aimed at a card that is gone.
+ *
+ * The failure direction is deliberate: an unknown is "no card", which costs a sentence, never a
+ * pointer that does nothing when pressed.
+ */
+export function answerableDecisionCards(
+  approvals: ApprovalInfo[],
+  answerable: ReadonlySet<string>,
+  decisions: PendingDecisionQueue | null | undefined,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const approval of approvals) {
+    if (!answerable.has(approval.id)) continue;
+    for (const row of evidenceDecisionRows(approval, decisions) ?? []) {
+      keys.add(decisionRowKey(row));
+    }
+  }
+  return keys;
+}
+
 /** One machine-checkable statement about the row, in the row's own fields. */
 interface DecisionCheck {
   ok: boolean;
@@ -843,7 +881,11 @@ function EvidenceDecisionQuestion({
   const held = checks.filter((check) => check.ok).length;
 
   return (
-    <section className="decision-ask-q">
+    // Where the rail's pointer lands. The handle is `decisionRowKey` of the row this section was
+    // built from, so the strip computes it from its own copy of the same row and there is no map
+    // between the two to fall out of step. Per QUESTION rather than per card: an ask raised over
+    // three rows is one card, and a pointer for one of them must arrive at that one.
+    <section className="decision-ask-q" data-decision-row={decisionRowKey(row)}>
       <div className="decision-ask-chip">{`证据 ${index + 1}/${total}`}</div>
       <div className="decision-ask-claim">
         {claim === '' ? (

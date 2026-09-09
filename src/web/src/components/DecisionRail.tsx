@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input, Typography } from 'antd';
-import { CardActionButton, CardActions } from './CardAction';
-import { api } from '../api';
+import { useQuery } from '@tanstack/react-query';
+import { Typography } from 'antd';
 import { pendingDecisionsQuery } from '../lib/queries';
 
 /**
@@ -17,6 +15,35 @@ import { pendingDecisionsQuery } from '../lib/queries';
  * sent. So the two kinds of content are separated by kind: what is true now is pinned here and
  * does not scroll, and what HAPPENED — a decision, once made — is a line in the log where it
  * happened (`DecisionLog`, rendered inside the transcript scroller).
+ *
+ * ONE DECISION SURFACE, AND THIS IS NOT IT
+ * ----------------------------------------
+ * This strip used to carry `Confirm completion` and `Send back` and post them itself. That made
+ * two surfaces for one fact, neither knowing about the other, and the account paid for it on
+ * 2026-09-09: a coordinator recording a judgment came back `EVIDENCE_JUDGMENT_ALREADY_DECIDED`
+ * because the same evidence had been answered from the other one first. Whoever got there first
+ * won, and the loser found out from an error.
+ *
+ * So the buttons are gone and no request is written from this file at all — a decision is made on
+ * the `AskUserQuestion` card the coordinator session raises, and nowhere else. What is kept is the
+ * one thing that surface cannot do: say, at a glance and without a live turn, how many are waiting.
+ * The rows are POINTERS. Pressing one takes the reader to the card, which is a navigation and not
+ * an answer, and `DecisionRail.test.tsx` asserts over the rendered output that nothing here
+ * answers anything — absence, not `disabled`, because a disabled button is still a second door
+ * with a lock somebody can take off.
+ *
+ * A POINTER THAT CANNOT POINT SAYS SO
+ * -----------------------------------
+ * A pointer is only worth having if it arrives somewhere. There are four ways a waiting row has no
+ * card to arrive at — the coordinator session is not running, it is running but has not reached
+ * the call yet, the turn that raised the card is over so the card can no longer be answered, and
+ * the card was answered seconds ago while this strip is still holding a 20s-old read. The caller
+ * collapses all four into one fact it computes from rows it already holds (`answerableDecisionCards`
+ * in `ApprovalPanel.tsx`): is there a card for this row, on screen, that could still be answered.
+ *
+ * A row with one is a control. A row without one is NOT a control: it is text, and it carries the
+ * sentence saying what has to happen before there is anywhere to go. Trading a button that worked
+ * for a pointer that does nothing when pressed would have been worse than changing nothing.
  *
  * ONE LINE UNTIL ASKED
  * --------------------
@@ -47,14 +74,6 @@ import { pendingDecisionsQuery } from '../lib/queries';
  * was the same broadcast one heading further down — being able to see a stall is not the same as
  * being told one, and the stalled population belongs in the report that exists for it.
  *
- * ONE ROW AT A TIME, AND NO BULK ANYTHING
- * ---------------------------------------
- * There is deliberately no select-all, no checkbox, and no button that answers more than the card
- * it is inside. Judging N submissions means reading N of them: a cheap "confirm all" is precisely
- * how a judgment face decays into a rubber stamp, and the value of this criterion is entirely in
- * somebody having read the evidence. `DecisionRail.test.tsx` asserts the absence, because absence
- * is the kind of property that comes back the first time somebody is in a hurry.
- *
  * NOTHING IS DELIVERED HERE
  * -------------------------
  * The rows come from `GET /tasks/evidence-decisions/pending`, which re-derives them from the
@@ -62,14 +81,8 @@ import { pendingDecisionsQuery } from '../lib/queries';
  * question answered in another window is gone from the next read, rather than lingering as a card
  * whose answer arrived on a live-only frame this tab never heard.
  *
- * THE OWNER PRESSES THE SAME BUTTON
- * ---------------------------------
- * There is no separate owner path. The two buttons post to the one decision door, naming the
- * session this strip is being read in, and that session is put through the same independence check
- * whoever is signed in.
- *
- * NOT `Mark complete`. Nothing here writes a status: a decision is a fact about one version of the
- * evidence, and DONE is derived from it.
+ * NOT `Mark complete`. Nothing here writes anything at all — not a status, and since the decision
+ * moved to the card, not a decision either.
  */
 
 export interface PendingDecisionCitation {
@@ -127,11 +140,14 @@ export const STRIP_LABEL = 'Open questions';
 export const NEEDS_DECISION_LABEL = 'NEEDS YOUR DECISION';
 /** The group this reader is the one to clear, by submitting another revision. */
 export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
-/** The card's heading. A question, stated as one. */
-export const DECISION_HEADING = 'DECISION REQUIRED';
-/** And the heading for a row no decision can be recorded about. It is a demand rather than a
- *  bulletin because the only reader who is sent one is the reader who can clear it. */
-export const WAITING_ON_YOU_HEADING = 'WAITING ON YOUR NEXT REVISION';
+/**
+ * The two option labels the decision ask is raised with.
+ *
+ * Nothing in this file renders them any more — they are the WIRE vocabulary now, declared here
+ * because this is where the row they are about is defined, and read by `ApprovalPanel.tsx` to
+ * recognise which `AskUserQuestion` is a completion decision. A rail that rendered either of them
+ * would be the second decision surface again.
+ */
 export const CONFIRM_LABEL = 'Confirm completion';
 export const SEND_BACK_LABEL = 'Send back';
 
@@ -144,17 +160,62 @@ export function waitingOnYouCount(rows: number): string {
 }
 
 /**
+ * How a row here and a card over there name the same thing.
+ *
+ * Task AND revision, because a decision is a compare-and-set against one version of the evidence:
+ * a card raised about rev 1 is not somewhere to send a reader holding a row that says rev 2, and a
+ * key of task alone would send them there anyway. When the two disagree the row simply has no
+ * target, which is the conservative direction — it says so instead of pointing at the wrong card.
+ */
+export function decisionRowKey(row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>): string {
+  return `${row.taskId}@${row.evidenceRevision}`;
+}
+
+/** What the pointer offers, said as the destination rather than as the act. */
+export const POINTER_HINT = 'Answer in the conversation ↓';
+
+/**
+ * What a row says when there is no card to send anybody to.
+ *
+ * One sentence for all four ways it happens, because the reader does the same thing in every one
+ * of them and a screen that guessed which one it was would be wrong some of the time. It names
+ * where a decision IS made, so the absence reads as "not here, not yet" rather than as a failure.
+ */
+export const NO_CARD_NOTE =
+  'No question card for this one in the conversation right now. A decision is made on the card '
+  + 'the coordinator session raises, so there is nothing to press here until it does.';
+
+/**
  * What has to happen before this row becomes answerable, addressed to the party who can do it.
  *
- * There is one such party and this card is only ever shown to it: nothing the reader can press
- * changes the row, because the decision door checks the criterion before it looks at which
- * decision was asked for, so a send-back is refused here exactly as a confirmation is. Saying
- * "send it back" would be a fourth version of the bug this card was fixed for.
+ * There is one such party and this row is only ever shown to it: nothing the reader can press
+ * changes it, because the decision door checks the criterion before it looks at which decision was
+ * asked for, so a send-back is refused here exactly as a confirmation is. Saying "send it back"
+ * would be a fourth version of the bug this card was fixed for.
  */
 export const WAITING_ON_YOU_ACTION =
   'This is your own submission, and you are the one who can clear it: submit another evidence '
   + 'revision quoting the project criterion this work serves. Until you do, no decision can be '
   + 'recorded here — not by this session and not by any other.';
+
+/**
+ * Take the reader to the card this row is about.
+ *
+ * The card publishes `data-decision-row` from `decisionRowKey`, so the handle is a pure function
+ * of the row and there is no map between the two to keep in step. Returns whether it arrived: the
+ * caller only offers the pointer when `answerableDecisionCards` says there is one, and a `false`
+ * here means that answer went stale between the render and the press.
+ */
+export function revealDecisionCard(
+  row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>,
+  scope: ParentNode = document,
+): boolean {
+  const key = decisionRowKey(row);
+  const card = scope.querySelector<HTMLElement>(`[data-decision-row="${key}"]`);
+  if (!card) return false;
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  return true;
+}
 
 /**
  * What a decision leaves behind, as a sentence in the log rather than a row that stopped existing.
@@ -186,6 +247,14 @@ export function sentBackLine(title: string, revision: string): string {
  * here: it stays where it happened and scrolls with everything else that happened. The pinned
  * strip above never shows it — a settled question is not a pending one, and a pinned area that
  * accumulated past answers would be a log that refuses to scroll.
+ *
+ * NOTHING FEEDS IT TODAY, AND THAT IS NOT AN OVERSIGHT. Its one writer was this strip's mutation,
+ * which was deleted when the strip stopped being a decision surface. The surviving surface is the
+ * `AskUserQuestion` card, and answering that DELIVERS an answer to the engine — it is the engine's
+ * `task_evidence_decide` that reaches the door, so a line appended here on the click would be the
+ * browser asserting a compare-and-set it did not witness. The transcript already records what
+ * actually happened, from the server. Whether to feed this from that record or to remove it is
+ * filed as its own task rather than guessed at here.
  */
 export function DecisionLog({ lines }: { lines: string[] }) {
   if (lines.length === 0) return null;
@@ -205,13 +274,6 @@ export function DecisionLog({ lines }: { lines: string[] }) {
   );
 }
 
-/** When the revision arrived, as a reader reads it: the age, said as a moment. The card's second
- *  line used to end at the dash, because the only thing after it was a claim legacy evidence does
- *  not have; a row is entitled to say WHEN it was submitted whether or not it says what it claims. */
-export function formatSubmitted(ageSeconds: number): string {
-  return ageSeconds < 60 ? 'submitted just now' : `submitted ${formatAge(ageSeconds)} ago`;
-}
-
 /** Age as a reader reads it. Whole units only: a queue is not a stopwatch. */
 export function formatAge(seconds: number): string {
   if (seconds < 60) return 'just now';
@@ -223,300 +285,80 @@ export function formatAge(seconds: number): string {
   return hours % 24 === 0 ? `${days}d` : `${days}d ${hours % 24}h`;
 }
 
-/**
- * One group of citations, resolved or not, in the order the submitter wrote them.
- *
- * The handle is shown as the server's `label` when it has one — the tool's name and the command
- * it ran — and as the raw ref when it does not. A `toolu_` id is how the SERVER pairs a call to
- * its result; to a reader it is an opaque string beside the word `resolved`, which is an
- * invitation to take the check on faith rather than to make it. A commit sha and an artifact ref
- * carry no label because they are already the readable thing.
- *
- * An unresolved citation never has a label: no row was found, so the ref is genuinely all anybody
- * has, and the reason beside it is what the reader acts on.
- */
-function CitationList({ citations }: { citations: PendingDecisionCitation[] }) {
+/** The four facts a row leads with, in both of the shapes a row can take. */
+function RowFacts({ row }: { row: PendingDecisionRow }) {
   return (
-    <ul className="decision-card-citations">
-      {citations.map((citation) => (
-        <li key={`${citation.kind}:${citation.ref}`}>
-          <Typography.Text code>{citation.label ?? citation.ref}</Typography.Text>
-          {/* A resolved row says `resolved` nowhere: it is under a heading that counts them and
-              inside a list that contains nothing else, so the word was the same twelve-fold
-              repetition as the ids, one column to the right. The KIND is kept only where the ref
-              stands alone, because there it is the only thing saying what kind of handle it is. */}
-          {citation.resolved ? (
-            citation.label === null ? (
-              <>{' '}<Typography.Text type="secondary">{citation.kind}</Typography.Text></>
-            ) : null
-          ) : (
-            <>{' '}<Typography.Text type="warning">
-              {citation.reason ?? 'unresolved'}
-            </Typography.Text></>
-          )}
-        </li>
-      ))}
-    </ul>
+    <>
+      <span className="decision-rail-task">{row.title}</span>
+      <span className="decision-rail-criterion">
+        {row.criterion ? row.criterion.key : 'no stated criterion'}
+      </span>
+      <span className="decision-rail-rev">{`rev ${row.evidenceRevision}`}</span>
+      <span className="decision-rail-age">{formatAge(row.ageSeconds)}</span>
+    </>
   );
 }
 
 /**
- * One card's contents.
- *
- * One thing folds, at every width: the citations that RESOLVED. What a reader can do with them is
- * exactly what the tally above them already says, and twelve `toolu_` ids — unclickable, and
- * comparable to nothing else on the card — pushed the criterion, the declared gaps and the two
- * buttons below the fold to say it a thirteenth time.
- *
- * The unresolved ones never fold, and neither do the gaps, for one reason: both are a reason to
- * press SEND BACK rather than CONFIRM. A screen that hid them to save room would be hiding the
- * reason to press the other button — which is the same rule the narrow-screen rule used to state
- * for gaps alone, now stated for everything that carries a reason.
- *
- * That is also why there is no width in this any more. `narrow` folded the whole list on a phone,
- * including the failures; a disclosure gives back the room at every width without ever taking away
- * the half of the list that is actionable.
- */
-export function DecisionCard({
-  row,
-  citationsOpen,
-  note,
-  busy,
-  error,
-  onToggleCitations,
-  onNote,
-  onDecide,
-}: {
-  row: PendingDecisionRow;
-  /** Whether the citations that resolved are being shown. Held by the strip, like the note, so a
-   *  static render can assert what each state puts on screen. */
-  citationsOpen: boolean;
-  note: string;
-  busy: boolean;
-  error: Error | null;
-  onToggleCitations: (open: boolean) => void;
-  onNote: (note: string) => void;
-  onDecide: (decision: 'CONFIRM' | 'SEND_BACK') => void;
-}) {
-  const resolved = row.citations.filter((citation) => citation.resolved);
-  const unresolved = row.citations.filter((citation) => !citation.resolved);
-  const tally = `Citations: ${resolved.length} of ${row.citations.length} resolved`;
-  // What the door would do, in the order it asks: a standard to measure against at all, and then
-  // this reader's standing to be the one measuring. Only a row that passes both has an action that
-  // could succeed, so only such a row gets one that can be pressed.
-  const decidable = row.decidability.decidable;
-  const answerable = decidable && row.independence.independent;
-  return (
-    <div className="decision-card">
-      <div className="decision-card-head">
-        {decidable ? DECISION_HEADING : WAITING_ON_YOU_HEADING}
-      </div>
-
-      {/* Led with, when there is one: the reason nothing on this card can be pressed, and what
-          the reader has to do about it. Everything below is still shown — deciding what the next
-          revision should say means reading what this one did. */}
-      {decidable ? null : (
-        <div className="decision-card-section">
-          <Typography.Text type="warning">
-            {row.decidability.refusal ?? 'no decision can be recorded about this evidence'}
-          </Typography.Text>
-          <div>
-            <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
-          </div>
-        </div>
-      )}
-
-      {/* The sentence the submitter wrote about their own work, first and in the card's own voice.
-          It used to be a trailing clause on the provenance line, after a dash, in the type size
-          that line is set in — so the one thing on the card written FOR the reader read as
-          metadata about the row, while twelve machine handles had the width. What is being
-          confirmed is a claim somebody made; the card leads with it. */}
-      <div className="decision-card-section decision-card-claim">
-        {row.claim === '' ? (
-          // Evidence from before the envelope has no claim field at all. The line says so rather
-          // than trailing off after the dash, which is what it did on the screenshot that started
-          // this: a card of blanks reads as a broken render, not as an older submission.
-          <Typography.Text type="secondary">This revision states no claim.</Typography.Text>
-        ) : (
-          <Typography.Text>{row.claim}</Typography.Text>
-        )}
-        <div>
-          <Typography.Text type="secondary">
-            {`Evidence rev ${row.evidenceRevision} · ${formatSubmitted(row.ageSeconds)}`}
-          </Typography.Text>
-        </div>
-      </div>
-
-      <div className="decision-card-section">
-        <Typography.Text type="secondary">Against criterion </Typography.Text>
-        {row.criterion ? (
-          <>
-            <Typography.Text code>{row.criterion.key}</Typography.Text>
-            <div className="decision-card-criterion">{row.criterion.text}</div>
-          </>
-        ) : (
-          <Typography.Text>
-            This evidence quotes no stated criterion, so there is nothing to measure it against.
-          </Typography.Text>
-        )}
-      </div>
-
-      {/* Never folded, at any width. */}
-      <div className="decision-card-section decision-card-gaps">
-        <Typography.Text type="secondary">Declared gaps</Typography.Text>
-        {row.gaps.length === 0 ? (
-          <div>
-            <Typography.Text>The submitter declared no gaps.</Typography.Text>
-          </div>
-        ) : (
-          <ul className="decision-card-gap-list">
-            {row.gaps.map((gap) => (
-              <li key={gap}>{gap}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="decision-card-section">
-        {/* The tally, and it is a control only when there is something behind it: a disclosure
-            that opens onto nothing is the same broken promise as an action that is always
-            refused. */}
-        {resolved.length === 0 ? (
-          <Typography.Text type="secondary">{tally}</Typography.Text>
-        ) : (
-          <button
-            className="decision-card-citations-toggle"
-            type="button"
-            aria-expanded={citationsOpen}
-            onClick={() => onToggleCitations(!citationsOpen)}
-          >
-            <Typography.Text type="secondary">{tally}</Typography.Text>
-            <span className="decision-card-citations-caret" aria-hidden="true">
-              {citationsOpen ? '▴' : '▾'}
-            </span>
-          </button>
-        )}
-        {/* Never folded: a citation that did not resolve is a reason to send this back. */}
-        {unresolved.length === 0 ? null : <CitationList citations={unresolved} />}
-        {citationsOpen ? <CitationList citations={resolved} /> : null}
-      </div>
-
-      <div className="decision-card-section">
-        <Typography.Text type="secondary">
-          {row.independence.independent
-            ? 'Independent: this session did not do this work.'
-            : `You cannot answer this one: ${row.independence.disqualification ?? 'this session took part in this work'}.`}
-        </Typography.Text>
-      </div>
-
-      {/* A note is what a send-back carries. A row that cannot be sent back is not given a box to
-          write one in — an input whose only consumer is a refused request is a third way of
-          promising something that will not happen. */}
-      {decidable ? (
-        <Input.TextArea
-          aria-label="What the next evidence revision must show"
-          placeholder="What the next evidence revision must show (required to send back)"
-          rows={2}
-          value={note}
-          onChange={(event) => onNote(event.target.value)}
-        />
-      ) : null}
-
-      {error ? (
-        <Alert
-          className="decision-card-error"
-          type="error"
-          showIcon
-          message="That decision was not recorded"
-          description={error.message}
-        />
-      ) : null}
-
-      {/* Two buttons, and they answer THIS card. Same component and same sizes as the approval
-          card's actions (`CardAction.tsx`), and the same rule: enabled only when the request they
-          would send is one the server would accept. `Confirm completion` is pressable exactly when
-          the door would take a CONFIRM — which is the property this card exists to have. */}
-      <CardActions className="decision-card-actions">
-        <CardActionButton
-          tone="primary"
-          disabled={busy || !answerable}
-          onClick={() => onDecide('CONFIRM')}
-        >
-          {CONFIRM_LABEL}
-        </CardActionButton>
-        <CardActionButton
-          tone="secondary"
-          disabled={busy || !answerable || note.trim() === ''}
-          onClick={() => onDecide('SEND_BACK')}
-        >
-          {SEND_BACK_LABEL}
-        </CardActionButton>
-      </CardActions>
-    </div>
-  );
-}
-
-/**
- * One group's rows, each opening into its card.
+ * One group's rows: a pointer where there is somewhere to point, and a sentence where there is not.
  *
  * Extracted so both groups share one row renderer: a group that grew its own would be a second
  * place for "what a row shows" to drift, and the difference between the groups is which rows are
- * in them and what the card says, never how a row reads.
+ * in them, never how a row reads.
  */
 function DecisionRows({
   group,
-  expandedTaskId,
-  citationsOpen,
-  note,
-  busy,
-  error,
-  onExpand,
-  onToggleCitations,
-  onNote,
-  onDecide,
+  hasCard,
+  onReveal,
 }: {
   group: PendingDecisionRow[];
-  expandedTaskId: string | null;
-  citationsOpen: boolean;
-  note: string;
-  busy: boolean;
-  error: Error | null;
-  onExpand: (taskId: string | null) => void;
-  onToggleCitations: (open: boolean) => void;
-  onNote: (note: string) => void;
-  onDecide: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
+  hasCard: (row: PendingDecisionRow) => boolean;
+  onReveal: (row: PendingDecisionRow) => void;
 }) {
   return (
     <ul className="decision-rail-list">
       {group.map((row) => {
-        const open = row.taskId === expandedTaskId;
+        // Both halves of the door's own answer, and then whether the card exists. A row the door
+        // would refuse has nowhere to go by construction — no ask is ever raised over one — so
+        // this says the same thing twice on purpose: the pointer appears only for a row that could
+        // be answered by this reader on a card that is on screen.
+        const pointable =
+          hasCard(row) && row.decidability.decidable && row.independence.independent;
         return (
           <li className="decision-rail-row" key={row.taskId}>
-            <button
-              className="decision-rail-summary"
-              type="button"
-              aria-expanded={open}
-              onClick={() => onExpand(open ? null : row.taskId)}
-            >
-              <span className="decision-rail-task">{row.title}</span>
-              <span className="decision-rail-criterion">
-                {row.criterion ? row.criterion.key : 'no stated criterion'}
-              </span>
-              <span className="decision-rail-rev">{`rev ${row.evidenceRevision}`}</span>
-              <span className="decision-rail-age">{formatAge(row.ageSeconds)}</span>
-            </button>
-            {open ? (
-              <DecisionCard
-                row={row}
-                citationsOpen={citationsOpen}
-                note={note}
-                busy={busy}
-                error={error}
-                onToggleCitations={onToggleCitations}
-                onNote={onNote}
-                onDecide={(decision) => onDecide(row, decision)}
-              />
-            ) : null}
+            {pointable ? (
+              <button
+                className="decision-rail-summary decision-rail-pointer"
+                type="button"
+                onClick={() => onReveal(row)}
+              >
+                <RowFacts row={row} />
+                <span className="decision-rail-goto">{POINTER_HINT}</span>
+              </button>
+            ) : (
+              <>
+                {/* Not a button. There is nowhere to go, and a control that goes nowhere is the
+                    thing this round replaced a working button with if it is left pressable. */}
+                <div className="decision-rail-summary decision-rail-inert">
+                  <RowFacts row={row} />
+                </div>
+                <div className="decision-rail-why">
+                  {row.decidability.decidable ? (
+                    <Typography.Text type="secondary">{NO_CARD_NOTE}</Typography.Text>
+                  ) : (
+                    <>
+                      <Typography.Text type="warning">
+                        {row.decidability.refusal
+                          ?? 'no decision can be recorded about this evidence'}
+                      </Typography.Text>
+                      <div>
+                        <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </li>
         );
       })}
@@ -538,32 +380,18 @@ function DecisionRows({
 export function DecisionStrip({
   queue,
   open,
-  expandedTaskId,
-  citationsOpen = false,
-  note = '',
-  busy = false,
-  error = null,
+  hasCard = () => false,
   onToggle,
-  onExpand,
-  onToggleCitations = () => {},
-  onNote = () => {},
-  onDecide = () => {},
+  onReveal = () => {},
 }: {
   queue: PendingDecisionQueue;
   /** Expanded is a deliberate act; the default is the one line. */
   open: boolean;
-  expandedTaskId: string | null;
-  /** Whether the open card is showing the citations that resolved. Default closed, for the same
-   *  reason the strip itself is. */
-  citationsOpen?: boolean;
-  note?: string;
-  busy?: boolean;
-  error?: Error | null;
+  /** Whether this row's decision card is on screen and could still be answered. The default is
+   *  the honest one for a caller that does not know: no pointer, and the sentence saying why. */
+  hasCard?: (row: PendingDecisionRow) => boolean;
   onToggle: (open: boolean) => void;
-  onExpand: (taskId: string | null) => void;
-  onToggleCitations?: (open: boolean) => void;
-  onNote?: (note: string) => void;
-  onDecide?: (row: PendingDecisionRow, decision: 'CONFIRM' | 'SEND_BACK') => void;
+  onReveal?: (row: PendingDecisionRow) => void;
 }) {
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
   // session may not answer is not a question put to this session.
@@ -575,18 +403,7 @@ export function DecisionStrip({
   if (decisions.length === 0 && yours.length === 0) return null;
 
   const rowsFor = (group: PendingDecisionRow[]) => (
-    <DecisionRows
-      group={group}
-      expandedTaskId={expandedTaskId}
-      citationsOpen={citationsOpen}
-      note={note}
-      busy={busy}
-      error={error}
-      onExpand={onExpand}
-      onToggleCitations={onToggleCitations}
-      onNote={onNote}
-      onDecide={onDecide}
-    />
+    <DecisionRows group={group} hasCard={hasCard} onReveal={onReveal} />
   );
 
   return (
@@ -619,7 +436,7 @@ export function DecisionStrip({
 
       {open ? (
         <div className="decision-strip-body">
-          {/* The questions for a decider, and the only group that asks the reader for anything. */}
+          {/* The questions for a decider, and the only group that points anywhere. */}
           {decisions.length === 0 ? null : (
             <section className="decision-rail-group" aria-label={NEEDS_DECISION_LABEL}>
               <div className="decision-rail-head">
@@ -650,63 +467,27 @@ export function DecisionStrip({
   );
 }
 
-/** The write. One row, one version, one answer — the revision is what makes it a compare-and-set. */
-export function decideEvidence(
-  row: PendingDecisionRow,
-  decidingSessionId: string,
-  decision: 'CONFIRM' | 'SEND_BACK',
-  note: string,
-): Promise<unknown> {
-  return api(`/tasks/${encodeURIComponent(row.taskId)}/evidence/decision`, {
-    method: 'POST',
-    body: {
-      decidingSessionId,
-      evidenceRevision: row.evidenceRevision,
-      decision,
-      note: note.trim() === '' ? undefined : note.trim(),
-    },
-  });
-}
-
 /**
- * The wired strip: one query, one mutation, the fold, and the expansion the reader is holding open.
+ * The wired strip: one query, the fold, and a pointer per row that has somewhere to point.
  *
- * `onDecided` is how an answer becomes an EVENT rather than a disappearance. The strip says what is
- * true now, so a settled question simply leaves it on the next read; the sentence describing what
- * was decided is handed up and rendered in the transcript, in place, by `DecisionLog`. A settled
- * line kept HERE would be a pinned area slowly filling with history.
+ * There is no mutation. The only thing this component can do to the server is read from it, which
+ * is the whole of what this round was about: `decideEvidence` and the two buttons that called it
+ * were deleted rather than disabled, so there is no second decision door left to unlock.
  */
 export function SessionDecisionStrip({
   sessionId,
-  onDecided,
+  cards,
 }: {
   sessionId: string;
-  onDecided?: (line: string) => void;
+  /** The rows whose decision card is on screen and still answerable, by `decisionRowKey`. Computed
+   *  by the page, which is the only place that holds both the queue and the live approvals. */
+  cards?: ReadonlySet<string>;
 }) {
-  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [expandedTaskId, setExpanded] = useState<string | null>(null);
-  const [citationsOpen, setCitationsOpen] = useState(false);
-  const [note, setNote] = useState('');
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
     refetchInterval: 20_000,
-  });
-  const answer = useMutation({
-    mutationFn: ({ row, decision }: { row: PendingDecisionRow; decision: 'CONFIRM' | 'SEND_BACK' }) =>
-      decideEvidence(row, sessionId, decision, note),
-    onSuccess: (_result, { row, decision }) => {
-      setExpanded(null);
-      setNote('');
-      setCitationsOpen(false);
-      onDecided?.(
-        decision === 'CONFIRM'
-          ? completionConfirmedLine(row.title, row.criterion?.key ?? null, row.evidenceRevision)
-          : sentBackLine(row.title, row.evidenceRevision),
-      );
-      void qc.invalidateQueries({ queryKey: pendingDecisionsQuery(sessionId).queryKey });
-    },
   });
 
   // A read that failed is not "nothing is waiting". Saying so in one muted line is the smallest
@@ -724,35 +505,9 @@ export function SessionDecisionStrip({
     <DecisionStrip
       queue={pending.data}
       open={open}
-      expandedTaskId={expandedTaskId}
-      citationsOpen={citationsOpen}
-      note={note}
-      busy={answer.isPending}
-      error={answer.isError ? (answer.error as Error) : null}
-      onToggle={(next) => {
-        setOpen(next);
-        // Folding it away closes whatever was open inside it: a card held open behind a fold is a
-        // note the reader cannot see they are still writing.
-        if (!next) {
-          answer.reset();
-          setNote('');
-          setExpanded(null);
-          setCitationsOpen(false);
-        }
-      }}
-      onExpand={(taskId) => {
-        answer.reset();
-        // A note is written about ONE submission. Carrying it to the next card open would put
-        // words the reader wrote about other work into a rejection of this one.
-        setNote('');
-        setExpanded(taskId);
-        // Same reason, weaker: the citations shown are this card's, and a list left open would be
-        // the next card opening onto somebody else's twelve lines.
-        setCitationsOpen(false);
-      }}
-      onToggleCitations={setCitationsOpen}
-      onNote={setNote}
-      onDecide={(row, decision) => answer.mutate({ row, decision })}
+      hasCard={(row) => cards?.has(decisionRowKey(row)) ?? false}
+      onToggle={setOpen}
+      onReveal={(row) => revealDecisionCard(row)}
     />
   );
 }

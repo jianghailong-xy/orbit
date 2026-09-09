@@ -166,6 +166,41 @@ same fixture where a recorded decision returns zero rows, because a bare "still 
 is also true of a read that filters nothing. And a stale `PENDING` approval must stop presenting
 itself as the live question.
 
+> **Superseded in part on 2026-09-09 — the account owner chose (c): the rail is a pointer, not a
+> second decision surface.**
+>
+> What is above is the record of the A2 decision and is left as written. Two of its statements no
+> longer describe the web client:
+>
+> - *"the rail writes `POST /tasks/:id/evidence/decision` directly (`DecisionRail.tsx:586`)"* —
+>   `decideEvidence` and the two buttons that called it were deleted. `DecisionRail.tsx` issues no
+>   write at all; `DecisionRail.test.tsx` asserts that over the rendered output as a census of the
+>   controls, so the property cannot be satisfied by `disabled` or by a stylesheet.
+> - *"the card is the primary surface, the rail is the fallback"* — there is one surface. The card
+>   is it.
+>
+> **Why.** Two surfaces for one fact raced on this account: a coordinator recording a judgment for
+> task `34LMiluvx0jK63cj8arWl` rev 1 was refused `EVIDENCE_JUDGMENT_ALREADY_DECIDED`, because the
+> same evidence had already been answered from the other one. Whoever pressed first won and the
+> loser found out from an error. The cost A2 named — "deleting this read to save the rail's fan-out
+> would turn a missed card into permanent silence" — is not paid here: the SERVER side is untouched.
+> `readPendingEvidenceJudgments` still recomputes the question from committed rows on every read,
+> the `?decidingSessionId=` scope is unchanged, and the rail still shows the count. What it no
+> longer does is answer.
+>
+> **What replaces the fallback.** The rail's rows are pointers into the transcript. A row whose
+> card is on screen and still answerable is a control that scrolls to it; a row without one is not
+> a control at all and carries the sentence saying so — because a pointer that goes nowhere would
+> be strictly worse than the button it replaced. The four ways a row has no live card (the
+> coordinator session is not running; it is running but has not reached the call; the turn that
+> raised the card is over; the card was answered while this 20s read is still in flight) are one
+> computation over facts the page already holds, `answerableDecisionCards` in `ApprovalPanel.tsx`,
+> and each is asserted in `DecisionRail.pointer.test.tsx`.
+>
+> The paragraph below about the rail's fan-out therefore stands, with its remedy overtaken: the
+> read is still made once per open window, and narrowing WHO it is read for is still the way that
+> cost comes down.
+
 ### D2 — one bounded question is not a conversation steered three hundred times
 
 The history this has to answer to is `coordinator-judgment.service.ts:13-25` (§0), whose second

@@ -5368,6 +5368,9 @@ html[data-theme='dark'] .session-tag-chip {
 .decision-rail-row {
   border-top: 1px solid var(--border-subtle);
 }
+/* Layout only, and shared by both shapes a row can take. Nothing here says "pressable": the
+   cursor and the hover belong to the variant that IS a control, so a row that is only text does
+   not advertise a press that would do nothing. */
 .decision-rail-summary {
   display: flex;
   align-items: baseline;
@@ -5377,12 +5380,8 @@ html[data-theme='dark'] .session-tag-chip {
   border: none;
   background: none;
   text-align: left;
-  cursor: pointer;
   font-size: 13px;
   color: var(--text-1);
-}
-.decision-rail-summary:hover {
-  background: var(--bg-hover);
 }
 .decision-rail-task {
   min-width: 0;
@@ -5399,72 +5398,28 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
-.decision-card {
-  padding: 8px 12px 12px;
-  border-top: 1px dashed var(--border-subtle);
-}
-.decision-card-head {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--text-2);
-}
-.decision-card-section {
-  margin-top: 8px;
-  font-size: 13px;
-}
-.decision-card-criterion {
-  margin-top: 2px;
-  white-space: pre-wrap;
-}
-.decision-card-citations,
-.decision-card-gap-list {
-  margin: 4px 0 0;
-  padding-left: 18px;
-}
-/* The claim is the card's lead: what a person is being asked to confirm, in the words the
-   submitter wrote. One step up in size is the whole of the emphasis — a heading would make it an
-   announcement, and it is a sentence somebody is standing behind. */
-.decision-card-claim {
-  font-size: 14px;
-  line-height: 1.5;
-}
-.decision-card-claim > div {
-  margin-top: 2px;
-  font-size: 12px;
-}
-/* The tally is a disclosure, and it has to read as one without reading as an action: text-sized,
-   text-coloured, and carrying nothing but the caret to say it opens. */
-.decision-card-citations-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: none;
-  background: none;
+/* A row with somewhere to go, and one without: the same four facts, and only one of them a
+   control. The pointer earns a hover and a cursor because pressing it does something; the inert
+   row gets neither, so the difference is visible before it is pressed rather than after. */
+.decision-rail-pointer {
   cursor: pointer;
-  font: inherit;
-  text-align: left;
 }
-.decision-card-citations-toggle:hover {
-  text-decoration: underline;
+.decision-rail-pointer:hover {
+  background: var(--bg-hover);
 }
-.decision-card-citations-caret {
-  color: var(--text-3, var(--text-2));
-  font-size: 11px;
+.decision-rail-inert {
+  cursor: default;
 }
-/* The gaps stay legible at every width, and so do the citations that did NOT resolve: both are a
-   reason to press the other button. What folds is only the list of the ones that held. */
-.decision-card-gaps {
-  font-weight: 500;
+.decision-rail-goto {
+  flex: none;
+  font-size: 12px;
+  color: var(--accent, #3b82f6);
 }
-.decision-card-error {
-  margin-top: 8px;
-}
-.decision-card-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
+/* Why there is nothing to press. Set as text, indented under the row it is about. */
+.decision-rail-why {
+  padding: 0 12px 8px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 /* A PENDING session before its first event: instead of a lonely top-left note in a
    blank pane, fill the transcript area with a calm, centered "waiting to run" state. */

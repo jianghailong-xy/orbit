@@ -159,7 +159,7 @@ import {
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
-import { ApprovalPanel } from './ApprovalPanel';
+import { ApprovalPanel, answerableDecisionCards } from './ApprovalPanel';
 import { DecisionLog, SessionDecisionStrip } from './DecisionRail';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
@@ -3137,6 +3137,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
 
+  // Which of those rows the pinned strip may point at: the ones whose card is on screen AND still
+  // answerable. The strip stopped being a place to decide from on 2026-09-09 — it counts and it
+  // points, and a row with no live card is told so rather than given a pointer that goes nowhere.
+  const decisionCards = answerableDecisionCards(
+    approvals,
+    answerableApprovalIds,
+    pendingDecisions.data ?? null,
+  );
+
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
   const decide = async (
@@ -5463,15 +5472,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             on every read — and state that sat in the transcript's vertical flow read as a message
             nobody sent. One line until it is asked to be more. */}
         {selectedId && !selectedTrashed && (
-          <SessionDecisionStrip
-            sessionId={selectedId}
-            onDecided={(line) =>
-              setDecisionEvents((previous) => ({
-                ...previous,
-                [selectedId]: [...(previous[selectedId] ?? []), line],
-              }))
-            }
-          />
+          <SessionDecisionStrip sessionId={selectedId} cards={decisionCards} />
         )}
 
         {stuck && (
