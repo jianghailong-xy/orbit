@@ -449,3 +449,37 @@ test('the ledger stays append-only, and every later migration is accounted for',
   assert.match(declaration, /"acceptance_expected_exit_code"/u);
   assert.match(declaration, /task_executable_acceptance_pair/u);
 });
+
+test('after 0246, no migration number is used twice: a duplicate reorders the ledger by string, not by intent', () => {
+  const dirs = readdirSync(MIGRATIONS).filter((dir) => /^\d{4}_/.test(dir)).sort();
+  // Prisma identifies a migration by its WHOLE directory name, so two branches can each add a
+  // `0249_*` under a different name and each `migrate deploy` stays green on its own; the
+  // collision only surfaces once they are merged, and from then on which of the two runs first is
+  // decided by the rest of the name rather than by the order their authors meant. The deepEqual
+  // above notices such a pair only by accident — it fails because the list GREW — and would go
+  // green again the moment both halves were dutifully added to it. This says the thing itself.
+  //
+  // Holes are expected and fine (0247 and 0248 were spent renumbering the pair this came from),
+  // so what is asserted is "no number twice", never "the numbers are consecutive".
+  //
+  // Everything at or below this number predates the rule and is exempt; the failure message says
+  // why that floor cannot be lowered.
+  const EXEMPT_THROUGH = '0246';
+  const byNumber = new Map<string, string[]>();
+  for (const dir of dirs) {
+    const number = dir.slice(0, 4);
+    if (number <= EXEMPT_THROUGH) continue;
+    byNumber.set(number, [...(byNumber.get(number) ?? []), dir]);
+  }
+  const shared = [...byNumber].filter(([, group]) => group.length > 1);
+  assert.deepEqual(shared.map(([number]) => number), [],
+    `${shared.map(([number, group]) => `${number} is claimed by ${group.join(' and ')}`).join('; ')}`
+    + ' — two migrations after 0246 share a number, so the ledger is no longer totally ordered.'
+    + ' Renumber the later one to the next free number. Do NOT lower the 0246 floor to make this'
+    + ' pass: main carries 28 shared numbers below it (0064_session_last_user_text /'
+    + ' 0064_session_tags, on up to 0226) that cannot be fixed, because `_prisma_migrations`'
+    + ' records an applied migration by its directory name — renaming one makes `migrate deploy`'
+    + ' on a live deployment run it again as a migration it has never seen.'
+    + ' 0246_project_acceptance_landed_wake is the highest number below which that holds, which is'
+    + ' the only reason the floor sits there.');
+});
