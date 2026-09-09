@@ -1,0 +1,433 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import {
+  APPROVE_LABEL,
+  CRITERIA_DECISION_ALREADY_SETTLED,
+  CRITERIA_DECISION_BASE_SEAL_MOVED,
+  CRITERIA_DECISION_HEADING,
+  CRITERIA_DECISION_STALE_HEADING,
+  CriteriaDecisionCard,
+  PROVENANCE_LABEL,
+  REFUSE_LABEL,
+  criteriaApprovedLine,
+  criteriaDecisionRequest,
+  criteriaDecisionStanding,
+  criteriaRefusedLine,
+  isAnswerable,
+  shortSeal,
+  type CriteriaDecisionResult,
+  type CriteriaDecisionStanding,
+  type PendingCriteriaDecisionQueue,
+  type PendingCriteriaDecisionRow,
+  type ProposedCriterion,
+} from './CriteriaDecisionCard';
+import {
+  CRITERIA_ROW_LABEL,
+  DecisionStrip,
+  NEEDS_DECISION_LABEL,
+  needsDecisionCount,
+  type PendingDecisionQueue,
+} from './DecisionRail';
+
+/**
+ * What the delivered card puts on screen, and — the half this file exists for — what it REFUSES to
+ * offer once the question it was about has moved on.
+ *
+ * The three ways a delivered card goes stale are the three ways a person ends up pressing a button
+ * that cannot work: somebody answered it in another window, a newer proposal displaced it, or the
+ * ruler it was composed against stopped being the ruler in force. None of them writes anything to
+ * this browser, so none of them can be noticed by a card holding a frozen copy of what it was
+ * delivered with. Every test below therefore feeds a DERIVED READ and an address, and asserts what
+ * the card concludes from them — which is the whole design in one sentence: the frame keeps the
+ * address, the read decides everything else.
+ *
+ * Assertions are predicates over the rendered output — this control is disabled, that word is
+ * present, this string is absent — rather than paragraphs pinned verbatim, so a typo fix does not
+ * fail and a lying screen does not pass.
+ *
+ * The positive control is not decoration: the decidable case asserts both actions ENABLED, so the
+ * three disabled assertions can actually fail. Without it a card that rendered every button dead
+ * would pass this file.
+ *
+ * NO `../api` MOCK and none needed. The card takes its standing as a prop and issues no request;
+ * what a press would send is asserted through `criteriaDecisionRequest`, which is that request as
+ * data. The last test in the file holds both properties in place.
+ */
+
+const SEAL_DRAFTED = '6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d';
+const SEAL_MOVED = '9c4f7a1b2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d7e';
+const CRITERION_TEXT = 'Full API is green on the merge boundary';
+
+function proposed(over: Partial<ProposedCriterion> = {}): ProposedCriterion {
+  return {
+    id: '3t4PyphGUWQtzDGfvOLY9R',
+    ordinal: 1,
+    text: CRITERION_TEXT,
+    verificationMethod: 'EXECUTABLE',
+    completionCriterionOverrideReason: null,
+    ...over,
+  };
+}
+
+function row(over: Partial<PendingCriteriaDecisionRow> = {}): PendingCriteriaDecisionRow {
+  return {
+    intentId: '7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d',
+    projectId: '34LWcmLItBx6ytdO26XXF',
+    commitToken: 'b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4',
+    actionDigest: 'a'.repeat(64),
+    filedAt: '2026-09-09T01:14:24.471Z',
+    ageSeconds: 12 * 60,
+    baselineSeal: SEAL_DRAFTED,
+    currentSeal: SEAL_DRAFTED,
+    proposed: [proposed(), proposed({ id: null, ordinal: 2, text: 'the scheduled nodes are green' })],
+    supersededIntentId: null,
+    decidability: { decidable: true, refusal: null, requiredAction: null },
+    ...over,
+  };
+}
+
+function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue {
+  return {
+    readAt: '2026-09-09T03:56:08.733Z',
+    projectId: '34LWcmLItBx6ytdO26XXF',
+    count: rows.length,
+    oldestAgeSeconds: rows.length === 0 ? null : rows[0].ageSeconds,
+    decidableCount: rows.filter((each) => each.decidability.decidable).length,
+    pending: rows,
+  };
+}
+
+function card(standing: CriteriaDecisionStanding): string {
+  return renderToStaticMarkup(<CriteriaDecisionCard standing={standing} onDecide={() => {}} />);
+}
+
+/**
+ * A string as it appears in the markup rather than as it is written in source.
+ *
+ * `Approve & re-seal` is `Approve &amp; re-seal` once rendered, so a search for the raw label finds
+ * nothing — which quietly turns every `not.toContain(label)` in this file into a test that cannot
+ * fail. Escaping is what keeps those assertions about the screen instead of about ampersands.
+ */
+function escaped(text: string): string {
+  return text
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&#x27;');
+}
+
+/** The opening tag of the button carrying this label, so `disabled` can be asked about. */
+function buttonFor(html: string, label: string): string {
+  const at = html.indexOf(escaped(label));
+  expect(at, `no control labelled ${label}`).toBeGreaterThan(-1);
+  const opened = html.lastIndexOf('<button', at);
+  expect(opened, `${label} is not inside a button`).toBeGreaterThan(-1);
+  return html.slice(opened, html.indexOf('>', opened) + 1);
+}
+
+function isDisabled(html: string, label: string): boolean {
+  return /\bdisabled\b/u.test(buttonFor(html, label));
+}
+
+/** Both spellings, because the web suite runs from `src/web` and a runner may start at the root. */
+function fromRepo(...candidates: string[]): string {
+  const found = candidates.map((each) => resolve(process.cwd(), each)).find(existsSync);
+  if (!found) throw new Error(`none of ${candidates.join(', ')} exists from ${process.cwd()}`);
+  return readFileSync(found, 'utf8');
+}
+
+/** Selector/body pairs, comments stripped so a rule cannot be satisfied by a sentence about it. */
+function rules(css: string): Array<{ selector: string; body: string }> {
+  const found: Array<{ selector: string; body: string }> = [];
+  const pattern = /([^{}]+)\{([^{}]*)\}/gu;
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, '');
+  for (let match = pattern.exec(stripped); match; match = pattern.exec(stripped)) {
+    found.push({ selector: match[1].trim(), body: match[2] });
+  }
+  return found;
+}
+
+describe('a proposal the door would answer', () => {
+  const live = row();
+  const standing = criteriaDecisionStanding(queue([live]), live.intentId);
+
+  it('is the one state whose actions can be pressed', () => {
+    // The positive control for every `disabled` assertion below it.
+    expect(standing.state).toBe('DECIDABLE');
+    expect(isAnswerable(standing)).toBe(true);
+    const html = card(standing);
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(false);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(false);
+    expect(html).toContain(CRITERIA_DECISION_HEADING);
+  });
+
+  it('shows what is being proposed, and that nothing is held up meanwhile', () => {
+    const html = card(standing);
+    expect(html).toContain(CRITERION_TEXT);
+    expect(html).toContain(shortSeal(SEAL_DRAFTED));
+    // A criterion the proposal is ADDING is marked as one rather than reading as an edit.
+    expect(html).toContain('new in this proposal');
+    // The sentence readers get wrong: refusing stops the ruler, not the work.
+    expect(html.toLowerCase()).toContain('nothing is on hold');
+  });
+});
+
+/**
+ * THE THREE STALE INPUTS.
+ *
+ * Each one is fed as a derived read plus the address the delivery named — never as a hand-built
+ * standing — because "the card notices" is a claim about what it concludes from that read.
+ */
+describe('a card whose question has moved on', () => {
+  it('cannot be pressed once the base seal has moved, and says which seal and which refusal', () => {
+    const stranded = row({
+      currentSeal: SEAL_MOVED,
+      decidability: {
+        decidable: false,
+        refusal: CRITERIA_DECISION_BASE_SEAL_MOVED,
+        requiredAction: 'REFILE_AGAINST_THE_CURRENT_STANDARD_SET',
+      },
+    });
+    const standing = criteriaDecisionStanding(queue([stranded]), stranded.intentId);
+    expect(standing.state).toBe('BASE_SEAL_MOVED');
+
+    const html = card(standing);
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(true);
+    // The reason, in the door's own words, and both versions so a reader can see what moved.
+    expect(html).toContain(CRITERIA_DECISION_BASE_SEAL_MOVED);
+    expect(html).toContain(shortSeal(SEAL_DRAFTED));
+    expect(html).toContain(shortSeal(SEAL_MOVED));
+    // And what clears it, which is somebody else's to do.
+    expect(html).toContain('REFILE_AGAINST_THE_CURRENT_STANDARD_SET');
+    expect(html).toContain(CRITERIA_DECISION_STALE_HEADING);
+  });
+
+  it('cannot be pressed once a newer proposal displaced it, and says nothing was applied', () => {
+    const displaced = row();
+    const replacement = row({
+      intentId: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
+      commitToken: 'ffffffff-1111-4222-8333-444455556666',
+      ageSeconds: 4 * 60,
+      supersededIntentId: displaced.intentId,
+      proposed: [proposed({ text: 'a narrower change' })],
+    });
+    // The displaced row is GONE from the read — that is what supersession does to it — and the
+    // only trace of it is the link the replacement carries.
+    const standing = criteriaDecisionStanding(queue([replacement]), displaced.intentId);
+    expect(standing.state).toBe('SUPERSEDED');
+
+    const html = card(standing);
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(true);
+    expect(html.toLowerCase()).toContain('superseded');
+    expect(html.toLowerCase()).toContain('nothing was applied');
+  });
+
+  it('cannot be pressed once it was answered at another end, and names that refusal too', () => {
+    const answered = row();
+    // Settled rows are not returned at all: an answered question is not a question. So the read
+    // that comes back is simply empty, and the card has to conclude the rest.
+    const standing = criteriaDecisionStanding(queue([]), answered.intentId);
+    expect(standing.state).toBe('ALREADY_SETTLED');
+
+    const html = card(standing);
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(true);
+    expect(html.toLowerCase()).toContain('already answered');
+    expect(html).toContain(CRITERIA_DECISION_ALREADY_SETTLED);
+  });
+
+  it('keeps no frozen copy of what it was delivered with', () => {
+    // The property the three states above are worth having: a stale card shows the ADDRESS and
+    // what happened to it, and cannot show a diff, because the read has stopped publishing one.
+    // A card that still displayed the proposal would be displaying a local frame nobody re-derived.
+    const gone = row();
+    for (const standing of [
+      criteriaDecisionStanding(queue([]), gone.intentId),
+      criteriaDecisionStanding(
+        queue([row({ intentId: 'other', supersededIntentId: gone.intentId, proposed: [] })]),
+        gone.intentId,
+      ),
+    ]) {
+      expect(card(standing)).not.toContain(CRITERION_TEXT);
+    }
+  });
+
+  it('offers nothing at all while the read it derives from has not come back', () => {
+    // Not a state of the proposal — a state of this browser. A card that cannot re-derive itself
+    // has no idea whether the door would take an answer, so it does not offer one.
+    const standing = criteriaDecisionStanding(null, row().intentId);
+    expect(standing.state).toBe('UNREAD');
+    const html = card(standing);
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(true);
+    // And it does not claim the question was settled: a failed read is not an answer, and telling
+    // a reader their decision is no longer theirs to make would be inventing one.
+    expect(html).not.toContain(CRITERIA_DECISION_STALE_HEADING);
+    expect(html).not.toContain(CRITERIA_DECISION_ALREADY_SETTLED);
+  });
+});
+
+describe('the provenance mark', () => {
+  it('is on the card in every state it can be in', () => {
+    // The whole security argument is that this card is not the agent's typing. A mark that is
+    // present only while the card is live would be absent exactly where a forgery is cheapest.
+    const live = row();
+    const stranded = row({
+      currentSeal: SEAL_MOVED,
+      decidability: {
+        decidable: false,
+        refusal: CRITERIA_DECISION_BASE_SEAL_MOVED,
+        requiredAction: 'REFILE_AGAINST_THE_CURRENT_STANDARD_SET',
+      },
+    });
+    for (const standing of [
+      criteriaDecisionStanding(queue([live]), live.intentId),
+      criteriaDecisionStanding(queue([stranded]), stranded.intentId),
+      criteriaDecisionStanding(queue([]), live.intentId),
+      criteriaDecisionStanding(null, live.intentId),
+    ]) {
+      const html = card(standing);
+      expect(html, standing.state).toContain(PROVENANCE_LABEL);
+      // And it says WHY it is there rather than being a badge somebody has to interpret.
+      expect(html.toLowerCase(), standing.state).toContain('agent');
+    }
+  });
+
+  it('never puts the second key on screen', () => {
+    // The card says a key is bound to the press. Rendering the key itself would hand it to anyone
+    // reading the conversation — including the party that proposed the change.
+    const live = row();
+    const html = card(criteriaDecisionStanding(queue([live]), live.intentId));
+    expect(html).not.toContain(live.commitToken);
+    expect(html.toLowerCase()).toContain('commit token bound');
+  });
+});
+
+describe('what one press sends', () => {
+  it('goes to the decision door with both keys and the seal it was composed against', () => {
+    const live = row({ currentSeal: SEAL_DRAFTED });
+    const request = criteriaDecisionRequest(live, 'APPROVE');
+    expect(request.path).toBe(
+      `/projects/${live.projectId}/acceptance/criteria-decisions/${live.intentId}`,
+    );
+    expect(request.body).toEqual({
+      commitToken: live.commitToken,
+      decision: 'APPROVE',
+      baseSeal: live.baselineSeal,
+    });
+  });
+
+  it('binds the answer to the version that was on the table, not to whatever stands now', () => {
+    // `baseSeal` is freshness rather than a key: it is what the door compares to decide the answer
+    // was composed against the ruler it is about to move.
+    const stale = row({ currentSeal: SEAL_MOVED });
+    expect(criteriaDecisionRequest(stale, 'REJECT').body.baseSeal).toBe(SEAL_DRAFTED);
+  });
+});
+
+describe('what a decision leaves in the transcript', () => {
+  const result = (over: Partial<CriteriaDecisionResult> = {}): CriteriaDecisionResult => ({
+    intentId: row().intentId,
+    decision: 'REJECT',
+    decidedAt: '2026-09-09T04:02:00.000Z',
+    baseSeal: SEAL_DRAFTED,
+    resultingSeal: SEAL_DRAFTED,
+    applied: false,
+    ...over,
+  });
+
+  it('says which way the ruler went, in the seals the door compared', () => {
+    const approved = criteriaApprovedLine(
+      result({ decision: 'APPROVE', resultingSeal: SEAL_MOVED, applied: true }),
+    );
+    expect(approved).toContain(shortSeal(SEAL_DRAFTED));
+    expect(approved).toContain(shortSeal(SEAL_MOVED));
+
+    const refused = criteriaRefusedLine(result());
+    expect(refused.toLowerCase()).toContain('nothing was applied');
+    expect(refused).toContain(shortSeal(SEAL_DRAFTED));
+  });
+});
+
+describe('the floor under the card', () => {
+  const empty: PendingDecisionQueue = {
+    decidingSessionId: '7RIOvpVLDjc8ZsFkf2GN5V',
+    count: 0,
+    oldestAgeSeconds: null,
+    pending: [],
+  };
+  const strip = (criteria: PendingCriteriaDecisionQueue): string =>
+    renderToStaticMarkup(
+      <DecisionStrip queue={empty} criteria={criteria} open onToggle={() => {}} />,
+    );
+
+  it('lists a held proposal as a row, and counts it in the one line above', () => {
+    // The floor exists because the card can be missed: nobody answered, nothing was written, and
+    // the question is still there on the next read.
+    const html = strip(queue([row()]));
+    expect(html).toContain(CRITERIA_ROW_LABEL);
+    expect(html).toContain(NEEDS_DECISION_LABEL);
+    expect(html).toContain(needsDecisionCount(1));
+    // The row states the facts a reader needs before opening anything.
+    expect(html).toContain(shortSeal(SEAL_DRAFTED));
+    expect(html).toContain('2 criteria proposed');
+  });
+
+  it('does not list one nobody can answer', () => {
+    // A row under a heading that says DECIDE, whose every answer the door refuses, is the exact
+    // bug this strip was fixed for once already. The card explains that one where it was met.
+    const html = strip(
+      queue([
+        row({
+          currentSeal: SEAL_MOVED,
+          decidability: {
+            decidable: false,
+            refusal: CRITERIA_DECISION_BASE_SEAL_MOVED,
+            requiredAction: 'REFILE_AGAINST_THE_CURRENT_STANDARD_SET',
+          },
+        }),
+      ]),
+    );
+    expect(html).not.toContain(CRITERIA_ROW_LABEL);
+  });
+
+  it('answers nothing itself', () => {
+    // One decision surface per proposal. Two would be two faces racing for one answer, and the
+    // loser comes back refused.
+    const html = strip(queue([row()]));
+    expect(html).not.toContain(escaped(APPROVE_LABEL));
+    expect(html).not.toContain(escaped(REFUSE_LABEL));
+  });
+});
+
+describe('what is left on disk', () => {
+  it('drops the primary fill while it is disabled, so a dead card differs in shape', () => {
+    // `CardAction.tsx`'s one rule reaches the stylesheet: a solid brand slab at half strength is
+    // still the most pressable thing on a card that has just said this cannot be answered.
+    const css = fromRepo('src/index.css', 'src/web/src/index.css');
+    // `:not(:disabled)` names both halves and is the hover rule, so it comes out of the selector
+    // before the question is asked — without this the check passes on the stylesheet it rejects.
+    const disabledPrimary = rules(css).filter((rule) => {
+      const selector = rule.selector.replace(/:not\([^)]*\)/gu, '');
+      return /\.card-action--primary\b/u.test(selector) && selector.includes(':disabled');
+    });
+    expect(disabledPrimary.length).toBeGreaterThan(0);
+    expect(disabledPrimary.some((rule) => /(^|[;\s])background\s*:/u.test(rule.body))).toBe(true);
+  });
+
+  it('renders its actions through the shared component rather than its own buttons', () => {
+    // The sizes and the one rule live in `CardAction.tsx`; a card that hand-rolled a button would
+    // be a second place for both to drift.
+    const source = fromRepo(
+      'src/components/CriteriaDecisionCard.tsx',
+      'src/web/src/components/CriteriaDecisionCard.tsx',
+    );
+    expect(source).toContain("from './CardAction'");
+    expect(source.includes('<button')).toBe(false);
+  });
+});

@@ -17,6 +17,7 @@ import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
+import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
 import {
   activeTasksPath,
@@ -515,5 +516,25 @@ export const pendingDecisionsQuery = (decidingSessionId: string) =>
     queryFn: () =>
       api<PendingDecisionQueue>(
         `/tasks/evidence-decisions/pending?decidingSessionId=${encodeURIComponent(decidingSessionId)}`,
+      ),
+  });
+
+/**
+ * Which loosening proposals this project's owner is being asked to decide, re-derived on every read.
+ *
+ * Keyed by the PROJECT and not by a session, because that is what the question is about: the ruler
+ * belongs to the project, and which session happens to be reading it changes nothing about the
+ * answer. The card and the pinned strip both read it through this one factory, so the transcript
+ * and the floor under it can never be looking at two different moments.
+ *
+ * The row carries the proposal's one-time `commitToken`, which is the owner's key and is on this
+ * read only — the session that filed the proposal is never handed one.
+ */
+export const pendingCriteriaDecisionsQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'pending-criteria-decisions'] as const,
+    queryFn: () =>
+      api<PendingCriteriaDecisionQueue>(
+        `/projects/${encodeURIComponent(projectId)}/acceptance/criteria-decisions/pending`,
       ),
   });

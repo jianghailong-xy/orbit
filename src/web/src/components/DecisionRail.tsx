@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
-import { pendingDecisionsQuery } from '../lib/queries';
+import {
+  shortSeal,
+  type PendingCriteriaDecisionQueue,
+  type PendingCriteriaDecisionRow,
+} from './CriteriaDecisionCard';
+import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/queries';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -159,6 +164,42 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
  */
 export const CONFIRM_LABEL = 'Confirm completion';
 export const SEND_BACK_LABEL = 'Send back';
+
+/**
+ * ── THE SECOND ROW TYPE: A HELD CRITERIA PROPOSAL ────────────────────────────────────────────
+ *
+ * The strip has always listed one kind of question — a completion decision about one task's
+ * evidence. This adds the other: a proposal to make this project's ruler LOOSER, which the account
+ * owner answers and nobody else can.
+ *
+ * WHY IT IS A ROW HERE AND NOT A SECOND STRIP
+ * -------------------------------------------
+ * Because it is the same fact this strip already exists to state: what is open, recomputed from the
+ * ledger every read. The proposal's own card is delivered into the conversation and can be missed —
+ * the reader is asleep, the engine abandons the turn, the tab was closed — and none of that writes
+ * anything, so the question is still there on the next read. That is what this row is: the floor
+ * under a card that may never be answered, and it comes from the same derived read the card does
+ * (`readPendingCriteriaDecisions`), so the two can never disagree about what is pending.
+ *
+ * ONLY THE ONES A READER CAN ACTUALLY ANSWER
+ * ------------------------------------------
+ * A proposal whose base seal has moved is undecidable for everybody: the door refuses every answer
+ * to it, and what clears it is the PROPOSER refiling against the ruler in force. Listing it under a
+ * heading that says DECIDE would be the exact bug this card was fixed for once already — so it is
+ * not listed, and the explanation of why lives on its card, where the reader met the question. The
+ * count above the list is read off the list, as every number here is.
+ */
+export const CRITERIA_ROW_LABEL = 'A weakening of this project’s criteria is waiting for you';
+/** The row's second line: what is proposed, against which ruler, and how long it has waited. */
+export function criteriaRowDetail(row: PendingCriteriaDecisionRow): string {
+  return (
+    `${row.proposed.length} criteria proposed · base seal ${shortSeal(row.baselineSeal)} · filed `
+    + `${formatAge(row.ageSeconds)} ago`
+  );
+}
+/** The affordance that takes the reader to the card in the conversation. */
+export const CRITERIA_ROW_OPEN = 'Open';
+
 
 /** The two numbers the collapsed line is made of, and the only two it may carry. */
 export function needsDecisionCount(rows: number): string {
@@ -319,6 +360,50 @@ function DecisionRows({
 }
 
 /**
+ * The held proposals, as rows: what is being asked, and one way through to the card that asks it.
+ *
+ * The row answers nothing itself. There is one decision surface for a proposal — the card the
+ * server delivered into the conversation — and a second set of buttons here would be two faces
+ * racing for one answer, which this account has already paid for once. So the row states the fact
+ * and opens the card; the ONE RULE is met by having no action that could be refused at all.
+ */
+function CriteriaDecisionRows({
+  rows,
+  onOpen,
+}: {
+  rows: PendingCriteriaDecisionRow[];
+  onOpen?: (row: PendingCriteriaDecisionRow) => void;
+}) {
+  return (
+    <ul className="decision-rail-list decision-rail-criteria">
+      {rows.map((row) => (
+        <li className="decision-rail-row" key={row.intentId}>
+          <button
+            className="decision-rail-summary decision-rail-criteria-summary"
+            type="button"
+            onClick={() => onOpen?.(row)}
+          >
+            <span className="decision-rail-task">{CRITERIA_ROW_LABEL}</span>
+            <span className="decision-rail-criterion">{criteriaRowDetail(row)}</span>
+            <span className="decision-rail-open">{CRITERIA_ROW_OPEN}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The proposals a reader at this screen could actually answer — see the row type's note above.
+ */
+export function decidableCriteriaRows(
+  criteria: PendingCriteriaDecisionQueue | null | undefined,
+): PendingCriteriaDecisionRow[] {
+  return (criteria?.pending ?? []).filter((row) => row.decidability.decidable);
+}
+
+
+/**
  * The strip itself: presentational, pinned, and one line until somebody asks for more.
  *
  * It takes the whole payload as a prop and issues no request, so a static render can assert what
@@ -331,12 +416,17 @@ function DecisionRows({
  */
 export function DecisionStrip({
   queue,
+  criteria = null,
   open,
   hasCard = () => false,
   onToggle,
   onReveal = () => {},
+  onOpenCriteria,
 }: {
   queue: PendingDecisionQueue;
+  /** The held criteria proposals of the project this session coordinates, when it coordinates one.
+   *  Null for every ordinary session, which has no ruler of its own to move. */
+  criteria?: PendingCriteriaDecisionQueue | null;
   /** Expanded is a deliberate act; the default is the one line. */
   open: boolean;
   /** Whether this row's decision card is on screen and could still be answered. The default is
@@ -344,6 +434,8 @@ export function DecisionStrip({
   hasCard?: (row: PendingDecisionRow) => boolean;
   onToggle: (open: boolean) => void;
   onReveal?: (row: PendingDecisionRow) => void;
+  /** Where the reader goes to answer a proposal: its card, in the conversation it was sent to. */
+  onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
   // session may not answer is not a question put to this session.
@@ -352,7 +444,13 @@ export function DecisionStrip({
   // rather than the payload's `oldestAgeSeconds`. Same reason the count comes from `decisions`:
   // every number on screen is read off the list under it, so there is no second value to drift.
   const yours = queue.waitingOnYou ?? [];
-  if (decisions.length === 0 && yours.length === 0) return null;
+  const proposals = decidableCriteriaRows(criteria);
+  if (decisions.length === 0 && yours.length === 0 && proposals.length === 0) return null;
+  // Two lists under one heading, so the age it leads with is the oldest of everything under it.
+  const oldest = Math.max(
+    ...[...proposals, ...decisions].map((row) => row.ageSeconds),
+    0,
+  );
 
   const rowsFor = (group: PendingDecisionRow[]) => (
     <DecisionRows group={group} hasCard={hasCard} onReveal={onReveal} />
@@ -369,13 +467,15 @@ export function DecisionStrip({
         aria-expanded={open}
         onClick={() => onToggle(!open)}
       >
-        {decisions.length === 0 ? null : (
+        {decisions.length + proposals.length === 0 ? null : (
           <span className="decision-strip-dot" aria-hidden="true" />
         )}
-        {decisions.length === 0 ? null : (
-          <span className="decision-strip-count">{needsDecisionCount(decisions.length)}</span>
+        {decisions.length + proposals.length === 0 ? null : (
+          <span className="decision-strip-count">
+            {needsDecisionCount(decisions.length + proposals.length)}
+          </span>
         )}
-        {decisions.length === 0 || yours.length === 0 ? null : (
+        {decisions.length + proposals.length === 0 || yours.length === 0 ? null : (
           <span className="decision-strip-sep" aria-hidden="true">·</span>
         )}
         {yours.length === 0 ? null : (
@@ -388,16 +488,20 @@ export function DecisionStrip({
 
       {open ? (
         <div className="decision-strip-body">
-          {/* The questions for a decider, and the only group that points anywhere. */}
-          {decisions.length === 0 ? null : (
+          {/* The questions for a decider, and the only group that points anywhere.
+              The proposals come first: a held one is a question about the ruler everything under
+              it is measured with, and answering an evidence row against a ruler that is about to
+              move is the one order of reading this group can get wrong. */}
+          {decisions.length + proposals.length === 0 ? null : (
             <section className="decision-rail-group" aria-label={NEEDS_DECISION_LABEL}>
               <div className="decision-rail-head">
                 <span className="decision-rail-label">{NEEDS_DECISION_LABEL}</span>
-                <span className="decision-rail-oldest">
-                  {`oldest ${formatAge(decisions[0].ageSeconds)}`}
-                </span>
+                <span className="decision-rail-oldest">{`oldest ${formatAge(oldest)}`}</span>
               </div>
-              {rowsFor(decisions)}
+              {proposals.length === 0 ? null : (
+                <CriteriaDecisionRows rows={proposals} onOpen={onOpenCriteria} />
+              )}
+              {decisions.length === 0 ? null : rowsFor(decisions)}
             </section>
           )}
 
@@ -428,17 +532,30 @@ export function DecisionStrip({
  */
 export function SessionDecisionStrip({
   sessionId,
+  projectId,
   cards,
+  onOpenCriteria,
 }: {
   sessionId: string;
+  /** The project this session coordinates, when it coordinates one. Its held criteria proposals
+   *  are the strip's second row type; an ordinary session reads nothing extra. */
+  projectId?: string | null;
   /** The rows whose decision card is on screen and still answerable, by `decisionRowKey`. Computed
    *  by the page, which is the only place that holds both the queue and the live approvals. */
   cards?: ReadonlySet<string>;
+  onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   const [open, setOpen] = useState(false);
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
+    refetchInterval: 20_000,
+  });
+  // The same read the card in the transcript uses, through the same factory, so the floor and the
+  // card cannot be looking at two different moments.
+  const criteria = useQuery({
+    ...pendingCriteriaDecisionsQuery(projectId ?? ''),
+    enabled: Boolean(projectId),
     refetchInterval: 20_000,
   });
 
@@ -456,6 +573,8 @@ export function SessionDecisionStrip({
   return (
     <DecisionStrip
       queue={pending.data}
+      criteria={criteria.data ?? null}
+      onOpenCriteria={onOpenCriteria}
       open={open}
       hasCard={(row) => cards?.has(decisionRowKey(row)) ?? false}
       onToggle={setOpen}

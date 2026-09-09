@@ -161,6 +161,7 @@ import {
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel, answerableDecisionCards } from './ApprovalPanel';
 import { SessionDecisionStrip } from './DecisionRail';
+import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -5461,7 +5462,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             on every read — and state that sat in the transcript's vertical flow read as a message
             nobody sent. One line until it is asked to be more. */}
         {selectedId && !selectedTrashed && (
-          <SessionDecisionStrip sessionId={selectedId} cards={decisionCards} />
+          <SessionDecisionStrip
+            sessionId={selectedId}
+            projectId={selectedSession?.projectId ?? null}
+            cards={decisionCards}
+            // The strip states the fact and this takes the reader to the one place it can be
+            // answered: the card the server delivered into this conversation. A second set of
+            // buttons up here would be two faces racing for one answer.
+            onOpenCriteria={(row) =>
+              document
+                .getElementById(`criteria-decision-${row.intentId}`)
+                ?.scrollIntoView({ block: 'center' })
+            }
+          />
         )}
 
         {stuck && (
@@ -5540,6 +5553,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
+              {/* The delivered card, in the conversation it was delivered to and scrolling with
+                  it: the server's own ask about this project's ruler. Its content is re-derived on
+                  every render — the frame keeps the proposal's address and nothing else — so a
+                  proposal answered in another window goes stale here rather than staying pressable
+                  or silently vanishing mid-read. */}
+              {selected && !selectedTrashed && (
+                <SessionCriteriaDecisionCard projectId={selectedSession?.projectId ?? null} />
+              )}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&

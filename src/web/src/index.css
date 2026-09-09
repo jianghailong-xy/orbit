@@ -7205,6 +7205,105 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 11px;
   opacity: 0.75;
 }
+/* ── The criteria-decision card ────────────────────────────────────────────────────────────────
+   The approval card's shape, in the warning tone, because what it asks about is a ruler getting
+   LOOSER — the one change in this product that cannot be undone by doing more work. Written after
+   `.approval-*` so these land on top of them, and the actions row is selected with both classes
+   because `.card-actions` further up sets its own alignment. */
+.criteria-decision {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.criteria-decision .approval-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--warning-bg);
+  border-bottom-color: var(--warning-border);
+}
+.criteria-decision-heading {
+  min-width: 0;
+}
+/* The mark. Boxed and set apart from the heading it follows, because its whole job is to be
+   distinguishable at a glance from anything an agent could have typed into the conversation. */
+.criteria-provenance {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid var(--warning-border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.criteria-decision .approval-body {
+  background: var(--bg-raised);
+  padding: 10px 14px 4px;
+}
+.criteria-decision-kv {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.7;
+}
+.criteria-decision-k {
+  flex: none;
+  width: 96px;
+  color: var(--text-3);
+}
+.criteria-decision-v {
+  flex: 1;
+  min-width: 0;
+}
+.criteria-decision-proposed {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.criteria-decision-method,
+.criteria-decision-new {
+  margin-left: 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.criteria-decision-new {
+  color: var(--warning);
+}
+.criteria-decision-hold,
+.criteria-decision-gone {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.65;
+}
+.criteria-decision .approval-stale {
+  background: var(--bg-raised);
+}
+.criteria-decision-error {
+  margin: 8px 14px 0;
+}
+.card-actions.criteria-decision-actions {
+  background: var(--bg-raised);
+  border-top-color: var(--warning-border);
+}
+/* The binding, said and never shown: the press carries the proposal's one-time key. */
+.criteria-decision-bound {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+/* The strip's row for one of these: the same summary line as an evidence row, ending in the way
+   through to the card rather than in an age. */
+.decision-rail-open {
+  flex: none;
+  font-size: 12px;
+  color: var(--brand);
+}
 /* On a phone the three buttons can't share one row: the long "auto-allow future …"
    label shrinks to a 5-6 line block and drags the others into tall boxes. Stack them
    full-width instead (the standard phone action-sheet layout). */
