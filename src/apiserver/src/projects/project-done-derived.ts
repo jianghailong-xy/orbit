@@ -8,6 +8,12 @@ import {
   type RecordedStandardSetConfirmation,
   type StandardSetConfirmationState,
 } from './project-acceptance';
+import {
+  readCriterionIndependence,
+  type CriterionAuthorshipConflict,
+  type CriterionIndependence,
+  type CriterionIndependenceRemedy,
+} from './project-criterion-independence';
 import { readCriterionLanding, type CriterionLanding } from './project-criterion-landing';
 import { readCriterionSatisfaction } from './project-criterion-satisfaction';
 
@@ -47,13 +53,24 @@ import { readCriterionSatisfaction } from './project-criterion-satisfaction';
  * inputs read twice give the same answer, and a project does not become DONE by the passage of
  * time.
  *
- *   (a) EVERY stated criterion is `satisfied` AND `landing === 'LANDED'`. Both come from the
- *       readers the project detail page already uses (`readCriterionSatisfaction`,
- *       `readCriterionLanding`) rather than from a second definition of either: a derivation that
- *       recomputed "satisfied" here could disagree with the value a person is shown, and then no
- *       answer on the screen would mean anything. `satisfied` alone is not enough and the landing
- *       lane's own header says why — settling happens in a task session's worktree and says
- *       nothing about the default branch.
+ *   (a) EVERY stated criterion is `satisfied`, is `landing === 'LANDED'`, and COUNTS AT ALL. The
+ *       first two come from the readers the project detail page already uses
+ *       (`readCriterionSatisfaction`, `readCriterionLanding`) rather than from a second definition
+ *       of either: a derivation that recomputed "satisfied" here could disagree with the value a
+ *       person is shown, and then no answer on the screen would mean anything. `satisfied` alone
+ *       is not enough and the landing lane's own header says why — settling happens in a task
+ *       session's worktree and says nothing about the default branch.
+ *
+ *       The third is `project-criterion-independence.ts`, and it is the SEPARATION OF DUTIES: a
+ *       criterion whose standing version was written by one of the very sessions producing its
+ *       evidence is somebody's own exam, and does not count. That is an equality between two
+ *       committed session ids, which is the whole reason it takes over from the `dispatch_origin`
+ *       identity gate that used to stand for this rule — a gate whose own header records that
+ *       NON_JUDGMENT "is expressly not evidence that a human held the authenticated credential",
+ *       and which therefore could not decide the question it was standing in for. A criterion that
+ *       does not count is WITHHELD and named, never filtered out: settling against the criteria
+ *       that remain would settle this project against a shorter standard set than the one its
+ *       owner confirmed, and would say so nowhere.
  *   (b) A confirmation naming THE VERSION OF THE CRITERIA THAT STANDS TODAY: r3's
  *       `project_standard_set_confirmation`, compared against `criteriaSemanticRevision` by
  *       `standardSetConfirmationStanding`, which is r3's comparison and not a copy of it. Editing
@@ -80,15 +97,28 @@ export type DerivedDoneWithheld =
   /** Some criterion has no merge receipt onto the default branch. `UNKNOWN` is absence of
    *  evidence, never evidence of absence — so this withholds DONE, and asserts nothing. */
   | 'CRITERION_UNLANDED'
+  /** Some criterion's standing version was written by a session that is also producing the
+   *  evidence counted for it, so that criterion does not count — and a project cannot settle
+   *  against a standard set smaller than the one its owner confirmed. */
+  | 'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE'
   /** Nobody has confirmed this standard set, or the confirmation names a version that has since
    *  been edited. */
   | 'STANDARD_SET_UNCONFIRMED';
 
-/** One criterion, as the two work-side lanes answer for it. */
+/** One criterion, as the three work-side lanes answer for it. */
 export interface DerivedDoneCriterion {
   definitionId: string;
   satisfied: boolean;
   landing: CriterionLanding;
+  /** Whether this criterion counts towards settlement at all. */
+  independence: CriterionIndependence;
+  /** The sessions on both sides of that equality, and the work they ran. Empty exactly when
+   *  `independence` is `INDEPENDENT`. */
+  conflicts: CriterionAuthorshipConflict[];
+  /** What would make a criterion that does not count, count. Null exactly when it already does —
+   *  which is what makes a withheld criterion something a card can render rather than something
+   *  quietly missing from a total. */
+  remedy: CriterionIndependenceRemedy | null;
 }
 
 /** The projection: the status these facts project, and — when it is not DONE — what is missing. */
@@ -114,6 +144,12 @@ export function deriveProjectDone(
   if (criteria.length === 0) withheld.push('NO_CRITERIA_STATED');
   if (criteria.some((criterion) => !criterion.satisfied)) withheld.push('CRITERION_UNSATISFIED');
   if (criteria.some((criterion) => criterion.landing !== 'LANDED')) withheld.push('CRITERION_UNLANDED');
+  // Withheld, and not filtered out: a criterion that does not count still IS one of the criteria
+  // this project's owner confirmed, so dropping it from the conjunction would settle the project
+  // against a shorter standard set than the one on record — and would say so nowhere.
+  if (criteria.some((criterion) => criterion.independence !== 'INDEPENDENT')) {
+    withheld.push('CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE');
+  }
   if (confirmation !== 'CONFIRMED') withheld.push('STANDARD_SET_UNCONFIRMED');
   const done = withheld.length === 0;
   return {
@@ -126,16 +162,19 @@ export function deriveProjectDone(
 }
 
 /** The delegates this unit reads. Named rather than taking the whole client so a caller can see
- *  that a projection of a project's status touches three tables and writes one of them. */
+ *  that a projection of a project's status touches four tables and writes one of them. */
 type DerivationClient = Pick<
   PrismaService,
-  'project' | 'projectAcceptanceCriterionDefinition' | 'projectStandardSetConfirmation'
+  'project'
+  | 'projectAcceptanceCriterionDefinition'
+  | 'projectCriteriaAuthorship'
+  | 'projectStandardSetConfirmation'
 >;
 
 /**
  * Read both inputs and project the status, without writing anything.
  *
- * The two work-side lanes are issued in the same batch as the confirmation read, in the shape
+ * The three work-side lanes are issued in the same batch as the confirmation read, in the shape
  * `ProjectsService.get` already uses: one query per lane, never one per criterion.
  */
 export async function readDerivedProjectDone(
@@ -143,7 +182,7 @@ export async function readDerivedProjectDone(
   ownerId: string,
   projectId: string,
 ): Promise<DerivedProjectDone> {
-  const [definitions, satisfaction, landing, confirmation] = await Promise.all([
+  const [definitions, satisfaction, landing, independence, confirmation] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
       orderBy: { ordinal: 'asc' },
@@ -159,16 +198,24 @@ export async function readDerivedProjectDone(
     }),
     readCriterionSatisfaction(prisma, ownerId, projectId),
     readCriterionLanding(prisma, ownerId, projectId),
+    readCriterionIndependence(prisma, ownerId, projectId),
     latestConfirmation(prisma, projectId),
   ]);
 
   const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
+  const independent = new Map(independence.map((row) => [row.definitionId, row]));
   const criteria = satisfaction.map((row) => ({
     definitionId: row.definitionId,
     satisfied: row.satisfied,
     // The same default `ProjectsService.get` serves: a criterion this lane has no receipt about
     // is UNKNOWN, which is exactly what it is for a criterion the lane never saw.
     landing: landed.get(row.definitionId) ?? ('UNKNOWN' satisfies CriterionLanding),
+    // A criterion this lane never saw has no authorship row to collide with anything, which is
+    // the same answer it gives for a criterion whose author is the owner or is unknown.
+    independence: independent.get(row.definitionId)?.independence
+      ?? ('INDEPENDENT' satisfies CriterionIndependence),
+    conflicts: independent.get(row.definitionId)?.conflicts ?? [],
+    remedy: independent.get(row.definitionId)?.remedy ?? null,
   }));
 
   return deriveProjectDone(

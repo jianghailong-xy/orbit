@@ -135,8 +135,9 @@ const SERVICE_SPEC = 'src/apiserver/src/projects/project-get-criterion-satisfact
  * true.
  *
  * WHAT IT DOES WITH THE ANSWER. `readDerivedProjectDone` folds `satisfied` into a conjunction —
- * every stated criterion satisfied AND `landing === 'LANDED'`, plus one confirmation naming the
- * version of the criteria that stands today — and `storeDerivedProjectStatus` writes what that
+ * every stated criterion satisfied AND `landing === 'LANDED'` AND written by somebody other than
+ * the session producing its evidence, plus one confirmation naming the version of the criteria
+ * that stands today — and `storeDerivedProjectStatus` writes what that
  * conjunction projects into `project.status`, in both directions between OPEN and DONE, on the two
  * edges that have no requester (after the owner's confirmation, and the post-commit edge of a task
  * write). So this answer does now reach a status write, which is the half of the assertion below

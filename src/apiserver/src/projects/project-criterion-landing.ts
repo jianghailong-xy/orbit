@@ -60,8 +60,9 @@ import type { PrismaService } from '../prisma/prisma.service';
  *    way to reinstate a guard. The sentence that used to end this bullet — "no caller of this
  *    consults it before a write" — stopped being true on 2026-09-08, and is corrected rather
  *    than deleted because it is what a reader of this lane will have been told. One caller does:
- *    `project-done-derived.ts` folds this answer into a conjunction with `satisfied` and the
- *    owner's standard-set confirmation, and writes what the three project into `project.status`.
+ *    `project-done-derived.ts` folds this answer into a conjunction with `satisfied`, the
+ *    separation-of-duties answer in `project-criterion-independence.ts` and the owner's
+ *    standard-set confirmation, and writes what they project into `project.status`.
  *    That is a change of fact and not a loosening of 0229, which recorded the owner's choice not
  *    to put a narrower guard back: the owner was asked again on 2026-09-08 with that sentence
  *    quoted back to them and answered that the projection should be built, and a projection
