@@ -415,7 +415,7 @@ final class ConsoleModel {
                 // And the project's two standing questions, for the reason the approvals above are
                 // re-read: one of them can be answered in a browser while this phone is asleep, and
                 // nothing replays that — a card only learns it went stale by asking again.
-                Task { [weak self] in await self?.refreshRulerQuestions() }
+                Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
             }
             isReconnect = true
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
@@ -1783,6 +1783,14 @@ final class ConsoleModel {
     /// a fact about the criteria, and what happened is the line left in the conversation.
     private var closedCards: Set<String> = []
     private var loadingRuler = false
+    /// When the reads above last came back. A card's own `.task` re-fires every time the List
+    /// recycles that row back on screen, so scrolling past the card must not be a way to spend
+    /// requests; the reads that must never be throttled say so (`force`).
+    private var lastRulerRead = Date.distantPast
+    /// Web's card re-reads on a 20s timer. This one re-reads on the events that can change the
+    /// answer — context load, reconnect, the card appearing, a press — with this as the floor
+    /// between two of them.
+    private static let rulerReadThrottle: TimeInterval = 10
 
     /// The open questions below the reader, oldest first — what the "needs you" bar counts and
     /// where a tap on it goes.
@@ -1824,8 +1832,9 @@ final class ConsoleModel {
     /// on screen could never find the first one. It runs when the session's context loads, when the
     /// stream reconnects (the iOS-specific gap — a suspended socket misses everything), when a card
     /// scrolls into view, and after any press. What it may never do is remove a card.
-    func refreshRulerQuestions() async {
+    func refreshRulerQuestions(force: Bool = false) async {
         guard !isDraft, let projectID, !loadingRuler else { return }
+        if !force, Date().timeIntervalSince(lastRulerRead) < Self.rulerReadThrottle { return }
         loadingRuler = true
         defer { loadingRuler = false }
 
@@ -1842,6 +1851,7 @@ final class ConsoleModel {
             projectCriteria = document.acceptanceCriteriaItems ?? []
         }
         if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
+        lastRulerRead = Date()
     }
 
     /// Whether the owner's confirmation is the LAST thing settlement is waiting on.
@@ -1892,7 +1902,7 @@ final class ConsoleModel {
         } catch {
             statusMessage = "That decision was not recorded — \(error)"
         }
-        await refreshRulerQuestions()
+        await refreshRulerQuestions(force: true)
     }
 
     /// Confirm the standard set as it stands. The digest is what makes this a confirmation of the
@@ -1907,7 +1917,7 @@ final class ConsoleModel {
             appendDecisionLine(AcceptanceConfirmations.confirmedLine(standing))
         } catch {
             statusMessage = "That confirmation was not recorded — \(error)"
-            await refreshRulerQuestions()
+            await refreshRulerQuestions(force: true)
         }
     }
 
