@@ -69,10 +69,20 @@ type CriterionRow = {
   semanticHash: string;
 };
 
+/** One row of migration 0251's authorship ledger, as the service writes it. */
+type AuthorshipRow = {
+  definitionId: string;
+  revision: number;
+  projectId: string;
+  ownerId: string;
+  authoredBySessionId: string | null;
+  authoredByType: string;
+};
+
 /** The database, small enough to read: project rows by id, and every criterion row ever written. */
 function fakePrisma() {
   const titles = new Map<string, string>();
-  const state = { criteria: [] as CriterionRow[] };
+  const state = { criteria: [] as CriterionRow[], authorship: [] as AuthorshipRow[] };
 
   const read = (id: string) => {
     const title = titles.get(id);
@@ -146,6 +156,18 @@ function fakePrisma() {
         assert.ok(row, `update named a criterion this store never wrote: ${where.id}`);
         Object.assign(row, data);
         return row;
+      },
+    },
+    projectCriteriaAuthorship: {
+      // `skipDuplicates`, modelled rather than ignored: a criterion whose text is restated
+      // unchanged keeps its revision, and the write must land on the row already there.
+      createMany: async ({ data }: { data: AuthorshipRow[] }) => {
+        for (const row of data) {
+          const already = state.authorship.some((candidate) => (
+            candidate.definitionId === row.definitionId && candidate.revision === row.revision));
+          if (!already) state.authorship.push(row);
+        }
+        return { count: data.length };
       },
     },
     task: { groupBy: async () => [] },
@@ -234,6 +256,10 @@ test('a project’s acceptance criteria can be authored, re-read and replaced ov
     // And it reached storage, rather than only being echoed back by the projection.
     assert.equal(state.criteria.length, 1);
     assert.equal(state.criteria[0].text, FIRST.text);
+    // Authored over the owner-authenticated channel, which carries no session at all — so this
+    // door writes USER, and never the SYSTEM migration 0251 backfilled.
+    assert.deepEqual(state.authorship.map((row) => [row.authoredByType, row.authoredBySessionId]),
+      [['USER', null]]);
 
     const id = created.json.id as string;
     const read = await send(base, 'GET', `/api/projects/${id}`);

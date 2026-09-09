@@ -959,6 +959,41 @@ export class ProjectsService {
   }
 
   /**
+   * One row per criterion VERSION, saying which conversation wrote it (migration 0251).
+   *
+   * `versions` carries revisions READ BACK from the database, never the ones the caller sent:
+   * `project_acceptance_definition_normalize` overwrites the `revision` the statement above
+   * supplies, so a number taken from the DTO names a version that does not exist.
+   *
+   * `ON CONFLICT DO NOTHING` (`skipDuplicates`) is what makes reordering not an authoring event:
+   * a criterion whose text and method are restated byte for byte keeps its revision, so the write
+   * lands on a primary key that is already there and the original author stands.
+   */
+  private static async recordCriterionAuthorship(
+    tx: Prisma.TransactionClient | PrismaService,
+    projectId: string,
+    ownerId: string,
+    authoredBySessionId: string | null,
+    versions: ReadonlyArray<{ id: string; revision: number }>,
+  ): Promise<void> {
+    if (versions.length === 0) return;
+    await tx.projectCriteriaAuthorship.createMany({
+      data: versions.map((version) => ({
+        definitionId: version.id,
+        revision: version.revision,
+        projectId,
+        ownerId,
+        authoredBySessionId,
+        // The two doors this service has, and they are different facts: a runner request names the
+        // session it is acting from, the owner-authenticated channel names none. Neither is the
+        // `SYSTEM` 0251 backfilled, which means nobody knows.
+        authoredByType: authoredBySessionId === null ? 'USER' : 'AGENT',
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  /**
    * Resolve a whole structured collection against the rows on record, WITHOUT WRITING ANYTHING.
    *
    * Separated from the write below because the answer decides whether the write happens at all: an
@@ -1028,11 +1063,17 @@ export class ProjectsService {
    * toward strictness, which is the walk it may take on its own. There is nothing to re-seal
    * afterwards: the standard set's seal is a function of the rows this leaves behind, and the
    * definition trigger has already moved `revision` and `content_hash` by the time anybody reads
-   * it. */
+   * it.
+   *
+   * `authoredBySessionId` is the conversation whose words these are — null when the request
+   * carried none, which is the owner-authenticated channel. It is recorded, not read: nothing
+   * allows or refuses anything on it yet. */
   private static async replaceAcceptanceDefinitions(
     tx: Prisma.TransactionClient | PrismaService,
     projectId: string,
+    ownerId: string,
     edit: ResolvedAcceptanceEdit,
+    authoredBySessionId: string | null,
   ): Promise<void> {
     const { existing, desired } = edit;
     const byId = new Map(existing.map((criterion) => [criterion.id, criterion]));
@@ -1081,6 +1122,16 @@ export class ProjectsService {
         });
       }
     }
+
+    // Read back, in one statement, after every definition of this project has been written: the
+    // revision each row ENDED UP on is the trigger's answer, not the one the loop above sent.
+    const written = await tx.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId },
+      select: { id: true, revision: true },
+    });
+    await ProjectsService.recordCriterionAuthorship(
+      tx, projectId, ownerId, authoredBySessionId, written,
+    );
   }
 
   /**
@@ -1376,7 +1427,11 @@ export class ProjectsService {
           ownerId,
           effectClass: CRITERIA_WEAKENING_EFFECT_CLASS,
         },
-        select: { id: true, commitToken: true, contractDigest: true, action: true },
+        select: {
+          id: true, commitToken: true, contractDigest: true, action: true,
+          // Read for authorship and for nothing else: who ASKED for this version.
+          principalType: true, principalId: true,
+        },
       });
       // A 404 and not a refusal: an id that names no proposal OF THIS PROJECT is an address that
       // does not resolve, and answering anything else would let a caller enumerate other tenants'
@@ -1461,7 +1516,15 @@ export class ProjectsService {
               : { completionCriterionOverrideReason: criterion.completionCriterionOverrideReason }),
           })),
         );
-        await ProjectsService.replaceAcceptanceDefinitions(tx, projectId, edit);
+        await ProjectsService.replaceAcceptanceDefinitions(
+          tx, projectId, ownerId, edit,
+          // The PROPOSER, not the owner who answered. An approval permits a version somebody else
+          // composed, and the question authorship exists to answer is who WROTE the criterion, not
+          // who let it through. `principalType` is `AGENT` exactly when a session made the ask and
+          // `OWNER` when the request carried no session at all, so this reproduces on the held path
+          // the same answer the applied path records directly.
+          intent.principalType === 'AGENT' ? intent.principalId : null,
+        );
         // READ BACK, never recomputed in TypeScript: `content_hash` and `revision` are written by
         // the definition's BEFORE trigger out of the assertion AND its verification method, and
         // the hash this service computes elsewhere covers the assertion alone. A `resultingSeal`
@@ -1622,11 +1685,16 @@ export class ProjectsService {
           await ProjectsService.replaceAcceptanceDefinitions(
             client,
             created.id,
+            ownerId,
             await ProjectsService.resolveAcceptanceEdit(
               client,
               created.id,
               dto.acceptanceCriteriaItems ?? [],
             ),
+            // The conversation this project was recorded from, when there was one. `coordinator`
+            // is the same server-derived seed the paragraph above refuses to take from the DTO, so
+            // authorship cannot be claimed for a session the caller merely names.
+            coordinator?.sessionId ?? null,
           );
           finalProject = await client.project.findUniqueOrThrow({
             where: { id: created.id },
@@ -2641,7 +2709,9 @@ export class ProjectsService {
             tx, id, dto.acceptanceCriteriaItems,
           );
           if (edit.direction === 'ADDITIVE') {
-            await ProjectsService.replaceAcceptanceDefinitions(tx, id, edit);
+            await ProjectsService.replaceAcceptanceDefinitions(
+              tx, id, ownerId, edit, actingSessionId ?? null,
+            );
           } else {
             held = await ProjectsService.holdWeakeningAcceptanceEdit(
               tx, ownerId, id, edit, actingSessionId,

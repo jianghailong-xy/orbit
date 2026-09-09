@@ -155,6 +155,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The user or authenticated runner principal recorded on a project criterion-set confirmation.
   // It is returned as audit provenance and is therefore an address just like `decidedById`.
   'confirmedById',
+  // The conversation that authored one version of a project's acceptance criteria (migration
+  // 0251). A session row's address, exactly like `actingSessionId` beside it — it is what a reader
+  // asking "who wrote this criterion" opens, and it is nullable because the owner channel names
+  // no session at all.
+  'authoredBySessionId',
   'actingSessionId',
   // Unit L2's provenance columns on `task` (migration 0150): where a piece of work was NOTICED, as
   // distinct from `projectId`, which says whose goal it counts towards. Addresses a reader follows

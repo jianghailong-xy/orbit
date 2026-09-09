@@ -369,6 +369,30 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        grows, so no stored event can be refused by it and it needs no backfill. Nothing reads
   //        the new event to allow or refuse a status: it is delivered as a message, and the
   //        decision it announces is the account owner's to make through a door of its own.
+  //   0251 gave project acceptance §6 — "a criterion the evidence's own session wrote does not
+  //        count" — the fact it reads, which did not exist: a new table,
+  //        `project_criteria_authorship`, one row per `(definition_id, revision)` saying which
+  //        conversation authored that version, plus one index and a backfill of the versions
+  //        standing when it ran. Read against every claim above: the new relation is not one this
+  //        file preserves, and authorship deliberately did NOT go on
+  //        `project_acceptance_criterion_definition` as a column — three suites assert that
+  //        relation's column list literally, and this is a fact about the write rather than about
+  //        the assertion. So it ALTERs nothing: not `task`, not `project`, not
+  //        `project_acceptance_criterion_definition`, and the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach. No
+  //        criterion's `text` or `verification_method` can move by one byte. It REFERENCES
+  //        `project(id, owner_id)`, which changes nothing about a project row: being pointed at is
+  //        not being written, and that unique constraint is neither created, dropped nor rewritten
+  //        here. It names no `project_acceptance_*` object in any statement and none of the six
+  //        preserved triggers/functions; it creates no enum, no function and no trigger — so it is
+  //        not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP TYPE`,
+  //        so all three `task_completion_criterion` labels survive. Unlike 0245 it does carry one
+  //        INSERT, and that INSERT is the backfill: it writes only the new table's own rows, and
+  //        it READS `project_acceptance_criterion_definition` and `project` to do it — which is
+  //        not one of the things this file forbids, exactly as 0239's fence body reads two
+  //        preserved tables. Reading a row drops, alters and rewrites nothing. Nothing reads the
+  //        new row to allow or refuse anything yet: a project's status is decided exactly as
+  //        before, and the acceptance DONE gate 0229 removed is not reinstated under another name.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -387,7 +411,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0245_project_standard_set_confirmation',
       '0246_project_acceptance_landed_wake',
       '0249_project_criteria_decision',
-      '0250_criteria_decision_pending_wake'],
+      '0250_criteria_decision_pending_wake',
+      '0251_project_criteria_authorship'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

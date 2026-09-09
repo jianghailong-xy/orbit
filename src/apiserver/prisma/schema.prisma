@@ -1806,6 +1806,7 @@ model Project {
   verdictFailures TaskVerificationFailure[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
   standardSetConfirmations       ProjectStandardSetConfirmation[]
+  criteriaAuthorship             ProjectCriteriaAuthorship[]
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
@@ -2028,6 +2029,40 @@ model ProjectStandardSetConfirmation {
 
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
   @@map("project_standard_set_confirmation")
+}
+
+/// Who authored each VERSION of a project's acceptance criteria (migration 0251). One row per
+/// `(definitionId, revision)`, because a criterion that is rewritten is a new version and may be
+/// written by somebody else — which is the question project acceptance §6 asks of a settlement:
+/// did the session that produced the evidence also move the ruler it is measured by.
+///
+/// Not a column on `ProjectAcceptanceCriterionDefinition`: three suites assert that relation's
+/// column list literally, and authorship is a fact about the WRITE rather than about the assertion.
+model ProjectCriteriaAuthorship {
+  definitionId String @map("definition_id") @db.Uuid
+  /// The definition's revision AS THE DATABASE WROTE IT. `project_acceptance_definition_normalize`
+  /// decides this number, so the writer reads it back rather than sending its own.
+  revision     Int
+
+  projectId String  @map("project_id") @db.Uuid
+  ownerId   String  @map("owner_id") @db.Uuid
+  project   Project @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+
+  /// The acting session that wrote this version, when there was one. NULL through the
+  /// owner-authenticated channel, and NULL for the rows 0251 backfilled — `authoredByType` is what
+  /// tells those two apart, and they must not be one row: a separation-of-duties gate that cannot
+  /// distinguish "the owner wrote it" from "nobody knows who wrote it" either admits every
+  /// historical criterion or refuses every one of them.
+  authoredBySessionId String? @map("authored_by_session_id") @db.Uuid
+  /// `USER` | `AGENT` | `SYSTEM`, held to that set by a CHECK rather than an enum. No FK to
+  /// `session` for the same reason `ProjectStandardSetConfirmation.confirmedById` has none: it is
+  /// what was true at the time, and it stays true after the conversation is gone.
+  authoredByType String @map("authored_by_type")
+  authoredAt DateTime @default(now()) @map("authored_at") @db.Timestamptz(6)
+
+  @@id([definitionId, revision], map: "project_criteria_authorship_pkey")
+  @@index([projectId], map: "project_criteria_authorship_project_idx")
+  @@map("project_criteria_authorship")
 }
 
 /// Rebuildable current projection of the Project completion contract. The owner decision is the

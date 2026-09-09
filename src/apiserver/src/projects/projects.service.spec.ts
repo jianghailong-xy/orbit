@@ -511,6 +511,7 @@ test('an update writes only the fields it was sent, and null clears one', async 
 // definition changed.
 test('a structured update preserves ids and revisions across reorder, and increments only an edit', async () => {
   const definitionWrites: any[] = [];
+  const authorshipWrites: any[] = [];
   const projectWrites: any[] = [];
   const finalDefinitions = [
     {
@@ -559,6 +560,9 @@ test('a structured update preserves ids and revisions across reorder, and increm
       update: async (args: any) => definitionWrites.push(['update', args.where.id, args.data]),
       create: async () => assert.fail('retained ids must not create replacement definitions'),
     },
+    projectCriteriaAuthorship: {
+      createMany: async (args: any) => { authorshipWrites.push(args); },
+    },
     $queryRaw: async () => [{
       coordinator_enabled: false,
       config_revision: 0n,
@@ -602,6 +606,21 @@ test('a structured update preserves ids and revisions across reorder, and increm
   }]);
   // And it landed: an ADDITIVE edit is applied where it is made, so there is no hold beside it.
   assert.equal('acceptanceCriteriaHold' in updated, false);
+  // The authorship rows (migration 0251) name the revisions READ BACK after the writes, not the
+  // ones those two updates sent: `project_acceptance_definition_normalize` overwrites what the
+  // statement supplies, so a number taken from the caller's arithmetic names a version that does
+  // not exist. This double still reports A on revision 2 while the update above sent 3, which is
+  // that trap in miniature; the rows themselves are checked against a real server in
+  // `criteria-authorship.pg.spec.ts`.
+  assert.equal(authorshipWrites.length, 1);
+  assert.equal(authorshipWrites[0].skipDuplicates, true,
+    'reordering must land on the version already there rather than claim it');
+  assert.deepEqual(authorshipWrites[0].data.map((row: any) => [
+    row.definitionId, row.revision, row.authoredByType, row.authoredBySessionId,
+  ]), [
+    [CRITERION_A_ID, 2, 'USER', null],
+    [CRITERION_B_ID, 1, 'USER', null],
+  ]);
   assert.deepEqual(updated.acceptanceCriteriaItems.map((item: any) => ({
     id: item.id, ordinal: item.ordinal, text: item.text,
     verificationMethod: item.verificationMethod,

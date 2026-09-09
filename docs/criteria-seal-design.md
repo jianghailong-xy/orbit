@@ -508,7 +508,7 @@ export class DecideCriteriaChangeDto {
 
 本轮实际落成的号（写下来是因为上面那份计划没落地，两条分支各自取了 `0249`）：
 `0249_project_criteria_decision` 新建 `project_criteria_decision`、
-`0248_project_criteria_authorship` 新建 `project_criteria_authorship`（另一条未合分支）、
+`0251_project_criteria_authorship` 新建 `project_criteria_authorship`（当初取的 `0248` 已被别人用掉，按路径重放到 main 时改的号）、
 `0250_criteria_decision_pending_wake` 扩 wake 事件 CHECK。`0247` 至今没人用——号**允许有洞**，
 下一号取现存最大 +1 而不是补洞。CHECK 那条没有并进建表那条：并进去会让
 `coordinator-wake.spec.ts` 那条对账读到一个既建表又改 CHECK 的文件，可读性差。
