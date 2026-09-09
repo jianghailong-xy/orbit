@@ -1,4 +1,4 @@
-import type { Prisma as PrismaTypes } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import {
   CRITERIA_WEAKENING_EFFECT_CLASS,
@@ -161,7 +161,7 @@ function ageSeconds(readAt: Date, filedAt: Date): number {
  * this one, and a join would multiply a row by the number of proposals that displaced it.
  */
 export async function readPendingCriteriaDecisions(
-  tx: PrismaTypes.TransactionClient,
+  tx: Prisma.TransactionClient,
   ownerId: string,
   projectId: string,
   readAt: Date = new Date(),
@@ -230,6 +230,32 @@ export async function readPendingCriteriaDecisions(
 }
 
 /**
+ * "Somebody answered this proposal", as one SQL clause — the same sentence `settledIntentIds`
+ * says, for the callers that have to ask it of the database inside a query rather than of rows
+ * they already hold.
+ *
+ * IT IS EXPORTED SO THAT THERE IS ONE OF IT. The write path asks the same question from the other
+ * side: before filing a proposal, `ProjectsService.pendingWeakeningProposal` has to know whether
+ * the one already on record is still a question, and it asks that in raw SQL because the answer
+ * has to be part of the `ORDER BY ... LIMIT 1` rather than a filter applied to whatever that
+ * picked. Written out there as well as here, the two would be free to disagree about what
+ * "answered" means — and the disagreement is not cosmetic: the read would stop showing a proposal
+ * the write path still treats as pending, so the owner would have no card for a proposal that is
+ * blocking the next edit. So the clause lives here, beside the definition it belongs to, and the
+ * write path composes it.
+ *
+ * A FRAGMENT AND NOT A SECOND QUERY, deliberately: the caller runs one `$queryRaw` and must go on
+ * running one. `intentAlias` is however the calling query names the intent row; it cannot be bound
+ * as a parameter, so it is raw the way `common/session-tree-sql.ts` takes its aliases — every
+ * caller passes a literal of its own.
+ */
+export function criteriaDecisionRecorded(intentAlias: string): Prisma.Sql {
+  const i = Prisma.raw(intentAlias);
+  return Prisma.sql`EXISTS (
+           SELECT 1 FROM "project_criteria_decision" d WHERE d."intent_id" = ${i}."id")`;
+}
+
+/**
  * Which of these proposals have been answered — THE one place that sentence is defined.
  *
  * Today that is `project_ratified_action_commit`, whose primary key IS the intent id, so a proposal
@@ -240,11 +266,13 @@ export async function readPendingCriteriaDecisions(
  * land on 0195's tables: the commit row expresses "this was committed" and nothing expresses "this
  * was turned down", so a rejected proposal would come back from this read as still pending. The
  * decision door's own table (`project_criteria_decision`, `docs/criteria-seal-design.md` §3.4)
- * is where that half lands, and when it exists this function is the single line that has to learn
- * about it — which is why the predicate is a function at all rather than a clause inlined above.
+ * is where that half lands, and it is in this tree now — this function is the single line that has
+ * to learn about it, which is why the predicate is a function at all rather than a clause inlined
+ * above. `criteriaDecisionRecorded` above is that same row as SQL, and is what the write path
+ * already asks; the two say one thing the day this reads it too.
  */
 async function settledIntentIds(
-  tx: PrismaTypes.TransactionClient,
+  tx: Prisma.TransactionClient,
   intentIds: readonly string[],
 ): Promise<Set<string>> {
   const commits = await tx.projectRatifiedActionCommit.findMany({
@@ -256,7 +284,7 @@ async function settledIntentIds(
 
 /** The seal of the standard set in force, read off the definition rows the trigger maintains. */
 async function currentStandardSetSeal(
-  tx: PrismaTypes.TransactionClient,
+  tx: Prisma.TransactionClient,
   projectId: string,
 ): Promise<string> {
   const definitions = await tx.projectAcceptanceCriterionDefinition.findMany({

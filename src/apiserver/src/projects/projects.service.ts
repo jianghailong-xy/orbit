@@ -50,6 +50,7 @@ import {
 } from './dto';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { criteriaDecisionPendingFact } from './coordinator-wake';
+import { criteriaDecisionRecorded } from './criteria-pending-decisions';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import {
   CRITERIA_WEAKENING_EFFECT_CLASS,
@@ -1231,7 +1232,10 @@ export class ProjectsService {
    *
    * ANSWERED is one row in `project_criteria_decision`, keyed by the intent — the same single
    * predicate the decision door refuses a second answer with, so "settled" means the same thing on
-   * the read that composes a proposal and on the door that answers one. WITHOUT this half, a
+   * the read that composes a proposal and on the door that answers one. It is COMPOSED rather than
+   * spelled here: `criteriaDecisionRecorded` lives in `criteria-pending-decisions.ts`, beside the
+   * derived read whose whole subject is what "answered" means, so the write path and that read
+   * cannot come to mean different things by one of them being edited. WITHOUT this half, a
    * REJECTED proposal stays pending forever: `holdWeakeningAcceptanceEdit` would hand the same
    * edit back its id rather than filing a fresh one, and that proposal's commit token is already
    * spent, so the caller would be pointed at a proposal nobody can answer. Rejecting an edit has
@@ -1251,8 +1255,7 @@ export class ProjectsService {
             WHERE s."project_id" = i."project_id"
               AND s."effect_class" = i."effect_class"
               AND s."action"->'supersedes'->>'intentId' = i."id"::text)
-         AND NOT EXISTS (
-           SELECT 1 FROM "project_criteria_decision" d WHERE d."intent_id" = i."id")
+         AND NOT ${criteriaDecisionRecorded('i')}
        ORDER BY i."created_at" DESC
        LIMIT 1`);
     const [row] = rows;

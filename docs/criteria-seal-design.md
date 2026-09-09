@@ -506,11 +506,17 @@ export class DecideCriteriaChangeDto {
 
 ### 6.1 迁移编号
 
-下一号是 **`0247`**（现存最大 `0246_project_acceptance_landed_wake`）。
-本轮至少三个迁移：`0247` 新建 `project_criteria_decision`、`0248` 新建
-`project_criteria_authorship`、`0249` 扩 wake 事件 CHECK（也可以并进 `0247`，
-但并进去会让 `coordinator-wake.spec.ts` 那条对账读到一个既建表又改 CHECK 的文件，可读性差）。
-**并行分支会撞号，开工前重查 `ls prisma/migrations | tail -3`。**
+本轮实际落成的号（写下来是因为上面那份计划没落地，两条分支各自取了 `0249`）：
+`0249_project_criteria_decision` 新建 `project_criteria_decision`、
+`0248_project_criteria_authorship` 新建 `project_criteria_authorship`（另一条未合分支）、
+`0250_criteria_decision_pending_wake` 扩 wake 事件 CHECK。`0247` 至今没人用——号**允许有洞**，
+下一号取现存最大 +1 而不是补洞。CHECK 那条没有并进建表那条：并进去会让
+`coordinator-wake.spec.ts` 那条对账读到一个既建表又改 CHECK 的文件，可读性差。
+
+**并行分支会撞号，而 Prisma 认的是整个目录名，所以 `0249_a` 和 `0249_b` 各自 `migrate deploy`
+都绿，合起来才红。** 开工前重查 `ls prisma/migrations | tail -3`，合并后重查
+`ls prisma/migrations | grep -oE '^[0-9]{4}' | sort | uniq -d`——注意这条在 `main` 上本来就有
+28 组历史重号（最新的是 `0226`），所以看的是 `0246` 之后有没有新的重号。
 
 ### 6.2 跑法（分层，别每个任务跑 full-api）
 

@@ -302,7 +302,7 @@ test('the events this unit knows about are exactly those the latest migration ac
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0249 no longer constrains the event column');
+  assert.ok(check, 'migration 0250 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,
