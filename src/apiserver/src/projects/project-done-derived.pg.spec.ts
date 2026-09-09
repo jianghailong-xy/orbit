@@ -608,3 +608,348 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
         + 'merge receipt');
   });
 });
+
+/** What `update` hands back instead of applying an edit whose direction cannot be read. */
+interface HeldEdit {
+  intentId: string;
+  baselineSeal: string;
+}
+
+/** The two criteria of the second timeline: the one its own evidence rewrites, and the one that is
+ *  only there so the readings below are about a criterion and not about the whole project. */
+const MARKED = 'the work whose own session moved the ruler it is measured by';
+const CONTROL = 'the work whose ruler nobody who ran it touched';
+
+/**
+ * The FIFTH clause, which the timeline above cannot reach.
+ *
+ * WHY A SECOND TIMELINE RATHER THAN MORE STEPS ON THE FIRST
+ * ---------------------------------------------------------
+ * Every criterion in the fixture above is authored through the owner's own door, and that is not
+ * an accident of how it was written — it is what makes those ten readings statements about
+ * satisfaction, landing and the confirmation and about nothing else. To pose §6's question a
+ * criterion has to be REWORDED by one of the very sessions running its work, and a rewording is
+ * not something a timeline can step back out of: it advances a revision, strands the confirmation,
+ * and leaves an authorship row that every later reading would then be carrying. So this is its own
+ * project, whose criteria are stated, met, landed and confirmed exactly as the first one's are,
+ * and which is then walked into the one state the first cannot enter.
+ *
+ * WHAT IS ASSERTED HERE THAT THE §6 SPEC DOES NOT ASSERT
+ * ------------------------------------------------------
+ * `criteria-settlement-independence.pg.spec.ts` is where the clause's own meaning lives — the
+ * equality between two committed session ids, the conflicts it names, the repair it offers. What
+ * it never shows is this clause STANDING BESIDE THE OTHERS, because every reading it takes has the
+ * fifth clause alone. This file is the one that pins the SET of clauses and their ORDER, and
+ * `withheld` is an ordered array a reader is shown in the order it arrives. So the two cases below
+ * are about POSITION, not about independence:
+ *
+ *   (6) the clause appears in the middle of the two the same edit raises
+ *   (7) the landing clause joins them, making four — and then all four are walked back to green
+ *       one at a time, until this one is the whole of what withholds DONE
+ *
+ * Four is the most that can ever hold together, and the fifth of the five is the reason: a project
+ * that states no criteria has none to be unsatisfied, none to be unlanded and none for anybody to
+ * have authored, so `NO_CRITERIA_STATED` excludes the three work-side clauses rather than joining
+ * them. Between them the two readings order all four against each other.
+ *
+ * WHY THE REWORD TAKES A DETOUR
+ * -----------------------------
+ * `classifyCriteriaEdit` cannot read the direction of prose, so a reword comes out `WEAKENING` and
+ * `update` holds it as a proposal instead of applying it. A fixture that ignored the hold would
+ * leave the criterion at revision 1 authored by the owner, and would be asserting nothing at all —
+ * so `state()` below answers its own proposal, standing in for the account owner. That detour does
+ * not move the author: `decideCriteriaChange` records the intent row's own principal, which is the
+ * acting session that proposed it, and not the owner who let it through.
+ */
+test('the clause for a criterion its own evidence wrote takes its place in order among the rest', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const prisma: PrismaClient = prismaClientFor(url);
+  t.after(async () => {
+    await prisma.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+
+  const acceptance = new ProjectAcceptanceService(prisma as unknown as PrismaService);
+  const projects = new ProjectsService(prisma as unknown as PrismaService, acceptance);
+  /** The router both post-commit edges are held behind; the first timeline says why a stand-in
+   *  that answers with nothing is what a fixture building these services directly needs. */
+  const completionInputs = {
+    routeSettledProjects: async () => [],
+    routeReadyCriteria: async () => [],
+    routeUnlandedCriteria: async () => [],
+    routeTaskExceptions: async () => [],
+  } as unknown as CompletionInputRouter;
+
+  const receipts = new MergeReceiptService(prisma as unknown as PrismaService, completionInputs);
+  const tasks = new TasksService(
+    prisma as never,
+    {} as never,
+    { publishTaskChanged() {}, publishForUser() {}, publishTaskResync() {} } as never,
+    undefined,
+    completionInputs,
+  );
+
+  const ownerId = randomUUID();
+  const projectId = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: ownerId,
+      email: `authored-${ownerId}@project-done.invalid`,
+      name: 'The account owner',
+      passwordHash: 'x',
+    },
+  });
+  await prisma.project.create({
+    data: { id: projectId, ownerId, title: 'The project whose ruler one of its own runners moved' },
+  });
+
+  // ── the fixture's own vocabulary ───────────────────────────────────────────────────────────────
+
+  /** The stored column, read with SQL: past every service, and past every response body. */
+  async function storedStatus(): Promise<string> {
+    const { rows } = await sql.query<{ status: string }>(
+      `SELECT "status"::text FROM "project" WHERE "id" = $1::uuid`, [projectId],
+    );
+    assert.equal(rows.length, 1, 'the project must still exist');
+    return rows[0]!.status;
+  }
+
+  /** What the projection says today, and — when it is not DONE — every clause holding it back, in
+   *  the order the derivation pushes them. */
+  async function withheld(): Promise<DerivedDoneWithheld[]> {
+    return (await readDerivedProjectDone(prisma as unknown as PrismaService, ownerId, projectId))
+      .withheld;
+  }
+
+  /**
+   * A conversation, as `sessions.create` writes one.
+   *
+   * `taskId` is what makes it the session that PRODUCED that task's evidence, and `USER` is the
+   * origin every ordinary agent run carries — deliberately not the judgment origin, because the
+   * identity gate is precisely what cannot see anything wrong with the edit in (6).
+   */
+  async function session(title: string, branch: string, taskId: string): Promise<string> {
+    const id = randomUUID();
+    await prisma.session.create({
+      data: {
+        id,
+        ownerId,
+        creatorId: ownerId,
+        taskId,
+        title,
+        prompt: 'do the work',
+        provider: 'claude',
+        status: RunStatus.SUCCEEDED,
+        branch,
+        isolationStatus: 'worktree',
+        dispatchOrigin: SessionDispatchOrigin.USER,
+      },
+    });
+    return id;
+  }
+
+  /** Restate the whole collection through the runner door, from the named session, and see the
+   *  edit through to the definitions whatever route it has to take: a reword is held as a
+   *  proposal, and this answers it with the proposal's own one-time key, standing in for the
+   *  account owner — who is the only principal that door accepts. */
+  async function state(items: Array<{ id: string; text: string }>, actingSessionId: string) {
+    const result = await projects.update(ownerId, projectId, {
+      acceptanceCriteriaItems: items.map((item) => ({
+        id: item.id,
+        text: item.text,
+        verificationMethod: METHOD,
+      })),
+    } as never, actingSessionId) as { acceptanceCriteriaHold?: HeldEdit };
+    const held = result.acceptanceCriteriaHold;
+    if (!held) return;
+
+    const { rows: [proposal] } = await sql.query<{ commit_token: string }>(
+      `SELECT "commit_token" FROM "project_ratified_action_intent" WHERE "id" = $1::uuid`,
+      [held.intentId],
+    );
+    assert.ok(proposal, 'a held edit files a proposal row this test can answer');
+    const decided = await projects.decideCriteriaChange(ownerId, projectId, held.intentId, {
+      decision: 'APPROVE',
+      commitToken: proposal.commit_token,
+      // The seal the proposal was composed against, which is still the one that stands: nothing
+      // has edited these criteria between the hold and this line.
+      baseSeal: held.baselineSeal,
+    } as never);
+    assert.equal(decided.applied, true, 'the owner approved it, so the edit is in force');
+  }
+
+  const DECLARATION = {
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'true',
+    acceptanceExpectedExitCode: 0,
+  };
+
+  /** Settle an EXECUTABLE task the way `runnerApi.turnComplete` settles one, through 0193/0230's
+   *  BEFORE UPDATE fence. */
+  async function settle(taskId: string) {
+    const written = await sql.query(
+      `UPDATE "task" SET "status" = 'DONE'
+        WHERE "id" = $1::uuid
+          AND "status" IN ('OPEN', 'IN_PROGRESS')
+          AND "completion_criterion" = 'EXECUTABLE'
+          AND "acceptance_command" = 'true'
+          AND "acceptance_expected_exit_code" = 0`,
+      [taskId],
+    );
+    assert.equal(written.rowCount, 1, 'the EXECUTABLE task must reach DONE through the DONE fence');
+  }
+
+  /** A merge of that session's branch into the default branch: the landing lane's whole input. */
+  async function landOnMain(sessionId: string, nibble: string) {
+    return receipts.record(ownerId, sessionId, {
+      result: 'MERGED',
+      sourceSha: sha(nibble),
+      targetBranch: 'main',
+      targetShaBefore: sha('a'),
+      targetShaAfter: sha('b'),
+    }, 'AGENT');
+  }
+
+  /** The owner confirms the version of the criteria that stands as this line runs. */
+  async function confirmWhatStands() {
+    const standing = await acceptance.standardSetConfirmation(ownerId, projectId);
+    await acceptance.confirmStandardSet(ownerId, projectId, {
+      criteriaDigest: standing.currentVersion.digest,
+    });
+  }
+
+  // ── the starting position: two criteria, met, landed, and confirmed by their owner ─────────────
+  //
+  // Both authored through the owner's own door, which is the one authorship that is never a
+  // conflict of interest — so this project reaches DONE with the fifth clause silent, and that
+  // DONE is what makes the OPEN readings below statements about what took it away.
+
+  const [marked, control] = criteriaFromDefinitions(
+    (await projects.update(ownerId, projectId, {
+      acceptanceCriteriaItems: [MARKED, CONTROL].map((text) => ({
+        text, verificationMethod: METHOD,
+      })),
+    } as never)).acceptanceCriteriaItems,
+  );
+  assert.ok(marked && control, 'the fixture states two criteria');
+
+  const markedWork = await tasks.create(ownerId, {
+    title: 'the work filed against the criterion its own session rewrote',
+    projectId, criterionKey: marked.key, ...DECLARATION,
+  } as never);
+  const controlWork = await tasks.create(ownerId, {
+    title: 'the work filed against the sibling criterion',
+    projectId, criterionKey: control.key, ...DECLARATION,
+  } as never);
+
+  const authorAndRunner = await session(
+    'the conversation that ran the work AND rewrote the criterion', 'orbit/marked', markedWork.id,
+  );
+  const otherRunner = await session(
+    'the conversation that only ran its work', 'orbit/control', controlWork.id,
+  );
+
+  await settle(markedWork.id);
+  await settle(controlWork.id);
+  await landOnMain(authorAndRunner, '1');
+  await landOnMain(otherRunner, '2');
+  await confirmWhatStands();
+
+  // ═══ (6) the clause appears in the middle of the two the same edit raises ═════════════════════
+
+  await t.test('(6) the clause arrives in the middle of the ones the same edit raises', async () => {
+    // The positive control, over the same rows: without it, every OPEN below would be equally true
+    // of a column that already said OPEN and of an implementation that projects nothing at all.
+    assert.equal(await storedStatus(), ProjectStatus.DONE,
+      'this timeline has to start from a column that DOES say DONE');
+    assert.deepEqual(await withheld(), [],
+      'and from a projection with nothing outstanding, so that whatever appears below appeared '
+        + 'here');
+
+    // The abuse §6 is about, through the ordinary door with the ordinary origin: the session that
+    // ran `markedWork` rewrites the criterion `markedWork` is measured by.
+    await state([
+      { id: marked.definitionId, text: `${MARKED}, as its own session would have it` },
+      { id: control.definitionId, text: CONTROL },
+    ], authorAndRunner);
+
+    assert.equal(await storedStatus(), ProjectStatus.OPEN,
+      'a criterion its own evidence wrote does not count, and a project cannot settle against a '
+        + 'standard set smaller than the one its owner confirmed');
+    assert.deepEqual(await withheld(), [
+      'CRITERION_UNSATISFIED',
+      'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
+      'STANDARD_SET_UNCONFIRMED',
+    ], 'three clauses on the one edit, and the new one is in the MIDDLE of them: the rewrite '
+      + 'advanced the revision, so the declaration filed against the older wording is stale and '
+      + 'the confirmation on record names a version that no longer stands — while the clause this '
+      + 'case is about sits where the derivation pushes it, after the two work-side clauses and '
+      + 'before the owner’s');
+  });
+
+  // ═══ (7) the landing clause joins them, and then all four walk back to green ══════════════════
+
+  await t.test('(7) it follows CRITERION_UNLANDED, and is the last clause left standing', async () => {
+    // The one clause (6) is missing, and the last one that can join it: a new piece of work under
+    // the OTHER criterion, settled by nobody and landed nowhere. `NO_CRITERIA_STATED` cannot make
+    // a fifth — a project that states no criteria has none to be unsatisfied, none to be unlanded
+    // and none for anybody to have authored — so four is the whole of what this array can hold at
+    // once, and this reading is the widest one there is.
+    const late = await tasks.create(ownerId, {
+      title: 'the work that arrives after the criteria were confirmed',
+      projectId, criterionKey: control.key, ...DECLARATION,
+    } as never);
+    const lateRunner = await session(
+      'the conversation running the late work', 'orbit/late', late.id,
+    );
+
+    assert.deepEqual(await withheld(), [
+      'CRITERION_UNSATISFIED',
+      'CRITERION_UNLANDED',
+      'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
+      'STANDARD_SET_UNCONFIRMED',
+    ], 'every clause that can hold together, holding together — and `withheld` is an ORDERED '
+      + 'array a reader is shown in the order it arrives, so this is what pins the clause BETWEEN '
+      + 'CRITERION_UNLANDED and STANDARD_SET_UNCONFIRMED rather than merely present somewhere');
+
+    // ── and back to green from there, one variable at a time ──────────────────────────────────
+    // Each step moves exactly ONE of the four, so the shrinking list is evidence about the clause
+    // that left rather than about a fixture that was rebuilt between readings.
+    await settle(late.id);
+    await landOnMain(lateRunner, '3');
+    assert.deepEqual(await withheld(), [
+      'CRITERION_UNSATISFIED',
+      'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
+      'STANDARD_SET_UNCONFIRMED',
+    ], 'the late work settled and landed together, so the landing clause goes while the '
+      + 'satisfaction clause stays: the declaration the rewrite stranded is a different fact');
+
+    // The ordinary repair for a declaration a rewrite left behind — re-sending the same key is how
+    // a task's revision is brought up to date — so staleness is not what the readings below are
+    // measuring.
+    await tasks.update(ownerId, markedWork.id, { criterionKey: marked.key } as never);
+    assert.deepEqual(await withheld(), [
+      'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
+      'STANDARD_SET_UNCONFIRMED',
+    ], 'and the work side is whole again: every criterion is satisfied and every one has landed, '
+      + 'so what is left is the owner’s half of the conjunction and the clause this case is about');
+
+    // The owner's half, over the ruler as it reads today: the one edge left.
+    await confirmWhatStands();
+
+    assert.deepEqual(await withheld(), ['CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE'],
+      'the other four are green and this one is the whole of what withholds DONE — there are '
+        + 'criteria, they are all satisfied, they have all landed, and the owner has confirmed '
+        + 'the version that stands');
+    assert.equal(await storedStatus(), ProjectStatus.OPEN,
+      'and the column follows it: the confirmation is a post-commit edge this projection rides — '
+        + 'the same edge that settled this project at the top of the file — so the projection ran '
+        + 'here and declined to settle, which is a different fact from a column nothing touched');
+  });
+});
