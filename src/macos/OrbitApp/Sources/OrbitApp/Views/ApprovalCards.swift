@@ -19,10 +19,39 @@ struct ApprovalCard: View {
 
     var body: some View {
         switch approval.kind {
-        case .question: QuestionCard(console: console, approval: approval)
+        case .question: QuestionApprovalCard(console: console, approval: approval)
         case .plan:     PlanCard(console: console, approval: approval)
         case .tool:     ToolApprovalCard(console: console, approval: approval)
         }
+    }
+}
+
+/// A question is one of two cards, and the fork is `EvidenceDecisions.rows` — the ONE question
+/// either client recognises by what it is ABOUT rather than by its shape. Everything else,
+/// including a two-option question that merely resembles it, is a form over options and renders as
+/// one. The reasoning for having exactly one exception, and what a second would cost, is in
+/// OrbitKit's `EvidenceDecision.swift`; it is not repeated here so there is one copy of it.
+///
+/// The queue is read from here rather than at session load: the request is worth making when a card
+/// that might be one of those rows is actually on screen. Until it arrives the generic form renders,
+/// which is what shipped before this card existed.
+private struct QuestionApprovalCard: View {
+    let console: ConsoleModel
+    let approval: PendingApproval
+
+    private var rows: [EvidenceDecisionRow]? {
+        EvidenceDecisions.rows(for: approval, queue: console.pendingDecisions)
+    }
+
+    var body: some View {
+        Group {
+            if let rows {
+                EvidenceDecisionCard(console: console, approval: approval, rows: rows)
+            } else {
+                QuestionCard(console: console, approval: approval)
+            }
+        }
+        .task { await console.loadPendingDecisions() }
     }
 }
 
@@ -469,6 +498,308 @@ private struct OptionRow: View {
     private var glyph: String {
         if multiSelect { return picked ? "checkmark.square.fill" : "square" }
         return picked ? "checkmark.circle.fill" : "circle"
+    }
+}
+
+// MARK: - the completion decision
+
+/// The card a person answers "is this work finished" on, built from the pending ROW.
+///
+/// It is the same object as `QuestionCard` — blue chrome, stuck to the tail of the transcript, the
+/// same 44pt reach on a phone — and it differs in exactly the two places the redesign is about: the
+/// body, which is read off `EvidenceDecisionRow` instead of being one flattened paragraph, and the
+/// actions, which are a judgment's rather than a form's. Everything it decides to show, and every
+/// word it shows, comes from `EvidenceDecisions` so that macOS, iOS and the browser cannot come
+/// apart on it.
+struct EvidenceDecisionCard: View {
+    let console: ConsoleModel
+    let approval: PendingApproval
+    let rows: [EvidenceDecisionRow]
+
+    /// Usually there is one row, and then the first press IS the submit. A delivery that found
+    /// three rows waiting asks about three in one call and a tool call is answered once, so the
+    /// picks are held until the last one is made rather than sent as a partial the others are lost
+    /// from — the same rule the web card follows.
+    @State private var answers: [String: [String]] = [:]
+
+    private var questions: [AskQuestion] {
+        approval.input.map { Approvals.parseQuestions(from: $0) } ?? []
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.seal.fill",
+                           title: EvidenceDecisions.askHeading, tone: .blue)
+            ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                if index < rows.count {
+                    EvidenceDecisionSection(
+                        row: rows[index],
+                        questionText: question.question,
+                        index: index,
+                        total: questions.count,
+                        picked: answers[question.question]?.first,
+                        onAnswer: { action in answer(question.question, action) },
+                        onChat: {
+                            console.startChatReply(approvalID: approval.id,
+                                                   question: rows[index].title)
+                        })
+                }
+            }
+        }
+        .approvalChrome(.blue)
+    }
+
+    private func answer(_ question: String, _ action: EvidenceDecisionAction) {
+        var next = answers
+        next.merge(EvidenceDecisions.answers(question: question, action: action)) { _, new in new }
+        guard questions.allSatisfy({ !(next[$0.question]?.isEmpty ?? true) }) else {
+            answers = next
+            return
+        }
+        decide(console, approval, .allow, answers: next)
+    }
+}
+
+/// One row, in the order a person decides in: what is claimed, what is admitted missing, what was
+/// checked for them, and only then the full text they can go and read.
+private struct EvidenceDecisionSection: View {
+    let row: EvidenceDecisionRow
+    /// The question's own text — the identity of this question on the way back, and the card's
+    /// bottom fold. Never the source of anything above it.
+    let questionText: String
+    let index: Int
+    let total: Int
+    /// The option label already chosen for this row, while the card waits on its other rows.
+    let picked: String?
+    let onAnswer: (EvidenceDecisionAction) -> Void
+    let onChat: () -> Void
+
+    @State private var claimOpen = false
+    @State private var gapsOpen = false
+    @State private var checksOpen = false
+    @State private var fullOpen = false
+    /// The send-back's whole state, as one value OrbitKit owns the rules of — including the one
+    /// that matters: it cannot be sent without a reason, because the decision door refuses a
+    /// SEND_BACK carrying none and writes nothing at all.
+    @State private var sendBack = EvidenceSendBackState()
+
+    private var claim: FoldedClaim {
+        EvidenceDecisions.foldedClaim(row.claim, clamp: EvidenceDecisions.claimClamp)
+    }
+    private var gaps: GapPreview { EvidenceDecisions.gapPreview(row) }
+    private var checks: [EvidenceDecisionCheck] { EvidenceDecisions.checks(row) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if total > 1 {
+                Text(EvidenceDecisions.positionChip(index: index, total: total))
+                    .font(.orbitLabel.bold()).foregroundStyle(.secondary)
+            }
+            claimBlock
+            Text(EvidenceDecisions.meta(row))
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            gapsBlock
+            checksBlock
+            fullBlock
+            if let picked {
+                Text(EvidenceDecisions.pickedNote(picked))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                ApprovalActions {
+                    confirmButton
+                    sendBackButton
+                    chatButton
+                }
+                // Below the actions rather than inside them: on macOS those are one row, and a
+                // growing reason box wedged into it would push Confirm and Chat off their line.
+                if sendBack.open { reasonBox }
+            }
+        }
+    }
+
+    // MARK: body
+
+    private var claimBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(claim.text.isEmpty ? EvidenceDecisions.noClaim : claim.text)
+                .font(.orbitProse.bold())
+                .foregroundStyle(claim.text.isEmpty ? AnyShapeStyle(.secondary)
+                                                    : AnyShapeStyle(.primary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if claim.folded {
+                DisclosureToggle(open: claimOpen, label: claimOpen ? "收起" : "展开全文") {
+                    claimOpen.toggle()
+                }
+                if claimOpen {
+                    Text(row.claim.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .font(.orbitProse)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    /// The body of the card. What the submitter says they did NOT establish is the part most likely
+    /// to change the answer, so a narrow screen gives up the full text and the machine's checks
+    /// before it gives up any of this — and what does not fit is COUNTED rather than dropped, one
+    /// press from being read.
+    private var gapsBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(EvidenceDecisions.gapsHeading(row.gaps.count))
+                .font(.orbitLabel.bold()).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(gaps.shown.enumerated()), id: \.offset) { _, gap in
+                gapRow(gap)
+            }
+            if !gaps.rest.isEmpty {
+                DisclosureToggle(open: gapsOpen,
+                                 label: gapsOpen ? "收起"
+                                                 : EvidenceDecisions.gapsMore(gaps.rest.count)) {
+                    gapsOpen.toggle()
+                }
+                if gapsOpen {
+                    ForEach(Array(gaps.rest.enumerated()), id: \.offset) { _, gap in
+                        gapRow(gap)
+                    }
+                }
+            }
+        }
+    }
+
+    private func gapRow(_ gap: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark").font(.orbitGlyph).foregroundStyle(.orange)
+            Text(gap).font(.orbitProse).foregroundStyle(.primary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// The three things nobody has to take on faith, folded into one line: they are a reason to
+    /// stop reading, which is exactly why they fold and the gaps above do not.
+    private var checksBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DisclosureToggle(open: checksOpen,
+                             label: EvidenceDecisions.checksHeading(
+                                held: checks.filter(\.ok).count, total: checks.count),
+                             symbol: "checkmark.shield") {
+                checksOpen.toggle()
+            }
+            if checksOpen {
+                ForEach(checks) { check in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: check.ok ? "checkmark" : "exclamationmark.triangle")
+                                .font(.orbitGlyph)
+                                .foregroundStyle(check.ok ? Color.green : Color.orange)
+                            Text(check.text).font(.orbitLabel)
+                            Spacer(minLength: 0)
+                        }
+                        if let detail = check.detail {
+                            Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    /// Last, and folded: the string the tool actually carries. Nothing above it is derived from
+    /// this — it is here so that "the card shows less" never means "the card hides something".
+    private var fullBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DisclosureToggle(open: fullOpen, label: EvidenceDecisions.fullLabel) {
+                fullOpen.toggle()
+            }
+            if fullOpen {
+                Text(questionText)
+                    .font(.orbitMono).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    // MARK: actions
+
+    private var confirmButton: some View {
+        Button { onAnswer(.confirm) } label: {
+            Text(EvidenceDecisions.confirmAction).approvalActionLabel()
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    private var sendBackButton: some View {
+        Button {
+            PlatformHaptics.tap()
+            sendBack.open.toggle()
+        } label: {
+            Text(EvidenceDecisions.sendBackAction).approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var chatButton: some View {
+        Button(action: onChat) {
+            Label(EvidenceDecisions.chatAction, systemImage: "bubble.left.and.bubble.right")
+                .approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var reasonBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(EvidenceDecisions.noteLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField(EvidenceDecisions.notePlaceholder, text: $sendBack.note, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.orbitControl)
+                .lineLimit(3...6)
+            Button {
+                if let action = sendBack.action { onAnswer(action) }
+            } label: {
+                Text(EvidenceDecisions.sendAction).approvalActionLabel()
+            }
+            .buttonStyle(.bordered)
+            // The one rule both clients are under: an action that cannot succeed is disabled.
+            .disabled(!sendBack.canSend)
+        }
+    }
+}
+
+/// A fold's own control: the label, a caret that says which way it goes, and the whole row taking
+/// the press. Plain-styled so a fold never competes with the card's actual actions.
+private struct DisclosureToggle: View {
+    let open: Bool
+    let label: String
+    var symbol: String? = nil
+    let toggle: () -> Void
+
+    var body: some View {
+        Button {
+            PlatformHaptics.tap()
+            toggle()
+        } label: {
+            HStack(spacing: 6) {
+                if let symbol {
+                    Image(systemName: symbol).font(.orbitGlyph).foregroundStyle(.secondary)
+                }
+                Text(label).font(.orbitLabel)
+                Image(systemName: open ? "chevron.up" : "chevron.down")
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isButton)
     }
 }
 

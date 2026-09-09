@@ -282,6 +282,18 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/approvals/\(approvalID)/decision", body: req)
     }
 
+    /// The completion decisions THIS session is being asked to make — the read the web decision
+    /// rail is built from, and the one a decision approval card joins so it can render the ROW
+    /// instead of the string the question flattened it into (see `EvidenceDecision.swift`).
+    ///
+    /// The session is required rather than optional because every row carries whether THAT session
+    /// may answer it: a queue that did not know who was reading it could only report a question,
+    /// never whether the reader is allowed to settle it.
+    public func pendingEvidenceDecisions(decidingSessionID: String) async throws -> EvidenceDecisionQueue {
+        try await get("tasks/evidence-decisions/pending",
+                      query: [URLQueryItem(name: "decidingSessionId", value: decidingSessionID)])
+    }
+
     // MARK: agents / runners
 
     public func agents() async throws -> [Agent] { try await get("agents") }

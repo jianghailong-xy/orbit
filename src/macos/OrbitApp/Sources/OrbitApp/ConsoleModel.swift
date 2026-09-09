@@ -1720,6 +1720,31 @@ final class ConsoleModel {
         }
     }
 
+    // MARK: completion decisions
+
+    /// The completion decisions this session is being asked to make, or nil until they are read.
+    ///
+    /// One `AskUserQuestion` reaches a coordinator twice — as a row in this queue and as the ask
+    /// raised over it — and the card is the half that blocks a turn, so it is the half that must
+    /// render the ROW rather than the string the question flattened it into (see OrbitKit's
+    /// `EvidenceDecision.swift`). Nil is a real state and it is the safe one: the card falls back to
+    /// the generic option form, which is what shipped before and still answers correctly.
+    private(set) var pendingDecisions: EvidenceDecisionQueue?
+    private var loadingDecisions = false
+
+    /// Read that queue. Driven by the question card itself rather than by the session opening: the
+    /// read is worth a request exactly when a card is on screen that might be one of these rows,
+    /// which is far rarer than "a session is selected" — and the web strip's fan-out over every
+    /// open window is the cost this client does not need to repeat.
+    func loadPendingDecisions() async {
+        guard !isDraft, !loadingDecisions else { return }
+        loadingDecisions = true
+        defer { loadingDecisions = false }
+        guard let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID)
+        else { return }
+        pendingDecisions = queue
+    }
+
     /// Fetch durable pending approvals (the REST source of truth) and reconcile them into the
     /// reducer. This both *surfaces* a prompt that predates the stream (or whose seq-0 nudge landed
     /// during a reconnect gap — those nudges aren't replayed) and *clears* a card resolved elsewhere
