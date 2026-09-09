@@ -15,8 +15,10 @@ verdict is derived from that conjunction rather than supplied.
 Project `DONE` is not a `HUMAN_ONLY` write, and since 2026-09-08 it is not, in the ordinary case,
 anybody's write at all: `projects/project-done-derived.ts` PROJECTS the column from a standing
 confirmation of today's standard set and criteria that are every one satisfied and landed,
-recomputing it on two edges that have no requester. A projection is not a gate — it refuses
-nothing, and none of what migration `0229_project_acceptance_judgment_removal` took away on
+recomputing it on three edges that have no requester: the owner's confirmation, the post-commit
+edge of any task write in the project, and a write that restates the criteria themselves.
+A projection is not a gate — it refuses nothing, and none of what migration
+`0229_project_acceptance_judgment_removal` took away on
 2026-09-03 comes back with it: no trigger on `project`, no acceptance run, and no 409 that turns a
 direct `status=DONE` request into a refusal. Who may still write the column BY HAND is the last
 column of the matrix below, and it turns on one condition — whether the request carries an acting
