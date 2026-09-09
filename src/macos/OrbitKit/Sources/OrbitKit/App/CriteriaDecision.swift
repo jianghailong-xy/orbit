@@ -38,11 +38,13 @@ import Foundation
    --------------------------
    The derivation, the standings and every visible word are here so macOS, iOS and the browser
    cannot come apart on them, and so they can be tested on Linux where no SwiftUI exists. The
-   mirror is `src/web/src/components/CriteriaDecisionCard.tsx` (commit `12d7f1d1`, filed under the
-   same project criterion as this file) — the strings below are copied from it deliberately, the
-   way `EvidenceDecisions` copies `DecisionRail`'s. There is no parity TEST for them yet only
-   because that web file has not landed on main; when it does, `EvidenceDecisionCopyParityTests` is
-   the shape the tripwire takes.
+   mirror is `src/web/src/components/CriteriaDecisionCard.tsx` (filed under the same project
+   criterion as this file) — the strings below are copied from it deliberately, the way
+   `EvidenceDecisions` copies `DecisionRail`'s. That file is on main now, so the copy is no longer
+   on trust: `CriteriaDecisionCopyParityTests` reads it and compares the three headings, the two
+   actions, the two paragraphs and the two refusal codes, and a counterpart it cannot find is a
+   FAILURE rather than a skip. What it does not compare is the title, the badge and the spelling of
+   the provenance mark: those differ by end on purpose, for the reason the next section gives.
 
    WHAT THE PHONE SAYS DIFFERENTLY, AND WHY
    ----------------------------------------

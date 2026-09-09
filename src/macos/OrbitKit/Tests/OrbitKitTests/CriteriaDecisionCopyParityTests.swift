@@ -1,0 +1,122 @@
+import Foundation
+import XCTest
+@testable import OrbitKit
+
+/// The two clients say the same words about one weakening proposal, and this is the tripwire that
+/// keeps them saying them.
+///
+/// `CriteriaDecision.swift` copied its visible strings out of `CriteriaDecisionCard.tsx` by hand,
+/// the way `EvidenceDecisions` copies `DecisionRail`'s. Until that web file landed on main there
+/// was nothing here to compare against and the copy was on trust; it has landed, so the trust
+/// becomes a check. Nothing in a build catches a heading re-worded at one end only — the Swift
+/// client and the browser bundle share no compiler — so the check has to be a test that reads the
+/// other end's source and compares the strings.
+///
+/// Shaped after `EvidenceDecisionCopyParityTests`, including the part that matters most: a missing
+/// counterpart is a FAILURE and never an `XCTSkip`. A check that quietly opts out reports green on
+/// exactly the day the thing it watches goes missing.
+///
+/// Not everything on the card is here, and deliberately: the title, the badge and the spelling of
+/// the provenance mark differ by end for reasons the file header gives (a phone card header is one
+/// line beside a badge). What is asserted is the copy that is meant to be the SAME sentence.
+final class CriteriaDecisionCopyParityTests: XCTestCase {
+
+    private static let webCard = "src/web/src/components/CriteriaDecisionCard.tsx"
+
+    /// The repo root, found by walking up from this file until the web card is under foot.
+    /// Not a fixed number of `..` hops: the depth of this file is not the thing being asserted.
+    private func repoRoot() throws -> URL {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            if FileManager.default.fileExists(
+                atPath: dir.appendingPathComponent(Self.webCard).path) {
+                return dir
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        // Deliberately a failure and not an `XCTSkip`, for the reason in the type's note above.
+        throw ParityError.noRepo
+    }
+
+    private enum ParityError: Error, CustomStringConvertible {
+        case noRepo
+        var description: String {
+            "\(CriteriaDecisionCopyParityTests.webCard) was not found above this test file. "
+                + "OrbitKit's weakening card is one half of a pair; if the web half moved, move "
+                + "this check with it rather than deleting it."
+        }
+    }
+
+    /// The web card's source with its string literals put back together.
+    ///
+    /// TypeScript wraps a long sentence as `'…' + '…'` across lines, and where that wrap falls is a
+    /// formatting decision while the words are the contract. So adjacent literals are joined, and a
+    /// value sitting on the line under its `=` is pulled up — which lets every assertion below name
+    /// the declaration it is about rather than guess at the wrapping.
+    private func flatWebCard() throws -> String {
+        let source = try String(contentsOf: try repoRoot().appendingPathComponent(Self.webCard),
+                                encoding: .utf8)
+        return source
+            .replacingOccurrences(of: "'\\s*\\+\\s*'", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "=\\s*\\n\\s*'", with: "= '", options: .regularExpression)
+    }
+
+    /// The other end declares this constant with exactly these words.
+    ///
+    /// Anchored on the declaration and not on the sentence alone: `Refuse` appears in prose on both
+    /// ends, and a check a comment can satisfy is not a check.
+    private func assertDeclares(_ web: String, _ name: String, _ value: String, _ what: String,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(web.contains("\(name) = '\(value)'"),
+                      "\(what) drifted: the web card no longer declares "
+                          + "\(name) as \(value.debugDescription)",
+                      file: file, line: line)
+    }
+
+    /// The one string the web end writes inline, with no name to anchor on: matched as the literal.
+    private func assertLiteral(_ web: String, _ value: String, _ what: String,
+                               file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(web.contains("'\(value)'"),
+                      "\(what) drifted: the web card no longer contains \(value.debugDescription)",
+                      file: file, line: line)
+    }
+
+    // MARK: the words on the card
+
+    /// The heading in each of the three states, and the two answers.
+    func testTheHeadingsAndActionsMatchTheWebCard() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "CRITERIA_DECISION_HEADING", CriteriaDecisions.liveHeading,
+                       "the heading of a live card")
+        assertDeclares(web, "CRITERIA_DECISION_STALE_HEADING", CriteriaDecisions.staleHeading,
+                       "the heading of a card that can no longer be answered")
+        assertDeclares(web, "CRITERIA_DECISION_UNREAD_HEADING", CriteriaDecisions.unreadHeading,
+                       "the heading of a card that could not be re-read")
+        assertDeclares(web, "APPROVE_LABEL", CriteriaDecisions.approveLabel, "the approve action")
+        assertDeclares(web, "REFUSE_LABEL", CriteriaDecisions.refuseLabel, "the refuse action")
+    }
+
+    /// The two paragraphs, which are the ones a reader actually acts on — what refusing does NOT
+    /// stop, and why a stale card shows nothing.
+    func testTheTwoParagraphsMatchWordForWord() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "NOTHING_IS_ON_HOLD", CriteriaDecisions.nothingIsOnHold,
+                       "the line saying what is not at stake")
+        assertLiteral(web, CriteriaDecisions.goneBody, "the body of a stale card")
+    }
+
+    // MARK: what the card reports the door said
+
+    /// A card names the refusal it would meet in the door's own spelling. If one end re-spells a
+    /// code, that end stops recognising the refusal the server sends and says nothing about it.
+    func testTheRefusalCodesAreSpelledTheSameOnBothEnds() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "CRITERIA_DECISION_BASE_SEAL_MOVED",
+                       CriteriaDecisions.baseSealMovedRefusal, "the base-seal-moved refusal")
+        assertDeclares(web, "CRITERIA_DECISION_ALREADY_SETTLED",
+                       CriteriaDecisions.alreadySettledRefusal, "the already-settled refusal")
+    }
+}
