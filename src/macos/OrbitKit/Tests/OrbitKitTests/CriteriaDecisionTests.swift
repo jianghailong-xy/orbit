@@ -116,6 +116,24 @@ final class CriteriaDecisionTests: XCTestCase {
         }
     }
 
+    /// The bar counts questions; the buttons answer them. They part company in exactly one place.
+    func testAStaleCardStopsBeingCountedAsAQuestionButAnUnreadableOneDoesNot() {
+        let live = CriteriaDecisions.standing(queue: queue([row("i-1")]), intentId: "i-1")
+        let moved = CriteriaDecisions.standing(queue: queue([row("i-1", decidable: false)]),
+                                               intentId: "i-1")
+        let replaced = CriteriaDecisions.standing(queue: queue([row("i-2", supersedes: "i-1")]),
+                                                  intentId: "i-1")
+        let settled = CriteriaDecisions.standing(queue: queue([]), intentId: "i-1")
+        let unread = CriteriaDecisions.standing(queue: nil, intentId: "i-1")
+
+        XCTAssertEqual([live, moved, replaced, settled, unread].map(CriteriaDecisions.isOpen),
+                       [true, false, false, false, true])
+        // The one that differs from `answerable`, and the reason: a failed read is this device's
+        // problem, not an answer somebody gave.
+        XCTAssertFalse(unread.answerable)
+        XCTAssertTrue(CriteriaDecisions.isOpen(unread))
+    }
+
     // MARK: what the card shows
 
     func testTheMetaLineCarriesTheProvenanceAndWhichRulerThisWasDraftedAgainst() {
@@ -278,6 +296,13 @@ final class CriteriaDecisionTests: XCTestCase {
         let done = AcceptanceConfirmations.checks(confirmation(.confirmed))
         XCTAssertTrue(done.allSatisfy(\.ok))
         XCTAssertTrue(done.last!.text.contains("Editing any criterion ends this confirmation"))
+    }
+
+    func testAConfirmedSetIsNoLongerAQuestionAndAnUnreadableOneStillIs() {
+        XCTAssertTrue(AcceptanceConfirmations.isOpen(confirmation(.unconfirmed)))
+        XCTAssertTrue(AcceptanceConfirmations.isOpen(confirmation(.stale)))
+        XCTAssertFalse(AcceptanceConfirmations.isOpen(confirmation(.confirmed)))
+        XCTAssertTrue(AcceptanceConfirmations.isOpen(nil))
     }
 
     func testAStaleConfirmationSaysWhichVersionWasConfirmedBefore() {

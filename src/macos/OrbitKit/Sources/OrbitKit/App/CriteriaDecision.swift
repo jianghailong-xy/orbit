@@ -285,12 +285,10 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     }
 
     public let id: String
-    public let title: String?
     public let acceptanceCriteriaItems: [Item]?
 
-    public init(id: String, title: String? = nil, acceptanceCriteriaItems: [Item]? = nil) {
+    public init(id: String, acceptanceCriteriaItems: [Item]? = nil) {
         self.id = id
-        self.title = title
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
     }
 }
@@ -486,6 +484,20 @@ public enum CriteriaDecisions {
         }
     }
 
+    /// Whether this card is still a QUESTION — which is not the same as whether it can be answered.
+    ///
+    /// The bar above the transcript counts by this and the buttons are gated by `answerable`, and
+    /// the two differ in exactly one case, deliberately: a card this device could not re-derive is
+    /// unanswerable (nobody can say the door would take it) and still open (nobody can say it was
+    /// closed either). Declaring it closed would be the app deciding, from a failed read, that
+    /// somebody's question had gone away.
+    public static func isOpen(_ standing: CriteriaDecisionStanding) -> Bool {
+        switch standing.state {
+        case .decidable, .unread:                        return true
+        case .baseSealMoved, .superseded, .alreadySettled: return false
+        }
+    }
+
     /// The proposed set as a numbered line each, in the server's own ordinals. One criterion the
     /// proposal ADDS is marked, because `id == nil` is the only way a reader can tell an addition
     /// from a rewrite — this read publishes the proposed set and not a diff.
@@ -610,6 +622,14 @@ public enum AcceptanceConfirmations {
     /// could not be read offers nothing, for the reason the weakening card's `unread` does.
     public static func answerable(_ standing: StandardSetConfirmationStanding?) -> Bool {
         guard let standing else { return false }
+        return standing.state != .confirmed
+    }
+
+    /// Whether the confirmation is still a question — the same distinction the other card draws:
+    /// a standing that could not be read is unanswerable and open, because a failed read is this
+    /// device's problem and not an answer.
+    public static func isOpen(_ standing: StandardSetConfirmationStanding?) -> Bool {
+        guard let standing else { return true }
         return standing.state != .confirmed
     }
 

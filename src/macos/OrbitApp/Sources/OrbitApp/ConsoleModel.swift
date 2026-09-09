@@ -1786,7 +1786,22 @@ final class ConsoleModel {
 
     /// The open questions below the reader, oldest first — what the "needs you" bar counts and
     /// where a tap on it goes.
-    var openQuestionRowIDs: [String] { decisionCards.map(\.id) }
+    ///
+    /// A card that has gone stale stays ON SCREEN (it is the only thing that can explain what
+    /// happened to the question) but stops being counted here: pointing somebody at a dead card and
+    /// calling it an open question is worse than saying nothing. `isOpen` is OrbitKit's, so the
+    /// one place that decides "still a question" is the same place that decides "answerable" — and
+    /// so the one case where they differ, an unreadable standing, cannot drift apart.
+    var openQuestionRowIDs: [String] {
+        decisionCards.filter { card in
+            switch card.kind {
+            case .criteriaDecision(let intentID):
+                return CriteriaDecisions.isOpen(criteriaStanding(intentID))
+            case .acceptanceConfirmation:
+                return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
+            }
+        }.map(\.id)
+    }
 
     /// A row the transcript has been asked to scroll to. The tick rides along so pressing the bar
     /// twice scrolls twice, which a bare id could not express.

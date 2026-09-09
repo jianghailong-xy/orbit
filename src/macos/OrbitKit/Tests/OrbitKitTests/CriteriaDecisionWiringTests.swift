@@ -126,6 +126,18 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                       "a press scrolls to the card rather than navigating anywhere")
     }
 
+    func testTheBarCountsOpenQuestionsRatherThanCardsOnScreen() throws {
+        let console = try source(Self.consolePath)
+        XCTAssertTrue(console.contains("CriteriaDecisions.isOpen(criteriaStanding(intentID))"),
+                      "a card that went stale stays on screen to explain itself, and stops being "
+                          + "counted: pointing somebody at a dead card and calling it an open "
+                          + "question is worse than saying nothing")
+        XCTAssertTrue(console.contains("AcceptanceConfirmations.isOpen(acceptanceConfirmation)"),
+                      "and the confirmation is counted by the same rule, from the same place")
+        XCTAssertFalse(console.contains("var openQuestionRowIDs: [String] { decisionCards.map(\\.id) }"),
+                       "counting every delivered card is exactly the version this replaced")
+    }
+
     func testTheConsoleOnlyAsksAboutARulerItCoordinates() throws {
         let console = try source(Self.consolePath)
         XCTAssertTrue(console.contains("guard !isDraft, let projectID, !loadingRuler else { return }"),
