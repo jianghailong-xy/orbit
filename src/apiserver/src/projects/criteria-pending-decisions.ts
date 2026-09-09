@@ -230,6 +230,75 @@ export async function readPendingCriteriaDecisions(
 }
 
 /**
+ * One held proposal as the ACCOUNT OWNER reads it: the row above, and the key that answers it.
+ *
+ * `commitToken` is the proposal's own one-time secret and the second of the decision door's two
+ * keys — the first being the owner credential the request arrived with. The proposer never
+ * receives it (`criteriaUnchangedNotice` hands back an address and nothing that could act on one),
+ * so this read is the ONLY place it leaves the database, and that is the whole of the argument
+ * that a decision card is authorised by the server rather than typed by an agent: the browser can
+ * press the button because the server gave the owner the key, not because the card said so.
+ */
+export interface OwnerPendingCriteriaDecision extends PendingCriteriaDecision {
+  commitToken: string;
+}
+
+/** The queue above, on the owner's path, where every row carries its key. */
+export interface OwnerPendingCriteriaDecisionQueue
+  extends Omit<PendingCriteriaDecisionQueue, 'pending'> {
+  pending: OwnerPendingCriteriaDecision[];
+}
+
+/**
+ * The same derivation, for the one reader that may hold the keys.
+ *
+ * WHY THIS IS A SECOND FUNCTION AND NOT A FLAG ON THE FIRST
+ * ---------------------------------------------------------
+ * `readPendingCriteriaDecisions` is what `coordinator-delivery.service.ts` composes the card from,
+ * and an agent reads that card. So the requirement is not "the token is usually absent there" but
+ * "the token cannot be there": the query above never SELECTs `commit_token` at all, and no
+ * argument to it can make it. What separates the two paths is therefore a fact about which columns
+ * were read, which is checkable by looking, rather than a branch somebody has to keep correct.
+ *
+ * WHY THE KEYS ARE A SECOND QUERY AND NOT A JOIN
+ * ----------------------------------------------
+ * For the same reason. Which proposals are pending is derived in exactly one place; this adds a
+ * column to the rows that derivation already picked, and cannot disagree with it about which rows
+ * those are. A proposal answered between the two reads comes back carrying a key the door will
+ * refuse as `ALREADY_SETTLED`, which is the ordinary answer to a card rendered a moment too early
+ * — the door re-reads under the project lock, and it, not this, is what decides.
+ *
+ * IT DOES NOT CHECK WHO IS ASKING. The caller does: `ProjectsService.pendingCriteriaDecisions` is
+ * where the owner-channel rule is applied, on the same rail as the door it hands the keys to.
+ */
+export async function readPendingCriteriaDecisionsForOwner(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+  readAt: Date = new Date(),
+): Promise<OwnerPendingCriteriaDecisionQueue> {
+  const queue = await readPendingCriteriaDecisions(tx, ownerId, projectId, readAt);
+  if (queue.pending.length === 0) return { ...queue, pending: [] };
+  const keys = new Map(
+    (await tx.projectRatifiedActionIntent.findMany({
+      where: { ownerId, projectId, id: { in: queue.pending.map((row) => row.intentId) } },
+      select: { id: true, commitToken: true },
+    })).map((row) => [row.id, row.commitToken]),
+  );
+  return {
+    ...queue,
+    // The fallback is unreachable rather than defensive: 0195's BEFORE UPDATE OR DELETE trigger
+    // refuses every write to a filed intent, so the row each of these ids came from a moment ago is
+    // still there. It is spelled as a fallback because a `!` here would be a claim about that
+    // trigger made in a file that cannot see it.
+    pending: queue.pending.map((row) => ({
+      ...row,
+      commitToken: keys.get(row.intentId) ?? '',
+    })),
+  };
+}
+
+/**
  * "Somebody answered this proposal", as one SQL clause — the same sentence `settledIntentIds`
  * says, for the callers that have to ask it of the database inside a query rather than of rows
  * they already hold.

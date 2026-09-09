@@ -359,6 +359,29 @@ export class ProjectsController {
   }
 
   /**
+   * Which held criteria proposals this project's owner is being asked to decide — and, on each
+   * row, the `commitToken` that answers it.
+   *
+   * THE READ THE CARD IS MADE OF. `src/web` renders it (`CriteriaDecisionCard`,
+   * `pendingCriteriaDecisionsQuery`), and re-reads it to decide whether its own buttons are still
+   * live, rather than trusting the frame it was rendered from. That is why this exists beside the
+   * message the coordinator conversation already carries: the message is a delivery and can be
+   * missed, and this is the standing question.
+   *
+   * OWNER-AUTHENTICATED AND NOTHING ELSE. Same rail as the confirmation and the door above, for
+   * the same reason and with one addition of its own: what comes back is not a description of a
+   * proposal but the ability to answer it, so the rule that governs the door governs this too and
+   * is applied by the same predicate, in the service, where every caller meets it.
+   */
+  @Get(':id/acceptance/criteria-decisions/pending')
+  pendingCriteriaDecisions(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.projects.pendingCriteriaDecisions(user.userId, id);
+  }
+
+  /**
    * The account owner answering ONE held criteria proposal — the decision door.
    *
    * On the same rail as the confirmation above and for the same reason: this controller carries no

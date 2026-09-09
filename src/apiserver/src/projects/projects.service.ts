@@ -50,7 +50,11 @@ import {
 } from './dto';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { criteriaDecisionPendingFact } from './coordinator-wake';
-import { criteriaDecisionRecorded } from './criteria-pending-decisions';
+import {
+  criteriaDecisionRecorded,
+  readPendingCriteriaDecisionsForOwner,
+  type OwnerPendingCriteriaDecisionQueue,
+} from './criteria-pending-decisions';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import {
   CRITERIA_WEAKENING_EFFECT_CLASS,
@@ -1340,6 +1344,47 @@ export class ProjectsService {
         semanticHash: true,
       },
     });
+  }
+
+  /**
+   * ── THE KEY SIDE OF THE DECISION DOOR ──────────────────────────────────────────────────────
+   *
+   * What this project's owner is being asked to decide, with the key each answer needs in it.
+   *
+   * WHY THE READ IS ON THE SAME RAIL AS THE DOOR
+   * --------------------------------------------
+   * It hands out `commitToken`, and a commitToken is not a description of a proposal — it is the
+   * ability to answer one. So "who may read this" is the same question as "who may decide this",
+   * and it gets the same answer from the same predicate rather than a second one that could drift:
+   * `refuseSessionAuthoredCriteriaDecision`, which `decideCriteriaChange` applies one method down.
+   * A session that could read the keys would be a session that could decide, whatever the door
+   * below it says, and the refusal would be a rule enforced at one door — which
+   * `coordinator-authority.ts` §2 says is not a boundary.
+   *
+   * The refusal is not a claim that a session may not know a proposal is waiting. It may, and it
+   * is told: `coordinator-delivery.service.ts` puts exactly that on the coordinator's conversation,
+   * composed from `readPendingCriteriaDecisions`, which selects no key. What a session may not have
+   * is the means to answer, which is why the two reads are two functions.
+   *
+   * NOTHING IS WRITTEN HERE, INCLUDING BY THE REFUSAL. The read is derived from committed rows
+   * every time it is asked, so there is no queue state for a refused read to have consumed.
+   */
+  async pendingCriteriaDecisions(
+    ownerId: string,
+    projectId: string,
+    actingSessionId?: string,
+  ): Promise<OwnerPendingCriteriaDecisionQueue> {
+    const refusal = refuseSessionAuthoredCriteriaDecision(actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+    // Before the derivation and not after: an unknown or another tenant's id is a 404 rather than
+    // an empty queue, so this route cannot be used to learn which project ids exist by the
+    // difference between two successful answers.
+    await this.assertOwned(ownerId, projectId);
+    return readPendingCriteriaDecisionsForOwner(
+      this.prisma as unknown as Prisma.TransactionClient,
+      ownerId,
+      projectId,
+    );
   }
 
   /**

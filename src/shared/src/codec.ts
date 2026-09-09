@@ -269,6 +269,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'ratificationId',
   'newDecisionRequestId',
   'intentId',
+  // The SAME address under the name a row uses for the proposal it displaced. It has to be spelled
+  // the way `intentId` is, because the only reader of it compares the two: a criteria decision card
+  // finds its replacement by looking for the row whose `supersededIntentId` equals the id it is
+  // rendering (`CriteriaDecisionCard.criteriaDecisionStanding`). Left out of this set, that
+  // comparison is base62 against a raw UUID, it never matches, and a superseded proposal renders as
+  // one that was answered.
+  'supersededIntentId',
   // Outcome fact ingress is tenant-scoped, but each key is still an address in the canonical fact
   // and evaluation-cut APIs rather than an equality capability. Causal predecessor ids have the
   // same wire semantics as the fact id they reference.
