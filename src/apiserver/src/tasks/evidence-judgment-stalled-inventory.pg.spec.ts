@@ -46,7 +46,11 @@ const suite = PG_URL ? test : test.skip;
 const API = path.resolve(__dirname, '../..');
 const ROOT = path.resolve(__dirname, '../../../..');
 const MIGRATIONS = path.join(API, 'prisma', 'migrations');
-const PRISMA = path.join(API, 'node_modules', 'prisma', 'build', 'index.js');
+// Resolved rather than named: which `node_modules` holds the `prisma` CLI is a fact
+// about the lockfile's hoisting, not about this repo — the prisma group bump lifts it
+// to the root and this path stops existing. `prisma` itself has no main export, so the
+// entry is named explicitly and let node find whichever tree it lives in.
+const PRISMA = require.resolve('prisma/build/index.js');
 const REPORT = path.join(ROOT, 'scripts', 'evidence-judgment-stalled-tasks.sql');
 
 /**

@@ -68,7 +68,11 @@ const skip = !PG_URL;
 
 const API = path.resolve(__dirname, '../..');
 const MIGRATIONS = path.join(API, 'prisma', 'migrations');
-const PRISMA = path.join(API, 'node_modules', 'prisma', 'build', 'index.js');
+// Resolved rather than named: which `node_modules` holds the `prisma` CLI is a fact
+// about the lockfile's hoisting, not about this repo — the prisma group bump lifts it
+// to the root and this path stops existing. `prisma` itself has no main export, so the
+// entry is named explicitly and let node find whichever tree it lives in.
+const PRISMA = require.resolve('prisma/build/index.js');
 
 /** 被测的那一条。前沿在它**之前**停下，所以重放开始时这个库从没听说过它。 */
 const UNIT = '0231_project_codebase_session_source';
