@@ -783,10 +783,20 @@ test('the duplicate shapes the unit tests construct are the ones this server pro
         assert.equal(error.meta?.target, undefined,
           `${name}: \`meta.target\` is what the classifier used to read, and this adapter does not set it`);
         const cause = (error.meta as {
-          driverAdapterError?: { cause?: { originalMessage?: string; constraint?: { fields?: string[] } } };
+          driverAdapterError?: {
+            cause?: { originalMessage?: string; constraint?: { fields?: string[]; index?: string } };
+          };
         }).driverAdapterError?.cause;
         assert.match(String(cause?.originalMessage), new RegExp(constraint), name);
-        assert.deepEqual(cause?.constraint?.fields, [field], name);
+        // Which field carries the key MOVED between clients this pin permits: 7.9 gives the
+        // conflicting columns, 7.10 dropped that and gives the index's own name instead. Both are
+        // accepted, and one of them is REQUIRED — the classifier needs something to read, and a
+        // release that offered neither would leave it with nothing while this test stayed green.
+        const shape = cause?.constraint;
+        if (shape?.fields !== undefined) assert.deepEqual(shape.fields, [field], `${name}: columns`);
+        else assert.equal(shape?.index, constraint, `${name}: index name`);
+        assert.ok(Array.isArray(shape?.fields) || typeof shape?.index === 'string',
+          `${name}: the adapter must still name the key it collided on, in one spelling or another`);
       }
     } finally {
       await services.db.$disconnect();

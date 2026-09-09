@@ -53,6 +53,33 @@ function adapterConflict(constraint: string, fields: string[]): Prisma.PrismaCli
   });
 }
 
+/**
+ * The same duplicate as prisma 7.10 reports it, captured off a real PostgreSQL the same way the
+ * one above was. The difference is the whole point: `constraint.fields` is GONE and the only
+ * remaining name for the key is `constraint.index`. A classifier written against the column list
+ * says "not mine" here — which is what `^7.9.1` resolving forward to 7.10 does to it, no upgrade
+ * of this repo required — so the pair is kept side by side and both are classified.
+ */
+function adapterConflict710(constraint: string, table: string): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: '7.10.0',
+    meta: {
+      modelName: 'Session',
+      driverAdapterError: {
+        name: 'DriverAdapterError',
+        cause: {
+          originalCode: '23505',
+          originalMessage: `duplicate key value violates unique constraint "${constraint}"`,
+          kind: 'UniqueConstraintViolation',
+          constraint: { index: constraint },
+          table,
+        },
+      },
+    },
+  });
+}
+
 type Row = {
   id: string;
   status: RunStatus;
@@ -305,6 +332,42 @@ test('the primary key as Prisma 7\'s pg adapter reports it is still classified',
   const result = await f.service.execute(OWNER_ID, TASK_ID, undefined, f.requestToken);
 
   assert.deepEqual(result, { ok: true, sessionId: WINNER_ID });
+});
+
+// The same conflict as prisma 7.10 reports it. `^7.9.1` already permits 7.10, so this is not a
+// test about an upgrade — it is the shape this pin can resolve to at any `npm install`.
+//
+// It goes through the HOLDER path deliberately. A case that sets `atDesiredId` proves nothing
+// about classification: the pre-insert dedup read finds that row and returns it before `create`
+// is ever called, so the conflict is never raised and the classifier never consulted. Reaching
+// the holder is what forces the insert, the P2002, and the decision about whether it is ours.
+test('the execution claim as prisma 7.10 reports it — index name, no column list — is classified', async () => {
+  const f = fixture({
+    conflict: adapterConflict710('session_task_execution_claim_idx', 'session'),
+    atDesiredId: null,
+    holder: holderRow({ status: RunStatus.RUNNING }),
+  });
+
+  await assert.rejects(() => f.service.execute(OWNER_ID, TASK_ID, undefined, f.requestToken), (error: Error) => {
+    assert.ok(error instanceof ConflictException,
+      `409, not ${error.constructor.name} — 7.10 drops \`constraint.fields\`, and a classifier `
+      + 'that reads only the column list rethrows the raw P2002 as a 500');
+    assert.match(error.message, /holds its execution claim/);
+    return true;
+  });
+});
+
+test('and a foreign unique key in 7.10\'s shape is still not classified', async () => {
+  // The negative control has to be re-run in this shape too: matching on index NAMES is a wider
+  // net than matching on `task_id`, and a net that also caught `session_project_action_id_key`
+  // would answer somebody else's duplicate with a sentence about running a task.
+  const foreign = adapterConflict710('session_project_action_id_key', 'session');
+  const f = fixture({ conflict: foreign, atDesiredId: null, holder: null });
+
+  await assert.rejects(() => f.service.execute(OWNER_ID, TASK_ID, undefined, f.requestToken), (error: Error) => {
+    assert.equal(error, foreign, 'classified, not swallowed into a sentence about running a task');
+    return true;
+  });
 });
 
 test('and a unique key this unit does not own is still not classified in that shape either', async () => {

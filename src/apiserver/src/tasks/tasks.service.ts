@@ -675,7 +675,15 @@ export const TASK_LIST_SELECT = {
  */
 function isTaskRunClaimConflict(error: unknown): boolean {
   const named = conflictingUniqueKey(error);
-  return /task_id/.test(named) || /\bid\b/.test(named) || /session_pkey/.test(named);
+  // The index NAMES come first because they are the only spelling every release has given us:
+  // prisma 7.9 reported the conflicting COLUMNS (`constraint.fields: ['task_id']`) and 7.10
+  // replaced that with the index's own name (`constraint.index`), leaving no column list at all.
+  // A predicate that knew only the columns therefore stopped recognising the claim index the
+  // moment the client moved — `session_task_execution_claim_idx` contains neither `task_id` nor
+  // a standalone `id` — and every lost claim went back to reaching the API as a 500. Both
+  // releases put the index name in `originalMessage`, so matching on it holds either way.
+  return /session_task_execution_claim_idx/.test(named) || /session_pkey/.test(named)
+    || /task_id/.test(named) || /\bid\b/.test(named);
 }
 
 /**
@@ -690,8 +698,13 @@ function isTaskRunClaimConflict(error: unknown): boolean {
  * PostgreSQL sentence in it. Only a real server can show that; the shape is invisible to a double.
  *
  *  - Prisma before the driver adapter: `meta.target`, the conflicting column list;
- *  - Prisma 7 with the pg adapter: `meta.driverAdapterError.cause.constraint.fields`, and the
- *    constraint's own name inside `originalMessage`.
+ *  - Prisma 7.9 with the pg adapter: `meta.driverAdapterError.cause.constraint.fields`;
+ *  - Prisma 7.10 with the pg adapter: `constraint.fields` is GONE, replaced by
+ *    `constraint.index` — the index's name rather than the columns under it.
+ *
+ * Every one of them also names the index inside `originalMessage`, which is why all four sources
+ * are joined and matched together rather than picked between: the caller cannot know which client
+ * raised the error, and a release that moves the field must not silently turn the guard off.
  *
  * The rendered `error.message` is deliberately NOT consulted: Prisma renders a code frame into it,
  * so matching there would classify on whatever the surrounding source happens to say.
