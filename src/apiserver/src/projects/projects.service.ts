@@ -1082,6 +1082,12 @@ export class ProjectsService {
    * did the displacing. A proposal identical to the one already pending displaces nothing and
    * files nothing — the caller gets the proposal it already has, which is what makes every
    * recorded supersession an ask that genuinely changed.
+   *
+   * BOTH OF THOSE READ `pendingWeakeningProposal`, AND THAT IS WHY IT EXCLUDES ANSWERED ONES. An
+   * ANSWERED proposal is not the proposal the caller already has: its key is spent. Were it still
+   * "pending" here, the identical-ask branch would hand a rejected proposal's id back to whoever
+   * re-made the edit, and `supersedes` would claim a later edit "replaced" something the owner had
+   * already answered — which is not what happened to it, and not what the reason text says.
    */
   private static async holdWeakeningAcceptanceEdit(
     tx: Prisma.TransactionClient,
@@ -1105,8 +1111,8 @@ export class ProjectsService {
 
     const pending = await ProjectsService.pendingWeakeningProposal(tx, projectId);
     if (pending && pending.actionDigest === actionDigest && pending.seal === baseline.digest) {
-      // The same ask against the same ruler: this is the proposal already on record, not a second
-      // one. Re-filing it would displace a proposal with a copy of itself.
+      // The same ask against the same ruler, still unanswered: this is the proposal already on
+      // record, not a second one. Re-filing it would displace a proposal with a copy of itself.
       return {
         applied: false,
         intentId: pending.id,
@@ -1198,10 +1204,21 @@ export class ProjectsService {
    * The project's one pending weakening proposal, or null.
    *
    * "Pending" is DERIVED and has to be: the intent row has no status column and cannot be updated,
-   * so nothing can mark one settled in place. It is the proposal no later proposal supersedes —
-   * read off the supersession links themselves rather than off `created_at`, because two
-   * transactions can share a timestamp and "the newest row" would then be a coin toss where the
-   * invariant needs an answer.
+   * so nothing can mark one settled in place. It is the proposal that is neither DISPLACED nor
+   * ANSWERED — and both halves are needed, because they are two different ways of stopping being
+   * pending and neither implies the other.
+   *
+   * DISPLACED is read off the supersession links themselves rather than off `created_at`, because
+   * two transactions can share a timestamp and "the newest row" would then be a coin toss where
+   * the invariant needs an answer.
+   *
+   * ANSWERED is one row in `project_criteria_decision`, keyed by the intent — the same single
+   * predicate the decision door refuses a second answer with, so "settled" means the same thing on
+   * the read that composes a proposal and on the door that answers one. WITHOUT this half, a
+   * REJECTED proposal stays pending forever: `holdWeakeningAcceptanceEdit` would hand the same
+   * edit back its id rather than filing a fresh one, and that proposal's commit token is already
+   * spent, so the caller would be pointed at a proposal nobody can answer. Rejecting an edit has
+   * to leave it re-proposable; it is a "no" to this ask, not a ban on ever asking again.
    */
   private static async pendingWeakeningProposal(
     tx: Prisma.TransactionClient,
@@ -1217,6 +1234,8 @@ export class ProjectsService {
             WHERE s."project_id" = i."project_id"
               AND s."effect_class" = i."effect_class"
               AND s."action"->'supersedes'->>'intentId' = i."id"::text)
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_criteria_decision" d WHERE d."intent_id" = i."id")
        ORDER BY i."created_at" DESC
        LIMIT 1`);
     const [row] = rows;
