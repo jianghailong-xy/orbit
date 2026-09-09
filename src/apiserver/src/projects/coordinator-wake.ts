@@ -93,6 +93,8 @@ export const COORDINATOR_WAKE_EVENTS = [
   'COMPLETION_EVIDENCE_REVISED',
   /** A terminal result is durable but the control plane has not committed its completion ACK. */
   'COMPLETION_ACK_STALE',
+  /** A loosening edit to this project's acceptance criteria is held, waiting on the owner. */
+  'CRITERIA_DECISION_PENDING',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -543,5 +545,63 @@ export function criterionUnlandedFact(
     subjectId: criterionSubjectId(projectId, criterionKey),
     subjectVersion: settlementVersion(serving),
     detail: { criterionKey, taskCount: serving.length, landing },
+  };
+}
+
+/**
+ * `CRITERIA_DECISION_PENDING` — a loosening edit to this project's criteria is held for the owner.
+ *
+ * THE PREDICATE IS "DECIDABLE", NOT "EXISTS"
+ * ==========================================
+ * The fact is admitted only for a proposal a decision could actually be recorded on today. A
+ * proposal whose baseline seal has since moved is a question nobody can answer — the door refuses
+ * every decision on it — and delivering a card whose only button is refused whichever way it is
+ * pressed is the defect `pending-evidence-judgments.ts` was re-scoped to stop. So this event admits
+ * no partial state: answerable, or the fact does not exist. Nothing is lost by that, because the
+ * derived read (`criteria-pending-decisions.ts`) still returns the stalled row, carrying the
+ * refusal and the action that clears it, to whoever goes looking.
+ *
+ * THE VERSION IS THE PROPOSAL ROW, AND THE PREDICATE IT SATISFIED
+ * ==============================================================
+ * `intentId` is a primary key of an immutable row: 0195's BEFORE UPDATE OR DELETE trigger refuses
+ * every write to a filed proposal, so it cannot be moved at all, and one proposal is therefore one
+ * question however many times it is re-derived. That is §2's "the session id of the attempt"
+ * argument, over a row with a stronger guarantee behind it. Superseding a proposal files a NEW row
+ * with a new id, which is a new question — correctly, because what the owner is being asked to
+ * approve has changed.
+ *
+ * `baselineSeal`, `actionDigest` and the pinned `decidable` are hashed in beside it even though the
+ * id alone already determines the first two. That is the rule `PROJECT_ACCEPTANCE_LANDED` learned:
+ * a field the predicate pins constant TODAY still goes into the version, so that a predicate later
+ * loosened to admit some other combination cannot derive a key the stricter reading already spent.
+ */
+export function criteriaDecisionPendingFact(
+  projectId: string,
+  proposal: {
+    intentId: string;
+    actionDigest: string;
+    baselineSeal: string;
+    decidability: { decidable: boolean };
+  },
+): WakeFact | null {
+  if (!proposal.decidability.decidable) return null;
+  return {
+    event: 'CRITERIA_DECISION_PENDING',
+    projectId,
+    subjectType: 'PROJECT',
+    subjectId: projectId,
+    subjectVersion: createHash('sha256')
+      .update(canonicalJson([
+        proposal.intentId,
+        proposal.baselineSeal,
+        proposal.actionDigest,
+        true,
+      ]))
+      .digest('hex'),
+    detail: {
+      intentId: proposal.intentId,
+      actionDigest: proposal.actionDigest,
+      baselineSeal: proposal.baselineSeal,
+    },
   };
 }

@@ -2,6 +2,10 @@ import { uuidToBase62 } from '@orbit/shared';
 
 import { buildEvidenceAskProtocol, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
+import type {
+  PendingCriteriaDecision,
+  PendingCriteriaDecisionQueue,
+} from './criteria-pending-decisions';
 
 /**
  * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
@@ -115,6 +119,12 @@ export function describeWakeFact(fact: WakeFact): string {
         + `由项目 coordinator 负责，原因是 ${reason}。`
       );
       }
+    case 'CRITERIA_DECISION_PENDING':
+      return (
+        '这个项目收到了一次会放松验收标准的编辑。它没有生效——在册的标准一个字都没动——'
+        + `而是被扣成了一条待决提案（提案 ${String(detail.intentId ?? fact.subjectId)}，`
+        + `内容摘要 ${String(detail.actionDigest ?? '未知').slice(0, 16)}…），等账号所有者决定。`
+      );
     default:
       return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
   }
@@ -282,8 +292,12 @@ export function buildCoordinatorDeliveryMessage(
   fact: WakeFact,
   projectTitle: string,
   ask?: { ask: EvidenceAsk; readAt: Date } | null,
+  decisions?: PendingCriteriaDecisionQueue | null,
 ): string {
   const projectId = uuidToBase62(fact.projectId);
+  if (fact.event === 'CRITERIA_DECISION_PENDING') {
+    return buildCriteriaDecisionMessage(fact, projectTitle, projectId, decisions ?? null);
+  }
   if (fact.event === 'PROJECT_ACCEPTANCE_LANDED') {
     const criteria = settledCriteriaOf(fact);
     return (
@@ -326,5 +340,92 @@ export function buildCoordinatorDeliveryMessage(
     + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
     + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
     + '所以以你自己刚读到的库里状态为准。'
+  );
+}
+
+/** One held proposal's own diff, numbered, so the card carries the thing it is asking about. */
+function renderProposedCriteria(proposed: readonly PendingCriteriaDecision['proposed'][number][]) {
+  return proposed
+    .map((criterion, index) => (
+      `${index + 1}. ${criterion.text}\n`
+      + `   判定方法：${criterion.verificationMethod}`
+      + `${criterion.id ? '' : '（这一条是新增的）'}`
+    ))
+    .join('\n');
+}
+
+/**
+ * `CRITERIA_DECISION_PENDING`'s message: a held loosening, and what the coordinator can do about it.
+ *
+ * WHY THIS CARD CARRIES A SNAPSHOT, LIKE THE ACCEPTANCE ONE AND UNLIKE THE OTHERS
+ * ==============================================================================
+ * The question is "should this diff take effect", and a question about a diff that does not carry
+ * the diff is one its reader cannot pass on without going to fetch what it is being asked about —
+ * and the thing it would have to fetch is not readable from the criteria tables at all, because the
+ * whole point of the hold is that the proposed version was never written to them. So the proposal
+ * is in the card, and the card says out loud that it is a snapshot taken at `readAt`; the criteria
+ * IN FORCE stay a read, because those are on record and unchanged.
+ *
+ * WHY IT SAYS "YOU CANNOT ANSWER THIS" IN THE SAME BREATH AS "HERE IS THE DIFF"
+ * ============================================================================
+ * Approving a looser ruler is the account owner's through their own authenticated channel, for the
+ * same reason `CONFIRM_ACCEPTANCE_CRITERIA` is: the party asking for the ruler to move must not be
+ * the party that moves it, and a coordinator session is on the asking side of that line whoever
+ * filed this particular proposal. A card that showed the diff without saying so would send a
+ * session looking for a tool that is not there, and the honest version of "you cannot" is the
+ * action it replaces — hand it to the person.
+ *
+ * WHEN THE SNAPSHOT SAYS THE QUESTION IS ALREADY GONE
+ * ===================================================
+ * The read happens at DELIVERY time and the fact was derived earlier, so a proposal can be answered,
+ * displaced or stranded in between. The message then says which, rather than rendering a diff
+ * nobody can act on — and it is still delivered, because "the thing you were about to be asked
+ * about is already settled" is worth one line to a reader who may have been told about it by some
+ * other route.
+ */
+function buildCriteriaDecisionMessage(
+  fact: WakeFact,
+  projectTitle: string,
+  projectId: string,
+  queue: PendingCriteriaDecisionQueue | null,
+): string {
+  const detail = (fact.detail ?? {}) as Record<string, unknown>;
+  const intentId = String(detail.intentId ?? fact.subjectId);
+  const row = queue?.pending.find((pending) => pending.intentId === intentId) ?? null;
+  const closing = (
+    `全量状态自己读：project_get（projectId 传 ${projectId}）读这个项目此刻在册的验收标准——`
+    + '上面那份提案不在里面，这正是「被扣住」的意思。\n\n'
+    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+    + '所以以你自己刚读到的库里状态为准。'
+  );
+  if (!row) {
+    return (
+      `【项目「${projectTitle}」有一条待决的验收标准放松提案，但它已经不在待决队列里了】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `${queue ? `在投递这条消息的时刻（${queue.readAt.toISOString()}）重新读了一次账本，` : ''}`
+      + `提案 ${intentId} 已经不是这个项目的待决提案了：要么已经有人答过它，`
+      + '要么它被一条更晚的提案顶掉了。这两种情况都不需要你做什么。\n\n'
+      + `${closing}`
+    );
+  }
+  const undecidable = !row.decidability.decidable;
+  return (
+    `【项目「${projectTitle}」有一条放松验收标准的提案在等账号所有者决定】\n\n`
+    + `${describeWakeFact(fact)}\n\n`
+    + `提案要把这个项目的验收标准改成下面这 ${row.proposed.length} 条`
+    + `（这是投递这条消息时读到的快照，读取时刻 ${queue!.readAt.toISOString()}）：\n`
+    + `${renderProposedCriteria(row.proposed)}\n\n`
+    + (undecidable
+      ? '这条提案现在答不了：它是对着另一版标准集写的，而在册的标准从那以后又动过了'
+        + `（提案的基线 ${row.baselineSeal.slice(0, 16)}…，现在在册的是 `
+        + `${row.currentSeal.slice(0, 16)}…）。决定门会以 ${row.decidability.refusal} 拒掉任何决定，`
+        + '清掉它的办法只有一个：照现在在册的标准重新提一次。'
+        + '你要做的是把这件事告诉提出它的那一方，而不是替他重提。\n\n'
+      : '这一句你答不了：放松尺子只走账号所有者自己认证的通道，'
+        + '带 acting session 的调用会被服务端拒掉——提出放松的一方不能同时是批准它的一方。'
+        + '你要做的是把上面这份 diff 交给账号所有者，让他在网页上决定；'
+        + `批准会绑定当前这一版标准（${row.baselineSeal.slice(0, 16)}…），`
+        + '标准在他决定之前又动了的话，这条提案就要重提。\n\n')
+    + `${closing}`
   );
 }

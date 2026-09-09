@@ -11,6 +11,10 @@ import { SessionsService } from '../sessions/sessions.service';
 import { buildEvidenceAsk, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
 import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
+import {
+  readPendingCriteriaDecisions,
+  type PendingCriteriaDecisionQueue,
+} from './criteria-pending-decisions';
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
@@ -289,6 +293,16 @@ export class CoordinatorDeliveryService {
       ? await this.evidenceAsk(project.ownerId, standing)
       : null;
 
+    // The same shape, for the other fact whose card is a question rather than an instruction: a
+    // held criteria proposal. Read HERE, at delivery, and not folded into the fact — the fact was
+    // derived at the commit that filed the proposal, and between then and now the proposal can have
+    // been answered, displaced, or stranded by an edit that moved the seal under it. What the card
+    // says has to be what is true when it is sent, and nothing that is true only when it is sent
+    // can live in an immutable ledger row.
+    const decisions = fact.event === 'CRITERIA_DECISION_PENDING'
+      ? await this.criteriaDecisions(project.ownerId, project.id)
+      : null;
+
     // The fact's own identity, spent as the turn's idempotency key. `createTurn` holds
     // `(session_id, client_turn_id)` unique and replays the committed turn for a repeat of the
     // same payload, so "the same fact does not say the same thing twice" is a database rule here
@@ -298,7 +312,7 @@ export class CoordinatorDeliveryService {
     try {
       await this.sessions.resume(project.ownerId, standing.id, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title, asked),
+        content: buildCoordinatorDeliveryMessage(fact, project.title, asked, decisions),
       });
     } catch (e) {
       // The refusals `resume` gives for an ordinary state of the world rather than a fault: the
@@ -341,6 +355,25 @@ export class CoordinatorDeliveryService {
     const queue = await readPendingEvidenceJudgments(this.prisma, ownerId, standing, readAt);
     const ask = buildEvidenceAsk(queue);
     return ask ? { ask, readAt } : null;
+  }
+
+  /**
+   * Which loosening proposals this project is holding, as the ledger stands right now.
+   *
+   * The read's own predicates decide what comes back — this asks it nothing of its own, for the
+   * reason `evidenceAsk` asks the evidence queue nothing of its own: a second opinion here would
+   * put a diff in front of a person that the decision door refuses whichever way they answer it.
+   * `readAt` travels with the rows on the queue itself, so the message can say when the snapshot
+   * was taken and a reader can tell a question that moved from a delivery that failed.
+   *
+   * Unconditional, unlike `evidenceAsk`'s null-when-empty: an empty answer is itself the thing the
+   * card has to report, because the fact that reached this method said there WAS one.
+   */
+  private criteriaDecisions(
+    ownerId: string,
+    projectId: string,
+  ): Promise<PendingCriteriaDecisionQueue> {
+    return readPendingCriteriaDecisions(this.prisma, ownerId, projectId, new Date());
   }
 
   /**

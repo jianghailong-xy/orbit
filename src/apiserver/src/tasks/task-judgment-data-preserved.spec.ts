@@ -350,6 +350,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        by 0223, and not one of their names appears in any statement here. Nothing reads this
   //        new row to allow or refuse a status — a decision is what moves the criteria, and
   //        `status` stays a projection of the same two inputs it was a projection of before.
+  //   0250 widened 0246's CHECK by one more spelling — `CRITERIA_DECISION_PENDING`, a project
+  //        holding a loosening edit to its acceptance criteria that nobody has decided yet — so
+  //        the coordinator conversation can be told a proposal is waiting. Read against every
+  //        claim above: it is 0246 again, statement for statement, and the same reasoning holds
+  //        line for line. One `ALTER TABLE "project_coordinator_wake" DROP CONSTRAINT / ADD
+  //        CONSTRAINT` over a table this file does not preserve and cannot reach one from — it
+  //        names no `task` object, neither 0177 relation, `task_executable_acceptance_pair` nor
+  //        any `project_acceptance_*` object. Despite the event naming criteria it touches no
+  //        acceptance relation: the string appears only inside the CHECK's list of permitted
+  //        values, and no criterion's `text` or `verification_method` is read, written or
+  //        constrained by it — which is the whole point of the fact, since a HELD edit is one
+  //        that wrote no definition. It creates no table, column, index, enum, type or trigger,
+  //        drops nothing but the constraint it immediately restates, carries no `ALTER TYPE` and
+  //        no `DROP TYPE` — so all three `task_completion_criterion` labels survive — has no
+  //        `CREATE OR REPLACE FUNCTION` at all, so it is not another writer of the DONE fence,
+  //        and has no INSERT/UPDATE/DELETE, so no preserved row is read or written. The set only
+  //        grows, so no stored event can be refused by it and it needs no backfill. Nothing reads
+  //        the new event to allow or refuse a status: it is delivered as a message, and the
+  //        decision it announces is the account owner's to make through a door of its own.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -367,7 +386,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0244_session_engine_phase',
       '0245_project_standard_set_confirmation',
       '0246_project_acceptance_landed_wake',
-      '0249_project_criteria_decision'],
+      '0249_project_criteria_decision',
+      '0250_criteria_decision_pending_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

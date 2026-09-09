@@ -297,12 +297,12 @@ test('the events this unit knows about are exactly those the latest migration ac
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0246_project_acceptance_landed_wake/migration.sql',
+      '../../prisma/migrations/0250_criteria_decision_pending_wake/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0246 no longer constrains the event column');
+  assert.ok(check, 'migration 0249 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,
