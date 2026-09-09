@@ -164,6 +164,19 @@ export function evidenceDecisionFromAnswers(
  * question that moved between the read and the answer is refused rather than mis-recorded. The
  * message says so, because a turn that met that refusal without expecting it would report a
  * failure of the delivery instead of re-reading the task.
+ *
+ * WHY STEP 3 NAMES THE SECOND ELEMENT
+ * ===================================
+ * A send-back needs a note or `task-evidence-decision.ts` refuses it and writes nothing, which is
+ * why the card makes the reason REQUIRED rather than optional: the decision cards send
+ * `[SEND_BACK_OPTION, reason]` under the question's own text (`ApprovalPanel.tsx`'s
+ * `EvidenceDecisionForm`, and `EvidenceDecision.swift`'s `answers(for:)` for the native clients) —
+ * the shape the generic question form has always used for a picked option beside a typed reply, and
+ * the reason `evidenceDecisionFromAnswers` reads the labels with `includes` rather than by position.
+ * So by the time this protocol is read the reason is usually already in hand, and a step that only
+ * said "ask the person if they did not say" would have a turn ask again for something it was handed,
+ * or invent a note to avoid asking. Naming the element is what makes "别自己编" a rule with an
+ * alternative instead of a rule with a gap.
  */
 export function buildEvidenceAskProtocol(ask: EvidenceAsk, readAt: Date): string {
   const cards = ask.questions
@@ -180,7 +193,10 @@ export function buildEvidenceAskProtocol(ask: EvidenceAsk, readAt: Date): string
     + `2. 人选「${CONFIRM_OPTION}」：task_evidence_decide，decision=CONFIRM，`
     + `evidenceRevision 传那一条的版本号。\n`
     + `3. 人选「${SEND_BACK_OPTION}」：decision=SEND_BACK 必须带 note，写清下一版证据要给出什么；`
-    + `不带 note 会被拒，什么都不会写。人没说要什么就再问人，别自己编。\n`
+    + `不带 note 会被拒，什么都不会写。人写的理由跟着 answers 一起回来——那条问题（键就是问题正文）`
+    + `对应的数组里，第一个元素是「${SEND_BACK_OPTION}」这个标签，第二个元素就是人写的理由：`
+    + `把它原样传给 note，别改写、别精简、别补充。只有那个数组除了标签什么都没有时，才回去再问人；`
+    + `任何时候都别自己编。\n`
     + `4. 人自己写了字、没选这两个之一：那不是裁决。别写 task_evidence_decide，按人写的做。\n\n`
     + `这几条是发消息那一刻的快照。真正的检查在裁决那道门上：evidenceRevision 必须还是任务当下的最新版，`
     + `被 EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED 拒了就重读 task_evidence_list 再答当下那一版。\n\n`
