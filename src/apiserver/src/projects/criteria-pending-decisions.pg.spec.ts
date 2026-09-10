@@ -34,6 +34,8 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
@@ -657,4 +659,266 @@ test('a switched-off coordinator is refused once, told nothing, and opens nothin
     [queue.count, queue.pending[0]?.intentId, queue.pending[0]?.decidability.decidable],
     [1, held.intentId, true],
   );
+});
+
+/**
+ * THE REAL PROPOSAL, REPLAYED — AND WHAT THE READ CONCLUDES ABOUT IT
+ * ==================================================================
+ *
+ * `project_update(acceptanceCriteriaItems)` is a whole-collection replacement, so an edit that
+ * rewords three criteria out of eight arrives stating all eight. `proposed` is that restatement
+ * verbatim, because it is the material `actionDigest` is taken over — which means it cannot say
+ * WHICH of the eight moved, and a card drawn from it can only lay out all eight. That is what the
+ * first weakening proposal Orbit ever held (intent 1GB4IZ4B) did to its reader: the three that
+ * moved were buried inside the other five, and the account owner's words afterwards were "it
+ * should only show what changed".
+ *
+ * So the read carries a diff, and this is where the diff is measured — on that proposal, not on a
+ * made-up one. It was approved on 2026-09-09 and so cannot be read back out of the pending queue
+ * any more; `criteria-weakening-1GB4IZ4B.fixture.json` is the record of it, and the web card's own
+ * spec renders from the same file, so "the same input" is one fact on disk rather than two
+ * examples free to drift apart.
+ *
+ * WHAT MAKES THIS A TEST OF THE READ AND NOT OF THE FIXTURE. The two sets go in through the
+ * PRODUCTION write path — the eight are stated, then restated with three rewritten — so what comes
+ * back is a proposal the ordinary machinery filed, and the diff is taken by the read against the
+ * definition rows that write left behind. Nothing here hands the read an answer: the fixture
+ * records what the comparison IS to conclude, and the assertion is that it did.
+ */
+const RECORDED_PROPOSAL = path.resolve(
+  __dirname, '../../src/projects/criteria-weakening-1GB4IZ4B.fixture.json',
+);
+
+interface RecordedProposal {
+  intentPublicId: string;
+  onRecord: Array<{ ordinal: number; text: string; verificationMethod: string }>;
+  proposed: Array<{
+    ordinal: number; retains: number | null; text: string; verificationMethod: string;
+  }>;
+  expected: {
+    sameCount: number; changedCount: number; newCount: number; removedCount: number;
+    entries: Array<{
+      ordinal: number; change: string; changed: string[];
+      /** On the CHANGED ones: the clause that moved, which is what the cut must land on — and a
+       *  stretch of the same sentence that did not, which is what it must leave alone. */
+      movedClause?: { removed: string; added: string };
+      stoodFast?: string;
+    }>;
+  };
+}
+
+test('the read says which of a restated collection actually moved', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const stack = connect(url);
+  t.after(async () => { await stack.db.$disconnect().catch(() => undefined); });
+  const db = stack.db;
+  const recorded = JSON.parse(readFileSync(RECORDED_PROPOSAL, 'utf8')) as RecordedProposal;
+
+  /** State a whole collection, each criterion with its own words AND its own procedure. */
+  async function state(
+    f: Fixture,
+    items: Array<{ id?: string; text: string; verificationMethod: string }>,
+  ): Promise<Held | null> {
+    const response = await stack.projects.update(f.ownerId, f.projectId, {
+      acceptanceCriteriaItems: items.map((item) => ({
+        ...(item.id ? { id: item.id } : {}),
+        text: item.text,
+        verificationMethod: item.verificationMethod,
+      })),
+    } as never) as unknown as { acceptanceCriteriaHold?: Held };
+    return response.acceptanceCriteriaHold ?? null;
+  }
+
+  async function definitionIds(f: Fixture): Promise<string[]> {
+    return (await db.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: f.projectId },
+      orderBy: { ordinal: 'asc' },
+      select: { id: true },
+    })).map((row) => row.id);
+  }
+
+  await t.test('(6) eight criteria restated to reword three read out as three changes', async () => {
+    const f = await fixture(db, 'replay');
+    assert.equal(
+      await state(f, recorded.onRecord.map((each) => ({
+        text: each.text, verificationMethod: each.verificationMethod,
+      }))),
+      null,
+      'stating a project’s first criteria is ADDITIVE and lands where it is made',
+    );
+    const ids = await definitionIds(f);
+    assert.equal(ids.length, recorded.onRecord.length, 'the set on record is the recorded one');
+
+    const held = await state(f, recorded.proposed.map((each) => ({
+      ...(each.retains === null ? {} : { id: ids[each.retains - 1]! }),
+      text: each.text,
+      verificationMethod: each.verificationMethod,
+    })));
+    assert.ok(held, 'a rewording cannot be read as a tightening, so it is held');
+
+    const queue = await readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
+    assert.equal(queue.count, 1);
+    const [row] = queue.pending;
+    assert.equal(row!.intentId, held.intentId);
+
+    // The positive control under every count below: the WHOLE collection was restated, so a card
+    // built from `proposed` alone would have eight rows to lay out and no way to pick three.
+    assert.equal(row!.proposed.length, recorded.proposed.length,
+      'the request restated the whole collection — that is what makes the diff necessary');
+
+    assert.deepEqual(
+      [row!.diff.changedCount, row!.diff.sameCount, row!.diff.newCount, row!.diff.removedCount],
+      [recorded.expected.changedCount, recorded.expected.sameCount,
+        recorded.expected.newCount, recorded.expected.removedCount],
+      'three of the eight moved and five did not, which is what the owner was never shown',
+    );
+    assert.deepEqual(
+      row!.diff.entries.map((entry) => ({
+        ordinal: entry.ordinal, change: entry.change, changed: entry.changed,
+      })),
+      recorded.expected.entries.map((each) => ({
+        ordinal: each.ordinal, change: each.change, changed: each.changed,
+      })),
+      'and WHICH three: the read names them, in the ordinals a reader sees on the card',
+    );
+
+    // Each rewrite carries BOTH sides, which is the thing `proposed` could never carry: the
+    // baseline's words are not stored on the proposal at all (`action.baseline.material` is
+    // `(definitionId, revision, contentHash)`), so "what it replaces" can only come from the
+    // definitions in force.
+    for (const entry of row!.diff.entries) {
+      const stated = recorded.proposed.find((each) => each.ordinal === entry.ordinal)!;
+      const before = recorded.onRecord.find((each) => each.ordinal === entry.ordinal)!;
+      assert.equal(entry.proposed?.text, stated.text, `the proposed words of ${entry.ordinal}`);
+      assert.equal(entry.onRecord?.text, before.text, `what ${entry.ordinal} would replace`);
+      assert.equal(entry.definitionId, ids[entry.ordinal - 1],
+        'matched by the definition the request named, never by position');
+    }
+
+    // WHERE INSIDE THE SENTENCE, not only which sentence. Each rewrite comes back cut into the
+    // runs it keeps, drops and adds, so a card can print one merged line instead of the two whole
+    // paragraphs that overflowed the 360px box this is read in. The cut is pinned in full by
+    // `criteria-inline-diff.spec.ts`, which needs no database; what is asserted HERE is that it
+    // survives the production write path and the derived read — the clause the fixture records as
+    // the thing that moved is what came back marked as moved, off rows Postgres handed over.
+    for (const entry of row!.diff.entries) {
+      const clause = recorded.expected.entries
+        .find((each) => each.ordinal === entry.ordinal)?.movedClause;
+      if (entry.change !== 'CHANGED') {
+        assert.deepEqual(entry.rewrites, [],
+          `criterion ${entry.ordinal} did not move, so there are not two versions of it to cut`);
+        continue;
+      }
+      assert.ok(clause, `the fixture records no moved clause for criterion ${entry.ordinal}`);
+      const cut = entry.rewrites.find((each) => each.field === 'text');
+      assert.ok(cut, `criterion ${entry.ordinal} moved its text and carries no cut of it`);
+      const side = (want: string): string => cut.segments
+        .filter((piece) => piece.side === want).map((piece) => piece.text).join('');
+      assert.ok(side('REMOVED').includes(clause.removed),
+        `criterion ${entry.ordinal}: the dropped clause is not in what the cut marks removed`);
+      assert.ok(side('ADDED').includes(clause.added),
+        `criterion ${entry.ordinal}: the new clause is not in what the cut marks added`);
+      assert.ok(!side('KEPT').includes(clause.removed),
+        `criterion ${entry.ordinal}: the dropped clause is inside the runs marked unchanged`);
+      // And the sentence around it is still reported as standing, which is the whole saving: a
+      // cut that gave up and marked both versions whole would leave this at zero.
+      const stood = recorded.expected.entries
+        .find((each) => each.ordinal === entry.ordinal)?.stoodFast;
+      assert.ok(stood, `the fixture records nothing that stood for criterion ${entry.ordinal}`);
+      assert.ok(side('KEPT').includes(stood),
+        `criterion ${entry.ordinal}: "${stood}" is in both versions and is not marked unchanged`);
+      assert.ok(side('KEPT').length >= Math.min(
+        entry.onRecord!.text.length, entry.proposed!.text.length,
+      ) * (2 / 3), `criterion ${entry.ordinal}: too little of the sentence is marked unchanged`);
+    }
+
+    // And nothing moved: a held edit writes no definition, so the words this diff compares against
+    // are still the words in force.
+    const after = await db.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: f.projectId }, orderBy: { ordinal: 'asc' }, select: { text: true },
+    });
+    assert.deepEqual(after.map((each) => each.text), recorded.onRecord.map((each) => each.text),
+      'the criteria on record are the ones that were on record');
+  });
+
+  await t.test('(7) a criterion whose PROCEDURE alone was rewritten is a change too', async () => {
+    // `text` byte for byte, `verificationMethod` rewritten. An edit that leaves the assertion
+    // alone and rewrites how a reader decides it holds has still changed what the project has to
+    // prove, and a comparison that read `text` only would call this proposal a no-op.
+    const f = await fixture(db, 'procedure');
+    assert.equal(
+      await state(f, [
+        { text: FIRST, verificationMethod: METHOD },
+        { text: SECOND, verificationMethod: METHOD },
+      ]),
+      null,
+    );
+    const ids = await definitionIds(f);
+    const loosened = 'somebody says it looks fine';
+    const held = await state(f, [
+      { id: ids[0]!, text: FIRST, verificationMethod: loosened },
+      { id: ids[1]!, text: SECOND, verificationMethod: METHOD },
+    ]);
+    assert.ok(held, 'rewriting a procedure cannot be read as a tightening either');
+
+    const queue = await readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
+    const [row] = queue.pending;
+    assert.deepEqual(
+      [row!.diff.changedCount, row!.diff.sameCount], [1, 1],
+      'one criterion moved and one did not, though every `text` came back identical',
+    );
+    const [first, second] = row!.diff.entries;
+    assert.deepEqual([first!.change, first!.changed], ['CHANGED', ['verificationMethod']],
+      'the field that moved is named, so a card can show that half and not the other');
+    assert.equal(first!.proposed?.verificationMethod, loosened);
+    assert.equal(first!.onRecord?.verificationMethod, METHOD, 'and the procedure it replaces');
+    assert.equal(first!.proposed?.text, first!.onRecord?.text,
+      'the assertion is untouched — this is the case a text-only comparison would miss');
+    assert.equal(second!.change, 'SAME');
+  });
+
+  await t.test('(8) what is dropped and what is added are expressible at all', async () => {
+    // The shape the old row could not state: a proposal that DROPS a criterion carries one row
+    // fewer, and there is nothing in a restatement to hang "and this one is going" on.
+    const f = await fixture(db, 'dropped');
+    assert.equal(
+      await state(f, [
+        { text: FIRST, verificationMethod: METHOD },
+        { text: SECOND, verificationMethod: METHOD },
+        { text: THIRD, verificationMethod: METHOD },
+      ]),
+      null,
+    );
+    const ids = await definitionIds(f);
+    const held = await state(f, [
+      { id: ids[0]!, text: FIRST, verificationMethod: METHOD },
+      { text: TIGHTENING, verificationMethod: METHOD },
+    ]);
+    assert.ok(held, 'dropping two criteria to add one is held');
+
+    const queue = await readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
+    const [row] = queue.pending;
+    assert.deepEqual(
+      [row!.diff.sameCount, row!.diff.changedCount, row!.diff.newCount, row!.diff.removedCount],
+      [1, 0, 1, 2],
+      'one kept, one added, two dropped — a count `proposed` cannot produce, since the two that '
+      + 'went are not in it',
+    );
+    assert.deepEqual(
+      row!.diff.entries.map((entry) => [entry.change, entry.ordinal]),
+      [['SAME', 1], ['NEW', 2], ['REMOVED', 2], ['REMOVED', 3]],
+      'the proposal’s own order first, then the criteria it does not restate, at their places',
+    );
+    const dropped = row!.diff.entries.filter((entry) => entry.change === 'REMOVED');
+    assert.deepEqual(dropped.map((entry) => entry.onRecord?.text), [SECOND, THIRD],
+      'and in the words that would go, which is the only place they are still written down');
+    assert.deepEqual(dropped.map((entry) => entry.proposed), [null, null],
+      'a dropped criterion has no proposed side: the proposal states none');
+    const added = row!.diff.entries.find((entry) => entry.change === 'NEW');
+    assert.deepEqual([added!.onRecord, added!.definitionId], [null, null],
+      'and an added one replaces nothing, so it names no definition and has no other side');
+  });
 });

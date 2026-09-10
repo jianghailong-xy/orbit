@@ -945,18 +945,27 @@ private struct CriteriaDecisionCard: View {
         .approvalChrome(.orange)
     }
 
-    /// What the proposal asks for, numbered as the server numbers it. Folded, because the whole set
-    /// is restated even when one line moved: the summary is the decision's size, and the rows are
-    /// what it says.
+    /// What the proposal would CHANGE — and, in one line, how much of the ruler it leaves alone.
+    ///
+    /// A criteria edit restates the whole collection, so a proposal that reworded three criteria out
+    /// of eight arrives stating all eight. This card used to lay out all eight; the three that moved
+    /// were buried in the other five. So the rows are the diff the server derived, and the untouched
+    /// ones are folded away behind their count — folded rather than hidden, because "three reworded"
+    /// and "the whole set replaced with three" are the same three rows until a reader is told how
+    /// many did not move.
     private func proposal(_ row: PendingCriteriaDecisionRow) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(CriteriaDecisions.proposedSummary(row))
-                .font(.orbitLabel.bold()).foregroundStyle(.secondary)
+            // The legend rides on the summary's line rather than taking one of its own: on a card
+            // whose whole problem is height, a row spent saying what a strikethrough means is a row
+            // not spent on the criteria — and this is the line a reader is already on when they
+            // meet the first mark.
+            (Text(CriteriaDecisions.changeSummary(row.diff)).bold()
+                + Text(CriteriaDecisions.hasRewrite(row.diff)
+                       ? "  \(CriteriaDecisions.inlineDiffLegend)" : ""))
+                .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            ForEach(Array(CriteriaDecisions.proposedLines(row).enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .font(.orbitProse)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(CriteriaDecisions.changeRows(row)) { change in
+                changeRow(change)
             }
             // The reason the proposer gave, when the edit carried one — quoted, never summarised.
             ForEach(Array(reasons(row).enumerated()), id: \.offset) { _, reason in
@@ -967,16 +976,63 @@ private struct CriteriaDecisionCard: View {
                     .background(Color.primary.opacity(0.05),
                                 in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             }
-            // How each proposed criterion would be judged. Behind a fold: it is the instruction, not
-            // the decision, and on a phone it doubles the card.
+            unchanged(row)
+        }
+    }
+
+    /// One criterion the proposal moves: what it would say — with, for a rewrite, the words it
+    /// drops struck through IN PLACE inside the sentence they were dropped from — and what it is
+    /// called. One paragraph and not two: laid out as the proposal's words followed by the
+    /// record's, three rewrites of long Chinese criteria did not fit the card at all.
+    private func changeRow(_ change: CriteriaDecisions.ChangeRow) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            (Text("\(change.ordinal). ").foregroundStyle(.secondary) + rewritten(change.words))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(change.badge)
+                .font(.orbitLabel).foregroundStyle(.orange)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let method = change.method {
+                (Text("\(CriteriaDecisions.methodLabel): ") + rewritten(method))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// The server's cut as one run of text: what stayed, what goes struck through, what arrives
+    /// underlined.
+    ///
+    /// Colour is never the only carrier — the strikethrough and the underline are the marks, and
+    /// they survive a monochrome screen, Increase Contrast, and colour-blind vision, which a red
+    /// and a green would not.
+    private func rewritten(_ runs: [CriterionSegment]) -> Text {
+        runs.reduce(Text("")) { line, run in
+            switch run.side {
+            case .kept:
+                return line + Text(run.text)
+            case .removed:
+                return line + Text(run.text).strikethrough().foregroundStyle(.secondary)
+            case .added:
+                return line + Text(run.text).underline()
+            }
+        }
+    }
+
+    /// The criteria this proposal leaves word for word alone: their count always on screen, their
+    /// words one tap away. Nothing at all when it leaves none alone — a card that said "0 criteria
+    /// are unchanged" would be noise on the one card where the reader most needs the rows.
+    @ViewBuilder
+    private func unchanged(_ row: PendingCriteriaDecisionRow) -> some View {
+        let rows = CriteriaDecisions.unchangedRows(row)
+        if !rows.isEmpty {
             DisclosureToggle(open: proposalOpen,
-                             label: proposalOpen ? "Hide how each would be judged"
-                                                 : "How each would be judged") {
+                             label: CriteriaDecisions.unchangedLine(rows.count)) {
                 proposalOpen.toggle()
             }
             if proposalOpen {
-                ForEach(Array(row.proposed.enumerated()), id: \.offset) { index, criterion in
-                    Text("\(criterion.ordinal > 0 ? criterion.ordinal : index + 1). \(criterion.verificationMethod)")
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, line in
+                    Text(line)
                         .font(.orbitLabel).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

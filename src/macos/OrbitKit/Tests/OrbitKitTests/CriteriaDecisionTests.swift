@@ -18,7 +18,8 @@ final class CriteriaDecisionTests: XCTestCase {
                      baseline: String = "6b1d02ea11223344",
                      current: String? = nil,
                      supersedes: String? = nil,
-                     proposed: [ProposedCriterion] = []) -> PendingCriteriaDecisionRow {
+                     proposed: [ProposedCriterion] = [],
+                     diff: CriteriaProposalDiff = .unreadable) -> PendingCriteriaDecisionRow {
         PendingCriteriaDecisionRow(
             intentId: intentID,
             projectId: "proj-1",
@@ -29,6 +30,7 @@ final class CriteriaDecisionTests: XCTestCase {
             baselineSeal: baseline,
             currentSeal: current ?? baseline,
             proposed: proposed,
+            diff: diff,
             supersededIntentId: supersedes,
             decidability: decidable
                 ? CriteriaDecisionDecidability(decidable: true)
@@ -158,18 +160,211 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(CriteriaDecisions.shortSeal(""), "(unreadable)")
     }
 
-    func testTheProposedSetIsNumberedAndAnAdditionIsMarkedAsOne() {
-        let proposal = row("i-1", proposed: [
-            ProposedCriterion(id: "c-3", ordinal: 1, text: "Full API is green", verificationMethod: "run it"),
-            ProposedCriterion(id: nil, ordinal: 2, text: "The scheduled nodes pass", verificationMethod: "run it"),
+    // MARK: the card is a diff
+
+    /// A restatement of eight criteria that rewords three, in the shape the server publishes it —
+    /// the same fact `criteria-weakening-1GB4IZ4B.fixture.json` records and both other ends are
+    /// pinned to. `change` and `changed` are the SERVER's conclusion here as everywhere: nothing on
+    /// this client compares two sets of words.
+    private func eightRewordingThree() -> PendingCriteriaDecisionRow {
+        let moved = [1, 2, 4]
+        let entries = (1...8).map { ordinal -> CriteriaProposalChangeEntry in
+            let rewritten = moved.contains(ordinal)
+            return CriteriaProposalChangeEntry(
+                change: rewritten ? .changed : .same,
+                definitionId: "c-\(ordinal)",
+                ordinal: ordinal,
+                proposed: CriterionWording(
+                    text: rewritten ? "criterion \(ordinal), rewritten" : "criterion \(ordinal)",
+                    verificationMethod: "a person reads it"),
+                onRecord: CriterionWording(text: "criterion \(ordinal)",
+                                           verificationMethod: "a person reads it"),
+                changed: rewritten ? [.text] : [],
+                // The server's cut, fed in as the server's: `criterion N` stood and `, rewritten`
+                // arrived. Nothing on this client compares two strings.
+                rewrites: rewritten
+                    ? [CriterionFieldRewrite(field: .text, segments: [
+                        CriterionSegment(side: .kept, text: "criterion \(ordinal)"),
+                        CriterionSegment(side: .added, text: ", rewritten"),
+                    ])]
+                    : [])
+        }
+        return row("i-1", diff: CriteriaProposalDiff(entries: entries, sameCount: 5,
+                                                     changedCount: 3, newCount: 0, removedCount: 0))
+    }
+
+    func testOnlyTheCriteriaThatMovedAreListed() {
+        let proposal = eightRewordingThree()
+        // The positive control: the whole collection really did arrive, so folding it is this
+        // client's doing rather than the server having sent three rows.
+        XCTAssertEqual(proposal.diff.entries.count, 8)
+
+        let rows = CriteriaDecisions.changeRows(proposal)
+        XCTAssertEqual(rows.count, 3)
+        // And WHICH three, in the server's own ordinals — a list renumbered 1. 2. 3. would be
+        // inventing a set nobody proposed.
+        XCTAssertEqual(rows.map(\.ordinal), [1, 2, 4])
+        for each in rows {
+            XCTAssertEqual(each.badge, CriteriaDecisions.rewordedLabel)
+            // The procedure did not move, so it is not drawn at all.
+            XCTAssertNil(each.method)
+        }
+    }
+
+    /// ONE LINE PER REWRITE, NOT TWO.
+    ///
+    /// Laid out as the proposal's words and then the record's, three rewrites of long Chinese
+    /// criteria came to 483px of content in a 360px scroll box — and a reader still had to compare
+    /// two paragraphs to find the clause. So the row carries ONE sequence, which is the server's
+    /// cut of the two versions, and neither version appears in it whole.
+    func testARewriteIsOneMergedSequenceAndNotBothVersionsInFull() {
+        let rows = CriteriaDecisions.changeRows(eightRewordingThree())
+        for each in rows {
+            // The positive control: the cut fed in really is a cut, not one run.
+            XCTAssertGreaterThan(each.words.count, 1, "row \(each.ordinal)")
+            XCTAssertEqual(each.words.map(\.side), [.kept, .added], "row \(each.ordinal)")
+            XCTAssertEqual(each.words.map(\.text).joined(), "criterion \(each.ordinal), rewritten")
+            // The words ON RECORD are read out of the same sequence rather than sent beside it.
+            XCTAssertEqual(each.words.filter { $0.side != .added }.map(\.text).joined(),
+                           "criterion \(each.ordinal)")
+        }
+    }
+
+    /// A criterion being ADDED or DROPPED has one version, so it is one plain run — a card that
+    /// struck through every word of a dropped criterion would be saying something different from
+    /// "this criterion goes".
+    func testACriterionWithOnlyOneVersionIsOnePlainRun() {
+        let proposal = row("i-1", diff: CriteriaProposalDiff(
+            entries: [
+                CriteriaProposalChangeEntry(
+                    change: .new, definitionId: nil, ordinal: 1,
+                    proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it")),
+            ],
+            sameCount: 0, changedCount: 0, newCount: 1))
+        let rows = CriteriaDecisions.changeRows(proposal)
+        XCTAssertEqual(rows[0].words, [CriterionSegment(side: .kept, text: "a looser ruler")])
+    }
+
+    /// A server OLDER than this build sends no cut, which is a shape that exists because an App
+    /// Store release outlives a deployment. The row is then drawn at the coarsest resolution — one
+    /// struck-through run and one added run — rather than blank.
+    func testAnEntryWithNoCutIsDrawnAsBothVersionsWhole() {
+        let entry = CriteriaProposalChangeEntry(
+            change: .changed, definitionId: "c-1", ordinal: 1,
+            proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it"),
+            onRecord: CriterionWording(text: "a stricter ruler", verificationMethod: "run it"),
+            changed: [.text])
+        XCTAssertTrue(entry.rewrites.isEmpty, "the positive control: this entry carries no cut")
+        XCTAssertEqual(CriteriaDecisions.rewriteRuns(entry, .text), [
+            CriterionSegment(side: .removed, text: "a stricter ruler"),
+            CriterionSegment(side: .added, text: "a looser ruler"),
         ])
-        let lines = CriteriaDecisions.proposedLines(proposal)
-        XCTAssertEqual(lines.count, 2)
-        XCTAssertTrue(lines[0].hasPrefix("1. Full API is green"), lines[0])
-        XCTAssertFalse(lines[0].contains("new in this proposal"))
-        XCTAssertTrue(lines[1].contains("new in this proposal"), lines[1])
-        XCTAssertEqual(CriteriaDecisions.proposedSummary(proposal),
-                       "2 criteria, as this project’s standard set")
+    }
+
+    /// And the decode that gets it there: a response with no `rewrites` key at all is an entry
+    /// without a cut, never a queue this client fails to read.
+    func testAnEntryDecodesWithoutTheCutField() throws {
+        let json = Data(#"""
+        {"change":"CHANGED","definitionId":"c-1","ordinal":1,
+         "proposed":{"text":"a looser ruler","verificationMethod":"run it",
+                     "completionCriterionOverrideReason":null},
+         "onRecord":{"text":"a stricter ruler","verificationMethod":"run it",
+                     "completionCriterionOverrideReason":null},
+         "changed":["text"]}
+        """#.utf8)
+        let entry = try JSONDecoder().decode(CriteriaProposalChangeEntry.self, from: json)
+        XCTAssertEqual(entry.change, .changed)
+        XCTAssertEqual(entry.changed, [.text])
+        XCTAssertTrue(entry.rewrites.isEmpty)
+    }
+
+    /// The legend is offered exactly where the marks are: a proposal that only adds and drops
+    /// criteria has no struck-through words on it, and explaining a mark that is not there costs a
+    /// line on the card that had none to spare.
+    func testTheLegendIsOfferedOnlyWhereSomethingWasRewritten() {
+        XCTAssertTrue(CriteriaDecisions.hasRewrite(eightRewordingThree().diff))
+        let addedOnly = CriteriaProposalDiff(entries: [
+            CriteriaProposalChangeEntry(
+                change: .new, definitionId: nil, ordinal: 1,
+                proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it")),
+        ], newCount: 1)
+        XCTAssertFalse(CriteriaDecisions.hasRewrite(addedOnly))
+    }
+
+    func testTheCountOfWhatDidNotMoveIsAlwaysSaidAndItsWordsAreBehindIt() {
+        let proposal = eightRewordingThree()
+        XCTAssertEqual(CriteriaDecisions.unchangedLine(proposal.diff.sameCount),
+                       "5 criteria are unchanged by this proposal")
+        XCTAssertEqual(CriteriaDecisions.unchangedLine(1),
+                       "1 criterion is unchanged by this proposal")
+        // Folded, not dropped: the five are still there to be opened.
+        let folded = CriteriaDecisions.unchangedRows(proposal)
+        XCTAssertEqual(folded.count, 5)
+        XCTAssertEqual(folded.first, "3. criterion 3")
+        XCTAssertEqual(CriteriaDecisions.changeSummary(proposal.diff), "3 reworded, 5 unchanged")
+    }
+
+    func testACriterionWhoseProcedureAloneMovedIsAChangeAndShowsBothProcedures() {
+        // `text` byte for byte the same on both sides. An edit that leaves the assertion alone and
+        // rewrites how a reader decides it holds has still changed what the project has to prove.
+        let proposal = row("i-1", diff: CriteriaProposalDiff(
+            entries: [
+                CriteriaProposalChangeEntry(
+                    change: .changed, definitionId: "c-1", ordinal: 1,
+                    proposed: CriterionWording(text: "Full API is green",
+                                               verificationMethod: "somebody says it looks fine"),
+                    onRecord: CriterionWording(text: "Full API is green",
+                                               verificationMethod: "the full API suite passes"),
+                    changed: [.verificationMethod]),
+                CriteriaProposalChangeEntry(
+                    change: .same, definitionId: "c-2", ordinal: 2,
+                    proposed: CriterionWording(text: "the nodes pass", verificationMethod: "run it"),
+                    onRecord: CriterionWording(text: "the nodes pass", verificationMethod: "run it")),
+            ],
+            sameCount: 1, changedCount: 1))
+        let rows = CriteriaDecisions.changeRows(proposal)
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].badge, CriteriaDecisions.rewordedLabel)
+        // The assertion is identical, so the words alone would look like the same criterion twice:
+        // the PROCEDURE is what carries the cut, and the assertion is drawn plain.
+        XCTAssertEqual(rows[0].words, [CriterionSegment(side: .kept, text: "Full API is green")])
+        XCTAssertEqual(rows[0].method, [
+            CriterionSegment(side: .removed, text: "the full API suite passes"),
+            CriterionSegment(side: .added, text: "somebody says it looks fine"),
+        ])
+    }
+
+    func testWhatIsDroppedAndWhatIsAddedAreBothSaid() {
+        let proposal = row("i-1", diff: CriteriaProposalDiff(
+            entries: [
+                CriteriaProposalChangeEntry(
+                    change: .new, definitionId: nil, ordinal: 1,
+                    proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it")),
+                CriteriaProposalChangeEntry(
+                    change: .removed, definitionId: "c-2", ordinal: 2, proposed: nil,
+                    onRecord: CriterionWording(text: "the migrations replay from empty",
+                                               verificationMethod: "a pg spec")),
+            ],
+            sameCount: 0, changedCount: 0, newCount: 1, removedCount: 1))
+        let rows = CriteriaDecisions.changeRows(proposal)
+        XCTAssertEqual(rows.map(\.badge),
+                       [CriteriaDecisions.addedLabel, CriteriaDecisions.droppedLabel])
+        // A dropped criterion has no proposed side at all, so the row is drawn in the words that
+        // would GO — the only place they are still written down.
+        XCTAssertEqual(rows[1].ordinal, 2)
+        XCTAssertEqual(rows[1].words.map(\.text).joined(), "the migrations replay from empty")
+        XCTAssertEqual(CriteriaDecisions.changeSummary(proposal.diff),
+                       "1 dropped, 1 added, 0 unchanged")
+        XCTAssertTrue(CriteriaDecisions.unchangedRows(proposal).isEmpty)
+    }
+
+    func testAProposalNothingCouldBeReadOutOfDrawsNoDiffAtAll() {
+        // The read publishes an EMPTY diff for a row whose stored action it cannot make sense of,
+        // rather than one saying every criterion on record is being dropped.
+        let proposal = row("i-1")
+        XCTAssertTrue(CriteriaDecisions.changeRows(proposal).isEmpty)
+        XCTAssertEqual(CriteriaDecisions.changeSummary(proposal.diff),
+                       CriteriaDecisions.changeSummaryUnreadable)
     }
 
     // MARK: what one press sends
@@ -214,6 +409,19 @@ final class CriteriaDecisionTests: XCTestCase {
            "currentSeal":"bbb",
            "proposed":[{"id":null,"ordinal":1,"text":"t","verificationMethod":"v",
                         "completionCriterionOverrideReason":null}],
+           "diff":{"sameCount":1,"changedCount":1,"newCount":0,"removedCount":0,"entries":[
+             {"change":"CHANGED","definitionId":"c1","ordinal":1,
+              "proposed":{"text":"t","verificationMethod":"v",
+                          "completionCriterionOverrideReason":null},
+              "onRecord":{"text":"was t","verificationMethod":"v",
+                          "completionCriterionOverrideReason":null},
+              "changed":["text"]},
+             {"change":"SAME","definitionId":"c2","ordinal":2,
+              "proposed":{"text":"u","verificationMethod":"v",
+                          "completionCriterionOverrideReason":null},
+              "onRecord":{"text":"u","verificationMethod":"v",
+                          "completionCriterionOverrideReason":null},
+              "changed":[]}]},
            "supersededIntentId":null,
            "decidability":{"decidable":false,"refusal":"PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED",
                            "requiredAction":"REFILE_AGAINST_THE_CURRENT_STANDARD_SET"}}]}
@@ -224,6 +432,13 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(decoded.pending[0].commitToken, "tok")
         XCTAssertNil(decoded.pending[0].proposed[0].id)
         XCTAssertFalse(decoded.pending[0].decidability.decidable)
+        // The diff decodes field for field too, including the enums: a `change` this client did
+        // not know would throw here rather than reaching a card that draws it as nothing.
+        let diff = decoded.pending[0].diff
+        XCTAssertEqual([diff.changedCount, diff.sameCount], [1, 1])
+        XCTAssertEqual(diff.entries.map(\.change), [.changed, .same])
+        XCTAssertEqual(diff.entries[0].changed, [.text])
+        XCTAssertEqual(diff.entries[0].onRecord?.text, "was t")
         let standing = CriteriaDecisions.standing(queue: decoded, intentId: "i1")
         XCTAssertFalse(standing.answerable)
     }

@@ -323,7 +323,7 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
       assert.deepEqual(
         Object.keys(row).filter((key) => !key.endsWith('PublicId')).sort(),
         ['actionDigest', 'ageSeconds', 'baselineSeal', 'commitToken', 'currentSeal', 'decidability',
-          'filedAt', 'intentId', 'projectId', 'proposed', 'supersededIntentId'].sort(),
+          'diff', 'filedAt', 'intentId', 'projectId', 'proposed', 'supersededIntentId'].sort(),
       );
       assert.equal(row.projectId, projectPublicId);
       assert.equal(row.baselineSeal, filed.baselineSeal);
@@ -335,6 +335,32 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
         filed.proposed.map((criterion) => criterion.text),
         'the diff the owner judges is the one the request stated',
       );
+      // THE DIFF, over the same boundary. The card renders this and not `proposed`, so a
+      // criterion the request restated word for word has to come back marked SAME here, and the
+      // one it drops has to be here at all — `proposed` cannot carry a criterion it omits.
+      const diff = row.diff as {
+        entries: Array<{ change: string; definitionId: string | null; ordinal: number }>;
+        sameCount: number; changedCount: number; newCount: number; removedCount: number;
+      };
+      assert.deepEqual(
+        [diff.sameCount, diff.changedCount, diff.newCount, diff.removedCount], [2, 0, 0, 1],
+        'this edit drops one of three criteria and restates the other two unchanged',
+      );
+      assert.deepEqual(diff.entries.map((entry) => entry.change), ['SAME', 'SAME', 'REMOVED']);
+      // Public-id spelled, like every other address on this response — and the SAME spelling
+      // `proposed[].id` arrives in, because a reader that compared the two would otherwise never
+      // match a single row.
+      assert.deepEqual(
+        diff.entries.slice(0, 2).map((entry) => entry.definitionId),
+        (row.proposed as ProposedCriterion[]).map((criterion) => criterion.id),
+        'the definition an entry names is spelled the way the proposal names it',
+      );
+      for (const entry of diff.entries) {
+        assert.notEqual(entry.definitionId, null);
+        assert.doesNotMatch(entry.definitionId!, /^[0-9a-f]{8}-[0-9a-f]{4}-/u,
+          'a raw uuid here would be the one address on this card nobody could hand back');
+      }
+
       // And the edit really was HELD: the criterion it drops is still stated.
       assert.deepEqual((await stated()).map((criterion) => criterion.text),
         [FIRST, SECOND, THIRD], 'a loosening edit changes nothing until it is answered');

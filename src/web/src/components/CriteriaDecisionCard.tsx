@@ -54,6 +54,88 @@ export interface ProposedCriterion {
   completionCriterionOverrideReason: string | null;
 }
 
+/**
+ * WHAT THE CARD DRAWS, AND WHY IT IS NOT `proposed`
+ * -------------------------------------------------
+ * A criteria edit is a whole-collection replacement, so a proposal that reworded three criteria out
+ * of eight arrives stating all eight, and five of them are the words already on record. This card
+ * used to lay out all eight, which buried the three that moved inside a 360px scroll box: the
+ * reader could not see which ones the decision was about, and scrolling to the end did not tell
+ * them either.
+ *
+ * So the card renders the DIFF and folds the rest away behind a count. The diff is the server's:
+ * `readPendingCriteriaDecisions` compares the restatement against the definitions in force inside
+ * the transaction that decided the proposal was pending. Nothing here compares anything — a client
+ * that fetched the criteria in force and diffed them itself would be making the card's central
+ * claim a conclusion IT reached, from two reads taken at two moments, and would have to reach it
+ * again in every client.
+ */
+export type CriteriaProposalChange = 'SAME' | 'CHANGED' | 'NEW' | 'REMOVED';
+
+/** The fields a rewrite can move: all three a criterion carries, not just the assertion. */
+export type CriteriaProposalField =
+  | 'text'
+  | 'verificationMethod'
+  | 'completionCriterionOverrideReason';
+
+/** One criterion's words, on either side of the comparison. */
+export interface CriterionWording {
+  text: string;
+  verificationMethod: string | null;
+  completionCriterionOverrideReason: string | null;
+}
+
+/**
+ * One run of a rewritten field, and what the rewrite does with it — the server's cut.
+ *
+ * Saying which criteria moved was only half of it: a rewrite still arrived as two whole paragraphs
+ * and a reader had to compare ninety characters of Chinese against ninety more to find the clause
+ * that changed. So the comparison is taken down to the level the change happened at, on the
+ * SERVER, for the same reason the criterion-level one is (see above) — a client that cut the two
+ * texts itself would be reaching the card's central claim on its own, twice, in two languages.
+ *
+ * The runs are in reading order and one merged sequence: the words ON RECORD are the `KEPT` and
+ * `REMOVED` runs, the words PROPOSED are the `KEPT` and `ADDED` ones. One line renders both.
+ */
+export type CriterionSegmentSide = 'KEPT' | 'REMOVED' | 'ADDED';
+
+export interface CriterionSegment {
+  side: CriterionSegmentSide;
+  text: string;
+}
+
+/** One field of a rewrite, cut up. One per entry in `changed`, in that same order. */
+export interface CriterionFieldRewrite {
+  field: CriteriaProposalField;
+  segments: CriterionSegment[];
+}
+
+/** What this proposal does to one criterion: which one, which way, and both sets of words. */
+export interface CriteriaProposalChangeEntry {
+  change: CriteriaProposalChange;
+  /** The definition this is about; null for one the proposal is adding, which names none. */
+  definitionId: string | null;
+  /** Its place in the proposed set — or, for one being dropped, in the set on record. */
+  ordinal: number;
+  /** The proposal's words. Null for `REMOVED`. */
+  proposed: CriterionWording | null;
+  /** The words it replaces, off the definition in force. Null for `NEW`. */
+  onRecord: CriterionWording | null;
+  /** Which fields differ. Empty except on `CHANGED`. */
+  changed: CriteriaProposalField[];
+  /** Each of those fields cut into what the rewrite keeps, drops and adds, in `changed` order. */
+  rewrites: CriterionFieldRewrite[];
+}
+
+/** The whole of what a proposal would do to the ruler, and how much of it it leaves alone. */
+export interface CriteriaProposalDiff {
+  entries: CriteriaProposalChangeEntry[];
+  sameCount: number;
+  changedCount: number;
+  newCount: number;
+  removedCount: number;
+}
+
 /** Whether the door would record a decision about this proposal right now — the server's answer. */
 export interface CriteriaDecisionDecidability {
   decidable: boolean;
@@ -81,6 +163,8 @@ export interface PendingCriteriaDecisionRow {
   /** The seal standing now. Equal to `baselineSeal` exactly when the proposal is decidable. */
   currentSeal: string;
   proposed: ProposedCriterion[];
+  /** The same restatement read against the criteria in force — what this card is drawn from. */
+  diff: CriteriaProposalDiff;
   /** The proposal this one displaced, or null when it displaced nothing. */
   supersededIntentId: string | null;
   decidability: CriteriaDecisionDecidability;
@@ -141,6 +225,106 @@ export const NOTHING_IS_ON_HOLD =
   'Nothing is on hold. The criteria on record are the ones in force and the session that proposed '
   + 'this was told to keep working against them, so refusing stops the ruler from moving, not the '
   + 'work.';
+
+/**
+ * THE WORDS THE DIFF IS SAID IN, ON BOTH CLIENTS.
+ *
+ * One vocabulary for the three things a proposal can do to a criterion, so the badge on a row, the
+ * one-line summary above the list, and the fold over the untouched ones are all saying the same
+ * word about the same thing. `CriteriaDecisionCopyParityTests.swift` reads these declarations out
+ * of this file and compares them with OrbitKit's, because nothing in either build catches a phrase
+ * re-worded at one end only.
+ */
+export const CRITERION_REWORDED_WORD = 'reworded';
+export const CRITERION_DROPPED_WORD = 'dropped';
+export const CRITERION_ADDED_WORD = 'added';
+
+/** The badge on one row of the diff, in the same words the summary counts them in. */
+export const CRITERION_REWORDED_LABEL = 'reworded by this proposal';
+export const CRITERION_ADDED_LABEL = 'new in this proposal';
+export const CRITERION_DROPPED_LABEL = 'dropped by this proposal';
+
+/**
+ * WHAT THE TWO MARKS ON A REWRITTEN LINE MEAN, SPELLED OUT ONCE.
+ *
+ * A rewrite used to be two paragraphs, the second labelled `on record now`, and that label was the
+ * whole of how a reader knew which half was which. It is one line now — the words that stayed,
+ * with the dropped run struck through and the new run underlined in place — so the label has
+ * nothing left to point at and this legend takes its job: it is the only thing on the card that
+ * says what a strikethrough means, and without it the marks are decoration.
+ *
+ * Kept to one short line because it costs one, on a card whose whole problem was height.
+ */
+export const INLINE_DIFF_LEGEND = 'struck through is dropped · underlined is added';
+/** On the runs themselves, for a pointer and for a screen reader that skips the legend. */
+export const DROPPED_RUN_TITLE = 'dropped by this rewrite';
+export const ADDED_RUN_TITLE = 'added by this rewrite';
+/** And the second field, shown only when the proposal moved it. */
+export const METHOD_LABEL = 'how it is judged';
+
+/**
+ * The line that says how much of the ruler this proposal leaves alone.
+ *
+ * IT IS WHY THE UNTOUCHED ONES ARE FOLDED AND NOT HIDDEN. The question this card answers is not
+ * only "what changes" but "how much of the ruler is being rewritten" — a reader who is shown three
+ * rows and nothing else cannot tell a proposal that reworded three criteria from one that replaced
+ * the whole set with three. So the count is always on screen, and the words behind it are one
+ * disclosure away.
+ */
+export const UNCHANGED_SUFFIX_ONE = 'criterion is unchanged by this proposal';
+export const UNCHANGED_SUFFIX_MANY = 'criteria are unchanged by this proposal';
+
+export function unchangedLine(count: number): string {
+  return `${count} ${count === 1 ? UNCHANGED_SUFFIX_ONE : UNCHANGED_SUFFIX_MANY}`;
+}
+
+/** What a proposal nothing could be read out of says instead of a diff. */
+export const CHANGE_SUMMARY_UNREADABLE = 'nothing this reader could read';
+/** And what a restatement that moved nothing says — every criterion came back word for word. */
+export const CHANGE_SUMMARY_NOTHING_MOVES = 'nothing moves';
+
+/** The size of the decision in one line: what moves, and how much did not. */
+export function changeSummary(diff: CriteriaProposalDiff): string {
+  if (diff.entries.length === 0) return CHANGE_SUMMARY_UNREADABLE;
+  const moved: string[] = [];
+  if (diff.changedCount > 0) moved.push(`${diff.changedCount} ${CRITERION_REWORDED_WORD}`);
+  if (diff.removedCount > 0) moved.push(`${diff.removedCount} ${CRITERION_DROPPED_WORD}`);
+  if (diff.newCount > 0) moved.push(`${diff.newCount} ${CRITERION_ADDED_WORD}`);
+  const head = moved.length === 0 ? CHANGE_SUMMARY_NOTHING_MOVES : moved.join(', ');
+  return `${head}, ${diff.sameCount} unchanged`;
+}
+
+/** The badge one row carries, or null for the untouched ones, which carry none. */
+export function changeLabel(change: CriteriaProposalChange): string | null {
+  switch (change) {
+    case 'CHANGED':
+      return CRITERION_REWORDED_LABEL;
+    case 'NEW':
+      return CRITERION_ADDED_LABEL;
+    case 'REMOVED':
+      return CRITERION_DROPPED_LABEL;
+    case 'SAME':
+      return null;
+  }
+}
+
+/** The rows a reader is shown by default: everything this proposal would move. */
+export function movedEntries(diff: CriteriaProposalDiff): CriteriaProposalChangeEntry[] {
+  return diff.entries.filter((entry) => entry.change !== 'SAME');
+}
+
+/** And the ones behind the fold. Read off `change` rather than off `sameCount` so the list and
+ *  the count cannot disagree about which rows they are talking about. */
+export function unmovedEntries(diff: CriteriaProposalDiff): CriteriaProposalChangeEntry[] {
+  return diff.entries.filter((entry) => entry.change === 'SAME');
+}
+
+/** Whether anything on this card is drawn with the two marks, and so whether to explain them. A
+ *  proposal that only adds and drops criteria has no struck-through words on it, and a legend for
+ *  marks that are not there is a line of height spent on nothing. */
+export function hasRewrite(diff: CriteriaProposalDiff): boolean {
+  return diff.entries.some((entry) => entry.change === 'CHANGED');
+}
 
 /** A seal as a reader compares it: enough to tell two apart, never the whole 64 characters. */
 export function shortSeal(seal: string): string {
@@ -251,20 +435,129 @@ export function headingFor(standing: CriteriaDecisionStanding): string {
   return CRITERIA_DECISION_STALE_HEADING;
 }
 
-/** The proposed set, numbered as the server numbers it, with the additions marked. */
-function ProposedCriteria({ proposed }: { proposed: ProposedCriterion[] }): JSX.Element {
+/**
+ * The runs one rewritten field is drawn from: the server's cut, or the whole of both versions.
+ *
+ * The fallback is not for a server that failed to cut — it is for one that is OLDER than this
+ * client, which is a shape that exists because iOS ships on its own release train and a browser
+ * bundle does not. An entry that says a field moved and carries no cut of it still has both
+ * versions on it, so it is drawn as one struck-through run and one added run: the same shape, at
+ * the coarsest possible resolution, rather than a blank row or a second layout to maintain.
+ */
+export function rewriteRuns(
+  entry: CriteriaProposalChangeEntry,
+  field: CriteriaProposalField,
+): CriterionSegment[] {
+  const cut = (entry.rewrites ?? []).find((each) => each.field === field);
+  if (cut && cut.segments.length > 0) return cut.segments;
+  const dropped = entry.onRecord?.[field] ?? '';
+  const added = entry.proposed?.[field] ?? '';
+  return [
+    ...(dropped === '' ? [] : [{ side: 'REMOVED' as const, text: dropped }]),
+    ...(added === '' ? [] : [{ side: 'ADDED' as const, text: added }]),
+  ];
+}
+
+/**
+ * One rewritten field as ONE line: what survived, with what it dropped struck through in place and
+ * what it gained marked beside it.
+ *
+ * `<del>` and `<ins>` rather than two styled spans, because that is what they mean — the elements
+ * exist for exactly this and carry it to a screen reader, which a class name does not.
+ */
+function RewrittenWords({ runs }: { runs: CriterionSegment[] }): JSX.Element {
   return (
-    <ol className="criteria-decision-proposed">
-      {proposed.map((criterion, index) => (
-        <li key={criterion.id ?? `new-${index}`}>
-          <span className="criteria-decision-text">{criterion.text}</span>
-          <span className="criteria-decision-method">{criterion.verificationMethod}</span>
-          {criterion.id === null ? (
-            <span className="criteria-decision-new">new in this proposal</span>
-          ) : null}
-        </li>
-      ))}
-    </ol>
+    <>
+      {runs.map((run, index) => {
+        if (run.side === 'REMOVED') {
+          return (
+            <del key={index} className="criteria-decision-cut" title={DROPPED_RUN_TITLE}>
+              {run.text}
+            </del>
+          );
+        }
+        if (run.side === 'ADDED') {
+          return (
+            <ins key={index} className="criteria-decision-add" title={ADDED_RUN_TITLE}>
+              {run.text}
+            </ins>
+          );
+        }
+        return <span key={index}>{run.text}</span>;
+      })}
+    </>
+  );
+}
+
+/**
+ * One row of the diff: what the proposal says — and, where it rewrites words, the two versions
+ * merged into one line rather than laid out one after the other.
+ *
+ * WHY MERGED. Two paragraphs per rewrite is what put 483px of content in a 360px scroll box: three
+ * rewrites of ninety-character Chinese cost six long blocks, of which about sixty characters
+ * actually differed. Read against each other they also asked the reader to do the comparison the
+ * server had already done. One line says the same thing in the space of one.
+ *
+ * `value` on the `<li>` is the server's ordinal rather than the row's position in this list, which
+ * is the whole point of showing three rows out of eight: `1.`, `2.`, `4.` tells a reader WHICH of
+ * the criteria moved, and a list that renumbered them `1. 2. 3.` would be inventing a set nobody
+ * proposed.
+ */
+function ChangedCriterion({ entry }: { entry: CriteriaProposalChangeEntry }): JSX.Element {
+  const badge = changeLabel(entry.change);
+  const words = entry.proposed ?? entry.onRecord;
+  const textMoved = entry.change === 'CHANGED' && entry.changed.includes('text');
+  const methodMoved = entry.changed.includes('verificationMethod');
+  return (
+    <li value={entry.ordinal} className="criteria-decision-entry">
+      <span className="criteria-decision-text">
+        {textMoved
+          ? <RewrittenWords runs={rewriteRuns(entry, 'text')} />
+          : words?.text ?? ''}
+      </span>
+      {badge ? <span className="criteria-decision-new">{badge}</span> : null}
+      {methodMoved ? (
+        <span className="criteria-decision-method">
+          {`${METHOD_LABEL}: `}
+          <RewrittenWords runs={rewriteRuns(entry, 'verificationMethod')} />
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * The proposal as a DIFF: the criteria it moves, and a count of the ones it leaves alone.
+ *
+ * `<details>` and not a piece of state, because there is nothing to remember: a card that is
+ * re-derived on every render has no business keeping a second thing across renders, and the
+ * element opens and closes without this component knowing about it.
+ */
+function ProposedChanges({ diff }: { diff: CriteriaProposalDiff }): JSX.Element {
+  const moved = movedEntries(diff);
+  const unmoved = unmovedEntries(diff);
+  return (
+    <>
+      {moved.length > 0 ? (
+        <ol className="criteria-decision-proposed">
+          {moved.map((entry, index) => (
+            <ChangedCriterion key={entry.definitionId ?? `added-${index}`} entry={entry} />
+          ))}
+        </ol>
+      ) : null}
+      {unmoved.length > 0 ? (
+        <details className="criteria-decision-unchanged">
+          <summary>{unchangedLine(unmoved.length)}</summary>
+          <ol className="criteria-decision-proposed criteria-decision-proposed--quiet">
+            {unmoved.map((entry, index) => (
+              <li value={entry.ordinal} key={entry.definitionId ?? `same-${index}`}>
+                <span className="criteria-decision-text">{entry.proposed?.text ?? ''}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
+    </>
   );
 }
 
@@ -318,11 +611,18 @@ export function CriteriaDecisionCard({
             </div>
             <div className="criteria-decision-kv">
               <span className="criteria-decision-k">Proposed</span>
+              {/* The legend rides on the summary's line rather than taking one of its own. On a
+                  card whose whole problem is height, a row spent saying what a strikethrough
+                  means is a row not spent on the criteria — and this is the line a reader is
+                  already on when they meet the first one. */}
               <span className="criteria-decision-v">
-                {`${row.proposed.length} criteria, as this project’s standard set`}
+                {changeSummary(row.diff)}
+                {hasRewrite(row.diff)
+                  ? <span className="criteria-decision-legend">{INLINE_DIFF_LEGEND}</span>
+                  : null}
               </span>
             </div>
-            <ProposedCriteria proposed={row.proposed} />
+            <ProposedChanges diff={row.diff} />
             <p className="criteria-decision-hold">{NOTHING_IS_ON_HOLD}</p>
           </>
         ) : standing.state === 'UNREAD' ? null : (
