@@ -22,13 +22,11 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
  *
  * NOTHING IS WRITTEN INTO THAT RECORD FROM HERE
  * ---------------------------------------------
- * Not by this file and not by the view that mounts it. Answering the card DELIVERS an answer to
- * the engine; it is the engine's `task_evidence_decide` that reaches the door, so a sentence
- * written from the browser at the moment of the click would be this tab asserting a compare-and-set
- * it did not witness — right when the door agreed and a lie when it refused. It would also be a
- * third copy of what the server has already written twice: the answered card, which names the task
- * and the revision and marks the option the person picked, and the call beneath it, which is the
- * only one of the three that can report whether the door agreed at all.
+ * Not by this file and not by the view that mounts it. A decision is pressed on the evidence card
+ * (`EvidenceDecisionCard.tsx`), which posts straight to the decision door and keeps the door's own
+ * receipt on itself. A line written into the transcript as well would be a second copy of that
+ * receipt, in the record of what the conversation did, about something no turn of the conversation
+ * took part in.
  *
  * ONE DECISION SURFACE, AND THIS IS NOT IT
  * ----------------------------------------
@@ -39,25 +37,28 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
  * won, and the loser found out from an error.
  *
  * So the buttons are gone and no request is written from this file at all — a decision is made on
- * the `AskUserQuestion` card the coordinator session raises, and nowhere else. What is kept is the
- * one thing that surface cannot do: say, at a glance and without a live turn, how many are waiting.
- * The rows are POINTERS. Pressing one takes the reader to the card, which is a navigation and not
- * an answer, and `DecisionRail.test.tsx` asserts over the rendered output that nothing here
- * answers anything — absence, not `disabled`, because a disabled button is still a second door
- * with a lock somebody can take off.
+ * the evidence card Orbit draws into the conversation (`EvidenceDecisionCard.tsx`), and nowhere
+ * else. Until 2026-09-10 that card was an `AskUserQuestion` a coordinator turn raised; it is drawn
+ * from the same read as these rows now, and no question an agent asks is taken for it. What is kept
+ * here is the one thing the card cannot do: stay pinned while the conversation scrolls, and say at
+ * a glance how many are waiting. The rows are POINTERS. Pressing one takes the reader to the card,
+ * which is a navigation and not an answer, and `DecisionRail.test.tsx` asserts over the rendered
+ * output that nothing here answers anything — absence, not `disabled`, because a disabled button is
+ * still a second door with a lock somebody can take off.
  *
  * A POINTER THAT CANNOT POINT SAYS SO
  * -----------------------------------
- * A pointer is only worth having if it arrives somewhere. There are four ways a waiting row has no
- * card to arrive at — the coordinator session is not running, it is running but has not reached
- * the call yet, the turn that raised the card is over so the card can no longer be answered, and
- * the card was answered seconds ago while this strip is still holding a 20s-old read. The caller
- * collapses all four into one fact it computes from rows it already holds (`answerableDecisionCards`
- * in `ApprovalPanel.tsx`): is there a card for this row, on screen, that could still be answered.
+ * A pointer is only worth having if it arrives somewhere. The card is drawn from the same read as
+ * these rows and waits on no turn, so what a waiting row can lack is a card in THIS conversation:
+ * one is drawn only in the coordinator session of the project the row's task is filed under. An
+ * ordinary session draws none, and a coordinator draws none for another project's task or for a
+ * task in no project. The caller answers it with the card's own filter over the read it already
+ * holds (`evidenceDecisionCardRows` in `EvidenceDecisionCard.tsx`): is there a card for this row
+ * on screen.
  *
  * A row with one is a control. A row without one is NOT a control: it is text, and it carries the
- * sentence saying what has to happen before there is anywhere to go. Trading a button that worked
- * for a pointer that does nothing when pressed would have been worse than changing nothing.
+ * sentence saying where its card is drawn instead. Trading a button that worked for a pointer that
+ * does nothing when pressed would have been worse than changing nothing.
  *
  * ONE LINE UNTIL ASKED
  * --------------------
@@ -157,16 +158,6 @@ export const STRIP_LABEL = 'Open questions';
 export const NEEDS_DECISION_LABEL = 'NEEDS YOUR DECISION';
 /** The group this reader is the one to clear, by submitting another revision. */
 export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
-/**
- * The two option labels the decision ask is raised with.
- *
- * Nothing in this file renders them any more — they are the WIRE vocabulary now, declared here
- * because this is where the row they are about is defined, and read by `ApprovalPanel.tsx` to
- * recognise which `AskUserQuestion` is a completion decision. A rail that rendered either of them
- * would be the second decision surface again.
- */
-export const CONFIRM_LABEL = 'Confirm completion';
-export const SEND_BACK_LABEL = 'Send back';
 
 /**
  * ── THE SECOND ROW TYPE: A HELD CRITERIA WEAKENING ───────────────────────────────────────────
@@ -225,18 +216,17 @@ export function decisionRowKey(row: Pick<PendingDecisionRow, 'taskId' | 'evidenc
 }
 
 /** What the pointer offers, said as the destination rather than as the act. */
-export const POINTER_HINT = 'Answer in the conversation ↓';
+export const POINTER_HINT = 'Answer on its card ↓';
 
 /**
  * What a row says when there is no card to send anybody to.
  *
- * One sentence for all four ways it happens, because the reader does the same thing in every one
- * of them and a screen that guessed which one it was would be wrong some of the time. It names
- * where a decision IS made, so the absence reads as "not here, not yet" rather than as a failure.
+ * It names where the card IS drawn, so the absence reads as "not here" rather than as a failure —
+ * and it promises no card later, because this conversation will never draw one for this row.
  */
 export const NO_CARD_NOTE =
-  'No question card for this one in the conversation right now. A decision is made on the card '
-  + 'the coordinator session raises, so there is nothing to press here until it does.';
+  'No card for this one in this conversation. Its decision card is drawn only in the coordinator '
+  + 'session of the project its task is filed under, so there is nothing to press here.';
 
 /**
  * What has to happen before this row becomes answerable, addressed to the party who can do it.
@@ -256,8 +246,8 @@ export const WAITING_ON_YOU_ACTION =
  *
  * The card publishes `data-decision-row` from `decisionRowKey`, so the handle is a pure function
  * of the row and there is no map between the two to keep in step. Returns whether it arrived: the
- * caller only offers the pointer when `answerableDecisionCards` says there is one, and a `false`
- * here means that answer went stale between the render and the press.
+ * caller only offers the pointer when the card's own filter says there is one, and a `false` here
+ * means that answer went stale between the render and the press.
  */
 export function revealDecisionCard(
   row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>,
@@ -315,7 +305,7 @@ function DecisionRows({
     <ul className="decision-rail-list">
       {group.map((row) => {
         // Both halves of the door's own answer, and then whether the card exists. A row the door
-        // would refuse has nowhere to go by construction — no ask is ever raised over one — so
+        // would refuse has nowhere to go by construction — no card is ever drawn for one — so
         // this says the same thing twice on purpose: the pointer appears only for a row that could
         // be answered by this reader on a card that is on screen.
         const pointable =
@@ -543,8 +533,8 @@ export function SessionDecisionStrip({
   /** The project this session coordinates, when it coordinates one. Its held criteria proposals
    *  are the strip's second row type; an ordinary session reads nothing extra. */
   projectId?: string | null;
-  /** The rows whose decision card is on screen and still answerable, by `decisionRowKey`. Computed
-   *  by the page, which is the only place that holds both the queue and the live approvals. */
+  /** The rows whose evidence card this conversation draws, by `decisionRowKey`. Computed by the
+   *  page, which mounts that card beside this strip, with the card's own filter. */
   cards?: ReadonlySet<string>;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {

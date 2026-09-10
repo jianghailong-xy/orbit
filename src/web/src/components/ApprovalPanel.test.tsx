@@ -1,7 +1,37 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { App as AntApp } from 'antd';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
+import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
+import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDecisionCard';
+import type { Runner } from './TasksSidePanel';
+
+// The census at the bottom of this file mounts the real session page. It reaches the server through
+// `api()`, and seeds its transcript through `getSessionEventPage` and its pending questions through
+// `listApprovals` — both of which call the module's own `api` rather than the export, so all three
+// are replaced. The cards above reach none of them.
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>();
+  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), listApprovals: vi.fn() };
+});
+// jsdom has no IndexedDB, and a cached transcript would seed the page instead of the stub.
+vi.mock('../lib/transcriptStore', () => ({
+  loadTranscript: async () => null,
+  saveTranscript: async () => {},
+}));
+
+const { api, getSessionEventPage, listApprovals } = await import('../api');
+const apiMock = vi.mocked(api);
+const seedMock = vi.mocked(getSessionEventPage);
+const approvalsMock = vi.mocked(listApprovals);
+const { WorkspaceView } = await import('./WorkspaceView');
+const { encodeId } = await import('../lib/idCodec');
 
 const dagApproval = (over: Record<string, unknown> = {}): ApprovalInfo =>
   ({
@@ -220,5 +250,285 @@ describe('DAG change approval', () => {
 
     expect(html).toContain('Approve tool call: Bash');
     expect(html).toContain('ls -la');
+  });
+});
+
+/**
+ * One waiting completion decision, one entry: a census over the session page as it is composed.
+ *
+ * The page puts a completion decision in front of a reader in one place — Orbit's evidence card,
+ * drawn from the pending read (`EvidenceDecisionCard.tsx`). The second entry used to come from
+ * this file: an `AskUserQuestion` offering `Confirm completion` / `Send back` whose text named a
+ * waiting row was taken for that decision and drawn with the same verdicts, and two entries for
+ * one question raced on 2026-09-09. So this mounts the real `WorkspaceView` for a coordinator
+ * conversation with one row waiting AND such a question pending, and counts what is on screen
+ * rather than asking whether some function recognises something: the verdicts appear once, on the
+ * evidence card, and the question is the ordinary form every question is.
+ *
+ * It has to be the real page. A card rendered on its own is handed only what a test passes it, so
+ * it cannot see a page that hands the question the pending read again.
+ */
+describe('one waiting completion decision on the session page', { timeout: 30_000 }, () => {
+  const RUNNER_ID = '0195c0de-0000-7000-8000-000000000041';
+  const WORKSPACE_ID = encodeId('0195c0de-0000-7000-8000-000000000042');
+  const SESSION_ID = encodeId('0195c0de-0000-7000-8000-000000000043');
+  const PROJECT_ID = encodeId('0195c0de-0000-7000-8000-000000000044');
+
+  const RUNNER = {
+    id: RUNNER_ID,
+    name: 'mac-01',
+    online: true,
+    maxConcurrent: 2,
+    activeSessions: 1,
+    engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
+  } satisfies Runner;
+
+  /** The project's coordinator conversation, mid-turn, so the question below is still live. */
+  const COORDINATOR = {
+    id: SESSION_ID,
+    workspaceId: WORKSPACE_ID,
+    runnerId: RUNNER_ID,
+    projectId: PROJECT_ID,
+    title: 'coordinating the evidence card',
+    status: 'RUNNING',
+    runStatus: 'RUNNING',
+    runState: 'RUNNING',
+    engineTurnActive: true,
+    provider: 'claude',
+    createdAt: '2026-09-10T13:00:00Z',
+    updatedAt: '2026-09-10T13:27:00Z',
+  };
+
+  /** The one row waiting, as the pending read publishes it to that conversation. */
+  const WAITING: PendingDecisionRow = {
+    taskId: encodeId('0195c0de-0000-7000-8000-000000000045'),
+    title: '拆掉裁决卡特例',
+    projectId: PROJECT_ID,
+    criterion: { key: '7UuR4yLsKJnDBlj2lNSv7G', text: '同一条待决证据在 Web 上只有一个可操作的裁决入口' },
+    evidenceRevision: '3',
+    ageSeconds: 10 * 60,
+    claim: '待决栏指向系统卡，问题卡不再被当成裁决卡。',
+    gaps: [],
+    citations: [],
+    decidability: { decidable: true, refusal: null, requiredAction: null },
+    independence: { independent: true, disqualification: null, requiredAction: null },
+  };
+
+  const QUEUE: PendingDecisionQueue = {
+    decidingSessionId: SESSION_ID,
+    count: 1,
+    oldestAgeSeconds: WAITING.ageSeconds,
+    pending: [WAITING],
+    waitingOnYou: [],
+  };
+
+  /**
+   * A pending question about that same row, worded the way the coordinator's ask was: the two
+   * answers, and the task and revision in its text. Everything a page would need to take it for
+   * the decision is in it, which is what makes it the fixture.
+   */
+  const LOOKALIKE = {
+    id: 'approval-lookalike',
+    sessionId: SESSION_ID,
+    toolName: 'AskUserQuestion',
+    status: 'PENDING',
+    createdAt: '2026-09-10T13:26:00Z',
+    input: {
+      questions: [{
+        question:
+          `${WAITING.claim}\n\n${WAITING.title} — task ${WAITING.taskId}, evidence rev ${WAITING.evidenceRevision}`,
+        header: 'Completion',
+        options: [
+          { label: 'Confirm completion', description: 'This evidence settles the criterion it quotes.' },
+          { label: 'Send back', description: 'It does not settle it.' },
+        ],
+        multiSelect: false,
+      }],
+    },
+  } as ApprovalInfo;
+
+  const VERDICTS = [DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION];
+
+  class FakeEventSource {
+    onmessage: ((e: { data: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor(readonly url: string) {}
+    close() {}
+  }
+
+  const unstubbed: string[] = [];
+  const scrolled: Element[] = [];
+  let container: HTMLDivElement | null = null;
+  let root: Root | null = null;
+  let client: QueryClient | null = null;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    unstubbed.length = 0;
+    scrolled.length = 0;
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false, media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {},
+      addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+    }));
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: () => {} });
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value(this: Element) {
+        scrolled.push(this);
+      },
+    });
+    apiMock.mockReset();
+    seedMock.mockReset();
+    seedMock.mockImplementation(async () => ({ events: [], hasMore: false }));
+    // Already pending when the page opens, as after a refresh or a deep link.
+    approvalsMock.mockReset();
+    approvalsMock.mockImplementation(async (sessionId: string) => (sessionId === SESSION_ID ? [LOOKALIKE] : []));
+    apiMock.mockImplementation((path: string) => {
+      const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
+      if (path === '/users/me') {
+        return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
+      }
+      if (path === '/workspaces') {
+        return reply([{ id: WORKSPACE_ID, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: 'claude' }]);
+      }
+      if (path.startsWith(`/sessions/${SESSION_ID}`)) {
+        if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
+        if (path.includes('/turns')) return reply([]);
+        if (path.includes('/background')) return reply([]);
+        if (path.includes('/diff')) return reply({ files: [] });
+        return reply(COORDINATOR);
+      }
+      if (path.startsWith('/sessions')) return reply([COORDINATOR]);
+      if (path.startsWith('/tasks/evidence-decisions/pending')) return reply(QUEUE);
+      if (path.startsWith(`/projects/${PROJECT_ID}/acceptance/criteria-decisions/pending`)) {
+        return reply({ readAt: '2026-09-10T13:27:00Z', projectId: PROJECT_ID, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
+      }
+      if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
+      if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
+      if (path === '/providers' || path === '/session-tags' || path === '/task-lists' || path === '/runners') return reply([]);
+      unstubbed.push(path);
+      return reply([]);
+    });
+  });
+
+  afterEach(async () => {
+    const mountedRoot = root;
+    const mountedClient = client;
+    const node = container;
+    root = null;
+    client = null;
+    container = null;
+    try {
+      if (mountedRoot) await act(async () => mountedRoot.unmount());
+    } finally {
+      if (mountedClient) {
+        await mountedClient.cancelQueries();
+        mountedClient.clear();
+      }
+      node?.remove();
+      delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      vi.unstubAllGlobals();
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    }
+  });
+
+  const waitForUi = async (assertion: () => void): Promise<void> => {
+    await act(async () => {
+      await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
+    });
+  };
+
+  /** The question cards on the page — every approval card that is not one of Orbit's own. */
+  const questionCards = (scope: HTMLElement): HTMLElement[] =>
+    [...scope.querySelectorAll<HTMLElement>('.approval-card')].filter(
+      (card) => !card.matches('.evidence-decision, .criteria-decision'),
+    );
+
+  /** Every control in scope labelled with one of the two verdicts, in document order. */
+  const verdictControls = (scope: HTMLElement): string[] =>
+    [...scope.querySelectorAll('button')]
+      .map((button) => (button.textContent ?? '').trim())
+      .filter((label) => VERDICTS.includes(label));
+
+  async function sessionPage(): Promise<HTMLDivElement> {
+    const nextClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+    });
+    const nextContainer = document.createElement('div');
+    const nextRoot = createRoot(nextContainer);
+    client = nextClient;
+    container = nextContainer;
+    root = nextRoot;
+    document.body.appendChild(nextContainer);
+    await act(async () => {
+      nextRoot.render(
+        <QueryClientProvider client={nextClient}>
+          <MemoryRouter initialEntries={[`/sessions/${SESSION_ID}`]}>
+            <AntApp>
+              <WorkspaceView runner={RUNNER} />
+            </AntApp>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+    // Both entries a reader could meet: the evidence card, drawn once the session row names its
+    // project and the read is back, and the question, fetched behind the session-switch debounce.
+    // Held until both are there, so nothing below is a census of a page still loading.
+    await waitForUi(() => {
+      expect(nextContainer.querySelector('.evidence-decision'), 'the evidence card was not drawn').not.toBeNull();
+      expect(questionCards(nextContainer), 'the pending question never reached the page').toHaveLength(1);
+    });
+    expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
+    return nextContainer;
+  }
+
+  it('puts one set of verdicts on the page, and it is the evidence card’s', async () => {
+    const page = await sessionPage();
+    const card = page.querySelector<HTMLElement>('.evidence-decision')!;
+
+    // A census, not a search: every verdict control on the whole page, wherever it came from.
+    expect(verdictControls(page), 'verdict controls on the session page').toEqual(VERDICTS);
+    // All of them on the card drawn for the waiting row, and pressable there.
+    expect(card.getAttribute('data-decision-row')).toBe(decisionRowKey(WAITING));
+    expect(verdictControls(card)).toEqual(VERDICTS);
+    for (const button of card.querySelectorAll<HTMLButtonElement>('button.card-action')) {
+      expect(button.disabled, `${button.textContent} is on the card but cannot be pressed`).toBe(false);
+    }
+  });
+
+  it('draws the question that reads like the verdict as the ordinary question form', async () => {
+    const page = await sessionPage();
+    const [question] = questionCards(page);
+
+    // What every question gets: its own options as picks, a field to type an answer, and Submit.
+    expect(
+      [...question.querySelectorAll('.chat-q-opt-btn .chat-q-opt-label')].map((label) => label.textContent),
+    ).toEqual(['Confirm completion', 'Send back']);
+    expect(question.querySelector('input.chat-q-custom'), 'the typed-answer field is missing').not.toBeNull();
+    expect([...question.querySelectorAll('button')].map((button) => button.textContent)).toContain('Submit');
+    // And nothing of the decision: not its card, no handle for the rail, none of its verdicts.
+    expect(question.classList.contains('decision-ask'), 'the question is drawn as a decision card').toBe(false);
+    expect(question.querySelector('[data-decision-row]'), 'the question publishes a handle for the rail').toBeNull();
+    expect(verdictControls(question)).toEqual([]);
+  });
+
+  it('points the pinned strip’s row at the evidence card', async () => {
+    const page = await sessionPage();
+    await act(async () => {
+      page.querySelector<HTMLButtonElement>('.decision-strip-line')!.click();
+    });
+    const pointers = [...page.querySelectorAll<HTMLButtonElement>('.decision-rail-pointer')];
+    expect(pointers, 'the waiting row is not a pointer on this page').toHaveLength(1);
+
+    scrolled.length = 0;
+    await act(async () => {
+      pointers[0].click();
+    });
+    expect(scrolled).toEqual([page.querySelector('.evidence-decision')]);
   });
 });

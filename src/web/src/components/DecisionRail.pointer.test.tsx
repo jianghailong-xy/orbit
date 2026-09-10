@@ -1,38 +1,47 @@
 // @vitest-environment jsdom
 import { act, type JSX } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ApprovalInfo } from '../api';
-import { ApprovalPanel, answerableDecisionCards } from './ApprovalPanel';
+import { pendingDecisionsQuery } from '../lib/queries';
+import { ApprovalPanel } from './ApprovalPanel';
 import {
-  CONFIRM_LABEL,
   DecisionStrip,
   NO_CARD_NOTE,
   POINTER_HINT,
-  SEND_BACK_LABEL,
   decisionRowKey,
   revealDecisionCard,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
+import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
 
 /**
- * The pointer, end to end: the rail and the cards in one document, as the page composes them.
+ * The pointer, end to end: the rail and the evidence card in one document, as the page composes them.
  *
- * `DecisionRail.test.tsx` renders the strip alone and can only ask what it PUT on screen. The two
- * claims this round has to make are about two components agreeing — the rail points at a handle
- * and the card publishes it — so neither file can hold them and this one renders both. The strip's
- * `hasCard` is not hand-fed either: it comes from `answerableDecisionCards`, the same function
- * `WorkspaceView` calls, over the same approvals it would hold.
+ * `DecisionRail.test.tsx` renders the strip alone and can only ask what it PUT on screen. The claim
+ * this file makes is about two components agreeing — the rail points at a handle and the card
+ * publishes it — so neither file can hold it and this one renders both. The strip's `hasCard` is
+ * not hand-fed either: it is computed the way `WorkspaceView` computes it, with the card's own
+ * filter (`evidenceDecisionCardRows`) over the read the card is drawn from.
  *
  * WHY THE "NO CARD" HALF IS THE POINT
  * -----------------------------------
  * The rail could decide without a live turn; that is what it gave up. So a pointer with nothing to
  * point at would be strictly worse than the button it replaced — a control that does nothing when
- * pressed, in place of one that worked. Every way a waiting row can lack a card is asserted below,
- * and what is asserted is not "the click is a no-op" but that there is no control to click.
+ * pressed, in place of one that worked. Every way a waiting row can lack a card in a conversation
+ * is asserted below, and what is asserted is not "the click is a no-op" but that there is no
+ * control to click.
  */
 
+vi.mock('../api', () => ({ api: vi.fn() }));
+const { api } = await import('../api');
+const apiMock = vi.mocked(api);
+
+const SESSION_ID = '34MOJw69NzKSq2X0exxf9';
+const PROJECT_ID = '34MPiBgZ80YpSKt0lmTQA';
+const OTHER_PROJECT_ID = '34LWcmLItBx6ytdO26XXF';
 const TASK_A = '34LMiluvx0jK63cj8arWl';
 const TASK_B = '34LVWtmeCNjbcCbCF2wDd';
 
@@ -40,6 +49,7 @@ function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
   return {
     taskId: TASK_A,
     title: 'the decision door',
+    projectId: PROJECT_ID,
     criterion: { key: '6KG2mjp63PrtVvGwxRLvFY', text: 'one decision surface, and this is not it' },
     evidenceRevision: '2',
     ageSeconds: 20 * 60,
@@ -56,7 +66,7 @@ function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
 
 function queue(rows: PendingDecisionRow[]): PendingDecisionQueue {
   return {
-    decidingSessionId: 'coordinator-session',
+    decidingSessionId: SESSION_ID,
     count: rows.length,
     oldestAgeSeconds: rows[0]?.ageSeconds ?? null,
     pending: rows,
@@ -64,22 +74,22 @@ function queue(rows: PendingDecisionRow[]): PendingDecisionQueue {
   };
 }
 
-/** The tool input exactly as `buildEvidenceQuestion` shapes it: the two option labels, and the
- *  trailing identity line that is the only part of the body the card reads. */
-function decisionApproval(id: string, rows: PendingDecisionRow[]): ApprovalInfo {
+/** A question that reads like the verdict: the two answers the coordinator's ask used to offer, and
+ *  the task and revision in its text. The page renders it as it renders every question. */
+function lookalike(r: PendingDecisionRow): ApprovalInfo {
   return {
-    id,
+    id: 'approval-lookalike',
     toolName: 'AskUserQuestion',
     input: {
-      questions: rows.map((r) => ({
+      questions: [{
         question: `${r.title} — task ${r.taskId}, evidence rev ${r.evidenceRevision}`,
         header: 'Completion',
         options: [
-          { label: CONFIRM_LABEL, description: 'This evidence settles the criterion it quotes.' },
-          { label: SEND_BACK_LABEL, description: 'It does not settle it.' },
+          { label: 'Confirm completion', description: 'This evidence settles the criterion it quotes.' },
+          { label: 'Send back', description: 'It does not settle it.' },
         ],
         multiSelect: false,
-      })),
+      }],
     },
   } as ApprovalInfo;
 }
@@ -98,6 +108,7 @@ beforeAll(() => {
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
+const clients: QueryClient[] = [];
 
 afterEach(async () => {
   scrolled.length = 0;
@@ -106,6 +117,8 @@ afterEach(async () => {
   if (mounted) await act(async () => mounted.unmount());
   container?.remove();
   container = null;
+  for (const qc of clients.splice(0)) qc.clear();
+  apiMock.mockReset();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
@@ -121,25 +134,31 @@ async function mount(ui: JSX.Element): Promise<HTMLElement> {
 }
 
 /**
- * The page in miniature: the pinned strip, and under it the approval cards, wired exactly the way
- * `WorkspaceView` wires them — including the one computation that decides whether a row is a
- * pointer at all.
+ * The page in miniature: the pinned strip, the evidence card under it and any question cards after
+ * that, over one read that has already come back — wired the way `WorkspaceView` wires them,
+ * including the one computation that decides whether a row is a pointer at all.
  */
 async function page({
   rows,
+  projectId = PROJECT_ID,
   approvals = [],
-  answerable,
 }: {
   rows: PendingDecisionRow[];
+  /** The project this session coordinates; null for an ordinary session. */
+  projectId?: string | null;
   approvals?: ApprovalInfo[];
-  /** The approval ids whose turn is still listening. Defaults to all of them. */
-  answerable?: string[];
 }): Promise<HTMLElement> {
-  const live = new Set(answerable ?? approvals.map((each) => each.id));
   const payload = queue(rows);
-  const cards = answerableDecisionCards(approvals, live, payload);
+  const qc = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, refetchOnMount: false, retryOnMount: false, refetchOnWindowFocus: false },
+    },
+  });
+  clients.push(qc);
+  qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, payload);
+  const cards = new Set(evidenceDecisionCardRows(payload, projectId).map(decisionRowKey));
   return mount(
-    <>
+    <QueryClientProvider client={qc}>
       <DecisionStrip
         queue={payload}
         open
@@ -147,16 +166,11 @@ async function page({
         onToggle={() => {}}
         onReveal={(each) => revealDecisionCard(each)}
       />
+      <SessionEvidenceDecisionCard sessionId={SESSION_ID} projectId={projectId} />
       {approvals.map((approval) => (
-        <ApprovalPanel
-          key={approval.id}
-          approval={approval}
-          decisions={payload}
-          answerable={live.has(approval.id)}
-          onDecide={() => {}}
-        />
+        <ApprovalPanel key={approval.id} approval={approval} onDecide={() => {}} />
       ))}
-    </>,
+    </QueryClientProvider>,
   );
 }
 
@@ -166,7 +180,7 @@ const strip = (scope: HTMLElement): HTMLElement =>
 const pointers = (scope: HTMLElement): HTMLButtonElement[] =>
   [...scope.querySelectorAll<HTMLButtonElement>('.decision-rail-pointer')];
 
-/** The card section that carries this row's handle, or null when no card publishes it. */
+/** The element that carries this row's handle, or null when nothing on the page publishes it. */
 const anchorFor = (scope: HTMLElement, r: PendingDecisionRow): HTMLElement | null =>
   scope.querySelector<HTMLElement>(`[data-decision-row="${decisionRowKey(r)}"]`);
 
@@ -176,29 +190,33 @@ async function click(button: HTMLElement): Promise<void> {
   });
 }
 
-describe('a row points at the card that answers it', () => {
-  it('takes the reader to that row’s question when the row is pressed', async () => {
+describe('a row points at the evidence card that answers it', () => {
+  it('takes the reader to the card Orbit drew for that row, not to a question that reads like one', async () => {
     const only = row();
-    const scope = await page({ rows: [only], approvals: [decisionApproval('a1', [only])] });
+    const scope = await page({ rows: [only], approvals: [lookalike(only)] });
 
-    const anchor = anchorFor(scope, only);
-    expect(anchor, 'the card publishes no handle for this row').not.toBeNull();
-    // The anchor is the question inside the real decision card, not a marker put somewhere else.
-    expect(anchor!.closest('.approval-card.decision-ask')).not.toBeNull();
+    // One handle on the whole page, and it is the evidence card's root. The look-alike question is
+    // on screen, as a question, and publishes none.
+    const handles = [...scope.querySelectorAll<HTMLElement>('[data-decision-row]')];
+    expect(handles).toHaveLength(1);
+    const card = handles[0];
+    expect(card.getAttribute('data-decision-row')).toBe(decisionRowKey(only));
+    expect(card.matches('.approval-card.evidence-decision'), 'the handle is not the evidence card').toBe(true);
+    expect(scope.querySelector('.chat-q-opt-btn'), 'the look-alike question is not on screen').not.toBeNull();
 
     expect(scrolled).toEqual([]);
     await click(pointers(scope)[0]);
 
     // The assertion this test exists for: the jump HAPPENED, and it arrived at that card.
-    expect(scrolled).toEqual([anchor]);
+    expect(scrolled).toEqual([card]);
+    // Drawn from the read the page already holds: nothing was asked of the server to get here.
+    expect(apiMock).not.toHaveBeenCalled();
   });
 
-  it('sends each row to its own question, not to the first one on the card', async () => {
-    // One ask over two rows is one card with two questions. A pointer that landed on the card
-    // would put a reader on somebody else's evidence and let them answer it.
+  it('sends each row to its own card, not to the first one on the page', async () => {
     const a = row();
     const b = row({ taskId: TASK_B, title: 'the evidence envelope', evidenceRevision: '1' });
-    const scope = await page({ rows: [a, b], approvals: [decisionApproval('a1', [a, b])] });
+    const scope = await page({ rows: [a, b] });
 
     expect(pointers(scope)).toHaveLength(2);
     await click(pointers(scope)[1]);
@@ -209,7 +227,7 @@ describe('a row points at the card that answers it', () => {
 
   it('offers the pointer as a destination rather than as an answer', async () => {
     const only = row();
-    const scope = await page({ rows: [only], approvals: [decisionApproval('a1', [only])] });
+    const scope = await page({ rows: [only] });
 
     expect(strip(scope).textContent).toContain(POINTER_HINT);
     // And pressing it wrote nothing: the strip still says exactly what it said, because a
@@ -221,20 +239,19 @@ describe('a row points at the card that answers it', () => {
 });
 
 /**
- * The half the acceptance calls the core: what a waiting row is when there is no card.
+ * The half the acceptance calls the core: what a waiting row is when this conversation draws no
+ * card for it.
  *
- * Every case below is a real thing that happens, and all of them come out of one computation over
- * facts the page already holds. What each asserts is the same three things: the row is still
- * there, it is NOT a control, and it says what has to happen before it becomes one.
+ * Each case is a real thing that happens, and all of them come out of the card's own filter. What
+ * each asserts is the same: the row is still there, it is NOT a control, it says where its card is
+ * drawn, and nothing on the page carries its handle.
  */
-describe('a row with no card to reach is not a pointer', () => {
-  const only = row();
-
-  /** Nothing to press, and something to read, in whichever way the card is missing. */
-  const expectInert = (scope: HTMLElement): void => {
+describe('a row this conversation draws no card for is not a pointer', () => {
+  /** Nothing to press, and something to read, whichever way the card is missing. */
+  const expectInert = (scope: HTMLElement, r: PendingDecisionRow): void => {
     const rail = strip(scope);
     expect(rail.querySelector('.decision-rail-row'), 'the row itself is gone').not.toBeNull();
-    expect(rail.textContent).toContain(only.title);
+    expect(rail.textContent).toContain(r.title);
     expect(pointers(scope)).toHaveLength(0);
     expect(rail.querySelector('.decision-rail-inert')).not.toBeNull();
     // The only control left in the whole strip is the fold. Nothing inside the group is pressable
@@ -243,90 +260,32 @@ describe('a row with no card to reach is not a pointer', () => {
       'decision-strip-line',
     ]);
     expect(rail.textContent).toContain(NO_CARD_NOTE);
+    expect(anchorFor(scope, r), 'something on the page publishes this row’s handle').toBeNull();
     expect(scrolled).toEqual([]);
   };
 
-  it('when the coordinator session is not running, or has not reached the call yet', async () => {
-    // No approval is held for it at all. Both situations arrive here as the same input, because
-    // both mean the same thing to a reader: the question has not been raised.
-    expectInert(await page({ rows: [only] }));
+  it('in a session that coordinates no project', async () => {
+    // An ordinary conversation can still be handed rows it may decide; it draws a card for none.
+    const only = row();
+    expectInert(await page({ rows: [only], projectId: null }), only);
   });
 
-  it('when the turn that raised the card is over', async () => {
-    // The card is still on screen and still says PENDING — the engine writes nothing when it
-    // abandons a call — but nothing is listening for an answer, so it is not a place to send
-    // anybody. The card itself says as much; the rail must not contradict it.
-    const scope = await page({
-      rows: [only],
-      approvals: [decisionApproval('a1', [only])],
-      answerable: [],
-    });
-
-    expect(anchorFor(scope, only), 'the dead card is still rendered').not.toBeNull();
-    expectInert(scope);
+  it('in a coordinator session, for a task filed under another project', async () => {
+    const elsewhere = row({ projectId: OTHER_PROJECT_ID });
+    expectInert(await page({ rows: [elsewhere] }), elsewhere);
   });
 
-  it('when it was answered a moment ago and this read is still 20s old', async () => {
-    // The answer drops the approval optimistically while the strip goes on showing the row until
-    // its next poll. The pointer goes with the card, so the stale row loses its control rather
-    // than keeping one aimed at something that is no longer there.
-    expectInert(await page({ rows: [only], approvals: [] }));
-  });
-
-  it('when the card on screen names a revision this read no longer lists', async () => {
-    // A decision is a compare-and-set against ONE version, and the guard against answering the
-    // wrong one turns out to be layered. The ask names rev 1; the queue lists rev 2; so the card
-    // matches no row this session may decide and `ApprovalPanel` does not recognise it as a
-    // decision at all — it renders as the ordinary option form, which publishes no handle. The
-    // rail therefore has nothing to point at, which is the right answer arrived at twice.
-    const scope = await page({
-      rows: [only],
-      approvals: [decisionApproval('a1', [row({ evidenceRevision: '1' })])],
-    });
-
-    expect(scope.querySelector('.approval-card'), 'the approval is on screen').not.toBeNull();
-    expect(scope.querySelector('.decision-ask-q'), 'it is not a decision card').toBeNull();
-    expect(scope.querySelector('[data-decision-row]'), 'it publishes no handle').toBeNull();
-    expectInert(scope);
+  it('in a coordinator session, for a task filed under no project', async () => {
+    const unfiled = row({ projectId: null });
+    expectInert(await page({ rows: [unfiled] }), unfiled);
   });
 
   it('does not throw or scroll if a reveal is asked for anyway', async () => {
     // The last line of defence: `hasCard` is computed at render and pressed a moment later, so it
     // can go stale. Reveal says it did not arrive instead of scrolling something else.
-    await page({ rows: [only] });
+    const only = row();
+    await page({ rows: [only], projectId: null });
     expect(revealDecisionCard(only)).toBe(false);
     expect(scrolled).toEqual([]);
-  });
-});
-
-/**
- * The index itself, as a function: this is what makes the four cases above one answer rather than
- * four branches somebody has to remember to keep in step.
- */
-describe('which cards a pointer may point at', () => {
-  const only = row();
-
-  it('names a row only when its card is held AND still answerable', () => {
-    const approval = decisionApproval('a1', [only]);
-    const key = decisionRowKey(only);
-
-    expect([...answerableDecisionCards([approval], new Set(['a1']), queue([only]))]).toEqual([key]);
-    expect(answerableDecisionCards([approval], new Set(), queue([only])).size).toBe(0);
-    expect(answerableDecisionCards([], new Set(['a1']), queue([only])).size).toBe(0);
-  });
-
-  it('names nothing for an approval that is not one of these questions', () => {
-    const other = {
-      id: 'a2',
-      toolName: 'Bash',
-      input: { command: 'npm test' },
-    } as ApprovalInfo;
-
-    expect(answerableDecisionCards([other], new Set(['a2']), queue([only])).size).toBe(0);
-  });
-
-  it('names nothing without a queue to recognise the question by', () => {
-    const approval = decisionApproval('a1', [only]);
-    expect(answerableDecisionCards([approval], new Set(['a1']), null).size).toBe(0);
   });
 });

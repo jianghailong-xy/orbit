@@ -6602,17 +6602,12 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--brand);
 }
 /* ── The evidence-decision card ───────────────────────────────────────────────────────────
-   One AskUserQuestion is not a form: the completion decision (`ApprovalPanel`,
-   EvidenceDecisionForm) is a judgment about a row the server publishes in full, so it is laid
-   out as the reader decides — what is claimed, what is admitted missing, what was checked for
-   them — with the actions stacked underneath instead of hidden behind a pick-then-Submit. */
+   The completion decision (`EvidenceDecisionCard.tsx`) is a judgment about a row the server
+   publishes in full, not a form, so it is laid out as the reader decides — what is claimed, what
+   is admitted missing, what was checked for them — with the actions stacked underneath instead of
+   hidden behind a pick-then-Submit. */
 .decision-ask-body {
   padding-bottom: 12px;
-}
-.decision-ask-q + .decision-ask-q {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--brand-border);
 }
 .decision-ask-chip {
   font-size: 11px;
@@ -6668,8 +6663,7 @@ html[data-theme='dark'] .session-tag-chip {
 .decision-ask-gaps-rest li + li {
   margin-top: 4px;
 }
-.decision-ask-checks,
-.decision-ask-full {
+.decision-ask-checks {
   margin-top: 8px;
 }
 /* A disclosure has to read as one without reading as an action: text-sized, text-coloured, and
@@ -6717,21 +6711,6 @@ html[data-theme='dark'] .session-tag-chip {
   flex-basis: 100%;
   color: var(--text-3);
   white-space: pre-wrap;
-}
-/* The string the tool actually carries, and the one place on this card it is shown. `pre-wrap`
-   is the whole of the old card's bug: `.chat-q-text` set no white-space at all, so eight hundred
-   words of claim, criterion and gaps ran together into one paragraph. */
-.decision-ask-full-body {
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-sunken);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-2);
 }
 /* The actions stack: a verdict is a full-width choice, not one of three things on a toolbar.
    Written against `.card-actions` too, because that class sets `align-items: center` further down
@@ -6783,15 +6762,14 @@ html[data-theme='dark'] .session-tag-chip {
   flex-direction: column;
   align-items: stretch;
 }
-/* What one row's answer looks like while the card waits on the others it was raised with. */
+/* What an answer given from the card leaves where its actions were. */
 .decision-ask-picked {
   margin-top: 12px;
   font-size: 12.5px;
   color: var(--text-2);
 }
-/* The same card drawn by Orbit from the pending read (`EvidenceDecisionCard.tsx`): its head carries
-   the provenance mark the criteria card carries, and a version it can no longer answer says why
-   above the actions it has disabled. */
+/* Its head carries the provenance mark the criteria card carries, and a version it can no longer
+   answer says why above the actions it has disabled. */
 .evidence-decision .approval-head {
   display: flex;
   align-items: center;

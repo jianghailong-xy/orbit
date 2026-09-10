@@ -3,12 +3,10 @@ import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  CONFIRM_LABEL,
   DecisionStrip,
   NEEDS_DECISION_LABEL,
   NO_CARD_NOTE,
   POINTER_HINT,
-  SEND_BACK_LABEL,
   WAITING_ON_YOU_ACTION,
   WAITING_ON_YOU_LABEL,
   decisionRowKey,
@@ -18,6 +16,7 @@ import {
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
+import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDecisionCard';
 
 /**
  * What the strip puts on screen, and — the half that matters more — what it does not.
@@ -155,7 +154,7 @@ function occurrences(html: string, needle: string): number {
 /**
  * Every `<button>` in the output, as its opening tag.
  *
- * A census rather than a search. Asked as "is CONFIRM_LABEL absent" this file would pass on a
+ * A census rather than a search. Asked as "is the confirm label absent" this file would pass on a
  * strip that grew a differently-worded action, a disabled one, or one hidden by a stylesheet —
  * all three of which leave the second decision door standing. Asked as "what is here", the answer
  * has to be a list somebody deliberately extended.
@@ -293,11 +292,11 @@ describe('nothing in the strip answers anything', () => {
   });
 
   it('never renders either decision as a word on screen', () => {
-    // The two labels still exist as the wire vocabulary the ask is raised with — they are just not
-    // something this strip may put in front of a reader.
+    // The two verdicts are the evidence card's words, and that card is the one place a reader may
+    // meet them (`EvidenceDecisionCard.tsx`).
     for (const html of everyState()) {
-      expect(html).not.toContain(CONFIRM_LABEL);
-      expect(html).not.toContain(SEND_BACK_LABEL);
+      expect(html).not.toContain(DECISION_CONFIRM_ACTION);
+      expect(html).not.toContain(DECISION_SEND_BACK_ACTION);
     }
   });
 
@@ -442,9 +441,9 @@ describe('a question is put to the sessions that can answer it, and to no others
  *
  * The rail used to be able to decide whether or not a coordinator turn was running, which is why
  * it could be a decision surface at all. Turning it into a pointer spends that: a row whose card
- * is not on screen has nowhere to go. There are four ways that happens and the page collapses them
- * into one answer (`answerableDecisionCards`), so what the strip has to get right is what it does
- * with a `false` — which is to stop being a control and say why.
+ * is not on screen has nowhere to go. The page answers which rows have one with the evidence card's
+ * own filter (`evidenceDecisionCardRows`), so what the strip has to get right is what it does with
+ * a `false` — which is to stop being a control and say why.
  */
 describe('a row points at its card, or says there is none', () => {
   const one = (over: Partial<PendingDecisionRow> = {}): PendingDecisionQueue => {
@@ -667,7 +666,7 @@ describe('a row the door would refuse whatever was pressed', () => {
     expect(html).toContain(WAITING_ON_YOU_ACTION);
     expect(html).toContain('submit another evidence revision quoting the project criterion');
     // And the reason it is not a pointer is its own, not the generic one: there will never be a
-    // card for this row, so it is not told that one may yet arrive. Read off THIS group — the
+    // card for this row anywhere, so it is not told where one is drawn. Read off THIS group — the
     // decidable row in the group above does carry the generic sentence, and a predicate over the
     // whole strip would be answered by that one.
     const group = html.slice(html.indexOf(WAITING_ON_YOU_LABEL));

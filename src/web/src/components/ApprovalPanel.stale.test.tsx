@@ -6,7 +6,7 @@ import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
-import { STRIP_LABEL } from './DecisionRail';
+import { UNANSWERABLE_NOTE } from './ApprovalPanel';
 
 /**
  * A card that arrived on the live stream, after the question it was raised for is over.
@@ -24,7 +24,7 @@ import { STRIP_LABEL } from './DecisionRail';
  * over the stream, never through `listApprovals`, which is stubbed empty here precisely so a card
  * that survives can only have come from a frame. Then it ends the question the two ways the server
  * recognises, one per test, and asserts the same pair each time: the card that died stops offering
- * an answer and says where the decision can still be made, and a card on the same screen whose turn
+ * an answer and says why, and a card on the same screen whose turn
  * is still alive is untouched. The second half is not decoration — without it an ApprovalPanel that
  * rendered nothing at all would satisfy the first.
  */
@@ -334,21 +334,22 @@ describe('an approval that arrived live outlives the question it was raised for'
     expect(mounted().querySelectorAll('.approval-card')).toHaveLength(2);
   });
 
-  it('says where the decision can still be made instead of going quiet', async () => {
+  it('says why it stopped offering an answer instead of going quiet', async () => {
     await bothCardsArriveLive();
-    // Neither card points anywhere while both are answerable — otherwise the assertion below
+    // Neither card carries the note while both are answerable — otherwise the assertion below
     // would pass on a card that always says it.
-    expect(cardFor(ABANDONED_COMMAND).textContent).not.toContain(STRIP_LABEL);
+    expect(cardFor(ABANDONED_COMMAND).textContent).not.toContain(UNANSWERABLE_NOTE);
 
     await publish([ABANDONED_RESULT]);
 
     await waitForUi(() => {
       expect(primaryOf(cardFor(ABANDONED_COMMAND)).disabled).toBe(true);
     });
-    // The pinned strip is the fallback D1 chose: answering it writes a decision directly and needs
-    // no live turn. Named by the strip's own label, so renaming it cannot leave this pointing at a
-    // heading that is no longer on screen.
-    expect(cardFor(ABANDONED_COMMAND).textContent).toContain(STRIP_LABEL);
-    expect(cardFor(LIVE_COMMAND).textContent).not.toContain(STRIP_LABEL);
+    // Nothing is listening for this answer, and the note says so and names the one path still
+    // open: a new message. Matched by the declaration, so a reworded note cannot leave this
+    // asserting a sentence that is no longer on screen.
+    expect(UNANSWERABLE_NOTE).toContain('new message');
+    expect(cardFor(ABANDONED_COMMAND).textContent).toContain(UNANSWERABLE_NOTE);
+    expect(cardFor(LIVE_COMMAND).textContent).not.toContain(UNANSWERABLE_NOTE);
   });
 });

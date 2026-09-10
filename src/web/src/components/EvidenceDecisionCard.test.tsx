@@ -17,6 +17,7 @@ import {
 import {
   DECISION_ASK_HEADING,
   DECISION_CONFIRM_ACTION,
+  DECISION_NO_CLAIM,
   DECISION_NO_CRITERION,
   DECISION_NO_GAPS,
   DECISION_SEND_ACTION,
@@ -285,6 +286,56 @@ describe('the card is drawn from the row the pending read published', () => {
     expect(html).not.toContain(escaped(first.claim));
     expect(html).not.toContain(first.criterion!.key);
     expect(html).not.toContain(escaped(GAPS[0]));
+  });
+
+  it('folds a long claim and gives all of it back on request', async () => {
+    const tail = '这句话在折叠时看不到';
+    const long = row({ claim: `${CLAIM}${'补充说明。'.repeat(40)}${tail}` });
+    const rendered = await mount(
+      <EvidenceDecisionCard
+        standing={evidenceDecisionStanding(queue([long]), PROJECT_ID, long)}
+        onDecide={() => {}}
+      />,
+    );
+
+    expect(rendered.querySelector('.decision-ask-claim')?.textContent).not.toContain(tail);
+    await click(press(rendered, '展开全文'));
+    expect(rendered.querySelector('.decision-ask-claim')?.textContent).toContain(tail);
+  });
+
+  it('says so when a revision carries no claim at all, rather than rendering a blank', () => {
+    const empty = row({ claim: '' });
+    expect(card(evidenceDecisionStanding(queue([empty]), PROJECT_ID, empty))).toContain(DECISION_NO_CLAIM);
+  });
+
+  it('counts the machine checks off the row’s own fields, and opens onto the three it counted', async () => {
+    // One citation of two resolved, so one of the three checks did not hold.
+    const live = row({
+      citations: [
+        { kind: 'TOOL_CALL', ref: 'toolu_held', resolved: true, reason: null, label: 'Bash · npx vitest run' },
+        {
+          kind: 'TOOL_CALL',
+          ref: 'toolu_missing',
+          resolved: false,
+          reason: 'no tool call with that id under this task',
+          label: null,
+        },
+      ],
+    });
+    const rendered = await mount(
+      <EvidenceDecisionCard
+        standing={evidenceDecisionStanding(queue([live]), PROJECT_ID, live)}
+        onDecide={() => {}}
+      />,
+    );
+
+    await click(press(rendered, '2 项机器已核 · 1 项没过'));
+    const checks = [...rendered.querySelectorAll('.decision-ask-check-list > li')];
+    expect(checks).toHaveLength(3);
+    expect(checks[0].textContent).toContain(live.criterion!.text);
+    expect(checks[1].textContent).toContain('1/2 条引用解析成功');
+    expect(checks[1].textContent).toContain('no tool call with that id under this task');
+    expect(checks[2].textContent).toContain('裁决人独立于这次提交');
   });
 });
 

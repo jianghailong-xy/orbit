@@ -4,12 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { ApprovalInfo } from '../api';
 import { ApprovalPanel } from './ApprovalPanel';
 import { CARD_ACTIONS_CLASS, CARD_ACTION_CLASS } from './CardAction';
-import {
-  CONFIRM_LABEL,
-  SEND_BACK_LABEL,
-  type PendingDecisionQueue,
-  type PendingDecisionRow,
-} from './DecisionRail';
+import type { PendingDecisionQueue, PendingDecisionRow } from './DecisionRail';
+import { EvidenceDecisionCard, evidenceDecisionStanding } from './EvidenceDecisionCard';
 
 /**
  * The approval card and the decision card render the same button, and are held to the same rule.
@@ -24,11 +20,11 @@ import {
  * ----------------------------
  * It used to be `DecisionRail`'s: the pinned strip carried `Confirm completion` and `Send back`
  * and posted them itself. That made two decision surfaces for one fact and they raced on
- * 2026-09-09, so the rail was reduced to a counter and a pointer and the judgment moved onto the
- * `AskUserQuestion` card the coordinator raises — which is an approval card, and lives in
- * `ApprovalPanel.tsx` beside the plain one. So the two cards this file is about are both there,
- * and the third claim below is the new one: the rail declares no action, imports none, and renders
- * none, because it no longer has anything to act on.
+ * 2026-09-09, so the rail was reduced to a counter and a pointer. The judgment went first onto an
+ * `AskUserQuestion` a coordinator turn raised, and since 2026-09-10 onto Orbit's own card,
+ * `EvidenceDecisionCard.tsx`, drawn from the pending read — so that is the second card now, and the
+ * third claim below still holds: the rail declares no action, imports none, and renders none,
+ * because it has nothing to act on.
  *
  * What is deliberately NOT asserted here is that the two cards LOOK the same or behave the same.
  * They are different objects: a plain approval is a permission prompt about a tool call; a
@@ -42,9 +38,12 @@ const source = (file: string): string =>
 const approval = (): ApprovalInfo =>
   ({ id: 'a1', toolName: 'Bash', input: { command: 'npm test' } }) as ApprovalInfo;
 
+const PROJECT_ID = 'project-1';
+
 const decisionRow = (): PendingDecisionRow => ({
   taskId: 'task-1',
   title: 'the derived pending queue',
+  projectId: PROJECT_ID,
   criterion: { key: '3t4PyphGUWQtzDGfvOLY9R', text: 'the rail is derived from the facts' },
   evidenceRevision: '2',
   ageSeconds: 5_400,
@@ -55,26 +54,11 @@ const decisionRow = (): PendingDecisionRow => ({
   independence: { independent: true, disqualification: null, requiredAction: null },
 });
 
-/** The ask the coordinator raises over that row, shaped the way `buildEvidenceQuestion` shapes it:
- *  the two option labels, and the trailing identity line the card recognises it by. */
-const decisionApproval = (row: PendingDecisionRow): ApprovalInfo =>
-  ({
-    id: 'd1',
-    toolName: 'AskUserQuestion',
-    input: {
-      questions: [{
-        question: `${row.title} — task ${row.taskId}, evidence rev ${row.evidenceRevision}`,
-        header: 'Completion',
-        options: [{ label: CONFIRM_LABEL }, { label: SEND_BACK_LABEL }],
-      }],
-    },
-  }) as ApprovalInfo;
-
-const decisionQueue = (row: PendingDecisionRow): PendingDecisionQueue => ({
+const decisionQueue = (rows: PendingDecisionRow[]): PendingDecisionQueue => ({
   decidingSessionId: 'coordinator-session',
-  count: 1,
-  oldestAgeSeconds: row.ageSeconds,
-  pending: [row],
+  count: rows.length,
+  oldestAgeSeconds: rows[0]?.ageSeconds ?? null,
+  pending: rows,
   waitingOnYou: [],
 });
 
@@ -90,25 +74,26 @@ function buttons(html: string): string[] {
 const actions = (html: string): string[] =>
   buttons(html).filter((button) => button.includes(`class="${CARD_ACTION_CLASS}`));
 
-const decisionCard = (over: { answerable?: boolean } = {}): string => {
+/** The evidence card for that row: still in the read, or answered elsewhere and gone from it. */
+const decisionCard = (over: { answered?: boolean } = {}): string => {
   const row = decisionRow();
+  const read = decisionQueue(over.answered ? [] : [row]);
   return renderToStaticMarkup(
-    <ApprovalPanel
-      approval={decisionApproval(row)}
-      decisions={decisionQueue(row)}
-      answerable={over.answerable ?? true}
-      onDecide={() => {}}
-    />,
+    <EvidenceDecisionCard standing={evidenceDecisionStanding(read, PROJECT_ID, row)} onDecide={() => {}} />,
   );
 };
 
 describe('both cards get their actions from one component', () => {
   it('is imported by each of them, and declared by neither', () => {
-    expect(source('ApprovalPanel.tsx')).toMatch(/from '\.\/CardAction'/);
+    for (const file of ['ApprovalPanel.tsx', 'EvidenceDecisionCard.tsx']) {
+      expect(source(file), `${file} does not take its actions from CardAction`).toMatch(
+        /from '\.\/CardAction'/,
+      );
+    }
     // The button element and its sizes live in exactly one file. A card that went back to writing
     // its own would show up here as a class nobody else can see or an inline size.
     expect(source('CardAction.tsx')).toContain('<button');
-    for (const file of ['ApprovalPanel.tsx', 'DecisionRail.tsx']) {
+    for (const file of ['ApprovalPanel.tsx', 'EvidenceDecisionCard.tsx', 'DecisionRail.tsx']) {
       const text = source(file);
       expect(text, `${file} declares its own action button`).not.toMatch(/className="approval-btn/);
       expect(text, `${file} sizes a button itself`).not.toMatch(/<Button\s/);
@@ -163,11 +148,11 @@ describe('both cards get their actions from one component', () => {
     expect(submit).toBeDefined();
     expect(submit).toMatch(/\sdisabled(?:=|\s|>)/);
 
-    // And the decision card's — a card whose turn has ended, so an answer would reach nobody.
-    const dead = decisionCard({ answerable: false });
+    // And the decision card's — a version answered elsewhere, so the door would refuse any answer.
+    const dead = decisionCard({ answered: true });
     expect(actions(dead).length).toBeGreaterThan(0);
     for (const button of actions(dead)) {
-      expect(button, 'a decision nobody is listening for is still pressable').toMatch(
+      expect(button, 'a decision the door would refuse is still pressable').toMatch(
         /\sdisabled(?:=|\s|>)/,
       );
     }

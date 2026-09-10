@@ -159,10 +159,10 @@ import {
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
-import { ApprovalPanel, answerableDecisionCards } from './ApprovalPanel';
-import { SessionDecisionStrip } from './DecisionRail';
+import { ApprovalPanel } from './ApprovalPanel';
+import { SessionDecisionStrip, decisionRowKey } from './DecisionRail';
 import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
-import { SessionEvidenceDecisionCard } from './EvidenceDecisionCard';
+import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -3148,23 +3148,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   // The card that owns the ⌘/Ctrl+Enter shortcut is the first one the key could actually reach.
   const activeApprovalId = approvals.find((a) => answerableApprovalIds.has(a.id))?.id;
-  // The same read the pinned strip is made of, handed to the cards as well. A completion decision
-  // reaches this session twice — as a row in that queue and as an `AskUserQuestion` raised over it
-  // — and the card is the one that blocks a turn, so it is the one that must render the ROW rather
-  // than the string the question flattened it into (`ApprovalPanel`, EvidenceDecisionForm). Same
-  // query key the strip uses, so the two share one cached read and this adds no request.
+  // The same read the pinned strip and the evidence card are drawn from — the same query key, so
+  // this shares their cached read and adds no request.
   const pendingDecisions = useQuery({
     ...pendingDecisionsQuery(selectedId ?? ''),
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
 
-  // Which of those rows the pinned strip may point at: the ones whose card is on screen AND still
-  // answerable. The strip stopped being a place to decide from on 2026-09-09 — it counts and it
-  // points, and a row with no live card is told so rather than given a pointer that goes nowhere.
-  const decisionCards = answerableDecisionCards(
-    approvals,
-    answerableApprovalIds,
-    pendingDecisions.data ?? null,
+  // Which of those rows the pinned strip may point at: the ones the evidence card below is drawn
+  // for, by the card's own filter over the same read and the project this session coordinates. The
+  // strip counts and points; a row this conversation draws no card for is told so rather than given
+  // a pointer that goes nowhere.
+  const decisionCards = new Set(
+    evidenceDecisionCardRows(pendingDecisions.data ?? null, selectedSession?.projectId ?? null)
+      .map(decisionRowKey),
   );
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
@@ -5665,7 +5662,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
-                  decisions={pendingDecisions.data ?? null}
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => (

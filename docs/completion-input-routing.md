@@ -212,6 +212,21 @@ itself as the live question.
 > read is still made once per open window, and narrowing WHO it is read for is still the way that
 > cost comes down.
 
+> **Overturned in turn on 2026-09-10 — the card the rail points at is Orbit's own.**
+>
+> The note above is left as written; its "What replaces the fallback" paragraph no longer describes
+> the web client. The card is no longer the `AskUserQuestion` a coordinator turn raised:
+> `EvidenceDecisionCard.tsx` draws it from the pending read and presses it at
+> `POST /tasks/:taskId/evidence/decision`, and `ApprovalPanel.tsx` takes no question for it — one
+> offering `Confirm completion` / `Send back` is an ordinary question form. `answerableDecisionCards`
+> went with that special case, and so did its four ways a row has no live card, every one of them a
+> state of a turn. A row now points at the card when this conversation draws one — only the
+> coordinator session of the project its task is filed under does, by the card's own filter
+> `evidenceDecisionCardRows` — and otherwise says where the card is drawn.
+> `DecisionRail.pointer.test.tsx` asserts that the pointer lands on that card, and
+> `ApprovalPanel.test.tsx` mounts the session page and counts one set of verdicts for one waiting
+> row.
+
 ### D2 — one bounded question is not a conversation steered three hundred times
 
 The history this has to answer to is `coordinator-judgment.service.ts:13-25` (§0), whose second

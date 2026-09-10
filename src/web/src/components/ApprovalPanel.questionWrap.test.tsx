@@ -24,10 +24,6 @@ import type { ApprovalInfo } from '../api';
  * stylesheet) a browser is given, resolved by a CSS engine rather than by this file's idea of the
  * cascade. Delete the declaration and this goes red on its own, which is how it was written: it
  * failed against the stylesheet as it stood, reporting `whiteSpace: ''`.
- *
- * The evidence-decision card is deliberately not in here. It renders from `PendingDecisionRow`
- * through `.decision-ask-full-body`, which has had its own `pre-wrap` since it was written; this
- * file is about the generic form every OTHER question still goes through.
  */
 
 /** Values under which a line break in the text is a line break on screen. `normal` and `nowrap`
@@ -103,9 +99,6 @@ const asShown = (html: string, text: string): { text: string; whiteSpace: string
 describe('a multi-line AskUserQuestion in the generic form', () => {
   it('keeps its line breaks on screen', () => {
     const html = renderToStaticMarkup(<ApprovalPanel approval={approval()} onDecide={() => {}} />);
-    // Two options and no decision queue: this is the ordinary form, not the evidence-decision card
-    // that has its own body style. Without this the test could pass by testing the other card.
-    expect(html).not.toContain('decision-ask');
 
     const shown = asShown(html, QUESTION);
 

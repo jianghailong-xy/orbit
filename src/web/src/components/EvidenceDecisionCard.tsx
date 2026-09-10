@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useId, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -44,12 +44,13 @@ import {
  * press, so the door's receipt for it is kept too: an answer given HERE reads as recorded, not as
  * answered somewhere else.
  *
- * THE HALF BOTH CARDS SHARE
- * -------------------------
- * The row's facts and the two verdicts are also what `ApprovalPanel`'s AskUserQuestion form draws,
- * and they live here so that, while both exist, the two cannot say different things about one row.
- * What only the form has — its position chip, the held pick, the question's full text and its third
- * answer — stays with the form.
+ * ONE ENTRY FOR ONE QUESTION
+ * --------------------------
+ * This is the only place on the web a verdict about evidence is pressed. `ApprovalPanel` takes no
+ * AskUserQuestion for one — a question offering `Confirm completion` / `Send back` is an ordinary
+ * question form — and the pinned strip points here instead of answering (`DecisionRail.tsx`). Two
+ * entries for one question raced on 2026-09-09, and the loser came back
+ * `EVIDENCE_JUDGMENT_ALREADY_DECIDED`.
  */
 
 /** The card's heading. */
@@ -235,22 +236,18 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
 /**
  * The two verdicts: confirm on one press, or send back with the reason the door requires.
  *
- * `children` lands after them in the same row, for an action only one card has — the
- * AskUserQuestion form's third answer. The system card passes none: a press there goes to the
- * door, and not deciding yet is simply not pressing.
+ * There is no third: a press goes to the door, and not deciding yet is simply not pressing.
  */
 export function EvidenceDecisionActions({
   disabled,
   onConfirm,
   onSendBack,
-  children,
 }: {
   /** Whether no answer from here could succeed right now. Every control below follows it. */
   disabled: boolean;
   onConfirm: () => void;
   /** Called with the reason, trimmed — and never with an empty one. */
   onSendBack: (note: string) => void;
-  children?: ReactNode;
 }): JSX.Element {
   const noteId = useId();
   const [backOpen, setBackOpen] = useState(false);
@@ -297,7 +294,6 @@ export function EvidenceDecisionActions({
           </div>
         )}
       </div>
-      {children}
     </CardActions>
   );
 }
