@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -11,20 +13,27 @@ import { ExportCtx, type RunEvent, Transcript } from './Transcript';
  *
  * The runner echoes what it was handed, so a `user` event's text is the person's words followed by
  * whatever the control plane appended on the way out — the background work a returning engine is
- * told about, a list console's condition board. Both blocks say outright that the user did not say
- * them, and both used to render inside the user's own bubble.
+ * told about, a list console's condition board, a promoted coordinator's standing role. Those
+ * blocks say outright that the user did not say them, and all of them used to render as the
+ * person's own words.
  *
  * The apiserver records the appended part beside the echo, as `controlPlaneNote`, when it stores
  * the event: it holds what the person actually wrote (the turn row), so where their words end is a
  * fact of the write rather than a guess about the text. Each block is checked from both sides. With
- * the note, the bubble holds only the person's words and the block is a folded entry signed
- * 控制面附注. Without it — someone who typed those very characters — the bubble shows exactly what
- * they typed and nothing is folded away, however much it looks like a block.
+ * the note, the person's words stand alone and the block is one folded entry under them, in the
+ * same bubble, named ⊕ Orbit attached: and the kind of block it is. Without it — someone who typed
+ * those very characters — the bubble shows exactly what they typed and there is no entry, however
+ * much it looks like a block.
+ *
+ * Coordinator context is the one of these an event stored before notes existed is still read for,
+ * from its text. That older reading draws the very same entry, so one long conversation does not
+ * show the same thing two ways.
  */
 
-const LABEL = '控制面附注';
+const LABEL = '⊕ Orbit attached:';
 
-// The shapes the server appends (background-jobs-context.ts, list-events.service.ts).
+// The shapes the server appends (background-jobs-context.ts, list-events.service.ts,
+// coordinator-opening.ts).
 const BACKGROUND_JOBS = [
   '<background-jobs>',
   '  你不在的时候结束了：',
@@ -40,6 +49,13 @@ const LIST_CONDITIONS = [
   '  以上是控制面在你上次收到消息之后观察到的，不是用户说的。',
   '  需要更完整的现状用 tasklist_get / task_list 自取。',
   '</list-conditions>',
+].join('\n');
+
+const COORDINATOR = [
+  '<orbit_project_coordinator_context>',
+  '你是项目（id: 34HvVYzGmE4NFDMiomVgi）的协调会话。',
+  '这里用来协调任务，不是替任务干活。',
+  '</orbit_project_coordinator_context>',
 ].join('\n');
 
 let container: HTMLDivElement;
@@ -84,36 +100,74 @@ function bubble(): Element {
   return el;
 }
 
-/** The entry signed 控制面附注, found by what it says rather than by how it is styled. */
-function noteToggle(): HTMLButtonElement | null {
-  return [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(LABEL)) ?? null;
+/** The entry's toggle, found by what it says rather than by how it is styled. */
+function attachedToggle(): HTMLButtonElement | null {
+  return [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith(LABEL)) ?? null;
+}
+
+async function click(el: Element) {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
+/**
+ * How every appended block must read once it is known to be Orbit's: last in the person's bubble,
+ * under their words, named for its kind, folded until clicked, the block verbatim once open, and
+ * folded again on a second click.
+ */
+async function expectFoldedEntry({ typed, block, kind, marker }: {
+  typed: string;
+  block: string;
+  kind: string;
+  marker: string;
+}) {
+  const toggle = attachedToggle();
+  expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
+  expect(toggle!.textContent).toBe(`${LABEL} ${kind}`);
+  const entry = toggle!.parentElement!;
+  expect(bubble().lastElementChild, 'the entry closes the person’s own bubble').toBe(entry);
+  // Everything else the bubble says is exactly what the person typed.
+  const words = () => (bubble().textContent ?? '').replace(entry.textContent ?? '', '').trim();
+  expect(words()).toBe(typed);
+  // Folded: the entry is named, but what the model read is not on the page until asked for.
+  expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+  expect(container.textContent).not.toContain(marker);
+
+  await click(toggle!);
+
+  expect(toggle!.getAttribute('aria-expanded')).toBe('true');
+  const original = [...entry.querySelectorAll('*')].find((el) => el.textContent === block);
+  expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
+  expect(words()).toBe(typed);
+
+  await click(toggle!);
+
+  expect(toggle!.getAttribute('aria-expanded')).toBe('false');
+  expect(container.textContent).not.toContain(marker);
+}
+
+/** The person's bubble as `event` draws it in a fresh transcript: folded, then with its entry open. */
+async function drawnBubble(event: RunEvent): Promise<{ folded: string; open: string }> {
+  act(() => root.unmount());
+  root = createRoot(container);
+  await mount([event]);
+  const folded = bubble().outerHTML;
+  const toggle = attachedToggle();
+  expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
+  await click(toggle!);
+  return { folded, open: bubble().outerHTML };
 }
 
 describe.each([
-  { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, marker: 'bgj_3a1af2b50428' },
-  { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, marker: '累计 47 次' },
-])('$tag', ({ typed, block, marker }) => {
-  it('with the note recorded: only the typed words are in the bubble, and the block is a folded 控制面附注 that opens to its original text', async () => {
+  { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', marker: 'bgj_3a1af2b50428' },
+  { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', marker: '累计 47 次' },
+])('$tag', ({ typed, block, kind, marker }) => {
+  it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to its original text', async () => {
     const appended = `\n\n${block}`;
     await mount([userEvent(`${typed}${appended}`, appended)]);
 
-    expect(bubble().textContent?.trim()).toBe(typed);
-
-    const toggle = noteToggle();
-    expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
-    expect(toggle!.closest('.chat-user'), 'the note sits inside the person’s bubble').toBeNull();
-    // Folded: the entry is named, but what the model read is not on the page until asked for.
-    expect(toggle!.getAttribute('aria-expanded')).toBe('false');
-    expect(container.textContent).not.toContain(marker);
-
-    await act(async () => {
-      toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(toggle!.getAttribute('aria-expanded')).toBe('true');
-    const original = [...container.querySelectorAll('*')].find((el) => el.textContent === block);
-    expect(original, `the opened note does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
-    expect(bubble().textContent?.trim()).toBe(typed);
+    await expectFoldedEntry({ typed, block, kind, marker });
   });
 
   it('with no note: someone who typed the same characters sees them in their bubble as typed, and nothing is folded away', async () => {
@@ -122,8 +176,31 @@ describe.each([
     const shown = bubble().textContent ?? '';
     expect(shown).toContain(typed);
     for (const line of block.split('\n')) expect(shown).toContain(line.trim());
-    expect(noteToggle()).toBeNull();
-    expect(container.textContent).not.toContain(LABEL);
+    expect(attachedToggle()).toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
+  });
+});
+
+describe('<orbit_project_coordinator_context>', () => {
+  const typed = '把这个项目协调起来';
+  const appended = `\n\n${COORDINATOR}`;
+  const expected = { typed, block: COORDINATOR, kind: 'project coordinator context', marker: '的协调会话' };
+
+  it('with the note recorded: the same folded entry, named for the coordinator context', async () => {
+    await mount([userEvent(`${typed}${appended}`, appended)]);
+
+    await expectFoldedEntry(expected);
+  });
+
+  it('with no note: read from the text the older way, it is drawn as that very entry, folded and open alike', async () => {
+    await mount([userEvent(`${typed}${appended}`)]);
+
+    await expectFoldedEntry(expected);
+
+    const recorded = await drawnBubble(userEvent(`${typed}${appended}`, appended));
+    const read = await drawnBubble(userEvent(`${typed}${appended}`));
+    expect(read.folded).toBe(recorded.folded);
+    expect(read.open).toBe(recorded.open);
   });
 });
 
@@ -132,7 +209,7 @@ describe('the exported transcript', () => {
   // <Transcript> — through renderToStaticMarkup, so the export has no user-bubble code of its own.
   // Rendered here rather than imported: that module inlines the stylesheet through Vite `?raw`
   // imports, which Vite refuses to serve from a node_modules linked in from outside the tree.
-  it('is drawn by the same component, so the note is out of the bubble there too — and open, since a file has nothing to click', () => {
+  it('is drawn by the same component, so the entry is in the bubble there too — and open, since a file has nothing to click', () => {
     const appended = `\n\n${BACKGROUND_JOBS}`;
     const html = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
@@ -141,10 +218,36 @@ describe('the exported transcript', () => {
         </div>
       </ExportCtx.Provider>,
     );
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const exported = new DOMParser().parseFromString(html, 'text/html').querySelector('.chat-user');
+    const toggle = [...(exported?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.startsWith(LABEL));
 
-    expect(doc.querySelector('.chat-user')?.textContent?.trim()).toBe('已经部署，请帮我测试');
-    expect(doc.body.textContent).toContain(LABEL);
-    expect([...doc.body.querySelectorAll('*')].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
+    expect(toggle?.textContent, `no entry signed ${LABEL} in the exported bubble:\n${html}`).toBe(`${LABEL} background jobs`);
+    expect(toggle!.getAttribute('aria-expanded')).toBe('true');
+    expect([...exported!.querySelectorAll('*')].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
+    expect(exported!.textContent!.replace(toggle!.parentElement!.textContent!, '').trim()).toBe('已经部署，请帮我测试');
+  });
+});
+
+describe('the entry’s focus ring', () => {
+  it('is drawn for keyboard focus alone (:focus-visible), so a click leaves no ring behind', async () => {
+    const appended = `\n\n${BACKGROUND_JOBS}`;
+    await mount([userEvent(`已经部署，请帮我测试${appended}`, appended)]);
+    const toggle = attachedToggle();
+    expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
+
+    // Read as text: jsdom cannot tell focus that arrived by a click from focus that arrived by Tab,
+    // so only the selector can say which of them draws. Every rule naming the toggle's class that
+    // draws an outline or a shadow is collected, wherever in the stylesheet it sits.
+    const found = ['src/index.css', 'src/web/src/index.css']
+      .map((each) => resolve(process.cwd(), each))
+      .find(existsSync);
+    const css = readFileSync(found!, 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
+    const names = new RegExp(`\\.${toggle!.className}(?![\\w-])`, 'u');
+    const drawing = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
+      .filter(([, , body]) => /(?:^|;)\s*(?:outline(?:-style)?\s*:(?!\s*(?:none|0)\s*(?:;|$))|box-shadow\s*:)/u.test(body))
+      .flatMap(([, selectors]) => selectors.split(',').map((selector) => selector.trim()))
+      .filter((selector) => names.test(selector));
+
+    expect(drawing).toEqual([`.${toggle!.className}:focus-visible`]);
   });
 });

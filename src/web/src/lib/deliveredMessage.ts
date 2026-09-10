@@ -116,11 +116,25 @@ export function lastTypedUserMessageText(
   return numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '';
 }
 
-const TAG_LABEL: Record<InjectedTag, string> = {
+/**
+ * What each of Orbit's blocks is called where it is shown. `<list-conditions>` and
+ * `<background-jobs>` have names too, though no text is ever read for them: only a recorded note
+ * shows them (describeNote).
+ */
+const TAG_LABEL: Record<InjectedTag | 'list-conditions' | 'background-jobs', string> = {
   'referenced-list': 'referenced list',
   'referenced-task': 'referenced task',
   orbit_project_coordinator_context: 'project coordinator context',
+  'list-conditions': 'list conditions',
+  'background-jobs': 'background jobs',
 };
+
+/** Each name once, in the order first seen, counted where it repeats. */
+function countNames(names: string[]): string {
+  const counts = new Map<string, number>();
+  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
+  return [...counts].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)).join(', ');
+}
 
 /**
  * "referenced list, referenced task ×2" — what was attached, counted where it repeats.
@@ -129,9 +143,26 @@ const TAG_LABEL: Record<InjectedTag, string> = {
  * reply mentions something they never asked about, which is the entire reason this line exists.
  */
 export function describeInjected(injected: InjectedBlock[]): string {
-  const counts = new Map<InjectedTag, number>();
-  for (const b of injected) counts.set(b.tag, (counts.get(b.tag) ?? 0) + 1);
-  return [...counts]
-    .map(([tag, n]) => (n > 1 ? `${TAG_LABEL[tag]} ×${n}` : TAG_LABEL[tag]))
-    .join(', ');
+  return countNames(injected.map((b) => TAG_LABEL[b.tag]));
+}
+
+/**
+ * A recorded note named the same way: "background jobs, project coordinator context".
+ *
+ * Only a name. The note was told apart from the person's words by where the apiserver recorded it
+ * ends (splitRecordedNote), so nothing here decides what is shown as theirs. Delivery can append
+ * several blocks to one message, so each is named by its opening tag and skipped past its closing
+ * one; an opening that is not one of Orbit's blocks is still named, generically.
+ */
+export function describeNote(note: string): string {
+  const names: string[] = [];
+  let rest = note.trim();
+  while (rest) {
+    const tag = /^<([\w-]+)[\s>]/.exec(rest)?.[1];
+    names.push(tag && Object.hasOwn(TAG_LABEL, tag) ? TAG_LABEL[tag as keyof typeof TAG_LABEL] : 'context');
+    const close = tag ? rest.indexOf(`\n</${tag}>`) : -1;
+    if (close < 0) break;
+    rest = rest.slice(close + `\n</${tag}>`.length).trim();
+  }
+  return countNames(names);
 }

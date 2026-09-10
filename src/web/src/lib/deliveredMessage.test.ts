@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeInjected,
+  describeNote,
   lastTypedUserMessageText,
   splitDeliveredMessage,
   splitRecordedNote,
@@ -140,6 +141,31 @@ describe('describeInjected', () => {
     const { injected } = splitDeliveredMessage(`q\n\n${REF_TASK}\n\n${REF_TASK}`);
 
     expect(describeInjected(injected)).toBe('referenced task ×2');
+  });
+});
+
+describe('describeNote', () => {
+  it('names a recorded note by the block it opens with, the two only a note can carry included', () => {
+    expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('background jobs');
+    expect(describeNote(CONDITIONS)).toBe('list conditions');
+    expect(describeNote(COORDINATOR)).toBe('project coordinator context');
+  });
+
+  it('names every block one delivery appended, the way the older reading names what it found', () => {
+    // Delivery appends references, then the condition board, then background jobs, then the
+    // coordinator's role: a coordinator with a build still running gets two blocks in one note.
+    const appended = `\n\n${REF_TASK}\n\n${REF_TASK}\n\n${BACKGROUND_JOBS}\n\n${COORDINATOR}`;
+
+    expect(describeNote(appended)).toBe('referenced task ×2, background jobs, project coordinator context');
+
+    const older = `\n\n${REF_LIST}\n\n${COORDINATOR}`;
+    expect(describeNote(older)).toBe(describeInjected(splitDeliveredMessage(`q${older}`).injected));
+  });
+
+  it('still names an opening it does not recognise, generically', () => {
+    expect(describeNote('<orbit_something_new>\n  x\n</orbit_something_new>')).toBe('context');
+    expect(describeNote('<background-jobs-v2>\n  x\n</background-jobs-v2>')).toBe('context');
+    expect(describeNote('[Image #1]')).toBe('context');
   });
 });
 

@@ -48,6 +48,7 @@ import { copyText } from '../lib/clipboard';
 import {
   type DeliveredMessage,
   describeInjected,
+  describeNote,
   splitDeliveredMessage,
   splitRecordedNote,
 } from '../lib/deliveredMessage';
@@ -275,7 +276,7 @@ type TextNode = {
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
   // What the control plane recorded, when it stored this `user` event, as appended at delivery
-  // (`controlPlaneNote`). Already taken out of `text`; drawn as its own entry under the bubble.
+  // (`controlPlaneNote`). Already taken out of `text`; drawn under it, in the same bubble.
   note?: string;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
@@ -792,12 +793,7 @@ function StandaloneResult({ node }: { node: ResultNode }) {
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
     case 'user':
-      return (
-        <>
-          <UserBubble node={node} />
-          {node.note && <ControlPlaneNote text={node.note} />}
-        </>
-      );
+      return <UserBubble node={node} />;
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
     case 'thinking':
@@ -1211,12 +1207,18 @@ function UserBubble({ node }: { node: TextNode }) {
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
   // whose bubble this is. When the apiserver recorded what it appended, `node.note` holds it and
-  // `node.text` is already just the person's; the note is drawn after the bubble as the control
-  // plane's own entry (see NodeView). An event with no note is read the older way, which names
-  // references and coordinator context on one line. Copying and the length cap follow the typed
-  // text for the same reason: neither should be measured against a block nobody wrote.
+  // `node.text` is already just the person's; an event with no note is read the older way, which
+  // finds references and coordinator context. Either way what was appended is one entry under the
+  // person's words (ControlPlaneNote), so a conversation stored across both reads as one. Copying
+  // and the length cap follow the typed text for the same reason: neither should be measured
+  // against a block nobody wrote.
   const { text: typed, injected }: DeliveredMessage =
     node.note === undefined ? splitDeliveredMessage(node.text) : { text: node.text, injected: [] };
+  const attached = node.note
+    ? { kind: describeNote(node.note), text: node.note }
+    : injected.length > 0
+      ? { kind: describeInjected(injected), text: injected.map((b) => b.text).join('\n\n') }
+      : null;
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -1257,13 +1259,11 @@ function UserBubble({ node }: { node: TextNode }) {
           </div>
         )}
         {shownText && <MD breaks>{shownText}</MD>}
-        {injected.length > 0 && (
+        {attached && (
           // Named, not hidden: without this the agent answers about a quota outage nobody
-          // appears to have raised. The full text rides in the tooltip, so what the model read
-          // is still reachable without putting it in the middle of someone's sentence.
-          <div className="chat-injected" title={injected.map((b) => b.text).join('\n\n')}>
-            ⊕ Orbit attached: {describeInjected(injected)}
-          </div>
+          // appears to have raised. Folded under the words, so what the model read is one click
+          // away without putting it in the middle of someone's sentence.
+          <ControlPlaneNote kind={attached.kind} text={attached.text} />
         )}
       </div>
       {node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
@@ -1821,24 +1821,26 @@ function useThrottled(value: string, ms: number): string {
 }
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
-// What the control plane appended to the message above it — a list's condition board, the
-// background work a returning engine is told about, a reference's summary — as the control plane's
-// own entry instead of part of the person's bubble. Folded, not dropped: it is why a reply can
-// mention something the message never did, and opening it shows exactly what the model read.
-function ControlPlaneNote({ text }: { text: string }) {
+// What the control plane appended to the message in the bubble — a reference's summary, a list's
+// condition board, the background work a returning engine is told about, a coordinator's standing
+// role — named on one line under the person's words, as Orbit's rather than theirs. Folded, not
+// dropped: it is why a reply can mention something the message never did, and opening it shows
+// exactly what the model read. Opened by a click rather than carried in a tooltip, which a touch
+// screen cannot reach.
+function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
   return (
-    <div className="chat-cp-note">
+    <div className="chat-injected">
       <button
         type="button"
-        className="chat-cp-note-head"
+        className="chat-injected-head"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {open ? <DownOutlined /> : <RightOutlined />} 控制面附注
+        {`⊕ Orbit attached: ${kind}`}
       </button>
-      {open && <pre className="chat-cp-note-body">{text}</pre>}
+      {open && <pre className="chat-injected-body">{text}</pre>}
     </div>
   );
 }

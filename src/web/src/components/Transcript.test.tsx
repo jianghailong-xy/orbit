@@ -973,21 +973,29 @@ describe('injected context in a user bubble', () => {
       <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
     );
 
-    // Attribute values stripped first: the block is deliberately still in the tooltip, and
-    // asserting over the raw html would pass for the wrong reason either way.
-    const visible = html.replace(/title="[^"]*"/g, '');
-
-    expect(visible).toContain('把这个项目协调起来');
-    expect(visible).not.toContain('orbit_project_coordinator_context');
-    expect(visible).not.toContain('的协调会话');
+    // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
+    // attribute either, where it used to ride as a tooltip.
+    expect(html).toContain('把这个项目协调起来');
+    expect(html).not.toContain('orbit_project_coordinator_context');
+    expect(html).not.toContain('的协调会话');
   });
 
-  it('keeps the block reachable in the tooltip, so what the model read is not lost', () => {
-    const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
+  it('keeps the block one click away, so what the model read is not lost', () => {
+    const events = [userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)];
+    const html = renderToStaticMarkup(<Transcript events={events} />);
+    const exported = renderToStaticMarkup(
+      <ExportCtx.Provider value={{ images: new Map() }}>
+        <Transcript events={events} live={false} />
+      </ExportCtx.Provider>,
     );
 
-    expect(/title="[^"]*的协调会话[^"]*"/.test(html)).toBe(true);
+    // A tooltip is out of reach on a touch screen, so the entry itself opens to the block: folded
+    // here, and already open in an export, where there is nothing to click.
+    const entry = (expanded: boolean) =>
+      new RegExp(`<button[^>]*aria-expanded="${expanded}"[^>]*>⊕ Orbit attached: project coordinator context</button>`);
+    expect(html).toMatch(entry(false));
+    expect(exported).toMatch(entry(true));
+    expect(exported).toContain('的协调会话');
   });
 
   it('says that something was attached, so the reply is not unexplained', () => {
