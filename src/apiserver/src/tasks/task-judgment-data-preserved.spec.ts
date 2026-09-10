@@ -412,7 +412,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0246_project_acceptance_landed_wake',
       '0249_project_criteria_decision',
       '0250_criteria_decision_pending_wake',
-      '0251_project_criteria_authorship'],
+      '0251_project_criteria_authorship',
+      '0252_approval_opening_turn'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

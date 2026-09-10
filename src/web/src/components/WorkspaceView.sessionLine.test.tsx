@@ -7,6 +7,36 @@ import { sessionLine, statusLabel } from './WorkspaceView';
  * cases are asserted on both sides.
  */
 describe('sessionLine', () => {
+  /**
+   * A parked conversation with something waiting on the account owner.
+   *
+   * `pendingApprovals` is no longer only blocked tool calls: the server adds the owner decisions
+   * this conversation is the surface for (`owner-decision-signal.ts`), and those are held open by
+   * nobody — the card is delivered and the turn ends underneath it. So the row's amber state cannot
+   * sit behind the generating gate, which is where it used to sit and why a real criteria decision
+   * left the row reading as an ordinary idle reply.
+   */
+  it('says somebody is waiting even when the conversation has parked', () => {
+    const parked = {
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      projectId: 'p_1',
+      lastAssistantText: 'Filed the proposal.',
+    };
+    expect(sessionLine({ ...parked, pendingApprovals: 1 }, true)).toEqual({
+      text: 'Waiting for approval',
+      tone: 'approval',
+    });
+    expect(statusLabel({ ...parked, pendingApprovals: 1 })).toBe('Waiting for approval');
+    // The paired negative, over the SAME row: with nothing waiting it is an ordinary preview, so
+    // the amber above is about the count and not about this fixture.
+    expect(sessionLine({ ...parked, pendingApprovals: 0 }, true)).toEqual({
+      text: 'Filed the proposal.',
+      tone: 'preview',
+    });
+    expect(statusLabel({ ...parked, pendingApprovals: 0 })).toBe('Waiting for your reply');
+  });
+
   it('surfaces live state before any reply preview', () => {
     expect(sessionLine({ status: 'RUNNING', pendingApprovals: 2 }, true)).toEqual({
       text: 'Waiting for approval',

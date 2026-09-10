@@ -69,6 +69,10 @@ import {
 } from '../common/session-tree-sql';
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
+import {
+  countOwnerDecisionsBySession,
+  readOwnerDecisionSignals,
+} from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import {
   MERGE_RECEIPT_RESULTS,
@@ -1930,9 +1934,23 @@ export class SessionsService {
       // turn raises just as well — and those sit at AWAITING_INPUT for the whole turn.
       this.prisma.session.findMany({
         where: { ...open, ...GENERATING_SESSION_FILTER, approvals: { some: { status: 'PENDING' } } },
-        select: { workspaceId: true },
+        select: { id: true, workspaceId: true },
       }),
     ]);
+    // The other half of "needs you": decisions only the account owner can take, waiting on the
+    // conversation they are asked on. Not an `Approval` row and deliberately never one — see
+    // `owner-decision-signal.ts` for why the door refuses to use that table and why COUNTING one is
+    // a different question. It is not behind `GENERATING_SESSION_FILTER` either: an unanswered
+    // decision outlives the turn that delivered its card, which is exactly the state in which the
+    // badge was dark while somebody was waiting.
+    const decisions = await readOwnerDecisionSignals(this.prisma, ownerId);
+    const awaitingDecision =
+      decisions.length === 0
+        ? []
+        : await this.prisma.session.findMany({
+            where: { ...open, id: { in: decisions.map((signal) => signal.sessionId) } },
+            select: { id: true, workspaceId: true },
+          });
     const counts = new Map<
       string,
       { workspaceId: string; active: number; running: number; needsYou: number }
@@ -1950,8 +1968,14 @@ export class SessionsService {
     for (const group of running) {
       if (group.workspaceId) row(group.workspaceId).running = group._count._all;
     }
-    for (const session of blocked) {
-      if (session.workspaceId) row(session.workspaceId).needsYou += 1;
+    // One conversation is one row of this tally however many things are waiting on it: the number
+    // is "sessions that need you", and a coordinator blocked on a tool call while a proposal is
+    // also unanswered is still one place to go.
+    const needsYou = new Set<string>();
+    for (const session of [...blocked, ...awaitingDecision]) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      needsYou.add(session.id);
+      row(session.workspaceId).needsYou += 1;
     }
     return [...counts.values()];
   }
@@ -2277,9 +2301,16 @@ export class SessionsService {
           _count: { _all: true },
         });
     const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));
+    // Plus the owner decisions each row is the surface for. A blocked tool call and an unanswered
+    // criteria decision are one question to the reader of this list — "is somebody waiting on me
+    // here" — so they are one number, and the row's own `projectId` is where the second kind leads.
+    // The count is a signal and grants nothing; the decision door re-reads every fact it needs.
+    const decisions = await countOwnerDecisionsBySession(this.prisma, ownerId, {
+      sessionIds: sessions.map((s) => s.id),
+    });
     return sessions.map((s) => ({
       ...s,
-      pendingApprovals: byId.get(s.id) ?? 0,
+      pendingApprovals: (byId.get(s.id) ?? 0) + (decisions.get(s.id) ?? 0),
     }));
   }
 

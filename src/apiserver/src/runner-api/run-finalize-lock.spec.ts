@@ -65,6 +65,10 @@ function makeController(current: LockedSnapshot) {
         return 0;
       },
     },
+    // The reaper that runs at every boundary where a turn ends: a tool call whose asking turn is
+    // over can never be answered, so it stops being a question there
+    // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
+    approval: { updateMany: async () => ({ count: 0 }) },
     conversationTurn: {
       ...currentWork.conversationTurn,
       findFirst: async () => null,

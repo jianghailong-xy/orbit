@@ -139,6 +139,37 @@ function ageSeconds(readAt: Date, filedAt: Date): number {
 }
 
 /**
+ * Which of these filed proposals are still questions — THE one place that sentence is composed,
+ * so the per-project read below and the owner-wide signal that merely COUNTS them cannot come to
+ * different answers about which rows are waiting.
+ *
+ * Two of the three ways a row stops being a question are decided here, because both are facts
+ * about the rows themselves: it was answered (`settledIntentIds`), or a later proposal about the
+ * same project displaced it. The third — the base seal moved — is deliberately NOT here: a row in
+ * that state is still a question, it is only one that cannot be answered today, and the read below
+ * returns it carrying the door's refusal. A counter that dropped it would tell the owner there is
+ * nothing waiting when there is.
+ *
+ * The supersession link is folded from the rows the caller already holds rather than asked of the
+ * database a second time: it lives IN the action of the row that did the displacing. Callers pass
+ * every filed row of the scope they care about — including settled ones — because a settled row
+ * can still be the one that displaced another.
+ */
+export async function stillUnanswered<T extends { id: string; action: unknown }>(
+  tx: Prisma.TransactionClient,
+  rows: readonly T[],
+): Promise<T[]> {
+  if (rows.length === 0) return [];
+  const settled = await settledIntentIds(tx, rows.map((row) => row.id));
+  const displaced = new Set<string>();
+  for (const row of rows) {
+    const action = storedAction(row.action);
+    if (action?.supersedes) displaced.add(action.supersedes.intentId);
+  }
+  return rows.filter((row) => !settled.has(row.id) && !displaced.has(row.id));
+}
+
+/**
  * Every proposal of this project that is still a question, oldest first, recomputed from the rows.
  *
  * THE THREE WAYS A ROW STOPS BEING A QUESTION, AND WHY TWO OF THEM VANISH AND ONE DOES NOT
@@ -178,22 +209,13 @@ export async function readPendingCriteriaDecisions(
 
   const pending: PendingCriteriaDecision[] = [];
   if (rows.length > 0) {
-    const settled = await settledIntentIds(tx, rows.map((row) => row.id));
-    // Which proposals a later one displaced, folded from the same rows this read already holds
-    // rather than asked of the database a second time: the supersession link is IN the action of
-    // the row that did the displacing, so the answer is here already.
-    const displaced = new Set<string>();
-    for (const row of rows) {
-      const action = storedAction(row.action);
-      if (action?.supersedes) displaced.add(action.supersedes.intentId);
-    }
+    const open = await stillUnanswered(tx, rows);
     // The seal of the set in force, computed off the same rows and by the same function the
     // confirmation read path uses — so what this read calls "moved" is what a reader of
     // `GET /projects/:id/acceptance/confirmation` sees.
     const currentSeal = await currentStandardSetSeal(tx, projectId);
 
-    for (const row of rows) {
-      if (settled.has(row.id) || displaced.has(row.id)) continue;
+    for (const row of open) {
       const action = storedAction(row.action);
       // A row whose JSONB this reader cannot make sense of is not silently dropped — dropping it
       // would make an unreadable proposal look like no proposal — but it has no diff to show and

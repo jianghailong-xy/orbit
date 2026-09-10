@@ -119,6 +119,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
+import { reapApprovalsOfEndedTurns } from '../sessions/abandoned-approvals';
 import {
   CURRENT_WORK_RUNTIME_REJECTED,
   CURRENT_WORK_SESSION_FINALIZED,
@@ -2638,6 +2639,18 @@ export class RunnerApiController {
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
     const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
+    // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
+    // its session, and the server already knows which turn it leased to that session — the runner
+    // has been polling inside it since the dequeue. It is what makes an abandoned call provable
+    // later (`sessions/abandoned-approvals.ts`), and null when there is no turn to name, which the
+    // reaper reads as "unknown" and leaves alone.
+    const openingTurn = existing
+      ? null
+      : await this.prisma.conversationTurn.findFirst({
+          where: { sessionId, status: 'IN_FLIGHT' },
+          orderBy: { seq: 'desc' },
+          select: { id: true },
+        });
     const approval =
       existing ??
       (await this.prisma.approval.create({
@@ -2646,6 +2659,7 @@ export class RunnerApiController {
           toolName: dto.toolName,
           input: (dto.input ?? {}) as Prisma.InputJsonValue,
           toolUseId: dto.toolUseId ?? null,
+          turnId: openingTurn?.id ?? null,
           ...(autoAllowed
             ? { status: 'ALLOWED', decidedAt: new Date(), message: AUTO_ALLOWED_MESSAGE }
             : {}),
@@ -3378,6 +3392,11 @@ export class RunnerApiController {
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
+      // Last, because it reads which turns are still live and everything above is what settled
+      // them. A tool call whose turn just ended can never be answered — the poll loop that would
+      // have consumed the answer ran inside it — so the approval stops being a question here, on
+      // that fact, rather than on how long it has been waiting.
+      await reapApprovalsOfEndedTurns(tx, sessionId);
       return {
         applied: true,
         steer: false,
@@ -4088,6 +4107,10 @@ export class RunnerApiController {
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
+      // Every turn of this session has just ended, so every tool call still waiting on one is now
+      // unanswerable. Same predicate as the turn boundary, evaluated after the drain that made it
+      // true rather than before it.
+      await reapApprovalsOfEndedTurns(tx, sessionId);
       // Abnormal end (FAILED/CANCELLED): if the workspace never got to finalize its
       // task, reclaim a now-stalled IN_PROGRESS task so it stops looking like it's
       // still running. A genuine FAILED run lands the task at FAILED (needs a human);

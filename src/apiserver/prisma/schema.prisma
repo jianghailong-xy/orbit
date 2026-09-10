@@ -1460,7 +1460,15 @@ model Approval {
   toolName     String    @map("tool_name")
   input        Json
   toolUseId    String?   @map("tool_use_id")
-  // PENDING -> ALLOWED | DENIED
+  /// conversation_turn.id that raised this approval, or null when it was raised outside one (and on
+  /// every row filed before 0252). No FK, exactly like RunEvent.turnId: both cascade through the
+  /// session, and a constraint here would let an approval write block a turn write.
+  ///
+  /// This is what makes "abandoned" a fact rather than an elapsed duration: once that turn is
+  /// ANSWERED, the poll loop that would consume the answer is gone, so the call can never be
+  /// answered. See prisma/migrations/0252_approval_opening_turn and sessions/abandoned-approvals.ts.
+  turnId       String?   @map("turn_id") @db.Uuid
+  // PENDING -> ALLOWED | DENIED, or ABANDONED when the turn that raised it ended unanswered
   status       String    @default("PENDING")
   message      String? // optional deny reason / note from the human
   // AskUserQuestion only: the human's picks, keyed by question text -> selected

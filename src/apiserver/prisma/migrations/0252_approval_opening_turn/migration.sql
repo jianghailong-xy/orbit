@@ -1,0 +1,25 @@
+-- The turn that raised an approval, so an abandoned tool call can be told from an unanswered one.
+--
+-- WHY A COLUMN AND NOT A CLOCK
+-- ============================
+-- `approval` has no expiry and no clock, and `permissionPrompt` (src/runner-go/mcp.go) polls with
+-- no wall-clock cap, deliberately: an approval asks a human who may be asleep. So when an engine
+-- ABANDONS a tool call — its poll hit a network error and it simply asked again — nothing at all is
+-- written, and the only thing a sweep could see afterwards is "this row has been PENDING for a long
+-- time". That is elapsed time, not a committed fact, and `docs/completion-input-routing.md` writes
+-- the prohibition out: no scheduler, no timeout, no elapsed-time interpretation.
+--
+-- This column supplies a fact instead. The turn that raised the approval is recorded when the row
+-- is created; once that turn is ANSWERED the poll loop that would have consumed the answer is gone
+-- with it, so the call can never be answered and the row is abandoned — provable from two committed
+-- rows, with no clock anywhere in the predicate.
+--
+-- Nullable, with no backfill and no default. Null means "not known", which is the honest reading of
+-- every row filed before this column existed and of any raised outside a conversation turn; the
+-- reaper (`abandoned-approvals.ts`) leaves those alone rather than guessing, so an unknown opener is
+-- never a reason to collect a row.
+--
+-- No foreign key, matching `run_event.turn_id`: both hang off a session row that already cascades,
+-- and a constraint here would put an approval write in the way of the turn writes it must never
+-- be able to block. The reaper joins on it explicitly and treats a missing turn as not-live.
+ALTER TABLE "approval" ADD COLUMN "turn_id" uuid;
