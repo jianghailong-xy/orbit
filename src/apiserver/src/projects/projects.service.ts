@@ -1142,12 +1142,15 @@ export class ProjectsService {
    * File a loosening edit as a PROPOSAL and change nothing else.
    *
    * The row goes into `project_ratified_action_intent` directly rather than through 0195's
-   * `project_submit_ratified_action`: that function refuses everything with
-   * `OWNER_RATIFICATION_REQUIRED` because it consults `project_owner_ratification`, a table with
-   * no Prisma model and no writer anywhere in this tree, so no project is ratified and none can
-   * become so. Going around it keeps both guarantees that matter — the BEFORE INSERT trigger still
-   * demands the project's CURRENT `contract_digest`, and the BEFORE UPDATE OR DELETE trigger still
-   * makes what is filed unrewritable.
+   * `project_submit_ratified_action`, which would take it: the two disagree about what
+   * `action_digest` is taken over, and the column holds one answer. That entry pins it to
+   * `outcome_sha256_json(p_action)` — the whole action ENVELOPE, including the six contract
+   * digests it requires be packed in first. What a proposal needs here is an identity
+   * recomputable from the ask alone: `actionDigest = sha256(canonicalJson(action.request))`,
+   * which is what `criteriaWeakeningActionDigest` computes in `criteria-weakening-intent.ts`.
+   * The two are not interchangeable. Going around it keeps both guarantees that matter — the
+   * BEFORE INSERT trigger still demands the project's CURRENT `contract_digest`, and the BEFORE
+   * UPDATE OR DELETE trigger still makes what is filed unrewritable.
    *
    * ONE PENDING PROPOSAL PER PROJECT, and the newer one wins. That is enforced here by SUPERSEDING
    * rather than by the unique key: the intent row cannot be updated or deleted, so a proposal is
