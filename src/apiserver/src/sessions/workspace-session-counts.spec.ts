@@ -49,7 +49,10 @@ test('workspace counts separate queued activity from Session-list spinner work',
     projectRatifiedActionIntent: {
       findMany: async () => [{ id: 'intent-1', projectId: 'p-1', action: {} }],
     },
+    // "Answered" has two landings and `settledIntentIds` reads both: a commit row, a decision row.
+    // This proposal has neither, so it is still a question — which is why `w-decision` needs you.
     projectRatifiedActionCommit: { findMany: async () => [] },
+    projectCriteriaDecision: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
