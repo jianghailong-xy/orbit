@@ -412,8 +412,8 @@ final class ConsoleModel {
                 // suspended emits no replayable event (its background_output tail is broadcast-only), so
                 // the authoritative server list is how those changes surface after a reconnect.
                 Task { [weak self] in await self?.refreshBackground() }
-                // And the project's two standing questions, for the reason the approvals above are
-                // re-read: one of them can be answered in a browser while this phone is asleep, and
+                // And the project's standing questions, for the reason the approvals above are
+                // re-read: any of them can be answered in a browser while this phone is asleep, and
                 // nothing replays that — a card only learns it went stale by asking again.
                 Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
             }
@@ -761,9 +761,9 @@ final class ConsoleModel {
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
-        // The project this conversation coordinates, if any. It is what decides whether the two
-        // standing questions about that project's ruler are asked here at all — an ordinary session
-        // has no project and makes neither read.
+        // The project this conversation coordinates, if any. It is what decides whether the
+        // standing questions that project puts to its owner are asked here at all — an ordinary
+        // session has no project and makes none of those reads.
         projectID = s.projectId
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
         provider = s.provider ?? "claude"
@@ -1729,42 +1729,21 @@ final class ConsoleModel {
         }
     }
 
-    // MARK: completion decisions
-
-    /// The completion decisions this session is being asked to make, or nil until they are read.
-    ///
-    /// One `AskUserQuestion` reaches a coordinator twice — as a row in this queue and as the ask
-    /// raised over it — and the card is the half that blocks a turn, so it is the half that must
-    /// render the ROW rather than the string the question flattened it into (see OrbitKit's
-    /// `EvidenceDecision.swift`). Nil is a real state and it is the safe one: the card falls back to
-    /// the generic option form, which is what shipped before and still answers correctly.
-    private(set) var pendingDecisions: EvidenceDecisionQueue?
-    private var loadingDecisions = false
-
-    /// Read that queue. Driven by the question card itself rather than by the session opening: the
-    /// read is worth a request exactly when a card is on screen that might be one of these rows,
-    /// which is far rarer than "a session is selected" — and the web strip's fan-out over every
-    /// open window is the cost this client does not need to repeat.
-    func loadPendingDecisions() async {
-        guard !isDraft, !loadingDecisions else { return }
-        loadingDecisions = true
-        defer { loadingDecisions = false }
-        guard let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID)
-        else { return }
-        pendingDecisions = queue
-    }
-
-    // MARK: the project's ruler — two standing questions
+    // MARK: the project's standing questions — its ruler, and its tasks' evidence
 
     /// The project this session coordinates, adopted from the session payload. Nil for an ordinary
-    /// session, and then nothing below here ever makes a request: these two questions belong to a
-    /// project, and a conversation that coordinates none has neither.
+    /// session, and then nothing below here ever makes a request: these questions belong to a
+    /// project, and a conversation that coordinates none has none of them.
     private(set) var projectID: String?
 
     /// The held loosening proposals, as the owner's read publishes them, or nil while the read has
     /// not come back. Nil is NOT "nothing is pending" — it is `unread`, which shows a delivered
     /// card with dead buttons rather than one that quietly claims the question went away.
     private(set) var criteriaDecisions: PendingCriteriaDecisionQueue?
+    /// The completion decisions this session is being asked to make, read the same way and nil for
+    /// the same reason. A card is drawn only for the rows `EvidenceDecisions.cardRows` keeps: this
+    /// project's, and ones the door would take an answer to from here.
+    private(set) var evidenceDecisions: EvidenceDecisionQueue?
     /// Whether the account owner has confirmed the standard set as it stands.
     private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
     /// The criteria themselves, for the fold on the confirmation card: confirming a set the reader
@@ -1807,6 +1786,8 @@ final class ConsoleModel {
                 return CriteriaDecisions.isOpen(criteriaStanding(intentID))
             case .acceptanceConfirmation:
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
+            case .evidenceDecision(let taskID, let evidenceRevision):
+                return EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))
             }
         }.map(\.id)
     }
@@ -1825,24 +1806,31 @@ final class ConsoleModel {
         scrollRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
     }
 
-    /// Re-read both questions from the server.
+    /// Re-read the project's standing questions from the server.
     ///
-    /// Driven by the console rather than by a card's own `.task`, unlike the completion queue: a
-    /// card here EXISTS because the read found something, so a read that only ran when a card was
-    /// on screen could never find the first one. It runs when the session's context loads, when the
-    /// stream reconnects (the iOS-specific gap — a suspended socket misses everything), when a card
-    /// scrolls into view, and after any press. What it may never do is remove a card.
+    /// Driven by the console rather than by a card's own `.task`: a card here EXISTS because the
+    /// read found something, so a read that only ran when a card was on screen could never find the
+    /// first one. It runs when the session's context loads, when the stream reconnects (the
+    /// iOS-specific gap — a suspended socket misses everything), when a card scrolls into view, and
+    /// after any press. What it may never do is remove a card.
     func refreshRulerQuestions(force: Bool = false) async {
         guard !isDraft, let projectID, !loadingRuler else { return }
         if !force, Date().timeIntervalSince(lastRulerRead) < Self.rulerReadThrottle { return }
         loadingRuler = true
         defer { loadingRuler = false }
 
-        // Three independent reads. One failing must not blank what the others answered, and none
+        // Four independent reads. One failing must not blank what the others answered, and none
         // failing may close a card — an unreadable standing is a card that says so.
         if let queue = try? await api.pendingCriteriaDecisions(projectID: projectID) {
             criteriaDecisions = queue
             for row in queue.pending { deliver(.criteriaDecision(intentID: row.intentId)) }
+        }
+        // Scoped to THIS session: every row says whether the door would take an answer from here.
+        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
+            evidenceDecisions = queue
+            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID) {
+                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            }
         }
         if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
             acceptanceConfirmation = standing
@@ -1899,6 +1887,34 @@ final class ConsoleModel {
             // screen it would go stale into "answered at another end", which is the one reading of
             // its own answer this window can be sure is wrong.
             appendDecisionLine(CriteriaDecisions.decisionLine(result))
+        } catch {
+            statusMessage = "That decision was not recorded — \(error)"
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// Where one delivered evidence card stands right now — re-derived from the read on every call,
+    /// never a frame the card kept.
+    func evidenceStanding(_ taskID: String, _ evidenceRevision: String) -> EvidenceDecisionStanding {
+        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, taskId: taskID,
+                                   evidenceRevision: evidenceRevision)
+    }
+
+    /// Answer one revision of a task's evidence at the decision door, FROM this session and with
+    /// this device's own credential.
+    ///
+    /// Not dropped optimistically, for the reason `decideCriteria` gives: the door's refusals are
+    /// the outcomes worth explaining, and the re-read below is what explains them.
+    func decideEvidence(_ row: EvidenceDecisionRow, _ decision: EvidenceDecisionAnswer,
+                        note: String? = nil) async {
+        guard let request = EvidenceDecisions.request(row: row, decision: decision, note: note,
+                                                      decidingSessionID: sessionID) else { return }
+        do {
+            let result = try await api.decideEvidence(taskID: row.taskId, request)
+            close(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            // Left on screen, the card would go stale into "answered somewhere else", which is the
+            // one reading of its own answer this window can be sure is wrong.
+            appendDecisionLine(EvidenceDecisions.recordedLine(result))
         } catch {
             statusMessage = "That decision was not recorded — \(error)"
         }

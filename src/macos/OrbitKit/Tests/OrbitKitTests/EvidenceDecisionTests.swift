@@ -2,16 +2,19 @@ import Foundation
 import XCTest
 @testable import OrbitKit
 
-/// The completion-decision card is built from the pending ROW, not from the question string the
-/// ask flattened that row into — and it is the ONE question either client special-cases.
+/// The completion-decision card is built from the pending ROW — the same row the web card is drawn
+/// from — and a conversation gets one only for the rows it is actually being asked about.
 ///
-/// These are the assertions the redesign is worth having: that the structure on screen comes from
+/// These are the assertions the card is worth having: that the structure on screen comes from
 /// fields (so a phone and a browser cannot report different numbers for one submission), that the
-/// send-back cannot be sent without the reason the decision door requires, and that an ordinary
-/// two-option question is untouched by any of it.
+/// send-back cannot be sent without the reason the decision door requires, and that the rows a card
+/// is delivered for are this project's and ones the door would take an answer to from here. What one
+/// press sends, and where a delivered card stands, is `EvidenceDecisionDoorTests`.
 final class EvidenceDecisionTests: XCTestCase {
 
     // MARK: fixtures
+
+    private static let project = "34JdnRJOxuG05yi0TpLq4"
 
     private func citation(_ ref: String, resolved: Bool, reason: String? = nil)
         -> EvidenceDecisionCitation {
@@ -21,6 +24,7 @@ final class EvidenceDecisionTests: XCTestCase {
 
     private func row(taskId: String = "34LMiluvx0jK63cj8arWl",
                      revision: String = "1",
+                     projectId: String? = EvidenceDecisionTests.project,
                      claim: String = "改掉了 update() 的头注释。",
                      gaps: [String],
                      citations: [EvidenceDecisionCitation] = [],
@@ -30,7 +34,8 @@ final class EvidenceDecisionTests: XCTestCase {
                          EvidenceDecisionCriterion(key: "6KG2mjp63PrtVvGwxRLvFY",
                                                    text: "提交一条完成证据后…")) -> EvidenceDecisionRow {
         EvidenceDecisionRow(
-            taskId: taskId, title: "改掉 update() 的头注释", criterion: criterion,
+            taskId: taskId, title: "改掉 update() 的头注释", projectId: projectId,
+            criterion: criterion,
             evidenceRevision: revision, ageSeconds: 1200, claim: claim, gaps: gaps,
             citations: citations,
             decidability: EvidenceDecisionDecidability(
@@ -41,56 +46,17 @@ final class EvidenceDecisionTests: XCTestCase {
                 disqualification: independent ? nil : "这条会话提交过这次证据"))
     }
 
-    private func queue(_ rows: [EvidenceDecisionRow]) -> EvidenceDecisionQueue {
+    private func queue(_ rows: [EvidenceDecisionRow],
+                       waitingOnYou: [EvidenceDecisionRow] = []) -> EvidenceDecisionQueue {
         EvidenceDecisionQueue(decidingSessionId: "34JbyLO3TvHgOmBBHLgZu", count: rows.count,
                               oldestAgeSeconds: rows.isEmpty ? nil : 1200,
-                              pending: rows, waitingOnYou: [])
-    }
-
-    /// The body the server writes: claim, criterion, gaps, and the identity line at the END.
-    /// Copied from `evidenceQuestionBody` rather than derived, so a change to that shape shows up
-    /// here as a card that stopped being recognised — which is what would happen in the app.
-    private func askBody(_ row: EvidenceDecisionRow) -> String {
-        let gaps = row.gaps.isEmpty
-            ? "Declared gaps: the submitter declared none."
-            : "Declared gaps:\n" + row.gaps.map { "- \($0)" }.joined(separator: "\n")
-        return """
-            \(row.claim)
-
-            Against criterion \(row.criterion?.key ?? "none"): \(row.criterion?.text ?? "")
-
-            \(gaps)
-
-            \(row.title) — task \(row.taskId), evidence rev \(row.evidenceRevision)
-            """
-    }
-
-    private func approval(_ rows: [EvidenceDecisionRow]) -> PendingApproval {
-        let questions = rows.map { row in
-            """
-            {"question": \(quoted(askBody(row))), "header": "Completion", "multiSelect": false,
-             "options": [{"label": "Confirm completion", "description": "settles it"},
-                         {"label": "Send back", "description": "does not"}]}
-            """
-        }
-        return PendingApproval(id: "appr-1", kind: .question, toolName: "AskUserQuestion",
-                               input: json("{\"questions\":[\(questions.joined(separator: ","))]}"))
-    }
-
-    private func quoted(_ s: String) -> String {
-        String(data: try! JSONEncoder().encode(s), encoding: .utf8)!
-    }
-
-    private func json(_ s: String) -> JSONValue {
-        try! JSONDecoder().decode(JSONValue.self, from: Data(s.utf8))
+                              pending: rows, waitingOnYou: waitingOnYou)
     }
 
     // MARK: 1 — the structure comes from the fields
 
-    /// Five declared gaps render as three lines and a count of the other two — off `row.gaps`,
-    /// never off the question body. NEGATIVE CONTROL: rebuild `gapPreview` by splitting the
-    /// flattened string and this goes red, because the string carries them as `- ` bullets inside
-    /// one paragraph and nothing here would count 5.
+    /// Five declared gaps render as three lines and a count of the other two — off `row.gaps`, in
+    /// the submitter's own words.
     func testFiveGapsShowThreeAndCountTheRest() {
         let r = row(gaps: ["没跑 pg spec 与 full-api",
                            "改动停在任务分支，尚未落 main",
@@ -141,15 +107,7 @@ final class EvidenceDecisionTests: XCTestCase {
         XCTAssertFalse(EvidenceDecisions.noClaim.isEmpty)
     }
 
-    // MARK: 2 — the actions are a judgment's, not a form's
-
-    /// `确认完成` submits on the press: one action, no pick-then-Submit step in between.
-    func testConfirmSendsOnTheFirstPress() {
-        let question = "任意一段问题正文"
-        XCTAssertEqual(EvidenceDecisions.answers(question: question, action: .confirm),
-                       [question: ["Confirm completion"]],
-                       "the label that goes back is the server's own, so the door reads it")
-    }
+    // MARK: 2 — the send-back needs its reason
 
     /// The send-back's control is dead until there is a reason, and alive the moment there is.
     /// NEGATIVE CONTROL: make `canSend` unconditional and both halves of this go red.
@@ -157,98 +115,56 @@ final class EvidenceDecisionTests: XCTestCase {
         var state = EvidenceSendBackState()
         XCTAssertFalse(state.open, "the reason box is closed until 退回重做 is pressed")
         XCTAssertFalse(state.canSend)
-        XCTAssertNil(state.action)
 
         state.open = true
         XCTAssertFalse(state.canSend, "opening the box is not a reason")
 
         state.note = "   \n  "
         XCTAssertFalse(state.canSend, "whitespace is not a reason either")
-        XCTAssertNil(state.action)
 
         state.note = "  把 pg spec 跑一遍  "
         XCTAssertTrue(state.canSend)
-        XCTAssertEqual(state.action, .sendBack(note: "把 pg spec 跑一遍"))
-        XCTAssertEqual(
-            EvidenceDecisions.answers(question: "正文", action: state.action!),
-            ["正文": ["Send back", "把 pg spec 跑一遍"]],
-            "the reason rides as the second entry, the shape a typed answer has always taken")
+        XCTAssertEqual(state.trimmedNote, "把 pg spec 跑一遍", "and the reason is sent trimmed")
     }
 
-    // MARK: 3 — only the judgment is special-cased
+    // MARK: 3 — which rows get a card
 
-    /// An ordinary two-option question is not a decision card, whatever else is pending.
-    func testOrdinaryQuestionStaysTheGenericForm() {
-        let pending = queue([row(gaps: [])])
-        let ordinary = PendingApproval(
-            id: "appr-2", kind: .question, toolName: "AskUserQuestion",
-            input: json("""
-                {"questions":[{"question":"Which database?","header":"DB","multiSelect":false,
-                 "options":[{"label":"Postgres"},{"label":"SQLite"}]}]}
-                """))
+    /// A conversation draws the judgments of the project it coordinates that the door would take
+    /// from it, and nothing else `pending` holds. Each dropped row differs from the kept one in one
+    /// field, so each is dropped for its own reason.
+    func testOnlyThisProjectsRowsThatThisSessionMayAnswerGetACard() {
+        let rows = [row(taskId: "kept", gaps: []),
+                    row(taskId: "another-project", projectId: "34MPiBgZ80YpSKt0lmTQA", gaps: []),
+                    row(taskId: "no-project", projectId: nil, gaps: []),
+                    row(taskId: "not-independent", gaps: [], independent: false),
+                    row(taskId: "not-decidable", gaps: [], decidable: false)]
 
-        XCTAssertNil(EvidenceDecisions.rows(for: ordinary, queue: pending),
-                     "two options and a pending queue are not enough — the generic form renders it")
-        // And it is still parsed by the untouched generic path.
-        let questions = Approvals.parseQuestions(from: ordinary.input!)
-        XCTAssertEqual(questions.map(\.options).flatMap { $0 }.map(\.label), ["Postgres", "SQLite"])
-        XCTAssertTrue(Approvals.allAnswered(questions,
-                                            selections: ["Which database?": ["Postgres"]],
-                                            custom: [:]))
-    }
-
-    /// A question wearing the two decision labels but naming no pending row is not one either —
-    /// which is also what happens if the server ever re-words its identity line.
-    func testDecisionLabelsWithoutAMatchingRowAreNotACard() {
-        let r = row(gaps: [])
-        let impostor = PendingApproval(
-            id: "appr-3", kind: .question, toolName: "AskUserQuestion",
-            input: json("""
-                {"questions":[{"question":"Is it done? task nobody, evidence rev 9","header":"C",
-                 "multiSelect":false,
-                 "options":[{"label":"Confirm completion"},{"label":"Send back"}]}]}
-                """))
-        XCTAssertNil(EvidenceDecisions.rows(for: impostor, queue: queue([r])))
-    }
-
-    /// A tool approval and a plan are never this card, whatever the queue holds.
-    func testOnlyAskUserQuestionIsEverConsidered() {
-        let pending = queue([row(gaps: [])])
-        let tool = PendingApproval(id: "t", kind: .tool, toolName: "Bash",
-                                   input: json("{\"command\":\"ls\"}"))
-        XCTAssertNil(EvidenceDecisions.rows(for: tool, queue: pending))
-    }
-
-    /// The card matches when the question IS one of the pending rows.
-    func testTheAskRaisedOverAPendingRowIsRecognised() {
-        let r = row(gaps: ["a", "b"])
-        let matched = EvidenceDecisions.rows(for: approval([r]), queue: queue([r]))
-        XCTAssertEqual(matched?.map(\.taskId), [r.taskId])
-        XCTAssertEqual(matched?.first?.gaps, ["a", "b"])
-    }
-
-    /// All or nothing: one unmatched question in a multi-row ask sends the WHOLE approval back to
-    /// the generic form, rather than rendering half a card with one Submit across both halves.
-    func testAMixedAskIsNotHalfACard() {
-        let known = row(gaps: [])
-        let unknown = row(taskId: "34LVxFqhGAi1xul4wjUHP", revision: "2", gaps: [])
-        XCTAssertNil(EvidenceDecisions.rows(for: approval([known, unknown]),
-                                            queue: queue([known])),
-                     "a card cannot be a judgment about one row and a form about another")
-        XCTAssertEqual(EvidenceDecisions.rows(for: approval([known, unknown]),
-                                              queue: queue([known, unknown]))?.count, 2)
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue(rows), projectId: Self.project)
+                           .map(\.taskId),
+                       ["kept"])
     }
 
     /// `waitingOnYou` is a row the door refuses whatever anybody presses, so no card is built from
-    /// it — the same rule the server's own ask follows.
-    func testOnlyPendingRowsBuildCards() {
+    /// it; and a conversation that coordinates no project, or has not read the queue, has none.
+    func testNoCardComesFromWaitingOnYouFromNoProjectOrFromNoRead() {
         let r = row(gaps: [])
-        let onlyWaiting = EvidenceDecisionQueue(decidingSessionId: "s", count: 0,
-                                                oldestAgeSeconds: nil, pending: [],
-                                                waitingOnYou: [r])
-        XCTAssertNil(EvidenceDecisions.rows(for: approval([r]), queue: onlyWaiting))
-        XCTAssertNil(EvidenceDecisions.rows(for: approval([r]), queue: nil),
-                     "before the queue has loaded, the generic form is what renders")
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue([], waitingOnYou: [r]),
+                                                 projectId: Self.project).isEmpty)
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue([r]), projectId: nil).isEmpty)
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: nil, projectId: Self.project).isEmpty)
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue([r]), projectId: Self.project), [r],
+                       "the same row, pending and in its own project's conversation, is a card")
+    }
+
+    /// A delivered card is addressed by the revision as well as the task — a newer revision is a
+    /// second card — and spelled the way the web card keys the same row.
+    func testTwoRevisionsOfOneTaskAreTwoCards() {
+        let first = DeliveredDecisionCard(
+            kind: .evidenceDecision(taskID: "34LMiluvx0jK63cj8arWl", evidenceRevision: "1"))
+        let second = DeliveredDecisionCard(
+            kind: .evidenceDecision(taskID: "34LMiluvx0jK63cj8arWl", evidenceRevision: "2"))
+        XCTAssertEqual(first.id, "evidence-decision-34LMiluvx0jK63cj8arWl@1")
+        XCTAssertNotEqual(first.id, second.id)
     }
 
     // MARK: 4 — the fold threshold is the one thing the two clients do not share
@@ -279,11 +195,12 @@ final class EvidenceDecisionTests: XCTestCase {
 
     // MARK: the wire
 
-    /// The row decodes from what `GET /tasks/evidence-decisions/pending` actually sends.
+    /// The row decodes from what `GET /tasks/evidence-decisions/pending` actually sends — including
+    /// the project it is filed under, which is what decides the conversation it gets a card in.
     func testQueueDecodesFromTheServersShape() throws {
         let wire = """
         {"readAt":"2026-09-09T01:00:00.000Z","decidingSessionId":"34JbyLO3TvHgOmBBHLgZu",
-         "count":1,"oldestAgeSeconds":1200,
+         "count":2,"oldestAgeSeconds":1200,
          "pending":[{"taskId":"34LMiluvx0jK63cj8arWl","title":"改注释","status":"OPEN",
            "projectId":"34JdnRJOxuG05yi0TpLq4",
            "criterion":{"key":"6KG2mjp63PrtVvGwxRLvFY","text":"提交一条完成证据后…"},
@@ -292,17 +209,24 @@ final class EvidenceDecisionTests: XCTestCase {
            "citations":[{"kind":"TOOL_CALL","ref":"toolu_1","resolved":true,"reason":null,
                          "label":"Bash · swift test"}],
            "decidability":{"decidable":true,"refusal":null,"requiredAction":null},
+           "independence":{"independent":true,"disqualification":null,"requiredAction":null}},
+          {"taskId":"34LVxFqhGAi1xul4wjUHP","title":"不在任何项目下","status":"OPEN",
+           "projectId":null,"criterion":null,
+           "evidenceRevision":"2","submittedAt":"2026-09-09T00:50:00.000Z","ageSeconds":600,
+           "claim":"","gaps":[],"citations":[],
+           "decidability":{"decidable":true,"refusal":null,"requiredAction":null},
            "independence":{"independent":true,"disqualification":null,"requiredAction":null}}],
          "waitingOnYou":[]}
         """
         let q = try JSONDecoder().decode(EvidenceDecisionQueue.self, from: Data(wire.utf8))
-        XCTAssertEqual(q.count, 1)
+        XCTAssertEqual(q.count, 2)
         XCTAssertEqual(q.pending.first?.gaps, ["没跑 pg spec", "没落 main"])
         XCTAssertEqual(q.pending.first?.criterion?.key, "6KG2mjp63PrtVvGwxRLvFY")
         XCTAssertEqual(q.pending.first?.citations.first?.label, "Bash · swift test")
+        XCTAssertEqual(q.pending.first?.projectId, "34JdnRJOxuG05yi0TpLq4")
+        XCTAssertNil(q.pending.last?.projectId, "a task filed under no project decodes as one")
         XCTAssertTrue(q.waitingOnYou.isEmpty)
-        // And the identity line built from it is the one the server writes into the ask.
-        XCTAssertEqual(EvidenceDecisions.askIdentity(q.pending[0]),
-                       "task 34LMiluvx0jK63cj8arWl, evidence rev 1")
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: q, projectId: Self.project).map(\.taskId),
+                       ["34LMiluvx0jK63cj8arWl"])
     }
 }

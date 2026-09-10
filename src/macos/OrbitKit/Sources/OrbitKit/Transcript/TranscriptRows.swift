@@ -31,21 +31,25 @@ public struct LocalStatusCard: Identifiable, Equatable, Sendable {
     }
 }
 
-/// A standing question about a project's ruler, delivered into the conversation it belongs to:
-/// the held weakening proposal, and the settlement confirmation. Neither is an `Approval` and
-/// neither stops a turn, so neither can be rendered at the tail the way a pending approval is —
-/// they sit where they arrived and later messages push them up, which is exactly why the
-/// cross-session "needs you" bar now also points DOWN at them inside their own session.
+/// A standing question a project puts to its owner, delivered into the conversation it belongs to:
+/// the held weakening proposal, the settlement confirmation, and the decision on one revision of a
+/// task's completion evidence. None is an `Approval` and none stops a turn, so none can be rendered
+/// at the tail the way a pending approval is — they sit where they arrived and later messages push
+/// them up, which is exactly why the cross-session "needs you" bar now also points DOWN at them
+/// inside their own session.
 ///
 /// It carries an address and never any content: what the card shows is re-derived from the server
-/// on every render (see OrbitKit's `CriteriaDecision.swift`), and a copy kept here would be the one
-/// thing that design is buying its way out of.
+/// on every render (see OrbitKit's `CriteriaDecision.swift` and `EvidenceDecision.swift`), and a
+/// copy kept here would be the one thing that design is buying its way out of.
 public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         /// One held loosening proposal, by the address the pending read publishes.
         case criteriaDecision(intentID: String)
         /// The one confirmation question a project has. There is never more than one.
         case acceptanceConfirmation
+        /// One revision of one task's completion evidence. The revision is part of the address
+        /// because the door's compare-and-set is against it: a newer revision is its own card.
+        case evidenceDecision(taskID: String, evidenceRevision: String)
     }
 
     public let kind: Kind
@@ -65,6 +69,9 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // something else on screen and one vocabulary is cheaper than two.
         case .criteriaDecision(let intentID): return "criteria-decision-\(intentID)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
+        // The web evidence card's `decisionRowKey` spelling, taskId@evidenceRevision.
+        case .evidenceDecision(let taskID, let evidenceRevision):
+            return "evidence-decision-\(taskID)@\(evidenceRevision)"
         }
     }
 }

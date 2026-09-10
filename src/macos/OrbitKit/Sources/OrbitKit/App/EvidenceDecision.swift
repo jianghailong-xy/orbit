@@ -1,47 +1,41 @@
 import Foundation
 
 /* ─────────────────────────────────────────────────────────────────────────────────────────────
-   THE EVIDENCE-DECISION CARD — THE OTHER HALF OF WEB'S `ApprovalPanel.tsx`
+   THE EVIDENCE-DECISION CARD — THE OTHER HALF OF WEB'S `EvidenceDecisionCard.tsx`
    ─────────────────────────────────────────────────────────────────────────────────────────────
 
-   THE GENERIC FORM STAYS THE DEFAULT, AND THIS IS THE ONE EXCEPTION TO IT
-   ----------------------------------------------------------------------
-   Everything here fires for a single shape: the card `coordinator-evidence-ask.ts` raises so a
-   person can answer "is this work finished". Every other AskUserQuestion — including one whose
-   two options happen to read alike — falls through to the option rows + Submit that `Approvals`
-   already parses, which is what the tool actually is: a form over options nobody has seen before.
+   A CARD ORBIT DRAWS, NOT A QUESTION AN AGENT ASKS
+   ------------------------------------------------
+   Whether a task's submitted evidence settles it used to reach this client as an AskUserQuestion
+   the project's coordinator raised over a pending row, answered back into the engine for the model
+   to relay to `task_evidence_decide`. Nothing in that loop needed a model:
+   `GET /tasks/evidence-decisions/pending` already publishes the whole row, and
+   `POST /tasks/:taskId/evidence/decision` already takes this device's own credential. So the card
+   is drawn from the one and pressed at the other — the shape `CriteriaDecision.swift` has for the
+   ruler — and no question is taken for one: an AskUserQuestion offering `Confirm completion` /
+   `Send back` is an ordinary form.
 
-   Recognising a question by what it is ABOUT is a cost, and it is taken deliberately rather than
-   drifted into. A client that grows one card per kind of question ends up with N surfaces for one
-   fact, and this account has already paid for that: two decision surfaces raced on 2026-09-09 and
-   the loser came back `EVIDENCE_JUDGMENT_ALREADY_DECIDED`. So the rule is written down — ONE
-   special case, this one, and a second one needs a better reason than "this question would look
-   nicer as a card". What earns this one its exception is that it is not multiple choice at all: it
-   is a judgment about a row the server already publishes in full, and the generic form was
-   throwing that row away.
-
-   THE CARD READS THE ROW, NOT THE QUESTION TEXT
-   ---------------------------------------------
-   `evidenceQuestionBody` flattens the claim, the criterion and the gaps into one string because a
-   tool input is all AskUserQuestion carries. Rendering THAT is what produced the wall of text this
-   card replaces. So the string is used for exactly two things — to say WHICH row is being asked
-   about, and, verbatim and folded away, as the full text — while every line above that fold is
-   read off `EvidenceDecisionRow`: the same row the web rail renders, out of the same
-   `?decidingSessionId=` read, scoped by the same server rule. Nothing on the card is summarised,
-   re-worded or inferred; each visible string is a field of that row or a count of one.
+   NOTHING IS FROZEN INTO THE CARD EXCEPT THE ADDRESS
+   --------------------------------------------------
+   A delivered card keeps one thing across renders — which revision of which task's evidence it was
+   drawn for, the pair the door's compare-and-set is against — and re-derives everything else from
+   the read (`EvidenceDecisions.standing`). A revision answered in a browser, displaced by a newer
+   one, or not readable right now is a conclusion about the read rather than local state somebody
+   has to remember to clear. Nothing on the card is summarised, re-worded or inferred: each visible
+   string is a field of the row or a count of one.
 
    ONE SOURCE FOR TWO CLIENTS
    --------------------------
-   This is the shared half. The recognition rule, the order of the body, the copy and the send-back
-   gate live here so macOS and iOS cannot disagree about them, and so they can be tested on Linux
-   where no SwiftUI exists. What does NOT live here is the one thing that genuinely differs between
-   a 390pt phone and a macOS window: how much of a claim fits before it folds — see
-   `claimClampCompact` / `claimClampRegular`. Structure is shared; width is not.
+   The derivation, the order of the body, the copy and the send-back gate live here so macOS and
+   iOS cannot disagree about them, and so they can be tested on Linux where no SwiftUI exists. What
+   does NOT live here is the one thing that genuinely differs between a 390pt phone and a macOS
+   window: how much of a claim fits before it folds — see `claimClampCompact` /
+   `claimClampRegular`. Structure is shared; width is not.
 
-   The mirror on the other side is `src/web/src/components/ApprovalPanel.tsx` (the card) and
-   `DecisionRail.tsx` (the row and the two option labels). `EvidenceDecisionCopyParityTests` reads
-   that file and fails when the words drift, because "one end says 机器已核 and the other says
-   提交者自述" is the failure this whole pair of tasks exists to prevent.
+   The mirror on the other side is `src/web/src/components/EvidenceDecisionCard.tsx`.
+   `EvidenceDecisionCopyParityTests` reads that file and fails when the words drift, because "one
+   end says 机器已核 and the other says 提交者自述" is the failure this pair of clients exists to
+   prevent.
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 
 // MARK: - the row, as the server publishes it
@@ -108,6 +102,9 @@ public struct EvidenceDecisionCriterion: Codable, Equatable, Sendable {
 public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     public let taskId: String
     public let title: String
+    /// The project the task is filed under, or nil for a task in none. A conversation draws a card
+    /// only for its own project's rows (`EvidenceDecisions.cardRows`).
+    public let projectId: String?
     public let criterion: EvidenceDecisionCriterion?
     /// The revision awaiting an answer, in the decimal spelling the decision door takes back.
     public let evidenceRevision: String
@@ -121,16 +118,18 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     public let decidability: EvidenceDecisionDecidability
     public let independence: EvidenceDecisionIndependence
 
-    /// A row is one revision of one task — the same key the question's identity line spells out.
+    /// A row is one revision of one task — the pair the decision door's compare-and-set is against.
     public var id: String { "\(taskId)#\(evidenceRevision)" }
 
-    public init(taskId: String, title: String, criterion: EvidenceDecisionCriterion?,
+    public init(taskId: String, title: String, projectId: String? = nil,
+                criterion: EvidenceDecisionCriterion?,
                 evidenceRevision: String, ageSeconds: Int? = nil, claim: String, gaps: [String],
                 citations: [EvidenceDecisionCitation],
                 decidability: EvidenceDecisionDecidability,
                 independence: EvidenceDecisionIndependence) {
         self.taskId = taskId
         self.title = title
+        self.projectId = projectId
         self.criterion = criterion
         self.evidenceRevision = evidenceRevision
         self.ageSeconds = ageSeconds
@@ -163,6 +162,97 @@ public struct EvidenceDecisionQueue: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - the door
+
+/// The two answers the door takes. There is deliberately no third that leaves it pending: not
+/// deciding yet is simply not pressing.
+public enum EvidenceDecisionAnswer: String, Codable, Equatable, Sendable {
+    case confirm = "CONFIRM"
+    case sendBack = "SEND_BACK"
+}
+
+/// The body one press sends to `POST /tasks/:taskId/evidence/decision`.
+///
+/// Three bindings, and they are not the same kind of thing: `decidingSessionId` says where the
+/// answer is given FROM — the door runs its independence check on that session, so an account owner
+/// gets no shorter path than a coordinator does — the credential the request carries says WHO, and
+/// `evidenceRevision` says WHICH version was read, which is the compare-and-set the door refuses
+/// once that version is not the latest.
+public struct EvidenceDecisionRequest: Codable, Equatable, Sendable {
+    public let decidingSessionId: String
+    public let evidenceRevision: String
+    public let decision: EvidenceDecisionAnswer
+    /// The reason, on a send-back and on nothing else. Nil is left out of the body, not sent as null.
+    public let note: String?
+
+    public init(decidingSessionId: String, evidenceRevision: String,
+                decision: EvidenceDecisionAnswer, note: String? = nil) {
+        self.decidingSessionId = decidingSessionId
+        self.evidenceRevision = evidenceRevision
+        self.decision = decision
+        self.note = note
+    }
+}
+
+/// What the door returns once it has recorded one — read back, never recomputed by a client.
+public struct EvidenceDecisionResult: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let evidenceRevision: String
+    public let decision: EvidenceDecisionAnswer
+    public let note: String?
+    /// ISO-8601, as JSON carries it. Never parsed here.
+    public let decidedAt: String
+
+    public init(taskId: String, evidenceRevision: String, decision: EvidenceDecisionAnswer,
+                note: String? = nil, decidedAt: String) {
+        self.taskId = taskId
+        self.evidenceRevision = evidenceRevision
+        self.decision = decision
+        self.note = note
+        self.decidedAt = decidedAt
+    }
+}
+
+// MARK: - where one delivered card stands right now
+
+/// The four shapes a delivered card can be in. Three are states of the EVIDENCE, read off the
+/// queue; `unread` is a state of this CLIENT and gets the same treatment for the same reason — a
+/// card that cannot re-derive itself cannot say the door would accept anything.
+public struct EvidenceDecisionStanding: Equatable, Sendable {
+    public enum State: Equatable, Sendable {
+        /// The revision is in the read, and the read still says this session may answer it.
+        case decidable(EvidenceDecisionRow)
+        /// It is gone, and the same task is in the read at a LATER revision. The door answers only a
+        /// task's latest evidence, so every answer to this one would be refused; the later revision
+        /// is its own card.
+        case superseded(replacement: EvidenceDecisionRow)
+        /// It is gone and nothing later has taken its place: it was answered.
+        case alreadyDecided
+        /// The read has not come back.
+        case unread
+    }
+
+    public let taskId: String
+    public let evidenceRevision: String
+    public let state: State
+
+    public init(taskId: String, evidenceRevision: String, state: State) {
+        self.taskId = taskId
+        self.evidenceRevision = evidenceRevision
+        self.state = state
+    }
+
+    /// The row this card is rendering, or nil when the read no longer publishes one. A stale card
+    /// has no evidence to show: see the file header.
+    public var row: EvidenceDecisionRow? {
+        if case .decidable(let row) = state { return row }
+        return nil
+    }
+
+    /// Whether the door would take an answer from this card: true for exactly one of the four.
+    public var answerable: Bool { row != nil }
+}
+
 // MARK: - what the card shows
 
 /// One machine-checkable statement about the row, in the row's own fields.
@@ -185,14 +275,6 @@ public struct FoldedClaim: Equatable, Sendable {
 public struct GapPreview: Equatable, Sendable {
     public let shown: [String]
     public let rest: [String]
-}
-
-/// What one press of the card's action area means. `chat` is the third answer and deliberately the
-/// third: not judging yet is useful — it rides back as a `deny` with a message, exactly as the
-/// generic form's "Chat about this" does — but it is not a verdict, so it does not get one's weight.
-public enum EvidenceDecisionAction: Equatable, Sendable {
-    case confirm
-    case sendBack(note: String)
 }
 
 /// The send-back half of the action area, as state a view holds and a test can assert on.
@@ -221,89 +303,95 @@ public struct EvidenceSendBackState: Equatable, Sendable {
     /// Whether the send control may be pressed. The one rule both clients are under: an action
     /// that cannot succeed is disabled.
     public var canSend: Bool { !trimmedNote.isEmpty }
-
-    /// The action this state would send, or nil while it could not succeed.
-    public var action: EvidenceDecisionAction? {
-        canSend ? .sendBack(note: trimmedNote) : nil
-    }
 }
 
 // MARK: - the logic
 
 public enum EvidenceDecisions {
 
-    // MARK: recognising the one question this file knows
+    // MARK: which rows get a card, and where one stands
 
-    /// `DecisionRail.tsx`'s two labels, which `coordinator-evidence-ask.ts` copies into the tool
-    /// input. Copied again here rather than derived: the invariant is that the WORDS match across
-    /// three packages, and a copy is the only form of it a Swift test can compare.
-    public static let confirmOption = "Confirm completion"
-    public static let sendBackOption = "Send back"
-
-    /// The identity `evidenceQuestionBody` writes into the end of every decision question.
+    /// The rows this conversation gets a card for.
     ///
-    /// The server puts it there so two rows whose claims read alike cannot collapse onto one
-    /// `answers` key. It is the ONLY part of that body this file reads, and it is read as a handle:
-    /// which row is this question about. A question naming no row this session may decide is not a
-    /// decision card and renders as the ordinary form — which is also what happens if the server
-    /// ever words that line differently, so the failure is a card that looks like it did yesterday
-    /// rather than a wrong one.
-    public static func askIdentity(_ row: EvidenceDecisionRow) -> String {
-        "task \(row.taskId), evidence rev \(row.evidenceRevision)"
-    }
-
-    /// The row one question is about, or nil when it is not one of these questions at all.
-    public static func row(for question: AskQuestion,
-                           in rows: [EvidenceDecisionRow]) -> EvidenceDecisionRow? {
-        let labels = question.options.map(\.label)
-        guard labels.count == 2,
-              labels.contains(confirmOption), labels.contains(sendBackOption) else { return nil }
-        let matched = rows.filter { question.question.contains(askIdentity($0)) }
-        return matched.count == 1 ? matched[0] : nil
-    }
-
-    /// The rows an approval is asking about, or nil for every other question in the world.
-    ///
-    /// All or nothing on purpose: a card rendering some of its questions as judgments and the rest
-    /// as a form would be two cards in one, with one Submit between them. Either the whole ask is
-    /// the one shape this file knows, or none of it is.
-    ///
-    /// Only `pending` is consulted — those are the rows the door would take an answer to from this
-    /// session, which is the same set the server built the ask from.
-    public static func rows(for approval: PendingApproval,
-                            queue: EvidenceDecisionQueue?) -> [EvidenceDecisionRow]? {
-        guard Approvals.isQuestion(toolName: approval.toolName ?? ""), let input = approval.input
-        else { return nil }
-        let questions = Approvals.parseQuestions(from: input)
-        guard !questions.isEmpty else { return nil }
-        let pending = queue?.pending ?? []
-        var matched: [EvidenceDecisionRow] = []
-        for question in questions {
-            guard let row = row(for: question, in: pending) else { return nil }
-            matched.append(row)
+    /// `pending` is already scoped by the server to rows this session may decide. The first two
+    /// checks are the second half of that rule, read off the door's own answers carried on the row;
+    /// the third is the card's own — a conversation shows the judgments of the project it
+    /// coordinates, and a row from another project, or from none, gets no card there.
+    public static func cardRows(queue: EvidenceDecisionQueue?,
+                                projectId: String?) -> [EvidenceDecisionRow] {
+        guard let projectId else { return [] }
+        return (queue?.pending ?? []).filter { row in
+            row.decidability.decidable && row.independence.independent && row.projectId == projectId
         }
-        return matched
+    }
+
+    /// Where one delivered card stands RIGHT NOW, derived from the read and from nothing else.
+    /// A nil queue is the read not having come back, which is `unread` and not "nothing pending".
+    public static func standing(queue: EvidenceDecisionQueue?, projectId: String?, taskId: String,
+                                evidenceRevision: String) -> EvidenceDecisionStanding {
+        EvidenceDecisionStanding(
+            taskId: taskId, evidenceRevision: evidenceRevision,
+            state: state(queue: queue, projectId: projectId, taskId: taskId,
+                         evidenceRevision: evidenceRevision))
+    }
+
+    private static func state(queue: EvidenceDecisionQueue?, projectId: String?, taskId: String,
+                              evidenceRevision: String) -> EvidenceDecisionStanding.State {
+        guard let queue else { return .unread }
+        let rows = cardRows(queue: queue, projectId: projectId)
+        if let row = rows.first(where: { row in
+            row.taskId == taskId && row.evidenceRevision == evidenceRevision
+        }) {
+            return .decidable(row)
+        }
+        if let replacement = rows.first(where: { row in
+            row.taskId == taskId && isLaterRevision(row.evidenceRevision, than: evidenceRevision)
+        }) {
+            return .superseded(replacement: replacement)
+        }
+        return .alreadyDecided
+    }
+
+    /// Revisions are decimal strings of up to 19 digits, so they are compared as digits: `10` is
+    /// later than `9`, which comparing the two strings would get backwards.
+    private static func isLaterRevision(_ candidate: String, than: String) -> Bool {
+        candidate.count == than.count ? candidate > than : candidate.count > than.count
+    }
+
+    /// Whether this card is still a QUESTION — which is not the same as whether it can be answered.
+    ///
+    /// The bar above the transcript counts by this and the buttons are gated by `answerable`, and
+    /// the two differ in exactly one case, for the reason `CriteriaDecisions.isOpen` gives: a card
+    /// this device could not re-derive is unanswerable and still open.
+    public static func isOpen(_ standing: EvidenceDecisionStanding) -> Bool {
+        switch standing.state {
+        case .decidable, .unread:          return true
+        case .superseded, .alreadyDecided: return false
+        }
     }
 
     // MARK: the copy
     //
     // Every string below is the one its web twin uses, and `EvidenceDecisionCopyParityTests`
-    // checks that by reading `ApprovalPanel.tsx`. Two clients wording one judgment differently is
-    // two judgments that happen to write the same row.
+    // checks that by reading `EvidenceDecisionCard.tsx`. Two clients wording one judgment
+    // differently is two judgments that happen to write the same row.
 
     /// The card's heading (`DECISION_ASK_HEADING`).
     public static let askHeading = "需要你裁决"
-    /// `确认完成` submits on the press itself (`DECISION_CONFIRM_ACTION`). The generic form's
-    /// pick-then-Submit exists for a form with several questions and several picks per question; in
-    /// a two-way judgment it buys nothing but one more press between a reader and the thing they
-    /// already decided.
+    /// The heading a card that can no longer be answered carries instead
+    /// (`EVIDENCE_DECISION_STALE_HEADING`).
+    public static let staleHeading = "这一版证据已经不等你裁决了"
+    /// And the one for a card this device could not re-derive just now
+    /// (`EVIDENCE_DECISION_UNREAD_HEADING`).
+    public static let unreadHeading = "这张卡刚才没能重新读取"
+    /// `确认完成` submits on the press itself (`DECISION_CONFIRM_ACTION`). A pick-then-Submit step
+    /// exists for a form with several questions and several picks per question; in a two-way
+    /// judgment it buys nothing but one more press between a reader and the thing they already
+    /// decided.
     public static let confirmAction = "确认完成"
     public static let sendBackAction = "退回重做"
     /// The send-back's own submit, behind the reason box rather than beside it.
     public static let sendAction = "退回"
-    /// The third answer (`DECISION_CHAT_ACTION` without its leading emoji: the native card draws an
-    /// SF Symbol there, which is the same signal in the platform's own alphabet).
-    public static let chatAction = "先聊聊，暂不裁决"
     /// Why the reason is required rather than a placeholder somebody may ignore: the decision door
     /// refuses a SEND_BACK carrying no note and writes nothing at all.
     public static let noteLabel = "下一版证据要给出什么？这句话是下一次尝试唯一能瞄准的东西。"
@@ -313,7 +401,11 @@ public enum EvidenceDecisions {
     public static let noClaim = "这一版证据没有写下主张。"
     public static let noCriterion = "未引用验收条目"
     public static let noGaps = "提交者声明没有缺口"
-    public static let fullLabel = "完整证据正文"
+
+    /// The door's two refusals that mean "this card is out of date", in the door's own spelling, so
+    /// a card can say which one it would meet.
+    public static let alreadyDecidedRefusal = "EVIDENCE_JUDGMENT_ALREADY_DECIDED"
+    public static let supersededRefusal = "EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED"
 
     /// The gaps that did not fit, counted rather than dropped: they are the body of this card.
     public static func gapsMore(_ rest: Int) -> String { "还有 \(rest) 条" }
@@ -329,6 +421,47 @@ public enum EvidenceDecisions {
         held == total ? "\(held) 项机器已核" : "\(held) 项机器已核 · \(total - held) 项没过"
     }
 
+    // MARK: the standing, in words
+
+    /// Which of three things the reader is looking at: a question, one that has moved on, or a card
+    /// this device could not re-derive.
+    public static func heading(_ standing: EvidenceDecisionStanding) -> String {
+        switch standing.state {
+        case .decidable:                   return askHeading
+        case .unread:                      return unreadHeading
+        case .superseded, .alreadyDecided: return staleHeading
+        }
+    }
+
+    /// What a card shows once the read no longer publishes its row: the address, and nothing else.
+    public static func addressLine(_ standing: EvidenceDecisionStanding) -> String {
+        "\(standing.taskId) · rev \(standing.evidenceRevision)"
+    }
+
+    /// Why this card cannot be answered, addressed to the reader looking at its dead buttons.
+    ///
+    /// Each sentence names the refusal the door would give, because that is the fact: a reader told
+    /// only "you cannot" has been told the button is broken.
+    public static func staleExplanation(_ standing: EvidenceDecisionStanding) -> String? {
+        switch standing.state {
+        case .decidable:
+            return nil
+        case .superseded(let replacement):
+            var out = "被顶掉了：这个任务又提交了第 \(replacement.evidenceRevision) 版证据，门只裁决最新的一版，"
+            out += "对第 \(standing.evidenceRevision) 版的任何裁决都会被拒绝（\(supersededRefusal)）。"
+            out += "这里什么也没有记下；第 \(replacement.evidenceRevision) 版有它自己的卡。"
+            return out
+        case .alreadyDecided:
+            var out = "已经答过了：这一版证据已不在待决里，它的裁决在别处记下了，从这张卡再发出的裁决会被拒绝"
+            out += "（\(alreadyDecidedRefusal)）。这张卡没有替你记下任何东西，也改变不了已经记下的。"
+            return out
+        case .unread:
+            var out = "待决读刚才没能读回来，所以这张卡说不出它此刻在问什么。卡上不存证据的副本，内容每次都从读重新推导；"
+            out += "说不准门会不会接受的裁决，这里就不提供。证据本身不受影响。"
+            return out
+        }
+    }
+
     // MARK: the body, in the order a person decides in
 
     /// How many gaps the card shows before it starts counting.
@@ -336,8 +469,7 @@ public enum EvidenceDecisions {
     /// Three, and NOT platform-forked, unlike the claim clamp below. This one is a contract with
     /// the other client rather than a judgment about width: the same evidence has to report the
     /// same "3 shown, N more" on a phone and in a browser, or the two ends disagree about how much
-    /// the submitter admitted. What a narrow screen gives up is the full text and the checks —
-    /// never any of this.
+    /// the submitter admitted. What a narrow screen gives up is the checks — never any of this.
     public static let gapsShown = 3
 
     /// Where a claim starts folding on a 390pt phone, and in a macOS window.
@@ -414,29 +546,35 @@ public enum EvidenceDecisions {
 
     // MARK: the answer
 
-    /// The `answers` payload for one decision, in the shape `evidenceDecisionFromAnswers` reads:
-    /// keyed by the question's own text, carrying the server's own option label. A send-back puts
-    /// its reason second, which is the same shape the generic form has always used for a typed
-    /// answer beside a picked one.
-    public static func answers(question: String,
-                               action: EvidenceDecisionAction) -> [String: [String]] {
-        switch action {
+    /// The request one press makes, as data, so what goes to the door can be asserted without a
+    /// network — the same tactic the web card takes with `evidenceDecisionRequest`.
+    ///
+    /// Nil for a send-back without a reason: the door refuses a SEND_BACK carrying no note and
+    /// writes nothing at all, so there is no request worth making. The reason is trimmed, because
+    /// whitespace is not one, and it rides with a send-back and with nothing else.
+    public static func request(row: EvidenceDecisionRow, decision: EvidenceDecisionAnswer,
+                               note: String? = nil,
+                               decidingSessionID: String) -> EvidenceDecisionRequest? {
+        switch decision {
         case .confirm:
-            return [question: [confirmOption]]
-        case .sendBack(let note):
-            return [question: [sendBackOption, note]]
+            return EvidenceDecisionRequest(decidingSessionId: decidingSessionID,
+                                           evidenceRevision: row.evidenceRevision,
+                                           decision: .confirm)
+        case .sendBack:
+            let reason = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !reason.isEmpty else { return nil }
+            return EvidenceDecisionRequest(decidingSessionId: decidingSessionID,
+                                           evidenceRevision: row.evidenceRevision,
+                                           decision: .sendBack, note: reason)
         }
     }
 
-    /// The chip over one card in a delivery that found several rows waiting.
-    public static func positionChip(index: Int, total: Int) -> String {
-        "证据 \(index + 1)/\(total)"
-    }
-
-    /// What the card says once a row has been answered but its siblings have not. A tool call is
-    /// answered once, so a delivery asking about three rows holds the first two picks rather than
-    /// sending a partial the other two are lost from.
-    public static func pickedNote(_ label: String) -> String {
-        "已选「\(label == confirmOption ? confirmAction : sendBackAction)」"
+    /// What an answer given from a card leaves where it was given: the door's receipt, in the card's
+    /// own words (`evidenceDecisionRecordedLine`).
+    public static func recordedLine(_ result: EvidenceDecisionResult) -> String {
+        let action = result.decision == .confirm ? confirmAction : sendBackAction
+        let line = "已记下「\(action)」 · rev \(result.evidenceRevision)"
+        guard let note = result.note, !note.isEmpty else { return line }
+        return "\(line)：\(note)"
     }
 }
