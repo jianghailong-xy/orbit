@@ -51,6 +51,8 @@ import {
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { criteriaDecisionPendingFact } from './coordinator-wake';
 import {
+  CRITERIA_DECISION_ALREADY_SETTLED,
+  CRITERIA_DECISION_BASE_SEAL_MOVED,
   criteriaDecisionRecorded,
   readPendingCriteriaDecisionsForOwner,
   type OwnerPendingCriteriaDecisionQueue,
@@ -1530,13 +1532,19 @@ export class ProjectsService {
       // (4) ALREADY SETTLED. One row, one predicate, both outcomes: `project_criteria_decision`
       // is keyed by the intent, so "has this been answered" needs no case analysis — and the
       // primary key is also the backstop for two requests that get past this read at once.
+      //
+      // The two codes this door refuses with are IMPORTED from `criteria-pending-decisions.ts`
+      // rather than spelled here, and that is the same rule as the predicate above: the derived
+      // read tells a reader which proposals could be decided and, when one could not, which
+      // refusal it would meet. A promise made in one spelling against a refusal given in another
+      // is a drift nobody sees until a card lights a button this door turns down.
       const settled = await tx.projectCriteriaDecision.findUnique({
         where: { intentId },
         select: { decision: true, decidedAt: true },
       });
       if (settled) {
         throw new ConflictException({
-          code: 'PROJECT_CRITERIA_DECISION_ALREADY_SETTLED',
+          code: CRITERIA_DECISION_ALREADY_SETTLED,
           settledAs: settled.decision,
           decidedAt: settled.decidedAt.toISOString(),
           message:
@@ -1561,7 +1569,7 @@ export class ProjectsService {
       // the walk this whole arrangement exists to forbid.
       if (currentSeal !== baseSeal || currentSeal !== proposalSeal) {
         throw new ConflictException({
-          code: 'PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED',
+          code: CRITERIA_DECISION_BASE_SEAL_MOVED,
           currentSeal,
           proposalSeal,
           message:

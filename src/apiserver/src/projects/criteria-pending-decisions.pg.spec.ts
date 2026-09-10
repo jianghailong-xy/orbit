@@ -20,6 +20,11 @@
  *       that moved the seal, so the row is witnessed CHANGING state rather than two rows being
  *       compared.
  *
+ * (2) settles a proposal the one way 0195's own tables can express an answer, which is a commit
+ * row. The other way one lands — the decision row the door writes for a REJECT as much as for an
+ * APPROVE — is (9) and (10) at the foot of this file, with what turning a proposal down leaves
+ * askable afterwards.
+ *
  * And the delivery is measured through the write path that produces it, not by composing a fact by
  * hand: the edit that gets held is the thing that puts the card on the conversation, so (4) sends
  * one and reads the conversation. The message lists what MOVED, which is an arm per kind of move,
@@ -68,6 +73,7 @@ import {
   readPendingCriteriaDecisions,
 } from './criteria-pending-decisions';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
+import { readOwnerDecisionSignals } from './owner-decision-signal';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { HELD_CRITERIA_WAKE_COORDINATOR_DISABLED, ProjectsService } from './projects.service';
 
@@ -1000,4 +1006,188 @@ test('the read says which of a restated collection actually moved', {
     assert.deepEqual([added!.onRecord, added!.definitionId], [null, null],
       'and an added one replaces nothing, so it names no definition and has no other side');
   });
+});
+
+/**
+ * THE OTHER WAY A PROPOSAL IS ANSWERED, AND WHAT ANSWERING IT LEAVES BEHIND.
+ *
+ * (2) above settles a proposal the only way 0195's own tables can express: a commit row, which
+ * says the proposal was APPLIED. A REJECT has no such row and never will — the door records both
+ * outcomes in `project_criteria_decision`, keyed by the intent and never reading `decision` back
+ * out, because a proposal that was turned down is as answered as one that was applied.
+ *
+ * WHY THE TWO CASES HERE ARE ONE ARGUMENT AND NOT TWO
+ * --------------------------------------------------
+ * "Answered" is asked from two sides, and the sides have to agree. This read asks it to decide
+ * what is still a question; `ProjectsService.pendingWeakeningProposal` asks it to decide whether an
+ * arriving edit is the proposal already on record. Disagreeing is not a cosmetic drift: a rejected
+ * proposal that stays pending on the WRITE side makes the very edit the owner turned down
+ * unaskable — re-making it takes the identical-ask branch, so nothing new is filed and the caller
+ * is handed back an id whose one-time `commitToken` is spent, which the door answers with
+ * ALREADY_SETTLED and nothing else. "No" to this ask has to leave it re-proposable.
+ *
+ *   (9) a REJECT settles the proposal: it leaves this read, the criteria do not move, and the
+ *       intent row is still on record — because settled is DERIVED from a second row and never by
+ *       editing the proposal, which 0195's trigger refuses.
+ *   (10) and the same edit, re-sent byte for byte, files a NEW proposal that supersedes nothing.
+ *
+ * (9) CARRIES ITS OWN POSITIVE CONTROL, and it is the whole reason (10) means anything: before the
+ * rejection, the identical re-send is made ONCE and the SAME id comes back with no row filed. That
+ * branch is a real rule this change must not have deleted, so (10)'s "a new proposal was filed" is
+ * a statement about the decision row rather than about a write path that files one every time. The
+ * only thing that differs between the two re-sends is that one `project_criteria_decision` row.
+ *
+ * The write path's own half of this is `criteria-pending-excludes-settled.pg.spec.ts`, over the
+ * censuses that say no criterion moved on the way past. This file's subject is the derived read.
+ */
+test('a rejected proposal is answered too, and the ask it turned down can be made again', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const stack = connect(url);
+  t.after(async () => { await stack.db.$disconnect().catch(() => undefined); });
+  const db = stack.db;
+  const f = await fixture(db, 'rejected');
+
+  /** State the whole collection through the owner's path — the only writer of a definition. */
+  async function state(items: Array<{ id?: string; text: string }>): Promise<Held | null> {
+    const response = await stack.projects.update(f.ownerId, f.projectId, {
+      acceptanceCriteriaItems: items.map((item) => ({
+        ...(item.id ? { id: item.id } : {}),
+        text: item.text,
+        verificationMethod: METHOD,
+      })),
+    } as never) as unknown as { acceptanceCriteriaHold?: Held };
+    return response.acceptanceCriteriaHold ?? null;
+  }
+
+  /** The definition rows as the database holds them, in the order the write path restates them. */
+  async function definitions(): Promise<Array<{ id: string; text: string }>> {
+    return db.projectAcceptanceCriterionDefinition.findMany({
+      where: { projectId: f.projectId },
+      orderBy: { ordinal: 'asc' },
+      select: { id: true, text: true },
+    });
+  }
+
+  /** Every proposal this project has filed, oldest first — what "a NEW one" is counted against. */
+  async function proposals(): Promise<string[]> {
+    const rows = await db.projectRatifiedActionIntent.findMany({
+      where: { projectId: f.projectId, effectClass: CRITERIA_WEAKENING_EFFECT_CLASS },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  /** The read under test, always for this owner and this project. */
+  function pending() {
+    return readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
+  }
+
+  /**
+   * The two other readers that ask "answered" through `stillUnanswered`: the owner's own rail,
+   * which carries the key, and the badge, which only counts. The coordinator's card is composed
+   * from `pending()` itself, so it needs no line of its own here.
+   */
+  async function otherReaders() {
+    return {
+      ownerRail: (await stack.projects.pendingCriteriaDecisions(f.ownerId, f.projectId))
+        .pending.map((row) => row.intentId),
+      badge: (await readOwnerDecisionSignals(db as never, f.ownerId)).map((signal) => signal.count),
+    };
+  }
+
+  // ── the fixture: three criteria, then the loosening edit this case turns down ─────────────────
+  assert.equal(await state([{ text: FIRST }, { text: SECOND }, { text: THIRD }]), null,
+    'stating a project’s first criteria is ADDITIVE and is never held');
+  const before = await definitions();
+  assert.equal(before.length, 3, 'the fixture starts with three criteria');
+  /** The edit under test, restated byte for byte on both sides of the rejection. */
+  const drops = [{ id: before[0]!.id, text: FIRST }, { id: before[1]!.id, text: SECOND }];
+
+  const held = await state(drops);
+  assert.ok(held, 'dropping a criterion is a loosening and has to be held');
+  const opening = await pending();
+  assert.deepEqual(
+    [opening.count, opening.pending[0]?.intentId, opening.pending[0]?.decidability.decidable],
+    [1, held.intentId, true],
+    'the proposal is a question before anybody answers it — otherwise (9) proves nothing',
+  );
+  assert.deepEqual(await otherReaders(), { ownerRail: [held.intentId], badge: [1] },
+    'and the owner’s rail and the badge are asking it too, so their empty answers in (9) are about '
+    + 'the rejection and not about a fixture neither of them can see');
+
+  // ═══ (9) a REJECT settles it ══════════════════════════════════════════════════════════════════
+  await t.test('(9) a rejected proposal leaves this read, and takes no criterion with it',
+    async () => {
+      // THE POSITIVE CONTROL, made while the proposal is still unanswered: the same ask against
+      // the same ruler is the proposal already on record, and re-sending it files nothing. Without
+      // this, (10) below would be equally true of a write path with no identical-ask branch at all.
+      const again = await state(drops);
+      assert.equal(again?.intentId, held.intentId,
+        'an unanswered proposal is handed back, because re-filing it would displace it with a copy');
+      assert.deepEqual(await proposals(), [held.intentId], 'and no second row was filed');
+
+      // The owner answers it. The token is read out of the table because the response deliberately
+      // does not carry it — the proposer holds an address and nothing that could act on one — and
+      // a test standing in for the account owner is exactly the party that does hold the key.
+      const proposal = await db.projectRatifiedActionIntent.findUniqueOrThrow({
+        where: { id: held.intentId },
+        select: { commitToken: true },
+      });
+      const sealBefore = (await stack.acceptance.standardSetConfirmation(f.ownerId, f.projectId))
+        .currentVersion.digest;
+      const decided = await stack.projects.decideCriteriaChange(
+        f.ownerId, f.projectId, held.intentId,
+        { commitToken: proposal.commitToken, decision: 'REJECT', baseSeal: sealBefore } as never,
+      );
+      assert.equal(decided.decision, 'REJECT');
+      assert.equal(decided.applied, false, 'a REJECT moves no criterion; it answers the question');
+
+      const queue = await pending();
+      assert.deepEqual([queue.count, queue.decidableCount, queue.pending], [0, 0, []],
+        'a proposal the owner turned down is answered, and an answered question is not a question');
+      assert.deepEqual(await otherReaders(), { ownerRail: [], badge: [] },
+        'and it leaves the owner’s rail and the badge at the same moment: all three compose the '
+        + 'one predicate, so none of them can go on asking what the other two call answered');
+
+      // What a REJECT is NOT: an edit of the proposal, and not an edit of the criteria either.
+      assert.ok(await db.projectRatifiedActionIntent.findUnique({ where: { id: held.intentId } }),
+        'the proposal is still on record — settled is a second row, never a write to this one');
+      assert.deepEqual(await definitions(), before,
+        'and the ruler did not move: the criteria are the three the fixture stated');
+      // The half 0195 can express is absent, which is what makes this a test of the decision row:
+      // a REJECT writes no commit, so the commit clause alone would still call this pending.
+      assert.equal(
+        await db.projectRatifiedActionCommit.findUnique({ where: { intentId: held.intentId } }),
+        null,
+        'nothing was committed, so "settled" here is the decision row and nothing else',
+      );
+    });
+
+  // ═══ (10) and the ask can be made again ═══════════════════════════════════════════════════════
+  await t.test('(10) the same edit, re-sent byte for byte, becomes a proposal of its own',
+    async () => {
+      const refiled = await state(drops);
+      assert.ok(refiled, 'the same edit is still a loosening, so it is still held');
+      assert.notEqual(refiled.intentId, held.intentId,
+        'a NEW proposal: the rejected one’s commit token is spent, so handing its id back would '
+        + 'point the caller at a proposal the door refuses ALREADY_SETTLED and nothing else',
+      );
+      assert.equal(refiled.supersededIntentId, null,
+        'and it displaced nothing — a settled proposal is not a pending one to be superseded');
+      assert.deepEqual(await proposals(), [held.intentId, refiled.intentId],
+        'two rows, because a rejected ask being made again is a new question and not an edit');
+
+      const queue = await pending();
+      assert.deepEqual(
+        [queue.count, queue.pending[0]?.intentId, queue.pending[0]?.decidability.decidable],
+        [1, refiled.intentId, true],
+        'exactly the new one is waiting: the rejected proposal did not come back with it',
+      );
+      assert.deepEqual(await definitions(), before,
+        'and asking again applied nothing either — this edit is still held, not landed');
+    });
 });
