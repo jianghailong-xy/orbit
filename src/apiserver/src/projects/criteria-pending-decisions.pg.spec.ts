@@ -22,11 +22,15 @@
  *
  * And the delivery is measured through the write path that produces it, not by composing a fact by
  * hand: the edit that gets held is the thing that puts the card on the conversation, so (4) sends
- * one and reads the conversation. Its negative — (5) — is in the same file and over the same code
- * because "no message was written" is vacuously true of a delivery nobody attempted: (5) ends a
- * project's coordinator conversation, holds an edit, and asserts three things together — no message,
- * a REFUSED wake naming why, and the proposal STILL PENDING in the read. That last one is the whole
- * point of the pair. The card is not the queue; this read is.
+ * one and reads the conversation. The message lists what MOVED, which is an arm per kind of move,
+ * so one case per arm sends the edit that takes it: (4) drops a criterion, (4b) rewords one — the
+ * arm the only proposal ever held goes down — and (4c) rewrites only how one is judged, where the
+ * two sides of the row read alike and the lines about the procedure are the whole of the question.
+ * Its negative — (5) — is in the same file and over the same code because "no message was written"
+ * is vacuously true of a delivery nobody attempted: (5) ends a project's coordinator conversation,
+ * holds an edit, and asserts three things together — no message, a REFUSED wake naming why, and the
+ * proposal STILL PENDING in the read. That last one is the whole point of the pair. The card is not
+ * the queue; this read is.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-pending-decisions.pg.spec.ts
  *
@@ -451,12 +455,15 @@ test('holding a loosening edit puts one message on the coordinator conversation'
   const db = stack.db;
 
   /** State a whole collection for one project, through the owner's path. */
-  async function state(f: Fixture, items: Array<{ id?: string; text: string }>): Promise<Held | null> {
+  async function state(
+    f: Fixture,
+    items: Array<{ id?: string; text: string; verificationMethod?: string }>,
+  ): Promise<Held | null> {
     const response = await stack.projects.update(f.ownerId, f.projectId, {
       acceptanceCriteriaItems: items.map((item) => ({
         ...(item.id ? { id: item.id } : {}),
         text: item.text,
-        verificationMethod: METHOD,
+        verificationMethod: item.verificationMethod ?? METHOD,
       })),
     } as never) as unknown as { acceptanceCriteriaHold?: Held };
     return response.acceptanceCriteriaHold ?? null;
@@ -535,6 +542,72 @@ test('holding a loosening edit puts one message on the coordinator conversation'
       [1, held.intentId, true],
       'the card is the delivery; this read is the floor, and delivering did not spend it',
     );
+  });
+
+  // ═══ (4b) the arm the only proposal ever held actually takes ══════════════════════════════════
+  await t.test('(4b) a reworded criterion is delivered with the words it replaces', async () => {
+    // 1GB4IZ4B — replayed in (6) below — reworded three of its eight criteria and dropped none, so
+    // every row it moved renders through this arm and not one through (4)'s. Both sides of a
+    // rewrite have to be carried: "changed to X" is unreadable without the words X replaces, and
+    // that side is on record rather than in the proposal, so the message is the only place a
+    // reader holding the proposal can find them.
+    const f = await fixture(db, 'reworded');
+    assert.equal(await state(f, [{ text: FIRST }, { text: SECOND }, { text: THIRD }]), null);
+    const ids = await definitionIds(f);
+    const reworded = 'the criterion this fixture rewrites, whose earlier words are only on record';
+
+    const held = await state(f, [
+      { id: ids[0]!, text: FIRST }, { id: ids[1]!, text: SECOND }, { id: ids[2]!, text: reworded },
+    ]);
+    assert.ok(held, 'rewording a criterion cannot be read as a tightening, so it is held');
+
+    const messages = await coordinatorMessages(db, f);
+    assert.equal(messages.length, 1, 'one held proposal, one message');
+    const body = messages[0]!.content ?? '';
+    assert.ok(body.includes(`${reworded}（被这份提案改写）`),
+      'the words the proposal asks for are in the message, named as the rewrite they are');
+    assert.ok(body.includes(`现在在册的是：${THIRD}`),
+      'and so are the words they would replace, which the proposal states nowhere: an edit '
+      + 'restates the collection it WANTS, so the wording being retired survives only on the '
+      + 'record this message was built against');
+    assert.ok(!body.includes(FIRST) && !body.includes(SECOND),
+      'while the two that came back word for word stay out, as in (4): one rewritten criterion '
+      + 'out of three is not three criteria to read');
+    assert.ok(body.includes('未改动 2 条'),
+      'and how much of the ruler was left alone is stated rather than counted off the fold');
+    assert.ok(!body.includes('判定方法'),
+      'the half that did not move says nothing: these procedures came back identical');
+  });
+
+  // ═══ (4c) the row whose two sides read the same, because the words are not what moved ═════════
+  await t.test('(4c) a criterion whose procedure alone moved says which half moved', async () => {
+    // The assertion is untouched and the way it is judged is not, so the row's two sides are the
+    // same sentence. Everything that distinguishes this proposal from a no-op is in the two lines
+    // about the procedure; without them the message names a rewrite and states nothing rewritten.
+    const f = await fixture(db, 'procedure-card');
+    assert.equal(await state(f, [{ text: FIRST }, { text: SECOND }]), null);
+    const ids = await definitionIds(f);
+    const loosened = 'somebody says it looks fine';
+
+    const held = await state(f, [
+      { id: ids[0]!, text: FIRST, verificationMethod: loosened }, { id: ids[1]!, text: SECOND },
+    ]);
+    assert.ok(held, 'rewriting how a criterion is judged cannot be read as a tightening either');
+
+    const messages = await coordinatorMessages(db, f);
+    assert.equal(messages.length, 1, 'one held proposal, one message');
+    const body = messages[0]!.content ?? '';
+    assert.ok(body.includes(`判定方法改成：${loosened}`),
+      'the procedure the proposal asks for is in the message');
+    assert.ok(body.includes(`现在在册的判定方法：${METHOD}`),
+      'and the one it would replace — the pair is the whole of what this proposal does, and a '
+      + 'card that carried neither would be a rewrite nobody can see');
+    assert.ok(body.includes(`${FIRST}（被这份提案改写）`),
+      'the criterion is named by its own words, identical on both sides as they are');
+    assert.ok(!body.includes('现在在册的是：'),
+      'and no wording is quoted back as replaced, because none was: the two sides of `text` agree');
+    assert.ok(!body.includes(SECOND), 'the one left alone stays out of it');
+    assert.ok(body.includes('未改动 1 条'), 'and it is counted, as everywhere else');
   });
 
   // ═══ (5) the negative, paired with (4) over the same code ═════════════════════════════════════
