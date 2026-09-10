@@ -403,7 +403,22 @@ export class ProjectsController {
     return this.projects.decideCriteriaChange(user.userId, id, intentId, dto);
   }
 
-  /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */
+  /**
+   * Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`.
+   *
+   * `acceptanceCriteriaItems` is classified before it is written, and this door is no gentler for
+   * being the owner's own. An edit that plainly tightens the ruler replaces the criteria where the
+   * call is made. An edit that drops a criterion, or whose direction cannot be read at all, is NOT
+   * written: it is held for the account owner to decide, and the criteria this route returns are
+   * the ones that were already there — the standard the caller is still judged against.
+   *
+   * `acceptanceCriteriaHold` on the response body is the field that says which of the two
+   * happened: present is held and carries the intentId the owner's decision is answered with,
+   * absent is applied. This route passes no sessionId, so a hold filed here is attributed to the
+   * OWNER rather than to an AGENT — which is a record of who asked, not an exemption from the
+   * fork, so a caller that reads its criteria back and finds them unmoved is looking at a hold
+   * rather than at a lost write.
+   */
   @Patch(':id')
   update(
     @CurrentUser() user: AuthUser,

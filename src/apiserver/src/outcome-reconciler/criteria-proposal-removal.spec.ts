@@ -392,6 +392,8 @@ test('CLI, MCP and web copy about acceptance criteria matches what a write now d
     ['src/apiserver/src/projects/dto.ts', read('src/apiserver/src/projects/dto.ts')],
     ['src/apiserver/src/runner-api/runner-projects.controller.ts',
       read('src/apiserver/src/runner-api/runner-projects.controller.ts')],
+    ['src/apiserver/src/projects/projects.controller.ts',
+      read('src/apiserver/src/projects/projects.controller.ts')],
   ];
   for (const { rel, text } of liveSources()) {
     if (rel.startsWith('src/web/src/') && /\.tsx?$/.test(rel)) surfaces.push([rel, text]);
@@ -449,6 +451,11 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
     ['the UpdateProjectDto acceptanceCriteriaItems field',
       docAbove('src/apiserver/src/projects/dto.ts',
         'acceptanceCriteriaItems?: UpdateProjectAcceptanceCriterionDto[]')],
+    // The user's own PATCH is the fourth door and reaches the same write through the same
+    // classification. It sends no sessionId, so the principal is the OWNER — and an owner is held
+    // on the same terms, which is exactly why silence here would be read as an exemption.
+    ['the user PATCH projects/:id route',
+      docAbove('src/apiserver/src/projects/projects.controller.ts', "@Patch(':id')")],
   ];
   for (const [door, copy] of doors) {
     assert.match(copy, /tighten/i, `${door} must say which edits land where they are made`);
