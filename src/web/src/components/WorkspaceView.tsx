@@ -162,6 +162,7 @@ import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type A
 import { ApprovalPanel, answerableDecisionCards } from './ApprovalPanel';
 import { SessionDecisionStrip } from './DecisionRail';
 import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
+import { SessionEvidenceDecisionCard } from './EvidenceDecisionCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -5615,6 +5616,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   or silently vanishing mid-read. */}
               {selected && !selectedTrashed && (
                 <SessionCriteriaDecisionCard projectId={selectedSession?.projectId ?? null} />
+              )}
+              {/* The same kind of card for the evidence this session may confirm or send back:
+                  drawn from the pending read and pressed straight at the decision door. Keyed by
+                  the session because this view outlives navigation and the card remembers which
+                  versions it has shown — those belong to this conversation, not the next one. */}
+              {selected && selectedId && !selectedTrashed && (
+                <SessionEvidenceDecisionCard
+                  key={selectedId}
+                  sessionId={selectedId}
+                  projectId={selectedSession?.projectId ?? null}
+                />
               )}
               {selected &&
                 !selectedTrashed &&

@@ -126,6 +126,9 @@ export interface PendingDecisionDecidability {
 export interface PendingDecisionRow {
   taskId: string;
   title: string;
+  /** The project the task is filed under, or null for a task in none. A conversation draws an
+   *  evidence card only for its own project's rows (`EvidenceDecisionCard.tsx`). */
+  projectId: string | null;
   criterion: { key: string; text: string } | null;
   evidenceRevision: string;
   ageSeconds: number;

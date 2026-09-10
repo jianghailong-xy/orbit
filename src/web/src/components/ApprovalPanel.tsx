@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
@@ -12,6 +12,13 @@ import {
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
+import {
+  DECISION_ASK_HEADING,
+  DECISION_CONFIRM_ACTION,
+  DECISION_SEND_BACK_ACTION,
+  EvidenceDecisionActions,
+  EvidenceDecisionFacts,
+} from './EvidenceDecisionCard';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { bashCommandRules } from '@orbit/shared';
 
@@ -624,40 +631,15 @@ function QuestionForm({
    re-worded or inferred; each visible string is a field of that row or a count of one.
 */
 
-/** The card's heading. */
-export const DECISION_ASK_HEADING = '需要你裁决';
-/** `确认完成` submits on the click itself. The generic form's pick-then-Submit exists for a form
- *  with several questions and several picks per question; in a two-way judgment it buys nothing
- *  but one more click between a reader and the thing they already decided. */
-export const DECISION_CONFIRM_ACTION = '确认完成';
-export const DECISION_SEND_BACK_ACTION = '退回重做';
-/** The send-back's own submit, behind the reason box rather than beside it. */
-export const DECISION_SEND_ACTION = '退回';
+/* The rest of this card's copy — its heading, the two verdicts, the reason box and the lines drawn
+   over a row — lives in `EvidenceDecisionCard.tsx` with the facts and actions that say it, because
+   the system card says the same words about the same row. Only what this form alone draws is here. */
+
 /** The third answer, and deliberately the third: not judging yet is useful (it rides back as a
  *  `deny` with a message, exactly as the generic form's does) but it is not a verdict, so it does
  *  not get a verdict's weight. */
 export const DECISION_CHAT_ACTION = '💬 先聊聊，暂不裁决';
-/** Why the reason is required rather than a placeholder somebody may ignore: the decision door
- *  refuses a SEND_BACK carrying no note and writes nothing at all. The generic form could not know
- *  that, so it offered a permanently-present `Or type your own answer…` that reads like an
- *  invitation to say something rather than like the one thing that makes the button work. */
-export const DECISION_NOTE_LABEL = '下一版证据要给出什么？这句话是下一次尝试唯一能瞄准的东西。';
-export const DECISION_NOTE_PLACEHOLDER = '例如：把 pg spec 跑一遍，并给出改前先红的原始输出…';
-/** The gaps that did not fit, counted rather than dropped: they are the body of this card. */
-export const decisionGapsMore = (rest: number): string => `还有 ${rest} 条`;
-/** Evidence from before the envelope has no claim at all; the line says so rather than rendering
- *  a blank where the card's lead should be. */
-export const DECISION_NO_CLAIM = '这一版证据没有写下主张。';
-export const DECISION_NO_CRITERION = '未引用验收条目';
-export const DECISION_NO_GAPS = '提交者声明没有缺口';
 export const DECISION_FULL_LABEL = '完整证据正文';
-
-/** How many gaps the card shows before it starts counting. Three is what fits on a phone above the
- *  actions; the rest are one press away and the count is never hidden. */
-const DECISION_GAPS_SHOWN = 3;
-/** Where a claim starts being folded. A claim is one sentence in the good case and a paragraph in
- *  the bad one, and the bad one must not push the gaps and the actions off the screen. */
-const DECISION_CLAIM_CLAMP = 120;
 
 /**
  * The identity `evidenceQuestionBody` writes into the end of every decision question.
@@ -736,49 +718,6 @@ export function answerableDecisionCards(
     }
   }
   return keys;
-}
-
-/** One machine-checkable statement about the row, in the row's own fields. */
-interface DecisionCheck {
-  ok: boolean;
-  text: string;
-  /** What the reader would go and look at: the standard itself, or the door's words for a check
-   *  that did not hold. Null when the line says everything there is. */
-  detail: string | null;
-}
-
-/**
- * The three things nobody has to take on faith, folded into one line.
- *
- * Each is a structured field the server already computed, so this is a reading of the row rather
- * than an opinion about it — which is exactly why they fold and the gaps do not: a check that held
- * is a reason to stop reading, and a gap is a reason to keep going.
- */
-function decisionChecks(row: PendingDecisionRow): DecisionCheck[] {
-  const resolved = row.citations.filter((citation) => citation.resolved);
-  const unresolved = row.citations.filter((citation) => !citation.resolved);
-  return [
-    {
-      ok: row.decidability.decidable,
-      text: '引用的验收条目仍是线上那一条',
-      detail: row.decidability.decidable
-        ? (row.criterion ? `${row.criterion.key} · ${row.criterion.text}` : null)
-        : row.decidability.refusal,
-    },
-    {
-      ok: row.citations.length > 0 && unresolved.length === 0,
-      text: `${resolved.length}/${row.citations.length} 条引用解析成功`,
-      detail:
-        unresolved.length === 0
-          ? null
-          : unresolved.map((citation) => `${citation.ref}：${citation.reason ?? '未解析'}`).join('\n'),
-    },
-    {
-      ok: row.independence.independent,
-      text: '裁决人独立于这次提交',
-      detail: row.independence.independent ? null : row.independence.disqualification,
-    },
-  ];
 }
 
 /**
@@ -865,20 +804,7 @@ function EvidenceDecisionQuestion({
   onAnswer: (picks: string[]) => void;
   onChat: () => void;
 }): JSX.Element {
-  const noteId = useId();
-  const [claimOpen, setClaimOpen] = useState(false);
-  const [gapsOpen, setGapsOpen] = useState(false);
-  const [checksOpen, setChecksOpen] = useState(false);
   const [fullOpen, setFullOpen] = useState(false);
-  const [backOpen, setBackOpen] = useState(false);
-  const [note, setNote] = useState('');
-
-  const claim = row.claim.trim();
-  const longClaim = claim.length > DECISION_CLAIM_CLAMP;
-  const shownGaps = row.gaps.slice(0, DECISION_GAPS_SHOWN);
-  const restGaps = row.gaps.slice(DECISION_GAPS_SHOWN);
-  const checks = decisionChecks(row);
-  const held = checks.filter((check) => check.ok).length;
 
   return (
     // Where the rail's pointer lands. The handle is `decisionRowKey` of the row this section was
@@ -887,93 +813,7 @@ function EvidenceDecisionQuestion({
     // three rows is one card, and a pointer for one of them must arrive at that one.
     <section className="decision-ask-q" data-decision-row={decisionRowKey(row)}>
       <div className="decision-ask-chip">{`证据 ${index + 1}/${total}`}</div>
-      <div className="decision-ask-claim">
-        {claim === '' ? (
-          <span className="decision-ask-quiet">{DECISION_NO_CLAIM}</span>
-        ) : longClaim && !claimOpen ? (
-          `${claim.slice(0, DECISION_CLAIM_CLAMP)}…`
-        ) : (
-          claim
-        )}
-      </div>
-      {longClaim && (
-        <button
-          type="button"
-          className="decision-ask-toggle"
-          aria-expanded={claimOpen}
-          onClick={() => setClaimOpen(!claimOpen)}
-        >
-          {claimOpen ? '收起' : '展开全文'}
-        </button>
-      )}
-      <div className="decision-ask-meta">
-        {`${row.taskId} · rev ${row.evidenceRevision} · `}
-        {row.criterion ? row.criterion.key : DECISION_NO_CRITERION}
-      </div>
-
-      {/* The body of the card. What the submitter says they did NOT establish is the part most
-          likely to change the answer, so a narrow screen gives up the full text and the machine's
-          checks before it gives up any of this — and what does not fit is COUNTED rather than
-          dropped, one press from being read. */}
-      <div className="decision-ask-gaps">
-        <div className="decision-ask-gaps-head">
-          {row.gaps.length === 0 ? DECISION_NO_GAPS : `提交者声明的缺口 · ${row.gaps.length} 条`}
-        </div>
-        {row.gaps.length > 0 && (
-          <ul className="decision-ask-gaps-list">
-            {shownGaps.map((gap, k) => (
-              <li key={k}>{gap}</li>
-            ))}
-          </ul>
-        )}
-        {restGaps.length > 0 && (
-          <>
-            <button
-              type="button"
-              className="decision-ask-toggle"
-              aria-expanded={gapsOpen}
-              onClick={() => setGapsOpen(!gapsOpen)}
-            >
-              {gapsOpen ? '收起' : decisionGapsMore(restGaps.length)}
-            </button>
-            {gapsOpen && (
-              <ul className="decision-ask-gaps-rest">
-                {restGaps.map((gap, k) => (
-                  <li key={k}>{gap}</li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="decision-ask-checks">
-        <button
-          type="button"
-          className="decision-ask-toggle"
-          aria-expanded={checksOpen}
-          onClick={() => setChecksOpen(!checksOpen)}
-        >
-          {`${held} 项机器已核`}
-          {held === checks.length ? '' : ` · ${checks.length - held} 项没过`}
-          <span className="decision-ask-caret" aria-hidden="true">{checksOpen ? '▴' : '▾'}</span>
-        </button>
-        {checksOpen && (
-          <ul className="decision-ask-check-list">
-            {checks.map((check, k) => (
-              <li key={k} className={check.ok ? 'is-held' : 'is-broken'}>
-                <span className="decision-ask-check-mark" aria-hidden="true">
-                  {check.ok ? '✓' : '!'}
-                </span>
-                {check.text}
-                {check.detail !== null && (
-                  <div className="decision-ask-check-detail">{check.detail}</div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <EvidenceDecisionFacts row={row} />
 
       {/* Last, and folded: the string the tool actually carries. Nothing above it is derived from
           this — it is here so that "the card shows less" never means "the card hides something". */}
@@ -995,55 +835,15 @@ function EvidenceDecisionQuestion({
           {`已选「${picked === CONFIRM_LABEL ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION}」`}
         </div>
       ) : (
-        <CardActions className="decision-ask-actions">
-          <CardActionButton
-            tone="primary"
-            disabled={!answerable}
-            onClick={() => onAnswer([CONFIRM_LABEL])}
-          >
-            {DECISION_CONFIRM_ACTION}
-          </CardActionButton>
-          <div className="decision-ask-back">
-            <CardActionButton
-              tone="secondary"
-              disabled={!answerable}
-              onClick={() => setBackOpen(!backOpen)}
-            >
-              {DECISION_SEND_BACK_ACTION}
-            </CardActionButton>
-            {backOpen && (
-              <div className="decision-ask-why">
-                <label className="decision-ask-why-label" htmlFor={noteId}>
-                  {DECISION_NOTE_LABEL}
-                </label>
-                <textarea
-                  id={noteId}
-                  className="decision-ask-note"
-                  rows={3}
-                  placeholder={DECISION_NOTE_PLACEHOLDER}
-                  value={note}
-                  disabled={!answerable}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-                {/* The one rule both cards are under: an action that cannot succeed is disabled.
-                    A send-back with no note is refused by the door and writes nothing, so the
-                    control that would send it is not pressable until there is one. */}
-                <CardActions className="decision-ask-send">
-                  <CardActionButton
-                    tone="secondary"
-                    disabled={!answerable || note.trim() === ''}
-                    onClick={() => onAnswer([SEND_BACK_LABEL, note.trim()])}
-                  >
-                    {DECISION_SEND_ACTION}
-                  </CardActionButton>
-                </CardActions>
-              </div>
-            )}
-          </div>
+        <EvidenceDecisionActions
+          disabled={!answerable}
+          onConfirm={() => onAnswer([CONFIRM_LABEL])}
+          onSendBack={(note) => onAnswer([SEND_BACK_LABEL, note])}
+        >
           <CardActionButton tone="outline" disabled={!answerable} onClick={onChat}>
             {DECISION_CHAT_ACTION}
           </CardActionButton>
-        </CardActions>
+        </EvidenceDecisionActions>
       )}
     </section>
   );

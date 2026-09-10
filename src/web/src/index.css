@@ -6789,6 +6789,26 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12.5px;
   color: var(--text-2);
 }
+/* The same card drawn by Orbit from the pending read (`EvidenceDecisionCard.tsx`): its head carries
+   the provenance mark the criteria card carries, and a version it can no longer answer says why
+   above the actions it has disabled. */
+.evidence-decision .approval-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.evidence-decision-heading {
+  min-width: 0;
+}
+.evidence-decision-stale {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.evidence-decision-error {
+  margin-top: 12px;
+}
 
 /* Free-text answer field: lets the user type their own answer to a question. */
 .chat-q-custom {

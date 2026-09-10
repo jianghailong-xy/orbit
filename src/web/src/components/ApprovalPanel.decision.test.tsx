@@ -5,15 +5,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApprovalInfo } from '../api';
 import {
   ApprovalPanel,
-  DECISION_ASK_HEADING,
   DECISION_CHAT_ACTION,
-  DECISION_CONFIRM_ACTION,
   DECISION_FULL_LABEL,
+  evidenceDecisionRows,
+} from './ApprovalPanel';
+import {
+  DECISION_ASK_HEADING,
+  DECISION_CONFIRM_ACTION,
   DECISION_SEND_ACTION,
   DECISION_SEND_BACK_ACTION,
   decisionGapsMore,
-  evidenceDecisionRows,
-} from './ApprovalPanel';
+} from './EvidenceDecisionCard';
 import {
   CONFIRM_LABEL,
   SEND_BACK_LABEL,
