@@ -32,21 +32,17 @@ import {
  * and therefore cannot be in that state: the row is gone from the next read because the decision
  * exists, not because a frame arrived.
  *
- * THIS READ IS ALSO THE FALLBACK UNDER THE COORDINATOR CARD
- * --------------------------------------------------------
- * Since A2 the primary surface for these questions is an `AskUserQuestion` card in the project's
- * coordinator conversation (`coordinator-delivery.service.ts` §1.4). A card can be asked and never
- * answered — the engine abandons the call, the turn is reclaimed, or nothing was running to pick
- * the message up — and none of those writes a thing: the approval row stays `PENDING`, and the wake
- * that delivered the fact is spent and holds its key, so no second delivery is coming.
- *
- * Because pending is a shape the rows already have rather than a row somebody wrote, the question
- * an unanswered card left behind is still here on the next read, and the answer written from here
- * reaches the same door the card's answer would have. Deleting this read to save the rail's fan-out
- * would turn a missed card into permanent silence — the choice was made with that cost in mind
- * (`docs/completion-input-routing.md` §A2 D1), and narrowing WHO the rail is read for is the way
- * that cost was meant to come down. `coordinator-evidence-unanswered.pg.spec.ts` holds the three
- * unanswered states against this read.
+ * THIS READ IS WHAT THE DECISION CARD IS DRAWN FROM
+ * -------------------------------------------------
+ * Until 2026-09-10 the question was also delivered: a turn in the project's coordinator
+ * conversation told the model to ask through `AskUserQuestion`, and this read was the fallback
+ * under a card that could be asked and never answered. That delivery is gone. The account owner's
+ * card renders these rows and its buttons post to `POST /tasks/:taskId/evidence/decision`, so this
+ * is no longer the floor under the question but the only way it is put to anybody — which a
+ * derived read can afford to be: pending is a shape the rows already have, so a question nobody
+ * has looked at yet is still here on the next read, and nothing has to be re-sent for it to be.
+ * Its cost is the one `docs/completion-input-routing.md` §A2 D1 names, and narrowing WHO it is
+ * read for is still how that comes down.
  *
  * WHY EACH ROW CARRIES A REASON RATHER THAN A FLAG
  * ------------------------------------------------

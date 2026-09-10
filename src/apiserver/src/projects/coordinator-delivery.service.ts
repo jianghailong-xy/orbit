@@ -8,13 +8,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { buildEvidenceAsk, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
-import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { buildCoordinatorDeliveryMessage } from './coordinator-judgment-opening';
-import {
-  readPendingCriteriaDecisions,
-  type PendingCriteriaDecisionQueue,
-} from './criteria-pending-decisions';
 import { WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import { CoordinatorWakeService, WakeAuthorizer } from './coordinator-wake.service';
 import { derivedUuid } from './project-dispatch-identity';
@@ -56,45 +50,6 @@ import { derivedUuid } from './project-dispatch-identity';
  *      is the honest limit of the whole change: swapping the carrier does not make delivery
  *      reliable. What makes it reliable is that the fact is still in the ledger afterwards, and
  *      that a delivery which could not be made RELEASES the key so the fact comes round again.
- *
- * §1.4 — AND AN UNANSWERED QUESTION IS NOT A FAILED DELIVERY
- * ==========================================================
- * §1.3 releases the key for a delivery that could not be MADE. A delivery that WAS made, asked a
- * person through `AskUserQuestion`, and got no answer is outside that sentence, and it is the
- * ordinary case rather than an exotic one: the person is asleep, the engine gives up on the tool
- * call, or the turn is reclaimed under the runtime's TTL. The message arrived, the wake is
- * `DELIVERED`, and the key stays held.
- *
- * Nothing here retries it, and this paragraph is why — it was decided
- * (`docs/completion-input-routing.md` §A2 D1) rather than overlooked, so a later reader who finds
- * the derived pending read "redundant" alongside the card is looking at the floor under it:
- *
- *   1. **"It timed out" is not a committed fact.** The deadline is the ENGINE's — `permissionPrompt`
- *      polls without a wall-clock cap (`runner-go/mcp.go:1170`) and `approval` has no expiry column
- *      and no clock over it — so when the tool call is abandoned nothing is written anywhere. What
- *      a sweep could see is "an approval has been PENDING for a while", which is elapsed time, and
- *      `coordinator-wake.ts` §0 lets a clock re-observe, lease and re-deliver a committed fact
- *      while forbidding it to CREATE, DECIDE or RESOLVE a wake.
- *   2. **The key cannot be given back by the mechanism that gives keys back.**
- *      `CoordinatorWakeService.release` compare-and-sets on `CLAIMED`, and this wake is
- *      `DELIVERED` — inside 0174's partial index by design, since it "excludes `REFUSED` and
- *      nothing else" (`coordinator-wake.ts`). Moving a terminal success back out of that index is
- *      the positive predicate 0174 explicitly chose against.
- *   3. **Re-delivery would be refused by the state it is diagnosing, and the refusal feeds itself.**
- *      Nobody answered means nobody is there; nobody there has not read the message; §2.1 refuses a
- *      coordinator holding an unread message and hands the key back; the producer re-derives and is
- *      refused again. One wake row per pass, no progress on any of them — `COORDINATOR_NO_PROGRESS`
- *      rebuilt, which `coordinator-wake.ts` §0 exists to keep out.
- *   4. **What it would buy is asking an absent person the same question on a timer**, and this path
- *      has no timer: "There is no retry clock: the producer retries only when the same committed
- *      fact is delivered again" (`completion-input-router.service.ts`).
- *
- * What catches it instead is `readPendingEvidenceJudgments` — the read this unit already calls to
- * build the card. It is not a queue: the question is a shape the committed rows have, so an
- * unanswered one is still there on the next read, and the answer written from the decision rail
- * (`POST /tasks/:id/evidence/decision`) needs no live turn to receive it. The card is the delivery;
- * the rail is the floor under it, and `coordinator-evidence-unanswered.pg.spec.ts` holds the three
- * states in which the floor is all there is.
  *
  * §2 — WHY DELIVERY DOES NOT REVIVE A CONVERSATION THAT ENDED
  * ===========================================================
@@ -167,11 +122,9 @@ export const DELIVERY_PROJECT_GONE = 'DELIVERY_PROJECT_GONE';
  *
  * The refusal codes are the same three above and mean the same three things; what is missing is
  * the wake. `send` below turns this into a `CoordinatorDeliveryOutcome` by releasing or binding
- * the key it holds, and a caller whose fact ends against a NAMED CONSUMER instead — the evidence
- * ledger's, through `CompletionInputRouter.routeCompletionEvidence` — has no key of its own to
- * spend here and reads this answer directly.
+ * the key it holds.
  */
-export type CoordinatorMessageOutcome =
+type CoordinatorMessageOutcome =
   /** The message is on the conversation, under the key derived from the fact. */
   | { outcome: 'SENT'; sessionId: string; clientTurnId: string }
   /** Nothing was written. Which state of the world it was is the code. */
@@ -250,14 +203,13 @@ export class CoordinatorDeliveryService {
    * conversation is read and written: a project with no coordinator, one whose coordinator ended
    * or is in Trash, and every ordinary refusal `resume` gives come back as a code rather than as
    * an exception. What is deliberately NOT here is the wake: `send` below holds a claimed key and
-   * releases or binds it around this call, while a fact whose terminal is a NAMED CONSUMER holds
-   * its key through its own router and has nothing to release.
+   * releases or binds it around this call.
    *
-   * That second caller is why this is public. Both write the SAME message under the SAME key — the
-   * turn id is a function of the fact — so the two paths cannot tell one conversation the same
-   * thing twice, and neither of them can grow its own idea of when a coordinator may be written to.
+   * `send` is its one caller. Until 2026-09-10 the evidence ledger's door was a second, telling this
+   * conversation about every completion evidence revision; that door now tells nobody, and this
+   * stopped being public with it.
    */
-  async message(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
+  private async message(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
     const project = await this.prisma.project.findUnique({
       where: { id: fact.projectId },
       select: { id: true, ownerId: true, title: true, coordinatorSessionId: true },
@@ -272,9 +224,7 @@ export class CoordinatorDeliveryService {
     // row goes on naming it after it ends.
     const standing = await this.prisma.session.findFirst({
       where: { id: project.coordinatorSessionId, ownerId: project.ownerId, deletedAt: null },
-      // `taskId` is read for the queue below and for nothing else: whether this conversation may
-      // decide a given row is the door's own question, and the door asks it of this column.
-      select: { id: true, status: true, cancelRequestedAt: true, taskId: true },
+      select: { id: true, status: true, cancelRequestedAt: true },
     });
     if (
       !standing
@@ -283,25 +233,6 @@ export class CoordinatorDeliveryService {
     ) {
       return { outcome: 'REFUSED', refusalCode: DELIVERY_COORDINATOR_SESSION_UNAVAILABLE };
     }
-
-    // The questions this turn is being sent to ask, read FOR the conversation that will ask them.
-    // It happens here rather than in the message builder because it is a read of the database, and
-    // it happens for this one event because it is this one event's action — an evidence revision
-    // is a claim waiting on a person's judgment, and nothing a coordinator session can call reads
-    // the queue that holds it (`coordinator-evidence-ask.ts`).
-    const asked = fact.event === 'COMPLETION_EVIDENCE_REVISED'
-      ? await this.evidenceAsk(project.ownerId, standing)
-      : null;
-
-    // The same shape, for the other fact whose card is a question rather than an instruction: a
-    // held criteria proposal. Read HERE, at delivery, and not folded into the fact — the fact was
-    // derived at the commit that filed the proposal, and between then and now the proposal can have
-    // been answered, displaced, or stranded by an edit that moved the seal under it. What the card
-    // says has to be what is true when it is sent, and nothing that is true only when it is sent
-    // can live in an immutable ledger row.
-    const decisions = fact.event === 'CRITERIA_DECISION_PENDING'
-      ? await this.criteriaDecisions(project.ownerId, project.id)
-      : null;
 
     // The fact's own identity, spent as the turn's idempotency key. `createTurn` holds
     // `(session_id, client_turn_id)` unique and replays the committed turn for a repeat of the
@@ -312,7 +243,7 @@ export class CoordinatorDeliveryService {
     try {
       await this.sessions.resume(project.ownerId, standing.id, {
         clientTurnId,
-        content: buildCoordinatorDeliveryMessage(fact, project.title, asked, decisions),
+        content: buildCoordinatorDeliveryMessage(fact, project.title),
       });
     } catch (e) {
       // The refusals `resume` gives for an ordinary state of the world rather than a fault: the
@@ -330,50 +261,6 @@ export class CoordinatorDeliveryService {
       throw e;
     }
     return { outcome: 'SENT', sessionId: standing.id, clientTurnId };
-  }
-
-  /**
-   * What this conversation may decide right now, or null when the answer is "nothing".
-   *
-   * The queue's own predicates decide which rows come back — this asks it nothing of its own, for
-   * the reason it has one implementation: a second opinion here would put a card in front of a
-   * person that the decision door refuses whichever button they press. `readAt` travels with the
-   * rows because the message says when the snapshot was taken, and a reader who is told that can
-   * tell a question that moved from a delivery that failed.
-   *
-   * It is the same read the decision rail makes on every page load, and it costs what that costs:
-   * a few queries per open question. The difference is that it is now made on the way out of a
-   * write rather than on the way into a screen, and what bounds it is what bounds the rail — a
-   * question is something a person is going to be shown, so an account with a thousand of them has
-   * a problem this read is reporting rather than causing.
-   */
-  private async evidenceAsk(
-    ownerId: string,
-    standing: { id: string; taskId: string | null },
-  ): Promise<{ ask: EvidenceAsk; readAt: Date } | null> {
-    const readAt = new Date();
-    const queue = await readPendingEvidenceJudgments(this.prisma, ownerId, standing, readAt);
-    const ask = buildEvidenceAsk(queue);
-    return ask ? { ask, readAt } : null;
-  }
-
-  /**
-   * Which loosening proposals this project is holding, as the ledger stands right now.
-   *
-   * The read's own predicates decide what comes back — this asks it nothing of its own, for the
-   * reason `evidenceAsk` asks the evidence queue nothing of its own: a second opinion here would
-   * put a diff in front of a person that the decision door refuses whichever way they answer it.
-   * `readAt` travels with the rows on the queue itself, so the message can say when the snapshot
-   * was taken and a reader can tell a question that moved from a delivery that failed.
-   *
-   * Unconditional, unlike `evidenceAsk`'s null-when-empty: an empty answer is itself the thing the
-   * card has to report, because the fact that reached this method said there WAS one.
-   */
-  private criteriaDecisions(
-    ownerId: string,
-    projectId: string,
-  ): Promise<PendingCriteriaDecisionQueue> {
-    return readPendingCriteriaDecisions(this.prisma, ownerId, projectId, new Date());
   }
 
   /**

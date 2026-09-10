@@ -51,12 +51,10 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from './sessions.service';
-import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { readOwnerDecisionSignals } from '../projects/owner-decision-signal';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectsService } from '../projects/projects.service';
@@ -92,12 +90,7 @@ function connect(url: string): Stack {
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
   const acceptance = new ProjectAcceptanceService(prisma);
-  const deliveries = new CoordinatorDeliveryService(
-    prisma,
-    new CoordinatorWakeService(prisma),
-    sessions,
-  );
-  return { db, sessions, projects: new ProjectsService(prisma, acceptance, sessions, deliveries) };
+  return { db, sessions, projects: new ProjectsService(prisma, acceptance, sessions) };
 }
 
 interface Fixture {

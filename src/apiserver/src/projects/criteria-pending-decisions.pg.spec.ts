@@ -1,12 +1,12 @@
 /**
- * THE FLOOR UNDER THE DECISION CARD, AND ONE DELIVERY OF THE CARD ITSELF.
+ * THE READ A HELD PROPOSAL'S DECISION CARD IS DRAWN FROM.
  *
  * `criteria-weakening-intent.pg.spec.ts` witnesses that a loosening edit is HELD rather than
  * applied. What it leaves open is the half a person has to be able to act on: how anybody finds a
- * held proposal afterwards, and how anybody is told there is one.
+ * held proposal afterwards.
  *
- * WHAT EACH HALF HAS TO WITNESS
- * -----------------------------
+ * WHAT IT HAS TO WITNESS
+ * ----------------------
  * The read is derived, so every claim about it is a claim about rows somebody else wrote:
  *
  *   (1) a filed proposal reads out, decidable, with the digest and baseline the write path
@@ -25,17 +25,12 @@
  * APPROVE — is (9) and (10) at the foot of this file, with what turning a proposal down leaves
  * askable afterwards.
  *
- * And the delivery is measured through the write path that produces it, not by composing a fact by
- * hand: the edit that gets held is the thing that puts the card on the conversation, so (4) sends
- * one and reads the conversation. The message lists what MOVED, which is an arm per kind of move,
- * so one case per arm sends the edit that takes it: (4) drops a criterion, (4b) rewords one — the
- * arm the only proposal ever held goes down — and (4c) rewrites only how one is judged, where the
- * two sides of the row read alike and the lines about the procedure are the whole of the question.
- * Its negative — (5) — is in the same file and over the same code because "no message was written"
- * is vacuously true of a delivery nobody attempted: (5) ends a project's coordinator conversation,
- * holds an edit, and asserts three things together — no message, a REFUSED wake naming why, and the
- * proposal STILL PENDING in the read. That last one is the whole point of the pair. The card is not
- * the queue; this read is.
+ * Until 2026-09-10 this file also held the delivery of that card to the project's coordinator
+ * conversation: one case per arm of the diff the message relayed, a conversation that had ended,
+ * and the switched-off control. The delivery is gone — the card is drawn from this read on the
+ * owner's own client — and `decision-facts-no-coordinator-turn.pg.spec.ts` holds that holding an
+ * edit writes no turn, beside a delivery to the same conversation that does. What those cases said
+ * about the read itself, that a proposal nobody was told about is still pending, is (1).
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-pending-decisions.pg.spec.ts
  *
@@ -56,17 +51,9 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
-  CoordinatorDeliveryService,
-  DELIVERY_COORDINATOR_SESSION_UNAVAILABLE,
-  coordinatorDeliveryTurnId,
-} from './coordinator-delivery.service';
-import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import { buildCoordinatorDeliveryMessage, describeWakeFact } from './coordinator-judgment-opening';
-import { criteriaDecisionPendingFact, wakeIdempotencyKey } from './coordinator-wake';
-import { CoordinatorWakeService } from './coordinator-wake.service';
 import {
   CRITERIA_DECISION_BASE_SEAL_MOVED,
   CRITERIA_DECISION_REFILE_ACTION,
@@ -75,7 +62,7 @@ import {
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { readOwnerDecisionSignals } from './owner-decision-signal';
 import { ProjectAcceptanceService } from './project-acceptance.service';
-import { HELD_CRITERIA_WAKE_COORDINATOR_DISABLED, ProjectsService } from './projects.service';
+import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -101,9 +88,7 @@ interface Held {
 interface Stack {
   db: PrismaClient;
   acceptance: ProjectAcceptanceService;
-  /** Wired WITH the delivery service: a held edit is what puts the card on the conversation. */
   projects: ProjectsService;
-  deliveries: CoordinatorDeliveryService;
 }
 
 /** The production wiring, over one client and with no seam. */
@@ -113,18 +98,8 @@ function connect(url: string): Stack {
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
-  const deliveries = new CoordinatorDeliveryService(
-    prisma,
-    new CoordinatorWakeService(prisma),
-    sessions,
-  );
   const acceptance = new ProjectAcceptanceService(prisma);
-  return {
-    db,
-    acceptance,
-    deliveries,
-    projects: new ProjectsService(prisma, acceptance, sessions, deliveries),
-  };
+  return { db, acceptance, projects: new ProjectsService(prisma, acceptance, sessions) };
 }
 
 interface Fixture {
@@ -139,17 +114,10 @@ interface Fixture {
 /**
  * One owner, one runnable workspace, one project, and the conversation it is coordinated from.
  *
- * The conversation is parked at AWAITING_INPUT with its own opening prompt already on it, so a
- * delivery below appends to a conversation somebody has been talking to rather than seeding one.
+ * The conversation is parked at AWAITING_INPUT with its own opening prompt already on it, and it is
+ * the one `readOwnerDecisionSignals` counts a held proposal on, which (9) reads.
  */
-async function fixture(
-  db: PrismaClient,
-  label: string,
-  {
-    coordinatorStatus = RunStatus.AWAITING_INPUT,
-    coordinatorEnabled = true,
-  }: { coordinatorStatus?: RunStatus; coordinatorEnabled?: boolean } = {},
-): Promise<Fixture> {
+async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
   const workspaceId = randomUUID();
@@ -172,10 +140,6 @@ async function fixture(
       status: RunnerStatus.ONLINE,
       capabilities: [],
       capabilitiesReportedAt: new Date(),
-      // Heartbeating now, so `deriveSessionCapabilities` does not answer RUNNER_OFFLINE. It is set
-      // for the ENDED fixture's sake: that conversation has to be one `resume` WOULD revive, or
-      // "delivery does not revive it" would be true of a conversation nothing could revive.
-      lastHeartbeatAt: new Date(),
     },
   });
   await db.workspace.create({
@@ -191,15 +155,9 @@ async function fixture(
       title: `协调：${label}`,
       prompt: `协调：${label}`,
       provider: 'claude',
-      status: coordinatorStatus,
+      status: RunStatus.AWAITING_INPUT,
       dispatchOrigin: SessionDispatchOrigin.USER,
       titleManagedByProject: true,
-      // A conversation that has RUN: started once, with a runtime session to resume into. Both are
-      // here for the ENDED fixture below and are inert for the parked one — `canResume` is what
-      // decides whether an ended conversation could be revived at all, and a fixture that answers
-      // NOT_STARTED would make "delivery did not revive it" a statement about the fixture.
-      startedAt: new Date(),
-      runtimeSessionId: randomUUID(),
     },
   });
   await db.conversationTurn.create({
@@ -217,55 +175,13 @@ async function fixture(
       id: projectId,
       ownerId,
       title: `${label} 的尺子`,
-      coordinatorEnabled,
+      coordinatorEnabled: true,
       coordinatorWorkspaceId: workspaceId,
       coordinatorSessionId,
     },
   });
   await db.projectRuntime.upsert({ where: { projectId }, create: { projectId }, update: {} });
   return { ownerId, runnerId, workspaceId, projectId, coordinatorSessionId };
-}
-
-/**
- * Every message this project's standing conversation has been SENT, oldest first.
- *
- * The seeded opening turn is excluded, exactly as `SessionsService`'s own queued-turn reader
- * excludes it: it is the conversation's own prompt rather than something anybody told it.
- */
-function coordinatorMessages(db: PrismaClient, f: Fixture) {
-  return db.conversationTurn.findMany({
-    where: {
-      sessionId: f.coordinatorSessionId,
-      kind: 'message',
-      clientTurnId: { not: SessionsService.initialTurnClientId(f.coordinatorSessionId) },
-    },
-    select: { clientTurnId: true, content: true },
-    orderBy: { seq: 'asc' },
-  });
-}
-
-/**
- * Every session this delivery path does NOT open, as the census spells that claim.
- *
- * A judgment session is the OTHER terminal a wake can reach, so "nothing was opened" has to be a
- * claim about the branch this fact never takes rather than about an empty table in general.
- */
-function judgmentSessions(db: PrismaClient, ownerId: string) {
-  return db.session.findMany({
-    where: { ownerId, dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR, deletedAt: null },
-    select: { id: true },
-  });
-}
-
-/** Every wake this project has, whatever the fact was — the reader that does not name an event. */
-function projectWakes(db: PrismaClient, projectId: string) {
-  return db.projectCoordinatorWake.findMany({
-    where: { projectId },
-    select: {
-      event: true, status: true, sessionId: true, refusalCode: true, idempotencyKey: true,
-    },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-  });
 }
 
 test('a held criteria proposal is a derived read, and the stale ways out of it', {
@@ -440,310 +356,7 @@ test('a held criteria proposal is a derived read, and the stale ways out of it',
       refusal: CRITERIA_DECISION_BASE_SEAL_MOVED,
       requiredAction: CRITERIA_DECISION_REFILE_ACTION,
     }, 'a reader told only "no" cannot act; the row carries the refusal and what clears it');
-
-    // And the fact derived from a stranded row does not exist at all: a card whose only button is
-    // refused whichever way it is pressed is the thing this predicate is here to stop.
-    assert.equal(
-      criteriaDecisionPendingFact(f.projectId, row!), null,
-      'an undecidable proposal produces no wake fact, so no key is spent asking an unanswerable '
-      + 'question',
-    );
   });
-});
-
-test('holding a loosening edit puts one message on the coordinator conversation', {
-  skip, concurrency: 1, timeout: 300_000,
-}, async (t) => {
-  const url = URL!;
-  assertCoordinatorPgUrlIsIsolated(url);
-  const stack = connect(url);
-  t.after(async () => { await stack.db.$disconnect().catch(() => undefined); });
-  const db = stack.db;
-
-  /** State a whole collection for one project, through the owner's path. */
-  async function state(
-    f: Fixture,
-    items: Array<{ id?: string; text: string; verificationMethod?: string }>,
-  ): Promise<Held | null> {
-    const response = await stack.projects.update(f.ownerId, f.projectId, {
-      acceptanceCriteriaItems: items.map((item) => ({
-        ...(item.id ? { id: item.id } : {}),
-        text: item.text,
-        verificationMethod: item.verificationMethod ?? METHOD,
-      })),
-    } as never) as unknown as { acceptanceCriteriaHold?: Held };
-    return response.acceptanceCriteriaHold ?? null;
-  }
-
-  async function definitionIds(f: Fixture): Promise<string[]> {
-    const rows = await db.projectAcceptanceCriterionDefinition.findMany({
-      where: { projectId: f.projectId },
-      orderBy: { ordinal: 'asc' },
-      select: { id: true },
-    });
-    return rows.map((row) => row.id);
-  }
-
-  // ═══ (4) the positive: a held edit becomes one turn on the standing conversation ══════════════
-  await t.test('(4) the write that holds the edit is the write that delivers the card', async () => {
-    const f = await fixture(db, 'card');
-    assert.equal(await state(f, [{ text: FIRST }, { text: SECOND }, { text: THIRD }]), null);
-    const ids = await definitionIds(f);
-    assert.deepEqual(await coordinatorMessages(db, f), [],
-      'three ADDITIVE statements delivered nothing — an applied edit asks nobody anything');
-    assert.deepEqual(await projectWakes(db, f.projectId), []);
-
-    const held = await state(f, [{ id: ids[0]!, text: FIRST }, { id: ids[1]!, text: SECOND }]);
-    assert.ok(held, 'the edit under test has to be one that gets held');
-
-    // ── the fact ended on the conversation the project already has ──────────────────────────────
-    const wakes = await projectWakes(db, f.projectId);
-    assert.equal(wakes.length, 1, 'one held proposal, one wake');
-    assert.equal(wakes[0]!.event, 'CRITERIA_DECISION_PENDING');
-    assert.equal(wakes[0]!.status, 'DELIVERED');
-    assert.equal(wakes[0]!.sessionId, f.coordinatorSessionId,
-      'delivered TO the standing conversation — this path creates no session of its own');
-
-    const fact = criteriaDecisionPendingFact(f.projectId, {
-      intentId: held.intentId,
-      actionDigest: held.actionDigest,
-      baselineSeal: held.baselineSeal,
-      decidability: { decidable: true },
-    })!;
-    assert.equal(wakes[0]!.idempotencyKey, wakeIdempotencyKey(fact),
-      'and under the key the fact itself derives, so a re-derivation collapses onto this one');
-
-    const messages = await coordinatorMessages(db, f);
-    assert.equal(messages.length, 1, 'exactly one message, and it is this fact’s');
-    assert.equal(messages[0]!.clientTurnId, coordinatorDeliveryTurnId(wakeIdempotencyKey(fact)),
-      'under the turn key derived from the fact, so a second delivery replays rather than repeats');
-
-    // ── and what it says is the question, not an instruction to answer it ────────────────────────
-    const body = messages[0]!.content ?? '';
-    assert.ok(body.includes(describeWakeFact(fact)),
-      'one event, one description — the card renders the fact through the shared renderer');
-    assert.ok(body.includes(held.intentId), 'the card names the proposal it is about');
-    assert.ok(body.includes(`${THIRD}（被这份提案删掉）`),
-      'and carries the diff, which is nowhere else: the words this proposal DROPS are stated by '
-      + 'nothing in it, so a message built out of the proposal alone could not name them — and it '
-      + 'says of them that they are what goes, which is the whole of what is being asked');
-    assert.ok(!body.includes(FIRST) && !body.includes(SECOND),
-      'while the two it restates word for word are not laid out again — a restatement carries the '
-      + 'whole collection, and printing it back is how the one row that moved got lost in it');
-    assert.ok(body.includes('未改动 2 条'),
-      'and it says how much of the ruler is left alone, because one dropped criterion out of '
-      + 'three and one out of eight are not the same decision to hand on');
-    assert.ok(body.includes('账号所有者'),
-      'the action is to hand it to the person who may answer, because this reader may not');
-    assert.ok(body.includes('这是一条通知，不是打断'),
-      'a message is a notification and never an interrupt, and the message says so');
-    assert.doesNotMatch(body, /发生了 CRITERIA_DECISION_PENDING/,
-      'the renderer’s default arm is silent about a missing case; this asserts it was not taken');
-
-    // The read is still the read: a delivered card changes nothing about the ledger it was
-    // derived from, so the floor under it holds exactly what it held.
-    const queue = await readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
-    assert.deepEqual(
-      [queue.count, queue.pending[0]?.intentId, queue.pending[0]?.decidability.decidable],
-      [1, held.intentId, true],
-      'the card is the delivery; this read is the floor, and delivering did not spend it',
-    );
-  });
-
-  // ═══ (4b) the arm the only proposal ever held actually takes ══════════════════════════════════
-  await t.test('(4b) a reworded criterion is delivered with the words it replaces', async () => {
-    // 1GB4IZ4B — replayed in (6) below — reworded three of its eight criteria and dropped none, so
-    // every row it moved renders through this arm and not one through (4)'s. Both sides of a
-    // rewrite have to be carried: "changed to X" is unreadable without the words X replaces, and
-    // that side is on record rather than in the proposal, so the message is the only place a
-    // reader holding the proposal can find them.
-    const f = await fixture(db, 'reworded');
-    assert.equal(await state(f, [{ text: FIRST }, { text: SECOND }, { text: THIRD }]), null);
-    const ids = await definitionIds(f);
-    const reworded = 'the criterion this fixture rewrites, whose earlier words are only on record';
-
-    const held = await state(f, [
-      { id: ids[0]!, text: FIRST }, { id: ids[1]!, text: SECOND }, { id: ids[2]!, text: reworded },
-    ]);
-    assert.ok(held, 'rewording a criterion cannot be read as a tightening, so it is held');
-
-    const messages = await coordinatorMessages(db, f);
-    assert.equal(messages.length, 1, 'one held proposal, one message');
-    const body = messages[0]!.content ?? '';
-    assert.ok(body.includes(`${reworded}（被这份提案改写）`),
-      'the words the proposal asks for are in the message, named as the rewrite they are');
-    assert.ok(body.includes(`现在在册的是：${THIRD}`),
-      'and so are the words they would replace, which the proposal states nowhere: an edit '
-      + 'restates the collection it WANTS, so the wording being retired survives only on the '
-      + 'record this message was built against');
-    assert.ok(!body.includes(FIRST) && !body.includes(SECOND),
-      'while the two that came back word for word stay out, as in (4): one rewritten criterion '
-      + 'out of three is not three criteria to read');
-    assert.ok(body.includes('未改动 2 条'),
-      'and how much of the ruler was left alone is stated rather than counted off the fold');
-    assert.ok(!body.includes('判定方法'),
-      'the half that did not move says nothing: these procedures came back identical');
-  });
-
-  // ═══ (4c) the row whose two sides read the same, because the words are not what moved ═════════
-  await t.test('(4c) a criterion whose procedure alone moved says which half moved', async () => {
-    // The assertion is untouched and the way it is judged is not, so the row's two sides are the
-    // same sentence. Everything that distinguishes this proposal from a no-op is in the two lines
-    // about the procedure; without them the message names a rewrite and states nothing rewritten.
-    const f = await fixture(db, 'procedure-card');
-    assert.equal(await state(f, [{ text: FIRST }, { text: SECOND }]), null);
-    const ids = await definitionIds(f);
-    const loosened = 'somebody says it looks fine';
-
-    const held = await state(f, [
-      { id: ids[0]!, text: FIRST, verificationMethod: loosened }, { id: ids[1]!, text: SECOND },
-    ]);
-    assert.ok(held, 'rewriting how a criterion is judged cannot be read as a tightening either');
-
-    const messages = await coordinatorMessages(db, f);
-    assert.equal(messages.length, 1, 'one held proposal, one message');
-    const body = messages[0]!.content ?? '';
-    assert.ok(body.includes(`判定方法改成：${loosened}`),
-      'the procedure the proposal asks for is in the message');
-    assert.ok(body.includes(`现在在册的判定方法：${METHOD}`),
-      'and the one it would replace — the pair is the whole of what this proposal does, and a '
-      + 'card that carried neither would be a rewrite nobody can see');
-    assert.ok(body.includes(`${FIRST}（被这份提案改写）`),
-      'the criterion is named by its own words, identical on both sides as they are');
-    assert.ok(!body.includes('现在在册的是：'),
-      'and no wording is quoted back as replaced, because none was: the two sides of `text` agree');
-    assert.ok(!body.includes(SECOND), 'the one left alone stays out of it');
-    assert.ok(body.includes('未改动 1 条'), 'and it is counted, as everywhere else');
-  });
-
-  // ═══ (5) the negative, paired with (4) over the same code ═════════════════════════════════════
-  await t.test('(5) a conversation that ended is not revived, and the key goes back', async () => {
-    const f = await fixture(db, 'ended', { coordinatorStatus: RunStatus.SUCCEEDED });
-    assert.equal(await state(f, [{ text: FIRST }, { text: SECOND }, { text: THIRD }]), null);
-    const ids = await definitionIds(f);
-
-    const held = await state(f, [{ id: ids[0]!, text: FIRST }, { id: ids[1]!, text: SECOND }]);
-    assert.ok(held, 'the edit is held whether or not anybody can be told about it');
-
-    assert.deepEqual(await coordinatorMessages(db, f), [],
-      'a conversation the person ended is not resurrected to be told about a proposal');
-    const wakes = await projectWakes(db, f.projectId);
-    assert.equal(wakes.length, 1, 'the fact was claimed — this is a refusal, not an absence');
-    assert.equal(wakes[0]!.status, 'REFUSED');
-    assert.equal(wakes[0]!.refusalCode, DELIVERY_COORDINATOR_SESSION_UNAVAILABLE);
-    assert.equal(wakes[0]!.sessionId, null);
-    const ended = await db.session.findUniqueOrThrow({
-      where: { id: f.coordinatorSessionId },
-      select: { status: true },
-    });
-    assert.equal(ended.status, RunStatus.SUCCEEDED, 'and the conversation is still ended');
-
-    // The half that makes the refusal survivable: the question did not go with the card.
-    const queue = await readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
-    assert.deepEqual(
-      [queue.count, queue.pending[0]?.intentId, queue.pending[0]?.decidability.decidable],
-      [1, held.intentId, true],
-      'undelivered is not unasked: the proposal is a shape the rows have, so it is still here',
-    );
-    // And the effect class is what makes "the weakening proposals of this project" a set rather
-    // than a convention, so the read that found it above is finding the right rows.
-    const intents = await db.projectRatifiedActionIntent.findMany({
-      where: { projectId: f.projectId },
-      select: { effectClass: true },
-    });
-    assert.deepEqual(intents.map((intent) => intent.effectClass), [CRITERIA_WEAKENING_EFFECT_CLASS]);
-  });
-
-  // ═══ (6) the copy the two cards above share, over a snapshot that has moved on ════════════════
-  await t.test('(6) a card whose proposal is already gone says so instead of rendering a diff',
-    async () => {
-      const fact = criteriaDecisionPendingFact('00000000-0000-7000-8000-00000000c0de', {
-        intentId: '00000000-0000-7000-8000-00000000beef',
-        actionDigest: 'd'.repeat(64),
-        baselineSeal: 'e'.repeat(64),
-        decidability: { decidable: true },
-      })!;
-      const gone = buildCoordinatorDeliveryMessage(fact, '空账本', null, {
-        readAt: new Date('2026-09-09T00:00:00.000Z'),
-        projectId: fact.projectId,
-        count: 0,
-        oldestAgeSeconds: null,
-        decidableCount: 0,
-        pending: [],
-      });
-      assert.ok(gone.includes('已经不是这个项目的待决提案了'),
-        'the read happens at delivery, so a proposal answered in between is reported as answered');
-      assert.ok(gone.includes('这是一条通知，不是打断'),
-        'and the carrier’s own sentence is on every branch of this card, not just the happy one');
-      assert.doesNotMatch(gone, /发生了 CRITERIA_DECISION_PENDING/);
-    });
-});
-
-/**
- * The switched-off control for `CRITERIA_DECISION_PENDING`, registered in
- * `coordinator-disabled-negatives.spec.ts`.
- *
- * A top-level case rather than a subtest of the two above, because that census attributes an
- * assertion to the `test('...')` it was written in and a subtest is invisible to it — and because
- * what it states is a different claim from either: not "the card went out" and not "the card could
- * not go out", but "the owner turned this project's coordinator off, and the producer honoured it
- * BEFORE anything was written to any conversation".
- *
- * Its paired positive is `(4)` above, over the same producer and the same write: the only
- * difference between the two fixtures is one boolean column. Without that pair, every assertion
- * here would be equally true of a producer nobody calls.
- */
-test('a switched-off coordinator is refused once, told nothing, and opens nothing', {
-  skip, concurrency: 1, timeout: 300_000,
-}, async (t) => {
-  const url = URL!;
-  assertCoordinatorPgUrlIsIsolated(url);
-  const stack = connect(url);
-  t.after(async () => { await stack.db.$disconnect().catch(() => undefined); });
-  const db = stack.db;
-  const f = await fixture(db, 'switched-off', { coordinatorEnabled: false });
-
-  async function state(items: Array<{ id?: string; text: string }>): Promise<Held | null> {
-    const response = await stack.projects.update(f.ownerId, f.projectId, {
-      acceptanceCriteriaItems: items.map((item) => ({
-        ...(item.id ? { id: item.id } : {}),
-        text: item.text,
-        verificationMethod: METHOD,
-      })),
-    } as never) as unknown as { acceptanceCriteriaHold?: Held };
-    return response.acceptanceCriteriaHold ?? null;
-  }
-
-  assert.equal(await state([{ text: FIRST }, { text: SECOND }, { text: THIRD }]), null);
-  const ids = (await db.projectAcceptanceCriterionDefinition.findMany({
-    where: { projectId: f.projectId },
-    orderBy: { ordinal: 'asc' },
-    select: { id: true },
-  })).map((row) => row.id);
-
-  const held = await state([{ id: ids[0]!, text: FIRST }, { id: ids[1]!, text: SECOND }]);
-  assert.ok(held, 'the edit is held whatever the switch says — holding it is not a notification');
-
-  // Refused ONCE, on the switch, and not silently: the wake row is claimed before it is
-  // authorized, so a fact that travelled the whole way and lost carries the reason it lost.
-  const wakes = await projectWakes(db, f.projectId);
-  assert.equal(wakes.length, 1);
-  assert.equal(wakes[0]!.event, 'CRITERIA_DECISION_PENDING');
-  assert.equal(wakes[0]!.status, 'REFUSED');
-  assert.equal(wakes[0]!.refusalCode, HELD_CRITERIA_WAKE_COORDINATOR_DISABLED);
-  assert.equal(wakes[0]!.sessionId, null);
-  assert.deepEqual(await judgmentSessions(db, f.ownerId), [],
-    'and no conversation was opened either — this producer opens none in any case');
-  assert.deepEqual(await coordinatorMessages(db, f), [],
-    'the standing conversation was told nothing');
-
-  // The question survives the switch, which is the difference between "nobody was told" and
-  // "nobody was asked": the read is derived from the proposal, not from the delivery.
-  const queue = await readPendingCriteriaDecisions(db as never, f.ownerId, f.projectId);
-  assert.deepEqual(
-    [queue.count, queue.pending[0]?.intentId, queue.pending[0]?.decidability.decidable],
-    [1, held.intentId, true],
-  );
 });
 
 /**
@@ -1088,8 +701,7 @@ test('a rejected proposal is answered too, and the ask it turned down can be mad
 
   /**
    * The two other readers that ask "answered" through `stillUnanswered`: the owner's own rail,
-   * which carries the key, and the badge, which only counts. The coordinator's card is composed
-   * from `pending()` itself, so it needs no line of its own here.
+   * which carries the key, and the badge, which only counts.
    */
   async function otherReaders() {
     return {

@@ -27,20 +27,14 @@ import {
  * this read cannot fall out of date with them, cannot be delivered twice, and cannot be lost.
  * Closing the conversation that was reading it changes none of them.
  *
- * THIS READ IS THE FLOOR UNDER THE COORDINATOR CARD
+ * THIS READ IS WHAT THE DECISION CARD IS DRAWN FROM
  * -------------------------------------------------
- * The primary surface for this question is a message in the project's coordinator conversation
- * (`coordinator-delivery.service.ts`, event `CRITERIA_DECISION_PENDING`). A card can be delivered
- * and never answered — the person is asleep, the engine abandons the tool call, the turn is
- * reclaimed — and none of those writes anything: the intent row stays unsettled, and the wake that
- * carried it is DELIVERED and goes on holding its idempotency key, so no second delivery is coming.
- * There is no retry clock on this path and deliberately so; the whole of that argument is
- * `coordinator-delivery.service.ts` §1.4, and it applies here word for word.
- *
- * Because pending is a shape the rows already have, the question an unanswered card left behind is
- * still here on the next read, and the answer written from here reaches the same door the card's
- * answer would have. That is the entire reason this read exists beside the card rather than instead
- * of it.
+ * Until 2026-09-10 a held proposal was also relayed to the project's coordinator conversation, as a
+ * message that could do nothing but hand the question on — approving a looser ruler is the account
+ * owner's alone. That relay is gone. The owner's card reads this derivation (through
+ * `readPendingCriteriaDecisionsForOwner` below, which adds the key) and answers at the decision
+ * door, so nothing has to be delivered for a proposal to be asked: pending is a shape the rows
+ * already have, so a question nobody has looked at yet is still here on the next read.
  *
  * WHY EACH ROW CARRIES A REASON RATHER THAN A FLAG
  * ------------------------------------------------
@@ -686,8 +680,8 @@ export interface OwnerPendingCriteriaDecisionQueue
  *
  * WHY THIS IS A SECOND FUNCTION AND NOT A FLAG ON THE FIRST
  * ---------------------------------------------------------
- * `readPendingCriteriaDecisions` is what `coordinator-delivery.service.ts` composes the card from,
- * and an agent reads that card. So the requirement is not "the token is usually absent there" but
+ * `readPendingCriteriaDecisions` answers whoever asks it, and until 2026-09-10 an agent was sent a
+ * card composed from it. So the requirement is not "the token is usually absent there" but
  * "the token cannot be there": the query above never SELECTs `commit_token` at all, and no
  * argument to it can make it. What separates the two paths is therefore a fact about which columns
  * were read, which is checkable by looking, rather than a branch somebody has to keep correct.

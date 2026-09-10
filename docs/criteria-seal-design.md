@@ -404,6 +404,8 @@ project_criteria_decision
   （`:354-396`），事实下次再派生时重来。**卡片不是队列，派生读才是地板**
   ——`src/apiserver/src/projects/completion-input-router.service.ts:160-195` 那段论证对削弱决定卡逐字适用。
 
+> **2026-09-10 已被推翻（本节原文不改）**：`CRITERIA_DECISION_PENDING` 不再投递给 coordinator 会话——`deliverHeldCriteriaEdit` 与 `criteriaDecisionPendingFact` 已删，`CoordinatorDeliveryService` 里投递时读待决的 `evidenceAsk` / `criteriaDecisions` 也随证据问题一起删了。放松卡与证据裁决卡都由客户端从待决读直出、按钮直连决定门，coordinator 不再被这两类事实唤醒；事件枚举值与 CHECK 保留（已写入的行还在用这两个拼写）。见 `docs/completion-input-routing.md` §A2 末尾的同日注记。
+
 ---
 
 ## 五、决定门的确切请求 / 响应形状

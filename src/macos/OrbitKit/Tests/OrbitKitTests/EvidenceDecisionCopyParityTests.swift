@@ -8,13 +8,12 @@ import XCTest
 /// The failure being prevented is specific and was named when this pair of tasks was filed: one end
 /// showing a line as 「机器已核」 while the other shows it as 「提交者自述」. Nothing in a build
 /// catches that — the Swift client and the browser bundle share no compiler — so the check has to
-/// be a test that reads the other end's source and compares the strings, which is the same tactic
-/// `coordinator-evidence-ask.ts` uses for the two option labels it copies out of `DecisionRail`.
+/// be a test that reads the other end's source and compares the strings.
 ///
-/// It also watches the two SERVER strings the card is recognised by. A card is a decision card
-/// because its options carry the server's labels and its body carries the server's identity line;
-/// if either is re-worded, the app quietly falls back to the generic form and nobody finds out for
-/// a release. Here it is a red line naming the file that moved.
+/// It also watches the option labels the card is recognised by, against `DecisionRail.tsx`. It used
+/// to compare them with the server's copy too, and the identity line the server wrote into the
+/// card's body — until 2026-09-10, when `coordinator-evidence-ask.ts` was deleted: the server no
+/// longer has the coordinator ask this question, so there is no server string left to compare.
 final class EvidenceDecisionCopyParityTests: XCTestCase {
 
     /// The repo root, found by walking up from this file until the web client is under foot.
@@ -104,32 +103,9 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
 
     // MARK: what the card is recognised BY
 
-    func testTheTwoOptionLabelsAreStillTheServersOwn() throws {
+    func testTheTwoOptionLabelsMatchTheDecisionRail() throws {
         let rail = try source("src/web/src/components/DecisionRail.tsx")
         assertContains(rail, "CONFIRM_LABEL = '\(EvidenceDecisions.confirmOption)'", "the confirm label")
         assertContains(rail, "SEND_BACK_LABEL = '\(EvidenceDecisions.sendBackOption)'", "the send-back label")
-
-        let ask = try source("src/apiserver/src/tasks/coordinator-evidence-ask.ts")
-        assertContains(ask, "CONFIRM_OPTION = '\(EvidenceDecisions.confirmOption)'",
-                       "the label the ask actually raises")
-        assertContains(ask, "SEND_BACK_OPTION = '\(EvidenceDecisions.sendBackOption)'",
-                       "the label the ask actually raises")
-    }
-
-    /// `askIdentity` is a handle into a string the server writes. If that line is re-worded, every
-    /// decision card silently becomes a generic form — so the wording is asserted, not assumed.
-    func testTheIdentityLineIsStillTheOneTheServerWrites() throws {
-        let ask = try source("src/apiserver/src/tasks/coordinator-evidence-ask.ts")
-        assertContains(ask, "task ${uuidToBase62(row.taskId)}, evidence rev ${row.evidenceRevision}",
-                       "the identity line the card matches on")
-
-        // And the Swift spelling of it agrees, field for field.
-        let row = EvidenceDecisionRow(
-            taskId: "34LMiluvx0jK63cj8arWl", title: "t", criterion: nil, evidenceRevision: "7",
-            claim: "c", gaps: [], citations: [],
-            decidability: EvidenceDecisionDecidability(decidable: true),
-            independence: EvidenceDecisionIndependence(independent: true))
-        XCTAssertEqual(EvidenceDecisions.askIdentity(row),
-                       "task 34LMiluvx0jK63cj8arWl, evidence rev 7")
     }
 }

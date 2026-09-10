@@ -2,8 +2,8 @@
 # One `*.pg.spec` (or several), run against a PostgreSQL this script creates and destroys — and
 # RED when nothing was witnessed.
 #
-#   scripts/run-pg-spec.sh src/apiserver/src/tasks/coordinator-evidence-inbox.pg.spec.ts
-#   scripts/run-pg-spec.sh src/apiserver/src/tasks/coordinator-evidence-{inbox,ask}.pg.spec.ts
+#   scripts/run-pg-spec.sh src/apiserver/src/projects/decision-facts-no-coordinator-turn.pg.spec.ts
+#   scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-pending-{decisions,owner-read}.pg.spec.ts
 #
 # WHY THIS EXISTS
 # ===============

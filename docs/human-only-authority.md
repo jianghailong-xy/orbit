@@ -371,6 +371,13 @@ person answered the card" reaches the apiserver only as the agent's report of it
 acceptable for A2, where the door's own independence check is the guarantee; it is not a thing to
 promote into a permission.
 
+> **2026-09-10:** `coordinator-evidence-ask.ts` is deleted and nothing asks the coordinator to raise
+> this card any more, so the paragraph above records A2 as it stood rather than the product. The
+> evidence question is a system card drawn from the pending read, and the account owner's click
+> posts `POST /tasks/:taskId/evidence/decision` directly — the apiserver now receives the answer as
+> the owner's own request rather than as an agent's report of it. The conclusion above is untouched:
+> `Approval` is still not a carrier for a permission.
+
 **5. What the disclaimer means here.** `coordinator-authority.ts:36-45` and `:103-104`, and
 `runner-projects.controller.ts:223-225`, all say the credentialed channel is not proof a human held
 it. That is true of the web door too. It is not an argument for (A): it is the reason the tier's

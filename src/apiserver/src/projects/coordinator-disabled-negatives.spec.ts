@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Seven kinds, twelve controls. The mapping is many-to-one in both directions on purpose: one kind is
+ * Six kinds, fourteen controls. The mapping is many-to-one in both directions on purpose: one kind is
  * reached by more than one write path and is controlled once per path, one control can cover two
  * kinds when the same run drives both, and one PRODUCER can build two kinds when which fact a
  * committed world justifies is the thing it decides.
@@ -261,30 +261,6 @@ const WIRED: readonly WiredWakeFact[] = [
       },
     ],
   },
-  {
-    // The one kind here that is not a fact about WORK. It is raised by a write that touched no
-    // task — a loosening edit to the project's acceptance criteria, held as a proposal instead of
-    // applied — so its producer is the criteria write path's own commit edge rather than one of
-    // the four `*.producer.ts` units, and its authorizer stops at the switch: a proposal is
-    // derived once, from a row 0195's trigger makes unwritable, so there is no world to go round
-    // again and no convergence pass to charge.
-    //
-    // One control, and one is enough because the whole switch story is in a single case: the same
-    // write that delivers with the switch on, all four claims, and the derived read asserted to
-    // still hold the proposal afterwards — which is the half that says the switch cost a
-    // notification rather than the question.
-    event: 'CRITERIA_DECISION_PENDING',
-    producedBy: [
-      'projects/coordinator-wake.ts#criteriaDecisionPendingFact',
-      'projects/projects.service.ts#deliverHeldCriteriaEdit',
-    ],
-    negatives: [
-      {
-        spec: 'projects/criteria-pending-decisions.pg.spec.ts',
-        test: 'a switched-off coordinator is refused once, told nothing, and opens nothing',
-      },
-    ],
-  },
 ];
 
 /**
@@ -300,7 +276,9 @@ const WIRED: readonly WiredWakeFact[] = [
  * instead of giving it a control is a visible edit that says "this one predates the work", which
  * is a claim about history a reviewer can check. `COMPLETION_ACK_STALE` is NOT here — the constant
  * spells it, and nothing in production builds one, so the census never sees it. That is what
- * makes it the honest synthetic input for `(c)`.
+ * makes it the honest synthetic input for `(c)`. `CRITERIA_DECISION_PENDING` has been in the same
+ * state since 2026-09-10, when the held-criteria delivery that built it was removed; its
+ * switched-off control went with it, because a fact nothing builds has no switch to prove.
  */
 const PREDATES_THIS_WORK: readonly Pick<WiredWakeFact, 'event' | 'producedBy'>[] = [
   {

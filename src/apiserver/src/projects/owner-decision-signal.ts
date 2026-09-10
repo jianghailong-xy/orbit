@@ -36,9 +36,9 @@ import { stillUnanswered } from './criteria-pending-decisions';
  *
  * WHERE THE COUNT LANDS
  * ---------------------
- * On the project's coordinator conversation, because that conversation is the surface the decision
- * is asked on (`coordinator-delivery.service.ts`, event `CRITERIA_DECISION_PENDING`) and therefore
- * the place a person who follows the badge arrives at an answerable card. A project with no
+ * On the project's coordinator conversation, because that conversation's page is where the decision
+ * card is drawn (`CriteriaDecisionCard.tsx`, from the owner's own pending read) and therefore the
+ * place a person who follows the badge arrives at an answerable card. A project with no
  * coordinator bound has nowhere to send them and is not counted: a lit badge that opens nothing is
  * worse than a dark one. Same reason the conversation has to be an OPEN one — a badge is a "go here
  * now", and here cannot be a conversation the owner filed away or threw out. The question itself is

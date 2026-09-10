@@ -32,9 +32,9 @@
  *   (2) the owner's read carries the key, and every field name the card reads, with `intentId` in
  *       the spelling the door takes back.
  *   (3) THE KEY DOES NOT LEAVE BY THE OTHER PATH. Two facts over the SAME rows, so the only thing
- *       that differs between them is which read was called: the delivery shape
- *       (`readPendingCriteriaDecisions`, what `coordinator-delivery.service.ts` composes an agent's
- *       card from) contains the token nowhere, and the owner's read of the same moment does.
+ *       that differs between them is which read was called: the derivation itself
+ *       (`readPendingCriteriaDecisions`, which answers whoever asks it) contains the token nowhere,
+ *       and the owner's read of the same moment does.
  *   (4) and a read made WITH an acting session is refused outright, with the door's own code —
  *       because handing over the key is handing over the decision, so it is one rule, not two.
  *   (5) a proposal a later one displaced is gone, and the survivor names it in the SAME spelling
@@ -366,10 +366,10 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
         [FIRST, SECOND, THIRD], 'a loosening edit changes nothing until it is answered');
     });
 
-  await t.test('(3) the delivery shape carries no key; the owner’s read of the same rows does',
+  await t.test('(3) the derivation itself carries no key; the owner’s read of the same rows does',
     async () => {
-      // What an agent is shown: `coordinator-delivery.service.ts` composes the coordinator's card
-      // from exactly this call.
+      // What any reader but the owner's rail is handed — until 2026-09-10 that included the
+      // coordinator's card, which was composed from exactly this call.
       const delivered = await readPendingCriteriaDecisions(prisma, ownerId, projectId);
       assert.equal(delivered.pending.length, 1, 'the same one proposal, read the other way');
       assert.equal(delivered.pending[0].intentId, firstProposalId,

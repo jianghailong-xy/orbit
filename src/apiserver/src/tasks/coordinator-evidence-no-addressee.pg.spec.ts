@@ -16,13 +16,12 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
-import { CoordinatorDeliveryService, coordinatorDeliveryTurnId } from '../projects/coordinator-delivery.service';
+import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { wakeIdempotencyKey } from '../projects/coordinator-wake';
 import { CoordinatorWakeService } from '../projects/coordinator-wake.service';
 import { CriterionReadyProducer } from '../projects/criterion-ready.producer';
 import { CriterionUnlandedProducer } from '../projects/criterion-unlanded.producer';
@@ -36,51 +35,47 @@ import type { PendingEvidenceJudgment } from './pending-evidence-judgments';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
 
 /**
- * The three states in which a submitted completion evidence revision has NO ADDRESSEE, and what
- * happens to it instead.
+ * The three states in which a submitted completion evidence revision used to have NO ADDRESSEE, and
+ * what happens to it in each.
  *
- *   COORDINATOR_PG_URL=postgresql://... \
- *   COORDINATOR_PG_EXPECTED_DATABASE=pcc... \
- *   COORDINATOR_PG_EXPECTED_USER=pcc... \
- *   COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER=... \
+ *   COORDINATOR_PG_URL=postgresql://... \\
+ *   COORDINATOR_PG_EXPECTED_DATABASE=pcc... \\
+ *   COORDINATOR_PG_EXPECTED_USER=pcc... \\
+ *   COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER=... \\
  *   node --test build/tasks/coordinator-evidence-no-addressee.pg.spec.js
  *
  * WHICH THREE, AND WHY THEY ARE ONE FILE
  * ======================================
- * The carrier assumes a project has a standing conversation to be told things in. Three states
- * have none, and they fail in three different places, which is why one case each:
+ * Until 2026-09-10 a revision was also said out loud to the conversation its project is coordinated
+ * from, and three states had nobody to say it to — each failing in a different place:
  *
  *   1. `Project.coordinatorSessionId` is null — the column is nullable and only carries a value
- *      once somebody has actually opened that conversation. The fact reaches the delivery unit and
- *      is refused there for want of a recipient.
+ *      once somebody has actually opened that conversation.
  *   2. The task is filed under no project. The route is inside `if (committed.projectId ...)`, so
- *      the fact is never even derived: there is no wake row, let alone a delivery.
+ *      the fact is never even derived: there is no wake row at all.
  *   3. The standing conversation IS the run of the task being judged — what promoting a task's own
- *      session to the project's coordinator produces. Here there is a recipient and the message
- *      arrives; what is missing is a DECIDER, because the decision door refuses a session that took
- *      part in the work.
+ *      session to the project's coordinator produces. There is a conversation; what is missing is a
+ *      DECIDER, because the decision door refuses a session that took part in the work.
  *
  * WHAT THE DEFINED BEHAVIOUR IS, IN ALL THREE
  * ===========================================
- * The fact is never dropped: it falls back to the derived read that finds these questions from the
- * rows themselves — `TaskCompletionEvidenceService.pending`, which is what
- * `GET /api/tasks/evidence-decisions/pending` returns and what the decision rail renders. That is
- * the timeout fallback this project already chose for a card nobody answers, and these three are
- * the same shape one step earlier: a question with no reader is still a question, and the read
- * that recomputes it from the ledger cannot lose one.
+ * Nobody is told, which since that date is true of every revision, and the fact is never dropped:
+ * the question belongs to the derived read, `TaskCompletionEvidenceService.pending`, which is what
+ * `GET /api/tasks/evidence-decisions/pending` returns and what the decision card is drawn from. A
+ * question with no reader is still a question, and the read that recomputes it from the ledger
+ * cannot lose one.
  *
- * So every case below asserts BOTH halves. What the carrier did — a fact recorded and nothing
- * said, no fact at all, or a message to a conversation that may not answer it — and then that the
- * evidence is still in front of a session that CAN settle it, and that settling it there really
- * does take it off the list.
+ * So every case below asserts both halves: what the ledger recorded — a consumed fact, or no fact at
+ * all — with nothing said to any conversation, and then that the evidence is still in front of a
+ * session that CAN settle it, and that settling it there really does take it off the list.
  *
  * HOW EACH "NOTHING HAPPENED" IS KEPT FROM BEING VACUOUS
- * =====================================================
- * Every count of rows that must not appear is paired, in the same fixture, with a fact that DOES
- * produce them: case 1 points the project at a conversation and submits again, case 2 carries a
- * sibling task that is filed under a project with one, and case 3 reads the same queue for a second
- * session. A count asserted alone would be green over a system that delivers nothing at all and
- * over a read that returns nothing at all, which is exactly what these cases are here to rule out.
+ * ======================================================
+ * Every row a read must still return is paired, in the same fixture, with the answer that takes it
+ * off, and case 2 counts its sibling's wake row in the same breath as the unfiled task's none. The
+ * silence of the conversations is the one claim these fixtures cannot pair, because nothing here
+ * delivers any more: its positive is (c) of `projects/decision-facts-no-coordinator-turn.pg.spec.ts`,
+ * the same delivery unit writing a turn on a parked conversation like the ones below.
  *
  * Not destructive: every case owns freshly generated ids and asserts over its own rows.
  */
@@ -344,16 +339,6 @@ function evidenceWakes(db: PrismaClient, taskId: string) {
   });
 }
 
-/** The turn key one recorded fact's message is written under, derived the way the product derives it. */
-function expectedTurnId(row: { subjectType: string; subjectId: string; subjectVersion: string }) {
-  return coordinatorDeliveryTurnId(wakeIdempotencyKey({
-    event: 'COMPLETION_EVIDENCE_REVISED',
-    subjectType: row.subjectType as 'TASK',
-    subjectId: row.subjectId,
-    subjectVersion: row.subjectVersion,
-  }));
-}
-
 /** Every session row this owner has — the count "nothing was opened" is really about. */
 function allSessions(db: PrismaClient, ownerId: string) {
   return db.session.count({ where: { ownerId } });
@@ -429,9 +414,9 @@ test('a project nobody has opened a coordinator for records the fact and tells n
       assert.equal(row.independence.independent, true);
       assert.deepEqual(row.criterion, { key: criterionKey, text: STANDARD });
 
-      // (4) The paired positive, in this same fixture: the person opens the coordinator, and the
-      // NEXT fact is delivered. So the silence above is a property of the missing recipient rather
-      // than of a stack that cannot deliver at all.
+      // (4) The person opens the coordinator, and the NEXT revision is recorded exactly like the
+      // first and told to that conversation no more than the first was told to anybody. Until
+      // 2026-09-10 this was the paired positive for (2); the delivery it paired with is gone.
       await stack.db.project.update({
         where: { id: projectId },
         data: { coordinatorSessionId: standing },
@@ -447,12 +432,15 @@ test('a project nobody has opened a coordinator for records the fact and tells n
         },
       );
       assert.equal(second.revision, '2');
-      const said = await everythingSaid(stack.db, w.ownerId);
-      assert.equal(said.length, 1, 'a project WITH a coordinator was told nothing either');
-      assert.equal(said[0]!.sessionId, standing);
       const wakes = await evidenceWakes(stack.db, taskId);
-      assert.equal(wakes.length, 2);
-      assert.equal(said[0]!.clientTurnId, expectedTurnId(wakes[1]!));
+      assert.deepEqual(
+        wakes.map((row) => [row.status, row.consumerType]),
+        [['CONSUMED', 'JUDGMENT_REQUEST_DERIVER'], ['CONSUMED', 'JUDGMENT_REQUEST_DERIVER']],
+      );
+      assert.deepEqual(
+        await everythingSaid(stack.db, w.ownerId), [],
+        'a project WITH a coordinator conversation was told about the revision',
+      );
 
       // (5) And the negative control for (3): answering it takes it off the same read. Without
       // this, "the row is still there" would also be true of a read that filters nothing.
@@ -486,7 +474,7 @@ test('a task in no project derives no fact at all, and is still asked about',
       await citedToolCall(stack.db, unfiledRun, 'toolu_unfiled');
 
       // Its sibling, filed under a project that HAS a standing conversation: the same account, the
-      // same stack, the same submission — so every count below that must be zero for the unfiled
+      // same stack, the same submission — so the wake count below that must be zero for the unfiled
       // task is one that this task moves.
       const standing = await conversation(stack.db, w, '协调：兄弟项目');
       const { projectId, criterionKey } = await project(stack.db, w, 'unfiled', standing);
@@ -521,11 +509,12 @@ test('a task in no project derives no fact at all, and is still asked about',
       assert.equal(sibling[0]!.status, 'CONSUMED');
       assert.equal(sibling[0]!.projectId, projectId);
 
-      // (2) And only the sibling was said out loud, on the conversation its project names.
-      const said = await everythingSaid(stack.db, w.ownerId);
-      assert.equal(said.length, 1, 'the unfiled task was delivered to somebody');
-      assert.equal(said[0]!.sessionId, standing);
-      assert.equal(said[0]!.clientTurnId, expectedTurnId(sibling[0]!));
+      // (2) And neither was said out loud — not even the sibling, whose project names a standing
+      // conversation to say it to.
+      assert.deepEqual(
+        await everythingSaid(stack.db, w.ownerId), [],
+        'an evidence revision was delivered to a conversation',
+      );
 
       // (3) The defined behaviour: it is still asked about, beside the one that was delivered, and
       // it is decidable — the derived read holds a task in no project to its OWN stated standard.
@@ -563,7 +552,7 @@ test('a task in no project derives no fact at all, and is still asked about',
     }
   });
 
-test('a coordinator that is the run being judged is told, may not answer, and is not the only reader',
+test('a coordinator that is the run being judged may not answer, and is not the only reader',
   { skip, timeout: 300_000 }, async () => {
     const stack = await connect();
     try {
@@ -591,15 +580,11 @@ test('a coordinator that is the run being judged is told, may not answer, and is
         },
       );
 
-      // (1) The carrier does not know the difference: there is a standing conversation, it is not
-      // ended, so the message is written to it. Pinned rather than wished away, because it is what
-      // a reader of that conversation will actually find.
+      // (1) The fact is recorded, and the standing conversation — which is also the run — is told
+      // nothing, as no conversation is.
       const wakes = await evidenceWakes(stack.db, taskId);
       assert.equal(wakes.length, 1);
-      const said = await everythingSaid(stack.db, w.ownerId);
-      assert.equal(said.length, 1, 'the standing conversation was told nothing');
-      assert.equal(said[0]!.sessionId, run);
-      assert.equal(said[0]!.clientTurnId, expectedTurnId(wakes[0]!));
+      assert.deepEqual(await everythingSaid(stack.db, w.ownerId), []);
 
       // (2) What it may not do is answer. The door refuses it by name, and writes nothing.
       await assert.rejects(

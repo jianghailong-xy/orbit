@@ -50,8 +50,6 @@ import {
   UpdateProjectDto,
   type UpdateProjectAcceptanceCriterionDto,
 } from './dto';
-import { CoordinatorDeliveryService } from './coordinator-delivery.service';
-import { criteriaDecisionPendingFact } from './coordinator-wake';
 import {
   CRITERIA_DECISION_ALREADY_SETTLED,
   CRITERIA_DECISION_BASE_SEAL_MOVED,
@@ -377,15 +375,6 @@ interface ResolvedAcceptanceEdit {
  * entire tree for that channel's identifiers. A field reusing one of them would read to everyone
  * downstream — and to that scan — as the removed channel coming back.
  */
-/** The project went away, or changed hands, between the commit that held the edit and the wake. */
-export const HELD_CRITERIA_WAKE_PROJECT_GONE = 'HELD_CRITERIA_WAKE_PROJECT_GONE';
-
-/**
- * The owner turned this project's coordinator off. The proposal stands and is still readable
- * through `readPendingCriteriaDecisions`; what is refused is the card, not the question.
- */
-export const HELD_CRITERIA_WAKE_COORDINATOR_DISABLED = 'HELD_CRITERIA_WAKE_COORDINATOR_DISABLED';
-
 export interface HeldCriteriaEdit {
   applied: false;
   intentId: string;
@@ -785,12 +774,6 @@ export class ProjectsService {
     // that construct this service by hand to exercise a read do not each have to stub a session
     // service they never reach; Nest injects the real one by type, not by position.
     private readonly sessions: SessionsService = undefined as unknown as SessionsService,
-    // Only the held-criteria edge needs it, and defaulted for the same reason `sessions` is: the
-    // specs that construct this service by hand to exercise a read reach no delivery. Nest injects
-    // the real one by type — `ProjectsModule` already imports `CoordinatorJudgmentModule`, which
-    // provides and exports it, so no new edge is added to the module graph.
-    private readonly deliveries: CoordinatorDeliveryService =
-      undefined as unknown as CoordinatorDeliveryService,
     // Only the two writes that change the owner's pending criteria decisions publish through it,
     // and it is defaulted for the same reason again. `RealtimeModule` is global, so Nest injects it
     // by type without a new import.
@@ -1401,10 +1384,10 @@ export class ProjectsService {
    * below it says, and the refusal would be a rule enforced at one door — which
    * `coordinator-authority.ts` §2 says is not a boundary.
    *
-   * The refusal is not a claim that a session may not know a proposal is waiting. It may, and it
-   * is told: `coordinator-delivery.service.ts` puts exactly that on the coordinator's conversation,
-   * composed from `readPendingCriteriaDecisions`, which selects no key. What a session may not have
-   * is the means to answer, which is why the two reads are two functions.
+   * The refusal is not a claim that a session may not know a proposal is waiting. It may: the write
+   * that filed one says so in its own response (`acceptanceCriteriaHold`), and
+   * `readPendingCriteriaDecisions` derives the question without selecting a key. What a session may
+   * not have is the means to answer, which is why the two reads are two functions.
    *
    * NOTHING IS WRITTEN HERE, INCLUDING BY THE REFUSAL. The read is derived from committed rows
    * every time it is asked, so there is no queue state for a refused read to have consumed.
@@ -2906,11 +2889,6 @@ export class ProjectsService {
       if (dto.acceptanceCriteriaItems !== undefined && !held) {
         await this.reprojectProjectStatus(ownerId, id);
       }
-      // A held proposal is a question addressed to a person, and the commit that filed it is the
-      // only edge that knows one was asked. After the commit, never inside it: the delivery writes
-      // a turn on another conversation, and a message that rolled back with a retried transaction
-      // would be a card about a proposal that does not exist.
-      if (held) await this.deliverHeldCriteriaEdit(ownerId, id, held);
       // Spread rather than nested, and only when there IS one: a caller whose edit was applied
       // sees exactly the response it saw before this existed, and a caller whose edit was held
       // cannot read the criteria in this body without the field that says they are the OLD ones.
@@ -2970,76 +2948,6 @@ export class ProjectsService {
       this.logger.warn(`derived project status not re-projected after a criteria edit: ${
         (e as { message?: string })?.message ?? String(e)}`),
     );
-  }
-
-  /**
-   * Tell the project's standing conversation that a loosening edit is being held for the owner.
-   *
-   * WHY A MESSAGE AND NOT A JUDGMENT SESSION
-   * ----------------------------------------
-   * `coordinator-delivery.service.ts` §0's distinction, applied: this fact needs no continuity of
-   * its own, and what it needs done is not a judgment but an ERRAND — put the diff in front of the
-   * account owner. The person who can answer it is already reading the conversation this project
-   * is coordinated from; opening a second one to say so would be telling a fresh session about a
-   * question it also cannot answer.
-   *
-   * WHY IT CANNOT LOOP, AND THEREFORE CHARGES NO CONVERGENCE PASS
-   * -------------------------------------------------------------
-   * `ProjectTasksSettledProducer` composes `CoordinatorConvergenceService.authorizeWake` into its
-   * authorizer because its fact is derived from a projection that MOVES: a task set can settle,
-   * reopen and settle again, so an unbounded producer over it is a loop with a budget on it. This
-   * fact is derived from one immutable row — 0195's trigger refuses every write to a filed intent,
-   * so the id, the baseline and the digest it is keyed on can never move — and it is derived once,
-   * on the commit that wrote that row. One proposal, one key, one delivery. There is nothing here
-   * for a budget to bound, and charging one would spend a convergence pass on a card that cannot
-   * be sent twice.
-   *
-   * NOTHING HERE THROWS. The criteria edit has committed; a coordinator conversation that ended,
-   * or a project whose owner turned the coordinator off, is not a failure of that write and must
-   * not be reported as one. Every ordinary refusal comes back as an outcome and is logged; the
-   * key goes back with it, so the fact is deliverable again if it is ever derived again.
-   */
-  private async deliverHeldCriteriaEdit(
-    ownerId: string,
-    projectId: string,
-    held: HeldCriteriaEdit,
-  ): Promise<void> {
-    if (!this.deliveries) return;
-    const fact = criteriaDecisionPendingFact(projectId, {
-      intentId: held.intentId,
-      actionDigest: held.actionDigest,
-      baselineSeal: held.baselineSeal,
-      // The proposal was composed against the seal that stood inside the transaction that filed
-      // it, so it is decidable by construction. Asked through the same shape the derived read
-      // answers in, rather than hard-coded, so the fact's own predicate stays the only place that
-      // sentence is written down.
-      decidability: { decidable: true },
-    });
-    if (!fact) return;
-    try {
-      const outcome = await this.deliveries.deliver(fact, async () => {
-        const project = await this.prisma.project.findUnique({
-          where: { id: projectId },
-          select: { ownerId: true, coordinatorEnabled: true },
-        });
-        if (!project || project.ownerId !== ownerId) {
-          return { allowed: false as const, refusalCode: HELD_CRITERIA_WAKE_PROJECT_GONE };
-        }
-        if (!project.coordinatorEnabled) {
-          return { allowed: false as const, refusalCode: HELD_CRITERIA_WAKE_COORDINATOR_DISABLED };
-        }
-        return { allowed: true as const };
-      });
-      if (outcome.outcome !== 'DELIVERED') {
-        this.logger.warn(
-          `project ${projectId}: the held criteria proposal ${held.intentId} was not delivered `
-          + `to the coordinator conversation (${outcome.outcome})`,
-        );
-      }
-    } catch (e) {
-      this.logger.warn(`held criteria proposal ${held.intentId} not delivered: ${
-        (e as { message?: string })?.message ?? String(e)}`);
-    }
   }
 
   /**

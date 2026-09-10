@@ -1,12 +1,6 @@
 import { uuidToBase62 } from '@orbit/shared';
 
-import { buildEvidenceAskProtocol, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
-import type {
-  CriteriaProposalChangeEntry,
-  CriteriaProposalDiff,
-  PendingCriteriaDecisionQueue,
-} from './criteria-pending-decisions';
 
 /**
  * What a coordinator is TOLD about a committed fact — in either of the two places one can be told.
@@ -246,29 +240,20 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  *      fact is worth interrupting anybody about. It is `settledAcceptanceProtocol`'s order, said in
  *      one line rather than five: the reader already knows the tools;
  *   3. where to read the rest, because nothing else about the project is copied in here — the
- *      state is in the database, and this message is not a snapshot of it. The one exception is
- *      the evidence branch below, which carries the questions it is sending its reader to ask: no
- *      tool a coordinator can call reads that queue, so a message that named it instead would be
- *      naming a read nobody can make (`coordinator-evidence-ask.ts`);
+ *      state is in the database, and this message is not a snapshot of it;
  *   4. that this is a NOTIFICATION. Claude does not steer mid-turn, so a conversation that was
  *      running when this arrived reads it afterwards, by which time its own reads are newer than
  *      anything this message could have carried. A reader that assumed otherwise would act on a
  *      world that has moved.
  *
- * AND WHY A SECOND FACT GETS A DIFFERENT SECOND LINE
- * =================================================
+ * AND WHY THE SECOND LINE IS NOT THE SAME FOR EVERY FACT
+ * ======================================================
  * Lines 1, 3 and 4 are properties of the carrier and are the same for every fact delivered here.
  * Line 2 is not: it is the ACTION, and the merge order above is the action `CRITERION_UNLANDED`
- * calls for. `COMPLETION_EVIDENCE_REVISED` — one new revision of a task's completion evidence,
- * delivered by the evidence ledger's own door — calls for no merge. Its action is to ASK: what the
- * evidence criterion wants is a person's judgment, and `coordinator-evidence-ask.ts` says why the
- * coordinator is the one carrying the question rather than the one answering it. `ask` is the
- * pending queue as it stood when the delivery was composed; a delivery with nothing this
- * coordinator may answer passes null and the message stays what it was — the fact, and where to
- * read the rest of it.
+ * calls for. The one other fact delivered here calls for a different one.
  *
- * AND WHY THE THIRD ONE CARRIES A SNAPSHOT THE OTHERS REFUSE TO
- * ============================================================
+ * AND WHY THAT ONE CARRIES A SNAPSHOT THE MERGE CARD REFUSES TO
+ * =============================================================
  * `PROJECT_ACCEPTANCE_LANDED` — every task terminal and every stated criterion satisfied AND on
  * the default branch — is the one message here that copies project state into itself: every
  * criterion's words, its two dimensions, and the work that served it. Line 3's rule is not being
@@ -288,17 +273,18 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * the refusal and the projection rather than an absence of a guard: a reader told the field is
  * merely unauthorized spends a turn on a 403, and one told a person writes it goes looking for a
  * writer that does not exist.
+ *
+ * WHAT IS NOT DELIVERED HERE ANY MORE
+ * ===================================
+ * Until 2026-09-10 two more facts had a branch here: `COMPLETION_EVIDENCE_REVISED`, whose message
+ * told the turn to ask the account owner through `AskUserQuestion`, and
+ * `CRITERIA_DECISION_PENDING`, whose message relayed a held loosening's diff. Both were questions
+ * only the account owner may answer, so the turn that carried them could only pass them on. Both
+ * are now cards the clients draw from the pending reads, with buttons that reach the decision doors
+ * directly, and neither fact is delivered to any conversation.
  */
-export function buildCoordinatorDeliveryMessage(
-  fact: WakeFact,
-  projectTitle: string,
-  ask?: { ask: EvidenceAsk; readAt: Date } | null,
-  decisions?: PendingCriteriaDecisionQueue | null,
-): string {
+export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: string): string {
   const projectId = uuidToBase62(fact.projectId);
-  if (fact.event === 'CRITERIA_DECISION_PENDING') {
-    return buildCriteriaDecisionMessage(fact, projectTitle, projectId, decisions ?? null);
-  }
   if (fact.event === 'PROJECT_ACCEPTANCE_LANDED') {
     const criteria = settledCriteriaOf(fact);
     return (
@@ -320,18 +306,6 @@ export function buildCoordinatorDeliveryMessage(
       + '所以以你自己刚读到的库里状态为准。'
     );
   }
-  if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
-    return (
-      `【项目「${projectTitle}」有一条新的完成证据】\n\n`
-      + `${describeWakeFact(fact)}\n\n`
-      + (ask ? `${buildEvidenceAskProtocol(ask.ask, ask.readAt)}\n\n` : '')
-      + `证据自己读：task_get（taskId 传 ${uuidToBase62(fact.subjectId)}）读这个任务和它的验收标准，`
-      + `project_get（projectId 传 ${projectId}）读项目声明的标准。这条消息里除了上面那些，`
-      + '没有这个任务或这个项目的任何其他状态。\n\n'
-      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-      + '所以以你自己刚读到的库里状态为准。'
-    );
-  }
   return (
     `【项目「${projectTitle}」有干完但还没落 main 的成果】\n\n`
     + `${describeWakeFact(fact)}\n\n`
@@ -341,159 +315,5 @@ export function buildCoordinatorDeliveryMessage(
     + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
     + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
     + '所以以你自己刚读到的库里状态为准。'
-  );
-}
-
-/**
- * What one row of the diff is CALLED, in the language this conversation is held in.
- *
- * `CriteriaDecisionCard.tsx` says `reworded / dropped / added` to whoever reads the web card; this
- * says the same three things here. Both are read off the same `change` the server derived, so the
- * two surfaces cannot come to different conclusions about which rows moved — only say it in
- * different words. `SAME` never reaches this: the rows it names are the ones not rendered.
- */
-function changeLabel(change: CriteriaProposalChangeEntry['change']): string {
-  switch (change) {
-    case 'CHANGED':
-      return '被这份提案改写';
-    case 'NEW':
-      return '这份提案新增的';
-    case 'REMOVED':
-      return '被这份提案删掉';
-    case 'SAME':
-      return '';
-  }
-}
-
-/**
- * The size of the decision in one line — the tally `changeSummary` prints on the web card.
- *
- * THE UNCHANGED COUNT IS PART OF THE QUESTION, NOT A FOOTNOTE. A reader shown three rows and
- * nothing else cannot tell a proposal that reworded three criteria from one that replaced an
- * eight-criterion ruler with three, and those are not the same decision. So the count of the ones
- * left alone is always in the sentence, even at zero — where it is the loudest thing in it.
- */
-function changeSummary(diff: CriteriaProposalDiff): string {
-  if (diff.entries.length === 0) return '这次读不出它的内容';
-  const moved: string[] = [];
-  if (diff.changedCount > 0) moved.push(`改写 ${diff.changedCount} 条`);
-  if (diff.removedCount > 0) moved.push(`删掉 ${diff.removedCount} 条`);
-  if (diff.newCount > 0) moved.push(`新增 ${diff.newCount} 条`);
-  const head = moved.length === 0 ? '一条都没动' : moved.join('、');
-  return `${head}，未改动 ${diff.sameCount} 条`;
-}
-
-/**
- * The rows this proposal moves, and only those — the same fold the web card draws.
- *
- * A weakening edit restates the WHOLE collection, so laying out `proposed` puts the seven
- * criteria that came back word for word in front of a reader looking for the three that did not.
- * The words being replaced come along on a rewrite, because "changed to X" is unreadable without
- * the X it changed from, and that side is on record rather than in the proposal. A dropped
- * criterion renders from `onRecord` for the same reason: the proposal states nothing about it,
- * which is exactly what dropping it means.
- */
-function renderProposedCriteria(diff: CriteriaProposalDiff): string {
-  const moved = diff.entries.filter((entry) => entry.change !== 'SAME');
-  if (moved.length === 0) return '';
-  const rows = moved
-    .map((entry) => {
-      const words = entry.proposed ?? entry.onRecord;
-      const methodMoved = entry.changed.includes('verificationMethod');
-      return (
-        `${entry.ordinal}. ${words?.text ?? ''}（${changeLabel(entry.change)}）`
-        + (entry.change === 'CHANGED' && entry.changed.includes('text') && entry.onRecord
-          ? `\n   现在在册的是：${entry.onRecord.text}` : '')
-        + (methodMoved && entry.proposed
-          ? `\n   判定方法改成：${entry.proposed.verificationMethod ?? '（没有）'}` : '')
-        + (methodMoved && entry.onRecord
-          ? `\n   现在在册的判定方法：${entry.onRecord.verificationMethod ?? '（没有）'}` : '')
-      );
-    })
-    .join('\n');
-  return `\n会动的是下面这几条，未改动的那些不铺在这里（正文用 project_get 读）：\n${rows}`;
-}
-
-/**
- * `CRITERIA_DECISION_PENDING`'s message: a held loosening, and what the coordinator can do about it.
- *
- * WHY THIS CARD CARRIES A SNAPSHOT, LIKE THE ACCEPTANCE ONE AND UNLIKE THE OTHERS
- * ==============================================================================
- * The question is "should this diff take effect", and a question about a diff that does not carry
- * the diff is one its reader cannot pass on without going to fetch what it is being asked about —
- * and the thing it would have to fetch is not readable from the criteria tables at all, because the
- * whole point of the hold is that the proposed version was never written to them. So the proposal
- * is in the card, and the card says out loud that it is a snapshot taken at `readAt`; the criteria
- * IN FORCE stay a read, because those are on record and unchanged.
- *
- * A SNAPSHOT OF THE DIFF, WHICH IS NOT A SNAPSHOT OF THE WHOLE RULER. What has to be carried is
- * what cannot be fetched, and that is the rows this proposal MOVES — the ones it restates word for
- * word are the ones already on record, so laying them out again buys a reader nothing and costs
- * them the three that moved, in four kilobytes of prose that all looks alike. `row.diff` carries
- * both sides of every row it moves, so the card is still readable with no second fetch; the count
- * of the untouched ones goes with it, because how much of the ruler is left alone is part of the
- * question and not a detail the fold may swallow.
- *
- * WHY IT SAYS "YOU CANNOT ANSWER THIS" IN THE SAME BREATH AS "HERE IS THE DIFF"
- * ============================================================================
- * Approving a looser ruler is the account owner's through their own authenticated channel, for the
- * same reason `CONFIRM_ACCEPTANCE_CRITERIA` is: the party asking for the ruler to move must not be
- * the party that moves it, and a coordinator session is on the asking side of that line whoever
- * filed this particular proposal. A card that showed the diff without saying so would send a
- * session looking for a tool that is not there, and the honest version of "you cannot" is the
- * action it replaces — hand it to the person.
- *
- * WHEN THE SNAPSHOT SAYS THE QUESTION IS ALREADY GONE
- * ===================================================
- * The read happens at DELIVERY time and the fact was derived earlier, so a proposal can be answered,
- * displaced or stranded in between. The message then says which, rather than rendering a diff
- * nobody can act on — and it is still delivered, because "the thing you were about to be asked
- * about is already settled" is worth one line to a reader who may have been told about it by some
- * other route.
- */
-function buildCriteriaDecisionMessage(
-  fact: WakeFact,
-  projectTitle: string,
-  projectId: string,
-  queue: PendingCriteriaDecisionQueue | null,
-): string {
-  const detail = (fact.detail ?? {}) as Record<string, unknown>;
-  const intentId = String(detail.intentId ?? fact.subjectId);
-  const row = queue?.pending.find((pending) => pending.intentId === intentId) ?? null;
-  const closing = (
-    `全量状态自己读：project_get（projectId 传 ${projectId}）读这个项目此刻在册的验收标准——`
-    + '上面那份提案不在里面，这正是「被扣住」的意思。\n\n'
-    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-    + '所以以你自己刚读到的库里状态为准。'
-  );
-  if (!row) {
-    return (
-      `【项目「${projectTitle}」有一条待决的验收标准放松提案，但它已经不在待决队列里了】\n\n`
-      + `${describeWakeFact(fact)}\n\n`
-      + `${queue ? `在投递这条消息的时刻（${queue.readAt.toISOString()}）重新读了一次账本，` : ''}`
-      + `提案 ${intentId} 已经不是这个项目的待决提案了：要么已经有人答过它，`
-      + '要么它被一条更晚的提案顶掉了。这两种情况都不需要你做什么。\n\n'
-      + `${closing}`
-    );
-  }
-  const undecidable = !row.decidability.decidable;
-  return (
-    `【项目「${projectTitle}」有一条放松验收标准的提案在等账号所有者决定】\n\n`
-    + `${describeWakeFact(fact)}\n\n`
-    + `提案要动这个项目的验收标准：${changeSummary(row.diff)}`
-    + `（这是投递这条消息时读到的快照，读取时刻 ${queue!.readAt.toISOString()}）。`
-    + `${renderProposedCriteria(row.diff)}\n\n`
-    + (undecidable
-      ? '这条提案现在答不了：它是对着另一版标准集写的，而在册的标准从那以后又动过了'
-        + `（提案的基线 ${row.baselineSeal.slice(0, 16)}…，现在在册的是 `
-        + `${row.currentSeal.slice(0, 16)}…）。决定门会以 ${row.decidability.refusal} 拒掉任何决定，`
-        + '清掉它的办法只有一个：照现在在册的标准重新提一次。'
-        + '你要做的是把这件事告诉提出它的那一方，而不是替他重提。\n\n'
-      : '这一句你答不了：放松尺子只走账号所有者自己认证的通道，'
-        + '带 acting session 的调用会被服务端拒掉——提出放松的一方不能同时是批准它的一方。'
-        + '你要做的是把上面这份 diff 交给账号所有者，让他在网页上决定；'
-        + `批准会绑定当前这一版标准（${row.baselineSeal.slice(0, 16)}…），`
-        + '标准在他决定之前又动了的话，这条提案就要重提。\n\n')
-    + `${closing}`
   );
 }

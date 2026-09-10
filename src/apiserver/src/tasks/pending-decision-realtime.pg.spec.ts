@@ -219,7 +219,7 @@ test('the four writes that move a pending decision each nudge the owner’s cont
   const realtime = new RealtimeService(prisma as unknown as PrismaService, push);
   const acceptance = new ProjectAcceptanceService(prisma as unknown as PrismaService);
   const projects = new ProjectsService(
-    prisma as unknown as PrismaService, acceptance, undefined, undefined, realtime,
+    prisma as unknown as PrismaService, acceptance, undefined, realtime,
   );
   const evidence = new TaskCompletionEvidenceService(
     prisma as unknown as PrismaService, undefined, undefined, realtime,

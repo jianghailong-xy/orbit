@@ -147,51 +147,30 @@ export class CompletionInputRouter {
 
   /**
    * The evidence ledger's own door: one committed completion-evidence revision, recorded against
-   * its named consumer AND said out loud to the conversation coordinating this project.
-   *
-   * WHY THE DELIVERY IS HERE RATHER THAN AT THE CALL SITE
-   * ====================================================
-   * `route`'s third argument has been a no-op for this fact since the judgment machinery was
-   * removed on 2026-09-02: the revision was claimed, recorded and nothing happened next, which is
-   * a ledger entry nobody reads. This is that argument, wired. It is a door on this router rather
-   * than a closure in `TaskCompletionEvidenceService` because the performer belongs to this
-   * module's graph and not to a task write — the same argument the four doors below make.
+   * its named consumer and said to nobody.
    *
    * WHY THE CONSUMER IS STILL `JUDGMENT_REQUEST_DERIVER`
    * ===================================================
    * Unchanged, and deliberately: `completion-input.ts` says the label is what these rows have
-   * always said and what the CHECK still accepts, and a delivery is not a reason to rewrite the
-   * vocabulary of rows already written. What changed is that something now happens BEFORE the row
-   * reaches its terminal, not what the terminal is called.
+   * always said and what the CHECK still accepts, and how a question reaches a person is not a
+   * reason to rewrite the vocabulary of rows already written.
    *
-   * WHY A MESSAGE THAT COULD NOT BE SENT IS NOT AN ERROR HERE
-   * ========================================================
-   * `notifyStandingCoordinator` answers with a refusal code for every state of the world that has
-   * no recipient in it — no coordinator conversation, one that ended, one still holding a message
-   * it has not read. Throwing on those would release the key and re-raise at a caller whose write
-   * has already committed (`coordinator-delivery.service.ts` §3), so the fact is recorded either
-   * way and the refusal stays where it was decided.
-   *
-   * AND WHAT A PROJECT WITH NO RECIPIENT AT ALL FALLS BACK TO
-   * ========================================================
-   * The derived read that finds these questions from the rows themselves —
-   * `readPendingEvidenceJudgments`, behind `GET /api/tasks/evidence-decisions/pending`. Three
-   * states have no addressee and none of them is a discard: a project nobody has opened a
-   * coordinator conversation for, a task filed under no project (which never reaches this door at
-   * all, because the route is inside `if (committed.projectId ...)`), and a standing conversation
-   * that IS the run of the task being judged, which is told and then refused by the decision
-   * door's independence check. In all three the evidence is still a question in the shape the
-   * ledger already has, so it is still asked — of a session that may answer it — and answering it
-   * still takes it off the list. `coordinator-evidence-no-addressee.pg.spec.ts` holds all three.
-   *
-   * That is the same fallback this path chose for a card nobody answers, and for the same reason:
-   * a read recomputed from committed rows has no delivery to lose, so it cannot be in the state a
-   * failed delivery leaves. Nothing here is a second writer, and no clock is added.
+   * WHY NOTHING IS DELIVERED
+   * ========================
+   * Until 2026-09-10 this door also put the revision on the conversation coordinating the project,
+   * as a turn telling the model to ask the account owner through `AskUserQuestion` and record the
+   * answer. Only the owner's answer settles the question, so that turn could do nothing but relay
+   * it, and the relay was the slow part: measured that day, a median of 161s from submission to
+   * card and 15s from a click to the decision it stood for, and a card that died with its turn.
+   * The question is now drawn straight from the read that derives it from the rows —
+   * `readPendingEvidenceJudgments`, behind `GET /api/tasks/evidence-decisions/pending` — and
+   * answered at `POST /tasks/:taskId/evidence/decision`, the same decision door the runner's tool
+   * reaches. A read recomputed from committed rows has no delivery to lose, so nothing is re-sent
+   * and no clock is added; `decision-facts-no-coordinator-turn.pg.spec.ts` holds that this door
+   * writes no turn.
    */
   async routeCompletionEvidence(fact: WakeFact): Promise<CompletionInputRouteOutcome> {
-    return this.route(fact, 'JUDGMENT_REQUEST_DERIVER', async () => {
-      await this.disposition.notifyStandingCoordinator(fact);
-    });
+    return this.route(fact, 'JUDGMENT_REQUEST_DERIVER');
   }
 
   /**

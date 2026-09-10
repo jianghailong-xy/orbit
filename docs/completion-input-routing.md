@@ -302,3 +302,35 @@ fact any more" note at the `route(...)` call (lines 389-391):
 > written from here (`POST /tasks/:id/evidence/decision`) needs no live turn to receive it. Removing
 > this read would make a missed card permanent silence.
 
+> **Overturned on 2026-09-10 — the evidence question is a system card, and the coordinator is no
+> longer woken for it.**
+>
+> What is above is the record of A2 and is left as written; this note is the decision that replaced
+> it. The account owner's evidence-judgment card is no longer an `AskUserQuestion` a coordinator turn
+> raises. The clients draw it straight from `readPendingEvidenceJudgments`
+> (`GET /tasks/evidence-decisions/pending`), and its Confirm completion / Send back buttons post
+> `POST /tasks/:taskId/evidence/decision` with the owner's own credentials — the same
+> `TaskCompletionEvidenceService.decide` the runner's `task_evidence_decide` reaches, every check it
+> makes unchanged. `CompletionInputRouter.routeCompletionEvidence` still records
+> `COMPLETION_EVIDENCE_REVISED` against `JUDGMENT_REQUEST_DERIVER` and no longer puts anything on the
+> project's coordinator conversation; `coordinator-evidence-ask.ts` and the protocol it wrote into
+> that turn are deleted. A held loosening of the acceptance criteria went the same way: its card was
+> already drawn from `readPendingCriteriaDecisions`, and the turn that relayed it to the coordinator
+> (`CRITERIA_DECISION_PENDING`) is no longer built or delivered. Both event spellings stay in the
+> ledger's CHECK, because rows already written say them.
+>
+> **Why.** Measured on this deployment on 2026-09-10 over 49 cards: a median of 161s (p90 4130s) from
+> a submission to its card, because the card waited for the coordinator's next turn; a median of
+> 15.4s (p90 33.8s) from a click to the recorded decision, because a model was relaying the click; 53
+> decisions recorded by the agent against 7 by the owner; and a card that died with the turn that
+> raised it, sometimes lingering as a ghost. The held-criteria relay had spent four coordinator turns
+> saying only that the owner has to answer. A2's principle — one entry for one question — stands; the
+> entry kept is the system card, and the one removed is the model's.
+>
+> **What above no longer holds.** The `COMPLETION_EVIDENCE_REVISED` sentence in "Delivery and replay
+> contract"; D1's premise that the card is delivered and the pending read is its fallback — the read
+> is now the only way the question is put to anybody; D2's bounded-turn argument and its leak
+> metric, since no turn is spent on evidence at all; and the comment drafts, which describe a delivery
+> that no longer exists. `src/apiserver/src/projects/decision-facts-no-coordinator-turn.pg.spec.ts`
+> holds that neither fact writes a coordinator turn, beside a `CRITERION_UNLANDED` delivery to the
+> same conversation that does.

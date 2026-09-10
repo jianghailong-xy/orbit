@@ -23,7 +23,6 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import type { WakeFact } from './coordinator-wake';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
@@ -65,19 +64,15 @@ const noUnlandedCriteria = {
   },
 } as unknown as CriterionUnlandedProducer;
 
-/** Every fact the evidence door handed to the project's standing conversation, in order. */
-const told: WakeFact[] = [];
-
 /**
  * The terminal chooser, doubled for the same reason: `route` is called directly here, so nothing
  * below may ask whether an evidence revision deserves a judgment session — and a double that
  * throws is what says so out loud rather than quietly opening one.
  *
- * One method is not a terminal and is therefore not refused: the evidence door delivers its fact
- * to the conversation the project already has, which is a side effect of `route` rather than a
- * choice about where the fact ends. It is RECORDED here instead of performed, so this file's
- * subject stays the ledger; that the message really reaches the conversation is held against the
- * real delivery unit by `coordinator-evidence-inbox.pg.spec.ts`.
+ * It has no method the evidence door may call. Until 2026-09-10 it had one — the door also handed
+ * its fact to the conversation the project already has, and this double recorded that — and the
+ * door now tells nobody, so it asks nothing of this unit at all. That no turn is written is held
+ * against the real delivery unit by `decision-facts-no-coordinator-turn.pg.spec.ts`.
  */
 const noWakeDisposition = {
   openIfDecisive: () => {
@@ -88,10 +83,6 @@ const noWakeDisposition = {
   },
   raiseBlockerIfNeeded: () => {
     throw new Error('N7 evidence routing must not raise a blocker for its facts');
-  },
-  notifyStandingCoordinator: async (fact: WakeFact) => {
-    told.push(fact);
-    return { outcome: 'SENT' as const, sessionId: 'recorded', clientTurnId: 'recorded' };
   },
 } as unknown as WakeDispositionService;
 const suite = URL ? test : test.skip;
@@ -263,19 +254,10 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
       + 'criterion has an evaluator left to move it',
     );
 
-    // Evidence routing opens no agent judgment. It DOES tell the person's long-lived Session, once
-    // per recorded revision and never for the replay — which is asserted off the recorder above
-    // rather than off the conversation's turns, because the double is what wrote neither. The turns
-    // themselves are `coordinator-evidence-inbox.pg.spec.ts`'s subject.
+    // Evidence routing opens no agent judgment and tells the person's long-lived Session nothing:
+    // the double above has no method for it to call, so a door that still reached for one would
+    // have failed the submissions instead of recording them.
     assert.equal(await db.session.count({ where: { dispatchOrigin: 'PROJECT_COORDINATOR' } }), 0);
-    assert.deepEqual(
-      told.map((fact) => [fact.event, fact.subjectId, fact.subjectVersion.split(':')[0]]),
-      [
-        ['COMPLETION_EVIDENCE_REVISED', taskId, '1'],
-        ['COMPLETION_EVIDENCE_REVISED', taskId, '2'],
-      ],
-      'the standing conversation was not told about exactly the revisions the ledger recorded',
-    );
     assert.equal(
       await db.projectCoordinatorWake.count({ where: { projectId, event: 'PROJECT_TASKS_SETTLED' } }),
       0,

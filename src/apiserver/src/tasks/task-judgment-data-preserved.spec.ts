@@ -367,8 +367,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `CREATE OR REPLACE FUNCTION` at all, so it is not another writer of the DONE fence,
   //        and has no INSERT/UPDATE/DELETE, so no preserved row is read or written. The set only
   //        grows, so no stored event can be refused by it and it needs no backfill. Nothing reads
-  //        the new event to allow or refuse a status: it is delivered as a message, and the
-  //        decision it announces is the account owner's to make through a door of its own.
+  //        the new event to allow or refuse a status: it was only ever delivered as a message —
+  //        and since 2026-09-10 nothing builds it at all — and the decision it announces is the
+  //        account owner's to make through a door of its own.
   //   0251 gave project acceptance §6 — "a criterion the evidence's own session wrote does not
   //        count" — the fact it reads, which did not exist: a new table,
   //        `project_criteria_authorship`, one row per `(definition_id, revision)` saying which
