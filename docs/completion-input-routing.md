@@ -103,6 +103,17 @@ nicety:
    nobody, because the poll loop that would have consumed the decision (`mcp.go:1174`) died with
    the turn. A surface that looks answerable and silently isn't is worse than no surface.
 
+**Since 0252, "nothing is written anywhere" above is narrower than it reads, and the narrowing does
+not touch line 30's contract.** `approval.turn_id` records which turn raised a call, so "the turn
+that asked has ended" is now two committed rows rather than an inference; `reapApprovalsOfEndedTurns`
+(`src/apiserver/src/sessions/abandoned-approvals.ts`) is called at the boundaries that END turns —
+the turn-complete acknowledgement and the finalize drain — and leaves such a row `ABANDONED` with the
+reason on it. That is a write made BY a committed fact at the moment it commits, not a scheduler, a
+timeout, a startup sweep or a reading of elapsed time: it fires on the turn ending and never on how
+long anything has been waiting, and a row whose opener is unknown is left alone rather than guessed
+at. Consequence 2 above is the same defect it always was for the window before that boundary, and
+`SessionsService.listApprovals` is still what keeps an unanswerable card off the screen inside it.
+
 **Why (a) — release the wake on timeout so the same fact can be re-delivered — is rejected.**
 Four reasons, none of them a preference:
 

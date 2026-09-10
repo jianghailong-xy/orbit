@@ -57,6 +57,10 @@ function makeController(
         ? [{ id: 'current-work-1', targetTurnId: 'target-1', status: 'IN_FLIGHT' }]
         : [],
     },
+    // The reaper that runs at every boundary where a turn ends: a tool call whose asking turn is
+    // over can never be answered, so it stops being a question there
+    // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
+    approval: { updateMany: async () => ({ count: 0 }) },
     // Only read when the terminal message is a quota refusal; this runner reports no snapshot,
     // so the reset moment has to come from the message itself.
     runner: { findUnique: async () => ({ planUsage: null }) },

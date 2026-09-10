@@ -70,6 +70,10 @@ test('UI list and detail payloads include the same derived capabilities', async 
         titleBeforeProjectManagement: 'Dormant session',
       }),
     },
+    // The list's `pendingApprovals` is blocked tool calls plus the owner decisions each row is the
+    // surface for (`projects/owner-decision-signal.ts`). This row coordinates nothing, so the
+    // second half is empty and the capabilities below are unaffected either way.
+    project: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

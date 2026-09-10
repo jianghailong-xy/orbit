@@ -712,12 +712,21 @@ const sentLine = (text: string): SessionLine => ({
 
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
+  // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
+  // line reports what the workspace is doing, and this one is the only one you can act on.
+  //
+  // Deliberately OUTSIDE the generating gate it used to live inside. A blocked tool call keeps the
+  // turn open, so "generating" was a free ride for it; the owner decisions the server now counts
+  // here (see `owner-decision-signal.ts`) are held open by nobody, so they outlive the turn that
+  // delivered their card and sit on a PARKED conversation. Inside the gate, a real criteria
+  // decision waiting for an answer left this row reading as an idle reply preview.
+  if (live && (s.pendingApprovals ?? 0) > 0)
+    return { text: 'Waiting for approval', tone: 'approval' };
   // Outranks the generating preview below, which would otherwise echo the message back as
   // though it had been read. It has not: the runtime is still being built (see
   // sessionIsStarting). Blue, because this is progress — just not the agent's yet.
   if (live && sessionIsStarting(s)) return { text: `${startingLabel(s)}…`, tone: 'running' };
   if (live && isGenerating(s, state)) {
-    if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
     // A sub-workspace in flight: lastToolUse is already cleared (the async Workspace tool_result +
     // the parent's own system progress events), so surface it explicitly instead of falling
@@ -846,10 +855,12 @@ export function SessionTagChips({
 // wording) so the glyph and the header label always agree.
 export function statusLabel(session: any): string {
   const state = sessionRunStateOf(session);
+  // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
+  // decision is not held open by a turn, so it is still waiting once the conversation parks.
+  if ((session.pendingApprovals ?? 0) > 0) return 'Waiting for approval';
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (sessionIsStarting(session)) return startingLabel(session);
-  if (isGenerating(session, state))
-    return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
+  if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
   if (state === 'FAILED') {
     if (sessionRetryPending(session)) return 'Retrying';
@@ -870,6 +881,14 @@ export function statusLabel(session: any): string {
 export function StatusIcon({ session }: { session: any }) {
   const state = sessionRunStateOf(session);
   const fontSize = 16;
+  // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
+  // the same order on purpose: they are read together on one row.
+  if ((session.pendingApprovals ?? 0) > 0)
+    return (
+      <Tooltip title="Waiting for approval">
+        <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
+      </Tooltip>
+    );
   if (state === 'SUCCEEDED')
     return (
       <Tooltip title="Succeeded">
@@ -885,11 +904,7 @@ export function StatusIcon({ session }: { session: any }) {
       </Tooltip>
     );
   if (isGenerating(session, state)) {
-    return (session.pendingApprovals ?? 0) > 0 ? (
-      <Tooltip title="Waiting for approval">
-        <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
-      </Tooltip>
-    ) : (
+    return (
       <Tooltip title="Running">
         <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
       </Tooltip>

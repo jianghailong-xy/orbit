@@ -32,6 +32,7 @@ import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
+import { countOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import {
   approvalIdOf,
   backgroundPayloadOf,
@@ -730,7 +731,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       case ControlEventType.APPROVAL_RESOLVED:
         data = {
           approvalId: approvalIdOf(ev.payload),
-          pendingApprovals: await this.countPendingApprovals(sessionId),
+          // The clients OVERWRITE the row's count with this number, so it has to be the same total
+          // the list computes — an approval being answered must not take an unanswered owner
+          // decision dark with it.
+          pendingApprovals:
+            (await this.countPendingApprovals(sessionId))
+            + (await this.countOwnerDecisions(sessionId, meta.ownerId)),
         };
         break;
       default:
@@ -805,9 +811,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // A blocked permission keeps a session generating, so only a generating session can hold a
     // live approval — skip the count otherwise (mirrors the list endpoint). A self-driven turn
     // counts: it stays at AWAITING_INPUT while it runs, and its prompt still blocks it.
-    const pendingApprovals = isSessionGenerating(s)
-      ? await this.countPendingApprovals(sessionId)
-      : 0;
+    const pendingApprovals =
+      (isSessionGenerating(s) ? await this.countPendingApprovals(sessionId) : 0)
+      // Outside that gate on purpose: an owner decision is not held open by a turn, so it is still
+      // waiting after the conversation parks. That gap is why the badge was dark for a decision
+      // that had been sitting unanswered.
+      + (await this.countOwnerDecisions(sessionId, s.ownerId));
     return {
       id: s.id,
       taskId: s.taskId ?? null,
@@ -846,6 +855,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   private countPendingApprovals(sessionId: string): Promise<number> {
     return this.prisma.approval.count({ where: { sessionId, status: 'PENDING' } });
+  }
+
+  /** Owner decisions asked on this conversation. A count and nothing else — never a key; the
+   *  argument is in `owner-decision-signal.ts`. */
+  private async countOwnerDecisions(sessionId: string, ownerId: string): Promise<number> {
+    const bySession = await countOwnerDecisionsBySession(this.prisma, ownerId, {
+      sessionIds: [sessionId],
+    });
+    return bySession.get(sessionId) ?? 0;
   }
 
   // ── cancellation (durable, cross-replica) ───────────────────────────────

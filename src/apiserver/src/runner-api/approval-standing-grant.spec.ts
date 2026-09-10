@@ -44,6 +44,10 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
     },
     workspacePermissionRule: { findMany: async () => rules },
     modelProvider: { findFirst: async () => ({ runtime: AgentProvider.CODEX }) },
+    // Which turn raised the call, so an abandoned one is provable later
+    // (`sessions/abandoned-approvals.ts`). These fixtures have no conversation turns, so every row
+    // they create records a null opener — which the reaper reads as "unknown" and never collects.
+    conversationTurn: { findFirst: async () => null },
   } as never;
   const realtime = {
     publish: (_id: string, event: unknown) => {

@@ -840,7 +840,11 @@ export interface RunEventBatch {
   leaseOwner?: string;
 }
 
-export type ApprovalStatus = 'PENDING' | 'ALLOWED' | 'DENIED';
+/** `ABANDONED` is not a decision: it is what a call whose asking turn ended is left as, so the
+ *  record keeps the question and the reason nobody will ever answer it (apiserver
+ *  `sessions/abandoned-approvals.ts`). It carries no `decidedAt` and no decider, which is what
+ *  tells it apart from a `DENIED` somebody actually chose. */
+export type ApprovalStatus = 'PENDING' | 'ALLOWED' | 'DENIED' | 'ABANDONED';
 
 /** A tool-permission request awaiting a human allow/deny (from claude's
  *  --permission-prompt-tool, served by the orbit MCP server). */

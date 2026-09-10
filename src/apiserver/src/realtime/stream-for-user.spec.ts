@@ -41,7 +41,9 @@ type Row = {
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
 // the mock ignores `select` and returns the whole row, which satisfies both selects),
-// approval.count, and the $executeRawUnsafe that publish() fires for the cross-replica NOTIFY.
+// approval.count, project.findMany (no project is coordinated from these conversations, so the
+// owner-decision half of the count is zero), and the $executeRawUnsafe that publish() fires for
+// the cross-replica NOTIFY.
 function fakePrisma(
   rows: Record<string, Row>,
   pendingApprovals = 0,
@@ -50,6 +52,11 @@ function fakePrisma(
     $executeRawUnsafe: async () => 0,
     session: { findUnique: async ({ where }: { where: { id: string } }) => rows[where.id] ?? null },
     approval: { count: async () => pendingApprovals },
+    // `pendingApprovals` on the wire is blocked tool calls PLUS the owner decisions the
+    // conversation is the surface for (`projects/owner-decision-signal.ts`). These fixtures
+    // coordinate no project, so the second half contributes nothing and the numbers below are
+    // still statements about the first.
+    project: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 

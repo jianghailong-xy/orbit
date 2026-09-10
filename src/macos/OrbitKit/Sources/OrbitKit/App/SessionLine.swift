@@ -25,8 +25,19 @@ public struct SessionLine: Equatable, Sendable {
     /// ended before producing any reply still says what happened, so the row can't shrink to a
     /// bare title (iOS sizes its list row from its content — a missing line visibly shortens it).
     public static func make(for s: Session, live: Bool) -> SessionLine {
+        // Somebody is waiting on YOU here, which outranks everything else the row could say: every
+        // other line reports what the agent is doing, and this one is the only one you can act on.
+        //
+        // Deliberately OUTSIDE the `isGenerating` gate it used to live inside, matching the web
+        // port. A blocked tool call holds the turn open, so the gate was free for it; the owner
+        // decisions the server now folds into this count (apiserver `owner-decision-signal.ts`) are
+        // held open by nobody — the card is delivered and the turn ends underneath it — so they sit
+        // on a PARKED conversation. Inside the gate, a real criteria decision waiting for an answer
+        // left the row reading as an ordinary idle reply preview.
+        if live && (s.pendingApprovals ?? 0) > 0 {
+            return SessionLine(text: "Waiting for approval", tone: .approval)
+        }
         if live && s.isGenerating {
-            if (s.pendingApprovals ?? 0) > 0 { return SessionLine(text: "Waiting for approval", tone: .approval) }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // The agent hasn't answered yet: show the message you sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which

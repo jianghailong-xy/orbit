@@ -5,6 +5,7 @@ import { SessionsService } from './sessions.service';
 
 test('workspace counts separate queued activity from Session-list spinner work', async () => {
   const groupByCalls: any[] = [];
+  const findManyCalls: any[] = [];
   const prisma = {
     session: {
       groupBy: async (args: any) => {
@@ -23,11 +24,32 @@ test('workspace counts separate queued activity from Session-list spinner work',
               { workspaceId: 'w-subagent', _count: { _all: 1 } },
             ];
       },
-      findMany: async () => [
-        { workspaceId: 'w-running' },
-        { workspaceId: 'w-needs-you' },
-      ],
+      findMany: async (args: any) => {
+        findManyCalls.push(args);
+        // Two different questions reach this method. The first is the blocked-on-a-tool-call
+        // population; the second resolves the conversations an owner DECISION is waiting on
+        // (`projects/owner-decision-signal.ts`) to the workspaces they run in. They are told apart
+        // by what they ask for, not by call order, so adding a query elsewhere cannot silently
+        // rewire this fixture.
+        if (args?.where?.approvals) {
+          return [
+            { id: 's-running', workspaceId: 'w-running' },
+            { id: 's-needs-you', workspaceId: 'w-needs-you' },
+          ];
+        }
+        return [{ id: 's-coordinator', workspaceId: 'w-decision' }];
+      },
     },
+    // One project, coordinated from `s-coordinator`, with one filed weakening proposal that
+    // nothing has answered or displaced. No Approval row exists for it anywhere — that is the
+    // whole point of the second source.
+    project: {
+      findMany: async () => [{ id: 'p-1', coordinatorSessionId: 's-coordinator' }],
+    },
+    projectRatifiedActionIntent: {
+      findMany: async () => [{ id: 'intent-1', projectId: 'p-1', action: {} }],
+    },
+    projectRatifiedActionCommit: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -54,6 +76,20 @@ test('workspace counts separate queued activity from Session-list spinner work',
     running: 0,
     needsYou: 1,
   });
+  // The second source: a conversation with an unanswered owner decision on it and no approval row
+  // anywhere. It is neither running nor queued, so `needsYou` is the only thing this workspace has
+  // — which is exactly the state the tally used to report as nothing at all.
+  assert.deepEqual(byWorkspace.get('w-decision'), {
+    workspaceId: 'w-decision',
+    active: 0,
+    running: 0,
+    needsYou: 1,
+  });
+  // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
+  // a conversation the owner filed away does not light a workspace they are not looking at.
+  const decisionQuery = findManyCalls.find((call) => !call?.where?.approvals);
+  assert.equal(decisionQuery.where.completedAt, null);
+  assert.equal(decisionQuery.where.deletedAt, null);
 
   assert.deepEqual(groupByCalls[0].where.status.in, [RunStatus.RUNNING, RunStatus.PENDING]);
   assert.deepEqual(groupByCalls[1].where.OR, [
