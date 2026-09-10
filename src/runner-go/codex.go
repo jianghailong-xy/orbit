@@ -323,8 +323,21 @@ func isCodexImage(mime string) bool {
 // custom provider (see custom-provider.ts); codex ignores OPENAI_BASE_URL, so we translate it
 // into a `model_providers.orbit` block and select it. The key stays in the process env and codex
 // reads it via env_key. No injected base URL → built-in codex (its default provider), no overrides.
-// wire_api "chat" (=> {base_url}/chat/completions) is the compatible dialect Gemini's OpenAI
-// endpoint and generic OpenAI-compatible servers speak; native OpenAI accepts it too.
+//
+// wire_api "responses" (=> {base_url}/responses) because it is the only dialect codex still has.
+// This used to say "chat" — the Chat Completions dialect Gemini's OpenAI endpoint and generic
+// OpenAI-compatible servers speak — and codex removed it (deprecated December 2025, gone in early
+// February 2026, openai/codex discussion #7782, with no plan to bring it back). Every release on
+// this fleet refuses it at config load and exits before making a request: measured on 0.149.0
+// through 0.154.0, on exec and app-server alike, while "responses" loads and reaches
+// {base_url}/responses on every one of them — so there is no version to gate on.
+//
+// The consequence has to be said out loud rather than papered over: an endpoint that only serves
+// Chat Completions (Gemini's OpenAI-compatible one among them) cannot run on the codex runtime at
+// all, whatever this block says. With it the session no longer dies at spawn on a config error; the
+// turn fails on the endpoint's own 404 for /responses, which names the path it could not find. The
+// apiserver's connection test probes the same path, so an owner finds out when they add the key.
+// TestCodexProviderArgsLoadInTheInstalledCodex holds this to the installed engine.
 func codexProviderArgs(agentEnv map[string]string) []string {
 	base := strings.TrimSpace(agentEnv["OPENAI_BASE_URL"])
 	if base == "" {
@@ -334,7 +347,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 		"-c", fmt.Sprintf("model_providers.orbit.name=%q", "Orbit provider"),
 		"-c", fmt.Sprintf("model_providers.orbit.base_url=%q", base),
 		"-c", `model_providers.orbit.env_key="OPENAI_API_KEY"`,
-		"-c", `model_providers.orbit.wire_api="chat"`,
+		"-c", `model_providers.orbit.wire_api="responses"`,
 		"-c", `model_provider="orbit"`,
 	}
 }

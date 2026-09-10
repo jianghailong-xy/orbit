@@ -50,8 +50,9 @@ export interface ProviderPreset {
   defaultModel: string;
   /**
    * Runtime the provider borrows: `claude` for Anthropic-compatible endpoints (default),
-   * `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, …), `kimi` for
-   * Moonshot's own API — the Kimi CLI speaks it natively, so a Kimi key runs on Kimi.
+   * `codex` for endpoints that serve the OpenAI Responses API (OpenAI itself) — codex has no other
+   * dialect since it dropped Chat Completions in February 2026 — and `kimi` for Moonshot's own API,
+   * which the Kimi CLI speaks natively, so a Kimi key runs on Kimi.
    */
   runtime?: 'claude' | 'codex' | 'kimi';
   /**
@@ -132,7 +133,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'gemini-2.5-pro',
     catalog: { source: 'google', match: /^gemini-\d/ },
-    note: 'Google Gemini via its OpenAI-compatible endpoint.',
+    // Kept, not deleted: the preset is a vendor identity rows already carry, and the day Google's
+    // compatibility layer serves /responses it works again with no change here. Until then the note
+    // is the owner's warning, and the connection test (which probes /responses for codex) is what
+    // stops a key from being saved into a provider no session can use.
+    note:
+      "Google Gemini via its OpenAI-compatible endpoint. Codex needs the OpenAI Responses API, which that endpoint doesn't serve yet — so sessions on this provider can't run today.",
     brand: { mono: 'G', from: '#4285f4', to: '#9b72cb' },
     keyUrl: 'https://aistudio.google.com/apikey',
   },

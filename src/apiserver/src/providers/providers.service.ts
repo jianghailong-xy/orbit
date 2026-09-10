@@ -248,10 +248,11 @@ export class ProvidersService {
   }
 
   /**
-   * Probe a provider before it's saved: one minimal Anthropic-compatible request
-   * (POST {baseUrl}/v1/messages, max_tokens 1) with the same `Bearer` auth the claude runtime
-   * injects. Stateless — the browser passes the freshly-typed key, nothing is persisted. Never
-   * throws on a network/HTTP failure; returns a structured verdict the picker renders inline.
+   * Probe a provider before it's saved: one minimal request on the endpoint the borrowed runtime
+   * will actually call, with the same `Bearer` auth that runtime injects — POST {baseUrl}/v1/messages
+   * for claude, POST {baseUrl}/responses for codex, POST {baseUrl}/chat/completions for kimi.
+   * Stateless — the browser passes the freshly-typed key, nothing is persisted. Never throws on a
+   * network/HTTP failure; returns a structured verdict the picker renders inline.
    */
   async testConnection(dto: {
     baseUrl: string;
@@ -262,11 +263,19 @@ export class ProvidersService {
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
     if (!model) throw new BadRequestException('add a model before testing');
-    // What the endpoint speaks, not which CLI drives it: codex and kimi providers both point at
-    // an OpenAI-compatible base URL (Moonshot's own /v1 for kimi), claude providers at the
-    // Anthropic Messages API.
-    const isOpenAIDialect = dto.runtime === 'codex' || dto.runtime === 'kimi';
-    const endpoint = isOpenAIDialect ? `${base}/chat/completions` : `${base}/v1/messages`;
+    // The path the runtime's CLI will call, not merely the vendor's family: codex and kimi both
+    // point at an OpenAI-compatible base URL, but only kimi still speaks Chat Completions. Codex
+    // has nothing but the Responses API (it removed Chat Completions in February 2026, and the
+    // runner configures it with wire_api="responses"), so a codex probe that asked /chat/completions
+    // would pass an endpoint — Gemini's OpenAI-compatible one is exactly this — that every session
+    // on it then fails against.
+    const isResponses = dto.runtime === 'codex';
+    const isOpenAIDialect = isResponses || dto.runtime === 'kimi';
+    const endpoint = isResponses
+      ? `${base}/responses`
+      : isOpenAIDialect
+        ? `${base}/chat/completions`
+        : `${base}/v1/messages`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${dto.apiKey}`,
@@ -277,11 +286,10 @@ export class ProvidersService {
     // prompt. Without it Anthropic turns such a token away with a 429 whose message is the literal
     // string "Error" — so a key that drives sessions perfectly well failed the probe. Send what the
     // runtime sends, so the probe is no stricter than the session it is standing in for.
-    const body: Record<string, unknown> = {
-      model,
-      max_tokens: 1,
-      messages: [{ role: 'user', content: 'ping' }],
-    };
+    // The Responses API spells it differently and refuses a cap under 16 output tokens.
+    const body: Record<string, unknown> = isResponses
+      ? { model, input: 'ping', max_output_tokens: 16 }
+      : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
     if (!isOpenAIDialect) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
     try {
       const resp = await fetch(endpoint, {
@@ -296,7 +304,16 @@ export class ProvidersService {
         return { ok: false, status: resp.status, message: 'Invalid API key' };
       }
       if (resp.status === 404) {
-        return { ok: false, status: resp.status, message: 'Endpoint not found — check the Base URL' };
+        // For codex a 404 on /responses is usually not a typo in the URL: it is an OpenAI-compatible
+        // endpoint that only serves Chat Completions, which no current Codex can use. "Check the Base
+        // URL" would send the owner looking for a mistake they did not make.
+        return {
+          ok: false,
+          status: resp.status,
+          message: isResponses
+            ? "Endpoint doesn't serve the OpenAI Responses API — Codex needs it, so a Chat Completions-only endpoint can't run on Codex"
+            : 'Endpoint not found — check the Base URL',
+        };
       }
       // Keep the status next to the vendor's own words: a body can carry a message as unhelpful as
       // "Error", and alone it reads like the form itself broke rather than the endpoint answering.
