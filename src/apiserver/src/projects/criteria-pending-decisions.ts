@@ -55,10 +55,10 @@ import {
 /**
  * The two refusals a decision on a pending proposal can meet, in the door's spelling.
  *
- * Stated HERE, in the read, and not in the door — because the read is what exists first and the
- * door (`criteria-decision-door.pg.spec.ts`, a sibling task) is to import these rather than spell
- * its own. One rule, one spelling: a queue that promises a decision the door refuses, or refuses
- * one the door would take, is the drift both of them exist to keep out.
+ * Stated HERE, in the read, and not in the door — because the read is what exists first, and
+ * `ProjectsService.decideCriteriaChange` imports these rather than spelling its own. One rule, one
+ * spelling: a queue that promises a decision the door refuses, or refuses one the door would take,
+ * is the drift both of them exist to keep out.
  */
 export const CRITERIA_DECISION_BASE_SEAL_MOVED = 'PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED';
 export const CRITERIA_DECISION_ALREADY_SETTLED = 'PROJECT_CRITERIA_DECISION_ALREADY_SETTLED';
@@ -759,28 +759,44 @@ export function criteriaDecisionRecorded(intentAlias: string): Prisma.Sql {
 /**
  * Which of these proposals have been answered — THE one place that sentence is defined.
  *
- * Today that is `project_ratified_action_commit`, whose primary key IS the intent id, so a proposal
- * carries at most one and the database rather than this function is what makes "answered twice"
- * impossible.
+ * TWO LANDINGS, ONE SENTENCE, and neither is a superset of the other:
  *
- * IT IS INCOMPLETE, AND THE INCOMPLETENESS IS NAMED RATHER THAN HIDDEN. A REJECT has nowhere to
- * land on 0195's tables: the commit row expresses "this was committed" and nothing expresses "this
- * was turned down", so a rejected proposal would come back from this read as still pending. The
- * decision door's own table (`project_criteria_decision`, `docs/criteria-seal-design.md` §3.4)
- * is where that half lands, and it is in this tree now — this function is the single line that has
- * to learn about it, which is why the predicate is a function at all rather than a clause inlined
- * above. `criteriaDecisionRecorded` above is that same row as SQL, and is what the write path
- * already asks; the two say one thing the day this reads it too.
+ *   * `project_criteria_decision` is the decision door's own row, and it is where BOTH outcomes of
+ *     an answer land. Its primary key IS the intent id, so a proposal carries at most one and the
+ *     database rather than this function is what makes "answered twice" impossible. `decision` is
+ *     deliberately NOT read: APPROVE and REJECT are one predicate here, because a proposal that was
+ *     turned down is as answered as one that was applied. Splitting them would put a rejected
+ *     proposal back on the owner's card as a question they have already answered — which is the
+ *     hole this function was written around and no longer has, now that the door exists.
+ *   * `project_ratified_action_commit` is 0195's own landing, written by the generic two-phase
+ *     machine — and by this door beside the decision, for an APPROVE. A proposal committed through
+ *     that machine rather than through this door has no decision row, so this half is not
+ *     redundant: dropping it would make a committed proposal a question again.
+ *
+ * Two primary-key reads over the ids this caller already holds rather than one join, so the union
+ * is computed where both halves are visible instead of on the wrong side of an outer join.
+ *
+ * `criteriaDecisionRecorded` above is the decision half as SQL, for the write path that has to ask
+ * it inside a query it is already running; this is that same sentence for the caller that holds the
+ * rows. The two are one rule stated twice in the one file that defines it.
  */
 async function settledIntentIds(
   tx: Prisma.TransactionClient,
   intentIds: readonly string[],
 ): Promise<Set<string>> {
-  const commits = await tx.projectRatifiedActionCommit.findMany({
-    where: { intentId: { in: [...intentIds] } },
+  const ids = [...intentIds];
+  const decisions = await tx.projectCriteriaDecision.findMany({
+    where: { intentId: { in: ids } },
     select: { intentId: true },
   });
-  return new Set(commits.map((commit) => commit.intentId));
+  const commits = await tx.projectRatifiedActionCommit.findMany({
+    where: { intentId: { in: ids } },
+    select: { intentId: true },
+  });
+  return new Set([
+    ...decisions.map((decision) => decision.intentId),
+    ...commits.map((commit) => commit.intentId),
+  ]);
 }
 
 /**
