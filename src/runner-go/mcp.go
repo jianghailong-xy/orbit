@@ -1989,7 +1989,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"revise what it is trying to achieve (goal), what would settle that the goal was " +
 				"reached (acceptanceCriteriaItems) or how the work is to be done (instructions), and " +
 				"cancel or reopen work. You have authority to write these configuration fields. " +
-				"Sending acceptanceCriteriaItems replaces the criteria in force immediately: it is " +
+				"Sending acceptanceCriteriaItems is judged by its direction before it is written: an " +
+				"edit that plainly tightens the ruler replaces the criteria in force immediately, and " +
+				"an edit that drops a criterion or whose direction cannot be read is NOT applied — " +
+				"it is held as a proposal for the account owner to decide. Which one you got is on the " +
+				"response: acceptanceCriteriaHold means held, and the criteria in that same body are " +
+				"the ones still in force, so go on being judged against them. The set is " +
 				"the standard this project is judged by, so read project_get first and send the " +
 				"complete set you mean. " +
 				"Existing legacy acceptanceCriteria text remains readable through project_get and " +

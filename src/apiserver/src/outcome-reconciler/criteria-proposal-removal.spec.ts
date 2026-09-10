@@ -297,20 +297,67 @@ test('the acceptance-criteria capability set carries no propose and no confirm',
 });
 
 /**
- * Copy that would be a lie after this change.
+ * Copy that would be a lie about what a criteria write does.
  *
- * A tool description saying "this is a proposal, nothing changes until the owner approves it" in
- * front of a write that lands immediately is worse than no description: a model reads it, reports
- * the criteria as unchanged, and keeps working to a standard that has already moved.
+ * WHAT THIS SCAN GUARDED WHEN 0223 WROTE IT, AND WHY ITS SHAPE HAD TO CHANGE
+ * -------------------------------------------------------------------------
+ * 0223 left a write with exactly ONE outcome — the set you send is in force when the call returns
+ * — so copy in front of it saying "this is a proposal, nothing changes until the owner approves
+ * it" was false with no qualification, and banning that vocabulary outright was the same act as
+ * banning the lie. That is no longer the world. `classifyCriteriaEdit` gives the write TWO
+ * outcomes: an edit that plainly tightens the ruler is applied where it is made, and an edit that
+ * drops a criterion or whose direction cannot be read is HELD as a proposal the account owner
+ * decides — `acceptanceCriteriaHold` on the response, one `project_ratified_action_intent` row,
+ * `decideCriteriaChange` behind the owner's own credential and the proposal's one-time key. A held
+ * proposal is a real thing with a card, a row in the rail and a door, so a surface that uses the
+ * word is not lying, and a scan that banned the word was catching the noun instead of the claim.
+ *
+ * WHAT THE LIE ACTUALLY IS, AND THAT IT NOW POINTS BOTH WAYS
+ * ---------------------------------------------------------
+ * Stating ONE of the two outcomes as THE outcome. The harm is the one this file was opened for and
+ * it is symmetric — a model that believes the wrong branch happened works to the wrong ruler:
+ *
+ *   "this is a proposal, nothing changes until the owner approves it" is false for a tightening
+ *   edit, which landed: the model reports the criteria unchanged and keeps to a ruler that moved.
+ *
+ *   "sending acceptanceCriteriaItems replaces the criteria in force immediately" is false for a
+ *   weakening edit, which was held: the model reports the criteria moved and keeps to a ruler that
+ *   did not. On today's data that is the COMMON case, not the corner — `verificationMethod` is
+ *   required free prose, every rewrite of it is undecidable, and every undecidable edit is
+ *   `WEAKENING`.
+ *
+ * So the ban is on the CLAIM. `NEVER_TRUE` is the half no wording can rescue: names and behaviours
+ * that belong to no branch at all. `ONE_BRANCH_AS_THE_OUTCOME` is the half that is a lie only
+ * while it stands alone, and a line that names the fork has told its reader there are two answers,
+ * which is the whole of what this scan wants — so `NAMES_THE_FORK` clears it. That redemption is a
+ * word list rather than a parse on purpose: it only ever runs on a line that already made one of
+ * these claims, so the way it can be wrong is a lie smuggled past on a line that also says
+ * "tightening", which is a sentence somebody had to write deliberately.
+ *
+ * `/\bPROPOSAL\b/` was the pattern that failed on the day the hold came back — it caught
+ * `DecisionRail.tsx`'s heading over the rail's second row type, which describes today's mechanism
+ * accurately — and it is gone rather than reworded. A census that bans a word teaches the next
+ * author to pick a synonym, and the synonym is just as capable of stating one branch as the whole.
  */
-const LYING_COPY = [
-  /\bPROPOSAL\b/,
-  /you are PROPOSING/i,
+const NEVER_TRUE = [
+  // The removed channel's wire field. Today's is `acceptanceCriteriaHold`, named that way in
+  // `projects.service.ts` precisely so this scan can tell the two apart.
   /acceptanceCriteriaProposal/,
+  // `acceptanceCriteriaItems: []` is a clear, in both branches, and always was after 0223.
+  /\[\] is refused/,
+];
+
+const ONE_BRANCH_AS_THE_OUTCOME = [
+  /you are PROPOSING/i,
   /records? (?:one|a) proposal for the account owner/i,
   /nothing changes until (?:they|the owner)/i,
   /until the (?:account )?owner (?:approves|answers) it/i,
-  /\[\] is refused/,
+  // The mirrored claim, and the one a door actually got wrong: after the hold came back, saying a
+  // criteria write takes effect on its own is the same category of lie as saying it never does.
+  /in force immediately/i,
+  /lands? immediately/i,
+  /takes? effect immediately/i,
+  /applied immediately/i,
   // The same claim in Chinese: the web app's own copy is Chinese, and an English-only scan would
   // have missed the one sentence on the acceptance review page that said the ruler moved by
   // proposal and owner confirmation. Scoped to lines that are about the standard, because
@@ -318,6 +365,9 @@ const LYING_COPY = [
   /标准[^\n]{0,40}(?:提议|批准|卡片上确认)/,
   /(?:提议|批准)[^\n]{0,40}标准/,
 ];
+
+/** A line saying this has named the fork, so the claim on it is conditional rather than whole. */
+const NAMES_THE_FORK = /tighten|weaken|held|hold|收紧|削弱|扣下/i;
 
 test('CLI, MCP and web copy about acceptance criteria matches what a write now does', () => {
   const surfaces: Array<[string, string]> = [
@@ -333,28 +383,52 @@ test('CLI, MCP and web copy about acceptance criteria matches what a write now d
   const offenders: string[] = [];
   for (const [rel, text] of surfaces) {
     text.split('\n').forEach((line, index) => {
-      for (const phrase of LYING_COPY) {
-        if (phrase.test(line)) offenders.push(`${rel}:${index + 1}: ${line.trim()}`);
+      const at = `${rel}:${index + 1}: ${line.trim()}`;
+      for (const phrase of NEVER_TRUE) {
+        if (phrase.test(line)) offenders.push(at);
+      }
+      if (NAMES_THE_FORK.test(line)) return;
+      for (const phrase of ONE_BRANCH_AS_THE_OUTCOME) {
+        if (phrase.test(line)) offenders.push(at);
       }
     });
   }
   assert.deepEqual(offenders, [],
-    'a surface still tells its caller that acceptance criteria are a proposal the owner must '
-      + 'approve, while the write lands immediately');
+    'a surface states one of the two outcomes of a criteria write as if it were the only one: '
+      + 'an edit that plainly tightens the ruler lands where it is made, and one that does not is '
+      + 'held for the account owner, and copy that names either alone sends a model to the wrong '
+      + 'ruler');
 });
 
 test('CLI and MCP say what the write does rather than merely not lying about it', () => {
   // Silence would pass the scan above and still leave a caller guessing. Both doors state the
-  // semantics they actually have: the set you send replaces the one in force.
+  // semantics they actually have, and since the hold came back that is two statements rather than
+  // one: what the set means, and which of the two outcomes a caller's own edit got.
   const mcp = read('src/runner-go/mcp.go');
   const property = mcp.slice(mcp.indexOf('projectCriteriaUpdateProp'));
   assert.match(property.slice(0, property.indexOf('items')), /whole structured replacement/i,
     'the MCP acceptanceCriteriaItems property must say the set is replaced');
-  assert.match(mcp, /Sending acceptanceCriteriaItems replaces the criteria in force immediately/,
-    'the MCP project_update description must say the write lands immediately');
   const cli = read('src/runner-go/project_cli.go');
   assert.match(cli, /whole-collection replacement/i, 'the CLI help must say the set is replaced');
   assert.match(cli, /\[\] clears the collection/, 'the CLI help must document the clear again');
+  // Both branches, named at both doors, in the copy about THIS write rather than anywhere in the
+  // file: `held` is an ordinary enough word that a whole-file match would be satisfied by a
+  // sentence about something else. `acceptanceCriteriaHold` is required by name because prose
+  // about a fork with nothing to look at leaves a caller unable to tell which side it landed on.
+  const mcpUpdate = mcp.slice(mcp.indexOf('"name": "project_update"'));
+  const cliHelp = cli.slice(cli.indexOf('Structured acceptance is a whole-collection replacement'));
+  const cliEntry = cli.slice(cli.indexOf('{Tool: "project_update"'));
+  const doors: Array<[string, string]> = [
+    ['the MCP project_update description', mcpUpdate.slice(0, mcpUpdate.indexOf('"inputSchema"'))],
+    ['the CLI project update help', cliHelp.slice(0, cliHelp.indexOf('Status is an ordinary'))],
+    ['the CLI project_update catalogue entry', cliEntry.slice(0, cliEntry.indexOf('Mutates:'))],
+  ];
+  for (const [door, copy] of doors) {
+    assert.match(copy, /tighten/i, `${door} must say which edits land where they are made`);
+    assert.match(copy, /\bheld\b/i, `${door} must say the other edits are held, not applied`);
+    assert.match(copy, /acceptanceCriteriaHold/,
+      `${door} must name the field that tells a caller which of the two it got`);
+  }
 });
 
 test('0223 is subtraction: it only takes machinery away', () => {
