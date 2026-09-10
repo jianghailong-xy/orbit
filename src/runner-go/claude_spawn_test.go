@@ -261,3 +261,53 @@ func userFrameText(t *testing.T, frame map[string]interface{}) string {
 	t.Fatalf("no text block in user frame %v", frame)
 	return ""
 }
+
+// settingsFileFrom reads back the settings file a spawn's argv points at, or nil when the
+// spawn passed none. The file is the whole of Orbit's say over what the engine's own
+// configuration is, so tests read it rather than the map that built it.
+func settingsFileFrom(t *testing.T, args []string) map[string]interface{} {
+	t.Helper()
+	for i, arg := range args {
+		if arg != "--settings" || i+1 >= len(args) {
+			continue
+		}
+		data, err := os.ReadFile(args[i+1])
+		if err != nil {
+			t.Fatalf("reading the settings file at %q: %v", args[i+1], err)
+		}
+		var settings map[string]interface{}
+		if err := json.Unmarshal(data, &settings); err != nil {
+			t.Fatalf("the settings file is not JSON: %v", err)
+		}
+		return settings
+	}
+	return nil
+}
+
+// A fast-mode session asks for it in the settings file, because the CLI has no flag for it
+// and refuses the setting outright in a headless session unless the flag-settings layer —
+// this file — is the one asking. TestRealClaudeFastModeSettingReachesTheAPIRequests holds
+// that claim to the requests a real engine makes.
+func TestClaudeCommandArgsAskForFastModeInTheSettingsFile(t *testing.T) {
+	job := claudeSpawnJob(t)
+	job.Agent.FastMode = true
+	settings := settingsFileFrom(t, claudeCommandArgs(job, t.TempDir(), true))
+	if settings == nil {
+		t.Fatalf("a fast-mode spawn passed no --settings at all, so nothing asked for it")
+	}
+	if settings["fastMode"] != true {
+		t.Errorf("settings %v carry fastMode %v, want true", settings, settings["fastMode"])
+	}
+}
+
+// Off is the engine's own default, so Orbit says nothing rather than saying false: a key
+// here is a second place claiming to decide it, and one that would go stale on its own.
+func TestClaudeCommandArgsLeaveFastModeUnsaidWhenItIsOff(t *testing.T) {
+	settings := settingsFileFrom(t, claudeCommandArgs(claudeSpawnJob(t), t.TempDir(), true))
+	if settings == nil {
+		return // no settings file at all says nothing about fast mode, which is the point
+	}
+	if _, said := settings["fastMode"]; said {
+		t.Errorf("settings %v mention fastMode, want the key absent when the session is not in it", settings)
+	}
+}

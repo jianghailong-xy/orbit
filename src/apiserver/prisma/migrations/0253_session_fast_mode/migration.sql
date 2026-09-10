@@ -1,0 +1,14 @@
+-- Whether a session runs in Claude Code's fast lane.
+--
+-- Not a flag: the CLI has no `--fast`, it reads `fastMode` out of the settings file the runner
+-- writes for the session (runner-go/claude_spawn.go), and it reads it once, when the process
+-- starts. So this column is what the NEXT process is built from, and changing it queues a
+-- `reload` rather than the `setconfig` a model / permission mode / effort change queues.
+--
+-- NOT NULL DEFAULT false rather than a nullable column: off is the engine's own default, so
+-- unlike `effort` there is no "inherit from the workspace" state to spell, and false says
+-- exactly what an absent setting would. A constant, non-volatile default also means PG writes
+-- only pg_attribute.attmissingval and never rewrites the heap, so every existing session reads
+-- as `false` the moment this commits — there is nothing to backfill, and a replica still
+-- running the previous release can INSERT without naming the column.
+ALTER TABLE "session" ADD COLUMN "fast_mode" BOOLEAN NOT NULL DEFAULT false;

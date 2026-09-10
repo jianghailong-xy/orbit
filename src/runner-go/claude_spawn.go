@@ -98,14 +98,14 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		// (ensureClaudeTranscript) before we get here, so --resume has something to resume.
 		args = append(args, "--resume", job.SessionUUID)
 	}
-	// Route the agent's background work to the runner. The settings file is
-	// session-private (never the user's own ~/.claude/settings.json — this same
-	// machine's interactive claude reads that one), and the hook it installs is
-	// the only way to refuse Bash *with run_in_background* while leaving Bash
-	// itself alone. It fails open: a settings file we could not write, or an exe
-	// we could not resolve, leaves the engine's own background shells working
-	// exactly as before.
-	if path, err := writeClaudeSettings(scratchDir, orbitExe); err == nil && path != "" {
+	// Route the agent's background work to the runner, and say whether this session runs
+	// in Claude Code's fast lane. The settings file is session-private (never the user's
+	// own ~/.claude/settings.json — this same machine's interactive claude reads that
+	// one), and the hook it installs is the only way to refuse Bash *with
+	// run_in_background* while leaving Bash itself alone. It fails open: a settings file
+	// we could not write, or an exe we could not resolve, leaves the engine's own
+	// background shells working exactly as before.
+	if path, err := writeClaudeSettings(scratchDir, orbitExe, a.FastMode); err == nil && path != "" {
 		args = append(args, "--settings", path)
 	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
@@ -119,22 +119,43 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	return args
 }
 
-// writeClaudeSettings writes this session's private settings file — the
-// PreToolUse hooks that send background work to the runner — and returns its
-// path. Two matchers, for the two halves of one story: the launch door, and the
-// readers that would be asked about a job this CLI has never heard of.
-func writeClaudeSettings(scratchDir, orbitExe string) (string, error) {
-	if scratchDir == "" || orbitExe == "" {
+// writeClaudeSettings writes this session's private settings file — the PreToolUse hooks
+// that send background work to the runner, and the session's fast-mode opt-in — and
+// returns its path, or "" when there is nothing to say.
+//
+// Two hook matchers, for the two halves of one story: the launch door, and the readers
+// that would be asked about a job this CLI has never heard of.
+//
+// `fastMode` is here rather than in argv because the CLI has no flag for it: `/fast` is a
+// settings key, and in a headless (SDK) session it is refused outright unless the FLAG
+// settings layer — this file — asks for it. Measured on 2.1.260 against a recording proxy:
+// with it, every request carries `speed: "fast"` and the `fast-mode-2026-02-01` beta;
+// without it the engine logs "Fast mode is not available in the Agent SDK" and sends
+// neither. The same measurement is why nothing sends this as a control frame: an
+// apply_flag_settings carrying fastMode is answered `success` and changes nothing, because
+// the SDK opt-in is settled when the process starts. So a session that changes it gets a
+// re-spawn (session.go's `reload`), like a provider switch and unlike an effort change.
+func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, error) {
+	if scratchDir == "" {
 		return "", nil
 	}
-	guard := []map[string]interface{}{{"type": "command", "command": orbitExe + " hook bg-guard"}}
-	settings := map[string]interface{}{
-		"hooks": map[string]interface{}{
+	settings := map[string]interface{}{}
+	if orbitExe != "" {
+		guard := []map[string]interface{}{{"type": "command", "command": orbitExe + " hook bg-guard"}}
+		settings["hooks"] = map[string]interface{}{
 			"PreToolUse": []map[string]interface{}{
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
 			},
-		},
+		}
+	}
+	// Written only when it is on. `false` is the engine's own default, and a key that says
+	// so would be a second place claiming to decide it.
+	if fastMode {
+		settings["fastMode"] = true
+	}
+	if len(settings) == 0 {
+		return "", nil
 	}
 	b, err := json.Marshal(settings)
 	if err != nil {

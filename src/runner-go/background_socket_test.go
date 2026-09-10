@@ -314,7 +314,7 @@ func TestBgGuardHookDecisions(t *testing.T) {
 // The hook only exists in a spawn if the settings file is written and passed.
 func TestClaudeSpawnInstallsTheBackgroundGuardHook(t *testing.T) {
 	scratch := t.TempDir()
-	path, err := writeClaudeSettings(scratch, "/usr/local/bin/orbit")
+	path, err := writeClaudeSettings(scratch, "/usr/local/bin/orbit", false)
 	if err != nil {
 		t.Fatalf("settings not written: %v", err)
 	}

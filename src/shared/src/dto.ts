@@ -96,6 +96,9 @@ export interface AgentExecConfig {
   permissionMode: PermissionMode;
   /** Provider reasoning effort/variant. Valid levels depend on the runtime model. */
   effort?: string;
+  /** Claude Code's fast lane (`/fast`). Spawn-only — the engine reads it from the settings file
+   *  the runner writes and never re-reads it — so it moves on a `reload`, never a `setconfig`. */
+  fastMode?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
@@ -922,11 +925,15 @@ export interface ApprovalDecisionResponse {
 }
 
 // 'reload' carries no user text: it tells the runner the session's model /
-// permission-mode / effort / provider changed, so it should re-spawn claude with --resume
-// + the new flags (full context preserved). The new config rides in the turn's `content`
-// JSON. It is reserved for the SPAWN-ONLY half of a config change — a provider is a
+// permission-mode / effort / fast mode / provider changed, so it should re-spawn claude with
+// --resume + the new flags (full context preserved). The new config rides in the turn's
+// `content` JSON. It is reserved for the SPAWN-ONLY half of a config change — a provider is a
 // process-construction fact (its environment), so the only way to apply one is to build a
-// new process.
+// new process, and fast mode is the same fact in a different place: the engine reads
+// `fastMode` out of the settings file the spawn writes and never reads it again, so a frame
+// asking for it is answered `success` and changes nothing (measured in
+// runner-go/claude_fastmode_requestbody_test.go). Like `effort` it is present only when the
+// PATCH moved it.
 // 'setconfig' is the other half: model, permission mode and reasoning effort are things a
 // resident engine can be told, so this asks the runner to say them over the live session
 // instead of tearing it down. Same payload shape, minus the spawn-only fields — and its

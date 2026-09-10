@@ -43,6 +43,44 @@ export function isRetiredModel(
   return !offered.some((row) => row && row.value === id);
 }
 
+/**
+ * The Claude models that have a fast lane at all.
+ *
+ * Claude Code's own gate, copied: it allows fast mode on a model whose capability list carries
+ * `fast_mode` and refuses it on every other one ("<model> is not in your organization's allowed
+ * models"), and as of CLI 2.1.260 that is Opus 5 and Opus 4.8. Same shape and the same long-term
+ * caveat as AUTO_CAPABLE_CLAUDE_MODELS: the answer belongs to the CLI that runs the model, so a
+ * static table here goes stale a release before anyone notices, and the fix is the same one —
+ * have the runner report it in the heartbeat catalogue beside the reasoning levels.
+ */
+export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
+  'claude-opus-5',
+  'claude-opus-4-8',
+]);
+
+/**
+ * Whether fast mode — Claude Code's `/fast`, faster output from the same Opus, drawn from usage
+ * credits — is something this runtime and model actually have.
+ *
+ * Claude only: it is an Anthropic-first-party lane, and the CLI refuses it outright on Bedrock,
+ * Vertex and anything else that is not the Anthropic API. Within Claude it is per-model, so an
+ * unavailable answer is what keeps a session that switched to Sonnet from carrying a setting the
+ * engine will silently drop.
+ *
+ * `runtime` is the built-in runtime that executes the session, not the persisted provider slug —
+ * resolve a configured slug to its runtime first, exactly as `autoAvailable` asks.
+ *
+ * A configured (BYOK) provider is NOT exempted the way it is for Auto, and the difference is
+ * deliberate: Auto is a permission mode the CLI decides for itself, while fast mode is a lane
+ * Anthropic bills for on a first-party account. A borrowed runtime pointed at somebody else's
+ * endpoint has no such account, so offering the toggle there would promise something no engine
+ * can deliver.
+ */
+export function fastModeAvailable(runtime: string, model: string): boolean {
+  if (runtime !== AgentProvider.CLAUDE) return false;
+  return FAST_MODE_CAPABLE_CLAUDE_MODELS.has(model);
+}
+
 /** Resolve the model to run for a provider, guarding against a cross-provider mismatch.
  *
  *  A per-session or Runtime-derived value normally wins, but a model whose id clearly belongs to a

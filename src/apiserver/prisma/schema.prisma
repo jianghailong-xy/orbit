@@ -968,6 +968,11 @@ model Session {
   // Claude effort level (low|medium|high|xhigh|max); null omits --effort so claude
   // uses the model's default.
   effort               String?
+  // Whether this session runs in Claude Code's fast lane (`/fast` interactively). Not a flag
+  // and not nullable like effort: the CLI has no --fast, it reads `fastMode` out of the
+  // settings file the spawn writes, and off is its own default — so there is no "inherit"
+  // state to spell here and false says exactly what an absent key would.
+  fastMode             Boolean   @default(false) @map("fast_mode")
   // Legacy internal provenance. Current clients use one Active list rather than splitting
   // out System; task-linked runs are always "user" for compatibility with older clients.
   source               String    @default("user")

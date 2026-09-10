@@ -812,3 +812,60 @@ func TestSessionClearsEffortWithANullLevel(t *testing.T) {
 		t.Errorf("the claim still carries effort %q, want it empty so the next spawn drops --effort", got)
 	}
 }
+
+// reloadTurn is the control plane telling the runner that a setting has changed which the
+// process it is running cannot be told about, so that process has to be replaced.
+func reloadTurn(id, content string) scriptedTurn {
+	return scriptedTurn{turn: RunInboxResponse{TurnID: id, Kind: "reload", Content: content}}
+}
+
+// Fast mode is the one Claude setting that still costs the session its process.
+//
+// Not an oversight and not a missing frame: `/fast` is a settings key, not a flag, and the
+// CLI decides once at startup whether a headless session may have it — an
+// apply_flag_settings carrying `fastMode` is answered `success` and changes nothing at all
+// (measured in claude_fastmode_requestbody_test.go, which is also where the positive half
+// is held to the API requests a real engine makes). So the control plane sends this one as
+// a `reload`, and what this pins is that the runner then rebuilds with it: the value has to
+// reach job.Agent, because the process that carries it is the one the re-spawn creates.
+//
+// Paired with a reload that says nothing about fast mode, which must leave it alone while
+// still landing the field it does carry — the same "absent means not stated" the other
+// reload fields have, and the difference between a runner that read the payload and one
+// that turned fast mode on for every restart.
+func TestSessionRebuildsTheEngineForAFastModeChange(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		content      string
+		wantFastMode bool
+		wantModel    string
+	}{
+		{
+			name:         "the reload turns fast mode on",
+			content:      `{"fastMode":true}`,
+			wantFastMode: true,
+			wantModel:    "claude-opus-5",
+		},
+		{
+			name:         "a reload that does not mention it leaves it alone",
+			content:      `{"model":"claude-haiku-4-5"}`,
+			wantFastMode: false,
+			wantModel:    "claude-haiku-4-5",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run := runDeliverySession(t, []fakeStep{{Await: "user"}},
+				[]scriptedTurn{reloadTurn("reload-1", tc.content)}, nil)
+
+			if !run.reload {
+				t.Fatalf("the run did not ask for a re-spawn, so the new settings file is never written")
+			}
+			if got := run.job.Agent.FastMode; got != tc.wantFastMode {
+				t.Errorf("the claim carries fast mode %v, want %v — the re-spawn builds its settings file from this", got, tc.wantFastMode)
+			}
+			if got := run.job.Agent.Model; got != tc.wantModel {
+				t.Errorf("the claim carries model %q, want %q", got, tc.wantModel)
+			}
+		})
+	}
+}

@@ -522,17 +522,21 @@ type RunnerAgent struct {
 }
 
 type AgentExecConfig struct {
-	Provider           string                 `json:"provider,omitempty"`
-	Model              string                 `json:"model"`
-	AppendSystemPrompt string                 `json:"appendSystemPrompt"`
-	SystemPrompt       string                 `json:"systemPrompt"`
-	AllowedTools       []string               `json:"allowedTools"`
-	DisallowedTools    []string               `json:"disallowedTools"`
-	PermissionMode     string                 `json:"permissionMode"`
-	Effort             string                 `json:"effort"`
-	MaxTurns           *int                   `json:"maxTurns"`
-	MaxBudgetUsd       *float64               `json:"maxBudgetUsd"`
-	McpConfig          map[string]interface{} `json:"mcpConfig"`
+	Provider           string   `json:"provider,omitempty"`
+	Model              string   `json:"model"`
+	AppendSystemPrompt string   `json:"appendSystemPrompt"`
+	SystemPrompt       string   `json:"systemPrompt"`
+	AllowedTools       []string `json:"allowedTools"`
+	DisallowedTools    []string `json:"disallowedTools"`
+	PermissionMode     string   `json:"permissionMode"`
+	Effort             string   `json:"effort"`
+	// FastMode asks Claude Code for its fast lane — the same thing `/fast` turns on
+	// interactively. Unlike Effort it is not a flag: it is a settings key, and one the
+	// engine reads once at startup (claude_spawn.go), so it moves only across a re-spawn.
+	FastMode     bool                   `json:"fastMode"`
+	MaxTurns     *int                   `json:"maxTurns"`
+	MaxBudgetUsd *float64               `json:"maxBudgetUsd"`
+	McpConfig    map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }

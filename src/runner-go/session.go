@@ -1904,15 +1904,21 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				procCancel() // kill claude; the main loop returns reload=true to re-spawn
 				return
 			case "reload":
-				// Model / permission-mode / effort / provider changed, and this session gets the
-				// change by being rebuilt. --model, --permission-mode and --effort are spawn
-				// flags, so we apply the new values to job.Agent and tear claude down; the outer
-				// loop re-spawns with --resume + the new flags (full context preserved).
-				// Only the changed fields are carried, so an untouched field keeps its
-				// running value. Effort is a *string so present-but-empty can clear it
+				// Model / permission-mode / effort / fast mode / provider changed, and this
+				// session gets the change by being rebuilt. --model, --permission-mode and
+				// --effort are spawn flags, so we apply the new values to job.Agent and tear
+				// claude down; the outer loop re-spawns with --resume + the new flags (full
+				// context preserved). Only the changed fields are carried, so an untouched field
+				// keeps its running value. Effort is a *string so present-but-empty can clear it
 				// back to the model default (drop --effort) — "" that model/mode can't.
 				// A provider switch arrives as a new environment, applied the same way:
 				// the process it belongs to is the one this re-spawn creates.
+				//
+				// Fast mode is a *bool for the same reason effort is a *string — absent means
+				// "not stated" — and it is here rather than in `setconfig` because it is not a
+				// flag at all: it is a key in the settings file the spawn writes, read once when
+				// the process starts (writeClaudeSettings). A claude session changing it
+				// therefore needs the re-spawn that model, mode and effort no longer do.
 				//
 				// Still the only path for the runtimes with no control channel (codex, kimi and
 				// opencode reload for every field), and for a provider switch, which really does
@@ -1922,6 +1928,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					Model          string  `json:"model"`
 					PermissionMode string  `json:"permissionMode"`
 					Effort         *string `json:"effort"`
+					FastMode       *bool   `json:"fastMode"`
 				}
 				if json.Unmarshal([]byte(resp.Content), &cfg) == nil {
 					if cfg.Model != "" {
@@ -1932,6 +1939,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					}
 					if cfg.Effort != nil {
 						job.Agent.Effort = *cfg.Effort
+					}
+					if cfg.FastMode != nil {
+						job.Agent.FastMode = *cfg.FastMode
 					}
 				}
 				applyProviderEnv(job, resp)
