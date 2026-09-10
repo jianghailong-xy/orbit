@@ -128,6 +128,22 @@ function exists(relative: string): boolean {
   return statSync(path.join(REPO, relative), { throwIfNoEntry: false }) !== undefined;
 }
 
+/**
+ * The doc comment immediately above `declaration` — the copy a reader of that line actually has.
+ * The slice is anchored on the declaration rather than on any of the prose, so a sentence moved
+ * elsewhere in the same file stops counting: `held` is an ordinary enough word that a whole-file
+ * match would be satisfied by something else entirely.
+ */
+function docAbove(relative: string, declaration: string): string {
+  const text = read(relative);
+  const at = text.indexOf(declaration);
+  assert.ok(at > 0, `${relative} no longer declares ${declaration}`);
+  const before = text.slice(0, at);
+  const opened = before.lastIndexOf('/**');
+  assert.ok(opened > 0, `${declaration} in ${relative} has no doc comment above it`);
+  return before.slice(opened);
+}
+
 test('the proposal relation and its six indexes are created by 0217 and dropped by 0223', () => {
   const table = lastVerdict(
     new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?"?${PROPOSAL_TABLE}"?[\\s(]`, 'i'),
@@ -401,9 +417,10 @@ test('CLI, MCP and web copy about acceptance criteria matches what a write now d
 });
 
 test('CLI and MCP say what the write does rather than merely not lying about it', () => {
-  // Silence would pass the scan above and still leave a caller guessing. Both doors state the
-  // semantics they actually have, and since the hold came back that is two statements rather than
-  // one: what the set means, and which of the two outcomes a caller's own edit got.
+  // Silence would pass the scan above and still leave a caller guessing. Every door states the
+  // semantics it actually has, and since the hold came back that is two statements rather than
+  // one: what the set means, and which of the two outcomes a caller's own edit got. (The name of
+  // this test is one door behind: the runner's HTTP route and its DTO are held to it too.)
   const mcp = read('src/runner-go/mcp.go');
   const property = mcp.slice(mcp.indexOf('projectCriteriaUpdateProp'));
   assert.match(property.slice(0, property.indexOf('items')), /whole structured replacement/i,
@@ -411,17 +428,27 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
   const cli = read('src/runner-go/project_cli.go');
   assert.match(cli, /whole-collection replacement/i, 'the CLI help must say the set is replaced');
   assert.match(cli, /\[\] clears the collection/, 'the CLI help must document the clear again');
-  // Both branches, named at both doors, in the copy about THIS write rather than anywhere in the
+  // Both branches, named at every door, in the copy about THIS write rather than anywhere in the
   // file: `held` is an ordinary enough word that a whole-file match would be satisfied by a
   // sentence about something else. `acceptanceCriteriaHold` is required by name because prose
   // about a fork with nothing to look at leaves a caller unable to tell which side it landed on.
   const mcpUpdate = mcp.slice(mcp.indexOf('"name": "project_update"'));
   const cliHelp = cli.slice(cli.indexOf('Structured acceptance is a whole-collection replacement'));
   const cliEntry = cli.slice(cli.indexOf('{Tool: "project_update"'));
+  // The runner's bare HTTP door is the third way to this write and the only one with no tool
+  // description in front of it: a caller that speaks it reads the route and the DTO, so both have
+  // to carry the sentence. Two entries rather than one, because the point is that EACH of them
+  // says it — concatenating the two would let one file borrow the other's half.
   const doors: Array<[string, string]> = [
     ['the MCP project_update description', mcpUpdate.slice(0, mcpUpdate.indexOf('"inputSchema"'))],
     ['the CLI project update help', cliHelp.slice(0, cliHelp.indexOf('Status is an ordinary'))],
     ['the CLI project_update catalogue entry', cliEntry.slice(0, cliEntry.indexOf('Mutates:'))],
+    ['the runner PATCH projects/:id route',
+      docAbove('src/apiserver/src/runner-api/runner-projects.controller.ts',
+        "@Patch('projects/:id')")],
+    ['the UpdateProjectDto acceptanceCriteriaItems field',
+      docAbove('src/apiserver/src/projects/dto.ts',
+        'acceptanceCriteriaItems?: UpdateProjectAcceptanceCriterionDto[]')],
   ];
   for (const [door, copy] of doors) {
     assert.match(copy, /tighten/i, `${door} must say which edits land where they are made`);

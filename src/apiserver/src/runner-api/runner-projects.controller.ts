@@ -188,6 +188,23 @@ export class RunnerProjectsController {
     });
   }
 
+  /**
+   * The one write acceptance criteria reach — and the one write that may decline to perform
+   * itself, which nothing about a 200 on this route would tell a caller that had not been told.
+   *
+   * `acceptanceCriteriaItems` is classified before it is written. An edit that plainly tightens
+   * the ruler replaces the criteria where the call is made. An edit that drops a criterion, or
+   * whose direction cannot be read at all, is NOT written: it is held for the account owner to
+   * decide, and the criteria this route returns are the ones that were already there — the
+   * standard the caller is still judged against.
+   *
+   * `acceptanceCriteriaHold` on the response body is the field that says which of the two
+   * happened. Present is held, and carries the intentId, actionDigest and baselineSeal the
+   * owner's decision is answered with; absent is applied. The header below does not decide the
+   * fork — it decides whether a hold is attributed to an AGENT or to the OWNER, and an owner
+   * writing their own project is held on the same terms — so a caller that reads its criteria
+   * back and finds them unmoved is looking at a hold rather than at a lost write.
+   */
   @Patch('projects/:id')
   updateProject(
     @CurrentRunner() runner: Runner,

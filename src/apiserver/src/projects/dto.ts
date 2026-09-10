@@ -205,7 +205,14 @@ export class UpdateProjectDto {
    *  two different stored states. */
   @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string | null;
   /** Whole-collection structured replacement. `[]` explicitly clears every criterion; omission
-   * leaves the collection untouched. Existing item ids preserve identity and revision history. */
+   * leaves the collection untouched. Existing item ids preserve identity and revision history.
+   *
+   * Sending this field is not by itself a write of the standard. The set is classified first: one
+   * that plainly tightens the ruler replaces the criteria where the request is made, and one that
+   * drops a criterion or whose direction cannot be read is held for the account owner to decide
+   * and never reaches the definitions. `acceptanceCriteriaHold` on the response is what tells the
+   * two apart — when it is there the edit was held, and the criteria returned beside it are the
+   * unchanged ones the project is still judged by. */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
