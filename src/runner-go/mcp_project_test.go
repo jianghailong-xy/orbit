@@ -835,31 +835,82 @@ func TestMCPProjectCreateWithNoSessionSendsNoHeader(t *testing.T) {
 	}
 }
 
-// Only the create. A coordinator default is settled once, when the project is recorded; a read or
-// an edit sent from wherever the agent happens to be now is not a request to move it.
-func TestMCPProjectReadAndUpdateCarryNoSession(t *testing.T) {
-	for _, tc := range []struct {
-		tool string
-		args map[string]interface{}
-	}{
-		{"project_get", map[string]interface{}{"projectId": "proj-1"}},
-		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "CANCELLED"}},
-	} {
-		sawSessionHeader := true
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
-			_, _ = w.Write([]byte(projectDetailJSON))
-		}))
+// Reading a project is not an act on it. Nothing about a GET is attributed, so the header would
+// name a session no server-side fact is keyed on.
+func TestMCPProjectGetCarriesNoSession(t *testing.T) {
+	sawSessionHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
 
-		mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-1"}
-		res := mcp.callTool(tc.tool, tc.args)
-		srv.Close()
-		if res["isError"] == true {
-			t.Fatalf("%s returned an error: %#v", tc.tool, res["content"])
-		}
-		if sawSessionHeader {
-			t.Fatalf("%s sent a session header", tc.tool)
-		}
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-1"}
+	res := mcp.callTool("project_get", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] == true {
+		t.Fatalf("project_get returned an error: %#v", res["content"])
+	}
+	if sawSessionHeader {
+		t.Fatal("project_get sent a session header")
+	}
+}
+
+// An edit IS an act on the project, and the server keys two durable facts on who made it: which
+// conversation authored each version of the acceptance criteria, and which principal a held
+// loosening proposal is filed under. Without this header both are written as the account owner's
+// own, so an agent rewriting the exam it is judged against is indistinguishable from the owner
+// rewriting it — and the separation-of-duties rule that compares the two has nothing to compare.
+//
+// This is not a request to move anything: the coordinator a project opens in is settled when the
+// project is recorded, and the update door reads no session to change it.
+func TestMCPProjectUpdateCarriesTheCallingSession(t *testing.T) {
+	var session, method, path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	// Base62, the spelling the runner injects and the only one a model ever sees. Forwarded
+	// verbatim: the server decodes it, and an id re-spelled here would match nothing.
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1",
+		"acceptanceCriteriaItems": []interface{}{
+			map[string]interface{}{"text": "Every shard is reported", "verificationMethod": "read the report"},
+		},
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_update returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPatch || path != "/api/runner/projects/proj-1" {
+		t.Fatalf("project_update hit %s %s", method, path)
+	}
+	if session != "343dlzsYWKo5z8l2M8tsB" {
+		t.Fatalf("project_update session header = %q", session)
+	}
+}
+
+// `orbit mcp` outside a session (the runner injects nothing) must send no header at all rather
+// than an empty one, which the server would try to resolve as a session and refuse.
+func TestMCPProjectUpdateWithNoSessionSendsNoHeader(t *testing.T) {
+	sawSessionHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "goal": "Index every shard",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_update returned an error: %#v", res["content"])
+	}
+	if sawSessionHeader {
+		t.Fatal("project_update with no session sent a session header")
 	}
 }
 

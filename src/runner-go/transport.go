@@ -1096,15 +1096,22 @@ func (t *Transport) createProject(sessionID, orchestrationToken string, body map
 // how a field gets cleared, so nothing here may prune it. Deciding locally which fields are worth
 // forwarding is the one thing that would turn "clear the goal" into "leave the goal alone".
 //
-// No session header, unlike createProject: a project's coordinator is settled when the project is
-// created, and an update sent from wherever the agent happens to be running now is not a request
-// to move it. Moving a coordinator is a decision someone makes on purpose.
-func (t *Transport) updateProject(id string, body map[string]interface{}) (json.RawMessage, error) {
+// The session header goes with it, for the same reason it goes with createProject and for a
+// different purpose: not to bind a coordinator — the server settles that when the project is
+// recorded and reads nothing here to move it — but to say WHOSE edit this is. A project's
+// acceptance criteria are the exam it is judged against, and the server records the authoring
+// conversation of every criterion version and names the principal behind every loosening proposal
+// it holds. With no header those facts can only be written one way, as the account owner's own,
+// and a rule about a session writing its own exam has nothing left to compare. Omitted when there
+// is no session, which is the headless `orbit project update` path: that one really is the owner
+// at a terminal, and an empty header would be a session id the server cannot resolve.
+func (t *Transport) updateProject(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "PATCH", "/runner/projects/"+url.PathEscape(id), body, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "PATCH", "/runner/projects/"+url.PathEscape(id), body, &out,
+		taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

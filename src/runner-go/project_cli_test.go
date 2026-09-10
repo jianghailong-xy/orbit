@@ -668,6 +668,30 @@ func TestProjectUpdatePatchesTheRunnerProjectRoute(t *testing.T) {
 	}
 }
 
+// The headless half of the same contract `orbit mcp` holds. `orbit project update` is the
+// owner-operated path — there is no conversation behind it — so it names none, and the server
+// reads that absence as the owner-authenticated channel rather than as an agent it failed to
+// identify. An empty header would be neither.
+func TestProjectUpdateFromTheCLICarriesNoSession(t *testing.T) {
+	sawSessionHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"update", "proj-1", "--goal", "Index every shard", "--json"},
+		strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project update: %v", err)
+	}
+	if sawSessionHeader {
+		t.Fatal("`orbit project update` sent a session header")
+	}
+}
+
 // Only what was named. A partial edit that also carried the fields nobody mentioned would blank
 // them, because the server treats a present key as an instruction.
 func TestProjectUpdateSendsOnlyTheFlagsGiven(t *testing.T) {
