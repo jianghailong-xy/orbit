@@ -150,7 +150,7 @@ import { appendBackgroundJobsContext } from './background-jobs-context';
 import { withControlPlaneNote } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
-import { enginePhaseAfter, engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { normalizeToolOutputEvent } from './tool-output';
@@ -3587,6 +3587,7 @@ export class RunnerApiController {
           // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
           // while this is still null, and the row is held FOR UPDATE across that decision.
           engineStartedAt: true,
+          enginePhase: true,
         },
       });
       // The owner fence alone is insufficient when the same runner process
@@ -3807,6 +3808,7 @@ export class RunnerApiController {
       // answer different questions off overlapping events: a compaction is not a turn, and the
       // output that ends one is exactly what makes the turn active.
       const enginePhase = enginePhaseAfter(durable);
+      const enginePhaseSince = enginePhaseSinceAfter(session.enginePhase ?? null, enginePhase, new Date());
       // When the engine first spoke for this run — see Session.engineStartedAt. `undefined`
       // from the reducer above means nothing in this batch came from the engine at all, which
       // is the case that matters: the runner emits the user turn itself (seq 1) seconds before
@@ -3827,6 +3829,8 @@ export class RunnerApiController {
         // null is a decision here (the phase is over), undefined is "this batch said nothing
         // about it" — so only the first may be written over the stored value.
         ...(enginePhase !== undefined ? { enginePhase } : {}),
+        // Moves only when the phase changes — see enginePhaseSinceAfter for why a keepalive must not.
+        ...(enginePhaseSince !== undefined ? { enginePhaseSince } : {}),
         // undefined = nothing in this batch either asked or answered; keep the stored
         // message rather than writing null over it.
         ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),

@@ -110,3 +110,21 @@ export function enginePhaseAfter(events: EventLike[]): string | null | undefined
   }
   return decided?.phase;
 }
+
+/**
+ * The write to Session.enginePhaseSince that a batch implies, given the phase stored before it.
+ *
+ * Only a change of phase moves the clock. Claude Code re-sends `status: compacting` every 30 seconds
+ * for as long as a compaction runs, and each re-send arrives here as a batch deciding 'compacting'
+ * again; stamping those would reset the notice's timer every half minute, which is the defect a
+ * clock separate from lastTurnAt exists to remove. Returns undefined when the batch leaves the phase
+ * where it was, so nothing is written.
+ */
+export function enginePhaseSinceAfter(
+  stored: string | null,
+  next: string | null | undefined,
+  now: Date,
+): Date | null | undefined {
+  if (next === undefined || next === stored) return undefined;
+  return next === null ? null : now;
+}

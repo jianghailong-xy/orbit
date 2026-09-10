@@ -408,6 +408,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `pg_attribute.attmissingval` and never rewrites the heap: there is no backfill here and
   //        none is owed. Nothing reads the new column to allow or refuse a status — it is read by
   //        the claim, to decide one setting a runner hands an engine.
+  //   0254 added `session.run_claimed_at` and `session.engine_phase_since`, two nullable
+  //        timestamps the waiting notices count from — the claim writes the first, a change of
+  //        `engine_phase` writes the second. Read against every claim above: like 0253 it ALTERs
+  //        `session` and nothing else — two `ALTER TABLE "session" ADD COLUMN` and two `COMMENT ON
+  //        COLUMN`, all DDL. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, index, enum, type, function or trigger — so it is not another writer
+  //        of the DONE fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE, so no
+  //        preserved row is read or written. Both columns are nullable with no default, a
+  //        catalog-only change: there is no backfill, and every existing session reads NULL, which
+  //        is "not measured". Nothing reads either column to allow or refuse anything; they are
+  //        clocks a notice displays.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -429,7 +445,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0250_criteria_decision_pending_wake',
       '0251_project_criteria_authorship',
       '0252_approval_opening_turn',
-      '0253_session_fast_mode'],
+      '0253_session_fast_mode',
+      '0254_session_wait_anchors'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

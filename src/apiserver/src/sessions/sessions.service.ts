@@ -2091,6 +2091,8 @@ export class SessionsService {
       engineTurnActive: boolean;
       engineStartedAt: Date | null;
       enginePhase: string | null;
+      runClaimedAt: Date | null;
+      enginePhaseSince: Date | null;
       workspaceId: string | null;
       workspaceName: string | null;
       workspaceModel: string | null;
@@ -2154,6 +2156,8 @@ export class SessionsService {
         s.engine_turn_active AS "engineTurnActive",
         s.engine_started_at AS "engineStartedAt",
         s.engine_phase AS "enginePhase",
+        s.run_claimed_at AS "runClaimedAt",
+        s.engine_phase_since AS "enginePhaseSince",
         a.id    AS "workspaceId",
         a.name  AS "workspaceName",
         a.model AS "workspaceModel",
@@ -2279,6 +2283,9 @@ export class SessionsService {
         // What the list row needs to tell a three-second cold start from an engine that has been
         // compacting for four minutes; both are RUNNING with a null engineStartedAt.
         enginePhase: r.enginePhase,
+        // The clocks the waiting notices count from; lastTurnAt moves with activity.
+        runClaimedAt: r.runClaimedAt,
+        enginePhaseSince: r.enginePhaseSince,
         workspace: r.workspaceId
           ? { id: r.workspaceId, name: r.workspaceName, model: r.workspaceModel, effort: r.workspaceEffort }
           : null,

@@ -248,6 +248,8 @@ import {
   startingLabel,
   startingTitle,
   waitElapsedLabel,
+  waitingNoticeFor,
+  waitingNoticeScope,
 } from '../lib/runnerSlots';
 import { reseedWithActiveSnapshot } from '../lib/reseedActiveSnapshot';
 
@@ -724,10 +726,11 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // decision waiting for an answer left this row reading as an idle reply preview.
   if (live && (s.pendingApprovals ?? 0) > 0)
     return { text: 'Waiting for approval', tone: 'approval' };
-  // Outranks the generating preview below, which would otherwise echo the message back as
-  // though it had been read. It has not: the runtime is still being built (see
-  // sessionIsStarting). Blue, because this is progress — just not the agent's yet.
-  if (live && sessionIsStarting(s)) return { text: `${startingLabel(s)}…`, tone: 'running' };
+  // Outranks the generating preview below. While the engine is starting, or compacting, it has
+  // produced nothing since the wait began, so that preview would echo the message back as though it
+  // were being answered (see waitingNoticeFor). Blue, because this is progress — just not the
+  // agent's yet.
+  if (live && waitingNoticeFor(s)) return { text: `${startingLabel(s)}…`, tone: 'running' };
   if (live && isGenerating(s, state)) {
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
     // A sub-workspace in flight: lastToolUse is already cleared (the async Workspace tool_result +
@@ -861,7 +864,7 @@ export function statusLabel(session: any): string {
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
   if ((session.pendingApprovals ?? 0) > 0) return 'Waiting for approval';
   if (state === 'SUCCEEDED') return 'Succeeded';
-  if (sessionIsStarting(session)) return startingLabel(session);
+  if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
   if (state === 'FAILED') {
@@ -898,8 +901,8 @@ export function StatusIcon({ session }: { session: any }) {
       </Tooltip>
     );
   // Same spinner as Running — it is genuinely working — with the honest tooltip. A separate
-  // glyph would read as a fourth outcome for something that is two seconds long.
-  if (sessionIsStarting(session))
+  // glyph would read as a fourth outcome for what is still work in progress.
+  if (waitingNoticeFor(session))
     return (
       <Tooltip title={startingTitle(session)}>
         <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
@@ -2347,16 +2350,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const showQueuedNotice =
     selectedIsQueued && queuedNoticeVisible(selectedStartingSession, delayedQueuedNotice);
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
-  const startingNoticeScope = selectedId
-    ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
-    : null;
+  // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
+  const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;
   // A normal cold start is only a few seconds. Preserve its honest state everywhere else, but
   // keep this explanatory transcript notice out of the common fast path so sending a message does
-  // not immediately make a large banner flash below it.
+  // not immediately make a large banner flash below it. Scoped per run (waitingNoticeScope), so
+  // neither a 30s compaction keepalive nor a wait turning into a compaction hides it again.
   const showStartingNotice = useDelayedFlag(
-    selectedIsStarting,
+    selectedWaiting !== null,
     STARTING_NOTICE_DELAY_MS,
-    startingNoticeScope,
+    waitingNoticeScope(selectedId, selectedStartingSession),
   );
   const scopedEvents = useMemo(
     () => (eventsSessionId === selectedId ? events : []),
@@ -5577,7 +5580,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   </div>
                   <div className="chat-queued-title">
                     {startingTitle(selectedStartingSession)}
-                    <WaitElapsed since={selectedStartingSession?.lastTurnAt} />
+                    <WaitElapsed since={selectedWaiting?.since} />
                   </div>
                   <div className="chat-queued-desc">{startingDescription(selectedStartingSession)}</div>
                 </div>
@@ -5647,7 +5650,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <div className="chat-note chat-slot-wait">
                   <span>
                     {startingTitle(selectedStartingSession)}
-                    <WaitElapsed since={selectedStartingSession?.lastTurnAt} />
+                    <WaitElapsed since={selectedWaiting?.since} />
                   </span>
                   <span>{startingDescription(selectedStartingSession)}</span>
                 </div>

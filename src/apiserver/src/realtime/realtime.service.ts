@@ -783,6 +783,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         engineTurnActive: true,
         engineStartedAt: true,
         enginePhase: true,
+        runClaimedAt: true,
+        enginePhaseSince: true,
         endReason: true,
         completedAt: true,
         archivedAt: true,
@@ -850,6 +852,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Also null-as-a-value: a phase ending is a transition the clients have to see, and it is
       // reported by this key going null rather than by any event they could watch for.
       enginePhase: s.enginePhase ?? null,
+      // The clocks the waiting notices count from — see Session.runClaimedAt / enginePhaseSince.
+      runClaimedAt: s.runClaimedAt ? s.runClaimedAt.toISOString() : null,
+      enginePhaseSince: s.enginePhaseSince ? s.enginePhaseSince.toISOString() : null,
     };
   }
 

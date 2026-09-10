@@ -1,4 +1,9 @@
-import { sessionRunStatusOf } from './sessionState';
+import {
+  sessionIsStarting,
+  sessionRunStateOf,
+  sessionRunStatusOf,
+  type SessionStateSource,
+} from './sessionState';
 
 export interface SlotSession {
   runStatus?: string | null;
@@ -114,13 +119,71 @@ export function startingDescription(session?: EnginePhase | null): string {
   return isCompacting(session) ? COMPACTING_DESCRIPTION : STARTING_DESCRIPTION;
 }
 
+/** A session as the waiting notices read it. Every clock is optional: an older control plane sends
+ *  none of them, and then `lastTurnAt` is the only clock there is. */
+export interface WaitingSource extends SessionStateSource {
+  lastTurnAt?: string | null;
+  runClaimedAt?: string | null;
+  enginePhaseSince?: string | null;
+}
+
+/** Which wait a session is in, and the moment that wait began. */
+export interface WaitingNotice {
+  kind: 'starting' | 'compacting';
+  since: string | null;
+}
+
+/**
+ * Whether the waiting notice applies to this session, and what it counts from.
+ *
+ * Compacting is checked first and does not require the starting state. Claude Code sends a per-turn
+ * `init` 0.1–0.4s after each message, and `init` stamps engineStartedAt; every pre-turn automatic
+ * compaction found on production came after it, so a phase gated on sessionIsStarting stayed hidden
+ * for the whole compaction. `RUNNING && enginePhase === 'compacting'` is enough on its own, because
+ * the server clears the phase on any engine output: a named phase already means the engine has said
+ * nothing since the phase began.
+ *
+ * Each wait counts from its own start. A compaction can begin hours into a turn, so it counts from
+ * `enginePhaseSince`; the starting state counts from the claim. `lastTurnAt` is only the fallback
+ * for a server that sends neither.
+ */
+export function waitingNoticeFor(session?: WaitingSource | null): WaitingNotice | null {
+  if (!session) return null;
+  if (sessionRunStateOf(session) === 'RUNNING' && isCompacting(session))
+    return {
+      kind: 'compacting',
+      since: session.enginePhaseSince ?? session.runClaimedAt ?? session.lastTurnAt ?? null,
+    };
+  if (sessionIsStarting(session))
+    return { kind: 'starting', since: session.runClaimedAt ?? session.lastTurnAt ?? null };
+  return null;
+}
+
+/**
+ * The reveal scope for a session's waiting notice: one per run.
+ *
+ * Per run rather than per notice, so a wait that turns from starting into compacting keeps the
+ * notice it has already earned instead of hiding it for another ten seconds. Anchored on the claim
+ * rather than on `lastTurnAt`, which moves with activity and re-hid the notice each time it did. A
+ * new claim is a new run, so the next message still gets its own quiet period.
+ */
+export function waitingNoticeScope(
+  sessionId: string | null,
+  session?: WaitingSource | null,
+): string | null {
+  if (!sessionId) return null;
+  return `${sessionId}:${session?.runClaimedAt ?? session?.lastTurnAt ?? ''}`;
+}
+
 /**
  * How long the current run has been waiting, for the notices whose whole problem is that a
  * static line reads the same at three seconds and at thirty minutes.
  *
- * `since` is the session's `lastTurnAt`: the claim writes it, and for the rest of a starting
- * stretch nothing moves it again — the events such a run does produce are session-level
- * `system` ones, which the control plane deliberately does not count as activity.
+ * `since` comes from waitingNoticeFor, which reads `lastTurnAt` only when the server sends no
+ * better clock. `lastTurnAt` looked stable during a wait and is not: ingest moves it on every event
+ * that carries a turn id, the runner stamps a turn id on everything once a message is fed, and
+ * Claude Code re-sends its compaction status every 30 seconds. Counted from it, this label went
+ * back to zero every half minute on exactly the waits it exists for.
  *
  * Null rather than '0s' for a missing, unparseable or future timestamp: a payload from a server
  * too old to send the field and a skewed clock both know nothing about this wait, and a zero

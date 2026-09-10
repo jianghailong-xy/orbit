@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunEventType } from '@orbit/shared';
-import { enginePhaseAfter, engineTurnActiveAfter } from './engine-turn';
+import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
 
 test('a turn ending leaves the engine idle', () => {
   assert.equal(
@@ -257,4 +257,28 @@ test('a shell the runner ran itself does not end a compaction', () => {
     ]),
     'compacting',
   );
+});
+
+/**
+ * The clock "Compacting the conversation" counts from. Measured on production: Claude Code re-sent
+ * `status: compacting` at 12:38:12.729 and again at 12:38:42.730, 30.001s apart, and each landed as a
+ * batch deciding 'compacting'. Timing the phase from the latest of those is what reset the notice.
+ */
+test('a phase is timed from the moment it began, not from its latest keepalive', () => {
+  const began = new Date('2026-09-10T12:38:12.729Z');
+  assert.equal(enginePhaseSinceAfter(null, 'compacting', began), began);
+  assert.equal(
+    enginePhaseSinceAfter('compacting', 'compacting', new Date('2026-09-10T12:38:42.730Z')),
+    undefined,
+  );
+});
+
+test('leaving a phase clears its clock, and a batch that decides nothing writes nothing', () => {
+  const now = new Date('2026-09-10T12:39:09.501Z');
+  assert.equal(enginePhaseSinceAfter('compacting', null, now), null);
+  assert.equal(enginePhaseSinceAfter('compacting', undefined, now), undefined);
+  assert.equal(enginePhaseSinceAfter(null, undefined, now), undefined);
+  // No phase before and none after is not a change: without this, every ordinary output batch
+  // would write a null over a null.
+  assert.equal(enginePhaseSinceAfter(null, null, now), undefined);
 });

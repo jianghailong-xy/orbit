@@ -150,6 +150,12 @@ export interface ControlSessionSummary {
    *  client does not recognise must read as null too: runners self-update on their own schedule
    *  and may name a phase before any client knows what to say about it. */
   enginePhase?: string | null;
+  /** When the current run was claimed. Written by nothing but the claim, so a wait can be measured
+   *  from it — lastTurnAt moves with activity. Absent from an older control plane. */
+  runClaimedAt?: string | null;
+  /** When enginePhase entered the phase it holds; null whenever enginePhase is. A keepalive that
+   *  re-announces the same phase does not move it. Absent from an older control plane. */
+  enginePhaseSince?: string | null;
 }
 
 /** `data` for `session.ended`. */

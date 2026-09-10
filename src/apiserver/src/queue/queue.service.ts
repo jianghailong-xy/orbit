@@ -144,6 +144,10 @@ export class QueueService {
           -- for the same reason as the column above: a resumed session must not inherit what the
           -- previous run's engine happened to be doing when it stopped.
           "engine_phase" = NULL,
+          -- The wait this claim starts is measured from here (0254). Unlike last_turn_at, which
+          -- ingest moves on every event carrying a turn id, nothing else writes it.
+          "run_claimed_at" = now(),
+          "engine_phase_since" = NULL,
           "updated_at" = now()
         WHERE id = (
           SELECT s.id FROM "session" s

@@ -1064,6 +1064,13 @@ model Session {
   // what an unrecognised value must degrade to: runners self-update on their own schedule, so
   // this is text and not an enum. Cleared by every claim and by any engine output (0244).
   enginePhase          String?   @map("engine_phase")
+  // When the current run was claimed — written by the claim and by nothing else, so a wait can be
+  // measured from it. lastTurnAt cannot serve: ingest moves it on any event carrying a turn id, and
+  // Claude re-sends its compaction status every 30s while compacting (0254).
+  runClaimedAt         DateTime? @map("run_claimed_at")
+  // When enginePhase entered the phase it holds — written only on a change of phase, so a keepalive
+  // that re-announces it keeps the original start. Null whenever enginePhase is (0254).
+  enginePhaseSince     DateTime? @map("engine_phase_since")
   // ── SOURCE snapshot: which commit this run starts from ──────────────────────
   // `docs/project-source-contract.md` §3.2, migration 0231. Fifteen columns, two seals, and the
   // seals are what make "may this column still be written" have exactly one answer:
