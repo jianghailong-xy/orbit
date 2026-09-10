@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
-import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
+import { AgentProvider, ClaimedSession, PermissionMode, fastModeAvailable } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import {
@@ -450,6 +450,13 @@ export class QueueService {
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
         ),
+        // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
+        // for the same reason an OpenCode variant is: the constraint is about the model this
+        // session dispatches with, which a create request that named none does not know. A
+        // session carrying the flag onto a model with no fast lane runs without it — the engine
+        // would drop the setting in silence anyway, and the runner would have written a settings
+        // key that does nothing.
+        fastMode: session.fastMode && fastModeAvailable(provider, exec.model),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned
         // runner's catalog is known — an account default carried over from another runtime

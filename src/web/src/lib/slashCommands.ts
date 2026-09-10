@@ -25,6 +25,9 @@ export interface LocalStatusSnapshot {
   model?: string | null;
   permissionMode?: string | null;
   effort?: string | null;
+  /** Whether this session runs in Claude Code's fast lane. Undefined/false on every session that
+   *  cannot have one, which is why the row below is only added when it is on. */
+  fastMode?: boolean | null;
   contextTokens?: number | null;
   contextWindow?: number | null;
   planUsageLabel?: string | null;
@@ -141,6 +144,10 @@ export function localStatusRows(s: LocalStatusSnapshot): LocalStatusRow[] {
   if (s.model) rows.push({ label: 'Model', value: s.model });
   if (s.permissionMode) rows.push({ label: 'Permission', value: s.permissionMode });
   rows.push({ label: 'Reasoning', value: s.effort || 'Default' });
+  // Only when it is on. Off is what every session that has no fast lane at all also reads as, so
+  // a row saying so would appear on Codex, on Kimi and on every Claude model without one — a
+  // setting named where it does not exist.
+  if (s.fastMode) rows.push({ label: 'Fast mode', value: 'on' });
 
   const contextTokens = Math.max(0, s.contextTokens ?? 0);
   const contextWindow = Math.max(0, s.contextWindow ?? 0);

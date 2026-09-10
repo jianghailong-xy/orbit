@@ -10,9 +10,11 @@ import { SessionsService } from './sessions.service';
  * The split is not a relaxation of the inbox gate — it is a statement about the fields. A
  * provider is decided when the process is built (it IS that process's environment), so the only
  * way to change one is to build another process, and the gate that holds a `reload` until no
- * message is in flight is exactly right for it. Model, permission mode and effort are not built
- * in; they can be said to a resident engine, and holding those until the turn ends was a delay
- * with nothing behind it.
+ * message is in flight is exactly right for it. Fast mode is built in the same way for a
+ * different reason: Claude Code has no `--fast`, it reads `fastMode` out of the settings file the
+ * spawn wrote, once, and answers a frame asking for it `success` while changing nothing. Model,
+ * permission mode and effort are not built in; they can be said to a resident engine, and holding
+ * those until the turn ends was a delay with nothing behind it.
  *
  * So each case below is a claim about one direction: the live half alone must NOT produce a
  * reload, the spawn-only half alone must NOT produce a setconfig, and neither assertion means
@@ -28,6 +30,7 @@ function serviceOn(current: {
   model?: string | null;
   permissionMode?: string | null;
   effort?: string | null;
+  fastMode?: boolean;
   /** The identity the session declares. A configured (BYOK) slug takes providerBuiltin: false. */
   provider?: string;
   providerBuiltin?: boolean;
@@ -49,6 +52,7 @@ function serviceOn(current: {
         model: 'claude-opus-5',
         permissionMode: 'default',
         effort: null,
+        fastMode: false,
         usesRuntimeDefaultModel: false,
         numTurns: 3,
         workspace: null,
@@ -371,4 +375,78 @@ test('a configured provider borrowing the codex runtime is re-spawned', async ()
 
   assert.deepEqual(turns.map((t) => t.kind), ['reload']);
   assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'byok-gpt-mini');
+});
+
+test('a fast-mode change rebuilds the engine instead of being said to it', async () => {
+  const { service, turns } = serviceOn({});
+
+  await service.updateConfig(OWNER, ID, { fastMode: true });
+
+  // A reload, on the runtime that HAS the control channel — which is what makes this a claim
+  // about the field rather than about the engine. `apply_flag_settings` will take a `fastMode`
+  // and answer `success`, and every request the running turn goes on to make still goes out
+  // without it: the opt-in is settled when the process starts. So the only thing that can move
+  // it is the process being built again.
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').fastMode, true);
+});
+
+test('the setconfig beside a fast-mode change never carries fast mode', async () => {
+  const { service, turns } = serviceOn({});
+
+  await service.updateConfig(OWNER, ID, { fastMode: true, effort: 'high' });
+
+  // Both halves moved, so both turns are queued, re-spawn last — and the split is by FIELD: the
+  // frame carries what a resident engine can act on and nothing else. A `fastMode` on the
+  // setconfig would be a key the CLI accepts, answers `success` to, and drops.
+  assert.deepEqual(
+    turns.map(({ kind, seq }) => ({ kind, seq })),
+    [
+      { kind: 'setconfig', seq: 1 },
+      { kind: 'reload', seq: 2 },
+    ],
+  );
+  assert.equal('fastMode' in JSON.parse(turns[0].content ?? '{}'), false);
+  assert.equal(JSON.parse(turns[1].content ?? '{}').fastMode, true);
+  // The effort is on both, exactly as it is beside a provider switch: the frame moves the turn
+  // running now, the flag builds the process that runs next.
+  assert.equal(JSON.parse(turns[0].content ?? '{}').effort, 'high');
+  assert.equal(JSON.parse(turns[1].content ?? '{}').effort, 'high');
+});
+
+test('re-sending the fast mode a session already has does not re-spawn it', async () => {
+  const { service, turns } = serviceOn({ fastMode: true });
+
+  await service.updateConfig(OWNER, ID, { fastMode: true });
+
+  // Rebuilding the process to arrive at the setting it already has is the interruption this
+  // split exists to stop handing out — and unlike a restated effort, a restated fast mode would
+  // cost the session its process for a value that never moved.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+});
+
+test('a PATCH that does not mention fast mode does not state one either', async () => {
+  const { service, turns } = serviceOn({ fastMode: true });
+
+  await service.updateConfig(OWNER, ID, { model: 'claude-haiku-4-5' });
+
+  // Nothing moved it, so nothing says anything about it: the runner reads an absent `fastMode`
+  // as "keep what this process was built with". Note the model here has no fast lane at all —
+  // the stored `true` is deliberately NOT rewritten, because the constraint is applied where the
+  // session dispatches, and going back to a model that has one must restore what was asked for.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.equal('fastMode' in JSON.parse(turns[0].content ?? '{}'), false);
+});
+
+test('asking for fast mode on a model without a fast lane stores the truth, and re-spawns nothing', async () => {
+  const { service, turns } = serviceOn({ model: 'claude-sonnet-5' });
+
+  await service.updateConfig(OWNER, ID, { fastMode: true });
+
+  // Claude Code refuses fast mode on a model whose capabilities do not carry it, so the honest
+  // answer is that nothing moved: no reload, and the row is left saying false rather than
+  // recording a setting no engine will honour. The PATCH is not an error — the pickers only
+  // describe this rule, and an MCP caller or an older client reaches here without passing one.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.equal('fastMode' in JSON.parse(turns[0].content ?? '{}'), false);
 });

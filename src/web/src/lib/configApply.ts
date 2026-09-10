@@ -1,13 +1,14 @@
 import { AgentProvider } from '@orbit/shared';
 
-/** The four settings the composer's pills can change on a session. */
-export type ConfigField = 'model' | 'permissionMode' | 'effort' | 'provider';
+/** The five settings the composer's pills can change on a session. */
+export type ConfigField = 'model' | 'permissionMode' | 'effort' | 'fastMode' | 'provider';
 
 /** Every field, so a caller can iterate them without re-listing them (and drifting). */
 export const CONFIG_FIELDS: readonly ConfigField[] = [
   'model',
   'permissionMode',
   'effort',
+  'fastMode',
   'provider',
 ];
 
@@ -16,6 +17,7 @@ const LABEL: Record<ConfigField, string> = {
   model: 'Model',
   permissionMode: 'Permission mode',
   effort: 'Reasoning effort',
+  fastMode: 'Fast mode',
   provider: 'Provider',
 };
 
@@ -23,10 +25,10 @@ const LABEL: Record<ConfigField, string> = {
  * Whether a change to this field reaches the engine that is already running, rather than the one
  * that runs next.
  *
- * The four fields stopped answering this the same way. A provider is decided when the engine
- * process is BUILT — it IS that process's environment — so changing one enqueues a `reload`: the
- * runner tears the process down and re-spawns it with `--resume`, and the inbox holds that turn
- * until no message is in flight. A change made mid-turn therefore lands on the next turn. Model,
+ * The five fields do not answer this the same way. A provider is decided when the engine process
+ * is BUILT — it IS that process's environment — so changing one enqueues a `reload`: the runner
+ * tears the process down and re-spawns it with `--resume`, and the inbox holds that turn until no
+ * message is in flight. A change made mid-turn therefore lands on the next turn. Model,
  * permission mode and effort are not build-time facts: a resident Claude Code takes `set_model`,
  * `set_permission_mode` and `apply_flag_settings` on its control channel and honours them from
  * that point in the turn it is running, so they enqueue a `setconfig`, which the inbox hands over
@@ -34,14 +36,19 @@ const LABEL: Record<ConfigField, string> = {
  * frame was measured against the API requests the running turn goes on to make: every call after
  * it carries the new level.
  *
+ * Fast mode went the other way on the same kind of measurement. It has no flag at all — Claude
+ * Code reads `fastMode` out of the settings file its process was built with — and an
+ * apply_flag_settings asking for it is answered `success` while every later request in the turn
+ * still goes out without it. So it is build-time after all, and it re-spawns like a provider.
+ *
  * The split is the server's (SessionsService.updateConfig), and so is the gate below it: those
  * control frames exist on the claude runtime only, so a Codex / Kimi / OpenCode session still
- * re-spawns for every one of the four. Judged by the RUNTIME the session executes on and never by
+ * re-spawns for every one of the five. Judged by the RUNTIME the session executes on and never by
  * its provider slug — a configured (BYOK) identity borrows one, and `runtimeForProvider` is this
  * client's copy of the server's `execRuntime`.
  */
 export const appliesMidTurn = (field: ConfigField, runtime: string): boolean =>
-  runtime === AgentProvider.CLAUDE && field !== 'provider';
+  runtime === AgentProvider.CLAUDE && field !== 'provider' && field !== 'fastMode';
 
 const MID_TURN = 'applies immediately, even mid-turn';
 const NEXT_TURN = 'applies on the next turn (the engine restarts to pick it up)';
@@ -107,6 +114,7 @@ export function configPillHints(state: ConfigPillState): Record<ConfigField, str
     model: hint('model'),
     permissionMode: `${hint('permissionMode')}${permissionNote}`,
     effort: hint('effort'),
+    fastMode: hint('fastMode'),
     provider: hint('provider'),
   };
 }

@@ -393,6 +393,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        preserved tables. Reading a row drops, alters and rewrites nothing. Nothing reads the
   //        new row to allow or refuse anything yet: a project's status is decided exactly as
   //        before, and the acceptance DONE gate 0229 removed is not reinstated under another name.
+  //   0253 added `session.fast_mode`, one boolean saying whether a session runs in Claude Code's
+  //        fast lane. Read against every claim above: it is one `ALTER TABLE "session" ADD COLUMN
+  //        ... NOT NULL DEFAULT false` and nothing else. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, index, enum, type, function or trigger — so it is not another writer
+  //        of the DONE fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE, so no
+  //        preserved row is read or written. The default is a constant, so PG writes only
+  //        `pg_attribute.attmissingval` and never rewrites the heap: there is no backfill here and
+  //        none is owed. Nothing reads the new column to allow or refuse a status — it is read by
+  //        the claim, to decide one key in the settings file a runner writes for an engine.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -413,7 +427,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0249_project_criteria_decision',
       '0250_criteria_decision_pending_wake',
       '0251_project_criteria_authorship',
-      '0252_approval_opening_turn'],
+      '0252_approval_opening_turn',
+      '0253_session_fast_mode'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

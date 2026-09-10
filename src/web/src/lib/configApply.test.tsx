@@ -15,10 +15,11 @@ import { runtimeForProvider } from './workspaceDefaults';
 
 /**
  * What the composer's config pills PROMISE about a change made through them, checked against what
- * the change actually does. The two used to be one sentence for all four fields ("the server
- * defers the re-spawn, so it applies on the next turn"); model, permission mode and effort each
- * stopped working that way when they moved onto the engine's control channel, and a tooltip that
- * still said it would be worse than no tooltip at all.
+ * the change actually does. The two used to be one sentence for every field ("the server defers
+ * the re-spawn, so it applies on the next turn"); model, permission mode and effort each stopped
+ * working that way when they moved onto the engine's control channel, and a tooltip that still
+ * said it would be worse than no tooltip at all. Fast mode is the field that stayed: it has no
+ * control frame that does anything, so it is the row's second re-spawn beside the provider.
  *
  * Read off the RENDERED tooltip rather than the helper's return value, because the copy only
  * matters where a user meets it. That needs a DOM: antd renders a tooltip into a portal, which
@@ -88,7 +89,7 @@ const LIVE_CLAUDE: ConfigPillState = {
 };
 
 /**
- * The four pills of one composer row, rendered together as the composer renders them: the tooltip
+ * The pills of one composer row, rendered together as the composer renders them: the tooltip
  * wraps the span, and `open` stands in for the hover that would otherwise be needed to see it.
  *
  * Each pill gets its own popup container, so which copy belongs to which field is answered by DOM
@@ -158,7 +159,7 @@ describe('what the config pills promise about when a change lands', { timeout: 1
     const copy = await copyForEachField(LIVE_CLAUDE);
 
     // The claim each pill makes has to be the one its field actually keeps. Driven off
-    // CONFIG_FIELDS, so a fifth pill cannot join the row without being described here.
+    // CONFIG_FIELDS, so another pill cannot join the row without being described here.
     const checked: ConfigField[] = [];
     for (const field of CONFIG_FIELDS) {
       expect(promisedTiming(copy[field]), `the ${field} pill: "${copy[field]}"`).toBe(
@@ -166,13 +167,21 @@ describe('what the config pills promise about when a change lands', { timeout: 1
       );
       checked.push(field);
     }
-    expect(checked).toEqual(['model', 'permissionMode', 'effort', 'provider']);
+    expect(checked).toEqual(['model', 'permissionMode', 'effort', 'fastMode', 'provider']);
 
     // …and the two halves have to READ differently. One shared sentence would satisfy every
     // assertion above the moment both halves were described with it.
     for (const immediate of ['model', 'permissionMode', 'effort'] as const) {
       expect(copy[immediate]).not.toBe(copy.provider);
+      expect(copy[immediate]).not.toBe(copy.fastMode);
     }
+    // Fast mode is on the spawn-only side of the split on Claude — the runtime that HAS the
+    // control channel — which is the whole reason it needs its own case rather than riding on the
+    // "no control channel" one below. It still has to name itself: a session with two pills
+    // reading the identical sentence cannot tell which one it is about to restart the engine for.
+    expect(promisedTiming(copy.fastMode)).toBe(false);
+    expect(copy.fastMode).not.toBe(copy.provider);
+    expect(copy.fastMode).toMatch(/Fast mode/);
   });
 
   /**

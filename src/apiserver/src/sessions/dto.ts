@@ -34,6 +34,12 @@ export interface CreateSessionDto {
   permissionMode?: string;
   /** Provider reasoning effort; '' / omitted → model default. */
   effort?: string;
+  /** Run the session in Claude Code's fast lane (`/fast`). Omitted → off, which is the engine's
+   *  own default. Stored as asked and policed at dispatch (`fastModeAvailable`), because which
+   *  model this session ends up on is not settled here: a request that names none inherits the
+   *  runner's Runtime default, which only the claim knows. A session whose effective model has
+   *  no fast lane simply dispatches without one. */
+  fastMode?: boolean;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial
@@ -68,10 +74,12 @@ export interface SessionInterruptDto {
 
 export interface SessionResumeDto extends SessionTurnDto {
   /** Per-session overrides re-applied on resume (the runner re-spawns the runtime, so a
-   *  new mode/model/effort takes effect). Omitted fields keep the session's prior value. */
+   *  new mode/model/effort/fast mode takes effect). Omitted fields keep the session's prior
+   *  value. */
   model?: string;
   permissionMode?: string;
   effort?: string;
+  fastMode?: boolean;
   /** Revive on another provider identity that runs on the SAME built-in runtime — same rule and
    *  same rejection as SessionConfigDto.provider. No reload turn is needed here: the revived
    *  session is claimed afresh, and the claim resolves the environment from the row. */
@@ -114,6 +122,11 @@ export interface SessionConfigDto {
   model?: string;
   permissionMode?: string;
   effort?: string;
+  /** Turn Claude Code's fast lane on or off. Spawn-only on every runtime — the engine reads it
+   *  once, out of the settings file its process was built with — so unlike the three above this
+   *  one always costs the session its process: the runner re-spawns with --resume and it takes
+   *  effect on the next turn. Forced off when the effective runtime/model do not have it. */
+  fastMode?: boolean;
   /** Re-point the session at another provider identity — a second account with the same vendor,
    *  or another endpoint — that runs on the SAME built-in runtime. Cross-runtime is rejected:
    *  the transcript, the resume id and the wire protocol belong to the CLI that started the

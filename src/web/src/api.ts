@@ -304,6 +304,8 @@ export const createInteractiveSession = (body: {
   model?: string;
   permissionMode?: string;
   effort?: string;
+  /** Start the session in Claude Code's fast lane (`/fast`). Omitted → off. */
+  fastMode?: boolean;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -464,7 +466,13 @@ export const listQueuedTurns = (sessionId: string) =>
 export const resumeSession = (
   sessionId: string,
   content: string,
-  config?: { model?: string; permissionMode?: string; effort?: string; provider?: string },
+  config?: {
+    model?: string;
+    permissionMode?: string;
+    effort?: string;
+    fastMode?: boolean;
+    provider?: string;
+  },
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
   clientTurnId: string = uuid(),
@@ -540,15 +548,22 @@ export const decideApproval = (
     body: { behavior, message, answers, rememberRules },
   });
 
-/** Change a live session's model, permission mode, effort and/or provider — mid-turn included.
- *  Model, permission mode and effort are handed to the running engine over its control channel and
- *  take effect where the turn stands; a provider is spawn-only (it IS the process's environment),
- *  so the runner re-spawns with --resume once the turn ends and it takes effect on the next one
- *  (`configPillHints` is the copy that says which is which, and only the claude runtime has the
- *  control channel). */
+/** Change a live session's model, permission mode, effort, fast mode and/or provider — mid-turn
+ *  included. Model, permission mode and effort are handed to the running engine over its control
+ *  channel and take effect where the turn stands; a provider is spawn-only (it IS the process's
+ *  environment) and so is fast mode (the engine reads it once, from the settings file its process
+ *  was built with), so for those the runner re-spawns with --resume once the turn ends and the
+ *  change takes effect on the next one (`configPillHints` is the copy that says which is which,
+ *  and only the claude runtime has the control channel). */
 export const updateSessionConfig = (
   sessionId: string,
-  config: { model?: string; permissionMode?: string; effort?: string; provider?: string },
+  config: {
+    model?: string;
+    permissionMode?: string;
+    effort?: string;
+    fastMode?: boolean;
+    provider?: string;
+  },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
 /** Rename a session's display title. Works on any session (live or ended) and never

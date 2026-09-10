@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider } from './enums';
-import { DEFAULT_MODEL_BY_PROVIDER, isRetiredModel, modelForProvider } from './models';
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  fastModeAvailable,
+  isRetiredModel,
+  modelForProvider,
+} from './models';
 
 describe('isRetiredModel', () => {
   const catalogue = [{ value: 'claude-opus-5' }, { value: 'claude-sonnet-5' }];
@@ -95,5 +100,36 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.OPENCODE, 'kimi-code/kimi-for-coding')).toBe(
       'kimi-code/kimi-for-coding',
     );
+  });
+});
+
+describe('fastModeAvailable', () => {
+  it('offers the fast lane on the Claude models that have one', () => {
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-opus-5')).toBe(true);
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-opus-4-8')).toBe(true);
+  });
+
+  it('refuses it on a Claude model that does not', () => {
+    // Claude Code's own answer, and the reason the pickers must ask rather than assume: it
+    // refuses fast mode outright on anything whose capability list does not carry it, so a
+    // session pinned here would carry a setting the engine drops without saying so.
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-sonnet-5')).toBe(false);
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'claude-haiku-4-5')).toBe(false);
+    expect(fastModeAvailable(AgentProvider.CLAUDE, '')).toBe(false);
+  });
+
+  it('refuses it outside the Claude runtime entirely', () => {
+    // Not a model question over here: fast mode is an Anthropic first-party lane, and no other
+    // engine has anything to do with the setting. The Opus id is deliberate — it is the one that
+    // would pass if this were asked of the model alone.
+    for (const runtime of [AgentProvider.CODEX, AgentProvider.KIMI, AgentProvider.OPENCODE]) {
+      expect(fastModeAvailable(runtime, 'claude-opus-5')).toBe(false);
+    }
+    // A configured (BYOK) slug reaches here as its BORROWED runtime, never as the slug: one that
+    // borrows claude is answered like Claude (a second Anthropic account is the common case, and
+    // the CLI's own first-party check covers the other), and an UNRESOLVED one — which is what
+    // this looks like — must not be a yes.
+    expect(fastModeAvailable('', 'claude-opus-5')).toBe(false);
+    expect(fastModeAvailable('acme-anthropic', 'claude-opus-5')).toBe(false);
   });
 });

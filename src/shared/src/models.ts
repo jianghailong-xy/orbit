@@ -68,13 +68,16 @@ export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * engine will silently drop.
  *
  * `runtime` is the built-in runtime that executes the session, not the persisted provider slug —
- * resolve a configured slug to its runtime first, exactly as `autoAvailable` asks.
+ * resolve a configured slug to its runtime first, exactly as `autoAvailable` asks. A configured
+ * (BYOK) identity that borrows the claude runtime is therefore answered like Claude, which is
+ * right for the common case (a second Anthropic account) and harmless for the other one: the CLI
+ * has its own first-party check and simply runs without the lane when the endpoint is not
+ * Anthropic's, the same way it decides Auto for itself.
  *
- * A configured (BYOK) provider is NOT exempted the way it is for Auto, and the difference is
- * deliberate: Auto is a permission mode the CLI decides for itself, while fast mode is a lane
- * Anthropic bills for on a first-party account. A borrowed runtime pointed at somebody else's
- * endpoint has no such account, so offering the toggle there would promise something no engine
- * can deliver.
+ * There is one thing this deliberately does NOT know: whether the account is ALLOWED the lane.
+ * That is an organisation-level answer the CLI fetches at startup, and no client or control-plane
+ * table can hold it. So a true here means "there is a fast lane for this runtime and model", never
+ * "this session will get one".
  */
 export function fastModeAvailable(runtime: string, model: string): boolean {
   if (runtime !== AgentProvider.CLAUDE) return false;

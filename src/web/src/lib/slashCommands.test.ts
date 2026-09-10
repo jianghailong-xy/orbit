@@ -132,4 +132,15 @@ describe('slashCommands', () => {
       value: 'not reported yet',
     });
   });
+
+  it('names the fast lane only while the session is in it', () => {
+    const labels = (rows: { label: string }[]) => rows.map((r) => r.label);
+
+    expect(labels(localStatusRows({ surface: 'Web', fastMode: true }))).toContain('Fast mode');
+    // The paired negative, which is the whole reason this row is conditional: off and "this
+    // runtime has no fast lane at all" arrive here as the same value, so an unconditional row
+    // would name the setting on every Codex and Kimi session too.
+    expect(labels(localStatusRows({ surface: 'Web', fastMode: false }))).not.toContain('Fast mode');
+    expect(labels(localStatusRows({ surface: 'Web' }))).not.toContain('Fast mode');
+  });
 });

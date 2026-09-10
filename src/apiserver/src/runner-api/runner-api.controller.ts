@@ -94,6 +94,7 @@ import {
   TURN_COMPLETE_STEER_REQUEUE,
   AbandonedSteer,
   ActivateTurnLeasesResponse,
+  fastModeAvailable,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -1600,6 +1601,13 @@ export class RunnerApiController {
           customRow?.enabled === true,
           runner.runsAsRoot,
         ),
+        // Whether the fast lane is actually on. Policed HERE rather than where it was picked,
+        // for the same reason an OpenCode variant is: the constraint is about the model this
+        // session dispatches with, which a create request that named none does not know. A
+        // session carrying the flag onto a model with no fast lane runs without it — the engine
+        // would drop the setting in silence anyway, and the runner would have written a settings
+        // key that does nothing.
+        fastMode: s.fastMode && fastModeAvailable(provider, exec.model),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
         // valid against the assigned runner's reported catalog for this model.

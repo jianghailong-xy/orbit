@@ -170,6 +170,7 @@ import type { PlanUsageSnapshot, SessionTurnIntent, SessionTurnPlacement } from 
 import {
   AgentProvider,
   derivePermissionSemantics,
+  fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
   TRASH_RETENTION_DAYS,
@@ -1210,6 +1211,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Seeded from the account default by the effect below once `me` loads (mirrors how Model/Mode
   // seed via effects); '' = model default until then.
   const [effort, setEffort] = useState('');
+  // Whether the draft (or the ended session about to be resumed) asks for Claude Code's fast
+  // lane. No seed-state ref like the three above: those exist because a workspace or account
+  // default can arrive late and clobber an untouched pick, and fast mode has neither — it is
+  // per-session, and off is what a session that never asked for it runs with.
+  const [fastMode, setFastMode] = useState(false);
   // Which product lifecycle slice of the session list to show.
   const [view, setView] = useState<SessionView>('open');
   // Optional narrowing/sectioning of the list by tag, mirroring the iOS drawer's filter menu.
@@ -2116,6 +2122,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         selected.effort ?? detailForSelected?.workspace?.effort ?? owningWorkspace?.effort ?? '',
       ),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, live]);
+
+  // The same seeding for Fast mode, without the seed-state ref the three pills above need: the
+  // value is on the session row itself, so there is no late-arriving workspace or account default
+  // that could come back and overwrite a pick made for this resume.
+  useEffect(() => {
+    if (!selected || live) return;
+    setFastMode(selected.fastMode === true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, live]);
 
@@ -3311,6 +3326,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               model,
               permissionMode: MODE_TO_PERMISSION[mode],
               effort: wireEffort,
+              fastMode,
               ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
             },
             attachmentIds,
@@ -3378,6 +3394,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // the workspace's effort server-side (session.effort ?? workspace.effort). Task runs omit it, so
         // those still inherit the workspace default.
         effort: wireEffort,
+        // Only when it is on. Off is the server's default and the engine's, so saying it is the
+        // one way this could disagree with either of them later.
+        ...(fastMode ? { fastMode: true } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -3989,16 +4008,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
-  // Change a LIVE session's model / mode / effort / provider, mid-turn included. Optimistically
-  // patch the cached session so the pill updates instantly; server-side the runner tells the
-  // running engine, or re-spawns claude --resume with the new flag when it is a provider (or a
-  // runtime with no control channel). Revert + surface the error on failure. Keyed on
-  // effectiveView to match the (view-scoped) sessions query that renders the list.
+  // Change a LIVE session's model / mode / effort / fast mode / provider, mid-turn included.
+  // Optimistically patch the cached session so the pill updates instantly; server-side the runner
+  // tells the running engine, or re-spawns claude --resume with the new flag when it is a provider
+  // or fast mode (or a runtime with no control channel). Revert + surface the error on failure.
+  // Keyed on effectiveView to match the (view-scoped) sessions query that renders the list.
   const configMut = useMutation({
     mutationFn: (cfg: {
       model?: string;
       permissionMode?: string;
       effort?: string;
+      fastMode?: boolean;
       provider?: string;
     }) => updateSessionConfig(selected!.id, cfg),
     onMutate: async (cfg) => {
@@ -4116,6 +4136,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       model: shownModel,
       permissionMode: shownMode,
       effort: shownEffort,
+      // The pill's own answer, so `/status` and the composer row cannot disagree: usable says
+      // there is a lane, shown says this session is in it.
+      fastMode: fastModeUsable && shownFastMode,
       contextTokens,
       contextWindow:
         shownProvider === 'opencode' && shownModel === ''
@@ -4560,6 +4583,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   const effectiveEffort =
     selected?.effort ?? detailForSelected?.workspace?.effort ?? selectedWorkspace?.effort ?? '';
+  // No workspace or account fallback beside it, unlike effort: fast mode is per-session, so the
+  // only thing that can be inheriting here is nothing.
+  const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
   const catalogModelOptions = shownProviderCapabilitiesResolved
     ? modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)
@@ -4742,6 +4768,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownModel,
     runner.modelCatalog,
   );
+  // Whether this session has a fast lane to offer at all — Claude only, and only on the models
+  // that carry it. The runtime, never the slug, for the same reason the timing hints ask by
+  // runtime: a configured (BYOK) identity borrows one. Unresolved means no, which is the safe
+  // direction: a pill that appears and then vanishes is worse than one that appears a moment
+  // late, and this is the same fact the server polices at dispatch.
+  const fastModeUsable =
+    shownProviderCapabilitiesResolved &&
+    fastModeAvailable(runtimeForProvider(shownProvider, configuredProviders), shownModel);
+  const shownFastMode: boolean = live ? effectiveFastMode : fastMode;
   // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
   // shared table the server stamps onto the session payload, so the picker cannot drift from it.
   //
@@ -6514,6 +6549,35 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
+          {/* Fast mode, and only where there is one to offer: it is Claude's own lane and it
+              exists on some of its models. A pill rendered for a session that cannot have it
+              would be a control whose only outcome is being ignored — the server clamps it at
+              dispatch either way. A session that stored `true` and then moved to a model without
+              a fast lane keeps the stored value while the pill is away, so going back to a model
+              that has one restores what was asked for rather than silently dropping it. */}
+          {fastModeUsable && (
+            <Tooltip title={configHints.fastMode} open={hoverTipOpen}>
+              <span className="composer-pill">
+                <Select
+                  size="small"
+                  variant="borderless"
+                  suffixIcon={null}
+                  value={shownFastMode ? 'on' : 'off'}
+                  onChange={(v) => {
+                    const next = v === 'on';
+                    if (live) configMut.mutate({ fastMode: next });
+                    else setFastMode(next);
+                  }}
+                  options={[
+                    { value: 'off', label: 'Standard' },
+                    { value: 'on', label: 'Fast' },
+                  ]}
+                  disabled={!configEditable}
+                  popupMatchSelectWidth={false}
+                />
+              </span>
+            </Tooltip>
+          )}
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
           {/* Context stays visible even before the first turn reports tokens — a New Session reads
               "—". Rightmost pill, to the right of plan usage. */}

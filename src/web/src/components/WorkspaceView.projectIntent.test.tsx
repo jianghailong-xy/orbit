@@ -230,11 +230,16 @@ describe('New Session project intent', { timeout: 12_000 }, () => {
 });
 
 describe('the existing composer control inventory', () => {
-  it('still defines exactly the five named pills and no sixth one', () => {
+  it('still defines exactly the six named pills and no seventh one', () => {
     // Visibility is state-dependent (Workspace belongs to an unlocked draft; Provider to a
-    // live/resumable session), so no honest runtime fixture paints all five at once. Assert the
-    // owned JSX block instead: this task may add the one dismiss button above it, but no config
-    // control definition may appear in or disappear from the existing row.
+    // live/resumable session; Fast mode to a Claude model that has a fast lane), so no honest
+    // runtime fixture paints them all at once. Assert the owned JSX block instead: a task may add
+    // the one dismiss button above it, but a config control may not appear in or disappear from
+    // the existing row without being named here.
+    //
+    // Six since fast mode joined the row. Deliberately a whole-inventory assertion rather than a
+    // ">= 5": the point is that adding a control is a decision somebody has to write down, and a
+    // count that only grew would let the next one arrive unnamed.
     const source = readFileSync(resolve(process.cwd(), 'src/components/WorkspaceView.tsx'), 'utf8');
     const start = source.indexOf('<div className="composer-pills">');
     const end = source.indexOf('{shownPlanUsage &&', start);
@@ -248,13 +253,15 @@ describe('the existing composer control inventory', () => {
       provider: pills.includes('title={configHints.provider}'),
       model: pills.includes('title={configHints.model}'),
       effort: pills.includes('title={configHints.effort}'),
+      fastMode: pills.includes('title={configHints.fastMode}'),
     }).toEqual({
       workspace: true,
       permission: true,
       provider: true,
       model: true,
       effort: true,
+      fastMode: true,
     });
-    expect(pills.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(5);
+    expect(pills.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(6);
   });
 });
