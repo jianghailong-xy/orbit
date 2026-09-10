@@ -510,10 +510,16 @@ test('holding a loosening edit puts one message on the coordinator conversation'
     assert.ok(body.includes(describeWakeFact(fact)),
       'one event, one description — the card renders the fact through the shared renderer');
     assert.ok(body.includes(held.intentId), 'the card names the proposal it is about');
-    assert.ok(body.includes(FIRST) && body.includes(SECOND),
-      'and carries the diff, which is nowhere else: the proposed version was never written down');
-    assert.ok(!body.includes(THIRD),
-      'the dropped criterion is not in the proposal, so it is not in the diff either');
+    assert.ok(body.includes(`${THIRD}（被这份提案删掉）`),
+      'and carries the diff, which is nowhere else: the words this proposal DROPS are stated by '
+      + 'nothing in it, so a message built out of the proposal alone could not name them — and it '
+      + 'says of them that they are what goes, which is the whole of what is being asked');
+    assert.ok(!body.includes(FIRST) && !body.includes(SECOND),
+      'while the two it restates word for word are not laid out again — a restatement carries the '
+      + 'whole collection, and printing it back is how the one row that moved got lost in it');
+    assert.ok(body.includes('未改动 2 条'),
+      'and it says how much of the ruler is left alone, because one dropped criterion out of '
+      + 'three and one out of eight are not the same decision to hand on');
     assert.ok(body.includes('账号所有者'),
       'the action is to hand it to the person who may answer, because this reader may not');
     assert.ok(body.includes('这是一条通知，不是打断'),

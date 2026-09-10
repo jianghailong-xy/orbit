@@ -3,7 +3,8 @@ import { uuidToBase62 } from '@orbit/shared';
 import { buildEvidenceAskProtocol, type EvidenceAsk } from '../tasks/coordinator-evidence-ask';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
 import type {
-  PendingCriteriaDecision,
+  CriteriaProposalChangeEntry,
+  CriteriaProposalDiff,
   PendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
 
@@ -343,15 +344,74 @@ export function buildCoordinatorDeliveryMessage(
   );
 }
 
-/** One held proposal's own diff, numbered, so the card carries the thing it is asking about. */
-function renderProposedCriteria(proposed: readonly PendingCriteriaDecision['proposed'][number][]) {
-  return proposed
-    .map((criterion, index) => (
-      `${index + 1}. ${criterion.text}\n`
-      + `   判定方法：${criterion.verificationMethod}`
-      + `${criterion.id ? '' : '（这一条是新增的）'}`
-    ))
+/**
+ * What one row of the diff is CALLED, in the language this conversation is held in.
+ *
+ * `CriteriaDecisionCard.tsx` says `reworded / dropped / added` to whoever reads the web card; this
+ * says the same three things here. Both are read off the same `change` the server derived, so the
+ * two surfaces cannot come to different conclusions about which rows moved — only say it in
+ * different words. `SAME` never reaches this: the rows it names are the ones not rendered.
+ */
+function changeLabel(change: CriteriaProposalChangeEntry['change']): string {
+  switch (change) {
+    case 'CHANGED':
+      return '被这份提案改写';
+    case 'NEW':
+      return '这份提案新增的';
+    case 'REMOVED':
+      return '被这份提案删掉';
+    case 'SAME':
+      return '';
+  }
+}
+
+/**
+ * The size of the decision in one line — the tally `changeSummary` prints on the web card.
+ *
+ * THE UNCHANGED COUNT IS PART OF THE QUESTION, NOT A FOOTNOTE. A reader shown three rows and
+ * nothing else cannot tell a proposal that reworded three criteria from one that replaced an
+ * eight-criterion ruler with three, and those are not the same decision. So the count of the ones
+ * left alone is always in the sentence, even at zero — where it is the loudest thing in it.
+ */
+function changeSummary(diff: CriteriaProposalDiff): string {
+  if (diff.entries.length === 0) return '这次读不出它的内容';
+  const moved: string[] = [];
+  if (diff.changedCount > 0) moved.push(`改写 ${diff.changedCount} 条`);
+  if (diff.removedCount > 0) moved.push(`删掉 ${diff.removedCount} 条`);
+  if (diff.newCount > 0) moved.push(`新增 ${diff.newCount} 条`);
+  const head = moved.length === 0 ? '一条都没动' : moved.join('、');
+  return `${head}，未改动 ${diff.sameCount} 条`;
+}
+
+/**
+ * The rows this proposal moves, and only those — the same fold the web card draws.
+ *
+ * A weakening edit restates the WHOLE collection, so laying out `proposed` puts the seven
+ * criteria that came back word for word in front of a reader looking for the three that did not.
+ * The words being replaced come along on a rewrite, because "changed to X" is unreadable without
+ * the X it changed from, and that side is on record rather than in the proposal. A dropped
+ * criterion renders from `onRecord` for the same reason: the proposal states nothing about it,
+ * which is exactly what dropping it means.
+ */
+function renderProposedCriteria(diff: CriteriaProposalDiff): string {
+  const moved = diff.entries.filter((entry) => entry.change !== 'SAME');
+  if (moved.length === 0) return '';
+  const rows = moved
+    .map((entry) => {
+      const words = entry.proposed ?? entry.onRecord;
+      const methodMoved = entry.changed.includes('verificationMethod');
+      return (
+        `${entry.ordinal}. ${words?.text ?? ''}（${changeLabel(entry.change)}）`
+        + (entry.change === 'CHANGED' && entry.changed.includes('text') && entry.onRecord
+          ? `\n   现在在册的是：${entry.onRecord.text}` : '')
+        + (methodMoved && entry.proposed
+          ? `\n   判定方法改成：${entry.proposed.verificationMethod ?? '（没有）'}` : '')
+        + (methodMoved && entry.onRecord
+          ? `\n   现在在册的判定方法：${entry.onRecord.verificationMethod ?? '（没有）'}` : '')
+      );
+    })
     .join('\n');
+  return `\n会动的是下面这几条，未改动的那些不铺在这里（正文用 project_get 读）：\n${rows}`;
 }
 
 /**
@@ -365,6 +425,14 @@ function renderProposedCriteria(proposed: readonly PendingCriteriaDecision['prop
  * whole point of the hold is that the proposed version was never written to them. So the proposal
  * is in the card, and the card says out loud that it is a snapshot taken at `readAt`; the criteria
  * IN FORCE stay a read, because those are on record and unchanged.
+ *
+ * A SNAPSHOT OF THE DIFF, WHICH IS NOT A SNAPSHOT OF THE WHOLE RULER. What has to be carried is
+ * what cannot be fetched, and that is the rows this proposal MOVES — the ones it restates word for
+ * word are the ones already on record, so laying them out again buys a reader nothing and costs
+ * them the three that moved, in four kilobytes of prose that all looks alike. `row.diff` carries
+ * both sides of every row it moves, so the card is still readable with no second fetch; the count
+ * of the untouched ones goes with it, because how much of the ruler is left alone is part of the
+ * question and not a detail the fold may swallow.
  *
  * WHY IT SAYS "YOU CANNOT ANSWER THIS" IN THE SAME BREATH AS "HERE IS THE DIFF"
  * ============================================================================
@@ -412,9 +480,9 @@ function buildCriteriaDecisionMessage(
   return (
     `【项目「${projectTitle}」有一条放松验收标准的提案在等账号所有者决定】\n\n`
     + `${describeWakeFact(fact)}\n\n`
-    + `提案要把这个项目的验收标准改成下面这 ${row.proposed.length} 条`
-    + `（这是投递这条消息时读到的快照，读取时刻 ${queue!.readAt.toISOString()}）：\n`
-    + `${renderProposedCriteria(row.proposed)}\n\n`
+    + `提案要动这个项目的验收标准：${changeSummary(row.diff)}`
+    + `（这是投递这条消息时读到的快照，读取时刻 ${queue!.readAt.toISOString()}）。`
+    + `${renderProposedCriteria(row.diff)}\n\n`
     + (undecidable
       ? '这条提案现在答不了：它是对着另一版标准集写的，而在册的标准从那以后又动过了'
         + `（提案的基线 ${row.baselineSeal.slice(0, 16)}…，现在在册的是 `
