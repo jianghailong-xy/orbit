@@ -740,7 +740,10 @@ export function criteriaDecisionLine(result: CriteriaDecisionResult): string {
  * seen here are kept, and only the ids: the content, the decidability and the three ways a card
  * goes stale are all conclusions about the read as it stands right now.
  *
- * Reloading the page forgets them, which is correct — a settled question needs no card.
+ * Reloading the page forgets them, which is correct — a settled question needs no card. Opening
+ * another conversation forgets them too: WorkspaceView keys this component by the session, since
+ * the view outlives navigation and an address shown in one project's conversation, looked up in
+ * another project's read, would be drawn there as a proposal already answered.
  */
 export function SessionCriteriaDecisionCard({
   projectId,

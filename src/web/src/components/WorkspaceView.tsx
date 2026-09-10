@@ -5610,9 +5610,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   it: the server's own ask about this project's ruler. Its content is re-derived on
                   every render — the frame keeps the proposal's address and nothing else — so a
                   proposal answered in another window goes stale here rather than staying pressable
-                  or silently vanishing mid-read. */}
+                  or silently vanishing mid-read. Keyed by the session, because this view outlives
+                  navigation and those addresses belong to the conversation they were shown in:
+                  unkeyed, the ones shown in one project's conversation are looked up in the next
+                  project's read, found nowhere, and drawn there as proposals already answered. */}
               {selected && !selectedTrashed && (
-                <SessionCriteriaDecisionCard projectId={selectedSession?.projectId ?? null} />
+                <SessionCriteriaDecisionCard
+                  key={selectedId}
+                  projectId={selectedSession?.projectId ?? null}
+                />
               )}
               {/* The same kind of card for the evidence this session may confirm or send back:
                   drawn from the pending read and pressed straight at the decision door. Keyed by
