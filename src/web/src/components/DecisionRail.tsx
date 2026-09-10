@@ -166,7 +166,7 @@ export const CONFIRM_LABEL = 'Confirm completion';
 export const SEND_BACK_LABEL = 'Send back';
 
 /**
- * ── THE SECOND ROW TYPE: A HELD CRITERIA PROPOSAL ────────────────────────────────────────────
+ * ── THE SECOND ROW TYPE: A HELD WEAKENING OF THE CRITERIA ────────────────────────────────────
  *
  * The strip has always listed one kind of question — a completion decision about one task's
  * evidence. This adds the other: a proposal to make this project's ruler LOOSER, which the account

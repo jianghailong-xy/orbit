@@ -7273,6 +7273,52 @@ html[data-theme='dark'] .session-tag-chip {
 .criteria-decision-new {
   color: var(--warning);
 }
+/* ── The diff ──────────────────────────────────────────────────────────────────────────────────
+   One row per criterion the proposal MOVES. A rewrite is two paragraphs — the words proposed and
+   the words on record — and they are set on separate lines because run together they read as one
+   sentence, which is how a change hid inside the 360px scroll box this card lives in. */
+.criteria-decision-entry {
+  margin-bottom: 6px;
+}
+.criteria-decision-entry .criteria-decision-method,
+.criteria-decision-was {
+  display: block;
+  margin-left: 0;
+  margin-top: 2px;
+}
+/* The badge stays INLINE, on the tail of the words it is about. Given a line of its own it costs
+   a row per change, and three of those are what push the fold back off the bottom of the 360px
+   box this card is read in — which is the thing being fixed. */
+.criteria-decision-entry .criteria-decision-new {
+  margin-left: 6px;
+  white-space: nowrap;
+}
+/* What the proposal would replace, set quieter than the words replacing it and ruled off on the
+   left so the two never read as one sentence. */
+.criteria-decision-was {
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+/* The criteria this proposal leaves alone: a count, and their words behind a native disclosure.
+   Folded rather than hidden, because "three reworded" and "the whole set replaced with three" are
+   the same three rows until the reader is told how many did not move — which is also why the
+   summary above the list counts them a second time, where nothing has to be scrolled to. */
+.criteria-decision-unchanged {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.criteria-decision-unchanged > summary {
+  cursor: pointer;
+  color: var(--text-3);
+}
+.criteria-decision-proposed--quiet {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
 .criteria-decision-hold,
 .criteria-decision-gone {
   margin: 10px 0 0;

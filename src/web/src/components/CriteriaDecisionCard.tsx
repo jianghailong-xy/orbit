@@ -54,6 +54,61 @@ export interface ProposedCriterion {
   completionCriterionOverrideReason: string | null;
 }
 
+/**
+ * WHAT THE CARD DRAWS, AND WHY IT IS NOT `proposed`
+ * -------------------------------------------------
+ * A criteria edit is a whole-collection replacement, so a proposal that reworded three criteria out
+ * of eight arrives stating all eight, and five of them are the words already on record. This card
+ * used to lay out all eight, which buried the three that moved inside a 360px scroll box: the
+ * reader could not see which ones the decision was about, and scrolling to the end did not tell
+ * them either.
+ *
+ * So the card renders the DIFF and folds the rest away behind a count. The diff is the server's:
+ * `readPendingCriteriaDecisions` compares the restatement against the definitions in force inside
+ * the transaction that decided the proposal was pending. Nothing here compares anything — a client
+ * that fetched the criteria in force and diffed them itself would be making the card's central
+ * claim a conclusion IT reached, from two reads taken at two moments, and would have to reach it
+ * again in every client.
+ */
+export type CriteriaProposalChange = 'SAME' | 'CHANGED' | 'NEW' | 'REMOVED';
+
+/** The fields a rewrite can move: all three a criterion carries, not just the assertion. */
+export type CriteriaProposalField =
+  | 'text'
+  | 'verificationMethod'
+  | 'completionCriterionOverrideReason';
+
+/** One criterion's words, on either side of the comparison. */
+export interface CriterionWording {
+  text: string;
+  verificationMethod: string | null;
+  completionCriterionOverrideReason: string | null;
+}
+
+/** What this proposal does to one criterion: which one, which way, and both sets of words. */
+export interface CriteriaProposalChangeEntry {
+  change: CriteriaProposalChange;
+  /** The definition this is about; null for one the proposal is adding, which names none. */
+  definitionId: string | null;
+  /** Its place in the proposed set — or, for one being dropped, in the set on record. */
+  ordinal: number;
+  /** The proposal's words. Null for `REMOVED`. */
+  proposed: CriterionWording | null;
+  /** The words it replaces, off the definition in force. Null for `NEW`. */
+  onRecord: CriterionWording | null;
+  /** Which fields differ. Empty except on `CHANGED`. */
+  changed: CriteriaProposalField[];
+}
+
+/** The whole of what a proposal would do to the ruler, and how much of it it leaves alone. */
+export interface CriteriaProposalDiff {
+  entries: CriteriaProposalChangeEntry[];
+  sameCount: number;
+  changedCount: number;
+  newCount: number;
+  removedCount: number;
+}
+
 /** Whether the door would record a decision about this proposal right now — the server's answer. */
 export interface CriteriaDecisionDecidability {
   decidable: boolean;
@@ -81,6 +136,8 @@ export interface PendingCriteriaDecisionRow {
   /** The seal standing now. Equal to `baselineSeal` exactly when the proposal is decidable. */
   currentSeal: string;
   proposed: ProposedCriterion[];
+  /** The same restatement read against the criteria in force — what this card is drawn from. */
+  diff: CriteriaProposalDiff;
   /** The proposal this one displaced, or null when it displaced nothing. */
   supersededIntentId: string | null;
   decidability: CriteriaDecisionDecidability;
@@ -141,6 +198,86 @@ export const NOTHING_IS_ON_HOLD =
   'Nothing is on hold. The criteria on record are the ones in force and the session that proposed '
   + 'this was told to keep working against them, so refusing stops the ruler from moving, not the '
   + 'work.';
+
+/**
+ * THE WORDS THE DIFF IS SAID IN, ON BOTH CLIENTS.
+ *
+ * One vocabulary for the three things a proposal can do to a criterion, so the badge on a row, the
+ * one-line summary above the list, and the fold over the untouched ones are all saying the same
+ * word about the same thing. `CriteriaDecisionCopyParityTests.swift` reads these declarations out
+ * of this file and compares them with OrbitKit's, because nothing in either build catches a phrase
+ * re-worded at one end only.
+ */
+export const CRITERION_REWORDED_WORD = 'reworded';
+export const CRITERION_DROPPED_WORD = 'dropped';
+export const CRITERION_ADDED_WORD = 'added';
+
+/** The badge on one row of the diff, in the same words the summary counts them in. */
+export const CRITERION_REWORDED_LABEL = 'reworded by this proposal';
+export const CRITERION_ADDED_LABEL = 'new in this proposal';
+export const CRITERION_DROPPED_LABEL = 'dropped by this proposal';
+
+/** What the words being replaced are labelled, so a reader can tell which half is which. */
+export const ON_RECORD_LABEL = 'on record now';
+/** And the second field, shown only when the proposal moved it. */
+export const METHOD_LABEL = 'how it is judged';
+
+/**
+ * The line that says how much of the ruler this proposal leaves alone.
+ *
+ * IT IS WHY THE UNTOUCHED ONES ARE FOLDED AND NOT HIDDEN. The question this card answers is not
+ * only "what changes" but "how much of the ruler is being rewritten" — a reader who is shown three
+ * rows and nothing else cannot tell a proposal that reworded three criteria from one that replaced
+ * the whole set with three. So the count is always on screen, and the words behind it are one
+ * disclosure away.
+ */
+export const UNCHANGED_SUFFIX_ONE = 'criterion is unchanged by this proposal';
+export const UNCHANGED_SUFFIX_MANY = 'criteria are unchanged by this proposal';
+
+export function unchangedLine(count: number): string {
+  return `${count} ${count === 1 ? UNCHANGED_SUFFIX_ONE : UNCHANGED_SUFFIX_MANY}`;
+}
+
+/** What a proposal nothing could be read out of says instead of a diff. */
+export const CHANGE_SUMMARY_UNREADABLE = 'nothing this reader could read';
+/** And what a restatement that moved nothing says — every criterion came back word for word. */
+export const CHANGE_SUMMARY_NOTHING_MOVES = 'nothing moves';
+
+/** The size of the decision in one line: what moves, and how much did not. */
+export function changeSummary(diff: CriteriaProposalDiff): string {
+  if (diff.entries.length === 0) return CHANGE_SUMMARY_UNREADABLE;
+  const moved: string[] = [];
+  if (diff.changedCount > 0) moved.push(`${diff.changedCount} ${CRITERION_REWORDED_WORD}`);
+  if (diff.removedCount > 0) moved.push(`${diff.removedCount} ${CRITERION_DROPPED_WORD}`);
+  if (diff.newCount > 0) moved.push(`${diff.newCount} ${CRITERION_ADDED_WORD}`);
+  const head = moved.length === 0 ? CHANGE_SUMMARY_NOTHING_MOVES : moved.join(', ');
+  return `${head}, ${diff.sameCount} unchanged`;
+}
+
+/** The badge one row carries, or null for the untouched ones, which carry none. */
+export function changeLabel(change: CriteriaProposalChange): string | null {
+  switch (change) {
+    case 'CHANGED':
+      return CRITERION_REWORDED_LABEL;
+    case 'NEW':
+      return CRITERION_ADDED_LABEL;
+    case 'REMOVED':
+      return CRITERION_DROPPED_LABEL;
+    case 'SAME':
+      return null;
+  }
+}
+
+/** The rows a reader is shown by default: everything this proposal would move. */
+export function movedEntries(diff: CriteriaProposalDiff): CriteriaProposalChangeEntry[] {
+  return diff.entries.filter((entry) => entry.change !== 'SAME');
+}
+
+/** And the ones behind the fold. Read off `change` rather than off `sameCount` so the list and
+ *  the count cannot disagree about which rows they are talking about. */
+export function unmovedEntries(diff: CriteriaProposalDiff): CriteriaProposalChangeEntry[] {
+  return diff.entries.filter((entry) => entry.change === 'SAME');
+}
 
 /** A seal as a reader compares it: enough to tell two apart, never the whole 64 characters. */
 export function shortSeal(seal: string): string {
@@ -251,20 +388,73 @@ export function headingFor(standing: CriteriaDecisionStanding): string {
   return CRITERIA_DECISION_STALE_HEADING;
 }
 
-/** The proposed set, numbered as the server numbers it, with the additions marked. */
-function ProposedCriteria({ proposed }: { proposed: ProposedCriterion[] }): JSX.Element {
+/**
+ * One row of the diff: what the proposal says, and — where it replaces words — what it replaces.
+ *
+ * `value` on the `<li>` is the server's ordinal rather than the row's position in this list, which
+ * is the whole point of showing three rows out of eight: `1.`, `2.`, `4.` tells a reader WHICH of
+ * the criteria moved, and a list that renumbered them `1. 2. 3.` would be inventing a set nobody
+ * proposed.
+ */
+function ChangedCriterion({ entry }: { entry: CriteriaProposalChangeEntry }): JSX.Element {
+  const badge = changeLabel(entry.change);
+  const words = entry.proposed ?? entry.onRecord;
+  const methodMoved = entry.changed.includes('verificationMethod');
   return (
-    <ol className="criteria-decision-proposed">
-      {proposed.map((criterion, index) => (
-        <li key={criterion.id ?? `new-${index}`}>
-          <span className="criteria-decision-text">{criterion.text}</span>
-          <span className="criteria-decision-method">{criterion.verificationMethod}</span>
-          {criterion.id === null ? (
-            <span className="criteria-decision-new">new in this proposal</span>
-          ) : null}
-        </li>
-      ))}
-    </ol>
+    <li value={entry.ordinal} className="criteria-decision-entry">
+      <span className="criteria-decision-text">{words?.text ?? ''}</span>
+      {badge ? <span className="criteria-decision-new">{badge}</span> : null}
+      {entry.change === 'CHANGED' && entry.changed.includes('text') && entry.onRecord ? (
+        <span className="criteria-decision-was">
+          {`${ON_RECORD_LABEL}: ${entry.onRecord.text}`}
+        </span>
+      ) : null}
+      {methodMoved && entry.proposed ? (
+        <span className="criteria-decision-method">
+          {`${METHOD_LABEL}: ${entry.proposed.verificationMethod ?? ''}`}
+        </span>
+      ) : null}
+      {methodMoved && entry.onRecord ? (
+        <span className="criteria-decision-was">
+          {`${ON_RECORD_LABEL}: ${entry.onRecord.verificationMethod ?? ''}`}
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * The proposal as a DIFF: the criteria it moves, and a count of the ones it leaves alone.
+ *
+ * `<details>` and not a piece of state, because there is nothing to remember: a card that is
+ * re-derived on every render has no business keeping a second thing across renders, and the
+ * element opens and closes without this component knowing about it.
+ */
+function ProposedChanges({ diff }: { diff: CriteriaProposalDiff }): JSX.Element {
+  const moved = movedEntries(diff);
+  const unmoved = unmovedEntries(diff);
+  return (
+    <>
+      {moved.length > 0 ? (
+        <ol className="criteria-decision-proposed">
+          {moved.map((entry, index) => (
+            <ChangedCriterion key={entry.definitionId ?? `added-${index}`} entry={entry} />
+          ))}
+        </ol>
+      ) : null}
+      {unmoved.length > 0 ? (
+        <details className="criteria-decision-unchanged">
+          <summary>{unchangedLine(unmoved.length)}</summary>
+          <ol className="criteria-decision-proposed criteria-decision-proposed--quiet">
+            {unmoved.map((entry, index) => (
+              <li value={entry.ordinal} key={entry.definitionId ?? `same-${index}`}>
+                <span className="criteria-decision-text">{entry.proposed?.text ?? ''}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
+    </>
   );
 }
 
@@ -318,11 +508,9 @@ export function CriteriaDecisionCard({
             </div>
             <div className="criteria-decision-kv">
               <span className="criteria-decision-k">Proposed</span>
-              <span className="criteria-decision-v">
-                {`${row.proposed.length} criteria, as this project’s standard set`}
-              </span>
+              <span className="criteria-decision-v">{changeSummary(row.diff)}</span>
             </div>
-            <ProposedCriteria proposed={row.proposed} />
+            <ProposedChanges diff={row.diff} />
             <p className="criteria-decision-hold">{NOTHING_IS_ON_HOLD}</p>
           </>
         ) : standing.state === 'UNREAD' ? null : (

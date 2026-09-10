@@ -107,6 +107,54 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
         assertLiteral(web, CriteriaDecisions.goneBody, "the body of a stale card")
     }
 
+    // MARK: the words the diff is said in
+
+    /// The vocabulary for what a proposal does to a criterion.
+    ///
+    /// This is the half the two ends are most likely to drift on, because it is said three times on
+    /// each card — as the badge on a row, as the word the summary counts in, and in the line over
+    /// the fold — and a client that re-worded only the badge would go on counting in the old word.
+    func testTheDiffVocabularyMatchesTheWebCard() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "CRITERION_REWORDED_WORD", CriteriaDecisions.rewordedWord,
+                       "the word a rewrite is counted in")
+        assertDeclares(web, "CRITERION_DROPPED_WORD", CriteriaDecisions.droppedWord,
+                       "the word a removal is counted in")
+        assertDeclares(web, "CRITERION_ADDED_WORD", CriteriaDecisions.addedWord,
+                       "the word an addition is counted in")
+        assertDeclares(web, "CRITERION_REWORDED_LABEL", CriteriaDecisions.rewordedLabel,
+                       "the badge on a rewritten criterion")
+        assertDeclares(web, "CRITERION_ADDED_LABEL", CriteriaDecisions.addedLabel,
+                       "the badge on a criterion being added")
+        assertDeclares(web, "CRITERION_DROPPED_LABEL", CriteriaDecisions.droppedLabel,
+                       "the badge on a criterion being dropped")
+        assertDeclares(web, "ON_RECORD_LABEL", CriteriaDecisions.onRecordLabel,
+                       "what the words being replaced are labelled")
+        assertDeclares(web, "METHOD_LABEL", CriteriaDecisions.methodLabel,
+                       "what a rewritten procedure is labelled")
+    }
+
+    /// The line that says how much of the ruler is being left alone, and the two it can be missing.
+    ///
+    /// It is the sentence the whole fold rests on: a reader shown three rows and no count cannot
+    /// tell a proposal that reworded three criteria from one that replaced the set with three. Both
+    /// halves are compared because English is the only thing that makes them two constants — the
+    /// end that changed one and not the other would say "5 criterion".
+    func testTheLineOverTheFoldMatchesTheWebCard() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "UNCHANGED_SUFFIX_ONE", CriteriaDecisions.unchangedSuffixOne,
+                       "the fold's line for a single untouched criterion")
+        assertDeclares(web, "UNCHANGED_SUFFIX_MANY", CriteriaDecisions.unchangedSuffixMany,
+                       "the fold's line for several")
+        assertDeclares(web, "CHANGE_SUMMARY_UNREADABLE", CriteriaDecisions.changeSummaryUnreadable,
+                       "what a proposal nothing could be read out of says")
+        assertDeclares(web, "CHANGE_SUMMARY_NOTHING_MOVES",
+                       CriteriaDecisions.changeSummaryNothingMoves,
+                       "what a restatement that moved nothing says")
+    }
+
     // MARK: what the card reports the door said
 
     /// A card names the refusal it would meet in the door's own spelling. If one end re-spells a

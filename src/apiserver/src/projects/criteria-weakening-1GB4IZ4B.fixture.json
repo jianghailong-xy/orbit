@@ -1,0 +1,153 @@
+{
+  "note": "The first real weakening proposal Orbit ever held, recorded so both clients can be pinned against it instead of against a hand-made example. Intent 1GB4IZ4B of the project Criteria seal & decision: a whole-collection restatement of eight criteria in which three texts were rewritten and nothing else moved. The account owner approved it at decidedAt, so it is history now and cannot be re-read from the pending queue — which is the reason it is written down here. onRecord is the set the proposal was composed against, proposed is the restatement the request carried (retains names the onRecord ordinal whose definition id that entry reuses; null would mean an addition), and expected is what the derived read is to conclude from the two.",
+  "intentPublicId": "1GB4IZ4BAWjdl34rgaypYT",
+  "filedAt": "2026-09-09T23:31:14.001Z",
+  "decidedAt": "2026-09-09T23:48:29.192Z",
+  "baselineSeal": "2f7659e8f0ae8f63109087606cc4cc550d0191e952969e3944b73e11adb691b8",
+  "onRecord": [
+    {
+      "ordinal": 1,
+      "text": "一次纯加严的 acceptanceCriteriaItems 写入（新增一条、或把判据从 VERIFICATION 升到 EXECUTABLE、或把期望退出码集合收窄）从普通 agent 会话发出时当场生效，seal 前进，且不产生任何 PENDING intent 行。",
+      "verificationMethod": "一条 pg spec，用 scripts/run-pg-spec.sh 跑（skip 即红）：同一夹具内先发一次加严写入，断言 project_acceptance_criterion_definition 确实变了、seal digest 前进、intent 表零行；这条阳性对照与下一条的阴性断言配对。"
+    },
+    {
+      "ordinal": 2,
+      "text": "一次削弱写入（删除一条标准、放宽期望退出码、判据降级、或改 evidenceTaskId）不改变在册的标准定义，而是写出恰好一条 PENDING ProjectRatifiedActionIntent，其 actionDigest 与请求内容对应、baseline 指向当时的 seal。",
+      "verificationMethod": "同一条 pg spec 的第二半：发一次删除写入，断言 definition 的文本与条数不变、seal digest 未动、intent 表新增恰好一行且其 actionDigest 可由请求内容重算得到。"
+    },
+    {
+      "ordinal": 3,
+      "text": "只改 text 或 verificationMethod 措辞、方向无法机器判定的写入，被归类为削弱并走 intent 路径，不当场生效。",
+      "verificationMethod": "分类器的单元 spec 加一条用例，且配一条 pg spec 断言这类写入后在册 definition 的 text 未变、intent 表新增一行。"
+    },
+    {
+      "ordinal": 4,
+      "text": "决定门要求两把钥匙同时成立才应用：intent 的一次性 commitToken 与账号所有者凭据。缺任一、commitToken 错误、intent 已 settled、或 base seal 已移动，四种情况各自被типed 拒绝且不写入任何生效行。",
+      "verificationMethod": "一条 pg spec 覆盖这四条拒绝路径，每条断言拒绝码与「definition 未变」；再断言一次成功的 APPROVE 在同一事务里完成 apply → 重新封存 → 记录批准。"
+    },
+    {
+      "ordinal": 5,
+      "text": "在当前 seal 未被账号所有者确认过时，项目 DONE 推导不出来；确认之后同样条件下能推导出来。",
+      "verificationMethod": "一条 pg spec，先断言未确认状态下结算读返回「held / 需要确认」且项目未变 DONE，再写入确认后重跑同一读，断言可结算。两次读之间只改确认这一件事。"
+    },
+    {
+      "ordinal": 6,
+      "text": "结算时，任何一条由其证据产出会话自己撰写的标准不计入，且该状态在读出的结算结果里可分辨（不是静默丢弃）。",
+      "verificationMethod": "一条 pg spec：构造一条作者会话 == 证据产出会话的标准，断言结算读把它标为不计入并阻止结算；再把证据换成另一会话产出，断言同一读放行。"
+    },
+    {
+      "ordinal": 7,
+      "text": "削弱决定卡与结算确认卡在 web 和 iOS 上渲染的内容来自服务端派生读，过期态（已在另一端答过 / 被更新的提议顶掉 / base seal 已移动）由派生结果决定而非本地冻结帧，且失效时动作按钮为 disabled。",
+      "verificationMethod": "web：一条组件 spec 断言三种过期输入下按钮 disabled 且卡文案说明原因。iOS：发一版 beta，由账号所有者截图确认卡在真机上的形态与失效态，截图附在任务证据里——这台机器没有 Swift 工具链，视觉不接受静态推断。"
+    },
+    {
+      "ordinal": 8,
+      "text": "这轮改动没有新增任何以 project_acceptance_ 为前缀的关系或函数。",
+      "verificationMethod": "npm run test:outcome-reconciler:full-api 在合并边界通过（其中包含 project_acceptance_ 前缀的普查断言），或单跑该普查 spec 并断言其计数未变。"
+    }
+  ],
+  "proposed": [
+    {
+      "ordinal": 1,
+      "retains": 1,
+      "text": "一次纯加严的 acceptanceCriteriaItems 写入（新增一条标准）从普通 agent 会话发出时当场生效，seal 前进，且不产生任何 PENDING intent 行。",
+      "verificationMethod": "一条 pg spec，用 scripts/run-pg-spec.sh 跑（skip 即红）：同一夹具内先发一次加严写入，断言 project_acceptance_criterion_definition 确实变了、seal digest 前进、intent 表零行；这条阳性对照与下一条的阴性断言配对。"
+    },
+    {
+      "ordinal": 2,
+      "retains": 2,
+      "text": "一次削弱写入（删除一条标准、或任何 text / verificationMethod 改写）不改变在册的标准定义，而是写出恰好一条 PENDING ProjectRatifiedActionIntent，其 actionDigest 与请求内容对应、baseline 指向当时的 seal。",
+      "verificationMethod": "同一条 pg spec 的第二半：发一次删除写入，断言 definition 的文本与条数不变、seal digest 未动、intent 表新增恰好一行且其 actionDigest 可由请求内容重算得到。"
+    },
+    {
+      "ordinal": 3,
+      "retains": 3,
+      "text": "只改 text 或 verificationMethod 措辞、方向无法机器判定的写入，被归类为削弱并走 intent 路径，不当场生效。",
+      "verificationMethod": "分类器的单元 spec 加一条用例，且配一条 pg spec 断言这类写入后在册 definition 的 text 未变、intent 表新增一行。"
+    },
+    {
+      "ordinal": 4,
+      "retains": 4,
+      "text": "决定门要求两把钥匙同时成立才应用：intent 的一次性 commitToken 与账号所有者凭据。缺任一、commitToken 错误、intent 已 settled、或 base seal 已移动，四种情况各自被typed 拒绝且不写入任何生效行。",
+      "verificationMethod": "一条 pg spec 覆盖这四条拒绝路径，每条断言拒绝码与「definition 未变」；再断言一次成功的 APPROVE 在同一事务里完成 apply → 重新封存 → 记录批准。"
+    },
+    {
+      "ordinal": 5,
+      "retains": 5,
+      "text": "在当前 seal 未被账号所有者确认过时，项目 DONE 推导不出来；确认之后同样条件下能推导出来。",
+      "verificationMethod": "一条 pg spec，先断言未确认状态下结算读返回「held / 需要确认」且项目未变 DONE，再写入确认后重跑同一读，断言可结算。两次读之间只改确认这一件事。"
+    },
+    {
+      "ordinal": 6,
+      "retains": 6,
+      "text": "结算时，任何一条由其证据产出会话自己撰写的标准不计入，且该状态在读出的结算结果里可分辨（不是静默丢弃）。",
+      "verificationMethod": "一条 pg spec：构造一条作者会话 == 证据产出会话的标准，断言结算读把它标为不计入并阻止结算；再把证据换成另一会话产出，断言同一读放行。"
+    },
+    {
+      "ordinal": 7,
+      "retains": 7,
+      "text": "削弱决定卡与结算确认卡在 web 和 iOS 上渲染的内容来自服务端派生读，过期态（已在另一端答过 / 被更新的提议顶掉 / base seal 已移动）由派生结果决定而非本地冻结帧，且失效时动作按钮为 disabled。",
+      "verificationMethod": "web：一条组件 spec 断言三种过期输入下按钮 disabled 且卡文案说明原因。iOS：发一版 beta，由账号所有者截图确认卡在真机上的形态与失效态，截图附在任务证据里——这台机器没有 Swift 工具链，视觉不接受静态推断。"
+    },
+    {
+      "ordinal": 8,
+      "retains": 8,
+      "text": "这轮改动没有新增任何以 project_acceptance_ 为前缀的关系或函数。",
+      "verificationMethod": "npm run test:outcome-reconciler:full-api 在合并边界通过（其中包含 project_acceptance_ 前缀的普查断言），或单跑该普查 spec 并断言其计数未变。"
+    }
+  ],
+  "expected": {
+    "sameCount": 5,
+    "changedCount": 3,
+    "newCount": 0,
+    "removedCount": 0,
+    "entries": [
+      {
+        "ordinal": 1,
+        "change": "CHANGED",
+        "changed": [
+          "text"
+        ]
+      },
+      {
+        "ordinal": 2,
+        "change": "CHANGED",
+        "changed": [
+          "text"
+        ]
+      },
+      {
+        "ordinal": 3,
+        "change": "SAME",
+        "changed": []
+      },
+      {
+        "ordinal": 4,
+        "change": "CHANGED",
+        "changed": [
+          "text"
+        ]
+      },
+      {
+        "ordinal": 5,
+        "change": "SAME",
+        "changed": []
+      },
+      {
+        "ordinal": 6,
+        "change": "SAME",
+        "changed": []
+      },
+      {
+        "ordinal": 7,
+        "change": "SAME",
+        "changed": []
+      },
+      {
+        "ordinal": 8,
+        "change": "SAME",
+        "changed": []
+      }
+    ]
+  }
+}

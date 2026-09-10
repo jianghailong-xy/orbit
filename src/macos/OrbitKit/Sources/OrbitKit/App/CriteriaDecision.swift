@@ -58,9 +58,11 @@ import Foundation
 
 // MARK: - the wire: held weakening proposals
 
-/// One criterion as the proposal states it. `id` is null for one the proposal is ADDING, which is
-/// the only way a reader can tell an addition from a rewrite — the read publishes the proposed set,
-/// not a diff against the set in force (the baseline's text is not published at all).
+/// One criterion as the proposal states it. `id` is null for one the proposal is ADDING.
+///
+/// This is the material the proposal's `actionDigest` is taken over, so it is the request VERBATIM
+/// and has to stay recomputable from it — which is exactly why it cannot say what changed. The
+/// answer to that question is `PendingCriteriaDecisionRow.diff` below.
 public struct ProposedCriterion: Codable, Equatable, Sendable, Identifiable {
     public let id: String?
     public let ordinal: Int
@@ -77,6 +79,98 @@ public struct ProposedCriterion: Codable, Equatable, Sendable, Identifiable {
         self.verificationMethod = verificationMethod
         self.completionCriterionOverrideReason = completionCriterionOverrideReason
     }
+}
+
+/// WHAT A PROPOSAL DOES TO ONE CRITERION — THE SERVER'S COMPARISON, NOT THIS CLIENT'S
+///
+/// A criteria edit is a whole-collection replacement, so a proposal that reworded three criteria
+/// out of eight arrives stating all eight, and five of them are the words already on record. This
+/// card used to lay out all eight; the three that moved were buried in the other five, and the
+/// account owner's words after reading the first real one were "it should only show what changed".
+///
+/// The comparison is taken by `readPendingCriteriaDecisions`, inside the transaction that decided
+/// which proposals are pending, against the definition rows the seal is computed from. A client
+/// that fetched the criteria in force and diffed them itself would be making the card's central
+/// claim a conclusion IT reached, from two reads taken at two moments, in every client separately.
+public enum CriteriaProposalChange: String, Codable, Equatable, Sendable {
+    case same = "SAME"
+    case changed = "CHANGED"
+    case new = "NEW"
+    case removed = "REMOVED"
+}
+
+/// The fields a rewrite can move: all three a criterion carries, not just the assertion. An edit
+/// that leaves `text` alone and rewrites `verificationMethod` has still changed what the project
+/// has to prove.
+public enum CriteriaProposalField: String, Codable, Equatable, Sendable {
+    case text
+    case verificationMethod
+    case completionCriterionOverrideReason
+}
+
+/// One criterion's words, on either side of the comparison.
+public struct CriterionWording: Codable, Equatable, Sendable {
+    public let text: String
+    public let verificationMethod: String?
+    public let completionCriterionOverrideReason: String?
+
+    public init(text: String, verificationMethod: String? = nil,
+                completionCriterionOverrideReason: String? = nil) {
+        self.text = text
+        self.verificationMethod = verificationMethod
+        self.completionCriterionOverrideReason = completionCriterionOverrideReason
+    }
+}
+
+/// What this proposal does to one criterion: which one, which way, and both sets of words.
+public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
+    public let change: CriteriaProposalChange
+    /// The definition this is about; nil for one the proposal is adding, which names none.
+    public let definitionId: String?
+    /// Its place in the proposed set — or, for one being dropped, in the set on record.
+    public let ordinal: Int
+    /// The proposal's words. Nil for `.removed`: the proposal states none.
+    public let proposed: CriterionWording?
+    /// THE WORDS IT REPLACES, off the definition in force. Nil for `.new`: it replaces nothing.
+    public let onRecord: CriterionWording?
+    /// Which fields differ. Empty except on `.changed`.
+    public let changed: [CriteriaProposalField]
+
+    public init(change: CriteriaProposalChange, definitionId: String? = nil, ordinal: Int,
+                proposed: CriterionWording? = nil, onRecord: CriterionWording? = nil,
+                changed: [CriteriaProposalField] = []) {
+        self.change = change
+        self.definitionId = definitionId
+        self.ordinal = ordinal
+        self.proposed = proposed
+        self.onRecord = onRecord
+        self.changed = changed
+    }
+}
+
+/// The whole of what a proposal would do to the ruler, and how much of it it leaves alone.
+///
+/// `sameCount` is what licenses a card to fold the untouched ones away, and it is a number the
+/// SERVER said rather than one a collapsed list implies — otherwise "5 unchanged" would be a claim
+/// about how many rows this client chose not to draw.
+public struct CriteriaProposalDiff: Codable, Equatable, Sendable {
+    public let entries: [CriteriaProposalChangeEntry]
+    public let sameCount: Int
+    public let changedCount: Int
+    public let newCount: Int
+    public let removedCount: Int
+
+    public init(entries: [CriteriaProposalChangeEntry] = [], sameCount: Int = 0,
+                changedCount: Int = 0, newCount: Int = 0, removedCount: Int = 0) {
+        self.entries = entries
+        self.sameCount = sameCount
+        self.changedCount = changedCount
+        self.newCount = newCount
+        self.removedCount = removedCount
+    }
+
+    /// What a proposal nothing could be read out of carries: no entries, and so no counts.
+    public static let unreadable = CriteriaProposalDiff()
 }
 
 /// Whether the decision door would record an answer about this proposal right now — the SERVER's
@@ -112,6 +206,8 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
     /// The seal standing NOW. Equal to `baselineSeal` exactly when the proposal is decidable.
     public let currentSeal: String
     public let proposed: [ProposedCriterion]
+    /// The same restatement read against the criteria in force — what the card is drawn from.
+    public let diff: CriteriaProposalDiff
     /// The proposal this one displaced, or nil when it displaced nothing.
     public let supersededIntentId: String?
     public let decidability: CriteriaDecisionDecidability
@@ -120,7 +216,8 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
 
     public init(intentId: String, projectId: String, commitToken: String, actionDigest: String,
                 filedAt: String, ageSeconds: Int, baselineSeal: String, currentSeal: String,
-                proposed: [ProposedCriterion], supersededIntentId: String? = nil,
+                proposed: [ProposedCriterion], diff: CriteriaProposalDiff = .unreadable,
+                supersededIntentId: String? = nil,
                 decidability: CriteriaDecisionDecidability) {
         self.intentId = intentId
         self.projectId = projectId
@@ -131,6 +228,7 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
         self.baselineSeal = baselineSeal
         self.currentSeal = currentSeal
         self.proposed = proposed
+        self.diff = diff
         self.supersededIntentId = supersededIntentId
         self.decidability = decidability
     }
@@ -390,6 +488,39 @@ public enum CriteriaDecisions {
     public static let baseSealMovedRefusal = "PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED"
     public static let alreadySettledRefusal = "PROJECT_CRITERIA_DECISION_ALREADY_SETTLED"
 
+    // MARK: copy — the diff
+
+    /// One vocabulary for the three things a proposal can do to a criterion, so the badge on a row
+    /// and the one-line summary above the list say the same word about the same thing. Compared
+    /// against the browser's declarations by `CriteriaDecisionCopyParityTests`.
+    public static let rewordedWord = "reworded"
+    public static let droppedWord = "dropped"
+    public static let addedWord = "added"
+
+    /// The badge on one row of the diff.
+    public static let rewordedLabel = "reworded by this proposal"
+    public static let addedLabel = "new in this proposal"
+    public static let droppedLabel = "dropped by this proposal"
+
+    /// What the words being replaced are labelled, so a reader can tell which half is which — and
+    /// the second field, shown only when the proposal moved it.
+    public static let onRecordLabel = "on record now"
+    public static let methodLabel = "how it is judged"
+
+    /// The line that says how much of the ruler this proposal leaves alone.
+    ///
+    /// IT IS WHY THE UNTOUCHED ONES ARE FOLDED AND NOT HIDDEN. The question this card answers is
+    /// not only "what changed" but "how much of the ruler is being rewritten" — three rows and
+    /// nothing else cannot tell a proposal that reworded three criteria from one that replaced the
+    /// whole set with three.
+    public static let unchangedSuffixOne = "criterion is unchanged by this proposal"
+    public static let unchangedSuffixMany = "criteria are unchanged by this proposal"
+
+    /// What a proposal nothing could be read out of says instead of a diff, and what a restatement
+    /// that moved nothing says — every criterion came back word for word.
+    public static let changeSummaryUnreadable = "nothing this reader could read"
+    public static let changeSummaryNothingMoves = "nothing moves"
+
     // MARK: derivation
 
     /// A seal as a reader compares it: enough to tell two apart, never the whole 64 characters.
@@ -500,21 +631,96 @@ public enum CriteriaDecisions {
         }
     }
 
-    /// The proposed set as a numbered line each, in the server's own ordinals. One criterion the
-    /// proposal ADDS is marked, because `id == nil` is the only way a reader can tell an addition
-    /// from a rewrite — this read publishes the proposed set and not a diff.
-    public static func proposedLines(_ row: PendingCriteriaDecisionRow) -> [String] {
-        row.proposed.enumerated().map { index, criterion in
-            let number = criterion.ordinal > 0 ? criterion.ordinal : index + 1
-            let marker = criterion.id == nil ? " · new in this proposal" : ""
-            return "\(number). \(criterion.text)\(marker)"
+    // MARK: derivation — the diff
+
+    /// The line that says how many criteria this proposal leaves alone.
+    public static func unchangedLine(_ count: Int) -> String {
+        "\(count) \(count == 1 ? unchangedSuffixOne : unchangedSuffixMany)"
+    }
+
+    /// The size of the decision in one line: what moves, and how much did not.
+    public static func changeSummary(_ diff: CriteriaProposalDiff) -> String {
+        if diff.entries.isEmpty { return changeSummaryUnreadable }
+        var moved: [String] = []
+        if diff.changedCount > 0 { moved.append("\(diff.changedCount) \(rewordedWord)") }
+        if diff.removedCount > 0 { moved.append("\(diff.removedCount) \(droppedWord)") }
+        if diff.newCount > 0 { moved.append("\(diff.newCount) \(addedWord)") }
+        let head = moved.isEmpty ? changeSummaryNothingMoves : moved.joined(separator: ", ")
+        return "\(head), \(diff.sameCount) unchanged"
+    }
+
+    /// The badge one row carries, or nil for the untouched ones, which carry none.
+    public static func changeLabel(_ change: CriteriaProposalChange) -> String? {
+        switch change {
+        case .changed: return rewordedLabel
+        case .new:     return addedLabel
+        case .removed: return droppedLabel
+        case .same:    return nil
         }
     }
 
-    /// The one line saying how much is being asked for, in the shape the browser's card says it.
-    public static func proposedSummary(_ row: PendingCriteriaDecisionRow) -> String {
-        let count = row.proposed.count
-        return "\(count) criteri\(count == 1 ? "on" : "a"), as this project’s standard set"
+    /// The entries a reader is shown by default: everything this proposal would move. Read off
+    /// `change` rather than off the counts, so the list and the count cannot disagree about which
+    /// rows they are talking about.
+    public static func movedEntries(_ diff: CriteriaProposalDiff) -> [CriteriaProposalChangeEntry] {
+        diff.entries.filter { $0.change != .same }
+    }
+
+    /// And the ones behind the fold.
+    public static func unmovedEntries(_ diff: CriteriaProposalDiff) -> [CriteriaProposalChangeEntry] {
+        diff.entries.filter { $0.change == .same }
+    }
+
+    /// One row of the diff, laid out for a view that only assembles.
+    ///
+    /// The numbering is the SERVER's ordinal and not this list's position, which is the whole point
+    /// of showing three rows out of eight: `1.`, `2.`, `4.` tells a reader WHICH criteria moved,
+    /// and a list renumbered `1. 2. 3.` would be inventing a set nobody proposed.
+    public struct ChangeRow: Equatable, Sendable, Identifiable {
+        public let id: String
+        /// The words this row is about: the proposal's, or — for one being dropped — the record's.
+        public let headline: String
+        public let badge: String
+        /// The words this rewrite would replace. Nil unless the assertion itself moved.
+        public let wasText: String?
+        /// The procedure proposed, and the one it replaces. Both nil unless the procedure moved.
+        public let method: String?
+        public let wasMethod: String?
+
+        public init(id: String, headline: String, badge: String, wasText: String? = nil,
+                    method: String? = nil, wasMethod: String? = nil) {
+            self.id = id
+            self.headline = headline
+            self.badge = badge
+            self.wasText = wasText
+            self.method = method
+            self.wasMethod = wasMethod
+        }
+    }
+
+    /// Every criterion this proposal would move, as rows. The untouched ones are not here — they
+    /// are `unchangedRows` below, behind a fold, under a count that is always on screen.
+    public static func changeRows(_ row: PendingCriteriaDecisionRow) -> [ChangeRow] {
+        movedEntries(row.diff).enumerated().map { index, entry in
+            let words = entry.proposed ?? entry.onRecord
+            let methodMoved = entry.changed.contains(.verificationMethod)
+            return ChangeRow(
+                id: entry.definitionId ?? "added-\(index)-\(entry.ordinal)",
+                headline: "\(entry.ordinal). \(words?.text ?? "")",
+                badge: changeLabel(entry.change) ?? "",
+                wasText: entry.change == .changed && entry.changed.contains(.text)
+                    ? entry.onRecord.map { "\(onRecordLabel): \($0.text)" } : nil,
+                method: methodMoved
+                    ? entry.proposed.map { "\(methodLabel): \($0.verificationMethod ?? "")" } : nil,
+                wasMethod: methodMoved
+                    ? entry.onRecord.map { "\(onRecordLabel): \($0.verificationMethod ?? "")" } : nil,
+            )
+        }
+    }
+
+    /// The criteria the proposal leaves word for word alone, numbered as the server numbers them.
+    public static func unchangedRows(_ row: PendingCriteriaDecisionRow) -> [String] {
+        unmovedEntries(row.diff).map { "\($0.ordinal). \($0.proposed?.text ?? "")" }
     }
 
     /// The request one press makes, as data, so what goes to the door can be asserted without a

@@ -8,17 +8,26 @@ import {
   CRITERIA_DECISION_BASE_SEAL_MOVED,
   CRITERIA_DECISION_HEADING,
   CRITERIA_DECISION_STALE_HEADING,
+  CRITERION_ADDED_LABEL,
+  CRITERION_DROPPED_LABEL,
+  CRITERION_REWORDED_LABEL,
   CriteriaDecisionCard,
+  METHOD_LABEL,
+  ON_RECORD_LABEL,
   PROVENANCE_LABEL,
   REFUSE_LABEL,
+  changeSummary,
   criteriaApprovedLine,
   criteriaDecisionRequest,
   criteriaDecisionStanding,
   criteriaRefusedLine,
   isAnswerable,
   shortSeal,
+  unchangedLine,
   type CriteriaDecisionResult,
   type CriteriaDecisionStanding,
+  type CriteriaProposalChangeEntry,
+  type CriteriaProposalDiff,
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
   type ProposedCriterion,
@@ -71,6 +80,35 @@ function proposed(over: Partial<ProposedCriterion> = {}): ProposedCriterion {
   };
 }
 
+/** One entry of the server's diff. `change` and `changed` are the server's conclusion, never one
+ *  this file recomputes: a test that diffed the two sides itself would be testing its own diff. */
+function entry(over: Partial<CriteriaProposalChangeEntry> = {}): CriteriaProposalChangeEntry {
+  return {
+    change: 'SAME',
+    definitionId: '3t4PyphGUWQtzDGfvOLY9R',
+    ordinal: 1,
+    proposed: { text: CRITERION_TEXT, verificationMethod: 'EXECUTABLE',
+      completionCriterionOverrideReason: null },
+    onRecord: { text: CRITERION_TEXT, verificationMethod: 'EXECUTABLE',
+      completionCriterionOverrideReason: null },
+    changed: [],
+    ...over,
+  };
+}
+
+/** The counts as the server publishes them: taken over the entries, so the two cannot disagree. */
+function diffOf(entries: CriteriaProposalChangeEntry[]): CriteriaProposalDiff {
+  const counted = (change: CriteriaProposalChangeEntry['change']): number =>
+    entries.filter((each) => each.change === change).length;
+  return {
+    entries,
+    sameCount: counted('SAME'),
+    changedCount: counted('CHANGED'),
+    newCount: counted('NEW'),
+    removedCount: counted('REMOVED'),
+  };
+}
+
 function row(over: Partial<PendingCriteriaDecisionRow> = {}): PendingCriteriaDecisionRow {
   return {
     intentId: '7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d',
@@ -82,6 +120,14 @@ function row(over: Partial<PendingCriteriaDecisionRow> = {}): PendingCriteriaDec
     baselineSeal: SEAL_DRAFTED,
     currentSeal: SEAL_DRAFTED,
     proposed: [proposed(), proposed({ id: null, ordinal: 2, text: 'the scheduled nodes are green' })],
+    diff: diffOf([
+      entry({ change: 'CHANGED', changed: ['text'],
+        onRecord: { text: 'Full API was green last week', verificationMethod: 'EXECUTABLE',
+          completionCriterionOverrideReason: null } }),
+      entry({ change: 'NEW', definitionId: null, ordinal: 2, onRecord: null,
+        proposed: { text: 'the scheduled nodes are green', verificationMethod: 'EXECUTABLE',
+          completionCriterionOverrideReason: null } }),
+    ]),
     supersededIntentId: null,
     decidability: { decidable: true, refusal: null, requiredAction: null },
     ...over,
@@ -139,6 +185,83 @@ function fromRepo(...candidates: string[]): string {
   return readFileSync(found, 'utf8');
 }
 
+/**
+ * The one real proposal, as it was filed and answered, read off the file the server's spec replays.
+ *
+ * Shared rather than restated so that "the same input" is one fact on disk instead of two examples
+ * that drift. `retains` names the ordinal on record whose definition id a proposed criterion reuses
+ * (null would be an addition); the definition ids themselves are the fixture project's and are not
+ * what this card is about, so they are spelled here as stable stand-ins.
+ */
+interface RecordedProposal {
+  intentPublicId: string;
+  onRecord: Array<{ ordinal: number; text: string; verificationMethod: string }>;
+  proposed: Array<{
+    ordinal: number; retains: number | null; text: string; verificationMethod: string;
+  }>;
+  expected: {
+    sameCount: number; changedCount: number; newCount: number; removedCount: number;
+    entries: Array<{
+      ordinal: number;
+      change: CriteriaProposalChangeEntry['change'];
+      changed: CriteriaProposalChangeEntry['changed'];
+    }>;
+  };
+}
+
+function realProposal(): PendingCriteriaDecisionRow {
+  const recorded = JSON.parse(fromRepo(
+    'src/apiserver/src/projects/criteria-weakening-1GB4IZ4B.fixture.json',
+    '../apiserver/src/projects/criteria-weakening-1GB4IZ4B.fixture.json',
+  )) as RecordedProposal;
+  const onRecord = new Map(recorded.onRecord.map((each) => [each.ordinal, each]));
+  const entries = recorded.proposed.map((each, index) => {
+    const verdict = recorded.expected.entries[index]!;
+    const was = each.retains === null ? null : onRecord.get(each.retains)!;
+    return entry({
+      change: verdict.change,
+      changed: verdict.changed,
+      definitionId: was ? `definition-${was.ordinal}` : null,
+      ordinal: each.ordinal,
+      proposed: { text: each.text, verificationMethod: each.verificationMethod,
+        completionCriterionOverrideReason: null },
+      onRecord: was
+        ? { text: was.text, verificationMethod: was.verificationMethod,
+          completionCriterionOverrideReason: null }
+        : null,
+    });
+  });
+  return row({
+    proposed: recorded.proposed.map((each) => proposed({
+      id: each.retains === null ? null : `definition-${each.retains}`,
+      ordinal: each.ordinal,
+      text: each.text,
+      verificationMethod: each.verificationMethod,
+    })),
+    diff: diffOf(entries),
+  });
+}
+
+/**
+ * The rows the card draws WITHOUT anything being opened — the whole of what "only what changed"
+ * means, measured as markup rather than as a count this file was handed.
+ *
+ * `criteria-decision-entry` is on the moved rows and on no others, so the folded ones are outside
+ * this set even though they are in the document: `<details>` keeps them off screen, and a check
+ * that counted every `<li>` would pass on the card this one rejects.
+ */
+function entryRows(html: string): string[] {
+  return [...html.matchAll(/<li[^>]*class="criteria-decision-entry[^"]*"[^>]*>/gu)]
+    .map((match) => match[0]);
+}
+
+/** The number a row is drawn with: the server's ordinal, not this list's position. */
+function ordinalOf(tag: string): number {
+  const found = /value="(\d+)"/u.exec(tag);
+  expect(found, `no ordinal on ${tag}`).not.toBeNull();
+  return Number(found![1]);
+}
+
 /** Selector/body pairs, comments stripped so a rule cannot be satisfied by a sentence about it. */
 function rules(css: string): Array<{ selector: string; body: string }> {
   const found: Array<{ selector: string; body: string }> = [];
@@ -169,9 +292,139 @@ describe('a proposal the door would answer', () => {
     expect(html).toContain(CRITERION_TEXT);
     expect(html).toContain(shortSeal(SEAL_DRAFTED));
     // A criterion the proposal is ADDING is marked as one rather than reading as an edit.
-    expect(html).toContain('new in this proposal');
+    expect(html).toContain(CRITERION_ADDED_LABEL);
     // The sentence readers get wrong: refusing stops the ruler, not the work.
     expect(html.toLowerCase()).toContain('nothing is on hold');
+  });
+});
+
+/**
+ * THE CARD IS A DIFF, AND THE ONE REAL EDIT ORBIT HELD IS WHAT IT IS MEASURED ON.
+ *
+ * The first weakening proposal Orbit ever held restated eight criteria to reword three of them, and
+ * the card laid out all eight with their verification methods — so the three that moved were buried
+ * inside a 360px scroll box, and reading to the end did not tell anybody which three they were. The
+ * account owner's words were "it should only show what changed".
+ *
+ * That proposal is on disk (`criteria-weakening-1GB4IZ4B.fixture.json`), because it was approved and
+ * so cannot be read back out of the pending queue, and because the same file is what the server's
+ * own spec replays through the write path. Both ends are pinned to one recorded fact rather than to
+ * two hand-made examples that can drift apart.
+ *
+ * WHAT IS AND IS NOT ASSERTED HERE. `change` and `changed` are fed in as the SERVER's conclusion,
+ * never recomputed from the two sides — a test that diffed them itself would be testing its own
+ * diff, and the rule this surface is built on is that the comparison is the server's.
+ */
+describe('a proposal that restates eight criteria to reword three', () => {
+  const real = realProposal();
+
+  it('is fed to the card as the whole restatement, so folding it is the card’s doing', () => {
+    // The positive control under every count below: the input really is all eight.
+    expect(real.diff.entries.length).toBe(8);
+    expect(real.proposed.length).toBe(8);
+    expect([real.diff.changedCount, real.diff.sameCount, real.diff.newCount,
+      real.diff.removedCount]).toEqual([3, 5, 0, 0]);
+  });
+
+  it('draws three rows and not eight, and says how many it left alone', () => {
+    const html = card(criteriaDecisionStanding(queue([real]), real.intentId));
+    expect(entryRows(html).length).toBe(3);
+    // And WHICH three: the server's own ordinals, so a reader can see it was 1, 2 and 4 that moved
+    // rather than the first three of a list this card renumbered.
+    expect(entryRows(html).map(ordinalOf)).toEqual([1, 2, 4]);
+    // The count is on screen without opening anything — "three reworded" and "the whole set
+    // replaced with three" are the same three rows until a reader is told how many did not move.
+    expect(html).toContain(unchangedLine(5));
+    expect(html).toContain(changeSummary(real.diff));
+    // Folded, not open: the five are one disclosure away rather than back in the scroll box. The
+    // presence check is what keeps the second line from passing on a card with no fold at all.
+    expect(html).toContain('<details');
+    expect(/<details[^>]*\bopen\b/u.test(html)).toBe(false);
+  });
+
+  it('shows the words each rewrite would replace, beside the words replacing them', () => {
+    const html = card(criteriaDecisionStanding(queue([real]), real.intentId));
+    const moved = real.diff.entries.filter((each) => each.change === 'CHANGED');
+    expect(moved.length).toBe(3);
+    for (const each of moved) {
+      expect(html, `the proposed words of ${each.ordinal}`).toContain(each.proposed!.text);
+      expect(html, `what ${each.ordinal} replaces`).toContain(each.onRecord!.text);
+      expect(html).toContain(CRITERION_REWORDED_LABEL);
+    }
+    expect(html).toContain(ON_RECORD_LABEL);
+  });
+});
+
+describe('the three ways a criterion can move', () => {
+  const unchangedNeighbour = entry({ definitionId: 'kept', ordinal: 2 });
+
+  it('calls a criterion changed when only HOW IT IS JUDGED moved', () => {
+    // `text` is byte-for-byte the same on both sides. An edit that leaves the assertion alone and
+    // rewrites the procedure has still changed what the project has to prove, and a comparison
+    // that only read `text` would report this proposal as changing nothing at all.
+    const reworded = row({
+      diff: diffOf([
+        entry({
+          change: 'CHANGED',
+          changed: ['verificationMethod'],
+          proposed: { text: CRITERION_TEXT, verificationMethod: 'somebody says it looks fine',
+            completionCriterionOverrideReason: null },
+          onRecord: { text: CRITERION_TEXT, verificationMethod: 'the full API suite passes',
+            completionCriterionOverrideReason: null },
+        }),
+        unchangedNeighbour,
+      ]),
+    });
+    const html = card(criteriaDecisionStanding(queue([reworded]), reworded.intentId));
+    expect(entryRows(html).length).toBe(1);
+    expect(html).toContain(CRITERION_REWORDED_LABEL);
+    // Both procedures, labelled, because the assertion is identical and the words alone would look
+    // like the card had drawn the same criterion twice.
+    expect(html).toContain(`${METHOD_LABEL}: somebody says it looks fine`);
+    expect(html).toContain(`${ON_RECORD_LABEL}: the full API suite passes`);
+    expect(html).toContain(unchangedLine(1));
+  });
+
+  it('says a criterion is being dropped, in the words it would drop', () => {
+    // The shape the card could not express at all before: a proposal that removes a criterion has
+    // nothing to lay out for it, so a card built from the restatement showed one row fewer and
+    // said nothing about the row that went.
+    const dropped = row({
+      diff: diffOf([
+        entry({ definitionId: 'kept', ordinal: 1 }),
+        entry({
+          change: 'REMOVED',
+          definitionId: 'gone',
+          ordinal: 2,
+          proposed: null,
+          onRecord: { text: 'the migrations replay from empty', verificationMethod: 'a pg spec',
+            completionCriterionOverrideReason: null },
+          changed: [],
+        }),
+      ]),
+    });
+    const html = card(criteriaDecisionStanding(queue([dropped]), dropped.intentId));
+    expect(entryRows(html).length).toBe(1);
+    expect(html).toContain(CRITERION_DROPPED_LABEL);
+    expect(html).toContain('the migrations replay from empty');
+    expect(html).toContain(unchangedLine(1));
+  });
+
+  it('folds nothing away when everything moved', () => {
+    // The negative of the fold: a proposal that rewrites the whole set has no unchanged count to
+    // report, and a card that printed "0 criteria are unchanged" would be noise on the one card
+    // where the reader most needs the rows.
+    const wholesale = row({
+      diff: diffOf([
+        entry({ change: 'CHANGED', changed: ['text'],
+          proposed: { text: 'a looser ruler', verificationMethod: 'EXECUTABLE',
+            completionCriterionOverrideReason: null } }),
+      ]),
+    });
+    const html = card(criteriaDecisionStanding(queue([wholesale]), wholesale.intentId));
+    expect(entryRows(html).length).toBe(1);
+    expect(html).not.toContain('unchanged by this proposal');
+    expect(html).not.toContain('<details');
   });
 });
 
@@ -249,7 +502,9 @@ describe('a card whose question has moved on', () => {
     for (const standing of [
       criteriaDecisionStanding(queue([]), gone.intentId),
       criteriaDecisionStanding(
-        queue([row({ intentId: 'other', supersededIntentId: gone.intentId, proposed: [] })]),
+        queue([row({
+          intentId: 'other', supersededIntentId: gone.intentId, proposed: [], diff: diffOf([]),
+        })]),
         gone.intentId,
       ),
     ]) {

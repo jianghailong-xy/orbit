@@ -5,7 +5,11 @@ import {
   type CriteriaWeakeningAction,
   type ProposedCriterion,
 } from './criteria-weakening-intent';
-import { criteriaFromDefinitions, standardSetVersion } from './project-acceptance';
+import {
+  type StatedAcceptanceCriterion,
+  criteriaFromDefinitions,
+  standardSetVersion,
+} from './project-acceptance';
 
 /**
  * Which loosening proposals an account owner is being asked to decide, derived from the ledger
@@ -81,6 +85,185 @@ export interface CriteriaDecisionDecidability {
   requiredAction: string | null;
 }
 
+/**
+ * WHAT ONE PROPOSED CRITERION DOES TO THE ONE IT NAMES — DERIVED HERE AND NOWHERE ELSE
+ * ------------------------------------------------------------------------------------
+ * A weakening edit restates the WHOLE collection: `project_update(acceptanceCriteriaItems)` is a
+ * replacement, so a proposal that reworded one criterion out of eight arrives carrying all eight,
+ * and seven of them are the words already on record. `proposed` is that restatement verbatim,
+ * because it is the material `actionDigest` is taken over and has to stay recomputable from the
+ * request alone — so it cannot say which of the eight moved, and a card built from it alone can
+ * only lay out all eight and leave the reader to find the three.
+ *
+ * WHY THE COMPARISON IS THE SERVER'S AND NOT THE CARD'S. A client could fetch the criteria in
+ * force and diff them against `proposed` itself. That would make the card's central claim — these
+ * are the words that change — a conclusion the CLIENT reached from two reads taken at two moments,
+ * about a ruler that can move between them, and it would have to be reached again, identically, in
+ * every client. The rule this whole surface is built on is that the card's content comes from one
+ * derived read; so the comparison is taken here, inside the same transaction that decided which
+ * proposals are pending, against the same definition rows the seal above is computed from.
+ *
+ * AGAINST THE SET IN FORCE, WHICH IS NOT ALWAYS THE BASELINE. `action.baseline.material` records
+ * the set the proposer composed against, but as `(definitionId, revision, contentHash)` and not as
+ * words — the baseline's text is not stored anywhere — so it can say THAT something differs and
+ * never WHAT. The comparison is therefore against the definitions standing now, which is also the
+ * more useful question: it is what approving this would change. For a decidable proposal the two
+ * are the same set, because that is exactly what `baselineSeal === currentSeal` means; for one
+ * whose base seal has moved they are not, and that row's buttons are already dead.
+ */
+export type CriteriaProposalChange = 'SAME' | 'CHANGED' | 'NEW' | 'REMOVED';
+
+/**
+ * The fields a rewrite can move, and the whole of what `CHANGED` is decided over.
+ *
+ * All three that a criterion carries today, not just `text`: a criterion states an assertion AND
+ * how a reader decides it holds, and an edit that leaves the assertion alone while rewriting the
+ * procedure has changed what the project has to prove. `content_hash` (0233) covers the first two;
+ * this covers the third as well, because the advisory override reason is stored, is returned, and
+ * is a thing the proposer can silently drop.
+ */
+export type CriteriaProposalField =
+  | 'text'
+  | 'verificationMethod'
+  | 'completionCriterionOverrideReason';
+
+const CRITERION_FIELDS: readonly CriteriaProposalField[] = [
+  'text',
+  'verificationMethod',
+  'completionCriterionOverrideReason',
+];
+
+/** One criterion's words, on either side of the comparison, normalised the same way on both. */
+export interface CriterionWording {
+  text: string;
+  verificationMethod: string | null;
+  completionCriterionOverrideReason: string | null;
+}
+
+/** What this proposal does to one criterion: which one, which way, and both sets of words. */
+export interface CriteriaProposalChangeEntry {
+  change: CriteriaProposalChange;
+  /** The definition this entry is about; null for one the proposal is ADDING, which names none. */
+  definitionId: string | null;
+  /** Its place in the proposed set — or, for one being dropped, its place in the set on record. */
+  ordinal: number;
+  /** The proposal's words. Null for `REMOVED`: the proposal states none. */
+  proposed: CriterionWording | null;
+  /** THE WORDS IT REPLACES, off the definition in force. Null for `NEW`: it replaces nothing. */
+  onRecord: CriterionWording | null;
+  /** Which fields differ. Empty except on `CHANGED`, where it is never empty. */
+  changed: CriteriaProposalField[];
+}
+
+/**
+ * The whole of what a proposal would do to the ruler, and how much of it it leaves alone.
+ *
+ * The counts are the part a card can act on without walking the entries: `sameCount` is what
+ * licenses a reader to fold the untouched ones away, and it has to be a number the server said
+ * rather than one a collapsed list implies, or "5 unchanged" would be a claim about how many rows
+ * the client chose not to draw.
+ */
+export interface CriteriaProposalDiff {
+  /** Every proposed criterion, judged, then every criterion the proposal drops. */
+  entries: CriteriaProposalChangeEntry[];
+  sameCount: number;
+  changedCount: number;
+  newCount: number;
+  removedCount: number;
+}
+
+/** Trimmed, and empty-as-null, so that whitespace is not a change and `''` is not a wording. */
+function wording(
+  text: string,
+  verificationMethod: string | null | undefined,
+  completionCriterionOverrideReason: string | null | undefined,
+): CriterionWording {
+  return {
+    text: text.trim(),
+    verificationMethod: verificationMethod?.trim() || null,
+    completionCriterionOverrideReason: completionCriterionOverrideReason?.trim() || null,
+  };
+}
+
+/**
+ * The proposal read against the criteria in force: one entry per proposed criterion, plus one for
+ * every criterion on record the proposal does not restate.
+ *
+ * Matched by the definition id the request itself carries, never by position: an edit may reorder
+ * the collection, and a comparison by ordinal would then report two rewrites where a reader
+ * dragged one row past another. A proposed criterion with no id is one being ADDED — the write
+ * path puts `null` there precisely because the id it would get is a uuid the request never named.
+ * An id that resolves to nothing on record is treated the same way and for the same reason: there
+ * is no criterion here for it to replace.
+ *
+ * Exported so both the read below and the specs that pin it call one function, and so a caller
+ * holding a proposal and a set of definitions can ask the question without a database.
+ */
+export function criteriaProposalDiff(
+  proposed: readonly ProposedCriterion[],
+  onRecord: readonly StatedAcceptanceCriterion[],
+): CriteriaProposalDiff {
+  const standing = new Map(onRecord.map((criterion) => [criterion.definitionId, criterion]));
+  const restated = new Set<string>();
+  const entries: CriteriaProposalChangeEntry[] = [];
+
+  proposed.forEach((criterion, index) => {
+    const ordinal = criterion.ordinal > 0 ? criterion.ordinal : index + 1;
+    const words = wording(
+      criterion.text, criterion.verificationMethod, criterion.completionCriterionOverrideReason,
+    );
+    const replaced = criterion.id === null ? undefined : standing.get(criterion.id);
+    if (!replaced) {
+      entries.push({
+        change: 'NEW',
+        definitionId: criterion.id,
+        ordinal,
+        proposed: words,
+        onRecord: null,
+        changed: [],
+      });
+      return;
+    }
+    restated.add(replaced.definitionId);
+    const was = wording(
+      replaced.text, replaced.verificationMethod, replaced.completionCriterionOverrideReason,
+    );
+    const changed = CRITERION_FIELDS.filter((field) => was[field] !== words[field]);
+    entries.push({
+      change: changed.length === 0 ? 'SAME' : 'CHANGED',
+      definitionId: replaced.definitionId,
+      ordinal,
+      proposed: words,
+      onRecord: was,
+      changed,
+    });
+  });
+
+  for (const criterion of onRecord) {
+    if (restated.has(criterion.definitionId)) continue;
+    entries.push({
+      change: 'REMOVED',
+      definitionId: criterion.definitionId,
+      ordinal: criterion.ordinal,
+      proposed: null,
+      onRecord: wording(
+        criterion.text, criterion.verificationMethod, criterion.completionCriterionOverrideReason,
+      ),
+      changed: [],
+    });
+  }
+
+  const counted = (change: CriteriaProposalChange): number =>
+    entries.filter((entry) => entry.change === change).length;
+  return {
+    entries,
+    sameCount: counted('SAME'),
+    changedCount: counted('CHANGED'),
+    newCount: counted('NEW'),
+    removedCount: counted('REMOVED'),
+  };
+}
+
 /** One loosening proposal waiting for an answer, with everything the answer needs in it. */
 export interface PendingCriteriaDecision {
   /** The proposal's address, which is what the proposer was told and what the door takes back. */
@@ -95,8 +278,11 @@ export interface PendingCriteriaDecision {
   baselineSeal: string;
   /** The seal of the standard set that stands NOW. Equal to `baselineSeal` when decidable. */
   currentSeal: string;
-  /** What the edit asked for, exactly as the request stated it — the diff the decider judges. */
+  /** What the edit asked for, exactly as the request stated it — the material of the digest. */
   proposed: ProposedCriterion[];
+  /** The same restatement read against the criteria in force: what it changes, and what it does
+   *  not. This is the shape a card renders; `proposed` is the shape a digest is taken over. */
+  diff: CriteriaProposalDiff;
   /** The proposal this one displaced, or null when it displaced nothing. */
   supersededIntentId: string | null;
   decidability: CriteriaDecisionDecidability;
@@ -187,10 +373,14 @@ export async function readPendingCriteriaDecisions(
       const action = storedAction(row.action);
       if (action?.supersedes) displaced.add(action.supersedes.intentId);
     }
-    // The seal of the set in force, computed off the same rows and by the same function the
-    // confirmation read path uses — so what this read calls "moved" is what a reader of
-    // `GET /projects/:id/acceptance/confirmation` sees.
-    const currentSeal = await currentStandardSetSeal(tx, projectId);
+    // The set in force, read ONCE: its seal is what this read calls "moved" — computed by the
+    // same function the confirmation read path uses, so it is the value a reader of
+    // `GET /projects/:id/acceptance/confirmation` sees — and its words are the other side of
+    // every comparison below. One read of these rows rather than two, because a proposal being
+    // told it is decidable against one version of the ruler and diffed against another is the
+    // exact incoherence this read exists to keep out of the card.
+    const inForce = await standardSetInForce(tx, projectId);
+    const currentSeal = inForce.seal;
 
     for (const row of rows) {
       if (settled.has(row.id) || displaced.has(row.id)) continue;
@@ -200,6 +390,13 @@ export async function readPendingCriteriaDecisions(
       // no baseline to compare, so it comes back undecidable with the seal that stands.
       const baselineSeal = action?.baseline.seal ?? '';
       const moved = baselineSeal !== currentSeal;
+      // An unreadable proposal gets an EMPTY diff rather than one saying it drops everything:
+      // `proposed` is `[]` for it because nothing could be read out of the row, and a comparison
+      // taken over that would report every criterion on record as dropped — which is a statement
+      // about this reader's failure dressed up as a statement about somebody's proposal.
+      const diff = action
+        ? criteriaProposalDiff(action.request.proposed, inForce.criteria)
+        : criteriaProposalDiff([], []);
       pending.push({
         intentId: row.id,
         projectId,
@@ -209,6 +406,7 @@ export async function readPendingCriteriaDecisions(
         baselineSeal,
         currentSeal,
         proposed: action?.request.proposed ?? [],
+        diff,
         supersededIntentId: action?.supersedes?.intentId ?? null,
         decidability: {
           decidable: !moved,
@@ -351,11 +549,19 @@ async function settledIntentIds(
   return new Set(commits.map((commit) => commit.intentId));
 }
 
-/** The seal of the standard set in force, read off the definition rows the trigger maintains. */
-async function currentStandardSetSeal(
+/**
+ * The standard set in force, read off the definition rows the trigger maintains: its seal, and the
+ * words behind that seal.
+ *
+ * Both come back together because both are answers about the SAME rows at the SAME moment. The
+ * seal decides whether a proposal is still decidable and the words decide what it would change;
+ * taken from two reads they could disagree, and the disagreement would surface as a card that
+ * says a decision is live beside a diff against a ruler that has already moved.
+ */
+async function standardSetInForce(
   tx: Prisma.TransactionClient,
   projectId: string,
-): Promise<string> {
+): Promise<{ seal: string; criteria: StatedAcceptanceCriterion[] }> {
   const definitions = await tx.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId },
     orderBy: { ordinal: 'asc' },
@@ -369,5 +575,6 @@ async function currentStandardSetSeal(
       contentHash: true,
     },
   });
-  return standardSetVersion(criteriaFromDefinitions(definitions)).digest;
+  const criteria = criteriaFromDefinitions(definitions);
+  return { seal: standardSetVersion(criteria).digest, criteria };
 }
