@@ -324,6 +324,7 @@ export const effectiveSessionEffort = (
 
 // Reasoning effort is provider- and model-specific. Codex's live runner catalog is authoritative;
 // these lists are the fallback when the selected model has not been reported yet.
+// Claude's Ultra is Claude Code's ultracode: xhigh plus standing workflow orchestration.
 export const CLAUDE_EFFORT_OPTIONS = [
   { value: '', label: 'Default' },
   { value: 'low', label: 'Low' },
@@ -331,6 +332,7 @@ export const CLAUDE_EFFORT_OPTIONS = [
   { value: 'high', label: 'High' },
   { value: 'xhigh', label: 'xHigh' },
   { value: 'max', label: 'Max' },
+  { value: 'ultra', label: 'Ultra' },
 ];
 
 export const CODEX_EFFORT_OPTIONS = [

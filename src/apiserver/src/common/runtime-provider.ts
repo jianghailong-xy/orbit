@@ -9,7 +9,9 @@ import { runtimeCatalogReasoningLevels } from './runtime-model';
 
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
 // model-defined and open-ended) must degrade to runtime Default rather than make these fail.
-const CLAUDE_EFFORTS = new Set(['', 'low', 'medium', 'high', 'xhigh', 'max']);
+// Claude's `ultra` is Claude Code's ultracode (xhigh plus standing workflow orchestration); the
+// runner spells it the way the CLI does.
+const CLAUDE_EFFORTS = new Set(['', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 const CODEX_EFFORTS = new Set([
   '',
   'none',

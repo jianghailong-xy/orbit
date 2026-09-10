@@ -364,7 +364,7 @@ public enum AgentDefaults {
         case "codex":    return [.default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra]
         case "kimi":     return [.default, .low, .high, .max]
         case "opencode": return [.default, .minimal, .low, .medium, .high, .xhigh, .max]
-        default:         return [.default, .low, .medium, .high, .xhigh, .max]
+        default:         return [.default, .low, .medium, .high, .xhigh, .max, .ultra]
         }
     }
 

@@ -77,6 +77,32 @@ type setConfigFrame struct {
 // lie, in exactly the way no test here could catch.
 const claudeEffortFloor = "2.1.235"
 
+// claudeUltraEffort is Orbit's `ultra` on this runtime: Claude Code's ultracode, which is xhigh
+// effort plus standing workflow orchestration. The CLI has no level by that name. It takes the
+// mode as `--effort ultracode` at spawn, and over the control channel as a settings key of its
+// own, `ultracode`, beside effortLevel.
+//
+// Measured on 2.1.260 through the recording proxy (claude_ultracode_requestbody_test.go): a
+// process spawned that way asks for xhigh and carries the "Ultracode is on" reminder, where one
+// spawned on plain xhigh carries none; `{"ultracode":true}` moves the running turn to xhigh at
+// once and the reminder arrives with the next user turn. Leaving it has to say
+// `"ultracode":false` out loud — an effortLevel alone leaves the mode on, which is invisible
+// until the level it runs at comes back.
+const claudeUltraEffort = "ultra"
+
+// claudeUltracodeFloor is the oldest `claude` Orbit sends the ultracode key to. Same reasoning
+// as claudeEffortFloor — the frame is answered `success` either way — and the same caveat: it is
+// the version the behaviour was measured on, not a discovery of where support began.
+const claudeUltracodeFloor = "2.1.260"
+
+// claudeEffortFlag is the --effort value a spawn passes for an Orbit effort.
+func claudeEffortFlag(effort string) string {
+	if effort == claudeUltraEffort {
+		return "ultracode"
+	}
+	return effort
+}
+
 // errEngineCannotApply is a frame that was never sent, because the process it was for
 // cannot be trusted to act on it. Handled exactly like a refusal — the values still land on
 // job.Agent and the re-spawn still carries them — and worded so the transcript's degraded
@@ -195,12 +221,22 @@ func setConfigFrames(content string, agent AgentExecConfig) ([]setConfigFrame, e
 		if effort != "" {
 			level = effort
 		}
+		settings := map[string]interface{}{"effortLevel": level}
+		floor := claudeEffortFloor
+		switch {
+		case effort == claudeUltraEffort:
+			settings = map[string]interface{}{"ultracode": true}
+			floor = claudeUltracodeFloor
+		case agent.Effort == claudeUltraEffort:
+			settings["ultracode"] = false
+			floor = claudeUltracodeFloor
+		}
 		out = append(out, setConfigFrame{
 			subtype:   ctrlApplyFlagSettings,
-			payload:   map[string]interface{}{"settings": map[string]interface{}{"effortLevel": level}},
+			payload:   map[string]interface{}{"settings": settings},
 			apply:     func(a *AgentExecConfig) { a.Effort = effort },
 			what:      effortName(effort),
-			minEngine: claudeEffortFloor,
+			minEngine: floor,
 		})
 	}
 	return out, nil

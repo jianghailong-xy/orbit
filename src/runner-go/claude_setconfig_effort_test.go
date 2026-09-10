@@ -60,6 +60,58 @@ func TestEffortFrameBytes(t *testing.T) {
 	}
 }
 
+// Ultra is the one Orbit effort the CLI has no level for. It is ultracode, a settings key of
+// its own, and leaving it has to switch that key off by name: measured on 2.1.260, an
+// effortLevel alone leaves the mode on (claude_ultracode_requestbody_test.go). Both kinds of
+// frame are only sent to an engine that has announced the version they were measured on.
+func TestUltraEffortFrameBytes(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		running string
+		content string
+		want    string
+	}{
+		{
+			name:    "entering ultra is the ultracode key, not a level",
+			running: "low",
+			content: `{"effort":"ultra"}`,
+			want:    `{"request":{"settings":{"ultracode":true},"subtype":"apply_flag_settings"},"request_id":"req-3-1","type":"control_request"}` + "\n",
+		},
+		{
+			name:    "leaving ultra for the level it runs at still switches the key off",
+			running: "ultra",
+			content: `{"effort":"xhigh"}`,
+			want:    `{"request":{"settings":{"effortLevel":"xhigh","ultracode":false},"subtype":"apply_flag_settings"},"request_id":"req-3-1","type":"control_request"}` + "\n",
+		},
+		{
+			name:    "leaving ultra for the model default",
+			running: "ultra",
+			content: `{"effort":""}`,
+			want:    `{"request":{"settings":{"effortLevel":null,"ultracode":false},"subtype":"apply_flag_settings"},"request_id":"req-3-1","type":"control_request"}` + "\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			running := AgentExecConfig{Model: "claude-opus-5", PermissionMode: "default", Effort: tc.running}
+			frames, err := setConfigFrames(tc.content, running)
+			if err != nil {
+				t.Fatalf("setConfigFrames(%s): %v", tc.content, err)
+			}
+			if len(frames) != 1 || frames[0].subtype != ctrlApplyFlagSettings {
+				t.Fatalf("the payload resolved to %d frame(s) %v, want one %s", len(frames), subtypesOf(frames), ctrlApplyFlagSettings)
+			}
+			if got := controlRequestFrame("req-3-1", frames[0].subtype, frames[0].payload); got != tc.want {
+				t.Errorf("frame =\n\t%q\nwant\n\t%q", got, tc.want)
+			}
+			if err := frames[0].unsupportedBy(claudeUltracodeFloor); err != nil {
+				t.Errorf("withheld from %s, the version it was measured on: %v", claudeUltracodeFloor, err)
+			}
+			if err := frames[0].unsupportedBy("2.1.259"); err == nil {
+				t.Errorf("sent to 2.1.259, older than the %s it was measured on", claudeUltracodeFloor)
+			}
+		})
+	}
+}
+
 // Effort is the one field of the three whose committed value is NOT what the running
 // process was built with: a session that never set one inherits its workspace's at claim
 // time. So the control plane states it only when the PATCH moved it, and an unstated effort

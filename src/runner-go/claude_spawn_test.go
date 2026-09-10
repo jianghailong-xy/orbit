@@ -45,6 +45,18 @@ func TestClaudeCommandArgsAskForBidirectionalStreamJSON(t *testing.T) {
 	}
 }
 
+// The CLI has no `ultra` level: Orbit's Ultra is ultracode, the name the CLI takes it by.
+// Every other effort is passed as the level it already is.
+func TestClaudeCommandArgsSpellUltraAsUltracode(t *testing.T) {
+	job := claudeSpawnJob(t)
+	for effort, want := range map[string]string{"ultra": "ultracode", "xhigh": "xhigh", "max": "max"} {
+		job.Agent.Effort = effort
+		if args := claudeCommandArgs(job, t.TempDir(), true); !containsArgs(args, []string{"--effort", want}) {
+			t.Errorf("effort %q: argv %v is missing --effort %s", effort, args, want)
+		}
+	}
+}
+
 // A persistent-JSONL provider takes every turn as a `user` frame on stdin, so nothing the
 // user typed may reach argv — not as a positional prompt, and not smuggled into a flag.
 func TestClaudeCommandArgsKeepThePromptOffTheCommandLine(t *testing.T) {

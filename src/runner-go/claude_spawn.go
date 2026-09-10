@@ -39,7 +39,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		"--permission-mode", a.PermissionMode,
 	}
 	if a.Effort != "" {
-		args = append(args, "--effort", a.Effort)
+		args = append(args, "--effort", claudeEffortFlag(a.Effort))
 	}
 	// Apply the agent's configured prompts (claim payload carries both; previously
 	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.

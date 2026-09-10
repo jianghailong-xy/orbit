@@ -260,7 +260,7 @@ func realClaudeTransportArgs(job *ClaimedSession) []string {
 		"--session-id", job.SessionUUID,
 	}
 	if job.Agent.Effort != "" {
-		args = append(args, "--effort", job.Agent.Effort)
+		args = append(args, "--effort", claudeEffortFlag(job.Agent.Effort))
 	}
 	return args
 }

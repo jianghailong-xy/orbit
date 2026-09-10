@@ -78,7 +78,7 @@ final class AgentDefaultsTests: XCTestCase {
 
     func testEffortsForProvider() {
         XCTAssertEqual(AgentDefaults.efforts(for: "claude"),
-                       [.default, .low, .medium, .high, .xhigh, .max])
+                       [.default, .low, .medium, .high, .xhigh, .max, .ultra])
         XCTAssertEqual(AgentDefaults.efforts(for: "codex"),
                        [.default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra])
         XCTAssertEqual(AgentDefaults.efforts(for: "kimi"),
@@ -89,6 +89,8 @@ final class AgentDefaultsTests: XCTestCase {
         // The whole point: neither provider is offered a value it rejects.
         XCTAssertFalse(AgentDefaults.efforts(for: "claude").contains(.minimal))
         XCTAssertTrue(AgentDefaults.efforts(for: "codex").contains(.ultra))
+        // Claude Code's ultracode.
+        XCTAssertTrue(AgentDefaults.efforts(for: "claude").contains(.ultra))
         XCTAssertFalse(AgentDefaults.efforts(for: "kimi").contains(.minimal))
 
         XCTAssertEqual(AgentDefaults.efforts(for: "gemini"), AgentDefaults.efforts(for: "claude"))

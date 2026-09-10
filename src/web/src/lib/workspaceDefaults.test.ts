@@ -376,7 +376,7 @@ describe('OpenCode defaults', () => {
   });
 
   it('does not leak an unknown dynamic OpenCode variant into another runtime', () => {
-    expect(normalizeEffortForProvider('claude', 'ultra', 'claude-opus-5', catalog)).toBe('');
+    expect(normalizeEffortForProvider('claude', 'project-custom', 'claude-opus-5', catalog)).toBe('');
     expect(normalizeEffortForProvider('codex', 'project-custom', 'gpt-5.6-sol', catalog)).toBe('');
   });
 });

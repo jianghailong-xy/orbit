@@ -114,7 +114,9 @@ test('OpenCode preserves provider-defined variants; closed CLI enums reject leak
     normalizeEffortForProvider(AgentProvider.OPENCODE, 'project-custom'),
     'project-custom',
   );
-  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'ultra'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'project-custom'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'minimal'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'ultra'), 'ultra');
   assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'max'), 'max');
   assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'ultra'), 'ultra');
   assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'project-custom'), '');
