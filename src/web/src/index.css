@@ -7274,14 +7274,15 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--warning);
 }
 /* ── The diff ──────────────────────────────────────────────────────────────────────────────────
-   One row per criterion the proposal MOVES. A rewrite is two paragraphs — the words proposed and
-   the words on record — and they are set on separate lines because run together they read as one
-   sentence, which is how a change hid inside the 360px scroll box this card lives in. */
+   One row per criterion the proposal MOVES, and a rewrite is ONE paragraph: the sentence as it
+   would stand, with what it drops struck through in place. Laid out as two — the words proposed
+   and then the words on record — three rewrites of long Chinese criteria came to 483px inside a
+   360px scroll box, and the clause that actually moved was still something a reader had to find
+   by comparing them. */
 .criteria-decision-entry {
   margin-bottom: 6px;
 }
-.criteria-decision-entry .criteria-decision-method,
-.criteria-decision-was {
+.criteria-decision-entry .criteria-decision-method {
   display: block;
   margin-left: 0;
   margin-top: 2px;
@@ -7293,14 +7294,35 @@ html[data-theme='dark'] .session-tag-chip {
   margin-left: 6px;
   white-space: nowrap;
 }
-/* What the proposal would replace, set quieter than the words replacing it and ruled off on the
-   left so the two never read as one sentence. */
-.criteria-decision-was {
-  padding-left: 8px;
-  border-left: 2px solid var(--border);
+/* ── A rewrite, inline ─────────────────────────────────────────────────────────────────────────
+   The words the proposal drops and the words it adds, marked IN PLACE inside the sentence they
+   moved in, so one line carries both versions. Laid out one after the other they were two
+   paragraphs of ninety-character Chinese per rewrite, and three of those overflowed the box.
+
+   Colour is never the only carrier: the dropped run is struck through and the added one
+   underlined, both of which survive a monochrome screen and colour-blind vision. `text-decoration`
+   is restated because a UA gives `<ins>` its underline and `<del>` its line-through by default and
+   an app stylesheet is not entitled to assume it. */
+.criteria-decision-cut {
+  text-decoration: line-through;
+  text-decoration-color: var(--error);
+  text-decoration-thickness: 1.5px;
+  color: var(--text-3);
+}
+.criteria-decision-add {
+  text-decoration: underline;
+  text-decoration-color: var(--success);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  color: var(--text-1);
+  background: var(--success-bg);
+}
+/* The one place on the card that says what those two marks mean — riding on the summary's line,
+   because a line of its own is a line this card does not have. */
+.criteria-decision-legend {
+  margin-left: 10px;
   font-size: 11.5px;
   color: var(--text-3);
-  line-height: 1.6;
 }
 /* The criteria this proposal leaves alone: a count, and their words behind a native disclosure.
    Folded rather than hidden, because "three reworded" and "the whole set replaced with three" are

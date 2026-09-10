@@ -133,6 +133,206 @@ const CRITERION_FIELDS: readonly CriteriaProposalField[] = [
   'completionCriterionOverrideReason',
 ];
 
+/**
+ * WHY THE REWRITE IS CUT INTO PIECES HERE, AND NOT LEFT AS TWO PARAGRAPHS FOR THE CARD
+ * ------------------------------------------------------------------------------------
+ * Saying WHICH criteria moved was only half of it. A rewrite still arrived as two whole
+ * paragraphs — the words proposed and the words on record — and the first real proposal Orbit held
+ * was eight Chinese criteria of about ninety characters each, of which three had a clause swapped
+ * inside them. Laid out as two paragraphs apiece that is six long blocks for three edits, 483px of
+ * content in a 360px scroll box, and a reader who must compare two paragraphs by eye to find the
+ * clause that moved. The clause is the answer; the other eighty characters are the question
+ * repeated.
+ *
+ * So the comparison is taken down to the level the change actually happened at, and it is taken
+ * HERE for exactly the reason the criterion-level one is (see above): a client that diffed the two
+ * texts itself would be reaching the card's central claim — THESE are the words that change — on
+ * its own, twice, in two languages, and the two would not stay identical. The server says it once.
+ *
+ * BY GRAPHEME CLUSTER, NOT BY WORD. Chinese does not put spaces between words, so an algorithm
+ * that splits on whitespace sees one token per sentence and can only report the sentence as
+ * different — which is the thing being fixed, not a smaller version of it. Splitting on UTF-16
+ * code units is the opposite failure: it cuts an emoji in half and a combining mark off its base,
+ * and the halves are then rendered as their own struck-through fragments. `Intl.Segmenter` at
+ * `grapheme` granularity is the unit a reader would call one character in every script, which is
+ * the unit this cuts on.
+ */
+export type CriterionSegmentSide = 'KEPT' | 'REMOVED' | 'ADDED';
+
+/**
+ * One run of a rewritten field, and what the rewrite does with it.
+ *
+ * ONE MERGED SEQUENCE RATHER THAN TWO. The segments are in reading order, and the two sides are
+ * read out of it rather than shipped separately: the words ON RECORD are the `KEPT` and `REMOVED`
+ * segments in order, and the words PROPOSED are the `KEPT` and `ADDED` ones. Both are recovered
+ * character for character (`criteria-inline-diff.spec.ts` pins that), which is what makes this a
+ * cut of the two texts and not a summary of them — a card can render the merged line, and a reader
+ * who wants either side whole can still be given it, from the same field.
+ */
+export interface CriterionSegment {
+  side: CriterionSegmentSide;
+  /** Never empty: an empty run is not a run, and would render as a stray mark. */
+  text: string;
+}
+
+/** One field of a rewrite, cut up. One of these per entry in `changed`, in that same order. */
+export interface CriterionFieldRewrite {
+  field: CriteriaProposalField;
+  segments: CriterionSegment[];
+}
+
+/**
+ * The unit the cut is made in: what a reader of any script would call one character.
+ *
+ * `und` and not a locale, because grapheme boundaries are not locale-dependent (word and sentence
+ * boundaries are, which is part of why this cuts on graphemes) and because a read must not give
+ * two answers on two machines with two default locales.
+ */
+const GRAPHEMES = new Intl.Segmenter('und', { granularity: 'grapheme' });
+
+function graphemes(text: string): string[] {
+  return Array.from(GRAPHEMES.segment(text), (piece) => piece.segment);
+}
+
+/**
+ * The most this will spend deciding where a rewrite differs, in cells of the LCS table.
+ *
+ * A derived read is on the path of every card render, and the table is quadratic, so a criterion
+ * somebody pastes a novel into must not be able to make this read expensive. Past the budget the
+ * middle is reported whole — one REMOVED run and one ADDED run — which is the honest answer at
+ * that size anyway: nobody reads a character-level diff of two thousand-character paragraphs. The
+ * common head and tail are still cut off first, so the fallback is reached far less often than the
+ * raw lengths suggest.
+ */
+const MAX_REWRITE_CELLS = 1_000_000;
+
+/**
+ * A common run this short between two changes is dropped and read as part of the change.
+ *
+ * The longest common subsequence of two Chinese sentences is littered with single characters that
+ * happen to appear in both — 的, 一, 不, a comma — and honouring every one of them turns a swapped
+ * clause into a dozen alternating fragments that is harder to read than the two paragraphs this
+ * replaces. Keeping only runs that are a word or more long is what makes the output a clause a
+ * reader can see rather than confetti.
+ */
+const MIN_KEPT_RUN = 3;
+
+/** The longest common subsequence of two grapheme sequences, as a keep-mask over each side. */
+function commonMask(before: string[], after: string[]): { before: boolean[]; after: boolean[] } {
+  const rows = before.length;
+  const columns = after.length;
+  const stride = columns + 1;
+  const table = new Uint16Array((rows + 1) * stride);
+  for (let i = rows - 1; i >= 0; i -= 1) {
+    for (let j = columns - 1; j >= 0; j -= 1) {
+      table[i * stride + j] = before[i] === after[j]
+        ? table[(i + 1) * stride + j + 1]! + 1
+        : Math.max(table[(i + 1) * stride + j]!, table[i * stride + j + 1]!);
+    }
+  }
+  const keptBefore = new Array<boolean>(rows).fill(false);
+  const keptAfter = new Array<boolean>(columns).fill(false);
+  let i = 0;
+  let j = 0;
+  while (i < rows && j < columns) {
+    if (before[i] === after[j]) {
+      keptBefore[i] = true;
+      keptAfter[j] = true;
+      i += 1;
+      j += 1;
+    } else if (table[(i + 1) * stride + j]! >= table[i * stride + j + 1]!) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return { before: keptBefore, after: keptAfter };
+}
+
+/** Runs of `true` shorter than `MIN_KEPT_RUN` are cleared, in place. */
+function dropShortRuns(mask: boolean[]): void {
+  let at = 0;
+  while (at < mask.length) {
+    if (!mask[at]) {
+      at += 1;
+      continue;
+    }
+    let end = at;
+    while (end < mask.length && mask[end]) end += 1;
+    if (end - at < MIN_KEPT_RUN) for (let k = at; k < end; k += 1) mask[k] = false;
+    at = end;
+  }
+}
+
+/** Appends, coalescing with the run before it, and never appending an empty one. */
+function appendSegment(into: CriterionSegment[], side: CriterionSegmentSide, text: string): void {
+  if (text === '') return;
+  const last = into[into.length - 1];
+  if (last && last.side === side) last.text += text;
+  else into.push({ side, text });
+}
+
+/**
+ * Two versions of one field, cut into the runs they share and the runs they do not.
+ *
+ * The common head and tail come off first — which is where nearly all of a real edit's agreement
+ * is, and it costs a linear scan instead of a quadratic table — and only what is left in the
+ * middle is put through the subsequence. Exported so a caller can ask the question about two
+ * strings, and so the spec that pins the cut does not have to build a proposal to get one.
+ */
+export function criterionFieldSegments(before: string, after: string): CriterionSegment[] {
+  const left = graphemes(before);
+  const right = graphemes(after);
+  let head = 0;
+  while (head < left.length && head < right.length && left[head] === right[head]) head += 1;
+  let tail = 0;
+  while (
+    tail < left.length - head
+    && tail < right.length - head
+    && left[left.length - 1 - tail] === right[right.length - 1 - tail]
+  ) tail += 1;
+  const middleBefore = left.slice(head, left.length - tail);
+  const middleAfter = right.slice(head, right.length - tail);
+
+  const segments: CriterionSegment[] = [];
+  appendSegment(segments, 'KEPT', left.slice(0, head).join(''));
+  if (
+    middleBefore.length === 0
+    || middleAfter.length === 0
+    || middleBefore.length * middleAfter.length > MAX_REWRITE_CELLS
+  ) {
+    appendSegment(segments, 'REMOVED', middleBefore.join(''));
+    appendSegment(segments, 'ADDED', middleAfter.join(''));
+  } else {
+    const kept = commonMask(middleBefore, middleAfter);
+    dropShortRuns(kept.before);
+    dropShortRuns(kept.after);
+    let i = 0;
+    let j = 0;
+    while (i < middleBefore.length || j < middleAfter.length) {
+      if (i < middleBefore.length && !kept.before[i]) {
+        appendSegment(segments, 'REMOVED', middleBefore[i]!);
+        i += 1;
+      } else if (j < middleAfter.length && !kept.after[j]) {
+        appendSegment(segments, 'ADDED', middleAfter[j]!);
+        j += 1;
+      } else if (i < middleBefore.length && j < middleAfter.length) {
+        appendSegment(segments, 'KEPT', middleBefore[i]!);
+        i += 1;
+        j += 1;
+      } else if (i < middleBefore.length) {
+        appendSegment(segments, 'REMOVED', middleBefore[i]!);
+        i += 1;
+      } else {
+        appendSegment(segments, 'ADDED', middleAfter[j]!);
+        j += 1;
+      }
+    }
+  }
+  appendSegment(segments, 'KEPT', left.slice(left.length - tail).join(''));
+  return segments;
+}
+
 /** One criterion's words, on either side of the comparison, normalised the same way on both. */
 export interface CriterionWording {
   text: string;
@@ -153,6 +353,9 @@ export interface CriteriaProposalChangeEntry {
   onRecord: CriterionWording | null;
   /** Which fields differ. Empty except on `CHANGED`, where it is never empty. */
   changed: CriteriaProposalField[];
+  /** Each of those fields cut into what the rewrite keeps, drops and adds, in `changed` order.
+   *  Empty exactly when `changed` is: `NEW` and `REMOVED` state one side and cut nothing. */
+  rewrites: CriterionFieldRewrite[];
 }
 
 /**
@@ -221,6 +424,7 @@ export function criteriaProposalDiff(
         proposed: words,
         onRecord: null,
         changed: [],
+        rewrites: [],
       });
       return;
     }
@@ -236,6 +440,13 @@ export function criteriaProposalDiff(
       proposed: words,
       onRecord: was,
       changed,
+      // A field a criterion does not carry is the empty string on that side, not a missing side:
+      // adding a procedure to a criterion that had none is an addition of every character of it,
+      // which is exactly what the cut then says.
+      rewrites: changed.map((field) => ({
+        field,
+        segments: criterionFieldSegments(was[field] ?? '', words[field] ?? ''),
+      })),
     });
   });
 
@@ -246,10 +457,11 @@ export function criteriaProposalDiff(
       definitionId: criterion.definitionId,
       ordinal: criterion.ordinal,
       proposed: null,
+      changed: [],
+      rewrites: [],
       onRecord: wording(
         criterion.text, criterion.verificationMethod, criterion.completionCriterionOverrideReason,
       ),
-      changed: [],
     });
   }
 

@@ -12,8 +12,9 @@ import {
   CRITERION_DROPPED_LABEL,
   CRITERION_REWORDED_LABEL,
   CriteriaDecisionCard,
+  DROPPED_RUN_TITLE,
+  INLINE_DIFF_LEGEND,
   METHOD_LABEL,
-  ON_RECORD_LABEL,
   PROVENANCE_LABEL,
   REFUSE_LABEL,
   changeSummary,
@@ -28,6 +29,7 @@ import {
   type CriteriaDecisionStanding,
   type CriteriaProposalChangeEntry,
   type CriteriaProposalDiff,
+  type CriterionSegment,
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
   type ProposedCriterion,
@@ -92,6 +94,7 @@ function entry(over: Partial<CriteriaProposalChangeEntry> = {}): CriteriaProposa
     onRecord: { text: CRITERION_TEXT, verificationMethod: 'EXECUTABLE',
       completionCriterionOverrideReason: null },
     changed: [],
+    rewrites: [],
     ...over,
   };
 }
@@ -123,7 +126,12 @@ function row(over: Partial<PendingCriteriaDecisionRow> = {}): PendingCriteriaDec
     diff: diffOf([
       entry({ change: 'CHANGED', changed: ['text'],
         onRecord: { text: 'Full API was green last week', verificationMethod: 'EXECUTABLE',
-          completionCriterionOverrideReason: null } }),
+          completionCriterionOverrideReason: null },
+        rewrites: [{ field: 'text', segments: [
+          { side: 'KEPT', text: 'Full API ' },
+          { side: 'REMOVED', text: 'was green last week' },
+          { side: 'ADDED', text: 'is green on the merge boundary' },
+        ] }] }),
       entry({ change: 'NEW', definitionId: null, ordinal: 2, onRecord: null,
         proposed: { text: 'the scheduled nodes are green', verificationMethod: 'EXECUTABLE',
           completionCriterionOverrideReason: null } }),
@@ -205,6 +213,9 @@ interface RecordedProposal {
       ordinal: number;
       change: CriteriaProposalChangeEntry['change'];
       changed: CriteriaProposalChangeEntry['changed'];
+      /** The clause a person said moved, and the server's cut of it — see the fixture's note. */
+      movedClause?: { removed: string; added: string };
+      rewrites?: CriteriaProposalChangeEntry['rewrites'];
     }>;
   };
 }
@@ -221,6 +232,9 @@ function realProposal(): PendingCriteriaDecisionRow {
     return entry({
       change: verdict.change,
       changed: verdict.changed,
+      // Fed in as the SERVER's cut, off the same file its own spec pins it with. This file must
+      // not compute one: the card's claim is that the comparison came from the derived read.
+      rewrites: verdict.rewrites ?? [],
       definitionId: was ? `definition-${was.ordinal}` : null,
       ordinal: each.ordinal,
       proposed: { text: each.text, verificationMethod: each.verificationMethod,
@@ -289,7 +303,10 @@ describe('a proposal the door would answer', () => {
 
   it('shows what is being proposed, and that nothing is held up meanwhile', () => {
     const html = card(standing);
-    expect(html).toContain(CRITERION_TEXT);
+    // The words a rewrite proposes are on the card, cut into the runs that moved and the runs that
+    // did not — a search for the whole sentence would be asserting the layout this card replaced.
+    expect(html).toContain('Full API ');
+    expect(html).toContain('is green on the merge boundary');
     expect(html).toContain(shortSeal(SEAL_DRAFTED));
     // A criterion the proposal is ADDING is marked as one rather than reading as an edit.
     expect(html).toContain(CRITERION_ADDED_LABEL);
@@ -342,16 +359,56 @@ describe('a proposal that restates eight criteria to reword three', () => {
     expect(/<details[^>]*\bopen\b/u.test(html)).toBe(false);
   });
 
-  it('shows the words each rewrite would replace, beside the words replacing them', () => {
+  /**
+   * ONE LINE PER REWRITE, NOT TWO PARAGRAPHS.
+   *
+   * Showing both versions whole was the shape that put 483px of content in a 360px box: three
+   * rewrites of ninety-character Chinese each cost two long blocks, of which sixty characters in
+   * total actually differed. So the card draws the server's cut in place — the sentence as it
+   * would stand, with the dropped run struck through inside it — and the assertion below is that
+   * the two versions are no longer laid out one after the other.
+   */
+  it('draws each rewrite as one merged line rather than both versions in full', () => {
     const html = card(criteriaDecisionStanding(queue([real]), real.intentId));
     const moved = real.diff.entries.filter((each) => each.change === 'CHANGED');
     expect(moved.length).toBe(3);
     for (const each of moved) {
-      expect(html, `the proposed words of ${each.ordinal}`).toContain(each.proposed!.text);
-      expect(html, `what ${each.ordinal} replaces`).toContain(each.onRecord!.text);
+      const runs = each.rewrites.find((rewrite) => rewrite.field === 'text')!.segments;
+      // The positive control: the cut fed in really is a cut, so the two assertions under it are
+      // about the card and not about a rewrite that happened to have one run.
+      expect(runs.length, `the cut of ${each.ordinal}`).toBeGreaterThan(2);
+      for (const run of runs) {
+        expect(html, `run ${run.side} of ${each.ordinal}`).toContain(escaped(run.text));
+      }
+      // And the shape that is gone: neither version is on the card as one uninterrupted block.
+      // `onRecord` is the one that used to be printed whole under `on record now:`.
+      expect(html, `${each.ordinal} still lays out the words on record in full`)
+        .not.toContain(escaped(each.onRecord!.text));
+      expect(html, `${each.ordinal} still lays out the proposed words in full`)
+        .not.toContain(escaped(each.proposed!.text));
       expect(html).toContain(CRITERION_REWORDED_LABEL);
     }
-    expect(html).toContain(ON_RECORD_LABEL);
+  });
+
+  it('marks the dropped runs as dropped, and says once what the mark means', () => {
+    const html = card(criteriaDecisionStanding(queue([real]), real.intentId));
+    const dropped = real.diff.entries
+      .filter((each) => each.change === 'CHANGED')
+      .flatMap((each) => each.rewrites)
+      .flatMap((rewrite) => rewrite.segments)
+      .filter((run: CriterionSegment) => run.side === 'REMOVED');
+    expect(dropped.length).toBe(4);
+    for (const run of dropped) {
+      // Inside a `<del>`, which is what carries "these words go" to a screen reader — a class name
+      // and a strikethrough carry it to a sighted reader and to nobody else.
+      const at = html.indexOf(escaped(run.text));
+      expect(at, `no ${JSON.stringify(run.text)} on the card`).toBeGreaterThan(-1);
+      expect(html.lastIndexOf('<del', at)).toBeGreaterThan(html.lastIndexOf('</del>', at));
+    }
+    expect(html).toContain(DROPPED_RUN_TITLE);
+    // The legend is the only thing that says what a strikethrough means, and it is said once.
+    expect(html).toContain(INLINE_DIFF_LEGEND);
+    expect(html.split(INLINE_DIFF_LEGEND).length - 1).toBe(1);
   });
 });
 
@@ -371,6 +428,11 @@ describe('the three ways a criterion can move', () => {
             completionCriterionOverrideReason: null },
           onRecord: { text: CRITERION_TEXT, verificationMethod: 'the full API suite passes',
             completionCriterionOverrideReason: null },
+          // Two procedures with nothing in common: the server's cut of them is one run each way.
+          rewrites: [{ field: 'verificationMethod', segments: [
+            { side: 'REMOVED', text: 'the full API suite passes' },
+            { side: 'ADDED', text: 'somebody says it looks fine' },
+          ] }],
         }),
         unchangedNeighbour,
       ]),
@@ -378,10 +440,11 @@ describe('the three ways a criterion can move', () => {
     const html = card(criteriaDecisionStanding(queue([reworded]), reworded.intentId));
     expect(entryRows(html).length).toBe(1);
     expect(html).toContain(CRITERION_REWORDED_LABEL);
-    // Both procedures, labelled, because the assertion is identical and the words alone would look
-    // like the card had drawn the same criterion twice.
-    expect(html).toContain(`${METHOD_LABEL}: somebody says it looks fine`);
-    expect(html).toContain(`${ON_RECORD_LABEL}: the full API suite passes`);
+    // The procedure is cut and merged like the assertion is, under its own label — the words alone
+    // would look like the card had drawn the same criterion twice, since `text` did not move.
+    expect(html).toContain(`${METHOD_LABEL}: `);
+    expect(html).toContain('somebody says it looks fine');
+    expect(html).toContain('the full API suite passes');
     expect(html).toContain(unchangedLine(1));
   });
 
@@ -418,7 +481,11 @@ describe('the three ways a criterion can move', () => {
       diff: diffOf([
         entry({ change: 'CHANGED', changed: ['text'],
           proposed: { text: 'a looser ruler', verificationMethod: 'EXECUTABLE',
-            completionCriterionOverrideReason: null } }),
+            completionCriterionOverrideReason: null },
+          rewrites: [{ field: 'text', segments: [
+            { side: 'REMOVED', text: CRITERION_TEXT },
+            { side: 'ADDED', text: 'a looser ruler' },
+          ] }] }),
       ]),
     });
     const html = card(criteriaDecisionStanding(queue([wholesale]), wholesale.intentId));

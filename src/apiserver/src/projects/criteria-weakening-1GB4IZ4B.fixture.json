@@ -1,5 +1,5 @@
 {
-  "note": "The first real weakening proposal Orbit ever held, recorded so both clients can be pinned against it instead of against a hand-made example. Intent 1GB4IZ4B of the project Criteria seal & decision: a whole-collection restatement of eight criteria in which three texts were rewritten and nothing else moved. The account owner approved it at decidedAt, so it is history now and cannot be re-read from the pending queue — which is the reason it is written down here. onRecord is the set the proposal was composed against, proposed is the restatement the request carried (retains names the onRecord ordinal whose definition id that entry reuses; null would mean an addition), and expected is what the derived read is to conclude from the two.",
+  "note": "The first real weakening proposal Orbit ever held, recorded so both clients can be pinned against it instead of against a hand-made example. Intent 1GB4IZ4B of the project Criteria seal & decision: a whole-collection restatement of eight criteria in which three texts were rewritten and nothing else moved. The account owner approved it at decidedAt, so it is history now and cannot be re-read from the pending queue — which is the reason it is written down here. onRecord is the set the proposal was composed against, proposed is the restatement the request carried (retains names the onRecord ordinal whose definition id that entry reuses; null would mean an addition), and expected is what the derived read is to conclude from the two. On each CHANGED entry there are two more fields, and they are different kinds of claim: movedClause is the clause a reader would point at as the thing that moved, written out in both versions’ own words, and stoodFast is a distinctive stretch of the same sentence that did NOT move — together they are what the character-level cut HAS TO land on and HAS TO leave alone, and are why a cut reporting the whole sentence as replaced is not good enough; rewrites is that cut as it actually comes out, run for run, so the server spec, the web card and OrbitKit all draw one recorded sequence instead of three recomputed ones.",
   "intentPublicId": "1GB4IZ4BAWjdl34rgaypYT",
   "filedAt": "2026-09-09T23:31:14.001Z",
   "decidedAt": "2026-09-09T23:48:29.192Z",
@@ -107,6 +107,34 @@
         "change": "CHANGED",
         "changed": [
           "text"
+        ],
+        "movedClause": {
+          "removed": "、或把判据从 VERIFICATION 升到 EXECUTABLE、或把期望退出码集合收窄",
+          "added": "标准"
+        },
+        "stoodFast": "从普通 agent 会话发出时当场生效",
+        "rewrites": [
+          {
+            "field": "text",
+            "segments": [
+              {
+                "side": "KEPT",
+                "text": "一次纯加严的 acceptanceCriteriaItems 写入（新增一条"
+              },
+              {
+                "side": "REMOVED",
+                "text": "、或把判据从 VERIFICATION 升到 EXECUTABLE、或把期望退出码集合收窄"
+              },
+              {
+                "side": "ADDED",
+                "text": "标准"
+              },
+              {
+                "side": "KEPT",
+                "text": "）从普通 agent 会话发出时当场生效，seal 前进，且不产生任何 PENDING intent 行。"
+              }
+            ]
+          }
         ]
       },
       {
@@ -114,6 +142,38 @@
         "change": "CHANGED",
         "changed": [
           "text"
+        ],
+        "movedClause": {
+          "removed": "放宽期望退出码、判据降级、或改",
+          "added": "或任何 text / verificationMethod 改写"
+        },
+        "stoodFast": "不改变在册的标准定义，而是写出恰好一条 PENDING ProjectRatifiedActionIntent",
+        "rewrites": [
+          {
+            "field": "text",
+            "segments": [
+              {
+                "side": "KEPT",
+                "text": "一次削弱写入（删除一条标准、"
+              },
+              {
+                "side": "REMOVED",
+                "text": "放宽期望退出码、判据降级、或改"
+              },
+              {
+                "side": "ADDED",
+                "text": "或任何 text / verificationMethod 改写"
+              },
+              {
+                "side": "REMOVED",
+                "text": " evidenceTaskId"
+              },
+              {
+                "side": "KEPT",
+                "text": "）不改变在册的标准定义，而是写出恰好一条 PENDING ProjectRatifiedActionIntent，其 actionDigest 与请求内容对应、baseline 指向当时的 seal。"
+              }
+            ]
+          }
         ]
       },
       {
@@ -126,6 +186,34 @@
         "change": "CHANGED",
         "changed": [
           "text"
+        ],
+        "movedClause": {
+          "removed": "тип",
+          "added": "typ"
+        },
+        "stoodFast": "决定门要求两把钥匙同时成立才应用",
+        "rewrites": [
+          {
+            "field": "text",
+            "segments": [
+              {
+                "side": "KEPT",
+                "text": "决定门要求两把钥匙同时成立才应用：intent 的一次性 commitToken 与账号所有者凭据。缺任一、commitToken 错误、intent 已 settled、或 base seal 已移动，四种情况各自被"
+              },
+              {
+                "side": "REMOVED",
+                "text": "тип"
+              },
+              {
+                "side": "ADDED",
+                "text": "typ"
+              },
+              {
+                "side": "KEPT",
+                "text": "ed 拒绝且不写入任何生效行。"
+              }
+            ]
+          }
         ]
       },
       {

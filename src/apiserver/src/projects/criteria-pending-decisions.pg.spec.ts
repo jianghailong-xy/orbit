@@ -697,7 +697,13 @@ interface RecordedProposal {
   }>;
   expected: {
     sameCount: number; changedCount: number; newCount: number; removedCount: number;
-    entries: Array<{ ordinal: number; change: string; changed: string[] }>;
+    entries: Array<{
+      ordinal: number; change: string; changed: string[];
+      /** On the CHANGED ones: the clause that moved, which is what the cut must land on — and a
+       *  stretch of the same sentence that did not, which is what it must leave alone. */
+      movedClause?: { removed: string; added: string };
+      stoodFast?: string;
+    }>;
   };
 }
 
@@ -773,7 +779,9 @@ test('the read says which of a restated collection actually moved', {
       row!.diff.entries.map((entry) => ({
         ordinal: entry.ordinal, change: entry.change, changed: entry.changed,
       })),
-      recorded.expected.entries,
+      recorded.expected.entries.map((each) => ({
+        ordinal: each.ordinal, change: each.change, changed: each.changed,
+      })),
       'and WHICH three: the read names them, in the ordinals a reader sees on the card',
     );
 
@@ -788,6 +796,43 @@ test('the read says which of a restated collection actually moved', {
       assert.equal(entry.onRecord?.text, before.text, `what ${entry.ordinal} would replace`);
       assert.equal(entry.definitionId, ids[entry.ordinal - 1],
         'matched by the definition the request named, never by position');
+    }
+
+    // WHERE INSIDE THE SENTENCE, not only which sentence. Each rewrite comes back cut into the
+    // runs it keeps, drops and adds, so a card can print one merged line instead of the two whole
+    // paragraphs that overflowed the 360px box this is read in. The cut is pinned in full by
+    // `criteria-inline-diff.spec.ts`, which needs no database; what is asserted HERE is that it
+    // survives the production write path and the derived read — the clause the fixture records as
+    // the thing that moved is what came back marked as moved, off rows Postgres handed over.
+    for (const entry of row!.diff.entries) {
+      const clause = recorded.expected.entries
+        .find((each) => each.ordinal === entry.ordinal)?.movedClause;
+      if (entry.change !== 'CHANGED') {
+        assert.deepEqual(entry.rewrites, [],
+          `criterion ${entry.ordinal} did not move, so there are not two versions of it to cut`);
+        continue;
+      }
+      assert.ok(clause, `the fixture records no moved clause for criterion ${entry.ordinal}`);
+      const cut = entry.rewrites.find((each) => each.field === 'text');
+      assert.ok(cut, `criterion ${entry.ordinal} moved its text and carries no cut of it`);
+      const side = (want: string): string => cut.segments
+        .filter((piece) => piece.side === want).map((piece) => piece.text).join('');
+      assert.ok(side('REMOVED').includes(clause.removed),
+        `criterion ${entry.ordinal}: the dropped clause is not in what the cut marks removed`);
+      assert.ok(side('ADDED').includes(clause.added),
+        `criterion ${entry.ordinal}: the new clause is not in what the cut marks added`);
+      assert.ok(!side('KEPT').includes(clause.removed),
+        `criterion ${entry.ordinal}: the dropped clause is inside the runs marked unchanged`);
+      // And the sentence around it is still reported as standing, which is the whole saving: a
+      // cut that gave up and marked both versions whole would leave this at zero.
+      const stood = recorded.expected.entries
+        .find((each) => each.ordinal === entry.ordinal)?.stoodFast;
+      assert.ok(stood, `the fixture records nothing that stood for criterion ${entry.ordinal}`);
+      assert.ok(side('KEPT').includes(stood),
+        `criterion ${entry.ordinal}: "${stood}" is in both versions and is not marked unchanged`);
+      assert.ok(side('KEPT').length >= Math.min(
+        entry.onRecord!.text.length, entry.proposed!.text.length,
+      ) * (2 / 3), `criterion ${entry.ordinal}: too little of the sentence is marked unchanged`);
     }
 
     // And nothing moved: a held edit writes no definition, so the words this diff compares against

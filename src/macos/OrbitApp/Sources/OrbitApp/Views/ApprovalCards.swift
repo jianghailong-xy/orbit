@@ -955,8 +955,14 @@ private struct CriteriaDecisionCard: View {
     /// many did not move.
     private func proposal(_ row: PendingCriteriaDecisionRow) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(CriteriaDecisions.changeSummary(row.diff))
-                .font(.orbitLabel.bold()).foregroundStyle(.secondary)
+            // The legend rides on the summary's line rather than taking one of its own: on a card
+            // whose whole problem is height, a row spent saying what a strikethrough means is a row
+            // not spent on the criteria — and this is the line a reader is already on when they
+            // meet the first mark.
+            (Text(CriteriaDecisions.changeSummary(row.diff)).bold()
+                + Text(CriteriaDecisions.hasRewrite(row.diff)
+                       ? "  \(CriteriaDecisions.inlineDiffLegend)" : ""))
+                .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(CriteriaDecisions.changeRows(row)) { change in
                 changeRow(change)
@@ -974,27 +980,41 @@ private struct CriteriaDecisionCard: View {
         }
     }
 
-    /// One criterion the proposal moves: what it would say, what it is called, and — for a rewrite
-    /// — the words it replaces, on their own line so the two never read as one sentence.
+    /// One criterion the proposal moves: what it would say — with, for a rewrite, the words it
+    /// drops struck through IN PLACE inside the sentence they were dropped from — and what it is
+    /// called. One paragraph and not two: laid out as the proposal's words followed by the
+    /// record's, three rewrites of long Chinese criteria did not fit the card at all.
     private func changeRow(_ change: CriteriaDecisions.ChangeRow) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(change.headline)
+            (Text("\(change.ordinal). ").foregroundStyle(.secondary) + rewritten(change.words))
                 .font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(change.badge)
                 .font(.orbitLabel).foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if let was = change.wasText {
-                Text(was).font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
             if let method = change.method {
-                Text(method).font(.orbitLabel).foregroundStyle(.secondary)
+                (Text("\(CriteriaDecisions.methodLabel): ") + rewritten(method))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let wasMethod = change.wasMethod {
-                Text(wasMethod).font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The server's cut as one run of text: what stayed, what goes struck through, what arrives
+    /// underlined.
+    ///
+    /// Colour is never the only carrier — the strikethrough and the underline are the marks, and
+    /// they survive a monochrome screen, Increase Contrast, and colour-blind vision, which a red
+    /// and a green would not.
+    private func rewritten(_ runs: [CriterionSegment]) -> Text {
+        runs.reduce(Text("")) { line, run in
+            switch run.side {
+            case .kept:
+                return line + Text(run.text)
+            case .removed:
+                return line + Text(run.text).strikethrough().foregroundStyle(.secondary)
+            case .added:
+                return line + Text(run.text).underline()
             }
         }
     }

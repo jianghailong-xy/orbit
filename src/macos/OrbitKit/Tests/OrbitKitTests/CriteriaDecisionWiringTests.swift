@@ -114,6 +114,28 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                        "which is exactly the wiring this test exists to prevent coming back")
     }
 
+    /// A REWRITE IS DRAWN AS ONE MERGED LINE, FROM THE SERVER'S CUT.
+    ///
+    /// The thing this catches is the layout coming back: two paragraphs per rewrite is what put
+    /// 483px of content in a 360px scroll box, and the way it would return is the view reading
+    /// `entry.onRecord.text` again instead of the runs OrbitKit hands it. Nothing on Linux compiles
+    /// this view, so the wire is asserted over its source.
+    func testARewriteIsDrawnFromTheServersCutAsOneLine() throws {
+        let card = try weakeningCard()
+        XCTAssertTrue(card.contains("rewritten(change.words)"),
+                      "the row's words are the server's cut, drawn as one run of text")
+        XCTAssertTrue(card.contains("Text(run.text).strikethrough()"),
+                      "what the rewrite drops is struck through IN PLACE rather than repeated "
+                          + "underneath — the strikethrough is the mark, and it survives a "
+                          + "monochrome screen where a red would not")
+        XCTAssertTrue(card.contains("Text(run.text).underline()"),
+                      "and what it adds is underlined, for the same reason")
+        XCTAssertTrue(card.contains("CriteriaDecisions.inlineDiffLegend"),
+                      "with the one line that says what those two marks mean")
+        XCTAssertFalse(card.contains("CriteriaDecisions.hasRewrite(row.diff) ? \"\""),
+                       "the legend is offered where there is a rewrite to read, not unconditionally")
+    }
+
     // MARK: the bar, and the cards it points at
 
     func testTheBarPointsDownIntoThisConversationWhenItHoldsAQuestion() throws {

@@ -129,10 +129,21 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
                        "the badge on a criterion being added")
         assertDeclares(web, "CRITERION_DROPPED_LABEL", CriteriaDecisions.droppedLabel,
                        "the badge on a criterion being dropped")
-        assertDeclares(web, "ON_RECORD_LABEL", CriteriaDecisions.onRecordLabel,
-                       "what the words being replaced are labelled")
         assertDeclares(web, "METHOD_LABEL", CriteriaDecisions.methodLabel,
                        "what a rewritten procedure is labelled")
+    }
+
+    /// What the two marks on a rewritten line mean.
+    ///
+    /// It replaced `on record now`, which is the label the two versions used to be told apart by
+    /// when they were two paragraphs. A rewrite is one line now, and this legend is the ONLY thing
+    /// on either card that says what a strikethrough means — so an end that re-words it while the
+    /// other does not leaves one set of readers guessing at a mark nothing explains.
+    func testTheLegendForTheTwoMarksMatchesTheWebCard() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "INLINE_DIFF_LEGEND", CriteriaDecisions.inlineDiffLegend,
+                       "the legend for the strikethrough and the underline")
     }
 
     /// The line that says how much of the ruler is being left alone, and the two it can be missing.

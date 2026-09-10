@@ -179,7 +179,15 @@ final class CriteriaDecisionTests: XCTestCase {
                     verificationMethod: "a person reads it"),
                 onRecord: CriterionWording(text: "criterion \(ordinal)",
                                            verificationMethod: "a person reads it"),
-                changed: rewritten ? [.text] : [])
+                changed: rewritten ? [.text] : [],
+                // The server's cut, fed in as the server's: `criterion N` stood and `, rewritten`
+                // arrived. Nothing on this client compares two strings.
+                rewrites: rewritten
+                    ? [CriterionFieldRewrite(field: .text, segments: [
+                        CriterionSegment(side: .kept, text: "criterion \(ordinal)"),
+                        CriterionSegment(side: .added, text: ", rewritten"),
+                    ])]
+                    : [])
         }
         return row("i-1", diff: CriteriaProposalDiff(entries: entries, sameCount: 5,
                                                      changedCount: 3, newCount: 0, removedCount: 0))
@@ -195,15 +203,92 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(rows.count, 3)
         // And WHICH three, in the server's own ordinals — a list renumbered 1. 2. 3. would be
         // inventing a set nobody proposed.
-        XCTAssertEqual(rows.map { String($0.headline.prefix(2)) }, ["1.", "2.", "4."])
+        XCTAssertEqual(rows.map(\.ordinal), [1, 2, 4])
         for each in rows {
             XCTAssertEqual(each.badge, CriteriaDecisions.rewordedLabel)
-            XCTAssertNotNil(each.wasText, each.headline)
-            XCTAssertTrue(each.wasText!.hasPrefix(CriteriaDecisions.onRecordLabel), each.wasText!)
-            // The procedure did not move, so neither half of it is drawn.
+            // The procedure did not move, so it is not drawn at all.
             XCTAssertNil(each.method)
-            XCTAssertNil(each.wasMethod)
         }
+    }
+
+    /// ONE LINE PER REWRITE, NOT TWO.
+    ///
+    /// Laid out as the proposal's words and then the record's, three rewrites of long Chinese
+    /// criteria came to 483px of content in a 360px scroll box — and a reader still had to compare
+    /// two paragraphs to find the clause. So the row carries ONE sequence, which is the server's
+    /// cut of the two versions, and neither version appears in it whole.
+    func testARewriteIsOneMergedSequenceAndNotBothVersionsInFull() {
+        let rows = CriteriaDecisions.changeRows(eightRewordingThree())
+        for each in rows {
+            // The positive control: the cut fed in really is a cut, not one run.
+            XCTAssertGreaterThan(each.words.count, 1, "row \(each.ordinal)")
+            XCTAssertEqual(each.words.map(\.side), [.kept, .added], "row \(each.ordinal)")
+            XCTAssertEqual(each.words.map(\.text).joined(), "criterion \(each.ordinal), rewritten")
+            // The words ON RECORD are read out of the same sequence rather than sent beside it.
+            XCTAssertEqual(each.words.filter { $0.side != .added }.map(\.text).joined(),
+                           "criterion \(each.ordinal)")
+        }
+    }
+
+    /// A criterion being ADDED or DROPPED has one version, so it is one plain run — a card that
+    /// struck through every word of a dropped criterion would be saying something different from
+    /// "this criterion goes".
+    func testACriterionWithOnlyOneVersionIsOnePlainRun() {
+        let proposal = row("i-1", diff: CriteriaProposalDiff(
+            entries: [
+                CriteriaProposalChangeEntry(
+                    change: .new, definitionId: nil, ordinal: 1,
+                    proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it")),
+            ],
+            sameCount: 0, changedCount: 0, newCount: 1))
+        let rows = CriteriaDecisions.changeRows(proposal)
+        XCTAssertEqual(rows[0].words, [CriterionSegment(side: .kept, text: "a looser ruler")])
+    }
+
+    /// A server OLDER than this build sends no cut, which is a shape that exists because an App
+    /// Store release outlives a deployment. The row is then drawn at the coarsest resolution — one
+    /// struck-through run and one added run — rather than blank.
+    func testAnEntryWithNoCutIsDrawnAsBothVersionsWhole() {
+        let entry = CriteriaProposalChangeEntry(
+            change: .changed, definitionId: "c-1", ordinal: 1,
+            proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it"),
+            onRecord: CriterionWording(text: "a stricter ruler", verificationMethod: "run it"),
+            changed: [.text])
+        XCTAssertTrue(entry.rewrites.isEmpty, "the positive control: this entry carries no cut")
+        XCTAssertEqual(CriteriaDecisions.rewriteRuns(entry, .text), [
+            CriterionSegment(side: .removed, text: "a stricter ruler"),
+            CriterionSegment(side: .added, text: "a looser ruler"),
+        ])
+    }
+
+    /// And the decode that gets it there: a response with no `rewrites` key at all is an entry
+    /// without a cut, never a queue this client fails to read.
+    func testAnEntryDecodesWithoutTheCutField() throws {
+        let json = Data(#"""
+        {"change":"CHANGED","definitionId":"c-1","ordinal":1,
+         "proposed":{"text":"a looser ruler","verificationMethod":"run it",
+                     "completionCriterionOverrideReason":null},
+         "onRecord":{"text":"a stricter ruler","verificationMethod":"run it",
+                     "completionCriterionOverrideReason":null},
+         "changed":["text"]}
+        """#.utf8)
+        let entry = try JSONDecoder().decode(CriteriaProposalChangeEntry.self, from: json)
+        XCTAssertEqual(entry.change, .changed)
+        XCTAssertEqual(entry.changed, [.text])
+        XCTAssertTrue(entry.rewrites.isEmpty)
+    }
+
+    /// The legend is offered exactly where the marks are: a proposal that only adds and drops
+    /// criteria has no struck-through words on it, and explaining a mark that is not there costs a
+    /// line on the card that had none to spare.
+    func testTheLegendIsOfferedOnlyWhereSomethingWasRewritten() {
+        XCTAssertTrue(CriteriaDecisions.hasRewrite(eightRewordingThree().diff))
+        let addedOnly = CriteriaProposalDiff(entries: [
+            CriteriaProposalChangeEntry(
+                change: .new, definitionId: nil, ordinal: 1,
+                proposed: CriterionWording(text: "a looser ruler", verificationMethod: "run it")),
+        ], newCount: 1)
+        XCTAssertFalse(CriteriaDecisions.hasRewrite(addedOnly))
     }
 
     func testTheCountOfWhatDidNotMoveIsAlwaysSaidAndItsWordsAreBehindIt() {
@@ -241,10 +326,12 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(rows.count, 1)
         XCTAssertEqual(rows[0].badge, CriteriaDecisions.rewordedLabel)
         // The assertion is identical, so the words alone would look like the same criterion twice:
-        // both procedures are drawn, labelled, and the words are not.
-        XCTAssertNil(rows[0].wasText)
-        XCTAssertEqual(rows[0].method, "how it is judged: somebody says it looks fine")
-        XCTAssertEqual(rows[0].wasMethod, "on record now: the full API suite passes")
+        // the PROCEDURE is what carries the cut, and the assertion is drawn plain.
+        XCTAssertEqual(rows[0].words, [CriterionSegment(side: .kept, text: "Full API is green")])
+        XCTAssertEqual(rows[0].method, [
+            CriterionSegment(side: .removed, text: "the full API suite passes"),
+            CriterionSegment(side: .added, text: "somebody says it looks fine"),
+        ])
     }
 
     func testWhatIsDroppedAndWhatIsAddedAreBothSaid() {
@@ -264,7 +351,8 @@ final class CriteriaDecisionTests: XCTestCase {
                        [CriteriaDecisions.addedLabel, CriteriaDecisions.droppedLabel])
         // A dropped criterion has no proposed side at all, so the row is drawn in the words that
         // would GO — the only place they are still written down.
-        XCTAssertEqual(rows[1].headline, "2. the migrations replay from empty")
+        XCTAssertEqual(rows[1].ordinal, 2)
+        XCTAssertEqual(rows[1].words.map(\.text).joined(), "the migrations replay from empty")
         XCTAssertEqual(CriteriaDecisions.changeSummary(proposal.diff),
                        "1 dropped, 1 added, 0 unchanged")
         XCTAssertTrue(CriteriaDecisions.unchangedRows(proposal).isEmpty)
