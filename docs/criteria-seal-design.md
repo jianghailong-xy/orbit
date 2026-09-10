@@ -242,7 +242,7 @@ nobody」，并且不经 `ProjectsService.update`（`:195-197`），因此不会
 | --- | --- | --- | --- |
 | 1 | `project_ratified_action_intent_immutable`（BEFORE UPDATE OR DELETE，逐行） | `src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:316-329` | **任何 UPDATE 与 DELETE 一律 `RAISE`** `RATIFIED_ACTION_INTENT_IMMUTABLE`。唯一逃逸：`TG_OP='DELETE'` 且 `project` 行已不存在（外键 CASCADE 收尾），`:318-320` |
 | 2 | `project_ratified_action_commit_immutable`（BEFORE UPDATE OR DELETE） | `src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:331-344` | 同上，码是 `RATIFIED_ACTION_COMMIT_IMMUTABLE`；同一条 CASCADE 逃逸 |
-| 3 | `project_owner_ratification_immutable` | `src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:301-314` | 同形，作用在 `project_owner_ratification`（**不在本路径上**，见 3.3） |
+| 3 | `project_owner_ratification_immutable` | `src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:301-314` | 同形，作用在 `project_owner_ratification`（**不在本路径上**，且已随 0218 与那张表一并删除，见 3.3） |
 | 4 | `project_action_intent_bind_full_revision`（**BEFORE INSERT**） | 0196 装（`src/apiserver/prisma/migrations/0196_outcome_binding_version_invalidation/migration.sql:312-314`），现役函数体是 `src/apiserver/prisma/migrations/0222_canonical_done_gate_removal/migration.sql:316-330` | INSERT 时按 `(project_id, contract_digest)` 反查 `project_completion_contract.contract_revision`；**查不到就 `RAISE RATIFIED_ACTION_BINDING_STALE`（SQLSTATE 40001）**，查到就覆写 `NEW.contract_revision` |
 | 5 | 列级 CHECK | `src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:270-280` | `principal_type IN ('SYSTEM','AGENT','RUNNER','OWNER','SERVICE')`；`trigger_kind IN ('AUTO','MANUAL')`；`budget_charge >= 0` |
 | 6 | 唯一性 | `src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:285-287` | `commit_token` UNIQUE；`UNIQUE(owner_id, project_id, idempotency_key)` |
@@ -277,11 +277,13 @@ nobody」，并且不经 `ProjectsService.update`（`:195-197`），因此不会
 4. **绑的是 `contract_digest`，不是 seal。** 见 1.3：太紧（改 `maxConcurrentTasks` 就让待决提案作废）
    又不可读（摘要不说明台面上是哪一版标准）。
 
-### 3.3 两条 SQL 入口用不了（这条最容易踩）
+### 3.3 那道「必须先 ratified」的闸门已经不在了（本节最初写错过一次）
 
-`project_submit_ratified_action`（`src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:1132`，0196 包了一层 `src/apiserver/prisma/migrations/0196_outcome_binding_version_invalidation/migration.sql:910`）
-和 `project_commit_ratified_action`（`src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:1219`，0222 包了一层 `src/apiserver/prisma/migrations/0222_canonical_done_gate_removal/migration.sql:300`）
-**都过不去**：
+`project_submit_ratified_action`（`src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:1132`；0196 把它改名 `_v1` 后另包一层 `src/apiserver/prisma/migrations/0196_outcome_binding_version_invalidation/migration.sql:906-910`；0222 把包层收成纯委派 `src/apiserver/prisma/migrations/0222_canonical_done_gate_removal/migration.sql:284`）
+和 `project_commit_ratified_action`（同一条链，末端 `src/apiserver/prisma/migrations/0222_canonical_done_gate_removal/migration.sql:301`）
+**今天都过得去**。
+
+0195 原本在这两条入口里各放了一道闸：
 
 ```sql
 -- src/apiserver/prisma/migrations/0195_project_owner_ratification/migration.sql:1189-1191 与 :1252-1255
@@ -290,21 +292,31 @@ IF (trigger_kind = 'AUTO' OR effect_class NOT IN
   -- OWNER_RATIFICATION_REQUIRED
 ```
 
-`ratified := project_owner_ratification_effective(...)`（现役定义 `src/apiserver/prisma/migrations/0196_outcome_binding_version_invalidation/migration.sql:316`）要求
-`project_owner_ratification` 里有一行。而那张表：
+`ratified` 由 0196 装的那一族 `project_owner_ratif…` 函数从 `project_owner_ratification` 读出来。
+**那张表连同整族函数已经被 0218 删掉**：DROP 清单在
+`src/apiserver/prisma/migrations/0218_owner_ratification_queue_removal/migration.sql:2524-2554`，
+现役函数体则是同一份迁移的 `:794`（submit）与 `:868`（commit），它自己的抬头写着
+「They no longer additionally require a signature on it」；0222 的注释（`:73`）复述了同一件事。
 
-* **全仓零写入方**——`project_owner_ratify_contract` / `project_preapproved_ratify_contract`
-  在 `src/` 下一个调用点都没有；
-* **连 Prisma 模型都没有**——`schema.prisma` 里搜不到 `project_owner_ratification` 的 `@@map`
-  （只在 `:2034` 的注释里被提到）。
+> ⚠️ **本节最初（`9f95e3b3`，2026-09-09）断言「两条入口都过不去」，那是错的。**
+> 错因：把 0195/0196 的迁移正文当成了现役定义，而删除发生在八天前的 0218。
+> 迁移目录是**追加**的——「某函数在 0196 里有定义」不等于它今天还在；
+> 现役定义要按最后一次 `CREATE OR REPLACE` / `DROP` 算，不是按第一次。
+>
+> 也因此，本节**不逐字写全**那一族已删函数的名字：`test/outcome-reconciler-v2.ratification.test.mjs`
+> 的全仓扫描对已删函数名用纯子串匹配，只豁免它自己和形如 `0195_project_owner_ratification`
+> 的迁移目录名。任何被 `git ls-files` 追踪的文件——`.md` 也算——逐字写出它们就会让那条 spec 变红。
+> 要看完整名单，直接读上面那段 DROP 清单。
 
-所以线上没有任何项目是 ratified 的，这两个函数对**任何**削弱提案都只会回
-`{ok:false, code:'OWNER_RATIFICATION_REQUIRED'}`。
-
-**落地形状因此是：绕开这两个 SQL 函数，用 Prisma 直接 INSERT intent 行。**
-这是安全的，因为写路径上仍然有触发器 4 把关（`contract_digest` 必须是项目当前的），
+**落地形状仍然是：绕开这两个 SQL 函数，用 Prisma 直接 INSERT intent 行**——但理由不再是「过不去」，
+而是 `action_digest` 的口径对不上：SQL 入口把它钉死成 `outcome_sha256_json(p_action)`，
+即**整个 action 信封**（含它自己要求塞进去的六个 digest）的摘要；
+而项目验收第 2 条要的是「由**请求内容**重算得到」，落地取的正是后者
+（`actionDigest = sha256(canonicalJson(action.request))`，见
+`src/apiserver/src/projects/criteria-weakening-intent.ts:23`、`:94`）。两个口径不兼容，只能二选一。
+直接 INSERT 是安全的，因为写路径上仍然有触发器 4 把关（`contract_digest` 必须是项目当前的），
 触发器 1 保证写下即不可改。代价是 `action_digest` 要在 TS 里算，且必须与
-`outcome_sha256_json` 同口径（规范化 JSON 后 sha256，仓库里已有
+`outcome_sha256_json` 同算法（规范化 JSON 后 sha256，仓库里已有
 `src/apiserver/src/projects/canonical-json.ts`）——**这一点必须有单元 spec 双向对账**，
 否则项目验收第 2 条的「可重算」会有两种定义。
 
