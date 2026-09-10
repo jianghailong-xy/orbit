@@ -1228,3 +1228,50 @@ func TestHandleCodexItemAppServerWebSearch(t *testing.T) {
 		t.Fatalf("content = %q", done[0].payload["content"])
 	}
 }
+
+// Codex's fast lane is a service tier, stated on every request that builds or drives the thread.
+//
+// Paired with the same job not in fast mode, which must say nothing at all: the schema documents
+// turn/start's serviceTier as sticking for "this turn and subsequent turns", so a key sent on an
+// off-session would be a setting the thread keeps after Orbit stopped asking for it.
+// TestRealCodexFastServiceTierReachesTheResponsesRequest holds the id to what a real engine sends.
+func TestCodexFastModeRidesEveryCodexRequest(t *testing.T) {
+	for _, fast := range []bool{true, false} {
+		job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-6-astra", FastMode: fast}}
+		thread := codexThreadParams(job, "/repo", "/tmp/uploads")
+		turn := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "turn-1", "hello", nil, codexTurnContextOptions{})
+		exec := codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "")
+
+		for name, params := range map[string]map[string]interface{}{"thread/start": thread, "turn/start": turn} {
+			got, said := params["serviceTier"]
+			if fast && got != codexFastServiceTier {
+				t.Errorf("fast mode on: %s serviceTier = %v, want %q", name, got, codexFastServiceTier)
+			}
+			if !fast && said {
+				t.Errorf("fast mode off: %s says serviceTier %v; an off-session must not name a tier at all", name, got)
+			}
+		}
+		want := []string{"-c", `service_tier="priority"`}
+		if fast != containsArgs(exec, want) {
+			t.Errorf("fast mode %v: exec args %v contain %v = %v", fast, exec, want, !fast)
+		}
+	}
+}
+
+// A reload names fast mode only when it moved it, and the Codex loop applies what it names to the
+// job its next turn/start is built from — no re-spawn, since the tier is a per-turn parameter.
+func TestCodexReloadAppliesFastModeOnlyWhenItIsStated(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-6-astra"}}
+	applyRuntimeReload(job, `{"fastMode":true}`)
+	if !job.Agent.FastMode {
+		t.Fatalf("a reload stating fastMode true left the job at %v", job.Agent.FastMode)
+	}
+	applyRuntimeReload(job, `{"model":"gpt-5.6-sol"}`)
+	if !job.Agent.FastMode || job.Agent.Model != "gpt-5.6-sol" {
+		t.Fatalf("a model-only reload moved fast mode or lost the model: %#v", job.Agent)
+	}
+	applyRuntimeReload(job, `{"fastMode":false}`)
+	if job.Agent.FastMode {
+		t.Fatal("a reload stating fastMode false did not turn it off")
+	}
+}

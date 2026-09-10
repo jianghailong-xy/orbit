@@ -1323,6 +1323,13 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 	if effort := normalizeCodexReasoningEffort(job.Agent.Effort); effort != "" {
 		params["effort"] = effort
 	}
+	// Stated on every turn, like model and effort, and never as an explicit null for "off": the
+	// schema documents turn/start's serviceTier as applying to "this turn and subsequent turns",
+	// so an Orbit session that turned fast mode off is a thread whose next turn must say nothing
+	// — the thread/start that built it said nothing either (see codexThreadParams).
+	if job.Agent.FastMode {
+		params["serviceTier"] = codexFastServiceTier
+	}
 	return params
 }
 
@@ -1339,6 +1346,9 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model
+	}
+	if job.Agent.FastMode {
+		params["serviceTier"] = codexFastServiceTier
 	}
 	if job.Agent.SystemPrompt != "" {
 		params["baseInstructions"] = job.Agent.SystemPrompt

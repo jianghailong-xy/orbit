@@ -4768,14 +4768,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownModel,
     runner.modelCatalog,
   );
-  // Whether this session has a fast lane to offer at all — Claude only, and only on the models
-  // that carry it. The runtime, never the slug, for the same reason the timing hints ask by
+  // Whether this session has a fast lane to offer at all — Claude's `/fast` on the models that
+  // carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
+  // advertises it. The runtime, never the slug, for the same reason the timing hints ask by
   // runtime: a configured (BYOK) identity borrows one. Unresolved means no, which is the safe
   // direction: a pill that appears and then vanishes is worse than one that appears a moment
   // late, and this is the same fact the server polices at dispatch.
   const fastModeUsable =
     shownProviderCapabilitiesResolved &&
-    fastModeAvailable(runtimeForProvider(shownProvider, configuredProviders), shownModel);
+    fastModeAvailable(
+      runtimeForProvider(shownProvider, configuredProviders),
+      shownModel,
+      runner.modelCatalog,
+    );
   const shownFastMode: boolean = live ? effectiveFastMode : fastMode;
   // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
   // shared table the server stamps onto the session payload, so the picker cannot drift from it.
@@ -6549,8 +6554,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          {/* Fast mode, and only where there is one to offer: it is Claude's own lane and it
-              exists on some of its models. A pill rendered for a session that cannot have it
+          {/* Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
+              tier both exist on some models and not others. A pill rendered for a session that cannot have it
               would be a control whose only outcome is being ignored — the server clamps it at
               dispatch either way. A session that stored `true` and then moved to a model without
               a fast lane keeps the stored value while the pill is away, so going back to a model

@@ -36,10 +36,11 @@ const LABEL: Record<ConfigField, string> = {
  * frame was measured against the API requests the running turn goes on to make: every call after
  * it carries the new level.
  *
- * Fast mode went the other way on the same kind of measurement. It has no flag at all — Claude
- * Code reads `fastMode` out of the settings file its process was built with — and an
+ * Fast mode went the other way on the same kind of measurement. On Claude it has no flag at all —
+ * Claude Code reads `fastMode` out of the settings file its process was built with — and an
  * apply_flag_settings asking for it is answered `success` while every later request in the turn
- * still goes out without it. So it is build-time after all, and it re-spawns like a provider.
+ * still goes out without it. So there it is build-time after all, and it re-spawns like a provider.
+ * On Codex it is a per-request service tier, which lands on the next turn like every Codex field.
  *
  * The split is the server's (SessionsService.updateConfig), and so is the gate below it: those
  * control frames exist on the claude runtime only, so a Codex / Kimi / OpenCode session still

@@ -222,6 +222,9 @@ func applyRuntimeReload(job *ClaimedSession, content string) {
 		Model          *string `json:"model"`
 		PermissionMode string  `json:"permissionMode"`
 		Effort         *string `json:"effort"`
+		// Absent means "not stated", exactly as effort's nil does: the control plane names fast
+		// mode only on the reload that moved it.
+		FastMode *bool `json:"fastMode"`
 	}
 	if json.Unmarshal([]byte(content), &cfg) != nil {
 		return
@@ -235,7 +238,22 @@ func applyRuntimeReload(job *ClaimedSession, content string) {
 	if cfg.Effort != nil {
 		job.Agent.Effort = *cfg.Effort
 	}
+	if cfg.FastMode != nil {
+		job.Agent.FastMode = *cfg.FastMode
+	}
 }
+
+// codexFastServiceTier is the service tier Codex calls "Fast".
+//
+// `priority`, not `fast`, because that is the id the catalogue itself advertises
+// (`codex debug models` → service_tiers: [{id: "priority", name: "Fast"}]), and the id is what a
+// session is judged against: codex omits a configured tier that a model does not advertise, with
+// no error. Measured on 0.154.0 against a recording upstream, on both the app-server and exec
+// paths: `priority` goes out as `service_tier: "priority"`, `fast` is accepted as an alias and ALSO
+// goes out as `priority`, and an unadvertised tier (`flex`) is dropped from the request entirely.
+// So the alias would work today, but only the id is something the control plane can check against
+// the runner's own catalogue — which is where fast mode's availability is decided.
+const codexFastServiceTier = "priority"
 
 // applyProviderEnv installs the environment a reload carries and reports whether the engine has
 // to be re-spawned to pick it up. Env arrives only when the session's provider changed (same
@@ -358,6 +376,9 @@ func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths
 	}
 	if effort := normalizeCodexReasoningEffort(job.Agent.Effort); effort != "" {
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", effort))
+	}
+	if job.Agent.FastMode {
+		args = append(args, "-c", fmt.Sprintf("service_tier=%q", codexFastServiceTier))
 	}
 	args = appendCodexOrbitMCPConfig(args, exe)
 	args = append(args, codexProviderArgs(job.Agent.Env)...)

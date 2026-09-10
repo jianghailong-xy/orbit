@@ -34,11 +34,11 @@ export interface CreateSessionDto {
   permissionMode?: string;
   /** Provider reasoning effort; '' / omitted → model default. */
   effort?: string;
-  /** Run the session in Claude Code's fast lane (`/fast`). Omitted → off, which is the engine's
-   *  own default. Stored as asked and policed at dispatch (`fastModeAvailable`), because which
-   *  model this session ends up on is not settled here: a request that names none inherits the
-   *  runner's Runtime default, which only the claim knows. A session whose effective model has
-   *  no fast lane simply dispatches without one. */
+  /** Run the session in its runtime's fast lane (Claude Code's `/fast`, Codex's "Fast" service
+   *  tier). Omitted → off, which is both engines' own default. Stored as asked and policed at
+   *  dispatch (`fastModeAvailable`), because which model this session ends up on is not settled
+   *  here: a request that names none inherits the runner's Runtime default, which only the claim
+   *  knows. A session whose effective model has no fast lane simply dispatches without one. */
   fastMode?: boolean;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
@@ -122,10 +122,11 @@ export interface SessionConfigDto {
   model?: string;
   permissionMode?: string;
   effort?: string;
-  /** Turn Claude Code's fast lane on or off. Spawn-only on every runtime — the engine reads it
-   *  once, out of the settings file its process was built with — so unlike the three above this
-   *  one always costs the session its process: the runner re-spawns with --resume and it takes
-   *  effect on the next turn. Forced off when the effective runtime/model do not have it. */
+  /** Turn the runtime's fast lane on or off. Always a `reload`, never mid-turn: Claude reads it
+   *  once, out of the settings file its process was built with, so there the runner re-spawns
+   *  with --resume; Codex takes it as a per-request service tier, so there the next turn/start
+   *  carries it. Either way it takes effect on the next turn. Forced off when the effective
+   *  runtime/model (for Codex, the runner catalogue's row) do not have it. */
   fastMode?: boolean;
   /** Re-point the session at another provider identity — a second account with the same vendor,
    *  or another endpoint — that runs on the SAME built-in runtime. Cross-runtime is rejected:

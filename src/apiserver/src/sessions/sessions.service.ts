@@ -29,6 +29,7 @@ import {
   deriveSessionLifecycleState,
   type EventSearchResponse,
   fastModeAvailable,
+  type RunnerModelCatalog,
   FilePatch,
   MAX_PROMPT_CHARS,
   PermissionMode,
@@ -829,11 +830,12 @@ export class SessionsService {
         permissionMode: rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode,
         effort: normalizeEffortForProvider(runtime, dto.effort ?? accountEffort),
         // Stored as asked rather than clamped here, unlike effort above: whether this session
-        // has a fast lane depends on the MODEL it ends up running, and a request that named
-        // none inherits the runner's Runtime default, which only the claim resolves. So the
-        // constraint is applied once, at dispatch (`fastModeAvailable` in queue.service and the
-        // reclaim payload), and a session whose effective model has no fast lane simply
-        // dispatches without one instead of being refused at create.
+        // has a fast lane depends on the MODEL it ends up running (and for Codex on that model's
+        // row in the runner's catalogue), and a request that named none inherits the runner's
+        // Runtime default, which only the claim resolves. So the constraint is applied once, at
+        // dispatch (`fastModeAvailable` in queue.service and the reclaim payload), and a session
+        // whose effective model has no fast lane simply dispatches without one instead of being
+        // refused at create.
         fastMode: dto.fastMode === true,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
@@ -5786,10 +5788,12 @@ export class SessionsService {
    * turn that is depends on what moved. The provider is spawn-only: the process was built with
    * its environment, so a `reload` — tear down, re-spawn with --resume and the new flags, full
    * context kept — is the only way to change it, and the inbox holds that turn until no message
-   * is in flight so it cannot abort a running turn. Fast mode is spawn-only for the same kind of
-   * reason in a different place: Claude Code has no `--fast` and reads `fastMode` out of the
+   * is in flight so it cannot abort a running turn. Claude's fast mode is spawn-only for the same
+   * kind of reason in a different place: Claude Code has no `--fast` and reads `fastMode` out of the
    * settings file its process was built with, exactly once, so a control frame asking for it is
    * answered `success` and changes nothing (measured — runner-go/claude_fastmode_requestbody_test.go).
+   * Codex's fast lane is a per-request service tier and needs no such thing, but every Codex field
+   * already rides the reload (see `acceptsLiveConfig`), so it lands on the next turn all the same.
    * Model, permission mode and effort are not spawn-only: a resident engine can be told about all
    * three, so they travel as `setconfig`, which the inbox hands over mid-turn. A PATCH that moves
    * both halves queues both, setconfig first.
@@ -5862,13 +5866,19 @@ export class SessionsService {
         dto.effort !== undefined
           ? normalizeEffortForProvider(exec.provider, dto.effort)
           : undefined;
-      // Clamped here, unlike on create: both halves of the question — the runtime this session
-      // executes on and the model it is being pointed at — are resolved above, so a PATCH that
-      // asks for the fast lane on a model that has none is answered by storing the truth rather
-      // than a setting the engine would drop without saying so.
+      // Clamped here, unlike on create: every part of the question — the runtime this session
+      // executes on, the model it is being pointed at, and (for Codex) the tiers that model's row
+      // in the assigned runner's catalogue advertises — is resolved above, so a PATCH that asks for
+      // the fast lane where there is none is answered by storing the truth rather than a setting
+      // the engine would drop without saying so.
       const normalizedFastMode =
         dto.fastMode !== undefined
-          ? dto.fastMode === true && fastModeAvailable(exec.provider, exec.model)
+          ? dto.fastMode === true &&
+            fastModeAvailable(
+              exec.provider,
+              exec.model,
+              session.assignedRunner?.modelCatalog as RunnerModelCatalog | null,
+            )
           : undefined;
       await tx.session.update({
         where: { id },
@@ -5916,9 +5926,10 @@ export class SessionsService {
       // turn ends. Effort joined them on measured behaviour, not on principle — an
       // apply_flag_settings frame moves the effort of the API calls the RUNNING turn goes on to
       // make (runner-go/claude_setconfig.go), which is the whole reason it stopped being worth a
-      // re-spawn. Fast mode went the other way on the same evidence: the frame is accepted,
-      // answered `success`, and every later request in the turn still goes out without it — so it
-      // joins the provider on the spawn-only side even on the runtime that HAS a control channel.
+      // re-spawn. Claude's fast mode went the other way on the same evidence: the frame is
+      // accepted, answered `success`, and every later request in the turn still goes out without it
+      // — so it joins the provider on the spawn-only side even on the runtime that HAS a control
+      // channel. (On Codex `acceptsLiveConfig` is false, so this term changes nothing there.)
       const respawns = !acceptsLiveConfig || next.changed || fastModeMoved;
       // …and the control frame goes whenever the live half moved. A PATCH that moved nothing at
       // all still sends one rather than falling silent: re-stating the committed pair is what

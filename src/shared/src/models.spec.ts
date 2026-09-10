@@ -118,11 +118,10 @@ describe('fastModeAvailable', () => {
     expect(fastModeAvailable(AgentProvider.CLAUDE, '')).toBe(false);
   });
 
-  it('refuses it outside the Claude runtime entirely', () => {
-    // Not a model question over here: fast mode is an Anthropic first-party lane, and no other
-    // engine has anything to do with the setting. The Opus id is deliberate — it is the one that
-    // would pass if this were asked of the model alone.
-    for (const runtime of [AgentProvider.CODEX, AgentProvider.KIMI, AgentProvider.OPENCODE]) {
+  it('refuses it on the runtimes that have no fast lane at all', () => {
+    // The Opus id is deliberate — it is the one that would pass if this were asked of the model
+    // alone.
+    for (const runtime of [AgentProvider.KIMI, AgentProvider.OPENCODE]) {
       expect(fastModeAvailable(runtime, 'claude-opus-5')).toBe(false);
     }
     // A configured (BYOK) slug reaches here as its BORROWED runtime, never as the slug: one that
@@ -131,5 +130,30 @@ describe('fastModeAvailable', () => {
     // this looks like — must not be a yes.
     expect(fastModeAvailable('', 'claude-opus-5')).toBe(false);
     expect(fastModeAvailable('acme-anthropic', 'claude-opus-5')).toBe(false);
+  });
+});
+
+describe('fastModeAvailable on Codex', () => {
+  const catalog = (serviceTiers?: string[]) => ({
+    [AgentProvider.CODEX]: [{ value: 'gpt-6-astra', label: 'GPT-6-Astra', serviceTiers }],
+  });
+
+  it("offers it on a model whose catalogue row advertises Codex's priority tier", () => {
+    expect(fastModeAvailable(AgentProvider.CODEX, 'gpt-6-astra', catalog(['priority']))).toBe(true);
+  });
+
+  it('refuses it on a row that advertises no such tier, and on a model with no row at all', () => {
+    // No row is a no here, unlike an effort level: codex does not refuse an unadvertised tier, it
+    // drops it from the request without a word, so "unknown" must not draw a control that does
+    // nothing.
+    expect(fastModeAvailable(AgentProvider.CODEX, 'gpt-6-astra', catalog([]))).toBe(false);
+    expect(fastModeAvailable(AgentProvider.CODEX, 'gpt-6-astra', catalog())).toBe(false);
+    expect(fastModeAvailable(AgentProvider.CODEX, 'gpt-5.6-sol', catalog(['priority']))).toBe(false);
+    expect(fastModeAvailable(AgentProvider.CODEX, 'gpt-6-astra')).toBe(false);
+  });
+
+  it('never answers a Claude model from a Codex catalogue, or the other way round', () => {
+    expect(fastModeAvailable(AgentProvider.CLAUDE, 'gpt-6-astra', catalog(['priority']))).toBe(false);
+    expect(fastModeAvailable(AgentProvider.CODEX, 'claude-opus-5', catalog(['priority']))).toBe(false);
   });
 });

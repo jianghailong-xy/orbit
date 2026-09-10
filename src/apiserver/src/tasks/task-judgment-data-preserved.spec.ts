@@ -393,7 +393,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        preserved tables. Reading a row drops, alters and rewrites nothing. Nothing reads the
   //        new row to allow or refuse anything yet: a project's status is decided exactly as
   //        before, and the acceptance DONE gate 0229 removed is not reinstated under another name.
-  //   0253 added `session.fast_mode`, one boolean saying whether a session runs in Claude Code's
+  //   0253 added `session.fast_mode`, one boolean saying whether a session runs in its runtime's
   //        fast lane. Read against every claim above: it is one `ALTER TABLE "session" ADD COLUMN
   //        ... NOT NULL DEFAULT false` and nothing else. It does not touch `task`, `project` or
   //        `project_acceptance_criterion_definition`, so the 0177 pair,
@@ -406,7 +406,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        preserved row is read or written. The default is a constant, so PG writes only
   //        `pg_attribute.attmissingval` and never rewrites the heap: there is no backfill here and
   //        none is owed. Nothing reads the new column to allow or refuse a status — it is read by
-  //        the claim, to decide one key in the settings file a runner writes for an engine.
+  //        the claim, to decide one setting a runner hands an engine.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',

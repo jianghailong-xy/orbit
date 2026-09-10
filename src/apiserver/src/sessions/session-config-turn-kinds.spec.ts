@@ -31,6 +31,8 @@ function serviceOn(current: {
   permissionMode?: string | null;
   effort?: string | null;
   fastMode?: boolean;
+  /** The assigned runner, when a case needs its reported catalogue (Codex's fast lane is read there). */
+  assignedRunner?: { modelCatalog?: unknown } | null;
   /** The identity the session declares. A configured (BYOK) slug takes providerBuiltin: false. */
   provider?: string;
   providerBuiltin?: boolean;
@@ -449,4 +451,39 @@ test('asking for fast mode on a model without a fast lane stores the truth, and 
   // describe this rule, and an MCP caller or an older client reaches here without passing one.
   assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
   assert.equal('fastMode' in JSON.parse(turns[0].content ?? '{}'), false);
+});
+
+/** A Codex runner whose catalogue row for `gpt-6-astra` advertises the tiers named here. */
+const codexRunner = (serviceTiers: string[]) => ({
+  modelCatalog: { codex: [{ value: 'gpt-6-astra', label: 'GPT-6-Astra', serviceTiers }] },
+});
+
+test('a Codex session reads its fast lane off the runner catalogue, and gets it on the next turn', async () => {
+  const { service, turns } = serviceOn({
+    provider: 'codex',
+    model: 'gpt-6-astra',
+    assignedRunner: codexRunner(['priority']),
+  });
+
+  await service.updateConfig(OWNER, ID, { fastMode: true });
+
+  // A reload and nothing else — the same kind every Codex field travels on, because Codex has no
+  // setconfig arm. What differs from Claude is only what the runner does with it: Codex's fast
+  // lane is a per-request service tier, so the next turn/start carries it without a re-spawn.
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').fastMode, true);
+});
+
+test('a Codex model whose catalogue row does not advertise the priority tier has no fast lane', async () => {
+  const { service, turns } = serviceOn({
+    provider: 'codex',
+    model: 'gpt-6-astra',
+    assignedRunner: codexRunner([]),
+  });
+
+  await service.updateConfig(OWNER, ID, { fastMode: true });
+
+  // Stored false and never sent. Codex does not refuse a tier its catalogue does not advertise; it
+  // drops it from the request without a word, so recording `true` would be a setting nothing honours.
+  assert.equal('fastMode' in JSON.parse(turns[0]?.content ?? '{}'), false);
 });

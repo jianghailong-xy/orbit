@@ -1,8 +1,9 @@
--- Whether a session runs in Claude Code's fast lane.
+-- Whether a session runs in its runtime's fast lane: Claude Code's `/fast`, or Codex's "Fast"
+-- service tier (`priority`).
 --
--- Not a flag: the CLI has no `--fast`, it reads `fastMode` out of the settings file the runner
--- writes for the session (runner-go/claude_spawn.go), and it reads it once, when the process
--- starts. So this column is what the NEXT process is built from, and changing it queues a
+-- On Claude it is not a flag: the CLI has no `--fast`, it reads `fastMode` out of the settings file
+-- the runner writes for the session (runner-go/claude_spawn.go), and it reads it once, when the
+-- process starts. On Codex it is a per-request `service_tier`. Either way a change to it queues a
 -- `reload` rather than the `setconfig` a model / permission mode / effort change queues.
 --
 -- NOT NULL DEFAULT false rather than a nullable column: off is the engine's own default, so

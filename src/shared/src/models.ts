@@ -1,4 +1,5 @@
 import { AgentProvider } from './enums';
+import type { RunnerModelCatalog } from './dto';
 
 /** The model each provider falls back to when neither the session nor its Runtime supplies one.
  *  Mirrors the clients' defaults (web `lib/agentDefaults` DEFAULT_MODEL_BY_PROVIDER, Swift
@@ -50,8 +51,8 @@ export function isRetiredModel(
  * `fast_mode` and refuses it on every other one ("<model> is not in your organization's allowed
  * models"), and as of CLI 2.1.260 that is Opus 5 and Opus 4.8. Same shape and the same long-term
  * caveat as AUTO_CAPABLE_CLAUDE_MODELS: the answer belongs to the CLI that runs the model, so a
- * static table here goes stale a release before anyone notices, and the fix is the same one —
- * have the runner report it in the heartbeat catalogue beside the reasoning levels.
+ * static table here goes stale a release before anyone notices. Codex does not have that problem —
+ * its runner reports each model's tiers — which is why the Codex half below reads the catalogue.
  */
 export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
   'claude-opus-5',
@@ -59,29 +60,44 @@ export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Whether fast mode — Claude Code's `/fast`, faster output from the same Opus, drawn from usage
- * credits — is something this runtime and model actually have.
- *
- * Claude only: it is an Anthropic-first-party lane, and the CLI refuses it outright on Bedrock,
- * Vertex and anything else that is not the Anthropic API. Within Claude it is per-model, so an
- * unavailable answer is what keeps a session that switched to Sonnet from carrying a setting the
- * engine will silently drop.
+ * The Codex service tier Codex calls "Fast" (`codex debug models` → service_tiers:
+ * [{ id: "priority", name: "Fast" }]). The id and not the `fast` alias, because codex silently
+ * omits a tier the model's catalogue does not advertise, so the id is the only spelling a session
+ * can be checked against. Mirrors runner-go's codexFastServiceTier.
+ */
+export const CODEX_FAST_SERVICE_TIER = 'priority';
+
+/**
+ * Whether fast mode — the runtime's own fast lane: Claude Code's `/fast`, Codex's "Fast" service
+ * tier — is something this runtime and model actually have.
  *
  * `runtime` is the built-in runtime that executes the session, not the persisted provider slug —
  * resolve a configured slug to its runtime first, exactly as `autoAvailable` asks. A configured
- * (BYOK) identity that borrows the claude runtime is therefore answered like Claude, which is
- * right for the common case (a second Anthropic account) and harmless for the other one: the CLI
- * has its own first-party check and simply runs without the lane when the endpoint is not
- * Anthropic's, the same way it decides Auto for itself.
+ * (BYOK) identity is therefore answered like the runtime it borrows, which is right for the common
+ * case (a second account with the same vendor) and harmless for the other: both CLIs run without
+ * the lane rather than fail when the endpoint cannot give it.
  *
- * There is one thing this deliberately does NOT know: whether the account is ALLOWED the lane.
- * That is an organisation-level answer the CLI fetches at startup, and no client or control-plane
- * table can hold it. So a true here means "there is a fast lane for this runtime and model", never
- * "this session will get one".
+ * - **Claude**: per model, from the static table above.
+ * - **Codex**: from the assigned runner's catalogue — the model's row must advertise the priority
+ *   tier. No row means no: unlike an effort level, a tier the catalogue does not advertise is not
+ *   refused by codex but dropped from the request without a word, so "unknown" must not render a
+ *   control whose only possible outcome is being ignored.
+ * - Kimi and OpenCode have no fast lane.
+ *
+ * There is one thing this deliberately does NOT know: whether the account is ALLOWED the lane (an
+ * organisation setting, EU data residency). The CLI decides that when it sends the request. A true
+ * here means "there is a fast lane for this runtime and model", never "this session will get one".
  */
-export function fastModeAvailable(runtime: string, model: string): boolean {
-  if (runtime !== AgentProvider.CLAUDE) return false;
-  return FAST_MODE_CAPABLE_CLAUDE_MODELS.has(model);
+export function fastModeAvailable(
+  runtime: string,
+  model: string,
+  modelCatalog?: RunnerModelCatalog | null,
+): boolean {
+  if (runtime === AgentProvider.CLAUDE) return FAST_MODE_CAPABLE_CLAUDE_MODELS.has(model);
+  if (runtime !== AgentProvider.CODEX) return false;
+  const rows = modelCatalog?.[AgentProvider.CODEX];
+  const row = Array.isArray(rows) ? rows.find((entry) => entry?.value === model) : undefined;
+  return Array.isArray(row?.serviceTiers) && row.serviceTiers.includes(CODEX_FAST_SERVICE_TIER);
 }
 
 /** Resolve the model to run for a provider, guarding against a cross-provider mismatch.
