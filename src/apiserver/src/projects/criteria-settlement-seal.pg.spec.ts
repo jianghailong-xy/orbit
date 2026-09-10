@@ -7,11 +7,13 @@
  * -----------------------------------------------
  * The machine is not new. `deriveProjectDone` has read `standardSetConfirmationStanding` since
  * 2026-09-08, and `project-done-derived.pg.spec.ts` already shows an unconfirmed project staying
- * OPEN and a confirmed one settling. What that file does NOT pin is the direction of an edit: the
- * one it makes is a REWORDING, which `classifyCriteriaEdit` calls `WEAKENING`, and a weakening edit
- * is on its way to not taking effect at all. The case this file exists for is the other one — the
- * edit that DOES take effect where it is made, and what it does to a confirmation already on
- * record.
+ * OPEN and a confirmed one settling — and its two edit cases already make an edit that takes
+ * effect where it is made, a step UP the ladder that each asserts `classifyCriteriaEdit` calls
+ * `ADDITIVE` before writing it. What that file does not do is pin the CLAUSE: it reads the
+ * confirmation as one input among several, on a timeline that moves the others too. The case this
+ * file exists for is the clause on its own — every withholding paired with a reading of the same
+ * rows that produces DONE, so that "unconfirmed, therefore not DONE" is evidence rather than a
+ * sentence a project that was never going to settle satisfies for free.
  *
  * THE PROPOSITION
  * ---------------

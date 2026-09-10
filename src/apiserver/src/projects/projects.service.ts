@@ -837,7 +837,7 @@ export class ProjectsService {
   }): void {
     if (dto.acceptanceCriteriaItems === null) {
       throw new BadRequestException(
-        'acceptanceCriteriaItems must be an array; use [] to clear it or omit it to leave it unchanged',
+        'acceptanceCriteriaItems must be an array stating the whole set, or omitted to leave it unchanged',
       );
     }
   }

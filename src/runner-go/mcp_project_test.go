@@ -314,15 +314,26 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(mcpToolDescription(tools, "project_update"), "[] to clear") {
-		t.Fatalf("project_update does not document the structured clear: %q", mcpToolDescription(tools, "project_update"))
-	}
 	// The proposal channel is gone and acceptanceCriteriaItems is a write again, so the copy has
 	// to say so. A description that still called it a proposal would tell a model the criteria had
 	// not changed while the write it just made had already landed — worse than saying nothing.
 	property := mcpToolPropertyDescription(t, tools, "project_update", "acceptanceCriteriaItems")
 	if !strings.Contains(property, "Whole structured replacement") {
 		t.Fatalf("project_update does not say the set is replaced: %q", property)
+	}
+	// `[]` was documented here as the structured clear, and it is not one: it drops every
+	// criterion, and a drop is held like any edit that does not tighten the ruler, with the
+	// criteria left in force. Copy that still offered the clear would tell a model it had emptied a
+	// standard it is still judged by, so the description and the property both say what `[]` does.
+	for _, text := range []string{mcpToolDescription(tools, "project_update"), property} {
+		if !strings.Contains(text, "[] drops every criterion rather than clearing the set") {
+			t.Fatalf("project_update does not say what [] does to the criteria: %q", text)
+		}
+		for _, gone := range []string{"[] to clear", "[] clears"} {
+			if strings.Contains(text, gone) {
+				t.Fatalf("project_update still offers [] as the structured clear (%q): %q", gone, text)
+			}
+		}
 	}
 	for _, lie := range []string{"PROPOSAL", "PROPOSING", "approve", "[] is refused"} {
 		for _, text := range []string{mcpToolDescription(tools, "project_update"), property} {

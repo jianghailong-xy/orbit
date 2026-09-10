@@ -204,15 +204,21 @@ export class UpdateProjectDto {
   /** null clears the field, as on the task list's `instructions`: blank and absent must not be
    *  two different stored states. */
   @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string | null;
-  /** Whole-collection structured replacement. `[]` explicitly clears every criterion; omission
-   * leaves the collection untouched. Existing item ids preserve identity and revision history.
+  /** Whole-collection structured replacement: the array states the whole set, and omission leaves
+   * the collection untouched. Existing item ids preserve identity and revision history.
    *
-   * Sending this field is not by itself a write of the standard. The set is classified first: one
-   * that plainly tightens the ruler replaces the criteria where the request is made, and one that
-   * drops a criterion or whose direction cannot be read is held for the account owner to decide
-   * and never reaches the definitions. `acceptanceCriteriaHold` on the response is what tells the
-   * two apart — when it is there the edit was held, and the criteria returned beside it are the
-   * unchanged ones the project is still judged by. */
+   * Sending this field is not by itself a write of the standard. `classifyCriteriaEdit` reads the
+   * set first, and only an edit that plainly tightens the ruler replaces the criteria where the
+   * request is made: adding a criterion, reordering, or stepping a criterion's `verificationMethod`
+   * UP the HUMAN → VERIFICATION → EXECUTABLE ladder. Every other edit — dropping a criterion,
+   * rewriting `text`, any other `verificationMethod` rewrite — is `WEAKENING`, and
+   * `holdWeakeningAcceptanceEdit` holds it for the account owner to decide: it never reaches the
+   * definitions, which do not move a byte. So `[]` drops every criterion rather than clearing the
+   * collection, and is held whenever there is one to drop.
+   *
+   * `acceptanceCriteriaHold` on the response is what tells the two outcomes apart — when it is
+   * there the edit was held, and the criteria returned beside it are the unchanged ones the
+   * project is still judged by. */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)

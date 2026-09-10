@@ -309,7 +309,8 @@ test('the acceptance-criteria capability set carries no propose and no confirm',
     /@Patch\('projects\/:id'\)[\s\S]*?return this\.projects\.update\(runner\.ownerId, id, dto, sessionId\);/,
     'the runner PATCH must forward the whole body, acceptance criteria included, to the write');
   assert.doesNotMatch(runner, /refuseEmptyCriteriaProposal/,
-    '`acceptanceCriteriaItems: []` is a clear again, not a refusal about proposals');
+    '`acceptanceCriteriaItems: []` is an edit again — a drop of every criterion, held like any '
+      + 'other drop — not a refusal about proposals');
 });
 
 /**
@@ -359,7 +360,8 @@ const NEVER_TRUE = [
   // The removed channel's wire field. Today's is `acceptanceCriteriaHold`, named that way in
   // `projects.service.ts` precisely so this scan can tell the two apart.
   /acceptanceCriteriaProposal/,
-  // `acceptanceCriteriaItems: []` is a clear, in both branches, and always was after 0223.
+  // `acceptanceCriteriaItems: []` is refused in neither branch: it drops every criterion, which
+  // is held like any other drop, and no door has refused it since 0223.
   /\[\] is refused/,
 ];
 
@@ -418,6 +420,16 @@ test('CLI, MCP and web copy about acceptance criteria matches what a write now d
       + 'ruler');
 });
 
+/**
+ * The copy as a caller reads it rather than as its file wraps it. A Go description is a run of
+ * `"..." +` literals, and the CLI help and a doc comment are hard-wrapped, so a sentence in the
+ * source is cut by line breaks — and by a doc comment's leading `*` — that no caller ever sees.
+ * Matching the source would pin the wrapping as much as the words.
+ */
+function rendered(source: string): string {
+  return source.replace(/"\s*\+\s*\n\s*"/g, '').replace(/\n\s*\*(?!\/)/g, ' ').replace(/\s+/g, ' ');
+}
+
 test('CLI and MCP say what the write does rather than merely not lying about it', () => {
   // Silence would pass the scan above and still leave a caller guessing. Every door states the
   // semantics it actually has, and since the hold came back that is two statements rather than
@@ -429,7 +441,6 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
     'the MCP acceptanceCriteriaItems property must say the set is replaced');
   const cli = read('src/runner-go/project_cli.go');
   assert.match(cli, /whole-collection replacement/i, 'the CLI help must say the set is replaced');
-  assert.match(cli, /\[\] clears the collection/, 'the CLI help must document the clear again');
   // Both branches, named at every door, in the copy about THIS write rather than anywhere in the
   // file: `held` is an ordinary enough word that a whole-file match would be satisfied by a
   // sentence about something else. `acceptanceCriteriaHold` is required by name because prose
@@ -462,6 +473,21 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
     assert.match(copy, /\bheld\b/i, `${door} must say the other edits are held, not applied`);
     assert.match(copy, /acceptanceCriteriaHold/,
       `${door} must name the field that tells a caller which of the two it got`);
+  }
+  // `[]` is the edit these doors used to offer as the way to clear the set, and it clears nothing:
+  // it drops every criterion, and a drop is held like any edit that does not tighten the ruler. A
+  // door still offering the clear would have a model report a standard emptied that it is in fact
+  // still judged by, so every door that documents `[]` says what it does instead, and none may go
+  // back to the clear. The two route docs state the fork without naming `[]` and are not held to it.
+  const documentsTheEmptySet: Array<[string, string]> = [
+    ['the MCP acceptanceCriteriaItems property', property.slice(0, property.indexOf('items'))],
+    ...doors.filter(([door]) => !door.includes('PATCH')),
+  ];
+  for (const [door, copy] of documentsTheEmptySet) {
+    assert.match(rendered(copy), /\[\]`? drops every criterion rather than clearing/,
+      `${door} must say [] drops every criterion rather than clearing the set`);
+    assert.doesNotMatch(rendered(copy), /\[\]`? (?:explicitly )?clears|\[\] to clear/,
+      `${door} still offers [] as the way to clear the set`);
   }
 });
 

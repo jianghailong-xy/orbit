@@ -1604,7 +1604,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"maxItems": maxProjectAcceptanceCriteriaItems,
 		"description": "Whole structured replacement; text and verificationMethod are required. " +
 			"Preserve an item's id from project_get to " +
-			"edit or reorder it without replacing its identity; omit id to add a new item; [] clears all. " +
+			"edit or reorder it without replacing its identity; omit id to add a new item. " +
+			"[] drops every criterion rather than clearing the set, and a drop is held like any " +
+			"edit that does not tighten the ruler — see acceptanceCriteriaHold in the response. " +
 			"currentStatus is derived and is not an input. Legacy acceptanceCriteria is not a " +
 			"runner write shape.",
 		"items": obj(projectCriterionProps(true), "text", "verificationMethod"),
@@ -1990,9 +1992,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"reached (acceptanceCriteriaItems) or how the work is to be done (instructions), and " +
 				"cancel or reopen work. You have authority to write these configuration fields. " +
 				"Sending acceptanceCriteriaItems is judged by its direction before it is written: an " +
-				"edit that plainly tightens the ruler replaces the criteria in force immediately, and " +
-				"an edit that drops a criterion or whose direction cannot be read is NOT applied — " +
-				"it is held as a proposal for the account owner to decide. Which one you got is on the " +
+				"edit that plainly tightens the ruler replaces the criteria in force immediately — " +
+				"adding an item, reordering, or stepping an item's verificationMethod up the " +
+				"HUMAN → VERIFICATION → EXECUTABLE ladder — and any other edit (dropping an item, " +
+				"rewriting an item's text, or rewording verificationMethod any other way) is NOT " +
+				"applied: it is held as a proposal for the account owner to decide. [] drops every " +
+				"criterion rather than clearing the set, so it is held whenever there is one to drop. " +
+				"Which one you got is on the " +
 				"response: acceptanceCriteriaHold means held, and the criteria in that same body are " +
 				"the ones still in force, so go on being judged against them. The set is " +
 				"the standard this project is judged by, so read project_get first and send the " +
@@ -2001,7 +2007,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"writable through the old user/JWT API compatibility path. It is not an agent " +
 				"fallback: this runner tool refuses it because a criterion is authored one item at " +
 				"a time; use acceptanceCriteriaItems with explicit text and verificationMethod on " +
-				"every item, and [] to clear the set. A " +
+				"every item. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
 				"write acceptance criteria. Status is not writable from inside a session: a call " +

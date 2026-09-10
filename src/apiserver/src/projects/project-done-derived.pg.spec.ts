@@ -58,7 +58,7 @@
  * because every one of them reaches the column over a task write or the owner's confirmation. An
  * EDIT of the criteria moves an input over neither: `ProjectsService.update` is the one writer
  * that states them, the digest moves under the confirmation already on record, and that write
- * re-projected nothing. A settled project whose owner reworded one assertion went on asserting
+ * re-projected nothing. A settled project whose owner tightened one assertion went on asserting
  * DONE in the column until some unrelated task write happened along — which, in the order this
  * repository runs in, is until something that has nothing to do with the edit happens.
  *
@@ -97,6 +97,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import type { CompletionInputRouter } from './completion-input-router.service';
+import { classifyCriteriaEdit } from './criteria-edit-classification';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { readDerivedProjectDone, type DerivedDoneWithheld } from './project-done-derived';
@@ -105,7 +106,6 @@ import { ProjectsService } from './projects.service';
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
-/** The verification method every criterion here declares; never the thing under test. */
 /**
  * The rungs of the HUMAN → VERIFICATION → EXECUTABLE ladder, in the order this fixture climbs them.
  *
@@ -115,6 +115,9 @@ const skip = !URL;
  * criterion does not move at all (`criteria-weakening-intent.pg.spec.ts`). What both cases below
  * need is a criterion that MOVED — the seal is the same either way, because it is taken over
  * `revision` and `content_hash` and the trigger rewrites both from the method as well as the words.
+ *
+ * `METHOD` is what every criterion is stated with and is never the thing under test; the other two
+ * are only ever the far side of an edit.
  */
 const METHOD = 'HUMAN';
 const STRICTER = 'VERIFICATION';
@@ -503,6 +506,26 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
     await nextTaskWrite(firstWork.id);
     assert.equal(await storedStatus(), ProjectStatus.DONE);
 
+    // The direction, from the repository's own rules rather than from this file's opinion: the
+    // assertion's words are untouched and its method steps UP the ladder, so nothing about this
+    // criterion got easier and the edit may take effect where it is made. Were those rules ever to
+    // call it `WEAKENING`, `update` would hold it and move nothing, and the readings below would
+    // fail as statements about the confirmation when what changed is the classification — so that
+    // change fails here, as itself.
+    assert.equal(
+      classifyCriteriaEdit(
+        [
+          { id: first.definitionId, text: FIRST, verificationMethod: METHOD },
+          { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
+        ],
+        [
+          { id: first.definitionId, text: FIRST, verificationMethod: STRICTER },
+          { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
+        ],
+      ),
+      'ADDITIVE',
+    );
+
     await projects.update(ownerId, projectId, {
       acceptanceCriteriaItems: [
         { id: first.definitionId, text: FIRST, verificationMethod: STRICTER },
@@ -551,7 +574,23 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
       // No task write, no confirmation, no call to the projection. This is the order the product
       // runs in: a project settles, and the owner then tightens how one of the assertions it
       // settled against is to be judged — an edit nobody follows with anything, because from the
-      // owner's side there is nothing left to do.
+      // owner's side there is nothing left to do. A step up the ladder rather than a rewording,
+      // for the reason the constants above give, and asserted to be one rather than described as
+      // one: an edit classified `WEAKENING` is held rather than applied, and this case would then
+      // be reading a column nothing had moved.
+      assert.equal(
+        classifyCriteriaEdit(
+          [
+            { id: first.definitionId, text: FIRST, verificationMethod: STRICTER },
+            { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
+          ],
+          [
+            { id: first.definitionId, text: FIRST, verificationMethod: STRICTEST },
+            { id: second.definitionId, text: SECOND, verificationMethod: METHOD },
+          ],
+        ),
+        'ADDITIVE',
+      );
       await projects.update(ownerId, projectId, {
         acceptanceCriteriaItems: [
           { id: first.definitionId, text: FIRST, verificationMethod: STRICTEST },
@@ -568,7 +607,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
       assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED', 'STANDARD_SET_UNCONFIRMED'],
         'and BOTH halves of the conjunction moved on the one edit, which is what an edit does: the '
           + 'confirmation on record names a version that no longer stands, and every task that '
-          + 'declared the reworded criterion declared a revision that is no longer the one it '
+          + 'declared the tightened criterion declared a revision that is no longer the one it '
           + 'carries — either clause alone would be enough to take DONE away');
       assert.equal(
         (await acceptance.standardSetConfirmation(ownerId, projectId)).state, 'STALE',
