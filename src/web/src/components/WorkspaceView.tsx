@@ -5626,10 +5626,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {/* The same kind of card for the evidence this session may confirm or send back:
                   drawn from the pending read and pressed straight at the decision door. Keyed by
                   the session because this view outlives navigation and the card remembers which
-                  versions it has shown — those belong to this conversation, not the next one. */}
+                  versions it has shown — those belong to this conversation, not the next one. Not
+                  by the bare session id, though: the criteria card above is its sibling and has
+                  that key, and React loses the first of two siblings sharing a key on every render
+                  without removing its DOM — copies of that card that never re-derive, stay
+                  pressable after the answer, and are left behind in the pane New session reuses. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionEvidenceDecisionCard
-                  key={selectedId}
+                  key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
                 />

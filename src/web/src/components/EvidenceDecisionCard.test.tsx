@@ -669,9 +669,10 @@ describe('where the card is mounted', () => {
     expect(at).toBeGreaterThan(source.indexOf('<div className="workspace-scroll-wrap">'));
     expect(at).toBeGreaterThan(source.indexOf('<SessionCriteriaDecisionCard'));
     // The view outlives navigation between sessions, so without the key one conversation's
-    // remembered addresses would be drawn as stale cards in the next one opened.
+    // remembered addresses would be drawn as stale cards in the next one opened. Not the bare
+    // session id, which is the criteria card's key: see WorkspaceView.criteriaDecisionCard.test.tsx.
     const element = source.slice(at, source.indexOf('/>', at));
-    expect(element).toContain('key={selectedId}');
+    expect(element).toContain('key={`evidence:${selectedId}`}');
     expect(element).toContain('sessionId={selectedId}');
   });
 });
