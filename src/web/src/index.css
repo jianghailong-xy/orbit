@@ -6133,6 +6133,14 @@ html[data-theme='dark'] .session-tag-chip {
 .md p {
   margin: 6px 0;
 }
+/* An HTML block — a tag on a line of its own, like a pasted <background-jobs> — is shown as its
+   source text (MD has no rehype-raw), in an element of its own (remarkHtmlBlocks) so it keeps the
+   line breaks and indentation the reset above would run together. Spaced like a paragraph; a
+   single class, so the first/last-child margin resets still win. */
+.md-html {
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
 .md ul,
 .md ol {
   margin: 6px 0;

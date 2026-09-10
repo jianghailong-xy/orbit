@@ -1742,6 +1742,29 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   );
 }
 
+/** mdast nodes whose children are blocks: an `html` child of one is an HTML block, not a tag in a line. */
+const HTML_BLOCK_PARENTS = new Set(['root', 'blockquote', 'listItem', 'footnoteDefinition']);
+
+// A tag on a line of its own — a pasted `<background-jobs>`, a `<details>` — opens a CommonMark HTML
+// block that runs to the next blank line. With no rehype-raw, react-markdown shows that block as its
+// source text, loose inside `.md`, whose `white-space: normal` then runs its lines and indentation
+// together. Giving the block an element of its own lets `.md-html` keep them. HTML inside a
+// paragraph is left where it is, in its line.
+function remarkHtmlBlocks() {
+  return (tree: any) => {
+    const walk = (node: any) => {
+      for (const child of node.children ?? []) {
+        if (child.type === 'html' && HTML_BLOCK_PARENTS.has(node.type)) {
+          child.data = { ...child.data, hName: 'div', hProperties: { className: ['md-html'] } };
+        } else {
+          walk(child);
+        }
+      }
+    };
+    walk(tree);
+  };
+}
+
 export const MD = memo(function MD({
   children,
   highlight = true,
@@ -1754,7 +1777,7 @@ export const MD = memo(function MD({
   return (
     <div className="md">
       <Markdown
-        remarkPlugins={breaks ? [remarkGfm, remarkHardBreaks] : [remarkGfm]}
+        remarkPlugins={breaks ? [remarkGfm, remarkHardBreaks, remarkHtmlBlocks] : [remarkGfm, remarkHtmlBlocks]}
         rehypePlugins={highlight ? [rehypeHighlight] : []}
         urlTransform={transcriptUrlTransform}
         components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink }}

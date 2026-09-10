@@ -1,4 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -1094,6 +1097,52 @@ describe('hand-typed Markdown', () => {
     // The two adjacent prose lines are one paragraph — without hard breaks CommonMark
     // would join them with a space.
     expect(html).toContain('render<br/>');
+  });
+});
+
+// A tag on a line of its own — `<background-jobs>`, `<list-conditions …>` — opens a CommonMark HTML
+// block, and MD, which has no rehype-raw, shows that block as its source text. `.md` resets
+// white-space to normal so the newlines Markdown puts between blocks do not open up blank lines,
+// and that reset ran the block's own lines and indentation together into one line of words — on
+// exactly the message where someone pasted the block to ask what it is. Asked the way
+// ApprovalPanel.questionWrap.test.tsx asks it: the rendered bubble under the whole index.css, and
+// the white-space a CSS engine resolves for the element holding the block.
+describe('a tag block typed into a user bubble', () => {
+  const BLOCK = '<background-jobs>\n  你不在的时候结束了：\n    bgj_x｜job｜npm run build\n</background-jobs>';
+  /** Under these a line break is a line break on screen and leading spaces stay; `pre-line` keeps
+   *  the breaks but collapses the indentation, and `normal` collapses both. */
+  const KEEPS_BREAKS_AND_INDENTATION = ['pre-wrap', 'pre', 'break-spaces'];
+
+  const stylesheet = (): string => {
+    // The web suite runs from `src/web`; a runner invoking vitest from the repo root does not.
+    const found = ['src/index.css', 'src/web/src/index.css']
+      .map((each) => resolve(process.cwd(), each))
+      .find(existsSync);
+    if (!found) throw new Error(`index.css not found from ${process.cwd()}`);
+    return readFileSync(found, 'utf8');
+  };
+
+  it('keeps its lines and indentation on screen, in the person’s own bubble, with nothing attached', () => {
+    const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>');
+    const { document } = dom.window;
+    const style = document.createElement('style');
+    style.textContent = stylesheet();
+    document.head.appendChild(style);
+    document.body.innerHTML = renderToStaticMarkup(
+      <Transcript events={[{ seq: 1, type: 'user', payload: { text: `这是什么？\n\n${BLOCK}` } }]} />,
+    );
+
+    // Found by what it says rather than by a class this file assumed: the innermost element holding it.
+    const holders = [...document.querySelectorAll('*')].filter((el) => el.textContent?.includes(BLOCK));
+    const holder = holders.find((el) => !holders.some((other) => other !== el && el.contains(other)));
+    expect(holder, `the block is not in the render verbatim:\n${document.body.innerHTML}`).toBeTruthy();
+
+    // The render carries the breaks and the indentation; the stylesheet decides whether anyone sees them.
+    expect(KEEPS_BREAKS_AND_INDENTATION).toContain(dom.window.getComputedStyle(holder!).whiteSpace);
+
+    // Still the person's own words: in their bubble, not taken for something Orbit attached.
+    expect(holder!.closest('.chat-user')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Orbit attached');
   });
 });
 
