@@ -40,8 +40,8 @@ import Foundation
    cannot come apart on them, and so they can be tested on Linux where no SwiftUI exists. The
    mirror is `src/web/src/components/CriteriaDecisionCard.tsx` (filed under the same project
    criterion as this file) — the strings below are copied from it deliberately, the way
-   `EvidenceDecisions` copies `DecisionRail`'s. That file is on main now, so the copy is no longer
-   on trust: `CriteriaDecisionCopyParityTests` reads it and compares the three headings, the two
+   `EvidenceDecisions` copies `EvidenceDecisionCard`'s. That file is on main now, so the copy is no
+   longer on trust: `CriteriaDecisionCopyParityTests` reads it and compares the three headings, the two
    actions, the two paragraphs and the two refusal codes, and a counterpart it cannot find is a
    FAILURE rather than a skip. What it does not compare is the title, the badge and the spelling of
    the provenance mark: those differ by end on purpose, for the reason the next section gives.

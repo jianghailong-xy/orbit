@@ -6,8 +6,8 @@ import XCTest
 /// keeps them saying them.
 ///
 /// `CriteriaDecision.swift` copied its visible strings out of `CriteriaDecisionCard.tsx` by hand,
-/// the way `EvidenceDecisions` copies `DecisionRail`'s. Until that web file landed on main there
-/// was nothing here to compare against and the copy was on trust; it has landed, so the trust
+/// the way `EvidenceDecisions` copies `EvidenceDecisionCard`'s. Until that web file landed on main
+/// there was nothing here to compare against and the copy was on trust; it has landed, so the trust
 /// becomes a check. Nothing in a build catches a heading re-worded at one end only — the Swift
 /// client and the browser bundle share no compiler — so the check has to be a test that reads the
 /// other end's source and compares the strings.

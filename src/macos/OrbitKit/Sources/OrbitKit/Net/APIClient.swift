@@ -283,8 +283,8 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// The completion decisions THIS session is being asked to make — the read the web decision
-    /// rail is built from, and the one a decision approval card joins so it can render the ROW
-    /// instead of the string the question flattened it into (see `EvidenceDecision.swift`).
+    /// rail is built from, and the one both clients draw their evidence cards from (see
+    /// `EvidenceDecision.swift`).
     ///
     /// The session is required rather than optional because every row carries whether THAT session
     /// may answer it: a queue that did not know who was reading it could only report a question,
@@ -292,6 +292,14 @@ public final class APIClient: @unchecked Sendable {
     public func pendingEvidenceDecisions(decidingSessionID: String) async throws -> EvidenceDecisionQueue {
         try await get("tasks/evidence-decisions/pending",
                       query: [URLQueryItem(name: "decidingSessionId", value: decidingSessionID)])
+    }
+
+    /// The evidence decision door, with this device's own credential — no agent between the press
+    /// and the door. The body names the session the answer is given from, and the door holds it to
+    /// the same independence check and revision compare-and-set a runner's answer meets.
+    public func decideEvidence(taskID: String,
+                               _ req: EvidenceDecisionRequest) async throws -> EvidenceDecisionResult {
+        try await post("tasks/\(taskID)/evidence/decision", body: req)
     }
 
     // MARK: a project's ruler — the two standing questions its owner answers
