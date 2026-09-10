@@ -27,6 +27,10 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.TASK_LIST_CHANGED), ControlEventType.TASK_LIST_CHANGED);
   assert.equal(controlTypeFor(RunEventType.TAG_CHANGED), ControlEventType.TAG_CHANGED);
   assert.equal(controlTypeFor(RunEventType.PROVIDER_CHANGED), ControlEventType.PROVIDER_CHANGED);
+  assert.equal(
+    controlTypeFor(RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED),
+    ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
+  );
 });
 
 test('only the owner-library events are user-scoped', () => {
@@ -34,6 +38,7 @@ test('only the owner-library events are user-scoped', () => {
     ControlEventType.TASK_LIST_CHANGED,
     ControlEventType.TAG_CHANGED,
     ControlEventType.PROVIDER_CHANGED,
+    ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
   ]) {
     assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
   }

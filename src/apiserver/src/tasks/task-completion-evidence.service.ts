@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
+import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   ImportLegacyTaskCommentEvidenceDto,
@@ -240,6 +242,7 @@ export class TaskCompletionEvidenceService {
     private readonly prisma: PrismaService,
     @Optional() private readonly tasks?: TasksService,
     @Optional() private readonly completionInputs?: CompletionInputRouter,
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   async submit(ownerId: string, taskId: string, actor: CompletionEvidenceActor, input: SubmitCompletionEvidence) {
@@ -373,6 +376,14 @@ export class TaskCompletionEvidenceService {
         projectId: task.projectId,
       };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
+
+    // A new revision changes what the pending-decisions read answers. Nudged after the commit, so
+    // an open page re-reads it now instead of on its next poll; the event names the task and
+    // carries none of the evidence.
+    this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
+      taskIds: [taskId],
+      resync: false,
+    });
 
     // The revision itself is the trigger. A source Session may still be RUNNING or
     // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
@@ -750,6 +761,13 @@ export class TaskCompletionEvidenceService {
       }
       return { decision: decisionResponse(written), completed: settled };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));
+
+    // A decided revision leaves the pending-decisions read, and a CONFIRM may have settled the task
+    // besides: the same nudge a submission sends, after the same commit.
+    this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, {
+      taskIds: [taskId],
+      resync: false,
+    });
 
     // The immediate successor edge for the task this decision settled, after commit and outside
     // the retried closure, exactly where the EXECUTABLE comparison puts its own. Losing it costs

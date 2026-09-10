@@ -55,18 +55,22 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.TAG_CHANGED;
     case RunEventType.PROVIDER_CHANGED:
       return ControlEventType.PROVIDER_CHANGED;
+    case RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED:
+      return ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED;
     default:
       return null;
   }
 }
 
-/** The user-scoped library events: they carry no session, so `toControlEvent` routes them by owner
- *  id and ships an empty `sessionId` (see the ControlEvent doc comment). */
+/** The user-scoped events — the owner's libraries, and a project's pending criteria decisions: they
+ *  carry no session, so `toControlEvent` routes them by owner id and ships an empty `sessionId`
+ *  (see the ControlEvent doc comment). */
 export function isUserScopedType(t: ControlEventType): boolean {
   return (
     t === ControlEventType.TASK_LIST_CHANGED ||
     t === ControlEventType.TAG_CHANGED ||
-    t === ControlEventType.PROVIDER_CHANGED
+    t === ControlEventType.PROVIDER_CHANGED ||
+    t === ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED
   );
 }
 

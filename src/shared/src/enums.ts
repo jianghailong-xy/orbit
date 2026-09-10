@@ -359,6 +359,11 @@ export enum RunEventType {
   TASK_LIST_CHANGED = 'task_list_changed',
   TAG_CHANGED = 'tag_changed',
   PROVIDER_CHANGED = 'provider_changed',
+  // A project's held criteria proposals changed: one was filed for the owner, or the owner decided
+  // one. Owner-scoped like the libraries above — the question is the project owner's, not any
+  // session's — and only a nudge: streamForUser maps it to
+  // ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED carrying the project id and nothing else.
+  PROJECT_CRITERIA_DECISIONS_CHANGED = 'project_criteria_decisions_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -372,7 +377,8 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.AGENT_CHANGED ||
     t === RunEventType.TASK_LIST_CHANGED ||
     t === RunEventType.TAG_CHANGED ||
-    t === RunEventType.PROVIDER_CHANGED
+    t === RunEventType.PROVIDER_CHANGED ||
+    t === RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED
   );
 }
 

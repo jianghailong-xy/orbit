@@ -145,6 +145,7 @@ export enum ControlEventType {
   TASK_LIST_CHANGED  = 'task.list.changed', // 用户级:sessionId 为空串
   TAG_CHANGED        = 'tag.changed',       // 用户级
   PROVIDER_CHANGED   = 'provider.changed',  // 用户级(admin 改 shared provider 时对所有人广播)
+  PROJECT_CRITERIA_DECISIONS_CHANGED = 'project.criteria_decisions.changed', // 用户级:data.id = 项目;提案被扣下/被决定时推,不带提案内容与 commitToken
   // 预留:未来任意通知都走这个泛化类型,不用每次改协议
   NOTIFICATION       = 'notification',
 }
@@ -235,6 +236,7 @@ hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标�
 
 - hub key 用保留前缀 `user:<ownerId>`。session id 是 UUID,**永不冲突**;`streamForRun` 因此天然匹配不到它,`toControlEvent` 认出前缀后**直接按 owner 路由,不查库**。多副本 NOTIFY 桥照旧白拿。
 - 事件类型:`task.list.changed` / `tag.changed` / `provider.changed`,`data` 统一是 `{ id }`(和 `task.changed` 一样,只是"去重新拉一下列表"的提示)。
+- `project.criteria_decisions.changed` 也走这条路:放松验收标准的提案被扣下、或被所有者决定之后发,`data.id` 是项目 id。它只是「去重读该项目待决」的提示,不带提案内容,也不带 `commitToken`(钥匙仍只在所有者那条待决读上)。证据提交/裁决不另立类型,复用 `task.changed`(`taskIds` 为该任务)。
 - 这些事件的 **`sessionId` 是空串**。客户端必须**按 `type` 派发**,不能再用"有没有 sessionId"来判断帧是否有效(keepalive ping 是**整个字段都没有**,原生解码器仍然靠这个把它丢掉)。
 - 全局变更(admin 管的 shared provider,人人可见)用 `publishForAllUsers`,内部 key 是 `user:*`,对每条流都放行。仅限真正全局、低频的编辑。
 

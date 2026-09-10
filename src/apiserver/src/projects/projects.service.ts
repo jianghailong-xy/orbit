@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import {
   deriveSessionLifecycleState,
+  RunEventType,
   SessionLifecycleState,
   type SessionFilingState,
   type SessionRunState,
@@ -26,6 +27,7 @@ import {
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
 import {
@@ -789,6 +791,10 @@ export class ProjectsService {
     // provides and exports it, so no new edge is added to the module graph.
     private readonly deliveries: CoordinatorDeliveryService =
       undefined as unknown as CoordinatorDeliveryService,
+    // Only the two writes that change the owner's pending criteria decisions publish through it,
+    // and it is defaulted for the same reason again. `RealtimeModule` is global, so Nest injects it
+    // by type without a new import.
+    private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
   ) {}
 
   /**
@@ -1654,6 +1660,12 @@ export class ProjectsService {
 
       return { row, definitions: await ProjectsService.acceptanceDefinitions(tx, projectId) };
     }, loggedRetry(this.logger, 'projects.decideCriteriaChange'));
+
+    // The answered proposal leaves the owner's pending read on every client, not only the one that
+    // answered it: the same nudge the hold sent, saying as little.
+    this.realtime?.publishForUser(
+      ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, projectId,
+    );
 
     // After the commit, and outside it, for `confirmStandardSet`'s reason: the projection reads
     // committed rows, it decides nothing about whether this decision was allowed, and a projection
@@ -2881,6 +2893,12 @@ export class ProjectsService {
       if (!projectResult) throw new CoordinatorBindingChanged();
       const { project, changedSessionId, held } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
+      // A held edit is a new question on the owner's pending criteria decisions. The nudge names
+      // the project and nothing else: the proposal, and the key that answers it, stay on the
+      // owner's own read.
+      if (held) {
+        this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, id);
+      }
       // The criteria a project states are one of the two facts its `status` is projected from, and
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
       // moved none of them, so there is nothing to re-project and no reason to re-decide a column

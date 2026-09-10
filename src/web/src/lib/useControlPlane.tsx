@@ -96,6 +96,24 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchProviders = (): void => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
     };
+    // The two reads a decision card is drawn from, which none of the list refetches above reach.
+    // Evidence being submitted or decided arrives as `task.changed`, and its read is keyed by the
+    // session DECIDING rather than by the task, so every session's copy is dirty. A held criteria
+    // proposal being filed or decided arrives as its own event naming the project; an event that
+    // names none dirties every project's copy.
+    const refetchPendingDecisions = (): void => {
+      void qc.invalidateQueries({
+        predicate: ({ queryKey }) => queryKey[0] === 'session' && queryKey[2] === 'pending-decisions',
+      });
+    };
+    const refetchCriteriaDecisions = (projectId: string): void => {
+      void qc.invalidateQueries({
+        predicate: ({ queryKey }) =>
+          queryKey[0] === 'project' &&
+          queryKey[2] === 'pending-criteria-decisions' &&
+          (!projectId || queryKey[1] === projectId),
+      });
+    };
     // One session's own detail (`['session', id]`), which every refetch above is blind to: they
     // are lists. The console merges detail over its list row — detail is fresher and carries
     // capabilities compact rows omit — so a stale detail masks a fresh row, and detail goes stale
@@ -116,11 +134,15 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       workspaces: refetchWorkspaces,
       tags: refetchTags,
       providers: refetchProviders,
+      decisions: refetchPendingDecisions,
     };
     // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
     // delta), so this is a plain type-prefix → group map. Note the pairs: a workspace rename and a
-    // tag recolor both change what the SESSION list rows render, so they refresh that too.
+    // tag recolor both change what the SESSION list rows render, so they refresh that too — and a
+    // held criteria proposal keeps the default for the same reason, since its coordinator's row
+    // counts it in pendingApprovals.
     const groupsFor = (type: string): string[] => {
+      if (type === 'task.changed') return ['tasks', 'decisions'];
       if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
       if (type.startsWith('workspace.')) return ['workspaces', 'sessions'];
       if (type.startsWith('tag.')) return ['tags', 'sessions'];
@@ -129,20 +151,25 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     const pending = new Set<string>();
     const pendingSessions = new Set<string>();
-    const scheduleRefresh = (type: string, sessionId?: string): void => {
+    const pendingProjects = new Set<string>();
+    const scheduleRefresh = (type: string, sessionId?: string, id?: string): void => {
       for (const g of groupsFor(type)) pending.add(g);
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
       // reaches the open console through its own transcript stream, and a task/tag/provider edit
       // says nothing about any session's state.
       if (sessionId && type.startsWith('session.')) pendingSessions.add(sessionId);
+      // '' when the event names no project, which refetchCriteriaDecisions reads as every project.
+      if (type === 'project.criteria_decisions.changed') pendingProjects.add(id ?? '');
       if (refreshTimer) return; // coalesce a burst into one refetch
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
         for (const g of pending) REFETCH[g]?.();
         for (const id of pendingSessions) refetchSessionDetail(id);
+        for (const id of pendingProjects) refetchCriteriaDecisions(id);
         pending.clear();
         pendingSessions.clear();
+        pendingProjects.clear();
       }, REFRESH_DEBOUNCE_MS);
     };
     // Close the stream and schedule a backoff reconnect. Guarded by `dropped` so it fires once per
@@ -169,10 +196,13 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // ended (see refetchSessionDetail). Prefix key, so a session id isn't needed here.
         for (const refetch of Object.values(REFETCH)) refetch();
         void qc.invalidateQueries({ queryKey: ['session'] });
+        // Keyed under ['project'], so the prefix above misses it: a proposal filed or decided
+        // during the gap would otherwise wait out its poll.
+        refetchCriteriaDecisions('');
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
-        let ev: { type?: string; sessionId?: string };
+        let ev: { type?: string; sessionId?: string; data?: { id?: unknown } | null };
         try {
           ev = JSON.parse(e.data);
         } catch {
@@ -182,7 +212,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // along as an optional extra rather than a requirement, because the user-scoped library
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
-        scheduleRefresh(ev.type, ev.sessionId);
+        const id = ev.data?.id;
+        scheduleRefresh(ev.type, ev.sessionId, typeof id === 'string' ? id : undefined);
       };
       es.onerror = () => drop();
     }

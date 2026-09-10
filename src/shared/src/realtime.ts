@@ -52,6 +52,10 @@ export enum ControlEventType {
   TAG_CHANGED = 'tag.changed',
   /** The deployment's configured model providers changed. USER-SCOPED (see above). */
   PROVIDER_CHANGED = 'provider.changed',
+  /** A project's pending criteria decisions changed — a loosening edit was held for the owner, or
+   *  the owner decided one. USER-SCOPED (see above). `data` is a `ControlResourceChanged` naming the
+   *  project: a nudge to re-read that project's pending decisions, never the proposal or its key. */
+  PROJECT_CRITERIA_DECISIONS_CHANGED = 'project.criteria_decisions.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -60,9 +64,10 @@ export enum ControlEventType {
  *  each event names its scope; `agentId` lets per-agent lists filter client-side. */
 export interface ControlEvent {
   type: ControlEventType;
-  /** The session this event is about — EMPTY for the user-scoped library events
-   *  (`task.list.changed` / `tag.changed` / `provider.changed`), which belong to the owner, not to
-   *  any one session. Clients must dispatch on `type`, not on the presence of a session id. */
+  /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
+   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed`), which belong to the
+   *  owner, not to any one session. Clients must dispatch on `type`, not on the presence of a
+   *  session id. */
   sessionId: string;
   agentId: string | null;
   /** ISO-8601. */
@@ -208,9 +213,10 @@ export interface ControlAgentChanged {
   affectsTaskRows?: boolean;
 }
 
-/** `data` for the user-scoped library events (`task.list.changed` / `tag.changed` /
- *  `provider.changed`). Same contract as the two above: refetch the matching list; the id is for
- *  future fine-grained updates and logging. */
+/** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `provider.changed` /
+ *  `project.criteria_decisions.changed`). Same contract as the two above: refetch the matching
+ *  read; the id is for future fine-grained updates and logging, except on the last, where it names
+ *  the project whose pending decisions to re-read. */
 export interface ControlResourceChanged {
   id: string;
 }

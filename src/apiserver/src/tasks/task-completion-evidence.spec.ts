@@ -37,7 +37,12 @@ test('the evidence service is state-orthogonal and only the explicit legacy door
   assert.ok(liveSubmit.length > 1_000, 'the static check did not locate the live submission path');
   assert.doesNotMatch(liveSubmit, /taskComment|lastAssistant|finalReply/,
     'ordinary evidence submission must never infer a fact from prose');
-  assert.doesNotMatch(source, /lastAssistant|finalReply|publish|notify/);
+  assert.doesNotMatch(source, /lastAssistant|finalReply|notify/);
+  // One signal leaves this file, and it delivers nothing: the owner-scoped nudge that tells an open
+  // page to re-read its pending decisions, sent once by submit and once by decide after each has
+  // committed. `pending-decision-realtime.pg.spec.ts` pins what it carries and when it is sent.
+  assert.deepEqual(source.match(/publish\w*/g), ['publishForUser', 'publishForUser'],
+    'the evidence service publishes nothing but the two pending-decision nudges');
   assert.equal((source.match(/taskComment\.findFirst/g) ?? []).length, 1,
     'exactly the explicit one-comment import may read a historical comment');
   assert.doesNotMatch(source, /taskComment\.(?:findMany|aggregate|count)/,

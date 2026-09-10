@@ -370,6 +370,7 @@ test('publishForUser reaches only that owner, with no session scope', async () =
   svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
   svc.publishForUser('userA', RunEventType.TASK_LIST_CHANGED, 'list1');
   svc.publishForUser('userA', RunEventType.TASK_CHANGED, 'task1');
+  svc.publishForUser('userA', RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, 'project1');
   // Session events need session-derived payloads and may not ride the owner-key shortcut.
   svc.publishForUser('userA', RunEventType.STATUS, 'not-a-session');
   await delay(30);
@@ -378,8 +379,9 @@ test('publishForUser reaches only that owner, with no session scope', async () =
 
   assert.deepEqual(
     mine.map((e) => e.type),
-    ['tag.changed', 'task.list.changed', 'task.changed'],
+    ['tag.changed', 'task.list.changed', 'task.changed', 'project.criteria_decisions.changed'],
   );
+  assert.deepEqual(mine[3].data, { id: 'project1' });
   // The library belongs to the owner, not a session — the envelope says so.
   assert.equal(mine[0].sessionId, '');
   assert.equal(mine[0].agentId, null);
