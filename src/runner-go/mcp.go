@@ -459,7 +459,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if fields == 0 {
 			return toolResult("no fields to update", true)
 		}
-		raw, err := s.t.updateProject(id, body)
+		// The calling session goes with the edit. Not to move anything — the server settles a
+		// project's coordinator when it is created — but so the acceptance criteria this body may
+		// carry are recorded as THIS conversation's words, and a loosening it proposes is filed
+		// under this session rather than under the account owner who never asked for it.
+		raw, err := s.t.updateProject(s.sessionID, id, body)
 		if err != nil {
 			return toolResult("update project failed: "+err.Error(), true)
 		}
@@ -1995,9 +1999,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"every item, and [] to clear the set. A " +
 				"project's one-shot JUDGMENT session " +
 				"(the one a committed fact opens, not the user-origin conversation) cannot " +
-				"write acceptance criteria. Status DONE is an ordinary write since migration 0229 " +
-				"removed the project acceptance judgment: nothing derives it and nothing refuses " +
-				"it, so writing it is a claim you are making rather than one the server checked. " +
+				"write acceptance criteria. Status is not writable from inside a session: a call " +
+				"made from a conversation that carries status is refused whole, and nothing that " +
+				"call sent is written — where a project stands is a statement about all of it, and " +
+				"an agent that could write it could close the project it was given instead of " +
+				"finishing it. Report what you found and leave that one to the account owner. " +
 				"Only the fields you pass are sent, so " +
 				"revising the goal never blanks the instructions: omit a field to leave it " +
 				"untouched, pass a string to replace it, pass null to clear it. CANCELLED says the " +
@@ -2021,7 +2027,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"status": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
-					"description": "OPEN reopens work; CANCELLED abandons it; DONE says the goal was reached. Since 0229 nothing checks DONE against the project's stated criteria — it is recorded exactly as sent.",
+					"description": "OPEN reopens work; CANCELLED abandons it; DONE says the goal was reached. Refused whenever this tool is called from inside a session, which is every call you make: the field is here for the headless owner-operated `orbit project update` path.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",

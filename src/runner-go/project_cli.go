@@ -758,7 +758,9 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.updateProject(id, body)
+	// No session: this is the headless owner-operated path, and the server reads the absence as
+	// the owner-authenticated channel rather than as an unattributed agent.
+	raw, err := t.updateProject("", id, body)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
