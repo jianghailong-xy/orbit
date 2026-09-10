@@ -960,40 +960,43 @@ describe('Orbit write tool cards', () => {
 describe('injected context in a user bubble', () => {
   // The runner echoes what it was *given*, so anything delivery appended lands inside the
   // person's own bubble looking like they typed it. Found on the deployed stack, not in a test.
-  const CONDITIONS = `<list-conditions list="l1" title="FineWeb">
-  配额挡住派发｜12 个就绪任务被配额挡住｜累计 47 次
-</list-conditions>`;
+  // These events carry no recorded note, so they are read by their text — which only ever finds
+  // references and coordinator context; the condition board and background jobs are separated by
+  // the note alone (Transcript.controlPlaneNote.test.tsx).
+  const COORDINATOR = `<orbit_project_coordinator_context>
+  你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
+</orbit_project_coordinator_context>`;
   const userEvent = (text: string): RunEvent => ({ seq: 1, type: 'user', payload: { text } });
 
   it('keeps the appended block out of the bubble body', () => {
     const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`这个列表现在什么情况？\n\n${CONDITIONS}`)]} />,
+      <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
     );
 
     // Attribute values stripped first: the block is deliberately still in the tooltip, and
     // asserting over the raw html would pass for the wrong reason either way.
     const visible = html.replace(/title="[^"]*"/g, '');
 
-    expect(visible).toContain('这个列表现在什么情况？');
-    expect(visible).not.toContain('list-conditions list=');
-    expect(visible).not.toContain('累计 47 次');
+    expect(visible).toContain('把这个项目协调起来');
+    expect(visible).not.toContain('orbit_project_coordinator_context');
+    expect(visible).not.toContain('的协调会话');
   });
 
   it('keeps the block reachable in the tooltip, so what the model read is not lost', () => {
     const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`这个列表现在什么情况？\n\n${CONDITIONS}`)]} />,
+      <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
     );
 
-    expect(/title="[^"]*累计 47 次[^"]*"/.test(html)).toBe(true);
+    expect(/title="[^"]*的协调会话[^"]*"/.test(html)).toBe(true);
   });
 
   it('says that something was attached, so the reply is not unexplained', () => {
     const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`这个列表现在什么情况？\n\n${CONDITIONS}`)]} />,
+      <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
     );
 
     expect(html).toContain('Orbit attached');
-    expect(html).toContain('list conditions');
+    expect(html).toContain('project coordinator context');
   });
 
   it('leaves a message nobody appended to completely alone', () => {
@@ -1004,7 +1007,7 @@ describe('injected context in a user bubble', () => {
   });
 
   it('does not offer to copy a message whose only text was injected', () => {
-    const html = renderToStaticMarkup(<Transcript events={[userEvent(`\n\n${CONDITIONS}`)]} />);
+    const html = renderToStaticMarkup(<Transcript events={[userEvent(`\n\n${COORDINATOR}`)]} />);
 
     expect(html).toContain('Orbit attached');
     expect(html).not.toContain('aria-label="Copy message"');

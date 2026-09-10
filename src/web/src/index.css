@@ -5178,6 +5178,32 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 11.5px;
   cursor: help;
 }
+/* What the control plane appended to the message above, as its own entry under the bubble rather
+   than inside it (ControlPlaneNote). Folded and muted like thinking: provenance, opened when the
+   reply mentions something the message did not. */
+.chat-cp-note {
+  width: fit-content;
+  max-width: 80%;
+  margin: -4px 0 8px auto;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.chat-cp-note-head {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-cp-note-body {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* A `#`-reference in a message, styled to read as the same object the composer chipped — the
    user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it

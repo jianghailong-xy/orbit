@@ -147,6 +147,7 @@ import {
   buildResumeContinuation,
 } from './resume-continuation';
 import { appendBackgroundJobsContext } from './background-jobs-context';
+import { withControlPlaneNote } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { enginePhaseAfter, engineTurnActiveAfter } from './engine-turn';
@@ -3625,6 +3626,27 @@ export class RunnerApiController {
         sessionData.coordinatorContextEpoch = coordinatorContextBoundarySeq;
         sessionData.coordinatorContextAckKey = null;
       }
+      // What the person wrote, for each user turn in this batch. Read before the events are stored:
+      // it is where their words end in the runner's echo, so whatever delivery appended is recorded
+      // beside the echo as the control plane's own (control-plane-note.ts) — and the preview below
+      // takes it over the echo for the same reason.
+      const userTurnIds = [...new Set(durable.flatMap((event) =>
+        event.type === RunEventType.USER && event.turnId ? [event.turnId] : [],
+      ))];
+      const userTurns = userTurnIds.length > 0
+        ? await tx.conversationTurn.findMany({
+            where: { sessionId, id: { in: userTurnIds } },
+            select: { id: true, content: true },
+          })
+        : [];
+      const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      for (const e of durable) {
+        if (e.type !== RunEventType.USER) continue;
+        e.payload = withControlPlaneNote(
+          e.payload,
+          e.turnId ? authoredUserText.get(e.turnId) : undefined,
+        );
+      }
       if (durable.length > 0) {
         await tx.runEvent.createMany({
           data: durable.map((e) => ({
@@ -3689,9 +3711,6 @@ export class RunnerApiController {
       // either way, so the stored value stays. Stored full; the list query truncates it
       // (left(…, PREVIEW_LEN)).
       let pendingUserText: string | null | undefined;
-      const userTurnIds = [...new Set(durable.flatMap((event) =>
-        event.type === RunEventType.USER && event.turnId ? [event.turnId] : [],
-      ))];
       let currentWorkAcknowledged = 0;
       const acknowledgedTurnIds = acknowledgedRuntimeTurnIds(durable);
       if (acknowledgedTurnIds.length > 0) {
@@ -3719,13 +3738,6 @@ export class RunnerApiController {
         });
         currentWorkAcknowledged = steers.count;
       }
-      const userTurns = userTurnIds.length > 0
-        ? await tx.conversationTurn.findMany({
-            where: { sessionId, id: { in: userTurnIds } },
-            select: { id: true, content: true },
-          })
-        : [];
-      const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
       for (const e of durable) {
         // Sub-workspace (Task/Workspace) events carry the spawning call's parentToolUseId. Skip
         // them: while a sub-workspace runs, its own tool_use/tool_result would clobber then

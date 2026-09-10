@@ -45,7 +45,12 @@ import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
-import { describeInjected, splitDeliveredMessage } from '../lib/deliveredMessage';
+import {
+  type DeliveredMessage,
+  describeInjected,
+  splitDeliveredMessage,
+  splitRecordedNote,
+} from '../lib/deliveredMessage';
 import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
@@ -269,6 +274,9 @@ type TextNode = {
   // got is the only thing that reports it, and the states above are shown for it alone. On
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
+  // What the control plane recorded, when it stored this `user` event, as appended at delivery
+  // (`controlPlaneNote`). Already taken out of `text`; drawn as its own entry under the bubble.
+  note?: string;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -460,12 +468,18 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // that is already there, in the place the person typed it, instead of showing what they
         // sent twice. Only steer → message: nothing else re-announces a turn this way, and a
         // re-leased message turn (which arrives as a continuation nudge) must keep its own line.
+        // Where the person's words end is what the apiserver recorded when it stored the event,
+        // never a guess from the text (see lib/deliveredMessage).
+        const recorded = splitRecordedNote(p);
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
           priorSteer.delivery = typeof p.delivery === 'string' ? p.delivery : undefined;
           priorSteer.deliveryReason = undefined;
-          if (p.text) priorSteer.text = String(p.text);
+          if (p.text) {
+            priorSteer.text = recorded ? recorded.text : String(p.text);
+            priorSteer.note = recorded?.note;
+          }
           if (refs && refs.length) priorSteer.attachmentRefs = refs;
           break;
         }
@@ -473,7 +487,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
-            text: p.text ? String(p.text) : '',
+            text: recorded ? recorded.text : p.text ? String(p.text) : '',
+            note: recorded?.note,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -777,7 +792,12 @@ function StandaloneResult({ node }: { node: ResultNode }) {
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
     case 'user':
-      return <UserBubble node={node} />;
+      return (
+        <>
+          <UserBubble node={node} />
+          {node.note && <ControlPlaneNote text={node.note} />}
+        </>
+      );
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
     case 'thinking':
@@ -1188,11 +1208,15 @@ function UserBubble({ node }: { node: TextNode }) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
-  // — a reference expansion, a list's condition board, or a promoted coordinator's standing role.
-  // Those belong to Orbit, not to the person whose bubble this is, so they come out of the body
-  // and are named on one line instead. Copying and the length cap follow the typed text for the
-  // same reason: neither should be measured against a block nobody wrote.
-  const { text: typed, injected } = splitDeliveredMessage(node.text);
+  // — a reference expansion, a list's condition board, the background work a returning engine is
+  // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
+  // whose bubble this is. When the apiserver recorded what it appended, `node.note` holds it and
+  // `node.text` is already just the person's; the note is drawn after the bubble as the control
+  // plane's own entry (see NodeView). An event with no note is read the older way, which names
+  // references and coordinator context on one line. Copying and the length cap follow the typed
+  // text for the same reason: neither should be measured against a block nobody wrote.
+  const { text: typed, injected }: DeliveredMessage =
+    node.note === undefined ? splitDeliveredMessage(node.text) : { text: node.text, injected: [] };
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -1797,6 +1821,28 @@ function useThrottled(value: string, ms: number): string {
 }
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
+// What the control plane appended to the message above it — a list's condition board, the
+// background work a returning engine is told about, a reference's summary — as the control plane's
+// own entry instead of part of the person's bubble. Folded, not dropped: it is why a reply can
+// mention something the message never did, and opening it shows exactly what the model read.
+function ControlPlaneNote({ text }: { text: string }) {
+  const exp = useContext(ExportCtx);
+  const [open, setOpen] = useState(!!exp);
+  return (
+    <div className="chat-cp-note">
+      <button
+        type="button"
+        className="chat-cp-note-head"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? <DownOutlined /> : <RightOutlined />} 控制面附注
+      </button>
+      {open && <pre className="chat-cp-note-body">{text}</pre>}
+    </div>
+  );
+}
+
 function Thinking({ text, seq }: { text: string; seq?: number }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);

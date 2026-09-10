@@ -2,23 +2,32 @@
  * Separating what a person typed from what Orbit appended to it.
  *
  * Orbit can add context to a message at delivery — `#`-reference expansion, a task list's
- * condition board, and the standing role of a conversation promoted to project coordinator.
- * These deliberately leave `conversation_turn.content` alone, so the durable record of what was
- * sent is the person's own words. But the runner echoes what it *received* into the transcript,
- * which is what the UI renders: the result was a one-line question followed by a block of
- * generated context, inside the user's own bubble, looking for all the world like they typed it.
+ * condition board, the background work a returning engine is told about, and the standing role of
+ * a conversation promoted to project coordinator. These deliberately leave
+ * `conversation_turn.content` alone, so the durable record of what was sent is the person's own
+ * words. But the runner echoes what it *received* into the transcript, which is what the UI
+ * renders: the result was a one-line question followed by a block of generated context, inside the
+ * user's own bubble, looking for all the world like they typed it.
  *
  * Stripping it outright would trade that for a worse problem — the agent answering about a quota
- * outage nobody appears to have mentioned. So the blocks come out of the bubble body and are
- * replaced by one muted line naming what was attached, with the full text on hover. The record is
- * untouched; only the reading of it changes.
+ * outage nobody appears to have mentioned. So the appended part comes out of the bubble body and is
+ * shown as Orbit's instead. The record is untouched; only the reading of it changes.
+ *
+ * Where the person's words end is what the apiserver recorded when it stored the event
+ * (`controlPlaneNote`, see splitRecordedNote), never what the text happens to look like: someone
+ * who types a `<background-jobs>` block into the composer sees it in their bubble exactly as typed.
+ * An event with no note is still read the older way below, from its end, which is what keeps the
+ * bubbles of messages stored before notes were recorded as they were.
  */
 
-/** The blocks Orbit appends at delivery. Nothing else is ever removed from a person's message. */
+/**
+ * The blocks an event with no recorded note is still read for. `<list-conditions>` and
+ * `<background-jobs>` are not among them: those two are told apart by the note alone, so typing one
+ * into the composer never makes it disappear.
+ */
 const INJECTED_TAGS = [
   'referenced-list',
   'referenced-task',
-  'list-conditions',
   'orbit_project_coordinator_context',
 ] as const;
 
@@ -37,6 +46,24 @@ export interface DeliveredMessage {
   injected: InjectedBlock[];
 }
 
+/**
+ * A `user` event's text split where the apiserver recorded that the person's words end.
+ *
+ * `controlPlaneNote` is exactly what delivery appended, stored beside an echo that is left whole,
+ * so the split is a slice rather than a reading of the text. `note` comes back trimmed, as the block
+ * the model read. Null when the event carries no such note.
+ */
+export function splitRecordedNote(payload: unknown): { text: string; note: string } | null {
+  const { text, controlPlaneNote: note } = (payload ?? {}) as {
+    text?: unknown;
+    controlPlaneNote?: unknown;
+  };
+  if (typeof text !== 'string' || typeof note !== 'string' || !note.trim() || !text.endsWith(note)) {
+    return null;
+  }
+  return { text: text.slice(0, text.length - note.length), note: note.trim() };
+}
+
 /** A block's closing tag, at the very end of what is left. */
 const CLOSE_AT_END = new RegExp(`\\n</(${INJECTED_TAGS.join('|')})>\\s*$`);
 
@@ -44,7 +71,7 @@ const CLOSE_AT_END = new RegExp(`\\n</(${INJECTED_TAGS.join('|')})>\\s*$`);
  * Split a delivered message into what was typed and what was appended to it.
  *
  * Works backwards from the end — where delivery appends — rather than matching anywhere, because
- * a person is entitled to write `<list-conditions>` in the middle of a sentence without having it
+ * a person is entitled to write `<referenced-task>` in the middle of a sentence without having it
  * silently eaten.
  *
  * Finding the close first and then its opening, rather than one regex spanning both, is what
@@ -83,7 +110,7 @@ export function lastTypedUserMessageText(
     if (events[i].type !== 'user') continue;
     const echoed = (events[i].payload as { text?: unknown } | undefined)?.text;
     if (typeof echoed !== 'string') continue;
-    const typed = splitDeliveredMessage(echoed).text;
+    const typed = splitRecordedNote(events[i].payload)?.text ?? splitDeliveredMessage(echoed).text;
     if (typed.trim()) return typed;
   }
   return numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '';
@@ -92,12 +119,11 @@ export function lastTypedUserMessageText(
 const TAG_LABEL: Record<InjectedTag, string> = {
   'referenced-list': 'referenced list',
   'referenced-task': 'referenced task',
-  'list-conditions': 'list conditions',
   orbit_project_coordinator_context: 'project coordinator context',
 };
 
 /**
- * "referenced list, list conditions ×2" — what was attached, counted where it repeats.
+ * "referenced list, referenced task ×2" — what was attached, counted where it repeats.
  *
  * Named rather than merely counted: "2 blocks attached" tells the reader nothing about why the
  * reply mentions something they never asked about, which is the entire reason this line exists.
