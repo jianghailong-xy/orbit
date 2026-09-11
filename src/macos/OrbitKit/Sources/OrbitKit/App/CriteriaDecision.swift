@@ -2,7 +2,7 @@ import Foundation
 
 /* ─────────────────────────────────────────────────────────────────────────────────────────────
    THE TWO CARDS A PROJECT'S RULER IS MOVED FROM — THE OTHER HALF OF WEB'S
-   `CriteriaDecisionCard.tsx` AND OF THE CONFIRMATION REGION IN `ProjectAcceptanceCard.tsx`
+   `CriteriaDecisionCard.tsx` AND OF `AcceptanceConfirmationCard.tsx`
    ─────────────────────────────────────────────────────────────────────────────────────────────
 
    WHAT THESE TWO QUESTIONS ARE, AND WHY THEY ARE NOT APPROVALS
@@ -872,10 +872,9 @@ public struct AcceptanceConfirmationCheck: Equatable, Sendable, Identifiable {
     }
 }
 
-/// The confirmation card's words and states — the transcript's half of what the browser draws in
-/// `ProjectAcceptanceCard`'s confirmation region, said as a question rather than as a region of a
-/// project page (this client has no project page, and the coordinator conversation is where the
-/// question was delivered).
+/// The confirmation card's words and states — this client's half of the card the browser draws as
+/// `AcceptanceConfirmationCard.tsx`. Both ends draw it in the same place: the coordinator
+/// conversation, which is where the question was delivered.
 public enum AcceptanceConfirmations {
 
     public static let title = "Confirm what done means?"
