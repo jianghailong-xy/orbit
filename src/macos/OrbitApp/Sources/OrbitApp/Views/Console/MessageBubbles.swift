@@ -45,46 +45,33 @@ struct UserBubbleView: View {
                 if !files.isEmpty {
                     attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
                 }
-                if !bubble.text.isEmpty {
-                    // Markdown-rendered by the same renderer as the assistant turn (web parity): the
-                    // messages sent here are mostly long structured prompts — headings, lists, fenced
-                    // commands — and reading them as raw '#'/'*' source is what this replaces. The copy
-                    // button still hands back the original source. `fillWidth: false` keeps the tinted
-                    // background hugging the text instead of stretching across the row; `.body`/`.primary`
-                    // are the bubble's own prose token and ink (the reply's reading size, system label).
-                    // Partial selection still works: iOS selects inside the renderer's own text views,
-                    // macOS through `.textSelection`.
-                    MarkdownView(source: shown, base: .body, ink: .primary, fillWidth: false)
-                        .font(.orbitProse)
-                        .textSelection(.enabled)
+                if let attached = bubble.attached {
+                    // What delivery appended, in the person's bubble under their words and parted
+                    // from them by a rule: one entry however it was told apart (web's
+                    // ControlPlaneNote). Hiding it outright would trade one problem for a worse one —
+                    // the agent answering about a quota outage nobody appears to have raised — so it
+                    // is named, and opens to exactly what the model read.
+                    Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                        if !bubble.text.isEmpty {
+                            GridRow { typedText(shown) }
+                            // Unsized across: the rule runs as wide as the words and the entry need,
+                            // where a bare Divider would stretch a bubble that hugs its text to the row.
+                            Divider()
+                                .padding(.top, 6).padding(.bottom, 5)
+                                .gridCellUnsizedAxes(.horizontal)
+                        }
+                        GridRow { attachedEntry(attached) }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                } else if !bubble.text.isEmpty {
+                    typedText(shown)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
                         .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
-                }
-                // What delivery appended, named rather than shown. Hiding it outright would trade
-                // one problem for a worse one — the agent answering about a quota outage nobody
-                // appears to have raised — so it stays reachable, by tap here because there is no
-                // hover to put a tooltip on (web uses one).
-                if !bubble.injected.isEmpty {
-                    Button {
-                        showInjected.toggle()
-                    } label: {
-                        Text("⊕ Orbit attached: \(describeInjected(bubble.injected))")
-                            .font(.orbitLabel).foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    if showInjected {
-                        Text(bubble.injected.joined(separator: "\n\n"))
-                            .font(.orbitLabel.monospaced())
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .textSelection(.enabled)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                    }
                 }
                 meta
             }
@@ -98,6 +85,40 @@ struct UserBubbleView: View {
         }
         .imagePreview($previewTarget, images: images.map { PreviewImage.attachment($0) },
                       ns: previewNS, store: store)
+    }
+
+    // Markdown-rendered by the same renderer as the assistant turn (web parity): the messages sent
+    // here are mostly long structured prompts — headings, lists, fenced commands — and reading them as
+    // raw '#'/'*' source is what this replaces. The copy button still hands back the original source.
+    // `fillWidth: false` keeps the tinted background hugging the text instead of stretching across the
+    // row; `.body`/`.primary` are the bubble's own prose token and ink (the reply's reading size,
+    // system label). Partial selection still works: iOS selects inside the renderer's own text views,
+    // macOS through `.textSelection`.
+    private func typedText(_ shown: String) -> some View {
+        MarkdownView(source: shown, base: .body, ink: .primary, fillWidth: false)
+            .font(.orbitProse)
+            .textSelection(.enabled)
+    }
+
+    /// The entry under the person's words: one line naming what was attached, opened by a tap — a
+    /// phone has no hover to hang a tooltip on — to the text the model read, verbatim.
+    private func attachedEntry(_ attached: (kind: String, text: String)) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                showInjected.toggle()
+            } label: {
+                Text("⊕ Orbit attached: \(attached.kind)")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            if showInjected {
+                Text(attached.text)
+                    .font(.orbitLabel.monospaced())
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     // Wrapping row of attachment chips (web's flex-wrap `.chat-files`): flows onto multiple lines so

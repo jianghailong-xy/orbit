@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 4
+    private static let schemaVersion = 5
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -36,6 +36,10 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// a `maxSeq` of 2^53-1, which makes every reconnect replay nothing for the rest of that
     /// session's life. The damage is already on disk, so upgrading the reducer alone wouldn't heal
     /// an affected device — dropping those snapshots does, at the cost of one tail re-fetch.
+    /// v5: a user bubble is split where the apiserver's recorded `controlPlaneNote` says the person's
+    /// words end, and `<list-conditions>` is no longer read off the text. A snapshot folded the older
+    /// way keeps a `<background-jobs>` block inside the person's bubble, or a condition board they
+    /// pasted eaten out of it, and a bubble already on disk is never split again — so drop those too.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {
