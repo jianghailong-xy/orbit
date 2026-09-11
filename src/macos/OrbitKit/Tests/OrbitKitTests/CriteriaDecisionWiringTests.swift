@@ -103,6 +103,21 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                       "and the body is the server's standing rather than a sentence composed here")
     }
 
+    /// Dimmed whole, by OrbitKit's rule, in one place. Unhooking either card from its rule — or
+    /// dimming by `answerable`, which would darken an unread card — is what turns this red.
+    func testBothCardsAreDimmedWholeByTheirOpenRuleAndOnlyByTheChrome() throws {
+        let weakening = try weakeningCard()
+        let confirmation = try confirmationCard()
+        XCTAssertTrue(weakening.contains(".approvalChrome(.orange, dimmed: CriteriaDecisions.isDimmed(standing))"),
+                      "a stale weakening card is dimmed by the derived standing it is drawn from")
+        XCTAssertTrue(confirmation.contains(".approvalChrome(.blue, dimmed: AcceptanceConfirmations.isDimmed(standing))"),
+                      "and so is a confirmation already given at another end")
+        XCTAssertFalse((weakening + confirmation).contains("0.72"),
+                       "the chrome applies the opacity; a second one inside a card would multiply")
+        XCTAssertTrue(try source(Self.cardPath).contains(".opacity(dimmed ? 0.72 : 1)"),
+                      "the chrome is where the whole card is dimmed")
+    }
+
     func testTheProvenanceRidesTheMetaLineAndTheBadgeCarriesTheState() throws {
         let card = try weakeningCard()
         XCTAssertTrue(card.contains("badge: CriteriaDecisions.badge(standing)"),

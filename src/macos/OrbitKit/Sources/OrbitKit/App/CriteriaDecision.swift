@@ -697,6 +697,14 @@ public enum CriteriaDecisions {
         }
     }
 
+    /// Whether the card is drawn dimmed, whole — the account owner's call on 2026-09-11, made
+    /// looking at a settled card on a phone. It is exactly "no longer a question": keyed on `isOpen`
+    /// rather than `answerable`, so `unread` stays bright, for `isOpen`'s reason — a card this
+    /// device failed to re-read is not known to be dead.
+    public static func isDimmed(_ standing: CriteriaDecisionStanding) -> Bool {
+        !isOpen(standing)
+    }
+
     // MARK: derivation — the diff
 
     /// The line that says how many criteria this proposal leaves alone.
@@ -944,6 +952,12 @@ public enum AcceptanceConfirmations {
     public static func isOpen(_ standing: StandardSetConfirmationStanding?) -> Bool {
         guard let standing else { return true }
         return standing.state != .confirmed
+    }
+
+    /// Whether the card is drawn dimmed, whole: once the set is confirmed, and never for a standing
+    /// that could not be read — the weakening card's rule (`CriteriaDecisions.isDimmed`).
+    public static func isDimmed(_ standing: StandardSetConfirmationStanding?) -> Bool {
+        !isOpen(standing)
     }
 
     /// Why the button is dead, or nil while it is live. Same rule as the other card: a reader

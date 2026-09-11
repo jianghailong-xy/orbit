@@ -58,7 +58,11 @@ private extension View {
     /// without shouting — now closed by a hairline in the same tone. The wash alone is 7% of a
     /// colour, which on the dark transcript left the card with no edge at all: it read as loose text
     /// with buttons under it rather than as one object to answer.
-    func approvalChrome(_ tone: Color) -> some View {
+    ///
+    /// `dimmed` takes the whole card down to 72% — content, wash and hairline together, the mock's
+    /// `opacity: .72` — for a delivered card that is no longer a question (the owner's call,
+    /// 2026-09-11). It is set here and nowhere else, so no card is dimmed twice.
+    func approvalChrome(_ tone: Color, dimmed: Bool = false) -> some View {
         padding(ApprovalMetrics.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(tone.opacity(0.07), in: RoundedRectangle(cornerRadius: ApprovalMetrics.radius))
@@ -66,6 +70,7 @@ private extension View {
                 RoundedRectangle(cornerRadius: ApprovalMetrics.radius)
                     .strokeBorder(tone.opacity(0.28))
             }
+            .opacity(dimmed ? 0.72 : 1)
     }
 
     /// The *label* of a card action, stretched to the card's width on iOS. It has to be the label:
@@ -892,7 +897,7 @@ private struct CriteriaDecisionCard: View {
                 refuseButton(standing)
             }
         }
-        .approvalChrome(.orange)
+        .approvalChrome(.orange, dimmed: CriteriaDecisions.isDimmed(standing))
     }
 
     /// What the proposal would CHANGE — and, in one line, how much of the ruler it leaves alone.
@@ -1071,7 +1076,7 @@ private struct AcceptanceConfirmationCard: View {
                 notYetButton
             }
         }
-        .approvalChrome(.blue)
+        .approvalChrome(.blue, dimmed: AcceptanceConfirmations.isDimmed(standing))
     }
 
     private func checkRow(_ check: AcceptanceConfirmationCheck) -> some View {
