@@ -189,6 +189,38 @@ test('the confirmation card refuses status from a session, and derives DONE rath
   assert.doesNotMatch(status, /写不写由账号所有者决定/);
 });
 
+/**
+ * Where the account owner answers the confirmation: on the card drawn into this conversation.
+ *
+ * Until 2026-09-11 the card sent the owner 「在网页上确认」 — to the confirmation region on the
+ * project page — while iOS and macOS already drew the question into the coordinator conversation,
+ * and the project's goal puts the confirmation surface there and nowhere else. The browser draws
+ * the same card in the conversation now (`AcceptanceConfirmationCard.tsx`), so the paragraph that
+ * says who confirms points at it.
+ *
+ * Asserted over that paragraph rather than the whole card, for the reason the status test above
+ * gives: a predicate over the card could be answered by another paragraph.
+ */
+test('the confirmation card sends the owner to the card in this conversation, not to a web page', () => {
+  const landed = projectAcceptanceLandedFact(
+    PROJECT,
+    [{ taskId: TASK, status: 'DONE' }],
+    [{ key: 'ab12', text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] }],
+  )!;
+  const card = buildCoordinatorDeliveryMessage(landed, '验收闭环');
+  const [who] = card.split('\n\n').filter((para) => para.includes('HUMAN_ONLY'));
+
+  assert.ok(who, 'the card says nothing about who may confirm');
+  assert.doesNotMatch(card, /网页上/);
+  assert.doesNotMatch(card, /项目页/);
+  assert.match(who, /这个会话里[^。]*确认卡上确认/);
+  assert.match(who, /网页、iOS、macOS/);
+  // Still the owner's act on the owner's credential: the card is where it is pressed, not a
+  // reason for this conversation to press anything.
+  assert.match(who, /账号所有者自己的凭据/);
+  assert.doesNotMatch(who, /你来确认|由你确认|你去确认/);
+});
+
 test('a judgment session is filed under a different title from the conversation', () => {
   assert.equal(judgmentSessionTitle('协调重做'), '判断：协调重做');
   assert.ok(judgmentSessionTitle('x'.repeat(200)).length <= 80);

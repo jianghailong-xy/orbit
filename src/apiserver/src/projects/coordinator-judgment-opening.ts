@@ -295,7 +295,9 @@ export function buildCoordinatorDeliveryMessage(fact: WakeFact, projectTitle: st
       + `要回答的不是「这些标准满足了吗」——上面那份清单已经是这个问题的答案。要回答的是 `
       + `CONFIRM_ACCEPTANCE_CRITERIA 那一句：这 ${criteria.length} 条合起来，表达的是当初要的那个目标吗？\n\n`
       + '这一句你答不了，它是 HUMAN_ONLY：确认只走账号所有者认证的通道，任何带 acting session 的调用'
-      + '都会被服务端拒掉。你要做的是把上面这份清单交给账号所有者，让他在网页上确认；'
+      + '都会被服务端拒掉。确认卡由 Orbit 直接画在这个会话里——网页、iOS、macOS 上都是同一张卡，'
+      + '卡上能展开读到这份清单，按钮带着账号所有者自己的凭据直达确认的门，不经过你。'
+      + '你要做的是把上面这份清单交给账号所有者，请账号所有者在这个会话里的那张确认卡上确认；'
       + '确认会绑定当前这一版标准，之后任何一条标准被改动，那次确认就自动不算数了。\n\n'
       + 'project_update 的 status 你也写不了：带会话的请求写这个字段会被整条拒掉'
       + '（PROJECT_STATUS_NOT_SESSION_WRITABLE）。DONE 也不是谁写的一列——上面每条都满足、都 LANDED，'

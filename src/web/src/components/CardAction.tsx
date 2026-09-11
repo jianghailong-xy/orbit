@@ -58,12 +58,18 @@ export function CardActionButton({
   tone = 'secondary',
   disabled = false,
   title,
+  expanded,
+  controls,
   onClick,
   children,
 }: {
   tone?: CardActionTone;
   disabled?: boolean;
   title?: string;
+  /** For an action that opens something in place instead of answering: whether it is open, and
+   *  the id of what it opened. */
+  expanded?: boolean;
+  controls?: string;
   onClick: () => void;
   children: ReactNode;
 }): JSX.Element {
@@ -73,6 +79,8 @@ export function CardActionButton({
       className={`${CARD_ACTION_CLASS} ${CARD_ACTION_CLASS}--${tone}`}
       disabled={disabled}
       title={title}
+      aria-expanded={expanded}
+      aria-controls={controls}
       onClick={onClick}
     >
       {children}

@@ -163,6 +163,7 @@ import { ApprovalPanel } from './ApprovalPanel';
 import { SessionDecisionStrip, decisionRowKey } from './DecisionRail';
 import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
 import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
+import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -5635,6 +5636,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <SessionEvidenceDecisionCard
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
+                  projectId={selectedSession?.projectId ?? null}
+                />
+              )}
+              {/* The settlement question — whether this project's criteria, together, are what
+                  done means — once it is the last thing the project's DONE waits on: drawn from the
+                  confirmation standing and the criteria, and pressed straight at the confirmation
+                  door. Keyed by the session like the two cards above, because whether it was
+                  delivered or set aside belongs to this conversation, and by a key neither of them
+                  carries, for the reason the evidence card's note gives. */}
+              {selected && selectedId && !selectedTrashed && (
+                <SessionAcceptanceConfirmationCard
+                  key={`confirmation:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
                 />
               )}

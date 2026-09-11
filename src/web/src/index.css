@@ -6819,6 +6819,80 @@ html[data-theme='dark'] .session-tag-chip {
 .evidence-decision-error {
   margin-top: 12px;
 }
+/* ── The settlement confirmation card ─────────────────────────────────────────────────────
+   `AcceptanceConfirmationCard.tsx`: whether the stated criteria, together, are what "done" means.
+   The approval card's own tone rather than the warning one — it is a question about meaning, like
+   the question and plan cards, not a ruler getting looser — with the provenance mark in its head
+   like the other two cards Orbit draws into a conversation. */
+.settlement-card .approval-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settlement-card-heading {
+  min-width: 0;
+}
+.settlement-card-body {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.settlement-card-meta {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.settlement-card-checks {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.settlement-card-checks li {
+  display: flex;
+  gap: 8px;
+}
+.settlement-card-checks li + li {
+  margin-top: 4px;
+}
+/* A tick and a question mark differ in shape as well as hue, so no colour carries the difference
+   alone. Amber, not red: the open line is the question being asked, not a failure. */
+.settlement-card-mark {
+  flex: none;
+  width: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.settlement-card-checks li.is-held .settlement-card-mark {
+  color: var(--success);
+}
+.settlement-card-checks li.is-open .settlement-card-mark {
+  color: var(--warning);
+}
+.settlement-card-stale {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.settlement-card-criteria {
+  margin: 10px 0 0;
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.settlement-card-criteria li + li {
+  margin-top: 4px;
+}
+.settlement-card-error {
+  margin-top: 10px;
+}
+.settlement-card-recorded {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
 
 /* Free-text answer field: lets the user type their own answer to a question. */
 .chat-q-custom {

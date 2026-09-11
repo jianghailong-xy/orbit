@@ -407,6 +407,12 @@ describe('one waiting completion decision on the session page', { timeout: 30_00
       if (path.startsWith(`/projects/${PROJECT_ID}/acceptance/criteria-decisions/pending`)) {
         return reply({ readAt: '2026-09-10T13:27:00Z', projectId: PROJECT_ID, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
       }
+      // The settlement card's two reads, which a coordinator conversation makes too: a project that
+      // states no criteria, so that card stays off this page.
+      if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) {
+        return reply({ state: 'UNCONFIRMED', confirmed: false, currentVersion: { digest: 'a'.repeat(64), material: [] }, confirmation: null });
+      }
+      if (path === `/projects/${PROJECT_ID}`) return reply({ id: PROJECT_ID, acceptanceCriteriaItems: [] });
       if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
       if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
       if (path === '/providers' || path === '/session-tags' || path === '/task-lists' || path === '/runners') return reply([]);

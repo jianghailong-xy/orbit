@@ -188,6 +188,12 @@ beforeEach(() => {
       doorRequests.push(`${init?.method ?? 'GET'} ${path}`);
       return Promise.reject(new Error(CRITERIA_DECISION_ALREADY_SETTLED));
     }
+    // The settlement card's two reads, which a coordinator conversation makes too: a project that
+    // states no criteria, so that card stays off this page.
+    if (path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) {
+      return reply({ state: 'UNCONFIRMED', confirmed: false, currentVersion: { digest: SEAL, material: [] }, confirmation: null });
+    }
+    if (path === `/projects/${PROJECT_PUBLIC}`) return reply({ id: PROJECT_PUBLIC, acceptanceCriteriaItems: [] });
     if (path === '/users/me') {
       return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
     }

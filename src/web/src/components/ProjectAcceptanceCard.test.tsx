@@ -8,13 +8,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { acceptanceConfirmationKey } from '../lib/acceptanceConfirmation';
 import {
   ACCEPTANCE_PHONE_QUERY,
   CRITERIA_PREVIEW,
   DIGEST_PREVIEW,
   MOBILE_CRITERIA_PREVIEW,
   ProjectAcceptanceCard,
-  acceptanceConfirmationKey,
   criteriaPreview,
   type AcceptanceCriterionItem,
 } from './ProjectAcceptanceCard';
