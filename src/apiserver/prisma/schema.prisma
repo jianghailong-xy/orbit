@@ -1199,6 +1199,10 @@ model Session {
   worktreeDirty        Boolean?  @map("worktree_dirty")
   commitStatus         String?   @map("commit_status")
   commitError          String?   @map("commit_error")
+  // What the runner said about a commit that went through ('committed' | 'nochange'), verbatim —
+  // e.g. that it evicted the session's parked engine first (migration 0256). An 'error' keeps its
+  // message in commitError, so a reported outcome's message is in exactly one of the two.
+  commitResultMessage  String?   @map("commit_result_message")
   commitRequestedAt    DateTime? @map("commit_requested_at")
   // Same ABA fence as mergeOperationId, for heartbeat-delivered commits.
   commitOperationId    String?   @map("commit_operation_id") @db.Uuid

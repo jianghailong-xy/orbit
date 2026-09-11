@@ -3780,6 +3780,7 @@ export class SessionsService {
                 commitOperationId: null,
                 commitOperationOwner: null,
                 commitError: null,
+                commitResultMessage: null,
               }
             : {}),
           // "Resolve in session" uses the live-session resume route. Clear its
@@ -3802,6 +3803,7 @@ export class SessionsService {
                 commitOperationId: null,
                 commitOperationOwner: null,
                 commitError: null,
+                commitResultMessage: null,
               }
             : {}),
         },
@@ -4647,6 +4649,7 @@ export class SessionsService {
         commitOperationId: randomUUID(),
         commitOperationOwner: null,
         commitError: null,
+        commitResultMessage: null,
       },
     });
     if (queued.count === 0) {
@@ -5616,6 +5619,7 @@ export class SessionsService {
           commitOperationId: null,
           commitOperationOwner: null,
           commitError: null,
+          commitResultMessage: null,
           // A resumable Completed session moves back to Open. Trash was rejected above.
           completedAt: null,
           archivedAt: null,

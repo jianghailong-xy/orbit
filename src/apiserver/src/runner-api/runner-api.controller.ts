@@ -4472,7 +4472,9 @@ export class RunnerApiController {
   /** Outcome of a heartbeat-delivered CommitCommand — persist it so the worktree status bar
    *  can flip from Commit to Merge. On success the worktree is clean (worktreeDirty=false),
    *  so the bar shows Merge without waiting for the next live-diff heartbeat; 'nochange' is
-   *  also clean. An error keeps the Commit button (commitError carries git's message).
+   *  also clean. An error keeps the Commit button (commitError carries git's message). A
+   *  success keeps the runner's message in commitResultMessage — e.g. that it evicted the
+   *  session's parked engine before committing, which nothing else records.
    *  `released` is not an outcome: a runner that drained before touching the repo hands
    *  the claim back. */
   @UseGuards(RunnerAuthGuard)
@@ -4558,6 +4560,7 @@ export class RunnerApiController {
         data: {
           commitStatus: dto.status,
           commitError: dto.status === 'error' ? (dto.message ?? null) : null,
+          commitResultMessage: clean ? (dto.message ?? null) : null,
           ...(clean ? { worktreeDirty: false } : {}),
         },
       });

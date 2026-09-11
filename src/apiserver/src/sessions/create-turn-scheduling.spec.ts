@@ -369,7 +369,7 @@ for (const tc of [
       commitOperationId: '66666666-6666-4666-8666-666666666666',
       commitOperationOwner: null,
     },
-    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner', 'commitResultMessage'],
   },
   // An orphaned NULL/NULL row has no runner process behind it; blocking on one
   // wedges the session's next turn behind an operation nobody is running.
@@ -389,7 +389,7 @@ for (const tc of [
       commitOperationId: null,
       commitOperationOwner: null,
     },
-    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner', 'commitResultMessage'],
   },
 ] as const) {
   test(`a new turn may supersede ${tc.name}`, async () => {

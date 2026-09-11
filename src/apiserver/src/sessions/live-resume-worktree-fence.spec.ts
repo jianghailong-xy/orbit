@@ -156,6 +156,7 @@ for (const tc of [
       commitOperationId: null,
       commitOperationOwner: null,
       commitError: null,
+      commitResultMessage: null,
     },
   },
 ] as const) {

@@ -333,7 +333,7 @@ for (const tc of [
       commitOperationId: '11111111-1111-4111-8111-111111111111',
       commitOperationOwner: null,
     },
-    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner', 'commitResultMessage'],
   },
   // An orphaned NULL/NULL row has no runner process behind it; blocking on one
   // leaves the terminal session unresumable forever.
@@ -353,7 +353,7 @@ for (const tc of [
       commitOperationId: null,
       commitOperationOwner: null,
     },
-    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner', 'commitResultMessage'],
   },
 ] as const) {
   test(`terminal resume may supersede ${tc.name}`, async () => {
