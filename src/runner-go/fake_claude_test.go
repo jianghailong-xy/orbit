@@ -35,13 +35,17 @@ const fakeClaudeTimeout = 10 * time.Second
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
 // `--input-format`…) never reaches the test framework. fakeCodexDirEnv does the same for the
-// fake `codex app-server` in codex_rate_limit_reset_read_test.go.
+// fake `codex app-server` in codex_rate_limit_reset_read_test.go, and fakeCodexResetProviderEnv for
+// the programmable one in codex_rate_limit_reset_consume_test.go.
 func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeClaudeDirEnv); dir != "" {
 		os.Exit(runFakeClaude(dir))
 	}
 	if dir := os.Getenv(fakeCodexDirEnv); dir != "" {
 		os.Exit(runFakeCodexAppServer(dir))
+	}
+	if dir := os.Getenv(fakeCodexResetProviderEnv); dir != "" {
+		os.Exit(runFakeCodexResetProvider(dir))
 	}
 	os.Exit(m.Run())
 }

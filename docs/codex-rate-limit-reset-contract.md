@@ -301,6 +301,25 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 进程在任何一步崩溃：内存状态直接丢弃。服务端的 claim 60 秒后由新进程接管（代数加一），新进程从第 1 步重新开始；
 如果 consume 已经 CONFIRMED，它只会收到 REFRESH command。
 
+实现：`src/runner-go/codex_rate_limit_reset_consume.go`（`codexResetConsumer`）；验证：`bash scripts/test-codex-reset-consume.sh`
+（可编程 fake app-server，credit 记在临时文件里）。上面各步没有写明的情形按下表处理：
+
+| 情形 | CONSUME | REFRESH |
+| --- | --- | --- |
+| runner 自身环境带 `OPENAI_API_KEY` / `OPENAI_BASE_URL`，读不到默认账户 | `CONSUME_NOT_CALLED / UNSUPPORTED_AUTH`，不起 app-server | `REFRESH_FAILED / ACCOUNT_UNIDENTIFIED` |
+| app-server 起不来或握手失败 | `CONSUME_RETRYING / APP_SERVER_UNAVAILABLE` | `REFRESH_FAILED / APP_SERVER_UNAVAILABLE` |
+| `account/read` 或 `account/rateLimits/read` 失败 | `CONSUME_RETRYING / READ_FAILED` | `REFRESH_FAILED / READ_FAILED` |
+| 读到的块没有指纹（未登录、API key、CLI 不带 reset credits、没有 accountId） | 按第 3 步 | `REFRESH_FAILED / ACCOUNT_UNIDENTIFIED` |
+| consume 回 JSON-RPC error，或结果不是四种 outcome 之一 | `CONSUME_RETRYING / PROVIDER_ERROR` | — |
+| consume 30 秒内没有应答 | `CONSUME_RETRYING / PROVIDER_TIMEOUT` | — |
+| 等 consume 应答时 app-server 退出 | `CONSUME_RETRYING / APP_SERVER_UNAVAILABLE` | — |
+
+- 重试留在同一个步骤里：只在回执是 `RETRY_CONSUME` / `RETRY_REFRESH` 时再试，每次重新起 app-server、重新读账户，退避 1 秒起
+  翻倍、封顶 30 秒，最长 10 分钟。回执被拒、送不到，或进程停止，步骤即结束。
+- CONSUME_OUTCOME 的回执给出 `REFRESH` / `RETRY_REFRESH`（服务端已 CONFIRMED）之后才开始 REFRESH；此后这个步骤只读、不再
+  consume，接下来的结果都属于 REFRESH 阶段，不带 key。
+- 每次读到的块都写入 usage probe 的缓存，读取经过 probe 的同一个 reader：`generation` 相同，`sequence` 与 probe 自己的读连续。
+
 ### 6.5 投递、回执与终态的边界
 
 实现：apiserver `src/apiserver/src/runner-api/codex-reset-relay.ts`（heartbeat 派发与 §6.3 路由），runner
@@ -322,7 +341,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
   RELEASED（可能已调用上游），由步骤自己完成并回报。
 - 重启：apiserver 重启后照常派发与接收（状态全在行上）。runner 重启丢弃内存，旧 claim 满 60 秒由新进程接管（代数加一、
   同一个 key）；旧进程的 result 按 `STALE_CLAIM` 拒绝，除非只是重述已记录的事实（`DUPLICATE`，对它 `next` 恒为 `STOP`）。
-- 本 relay 不声明 `codex-rate-limit-reset-v1`，runloop 里的 executor 为空：能力与 consume 同一提交生效（§4）。
+- runloop 把 §6.4 的 `codexResetConsumer` 交给 relay，并在同一个提交里声明 `codex-rate-limit-reset-v1`（§4）。
 
 ---
 
@@ -480,6 +499,7 @@ BEFORE UPDATE 触发器拒绝不可变列变化、检查点倒退、已结算行
 npm run test -w @orbit/shared        # 含 src/codexRateLimitReset.spec.ts
 (cd src/runner-go && go test ./...)   # 含 codex_rate_limit_reset_test.go
 bash scripts/test-codex-reset-relay.sh   # §6.5 的 relay：disposable PostgreSQL、runner fixture 与 Go relay
+bash scripts/test-codex-reset-consume.sh # §6.4 的 consume 与权威刷新：可编程 fake app-server，不碰真实账户
 ```
 
 | 测试 | 覆盖 |
@@ -490,6 +510,7 @@ bash scripts/test-codex-reset-relay.sh   # §6.5 的 relay：disposable PostgreS
 | 兼容 | 旧 heartbeat 请求与响应往返无损；嵌套与扁平块 |
 | 状态机 | 资格顺序逐条、派发 / 接管 / 释放 / 账户变化、回执幂等与围栏、期限、单调写入、快照 CAS 表 |
 | 随机交错 | 250 个种子 × 150 步：两个进程、丢失 / 重复 / 迟到的回执、draining、账户翻转、期限；断言每次写入合法、key 不变、确认后不再 CONSUME、上游 credit 至多消费 1 个 |
+| consume 与刷新 | 请求顺序与唯一的 key、四种 outcome 各自的状态、runner 或账户不符时零调用、传输与协议错误的重试码、刷新与 consume 分离、每个检查点崩溃后新进程的恢复；provider 是可编程 fake app-server（credit 记在文件里，跨进程保持），控制面按 `decideCodexResetDispatch` / `applyCodexResetResult` 建模 |
 
 ---
 

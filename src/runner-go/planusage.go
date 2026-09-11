@@ -116,6 +116,8 @@ type planUsageProbe struct {
 	fetch  planUsageFetchFunc
 	mu     sync.Mutex
 	val    atomic.Value // *PlanUsage; unset until the first successful fetch
+	// The Codex probe's reset reader, which the reset steps read through too; nil for Claude.
+	codexReset *codexResetReader
 }
 
 func newClaudePlanUsageProbe() *planUsageProbe {
@@ -127,7 +129,7 @@ func newClaudePlanUsageProbe() *planUsageProbe {
 func newCodexPlanUsageProbe(leaseOwner string) *planUsageProbe {
 	reader := &codexResetReader{leaseOwner: leaseOwner}
 	fetch := func(ctx context.Context, _ *http.Client) (*PlanUsage, error) { return fetchCodexPlanUsage(ctx, reader) }
-	return &planUsageProbe{client: &http.Client{}, name: "codex plan-usage", fetch: fetch}
+	return &planUsageProbe{client: &http.Client{}, name: "codex plan-usage", fetch: fetch, codexReset: reader}
 }
 
 // snapshot returns the latest usage, or nil if none has been fetched / it's
@@ -405,33 +407,46 @@ func parsePlanUsage(body []byte) (*PlanUsage, error) {
 }
 
 func fetchCodexPlanUsage(ctx context.Context, reader *codexResetReader) (*PlanUsage, error) {
+	var usage *PlanUsage
+	err := withDefaultCodexAppServer(ctx, 30*time.Second, func(cctx context.Context, app *codexAppServer) error {
+		var err error
+		usage, err = reader.readCodexPlanUsage(cctx, app)
+		return err
+	})
+	return usage, err
+}
+
+// withDefaultCodexAppServer runs use on a bare app-server of the runner's default Codex account — the
+// one the runner's own environment selects — once its handshake is done, all within budget, and closes
+// the app-server after. The shared state bootstrap before it waits on ctx alone.
+func withDefaultCodexAppServer(ctx context.Context, budget time.Duration, use func(context.Context, *codexAppServer) error) error {
 	env := os.Environ()
 	cwd, _ := os.Getwd()
 	state, err := codexPlanUsageStateForEnv(env, cwd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := ensureSharedCodexStateReady(ctx, ctx, state, env); err != nil {
-		return nil, err
+		return err
 	}
-	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	cctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	// This probe is the other regular starter on the shared partition, so it takes the same
-	// handshake lock a session start does. Losing the wait costs one usage refresh; colliding
+	// The usage probe and the reset steps are the other regular starters on the shared partition, so
+	// they take the same handshake lock a session start does. Losing the wait costs one read; colliding
 	// with a session start can cost the session.
 	unlock := lockCodexStateHandshake(cctx, state)
 	app, err := startBareCodexAppServer(cctx, state.Dir, env, cwd)
 	if err != nil {
 		unlock()
-		return nil, err
+		return err
 	}
 	defer app.close()
 	err = app.initialize(cctx)
 	unlock()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return reader.readCodexPlanUsage(cctx, app)
+	return use(cctx, app)
 }
 
 func startBareCodexAppServer(ctx context.Context, stateDir string, env []string, cwd string) (*codexAppServer, error) {

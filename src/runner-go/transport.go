@@ -69,6 +69,7 @@ func init() {
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,
+		codexRateLimitResetCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 

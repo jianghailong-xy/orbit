@@ -33,6 +33,17 @@ type codexRPCMessage struct {
 	Error  *codexRPCError  `json:"error,omitempty"`
 }
 
+// codexRPCCallError is the app-server's JSON-RPC error answer to one request: a server that answered no,
+// as distinct from a request that never got an answer.
+type codexRPCCallError struct {
+	method  string
+	message string
+}
+
+func (e *codexRPCCallError) Error() string {
+	return e.method + ": " + e.message
+}
+
 type codexInstructionMode uint8
 
 const (
@@ -1372,7 +1383,7 @@ func (a *codexAppServer) request(ctx context.Context, method string, params map[
 			return nil, a.closedError()
 		}
 		if msg.Error != nil {
-			return nil, fmt.Errorf("%s: %s", method, msg.Error.Message)
+			return nil, &codexRPCCallError{method: method, message: msg.Error.Message}
 		}
 		return rawObject(msg.Result), nil
 	case <-ctx.Done():

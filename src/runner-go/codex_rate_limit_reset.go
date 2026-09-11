@@ -18,8 +18,9 @@ import (
 // Codex earned rate-limit reset: the runner half of docs/codex-rate-limit-reset-contract.md. The
 // wire DTOs below mirror @orbit/shared (dto.ts, codexRateLimitReset.ts) field for field, and both
 // mirrors are tested against contracts/codex-rate-limit-reset.contract.json and its fixtures.
-// The heartbeat relay (codex_rate_limit_reset_relay.go) takes the command and reports results;
-// codexRateLimitResetCapabilityV1 joins runnerCapabilitiesV1 only in the change that adds the consume.
+// The heartbeat relay (codex_rate_limit_reset_relay.go) takes the command and reports results, the
+// consume (codex_rate_limit_reset_consume.go) carries it out, and runnerCapabilitiesV1 declares
+// codexRateLimitResetCapabilityV1 for the two together.
 
 const (
 	codexRateLimitResetProtocolVersion = 1

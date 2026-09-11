@@ -31,8 +31,8 @@ import (
 // kept on disk: a restart loses what is in memory, the claim ages into a takeover by the next process
 // (§7.4), and that process starts the step again under the operation's one key.
 //
-// None of this declares codexRateLimitResetCapabilityV1. A process is handed commands only once it
-// declares the capability, and that belongs in the change that also carries out the consume (§4).
+// A process is handed commands only once it declares codexRateLimitResetCapabilityV1, which the runner
+// declares for this relay together with the executor that carries the steps out: codexResetConsumer (§4).
 
 const (
 	codexResetResultPath = "/runner/codex-rate-limit-reset-result"
@@ -55,8 +55,8 @@ const (
 
 // codexResetExecutor carries out one command this process acts on, sending each result through report
 // and following the next step each receipt names (§6.4). It is handed at most one command per claim
-// at a time, and a claim's CONSUME at most once. The consume implementation provides it; a binary
-// without one declares no capability, and the control plane hands it no command to act on.
+// at a time, and a claim's CONSUME at most once. The runner's is codexResetConsumer.execute; a relay
+// built without one acts on no command it is handed.
 type codexResetExecutor func(ctx context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter)
 
 // codexResetReporter sends one result until it has a receipt, and returns the receipt or the error

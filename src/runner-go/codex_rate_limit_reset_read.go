@@ -17,8 +17,8 @@ import (
 // The Codex usage probe's half of docs/codex-rate-limit-reset-contract.md: each read of the
 // runner's default Codex account also yields the PlanUsageRateLimitReset block (§2) the heartbeat
 // carries — the provider's authoritative credit count, the account fingerprint (§3), when the read
-// started and which read of which runner process it was. Nothing here consumes a credit, and
-// codexRateLimitResetCapabilityV1 is still not declared.
+// started and which read of which runner process it was. Nothing here consumes a credit; the reset
+// steps (codex_rate_limit_reset_consume.go) make their reads through the same reader.
 //
 // The default account is the one the runner's own environment selects, exactly as for the usage
 // windows: a runner started with OPENAI_API_KEY or OPENAI_BASE_URL reads no Codex usage at all
