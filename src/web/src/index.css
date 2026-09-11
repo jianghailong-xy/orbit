@@ -7244,6 +7244,14 @@ html[data-theme='dark'] .session-tag-chip {
   border-color: var(--warning-border);
   background: var(--warning-bg);
 }
+/* A card that is no longer a question — answered at another end, displaced, or stranded by a moved
+   seal — is dimmed as one object: the account owner's call on 2026-09-11, the same 0.72 iOS dims
+   those three states by. The heading, the reason and the disabled actions still say why; this is
+   the at-a-glance half. An unread card stays bright, because a read that has not come back is not
+   an answer. Both classes, so no later single-class rule can undo it. */
+.criteria-decision.is-stale {
+  opacity: 0.72;
+}
 .criteria-decision .approval-head {
   display: flex;
   align-items: center;

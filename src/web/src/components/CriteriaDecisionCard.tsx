@@ -380,6 +380,21 @@ export function isAnswerable(standing: CriteriaDecisionStanding): boolean {
 }
 
 /**
+ * Whether the card is drawn dimmed, whole: exactly the three states whose question has moved on —
+ * the ones headed `CRITERIA_DECISION_STALE_HEADING` — which is the account owner's call of
+ * 2026-09-11 and iOS's `CriteriaDecisions.isDimmed`. `UNREAD` offers no action either and is still
+ * not one of them: it is this browser not knowing, not the proposal being gone, and a card dimmed
+ * on a failed read would be showing an answer nobody gave.
+ */
+export function isStale(standing: CriteriaDecisionStanding): boolean {
+  return (
+    standing.state === 'BASE_SEAL_MOVED'
+    || standing.state === 'SUPERSEDED'
+    || standing.state === 'ALREADY_SETTLED'
+  );
+}
+
+/**
  * Why this card cannot be answered, addressed to the reader looking at its dead buttons.
  *
  * Each sentence names the refusal the door would give, because that is the fact — a reader told
@@ -568,7 +583,8 @@ function ProposedChanges({ diff }: { diff: CriteriaProposalDiff }): JSX.Element 
  * The actions are `CardAction`'s, under `CardAction`'s one rule — an action that cannot succeed is
  * `disabled` rather than lit-and-refused — and `Approve & re-seal` is the primary tone, which
  * loses its fill as well as its strength while it is disabled. A stale card is the state that rule
- * was written for: it looks like the live one and can do none of what the live one can.
+ * was written for: it keeps the live one's layout, dimmed whole (`is-stale`, see `isStale`), and
+ * can do none of what the live one can.
  */
 export function CriteriaDecisionCard({
   standing,
@@ -586,7 +602,10 @@ export function CriteriaDecisionCard({
   const row =
     standing.state === 'DECIDABLE' || standing.state === 'BASE_SEAL_MOVED' ? standing.row : null;
   return (
-    <div className="approval-card criteria-decision" id={`criteria-decision-${standing.intentId}`}>
+    <div
+      className={`approval-card criteria-decision${isStale(standing) ? ' is-stale' : ''}`}
+      id={`criteria-decision-${standing.intentId}`}
+    >
       <div className="approval-head criteria-decision-head">
         <span className="criteria-decision-heading">{headingFor(standing)}</span>
         {/* The mark, and the reason it exists is in its own title rather than in a footnote

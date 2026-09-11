@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
@@ -591,6 +592,92 @@ describe('a card whose question has moved on', () => {
     // a reader their decision is no longer theirs to make would be inventing one.
     expect(html).not.toContain(CRITERIA_DECISION_STALE_HEADING);
     expect(html).not.toContain(CRITERIA_DECISION_ALREADY_SETTLED);
+  });
+});
+
+/**
+ * DIMMED WHOLE, AND ONLY ONCE THE QUESTION HAS MOVED ON.
+ *
+ * The account owner's call on 2026-09-11, after seeing a settled card on a phone: a card that is no
+ * longer a question drops to 0.72 as one object, on top of the heading, the reason and the dead
+ * buttons it already had — the same three states iOS dims. The rule rides on a class on the card's
+ * own element, so that class is what is asserted, for each of the five standings as a read derives
+ * them, and then the stylesheet is asked what the class does to that element.
+ *
+ * `UNREAD` is the one this is easy to get wrong: its buttons are dead too, so a dim keyed on "cannot
+ * be answered" would darken a card whose proposal may be perfectly live. It stays bright.
+ *
+ * The timeout is for the last case. Resolving the whole stylesheet's cascade in jsdom is seconds of
+ * synchronous work — 2.9s on an 8-core host at a load average near 20, 10.4s near 50 — and the
+ * default 5s budget failed it for load alone.
+ */
+describe('a card that is no longer a question', { timeout: 60_000 }, () => {
+  const live = row();
+  const stranded = row({
+    currentSeal: SEAL_MOVED,
+    decidability: {
+      decidable: false,
+      refusal: CRITERIA_DECISION_BASE_SEAL_MOVED,
+      requiredAction: 'REFILE_AGAINST_THE_CURRENT_STANDARD_SET',
+    },
+  });
+  const replacement = row({
+    intentId: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
+    supersededIntentId: live.intentId,
+  });
+  const standings = {
+    DECIDABLE: criteriaDecisionStanding(queue([live]), live.intentId),
+    UNREAD: criteriaDecisionStanding(null, live.intentId),
+    BASE_SEAL_MOVED: criteriaDecisionStanding(queue([stranded]), stranded.intentId),
+    SUPERSEDED: criteriaDecisionStanding(queue([replacement]), live.intentId),
+    ALREADY_SETTLED: criteriaDecisionStanding(queue([]), live.intentId),
+  };
+  const dimmed = ['BASE_SEAL_MOVED', 'SUPERSEDED', 'ALREADY_SETTLED'] as const;
+  const bright = ['DECIDABLE', 'UNREAD'] as const;
+
+  /** The classes on the card's own element: the outermost tag of its markup. */
+  const classesOf = (html: string): string[] => {
+    const opening = /^<div\b[^>]*\bclass="([^"]*)"/u.exec(html);
+    expect(opening, 'the markup does not open with the card').not.toBeNull();
+    return opening![1].split(/\s+/u);
+  };
+
+  it('is dimmed in each of the three states whose question has moved on', () => {
+    for (const state of dimmed) {
+      // The input really derives that state, so the class is about it and not about a fixture that
+      // fell through to another one.
+      expect(standings[state].state).toBe(state);
+      expect(classesOf(card(standings[state])), state).toContain('is-stale');
+    }
+  });
+
+  it('stays bright while it can be answered, and while its read has not come back', () => {
+    for (const state of bright) {
+      expect(standings[state].state).toBe(state);
+      const classes = classesOf(card(standings[state]));
+      // The card's own classes are what was read, so the absence below is not an empty list's.
+      expect(classes, state).toContain('criteria-decision');
+      expect(classes, state).not.toContain('is-stale');
+    }
+  });
+
+  it('is the whole card at 0.72, and no later rule in the stylesheet takes it back', () => {
+    // Asked of the cascade rather than of the file: the whole stylesheet and the card's own markup
+    // in one document, read back off the card's element — so a later rule resetting the card's
+    // opacity fails this exactly as it would on screen.
+    const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>');
+    const style = dom.window.document.createElement('style');
+    style.textContent = fromRepo('src/index.css', 'src/web/src/index.css');
+    dom.window.document.head.appendChild(style);
+    const opacityOf = (standing: CriteriaDecisionStanding): string => {
+      dom.window.document.body.innerHTML = card(standing);
+      const element = dom.window.document.querySelector('.criteria-decision');
+      expect(element, standing.state).not.toBeNull();
+      return dom.window.getComputedStyle(element!).opacity;
+    };
+    for (const state of dimmed) expect(opacityOf(standings[state]), state).toBe('0.72');
+    // `''` is what jsdom computes when nothing declares the property: not dimmed.
+    for (const state of bright) expect(['', '1'], state).toContain(opacityOf(standings[state]));
   });
 });
 
