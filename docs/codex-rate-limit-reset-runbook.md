@@ -117,12 +117,13 @@ docker logs orbit-apiserver 2>&1 | grep 'codex-reset' | grep '"operationId":"<id
 journalctl -u orbit-runner --since '-1h' | grep 'codex-reset' | grep '"operationId":"<id>"'
 ```
 
-一次正常的操作（故障注入 harness F1 的真实行，时间与 id 省略）：
+一次正常操作的两侧事件顺序如下。这是示意，时间与 id 省略；实际行以 harness 报告中 F1 的 `controlPlaneLog` 与 `runnerLog` 为准。
 
 ```text
 apiserver  admission/created          status=PENDING
 apiserver  delivery/claimed           claimGeneration=1 process=6f1c2b7e
 runner     delivery/started           reason=step
+runner     consume/calling            attempt=1
 runner     consume/called             account=match kind=CONSUME_OUTCOME outcome=reset
 apiserver  consume/applied            from=CONSUMING status=REFRESHING
 apiserver  receipt/answered           disposition=APPLIED next=REFRESH
@@ -300,7 +301,7 @@ bash scripts/test-codex-reset-fault-injection.sh
 | F3 | 步骤运行期间重投 3 次 | SUCCEEDED | 1 / 1 |
 | F4 | CONSUME_OUTCOME 请求丢失，再两次 503 | SUCCEEDED | 1 / 1 |
 | F5 | CONSUME_OUTCOME 已应用后回执丢失 | SUCCEEDED | 1 / 1 |
-| F6 | 成功后 33 个重复、乱序、冲突与迟到的结果 | SUCCEEDED（行不变） | 1 / 1 |
+| F6 | 成功后重放全部已发结果，外加迟到、冲突与 RELEASED 的结果；正序、倒序与部分重复 | SUCCEEDED（行不变） | 1 / 1 |
 | F7 | app-server 对 consume 不回答（超时） | SUCCEEDED | 2 / 1 |
 | F8 | provider 扣费后 app-server 退出 | SUCCEEDED（alreadyRedeemed） | 2 / 1 |
 | F9 | 调用 consume 前 SIGKILL，后继接管 | SUCCEEDED（第 2 代） | 1 / 1 |
