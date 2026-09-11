@@ -114,7 +114,7 @@ func TestCodexResetRelayAgainstALiveControlPlane(t *testing.T) {
 	var receipts []CodexRateLimitResetResultResponse
 	var failures []error
 	steps := 0
-	relay := newCodexResetRelay(context.Background(), transport, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter) {
+	relay := newCodexResetRelay(context.Background(), transport, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter, _ codexResetDeliveries) {
 		record := func(receipt CodexRateLimitResetResultResponse, err error) {
 			mu.Lock()
 			defer mu.Unlock()

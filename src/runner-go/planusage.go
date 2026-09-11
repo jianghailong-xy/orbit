@@ -190,7 +190,7 @@ func (p *planUsageProbe) runWithIntervals(ctx context.Context, activeCount func(
 		lastFetch = time.Now()
 		u, err := p.fetch(ctx, p.client)
 		if err != nil {
-			if msg := err.Error(); msg != lastErr {
+			if msg := planUsageErrorText(err); msg != lastErr {
 				logln(p.name+" unavailable:", msg)
 				lastErr = msg
 			}

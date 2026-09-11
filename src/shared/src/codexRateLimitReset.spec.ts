@@ -434,6 +434,17 @@ describe('creating an operation', () => {
     expect(codexResetRefusal(eligible({ rateLimitReset: future }))).toBe('SNAPSHOT_STALE');
   });
 
+  it('refuses a block read no later than an unrefreshed spend settled, and takes the next read', () => {
+    const settledAt = at(-500).toISOString();
+    const readAt = (ms: number) => block({ fetchedAt: at(ms).toISOString() });
+    expect(codexResetRefusal(eligible({ rateLimitReset: readAt(-1_000), readRequiredAfter: settledAt }))).toBe('SNAPSHOT_STALE');
+    expect(codexResetRefusal(eligible({ rateLimitReset: readAt(-500), readRequiredAfter: settledAt }))).toBe('SNAPSHOT_STALE');
+    expect(codexResetRefusal(eligible({ rateLimitReset: readAt(-499), readRequiredAfter: settledAt }))).toBeNull();
+    expect(codexResetRefusal(eligible({ readRequiredAfter: null }))).toBeNull();
+    // A settlement time that cannot be read is no licence either.
+    expect(codexResetRefusal(eligible({ readRequiredAfter: 'not a time' }))).toBe('SNAPSHOT_STALE');
+  });
+
   it('refuses reset from a context that does not run on the runner\'s default Codex account', () => {
     expect(codexResetAccountOverride({})).toBe(false);
     expect(codexResetAccountOverride({ provider: 'codex', env: { PATH: '/usr/bin', CODEX_HOME: '  ' } })).toBe(false);
@@ -522,10 +533,11 @@ describe('claims and delivery', () => {
     expect(codexResetCommandViolations(command)).toEqual([]);
   });
 
-  it('redelivers the same command to the claiming process without a new claim', () => {
+  it('redelivers the same command to the claiming process, renewing its claim rather than making a new one', () => {
     const first = delivered(created());
     const again = delivered(first.operation, { now: at(20_000) });
-    expect(again.operation).toBe(first.operation);
+    expect(again.operation).toEqual({ ...first.operation, claimedAt: at(20_000).toISOString(), updatedAt: at(20_000).toISOString() });
+    expect(codexResetTransitionViolations(first.operation, again.operation)).toEqual([]);
     expect(again.command).toEqual(first.command);
   });
 
@@ -534,6 +546,44 @@ describe('claims and delivery', () => {
     expect(decideCodexResetDispatch(first.operation, heartbeat({ leaseOwner: B, now: at(30_000) }))).toEqual({ kind: 'NONE', reason: 'CLAIM_HELD' });
     const takeover = delivered(first.operation, { leaseOwner: B, now: at(1_000 + TIMING.claimTakeoverAfterMs) });
     expect(takeover.operation).toMatchObject({ claimLeaseOwner: B, claimGeneration: 2, claimsWithUnknownCall: 2 });
+  });
+
+  it('never takes a claim from a holder that keeps renewing it, only from one whose renewals stopped', () => {
+    const first = delivered(created());
+    const renewed = delivered(first.operation, { now: at(50_000) }).operation;
+    // Past the first claim's takeover window, inside the renewal's.
+    expect(decideCodexResetDispatch(renewed, heartbeat({ leaseOwner: B, now: at(1_000 + TIMING.claimTakeoverAfterMs + 1_000) }))).toEqual({
+      kind: 'NONE',
+      reason: 'CLAIM_HELD',
+    });
+    const takeover = delivered(renewed, { leaseOwner: B, now: at(50_000 + TIMING.claimTakeoverAfterMs) });
+    expect(takeover.operation).toMatchObject({ claimLeaseOwner: B, claimGeneration: 2, claimsWithUnknownCall: 2 });
+  });
+
+  it('renews nothing for a holder that is draining or now reads another account', () => {
+    const first = delivered(created());
+    expect(decideCodexResetDispatch(first.operation, heartbeat({ draining: true, now: at(50_000) }))).toEqual({ kind: 'NONE', reason: 'RUNNER_DRAINING' });
+    const otherAccount = heartbeat({ rateLimitReset: block({ accountFingerprint: OTHER_FP }), now: at(50_000) });
+    expect(decideCodexResetDispatch(first.operation, otherAccount)).toEqual({ kind: 'NONE', reason: 'CLAIM_HELD' });
+    // Neither heartbeat renewed the claim, so it ages from when it was taken.
+    const takeover = delivered(first.operation, { leaseOwner: B, now: at(1_000 + TIMING.claimTakeoverAfterMs) });
+    expect(takeover.operation).toMatchObject({ claimLeaseOwner: B, claimGeneration: 2 });
+  });
+
+  it('renews a claim only until its checkpoint\'s deadline, then hands the holder nothing and lets the claim expire', () => {
+    const lateClaim = delivered(created(), { now: at(TIMING.consumeDeadlineMs - 30_000) }).operation;
+    expect(decideCodexResetDispatch(lateClaim, heartbeat({ now: at(TIMING.consumeDeadlineMs) }))).toEqual({ kind: 'NONE', reason: 'DEADLINE_PASSED' });
+    expect(expireCodexResetOperation(lateClaim, at(TIMING.consumeDeadlineMs))).toBeNull();
+    expect(expireCodexResetOperation(lateClaim, at(TIMING.consumeDeadlineMs - 30_000 + TIMING.claimTakeoverAfterMs))).toMatchObject({
+      consumeState: 'UNRESOLVED',
+      failureCode: 'CONSUME_EXPIRED',
+    });
+    const { operation } = confirmed('reset');
+    const renewedLate = delivered(operation, { now: at(2_000 + TIMING.refreshDeadlineMs - 10_000) }).operation;
+    expect(decideCodexResetDispatch(renewedLate, heartbeat({ now: at(2_000 + TIMING.refreshDeadlineMs) }))).toEqual({
+      kind: 'NONE',
+      reason: 'DEADLINE_PASSED',
+    });
   });
 
   it('never delivers without a lease, the capability or a usable block, or to a draining process or another runner', () => {
@@ -564,7 +614,7 @@ describe('claims and delivery', () => {
   it('delivers REFRESH without the key after a confirmed consume, and fails only the refresh on an account change', () => {
     const { operation } = confirmed('reset');
     const refresh = delivered(operation, { now: at(3_000) });
-    expect(refresh.operation).toBe(operation);
+    expect(refresh.operation).toEqual({ ...operation, claimedAt: at(3_000).toISOString(), updatedAt: at(3_000).toISOString() });
     expect(refresh.command.phase).toBe('REFRESH');
     expect(refresh.command).not.toHaveProperty('providerIdempotencyKey');
     const changed = decideCodexResetDispatch(operation, heartbeat({ rateLimitReset: block({ accountFingerprint: OTHER_FP }), now: at(62_000) }));
@@ -859,12 +909,21 @@ function walk(seed: number): void {
       });
       if (decision.kind === 'NONE') continue;
       if (decision.kind === 'DELIVER') {
+        if (decision.operation.claimGeneration > op.claimGeneration && op.claimLeaseOwner !== null && op.claimedAt !== null) {
+          expect(clock - (Date.parse(op.claimedAt) - T0), `seed ${seed}: took a claim over from a holder still renewing it`).toBeGreaterThanOrEqual(
+            TIMING.claimTakeoverAfterMs,
+          );
+        }
         if (decision.command.phase === 'CONSUME') {
           expect(op.consumeState, `seed ${seed}: CONSUME after confirmation`).not.toBe('CONFIRMED');
           expect(decision.command.providerIdempotencyKey).toBe(PROVIDER_KEY);
+          expect(clock, `seed ${seed}: CONSUME delivered past the consume deadline`).toBeLessThan(TIMING.consumeDeadlineMs);
         } else {
           expect(decision.operation.consumeState).toBe('CONFIRMED');
           expect(decision.command).not.toHaveProperty('providerIdempotencyKey');
+          expect(T0 + clock, `seed ${seed}: REFRESH delivered past the refresh deadline`).toBeLessThan(
+            Date.parse(op.consumeConfirmedAt as string) + TIMING.refreshDeadlineMs,
+          );
         }
         expect(codexResetCommandViolations(decision.command)).toEqual([]);
         inbox.set(process, decision.command);

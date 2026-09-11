@@ -129,7 +129,7 @@ func TestCodexResetRelayStartsEachClaimOncePerProcess(t *testing.T) {
 	release := make(chan struct{})
 	var mu sync.Mutex
 	var started []CodexRateLimitResetCommand
-	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, _ codexResetReporter) {
+	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, _ codexResetReporter, _ codexResetDeliveries) {
 		mu.Lock()
 		started = append(started, cmd)
 		mu.Unlock()
@@ -181,7 +181,7 @@ func TestCodexResetRelayActsOnNothingItMustNotActOn(t *testing.T) {
 		codexResetAnswer(http.StatusOK, `{"disposition":"APPLIED","status":"CONSUMING","next":"STOP"}`),
 	}}
 	var steps atomic.Int64
-	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(context.Context, CodexRateLimitResetCommand, codexResetReporter) {
+	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(context.Context, CodexRateLimitResetCommand, codexResetReporter, codexResetDeliveries) {
 		steps.Add(1)
 	})
 	var legacy HeartbeatResponse
@@ -234,7 +234,7 @@ func TestCodexResetRelayRefusesAConsumeOfAnotherProtocol(t *testing.T) {
 		codexResetAnswer(http.StatusOK, `{"disposition":"APPLIED","status":"NOT_ATTEMPTED","next":"STOP"}`),
 	}}
 	var steps atomic.Int64
-	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(context.Context, CodexRateLimitResetCommand, codexResetReporter) {
+	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(context.Context, CodexRateLimitResetCommand, codexResetReporter, codexResetDeliveries) {
 		steps.Add(1)
 	})
 	newer := codexResetDelivered(t, "consume", relay.leaseOwner)
@@ -263,7 +263,7 @@ func TestCodexResetRelayHandsBackOnlyAnUnstartedClaimWhenDraining(t *testing.T) 
 		codexResetAnswer(http.StatusOK, `{"disposition":"APPLIED","status":"CONSUMING","next":"STOP"}`),
 	}}
 	var steps atomic.Int64
-	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(context.Context, CodexRateLimitResetCommand, codexResetReporter) {
+	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(context.Context, CodexRateLimitResetCommand, codexResetReporter, codexResetDeliveries) {
 		steps.Add(1)
 	})
 	unstarted := codexResetDelivered(t, "consume", relay.leaseOwner)
@@ -297,7 +297,7 @@ func TestCodexResetRelayResendsAResultUntilItHasAReceipt(t *testing.T) {
 	}}
 	var receipt CodexRateLimitResetResultResponse
 	var reportErr error
-	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter) {
+	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter, _ codexResetDeliveries) {
 		outcome := codexResetResult(cmd, "CONSUME_OUTCOME", "")
 		outcome.Outcome = "reset"
 		outcome.ObservedAccountFingerprint = cmd.AccountFingerprint
@@ -348,7 +348,7 @@ func TestCodexResetRelayStopsAtARefusalOrAnAnswerThatIsNoReceipt(t *testing.T) {
 	for _, tc := range cases {
 		cp := &codexResetFakeControlPlane{answers: []func(http.ResponseWriter){tc.answer}}
 		var reportErr error
-		relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter) {
+		relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter, _ codexResetDeliveries) {
 			_, reportErr = report(codexResetResult(cmd, "CONSUME_RETRYING", "PROVIDER_TIMEOUT"))
 		})
 		consume := codexResetDelivered(t, "consume", relay.leaseOwner)
@@ -374,7 +374,7 @@ func TestCodexResetRelayGivesUpAfterItsReceiptWindow(t *testing.T) {
 		codexResetAnswer(http.StatusBadGateway, `upstream unavailable`),
 	}}
 	var reportErr error
-	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter) {
+	relay, ops, clock := codexResetTestRelay(t, context.Background(), cp, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter, _ codexResetDeliveries) {
 		_, reportErr = report(codexResetResult(cmd, "CONSUME_RETRYING", "APP_SERVER_UNAVAILABLE"))
 	})
 	consume := codexResetDelivered(t, "consume", relay.leaseOwner)
@@ -398,7 +398,7 @@ func TestCodexResetRelayGivesUpAfterItsReceiptWindow(t *testing.T) {
 	cancel()
 	quiet := &codexResetFakeControlPlane{answers: []func(http.ResponseWriter){codexResetAnswer(http.StatusBadGateway, `down`)}}
 	var stoppedErr error
-	halted, haltedOps, haltedClock := codexResetTestRelay(t, stopped, quiet, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter) {
+	halted, haltedOps, haltedClock := codexResetTestRelay(t, stopped, quiet, func(_ context.Context, cmd CodexRateLimitResetCommand, report codexResetReporter, _ codexResetDeliveries) {
 		_, stoppedErr = report(codexResetResult(cmd, "CONSUME_RETRYING", "APP_SERVER_UNAVAILABLE"))
 	})
 	haltedCommand := codexResetDelivered(t, "consume", halted.leaseOwner)

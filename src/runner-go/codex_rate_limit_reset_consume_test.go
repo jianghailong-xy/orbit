@@ -171,7 +171,7 @@ func codexResetUpdateProvider(dir string, change func(*codexResetProviderState))
 // log's order is the order things happened in.
 func runFakeCodexResetProvider(dir string) int {
 	log := filepath.Join(dir, codexResetEventLog)
-	appendJSONL(log, codexResetEvent{Src: "app", Pid: os.Getpid(), Spawn: true})
+	appendJSONL(log, codexResetEvent{Src: "app", Pid: os.Getpid(), Spawn: true, At: codexResetEventTime()})
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -183,13 +183,21 @@ func runFakeCodexResetProvider(dir string) int {
 		if json.Unmarshal(scanner.Bytes(), &frame) != nil {
 			continue
 		}
-		event := codexResetEvent{Src: "app", Pid: os.Getpid(), Method: frame.Method, Params: frame.Params}
+		event := codexResetEvent{Src: "app", Pid: os.Getpid(), Method: frame.Method, Params: frame.Params, At: codexResetEventTime()}
 		if frame.ID == nil {
 			appendJSONL(log, event)
 			continue
 		}
 		reply := map[string]interface{}{"id": frame.ID}
+		// Who the account is, as a real backend's error text may name it: no runner log line may repeat it.
+		named := ""
 		err := codexResetUpdateProvider(dir, func(state *codexResetProviderState) {
+			if state.AccountID != nil {
+				named = *state.AccountID
+			}
+			if email, ok := state.Account["email"].(string); ok {
+				named += " " + email
+			}
 			event.Answer = state.fault(frame.Method)
 			switch frame.Method {
 			case "initialize":
@@ -228,7 +236,7 @@ func runFakeCodexResetProvider(dir string) int {
 			return 3
 		case "error":
 			delete(reply, "result")
-			reply["error"] = map[string]interface{}{"code": -32600, "message": "the fake provider refused " + frame.Method}
+			reply["error"] = map[string]interface{}{"code": -32600, "message": "the fake provider refused " + frame.Method + " for" + named}
 		case "garbage":
 			reply["result"] = map[string]interface{}{"outcome": "deferred"}
 		}
@@ -240,18 +248,25 @@ func runFakeCodexResetProvider(dir string) int {
 	return 0
 }
 
+// codexResetEventTime is when an app-server event happened, for a harness comparing it with the control plane's
+// own timestamps (the fault-injection harness puts every consume call before or after the confirmation).
+func codexResetEventTime() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
+}
+
 // codexResetEvent is one line of the event log the fake app-servers, the control plane and the test all
 // append to: whichever wrote first happened first.
 type codexResetEvent struct {
 	Src string `json:"src"` // app | cp | test
 
 	// app: its start, or one frame it heard and what it answered — the outcome, or the fault the request
-	// went through.
+	// went through, and when.
 	Pid    int             `json:"pid,omitempty"`
 	Spawn  bool            `json:"spawn,omitempty"`
 	Method string          `json:"method,omitempty"`
 	Params json.RawMessage `json:"params,omitempty"`
 	Answer string          `json:"answer,omitempty"`
+	At     string          `json:"at,omitempty"`
 
 	// cp: a delivery, or one result and what became of it.
 	Delivered  string          `json:"delivered,omitempty"`
@@ -388,8 +403,8 @@ func (s *codexResetStop) await(t *testing.T) {
 }
 
 // dispatch is what one heartbeat of process leaseOwner is handed (decideCodexResetDispatch): the
-// operation's command once its claim is, or becomes, that process's. A claim another process took less
-// than claimTakeoverAfterMs ago stays that process's.
+// operation's command once its claim is, or becomes, that process's. Every heartbeat of the holder renews
+// its claim, and a claim renewed less than claimTakeoverAfterMs ago stays its holder's.
 func (m *codexResetModel) dispatch(leaseOwner string) *CodexRateLimitResetCommand {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -399,7 +414,9 @@ func (m *codexResetModel) dispatch(leaseOwner string) *CodexRateLimitResetComman
 		return nil
 	}
 	now := m.clock.now()
-	if op.ClaimLeaseOwner != leaseOwner {
+	if op.ClaimLeaseOwner == leaseOwner {
+		op.ClaimedAt = now
+	} else {
 		if op.ClaimLeaseOwner != "" && now.Before(op.ClaimedAt.Add(m.takeover)) {
 			return nil
 		}
@@ -879,6 +896,9 @@ func (h *codexResetHarness) process(tune ...func(*codexResetConsumer)) *codexRes
 	relay := newCodexResetRelay(ctx, transport, consumer.execute, &ops)
 	relay.now, relay.wait = h.clock.now, h.clock.wait
 	p := &codexResetTestProcess{h: h, relay: relay, probe: probe, ops: &ops, cancel: cancel}
+	// A step that waits for its claim to be delivered again gets the heartbeat a live process would send; a
+	// test about what happens without one sets awaiting to its own function.
+	relay.awaiting = func(codexResetClaim) { p.heartbeat() }
 	h.t.Cleanup(p.crash)
 	return p
 }
@@ -1215,6 +1235,8 @@ func TestCodexResetConsumeRetriesWithoutAnOutcomeUnderTheSameKey(t *testing.T) {
 
 	events := h.events()
 	retry := func(code string) string { return "CONSUME_RETRYING/" + code + " -> APPLIED CONSUMING RETRY_CONSUME" }
+	// The backoff outgrows the claim's delivery at 31s and 61s: those attempts read, call nothing and report
+	// nothing until the next heartbeat hands the claim over again, and then read and call.
 	codexResetRequireSequence(t, events, codexResetSteps(
 		"deliver CONSUME/1",
 		"app initialize", retry("APP_SERVER_UNAVAILABLE"),
@@ -1222,7 +1244,9 @@ func TestCodexResetConsumeRetriesWithoutAnOutcomeUnderTheSameKey(t *testing.T) {
 		codexResetReadRequests, "app "+consume, retry("PROVIDER_ERROR"),
 		codexResetReadRequests, "app "+consume, retry("PROVIDER_ERROR"),
 		codexResetReadRequests, "app "+consume, retry("PROVIDER_TIMEOUT"),
+		codexResetReadRequests, "deliver CONSUME/1",
 		codexResetReadRequests, "app "+consume, retry("APP_SERVER_UNAVAILABLE"),
+		codexResetReadRequests, "deliver CONSUME/1",
 		codexResetReadRequests, "app "+consume, "CONSUME_OUTCOME/alreadyRedeemed -> APPLIED REFRESHING REFRESH",
 		codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
 	))

@@ -534,7 +534,7 @@ test('(3) account scope: another account settles an unclaimed operation, after w
   );
 });
 
-test('(4) a lost command is delivered again on the next heartbeat, byte for byte, with nothing written', {
+test('(4) a lost command is delivered again on the next heartbeat, byte for byte, renewing only its claim', {
   skip, timeout: 120_000,
 }, async (t) => {
   const w = await world(t);
@@ -543,13 +543,21 @@ test('(4) a lost command is delivered again on the next heartbeat, byte for byte
   const op = await confirmed(w, m, a);
   const first = await heartbeat(w, m, { proc: a });
   assertCommand(first.command, op, a, { phase: 'CONSUME', claimGeneration: 1 });
-  const claimed = await operation(w, op.id);
+  let claimed = await operation(w, op.id);
 
-  // That response never reached the runner. Its next heartbeats are handed the same command.
+  // That response never reached the runner. Its next heartbeats are handed the same command, and each renews
+  // the claim of the process still holding it: claimedAt and updatedAt move on, nothing else is written.
   for (let beat = 1; beat <= 3; beat++) {
     const again = await heartbeat(w, m, { proc: a });
     assert.equal(JSON.stringify(again.command), JSON.stringify(first.command), `redelivery ${beat} differs from the first`);
-    assert.deepEqual(await operation(w, op.id), claimed, `redelivery ${beat} wrote: a new claim or generation`);
+    const renewed = await operation(w, op.id);
+    assert.deepEqual(
+      { ...renewed, claimedAt: claimed.claimedAt, updatedAt: claimed.updatedAt },
+      claimed,
+      `redelivery ${beat} wrote more than the renewal: a new claim or generation`,
+    );
+    assert.ok(Date.parse(renewed.claimedAt!) >= Date.parse(claimed.claimedAt!), `redelivery ${beat} moved the claim backwards`);
+    claimed = renewed;
   }
   // Paired: the result of that command lands against the claim it names.
   assertReceipt(await report(w, m, result(first.command, 'CONSUME_OUTCOME', { outcome: 'reset' })), {

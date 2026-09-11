@@ -8,7 +8,8 @@
  * older read, an old process still reporting, or a heartbeat that arrives out of order never takes
  * the stored block back. The write is a compare-and-set on the value the merge was computed against:
  * when another heartbeat changed planUsage in between, the merge is redone against what that one
- * wrote instead of overwriting it.
+ * wrote instead of overwriting it. How each offered block compared is counted
+ * (orbit_codex_reset_snapshot_writes_total), so "old processes keep reporting older reads" is a number.
  */
 import { Prisma } from '@prisma/client';
 import {
@@ -22,6 +23,7 @@ import {
   type PlanUsageSnapshot,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { countCodexResetSnapshotWrite } from '../runners/codex-reset-metrics';
 
 /** How often a heartbeat re-reads and re-merges when other writers keep changing planUsage first. */
 export const PLAN_USAGE_CAS_ATTEMPTS = 4;
@@ -72,7 +74,7 @@ export async function storeHeartbeatPlanUsage(
   for (let attempt = 0; attempt < PLAN_USAGE_CAS_ATTEMPTS; attempt++) {
     const row = await prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } });
     if (!row) return false;
-    const { planUsage } = mergeHeartbeatPlanUsage(row.planUsage, incoming, leaseOwner, new Date());
+    const { planUsage, order } = mergeHeartbeatPlanUsage(row.planUsage, incoming, leaseOwner, new Date());
     const written = await prisma.runner.updateMany({
       where: {
         id: runnerId,
@@ -80,8 +82,12 @@ export async function storeHeartbeatPlanUsage(
       },
       data: { planUsage: planUsage as Prisma.InputJsonValue },
     });
-    if (written.count === 1) return true;
+    if (written.count === 1) {
+      if (order !== null) countCodexResetSnapshotWrite('heartbeat', order);
+      return true;
+    }
   }
+  countCodexResetSnapshotWrite('heartbeat', 'cas_exhausted');
   return false;
 }
 
@@ -100,10 +106,15 @@ export async function storeRefreshedCodexResetBlock(
 ): Promise<boolean> {
   for (let attempt = 0; attempt < PLAN_USAGE_CAS_ATTEMPTS; attempt++) {
     const row = await prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } });
-    if (!row || !isObject(row.planUsage)) return false;
-    const stored = row.planUsage as PlanUsage;
-    const codex: PlanUsageSnapshot | undefined = stored.codex ?? (stored.provider === 'codex' ? stored : undefined);
-    if (!codex || !codexResetSnapshotAccepted(orderCodexResetSnapshot(codex.rateLimitReset, block, leaseOwner, new Date()))) {
+    const stored = row && isObject(row.planUsage) ? (row.planUsage as PlanUsage) : undefined;
+    const codex: PlanUsageSnapshot | undefined = stored?.codex ?? (stored?.provider === 'codex' ? stored : undefined);
+    if (!row || !stored || !codex) {
+      countCodexResetSnapshotWrite('refreshed', 'no_codex_snapshot');
+      return false;
+    }
+    const order = orderCodexResetSnapshot(codex.rateLimitReset, block, leaseOwner, new Date());
+    if (!codexResetSnapshotAccepted(order)) {
+      countCodexResetSnapshotWrite('refreshed', order);
       return false;
     }
     const planUsage: PlanUsage = stored.codex
@@ -113,7 +124,11 @@ export async function storeRefreshedCodexResetBlock(
       where: { id: runnerId, planUsage: { equals: row.planUsage as Prisma.InputJsonValue } },
       data: { planUsage: planUsage as Prisma.InputJsonValue },
     });
-    if (written.count === 1) return true;
+    if (written.count === 1) {
+      countCodexResetSnapshotWrite('refreshed', order);
+      return true;
+    }
   }
+  countCodexResetSnapshotWrite('refreshed', 'cas_exhausted');
   return false;
 }

@@ -35,8 +35,9 @@ shared 与 runner-go 两侧的契约测试读同一份文件，任何一侧没�
    （apiserver 建行时生成的 UUID）去重上游 consume，只随 CONSUME command 下发，不出现在任何用户 API 与日志里。
 4. **两个检查点分开持久化。** `consumeState` 与 `refreshState` 各自单调前进；consume 一旦 CONFIRMED，
    就只会再发 REFRESH command，永远不会再发 CONSUME。
-5. **每次投递都被 claim 围栏。** `(leaseOwner, claimGeneration)`：同一进程重投不换代；别的进程只在 claim
-   满 60 秒后接管并加一代；回执不属于当前 claim 就拒绝，除非它只是重述一个已记录的事实。
+5. **每次投递都被 claim 围栏，claim 是持有者续租的租约。** `(leaseOwner, claimGeneration)`：持有者的每次 heartbeat
+   续租且不换代，续到检查点期限为止；别的进程只在 claim 连续 60 秒未续租后接管并加一代；runner 只在 claim 最近一次投递
+   不超过 20 秒时发起 consume 调用；回执不属于当前 claim 就拒绝，除非它只是重述一个已记录的事实。
 6. **同一 runner + 账户同时至多一个在途 operation**（PENDING / CONSUMING / REFRESHING）。
 7. **快照块单调。** 按 `fetchedAt`（read 开始时间，毫秒）比较，同毫秒同进程再比 `sequence`；旧进程与乱序
    heartbeat 覆盖不了新值。
@@ -171,12 +172,14 @@ read 本身失败（进程起不来、RPC 报错）不产生新块，旧块按 �
 | draining | 带 `draining: true` 的进程不领取、不接管、不被重投任何 reset command；手上的 claim 若还没调用上游，回 `RELEASED / RUNNER_DRAINING`。 |
 | 在线 | 沿用 apiserver 现有 `OFFLINE_AFTER_MS = 90s`（`isRunnerOnline`）。 |
 
-runner 对每条 command 先过 `codexResetCommandDisposition(cmd, ownLeaseOwner, receivedAt, now)`：
+runner 对每条 command 先过 `codexResetCommandDisposition(cmd, ownLeaseOwner, sentAt, now)`（`sentAt` 是带回它的
+heartbeat 的发出时刻）：
 
-- `IGNORE`：`leaseOwner` 不是自己、heartbeat 响应已超过 60 秒（`commandFreshnessMs`，按单调时钟）、或 command 非法——
+- `IGNORE`：`leaseOwner` 不是自己、那次 heartbeat 发出已超过 60 秒（`commandFreshnessMs`，按单调时钟）、或 command 非法——
   什么都不做，也不回报；服务端会重投或交给别的进程；
 - `REFUSE_PROTOCOL`：见上；
-- `ACT`：执行 §6.4。
+- `ACT`：执行 §6.4。此后每一次 consume 调用发起前，还要确认该 claim 最近一次投递的 heartbeat 发出不超过
+  `codexResetCallFreshness`（20 秒，runner 常量，比 `commandFreshnessMs` 严格），见 §6.4。
 
 ---
 
@@ -212,7 +215,8 @@ runner 对每条 command 先过 `codexResetCommandDisposition(cmd, ownLeaseOwner
 2. 查 `(ownerId, clientRequestId)`：已存在 → `codexResetCreateReplay`；`REPLAY` 返回 200，`REQUEST_ID_REUSED` 返回 409 并带已存在的 `operationId`。
 3. `codexResetRefusal(input)` 非 null → 409（`OPERATION_IN_FLIGHT` 时带在途 `operationId`）。输入：`accountOverride`、
    `activeOperation`、`runnerOnline`、`Runner.capabilities`、最近 heartbeat 的 `leaseOwner` / `draining`、
-   `codexRateLimitResetOf(Runner.planUsage)`、请求里的指纹。
+   `codexRateLimitResetOf(Runner.planUsage)`、请求里的指纹，以及同一 runner + 账户最近一次 UNRESOLVED / REFRESH_FAILED
+   的 `completedAt`（`readRequiredAfter`：可能已扣费而数量未经刷新确认）。
 4. `newCodexResetOperation({ …, providerIdempotencyKey: randomUUID(), now })` 并 INSERT。撞 `(ownerId, clientRequestId)`
    唯一约束 → 回到第 2 步重放；撞在途唯一约束 → 409 `OPERATION_IN_FLIGHT`。
 
@@ -228,7 +232,7 @@ Web 在 `active` 非空时每 2–3 秒 GET 一次；v1 不加实时推送帧。
 | `CAPABILITY_MISSING` | runner 版本不支持 | 禁用，提示升级 runner |
 | `SNAPSHOT_MISSING` / `UNSUPPORTED_AUTH` / `PROVIDER_UNSUPPORTED` / `ACCOUNT_UNIDENTIFIED` | 该账户或版本不支持 | 隐藏 |
 | `ACCOUNT_MISMATCH` | 用户确认时看到的账户已不是当前账户 | 刷新后重试 |
-| `SNAPSHOT_STALE` | 快照超过 15 分钟，或来自未来超过 5 分钟 | 禁用，展示新鲜度 |
+| `SNAPSHOT_STALE` | 快照超过 15 分钟、来自未来超过 5 分钟，或读取开始不晚于 `readRequiredAfter`（可能已扣费的结算之后还没有新读） | 禁用，展示新鲜度 |
 | `CREDITS_UNAVAILABLE` / `NO_CREDIT_AVAILABLE` | 上游暂不可用 / 数量为 0 | 禁用 |
 
 资格检查按 `CODEX_RATE_LIMIT_RESET_ELIGIBILITY_ORDER` 依次进行，Web 禁用入口与 API 拒绝用的是同一个函数、同一个答案。
@@ -242,7 +246,8 @@ Web 在 `active` 非空时每 2–3 秒 GET 一次；v1 不加实时推送帧。
 每次 heartbeat，对该 runner 的在途 operation 调用
 `decideCodexResetDispatch(op, { runnerId, leaseOwner, draining, capabilities, rateLimitReset: <本次 CAS 之后的存储块>, now })`：
 `SETTLE` / `DELIVER` 返回的 `operation` 与原值不同就按 §7.6 写回，`DELIVER` 时把 `command` 放进响应。
-`NONE` 的原因：`SETTLED`、`RUNNER_MISMATCH`、`NO_ACTIVE_LEASE`、`CAPABILITY_MISSING`、`RUNNER_DRAINING`、`SNAPSHOT_MISSING`、`CLAIM_HELD`。
+`NONE` 的原因：`SETTLED`、`RUNNER_MISMATCH`、`NO_ACTIVE_LEASE`、`CAPABILITY_MISSING`、`RUNNER_DRAINING`、`SNAPSHOT_MISSING`、`CLAIM_HELD`、
+`DEADLINE_PASSED`（持有者的 heartbeat 已到检查点期限：不续租、不投递，claim 老化后由 §7.5 结算）。`DELIVER` 给持有者时续租 claim（§7.4）。
 
 旧 runner 会忽略这个字段（Go `encoding/json` 默认忽略未知字段）；它们也不声明 capability，本来就收不到。
 
@@ -316,6 +321,15 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 
 - 重试留在同一个步骤里：只在回执是 `RETRY_CONSUME` / `RETRY_REFRESH` 时再试，每次重新起 app-server、重新读账户，退避 1 秒起
   翻倍、封顶 30 秒，最长 10 分钟。回执被拒、送不到，或进程停止，步骤即结束。
+- **调用新鲜度**：每次 consume 调用发起前（读完账户、账户一致之后），该 claim 最近一次投递的 heartbeat 发出距今须小于
+  `codexResetCallFreshness`（20 秒 = 接管窗口 60 秒 − 调用超时 30 秒 − 10 秒余量）。超过则本次尝试不调用、不上报
+  （日志 `consume/awaiting_delivery`），等下一次投递后重新开始；投递不再来（claim 被接管、operation 已结算或过了期限、本进程
+  draining）就结束步骤（`consume/stopped reason=claim_not_delivered`）。持有者的 heartbeat 每次续租 claim（§7.4），
+  所以在界内开始的调用，在另一个进程能接管之前就已经结束。
+- **调用之后不报 CONSUME_NOT_CALLED**：`CONSUME_NOT_CALLED` 说的是本 claim 没有任何调用到达过 provider。一个 claim 只要发出过
+  一次 consume 调用，之后的尝试即使读到别的账户、未登录或 CLI 不带 reset credits，也不上报它，否则 operation 会结算为
+  NOT_ATTEMPTED（"没有扣费"）。步骤直接结束（`consume/stopped reason=not_called_after_a_call`），由账户变化或期限结算为
+  UNRESOLVED。每次调用在发出前写 `consume/calling`。
 - CONSUME_OUTCOME 的回执给出 `REFRESH` / `RETRY_REFRESH`（服务端已 CONFIRMED）之后才开始 REFRESH；此后这个步骤只读、不再
   consume，接下来的结果都属于 REFRESH 阶段，不带 key。
 - 每次读到的块都写入 usage probe 的缓存，读取经过 probe 的同一个 reader：`generation` 相同，`sequence` 与 probe 自己的读连续。
@@ -327,7 +341,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 
 | | 是什么 | 写库 | 丢失时 |
 | --- | --- | --- | --- |
-| 投递（delivery attempt） | 一次携带 command 的 heartbeat 响应 | 只有改变 claim 持有者的投递写行（首次 claim、满 60 秒后的接管）；向持有者重投不写任何列 | 下一次 heartbeat 原样重投，字节相同；apiserver 重启不影响，claim 在行上 |
+| 投递（delivery attempt） | 一次携带 command 的 heartbeat 响应 | 首次 claim 与接管（连续 60 秒未续租之后）写 claim；向持有者重投续租 claim（写 `claimed_at`、`updated_at`），只到检查点期限，期限后不再投递给持有者 | 下一次 heartbeat 原样重投，字节相同；apiserver 重启不影响，claim 在行上 |
 | 回执（receipt） | 对一条 result 的 200 应答：`APPLIED` 写了行；`DUPLICATE` 只是重述已记录的事实，不写 | 拒绝（400 / 404 / 409，体恰为 `{ code }`）不写 | runner 以相同字节退避重发（1 秒起翻倍，封顶 30 秒，最长 10 分钟，进程停止时放弃），得到同样的回执 |
 | 终态（terminal outcome） | 检查点进入非在途组合，`completedAt` 非空 | 此后任何写入都被拒（`codexResetTransitionViolations` 与 0255 触发器） | 迟到的 result：重述终态为 `DUPLICATE`，否则 `OPERATION_SETTLED` |
 
@@ -339,8 +353,9 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
   再调一次可能在已结算为“未消费”的 operation 背后花掉 credit。REFRESH 只是读取，同一 claim 可以再跑。
 - 进程开始 draining 后：收到而未启动的 claim 回 `RELEASED / RUNNER_DRAINING`；已启动 CONSUME 的 claim 不回
   RELEASED（可能已调用上游），由步骤自己完成并回报。
-- 重启：apiserver 重启后照常派发与接收（状态全在行上）。runner 重启丢弃内存，旧 claim 满 60 秒由新进程接管（代数加一、
+- 重启：apiserver 重启后照常派发与接收（状态全在行上）。runner 重启丢弃内存，旧 claim 连续 60 秒未续租后由新进程接管（代数加一、
   同一个 key）；旧进程的 result 按 `STALE_CLAIM` 拒绝，除非只是重述已记录的事实（`DUPLICATE`，对它 `next` 恒为 `STOP`）。
+  旧进程若还活着但已不再收到投递，按 §6.4 的调用新鲜度停止调用。
 - runloop 把 §6.4 的 `codexResetConsumer` 交给 relay，并在同一个提交里声明 `codex-rate-limit-reset-v1`（§4）。
 
 ---
@@ -386,9 +401,12 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 ### 7.4 claim
 
 - `claimGeneration` 从 0 开始，每次 claim 或接管加一，永不减少。
-- 同一 `leaseOwner` 的 heartbeat：原样重投，不改代数。
-- 别的进程：claim 未满 `claimTakeoverAfterMs = 60s` → `CLAIM_HELD`；满了 → 接管。与 merge / commit relay 不同是有意的：
-  git 操作不能在新进程里重跑，reset 可以，因为 key 属于 operation 而不属于进程。
+- 同一 `leaseOwner` 的 heartbeat（未 draining，本次存储块账户一致）：原样重投，不改代数，并**续租**：`claimedAt`、`updatedAt`
+  写为本次时间。只续到检查点期限（consume：`createdAt + 10min`；refresh：`consumeConfirmedAt + 10min`）；期限之后持有者得到
+  `DEADLINE_PASSED`，不续租也不投递，claim 老化后按 §7.5 结算。
+- 别的进程：claim 最近一次续租未满 `claimTakeoverAfterMs = 60s` → `CLAIM_HELD`；满了 → 接管。续租让还在 heartbeat 的持有者
+  不会被接管，于是两个活进程不会对同一个 claim 同时调用 consume；持有者自己也只在 claim 仍被投递时调用（§6.4 调用新鲜度）。
+  与 merge / commit relay 不同是有意的：git 操作不能在新进程里重跑，reset 可以，因为 key 属于 operation 而不属于进程。
 - `claimsWithUnknownCall`：CONSUME 阶段每次 claim 加一；该 claim 报 `CONSUME_NOT_CALLED` 或 `RELEASED` 时减一。
   只有它为 0 才能说“确定没调用过上游”（NOT_ATTEMPTED）。
 - 账户变化（本次 heartbeat 存储块的指纹不等于 operation 指纹）：有新鲜 claim → 等它回报；否则 CONSUME 阶段结算为
@@ -398,7 +416,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 
 - consume：`createdAt + 10min` 仍未 CONFIRMED → NOT_ATTEMPTED / UNRESOLVED（`CONSUME_EXPIRED`）。
 - refresh：`consumeConfirmedAt + 10min` 仍未完成 → FAILED（`REFRESH_EXPIRED`）。
-- 有新鲜 claim（未满 60 秒）时暂不到期，给它回报的时间。
+- 有新鲜 claim（最近一次续租未满 60 秒）时暂不到期，给它回报的时间。续租止于期限（§7.4），所以期限后至多 60 秒必然结算。
 
 ### 7.6 不变量与其可执行定义
 
@@ -500,6 +518,7 @@ npm run test -w @orbit/shared        # 含 src/codexRateLimitReset.spec.ts
 (cd src/runner-go && go test ./...)   # 含 codex_rate_limit_reset_test.go
 bash scripts/test-codex-reset-relay.sh   # §6.5 的 relay：disposable PostgreSQL、runner fixture 与 Go relay
 bash scripts/test-codex-reset-consume.sh # §6.4 的 consume 与权威刷新：可编程 fake app-server，不碰真实账户
+bash scripts/test-codex-reset-fault-injection.sh # 加固：真实控制面 + Go runner 进程 + fake app-server + 故障代理的 23 个场景
 ```
 
 | 测试 | 覆盖 |
@@ -522,3 +541,5 @@ bash scripts/test-codex-reset-consume.sh # §6.4 的 consume 与权威刷新：�
 - UNRESOLVED 是终态：进程失联很久之后迟到的真实 outcome 不再记录，界面应提示以刷新后的额度为准。
 - 同一个 ChatGPT 账户登录在两台 runner 上时指纹不同，两边可以各有一个在途 operation（各自需要一次明确确认）。
 - v1 不选择具体 credit（不传 `creditId`），不支持工作区级 `CODEX_HOME` 账户，不在原生客户端提供入口，不加实时推送帧。
+- 排障、人工恢复的边界、日志与指标、故障注入 harness 与残余风险（进程在调用前暂停、app-server 放弃后上游仍处理、时钟偏差等）
+  见 [codex-rate-limit-reset-runbook.md](./codex-rate-limit-reset-runbook.md)。

@@ -1,6 +1,7 @@
 import { Controller, Get, Header, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
+import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
 
 /**
  * Where the database-conflict counters are read from.
@@ -29,6 +30,6 @@ export class MetricsController {
   @Header('Content-Type', 'text/plain; version=0.0.4')
   @Header('Cache-Control', 'no-store')
   read(): string {
-    return renderDbConflictMetrics();
+    return renderDbConflictMetrics() + renderCodexResetMetrics();
   }
 }

@@ -795,6 +795,10 @@ export interface CodexResetEligibilityInput {
   rateLimitReset: PlanUsageRateLimitReset | null | undefined;
   /** CreateCodexRateLimitResetRequest.accountFingerprint. */
   expectedAccountFingerprint: string;
+  /** When this runner and account's latest operation that may have spent a credit no refresh confirmed
+   *  (UNRESOLVED, or REFRESH_FAILED) settled; null or absent when there is none. A block read no later
+   *  than that may count credits from before that spend, so it cannot back another confirmation. */
+  readRequiredAfter?: string | null;
 }
 
 /** Why a new operation must not be created, in CODEX_RATE_LIMIT_RESET_ELIGIBILITY_ORDER; null when
@@ -813,6 +817,10 @@ export function codexResetRefusal(input: CodexResetEligibilityInput): CodexRateL
   }
   if (block.accountFingerprint !== input.expectedAccountFingerprint) return 'ACCOUNT_MISMATCH';
   if (!codexResetSnapshotFresh(block, input.now)) return 'SNAPSHOT_STALE';
+  // Not `<=`: a settlement time that does not parse refuses too, rather than letting any block through.
+  if (input.readRequiredAfter != null && !(Date.parse(block.fetchedAt) > Date.parse(input.readRequiredAfter))) {
+    return 'SNAPSHOT_STALE';
+  }
   if (!block.rateLimitResetCredits) return 'CREDITS_UNAVAILABLE';
   if (block.rateLimitResetCredits.availableCount <= 0) return 'NO_CREDIT_AVAILABLE';
   return null;
@@ -1016,7 +1024,8 @@ export type CodexResetDispatch =
         | 'CAPABILITY_MISSING'
         | 'RUNNER_DRAINING'
         | 'SNAPSHOT_MISSING'
-        | 'CLAIM_HELD';
+        | 'CLAIM_HELD'
+        | 'DEADLINE_PASSED';
     }
   | { kind: 'SETTLE'; operation: CodexRateLimitResetOperationState }
   | { kind: 'DELIVER'; operation: CodexRateLimitResetOperationState; command: CodexRateLimitResetCommand };
@@ -1051,25 +1060,26 @@ function settle(
   };
 }
 
+/** When the active checkpoint runs out: the consume consumeDeadlineMs after createdAt, the refresh
+ *  refreshDeadlineMs after consumeConfirmedAt. Null for a settled operation. */
+function phaseDeadline(op: CodexRateLimitResetOperationState): number | null {
+  const phase = codexResetOperationPhase(op);
+  if (phase === 'CONSUME') return Date.parse(op.createdAt) + CODEX_RATE_LIMIT_RESET_TIMING.consumeDeadlineMs;
+  if (phase === 'REFRESH' && op.consumeConfirmedAt !== null) {
+    return Date.parse(op.consumeConfirmedAt) + CODEX_RATE_LIMIT_RESET_TIMING.refreshDeadlineMs;
+  }
+  return null;
+}
+
 /** The operation settled by its deadline, or null when it is not due (or a fresh claim still
  *  holds it). */
 export function expireCodexResetOperation(
   op: CodexRateLimitResetOperationState,
   now: Date,
 ): CodexRateLimitResetOperationState | null {
-  const phase = codexResetOperationPhase(op);
-  if (!phase || claimFresh(op, now)) return null;
-  if (phase === 'CONSUME' && now.getTime() >= Date.parse(op.createdAt) + CODEX_RATE_LIMIT_RESET_TIMING.consumeDeadlineMs) {
-    return settle(op, 'CONSUME_EXPIRED', now);
-  }
-  if (
-    phase === 'REFRESH' &&
-    op.consumeConfirmedAt !== null &&
-    now.getTime() >= Date.parse(op.consumeConfirmedAt) + CODEX_RATE_LIMIT_RESET_TIMING.refreshDeadlineMs
-  ) {
-    return settle(op, 'REFRESH_EXPIRED', now);
-  }
-  return null;
+  const deadline = phaseDeadline(op);
+  if (deadline === null || claimFresh(op, now) || now.getTime() < deadline) return null;
+  return settle(op, codexResetOperationPhase(op) === 'CONSUME' ? 'CONSUME_EXPIRED' : 'REFRESH_EXPIRED', now);
 }
 
 /** The command a claimed, active operation hands its claimer. Only CONSUME carries the key. */
@@ -1092,10 +1102,11 @@ export function codexResetCommand(op: CodexRateLimitResetOperationState): CodexR
 
 /**
  * What one heartbeat does to one operation of its runner: nothing, settle it, or (claiming or
- * taking it over first when needed) deliver its command. A claim held by another process is left
- * alone until it is claimTakeoverAfterMs old; after that the new process takes it with a higher
- * claimGeneration. Re-running a consume under a new process is safe because the provider key is
- * the operation's, never the process's.
+ * taking it over first when needed) deliver its command. Every heartbeat of the holder renews its
+ * claim until the checkpoint's deadline, so a claim is taken over only once its holder has gone
+ * claimTakeoverAfterMs without renewing it; the new process takes it with a higher claimGeneration.
+ * Re-running a consume under a new process is safe because the provider key is the operation's,
+ * never the process's.
  */
 export function decideCodexResetDispatch(op: CodexRateLimitResetOperationState, heartbeat: CodexResetHeartbeat): CodexResetDispatch {
   if (op.runnerId !== heartbeat.runnerId) return { kind: 'NONE', reason: 'RUNNER_MISMATCH' };
@@ -1115,7 +1126,17 @@ export function decideCodexResetDispatch(op: CodexRateLimitResetOperationState, 
   if (block.accountFingerprint !== op.accountFingerprint) {
     return fresh ? { kind: 'NONE', reason: 'CLAIM_HELD' } : { kind: 'SETTLE', operation: settle(op, 'ACCOUNT_CHANGED', heartbeat.now) };
   }
-  if (op.claimLeaseOwner === leaseOwner) return { kind: 'DELIVER', operation: op, command: codexResetCommand(op) };
+  if (op.claimLeaseOwner === leaseOwner) {
+    // The holder is alive and reads the operation's account: its heartbeat renews the claim, so no other
+    // process takes over a step that may still be calling (§7.4). Only until the checkpoint's deadline:
+    // past it the holder is handed nothing — its step stops calling within the runner's call-freshness
+    // bound — and the unrenewed claim ages into the expiry above.
+    const deadline = phaseDeadline(op);
+    if (deadline === null || heartbeat.now.getTime() >= deadline) return { kind: 'NONE', reason: 'DEADLINE_PASSED' };
+    const renewedAt = heartbeat.now.toISOString();
+    const renewed: CodexRateLimitResetOperationState = { ...op, claimedAt: renewedAt, updatedAt: renewedAt };
+    return { kind: 'DELIVER', operation: renewed, command: codexResetCommand(renewed) };
+  }
   if (fresh) return { kind: 'NONE', reason: 'CLAIM_HELD' };
   const at = heartbeat.now.toISOString();
   const claimed: CodexRateLimitResetOperationState = {

@@ -381,12 +381,12 @@ func codexResetConsumeParams(cmd CodexRateLimitResetCommand) (map[string]interfa
 	return map[string]interface{}{"idempotencyKey": cmd.ProviderIdempotencyKey}, nil
 }
 
-// codexResetCommandDisposition decides what the process `leaseOwner` does with a command from a
-// heartbeat response it received at `received`: act on it; ignore it (another process's claim, a
-// response older than the freshness window, or a malformed command — nothing is reported, and the
-// control plane redelivers or reassigns); or refuse a consume of a protocol it does not speak.
-func codexResetCommandDisposition(cmd CodexRateLimitResetCommand, leaseOwner string, received, now time.Time) string {
-	if cmd.LeaseOwner != leaseOwner || now.Sub(received) > codexRateLimitResetCommandFreshness {
+// codexResetCommandDisposition decides what the process `leaseOwner` does with a command from the
+// heartbeat it sent at `sent`: act on it; ignore it (another process's claim, a heartbeat older than
+// the freshness window, or a malformed command — nothing is reported, and the control plane redelivers
+// or reassigns); or refuse a consume of a protocol it does not speak.
+func codexResetCommandDisposition(cmd CodexRateLimitResetCommand, leaseOwner string, sent, now time.Time) string {
+	if cmd.LeaseOwner != leaseOwner || now.Sub(sent) > codexRateLimitResetCommandFreshness {
 		return codexResetCommandIgnore
 	}
 	if cmd.ProtocolVersion != codexRateLimitResetProtocolVersion {

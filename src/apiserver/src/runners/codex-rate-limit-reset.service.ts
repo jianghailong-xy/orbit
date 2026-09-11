@@ -12,6 +12,7 @@ import {
   codexRateLimitResetOf,
   codexResetAccountOverride,
   codexResetCreateReplay,
+  codexResetOperationStatus,
   codexResetOperationView,
   codexResetRefusal,
   createCodexResetRequestViolations,
@@ -29,6 +30,8 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
+import { codexResetLogLine } from './codex-reset-log';
+import { countCodexResetAdmission } from './codex-reset-metrics';
 import { CodexRateLimitResetRepository } from './codex-rate-limit-reset.repository';
 import { isRunnerOnline } from './runners.service';
 
@@ -44,7 +47,8 @@ const INSERT_PASSES = 3;
  *
  * All this does is decide whether a confirmation may become an operation, and make a retried or
  * concurrent confirmation come back as the operation it already is. Nothing here hands a command to a
- * runner or talks to a provider.
+ * runner or talks to a provider. Every confirmation is counted and logged at the admission stage
+ * (codex-reset-metrics.ts, codex-reset-log.ts), after its transaction, so a retried transaction counts once.
  */
 @Injectable()
 export class CodexRateLimitResetService {
@@ -60,7 +64,9 @@ export class CodexRateLimitResetService {
    * caller's; a request id that already exists is answered with its operation — replayed without
    * asking eligibility again or generating a key — or refused as REQUEST_ID_REUSED when it named
    * another runner or account; otherwise `codexResetRefusal` decides, and the operation is inserted
-   * with a provider key generated for that insert alone.
+   * with a provider key generated for that insert alone. Eligibility includes the runner and account's
+   * last operation that may have spent a credit no refresh confirmed: the block it is judged on has to be
+   * a read that started after that operation settled.
    *
    * The insert is ON CONFLICT DO NOTHING against both keys a concurrent confirmation can take first:
    * the request id and the runner and account's active slot. Losing writes nothing, and the winner has
@@ -69,7 +75,11 @@ export class CodexRateLimitResetService {
    */
   async create(ownerId: string, runnerId: string, body: unknown): Promise<CreateCodexRateLimitResetResponse> {
     const violations = createCodexResetRequestViolations(body);
-    if (violations.length > 0) throw new BadRequestException(violations.join('; '));
+    if (violations.length > 0) {
+      countCodexResetAdmission('invalid');
+      this.logger.warn(codexResetLogLine('admission', { event: 'invalid', runnerId }));
+      throw new BadRequestException(violations.join('; '));
+    }
     const request = body as CreateCodexRateLimitResetRequest;
     const created = await withTransactionRetry(
       this.prisma,
@@ -106,6 +116,7 @@ export class CodexRateLimitResetService {
             runnerDraining: runner.heartbeatDraining === true,
             rateLimitReset: codexRateLimitResetOf(runner.planUsage as PlanUsage | null),
             expectedAccountFingerprint: request.accountFingerprint,
+            readRequiredAfter: await this.operations.unrefreshedSpendSettledAt(tx, runnerId, request.accountFingerprint),
           });
           if (refusal) throw refused(refusal, refusal === 'OPERATION_IN_FLIGHT' ? active?.id : undefined);
           const operation = newCodexResetOperation({
@@ -122,6 +133,24 @@ export class CodexRateLimitResetService {
         throw new Error(`codex rate-limit reset: ${INSERT_PASSES} inserts in a row lost to concurrent confirmations`);
       },
       loggedRetry(this.logger, 'codexRateLimitReset.create'),
+    ).catch((error: unknown) => {
+      this.observeRefusal(runnerId, error);
+      throw error;
+    });
+    const event = created.replayed ? 'replayed' : 'created';
+    countCodexResetAdmission(event);
+    this.logger.log(
+      codexResetLogLine(
+        'admission',
+        {
+          event,
+          operationId: created.operation.id,
+          runnerId,
+          status: codexResetOperationStatus(created.operation),
+          replayed: created.replayed,
+        },
+        [created.operation.providerIdempotencyKey],
+      ),
     );
     return { operation: codexResetOperationView(created.operation), replayed: created.replayed };
   }
@@ -147,6 +176,18 @@ export class CodexRateLimitResetService {
   private async ownRunner(ownerId: string, runnerId: string): Promise<void> {
     const runner = await this.prisma.runner.findFirst({ where: { id: runnerId, ownerId }, select: { id: true } });
     if (!runner) throw new NotFoundException('runner not found');
+  }
+
+  /** Counts and logs a confirmation that became no operation: refused with a code, or naming no runner of the caller. */
+  private observeRefusal(runnerId: string, error: unknown): void {
+    if (error instanceof ConflictException) {
+      const refusal = error.getResponse() as CodexRateLimitResetRefusal;
+      countCodexResetAdmission('refused', refusal.code);
+      this.logger.log(codexResetLogLine('admission', { event: 'refused', runnerId, code: refusal.code, operationId: refusal.operationId }));
+    } else if (error instanceof NotFoundException) {
+      countCodexResetAdmission('invalid');
+      this.logger.warn(codexResetLogLine('admission', { event: 'not_found', runnerId }));
+    }
   }
 }
 

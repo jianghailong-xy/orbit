@@ -87,6 +87,25 @@ export class CodexRateLimitResetRepository {
   }
 
   /**
+   * When this runner and account's latest operation that may have spent a credit no refresh confirmed settled:
+   * UNRESOLVED (its consume may have reached the provider) or REFRESH_FAILED (it did). Null when there is none.
+   * A block read no later than that may count credits from before the spend, so admission waits for a later
+   * read before it takes another confirmation (codexResetRefusal's readRequiredAfter).
+   */
+  async unrefreshedSpendSettledAt(db: Reader, runnerId: string, accountFingerprint: string): Promise<string | null> {
+    const row = await db.codexRateLimitResetOperation.findFirst({
+      where: {
+        runnerId,
+        accountFingerprint,
+        OR: [{ consumeState: 'UNRESOLVED' }, { consumeState: 'CONFIRMED', refreshState: 'FAILED' }],
+      },
+      orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+      select: { completedAt: true },
+    });
+    return row?.completedAt?.toISOString() ?? null;
+  }
+
+  /**
    * Insert `operation` unless a row already holds its request id or its runner and account's active
    * slot. ON CONFLICT DO NOTHING: a conflicting insert still in flight is waited for, and losing to it
    * writes nothing and aborts nothing — so the caller can read what won in the same transaction.

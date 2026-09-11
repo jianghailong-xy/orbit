@@ -62,7 +62,7 @@ PG_TESTS=(
   "(1) an old runner is answered as it always was and claims nothing, beside a capable process that does"
   "(2) only a capable, leased, non-draining process of the operation's own runner is handed the command"
   "(3) account scope: another account settles an unclaimed operation, after waiting out a fresh claim"
-  "(4) a lost command is delivered again on the next heartbeat, byte for byte, with nothing written"
+  "(4) a lost command is delivered again on the next heartbeat, byte for byte, renewing only its claim"
   "(5) an apiserver restart loses nothing: the new server redelivers the command and takes its result"
   "(6) a runner restart: the new process waits out the old claim, takes it over under the same key, and fences the old one"
   "(7) a lost receipt: the result sent again is a DUPLICATE that writes nothing, and a refreshed block is stored once"

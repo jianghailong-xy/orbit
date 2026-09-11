@@ -836,6 +836,7 @@ func runLoop(cfg *RunnerConfig) bool {
 			modelCatalog := hbModelCatalog
 			runtimeDefaultModels := hbRuntimeDefaultModels
 			modelSnapshotMu.Unlock()
+			sent := time.Now()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -853,10 +854,11 @@ func runLoop(cfg *RunnerConfig) bool {
 				logln("heartbeat failed:", err)
 				return
 			}
-			// The Codex rate-limit reset step a claim holds for this process, if any. First, so the
-			// command's freshness counts from when the response arrived. It never blocks, and a
-			// process that has begun draining since it sent the heartbeat hands an unstarted claim back.
-			resets.handle(resp.CodexRateLimitResetRequest, time.Now(), loopCtx.Err() != nil)
+			// The Codex rate-limit reset step a claim holds for this process, if any. Its freshness
+			// counts from when this heartbeat was sent, which is no later than the renewal of the
+			// claim it carries. It never blocks, and a process that has begun draining since it sent
+			// the heartbeat hands an unstarted claim back.
+			resets.handle(resp.CodexRateLimitResetRequest, sent, loopCtx.Err() != nil)
 			// Scan the directories this response named, ready for the next heartbeat. An older
 			// control plane sends none, which parks the scanner rather than clearing what it
 			// last found.
