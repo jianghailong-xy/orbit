@@ -43,6 +43,13 @@ import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
  * mid-read. Nothing about the set is kept across renders — the standing and the criteria are read
  * again each time — and a read that failed is not an answer: the card says it could not be
  * re-read and offers nothing to confirm, which is OrbitKit's rule for a standing it does not have.
+ *
+ * WHAT THE PINNED STRIP IS TOLD
+ * -----------------------------
+ * Whether this card is on screen and still a question (`onOpenQuestion`), which is what iOS's
+ * needs-you bar counts. The card reports it rather than the strip reading the standing again,
+ * because being on screen is this card's own state: delivered once, gone after Not yet, and still
+ * there — stale — after a confirmation at another end.
  */
 
 /** The card's heading: the question itself (`AcceptanceConfirmations.title`). */
@@ -159,6 +166,15 @@ export function acceptanceConfirmationAnswerable(
   standing: StandardSetConfirmationStanding | null,
 ): boolean {
   return standing !== null && standing.state !== 'CONFIRMED';
+}
+
+/** Whether the settlement question is still a question — OrbitKit's `AcceptanceConfirmations.isOpen`.
+ *  Not the same as answerable: a standing that could not be read offers nothing to confirm and is
+ *  still open, because a failed read is this device's problem and not an answer. */
+export function acceptanceConfirmationOpen(
+  standing: StandardSetConfirmationStanding | null,
+): boolean {
+  return standing === null || standing.state !== 'CONFIRMED';
 }
 
 /** Why the button is dead, or null while it is live: a reader looking at a disabled action is told
@@ -323,9 +339,13 @@ export function AcceptanceConfirmationCard({
  */
 export function SessionAcceptanceConfirmationCard({
   projectId,
+  onOpenQuestion,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
+  /** Told whether this card is on screen and still a question each time that changes, and `false`
+   *  when the card goes: what the pinned strip points at (`DecisionRail.tsx`). A stable function. */
+  onOpenQuestion?: (open: boolean) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
@@ -353,6 +373,15 @@ export function SessionAcceptanceConfirmationCard({
   useEffect(() => {
     if (held) setDelivered(true);
   }, [held]);
+  // On screen and still a question: the delivered card iOS's needs-you bar counts while
+  // `AcceptanceConfirmations.isOpen`. `shown` is exactly what the render below draws, so the strip
+  // is told about the card a reader can reach and not about the reads behind it.
+  const shown = !setAside && (delivered || held);
+  const openHere = shown && acceptanceConfirmationOpen(standing);
+  useEffect(() => {
+    onOpenQuestion?.(openHere);
+  }, [onOpenQuestion, openHere]);
+  useEffect(() => () => onOpenQuestion?.(false), [onOpenQuestion]);
 
   const confirm = useMutation({
     mutationFn: (criteriaDigest: string) => confirmAcceptanceCriteria(project, criteriaDigest),
@@ -365,7 +394,7 @@ export function SessionAcceptanceConfirmationCard({
     onError: () => qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),
   });
 
-  if (setAside || !(delivered || held)) return null;
+  if (!shown) return null;
   return (
     <AcceptanceConfirmationCard
       standing={standing}

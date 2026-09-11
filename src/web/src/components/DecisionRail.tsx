@@ -7,6 +7,7 @@ import {
   type PendingCriteriaDecisionRow,
 } from './CriteriaDecisionCard';
 import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/queries';
+import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -67,6 +68,14 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
  * approval card, which does; expanding is a deliberate act. The same judgment the iOS Needs-you
  * banner was settled on: one signal and one way through to the thing, never a cascade of badges
  * saying the same fact in four places.
+ *
+ * ON A PHONE, NOT EVEN A FOLD
+ * ---------------------------
+ * A phone gets that judgment whole (project instruction #8): the line is the signal and pressing it
+ * is the way through, straight to the highest card this conversation draws for a question it
+ * counts, and no list ever opens under it. So on a phone it counts only what that press can reach —
+ * a row with no card here is not counted there — and with nothing to reach it is not drawn. The rows
+ * that need a sentence to say why they have no card keep the wider screens, where it has room.
  *
  * NOTHING IS SHOWN TO SOMEBODY WHO CANNOT ACT ON IT
  * ------------------------------------------------
@@ -195,6 +204,39 @@ export function criteriaRowDetail(row: PendingCriteriaDecisionRow): string {
 /** The affordance that takes the reader to the card in the conversation. */
 export const CRITERIA_ROW_OPEN = 'Open';
 
+/**
+ * ── THE THIRD ROW TYPE: THE SETTLEMENT QUESTION ──────────────────────────────────────────────
+ *
+ * Whether this project's criteria, together, are what "done" means: the question Orbit draws into
+ * the coordinator conversation (`AcceptanceConfirmationCard.tsx`) once it is the last thing the
+ * project's DONE waits on. The card stays where it was drawn while the conversation goes on, and
+ * nothing pinned said it was there.
+ *
+ * THE CARD'S ANSWER, NOT A SECOND ONE
+ * -----------------------------------
+ * The row is shown while that card is on screen and still a question, which is how iOS's needs-you
+ * bar counts it (`openQuestionRowIDs`, `AcceptanceConfirmations.isOpen`) — and the card is what says
+ * so. Neither half can be read back off the standing: a delivered card stays when the criteria move,
+ * Not yet takes it away, and a set confirmed at another end leaves it on screen but no longer asking.
+ * So nothing here decides when that card is drawn; the page passes on what the card reported.
+ *
+ * A WAY TO THE CARD, AND NOTHING ELSE
+ * -----------------------------------
+ * The confirmation binds a version of the set, and it is pressed on the card with that set readable
+ * under the button. A press here scrolls to the card and asks the server nothing.
+ */
+export const SETTLEMENT_ROW_LABEL =
+  'Settlement is waiting on your confirmation of this project’s criteria';
+
+/** Take the reader to the settlement card. A conversation draws at most one, so its class is the
+ *  handle. Returns whether it arrived, as `revealDecisionCard` does. */
+export function revealSettlementCard(scope: ParentNode = document): boolean {
+  const card = scope.querySelector<HTMLElement>('.settlement-card');
+  if (!card) return false;
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  return true;
+}
+
 
 /** The two numbers the collapsed line is made of, and the only two it may carry. */
 export function needsDecisionCount(rows: number): string {
@@ -277,6 +319,19 @@ function RowFacts({ row }: { row: PendingDecisionRow }) {
 }
 
 /**
+ * Whether a row is a pointer: both halves of the door's own answer, and then whether the card
+ * exists. A row the door would refuse has nowhere to go by construction — no card is ever drawn for
+ * one — so this says the same thing twice on purpose: the pointer appears only for a row that could
+ * be answered by this reader on a card that is on screen. The phone line counts exactly these.
+ */
+function pointsAtCard(
+  row: PendingDecisionRow,
+  hasCard: (row: PendingDecisionRow) => boolean,
+): boolean {
+  return hasCard(row) && row.decidability.decidable && row.independence.independent;
+}
+
+/**
  * One group's rows: a pointer where there is somewhere to point, and a sentence where there is not.
  *
  * Extracted so both groups share one row renderer: a group that grew its own would be a second
@@ -295,12 +350,7 @@ function DecisionRows({
   return (
     <ul className="decision-rail-list">
       {group.map((row) => {
-        // Both halves of the door's own answer, and then whether the card exists. A row the door
-        // would refuse has nowhere to go by construction — no card is ever drawn for one — so
-        // this says the same thing twice on purpose: the pointer appears only for a row that could
-        // be answered by this reader on a card that is on screen.
-        const pointable =
-          hasCard(row) && row.decidability.decidable && row.independence.independent;
+        const pointable = pointsAtCard(row, hasCard);
         return (
           <li className="decision-rail-row" key={row.taskId}>
             {pointable ? (
@@ -372,6 +422,27 @@ function CriteriaDecisionRows({
 }
 
 /**
+ * The settlement question, as a row: what is asked, and the way to the card that asks it. Its one
+ * control is a pointer, for the reason the note above the row type gives.
+ */
+function SettlementRow({ onReveal }: { onReveal: () => void }) {
+  return (
+    <ul className="decision-rail-list decision-rail-settlement">
+      <li className="decision-rail-row">
+        <button
+          className="decision-rail-summary decision-rail-pointer"
+          type="button"
+          onClick={onReveal}
+        >
+          <span className="decision-rail-task">{SETTLEMENT_ROW_LABEL}</span>
+          <span className="decision-rail-goto">{POINTER_HINT}</span>
+        </button>
+      </li>
+    </ul>
+  );
+}
+
+/**
  * The proposals a reader at this screen could actually answer — see the row type's note above.
  */
 export function decidableCriteriaRows(
@@ -396,18 +467,26 @@ export function decidableCriteriaRows(
 export function DecisionStrip({
   queue,
   criteria = null,
+  confirmation = false,
   open,
+  phone = false,
   hasCard = () => false,
   onToggle,
   onReveal = () => {},
   onOpenCriteria,
+  onRevealConfirmation = () => {},
 }: {
   queue: PendingDecisionQueue;
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
    *  Null for every ordinary session, which has no ruler of its own to move. */
   criteria?: PendingCriteriaDecisionQueue | null;
+  /** Whether this conversation's settlement card is on screen and still a question: the card's own
+   *  report, passed on by the page. False wherever no such card is drawn. */
+  confirmation?: boolean;
   /** Expanded is a deliberate act; the default is the one line. */
   open: boolean;
+  /** A phone, where the line is the way through rather than a fold (ON A PHONE, above). */
+  phone?: boolean;
   /** Whether this row's decision card is on screen and could still be answered. The default is
    *  the honest one for a caller that does not know: the row is neither listed nor counted. */
   hasCard?: (row: PendingDecisionRow) => boolean;
@@ -415,6 +494,8 @@ export function DecisionStrip({
   onReveal?: (row: PendingDecisionRow) => void;
   /** Where the reader goes to answer a proposal: its card, in the conversation it was sent to. */
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
+  /** Where the reader goes to answer the settlement question: its card. */
+  onRevealConfirmation?: () => void;
 }) {
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
   // session may not answer is not a question put to this session. Nor is one whose card another
@@ -425,12 +506,35 @@ export function DecisionStrip({
   // every number on screen is read off the list under it, so there is no second value to drift.
   const yours = queue.waitingOnYou ?? [];
   const proposals = decidableCriteriaRows(criteria);
-  if (decisions.length === 0 && yours.length === 0 && proposals.length === 0) return null;
-  // Two lists under one heading, so the age it leads with is the oldest of everything under it.
-  const oldest = Math.max(
-    ...[...proposals, ...decisions].map((row) => row.ageSeconds),
-    0,
-  );
+  // Everything under `NEEDS YOUR DECISION`, which is what the line's first number counts.
+  const asked = decisions.length + proposals.length + (confirmation ? 1 : 0);
+
+  if (phone) {
+    // Only what the press can reach, in the order the conversation draws the cards — weakenings,
+    // then evidence, then the settlement question — so it goes to the highest of them.
+    const ways = [
+      ...(onOpenCriteria ? proposals.map((row) => () => onOpenCriteria(row)) : []),
+      ...decisions.filter((row) => pointsAtCard(row, hasCard)).map((row) => () => onReveal(row)),
+      ...(confirmation ? [onRevealConfirmation] : []),
+    ];
+    if (ways.length === 0) return null;
+    return (
+      <div className="decision-strip" aria-label={STRIP_LABEL}>
+        <button className="decision-strip-line" type="button" onClick={() => ways[0]()}>
+          <span className="decision-strip-dot" aria-hidden="true" />
+          <span className="decision-strip-count">{needsDecisionCount(ways.length)}</span>
+          <span className="decision-strip-caret" aria-hidden="true">↓</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (asked === 0 && yours.length === 0) return null;
+  // Three kinds under one heading, so the age it leads with is the oldest of everything under it
+  // that has an age. The settlement question has none to give — its card does not know when
+  // settlement began to wait on it — and the heading does not invent one for it.
+  const aged = [...proposals, ...decisions];
+  const oldest = Math.max(...aged.map((row) => row.ageSeconds), 0);
 
   const rowsFor = (group: PendingDecisionRow[]) => (
     <DecisionRows group={group} hasCard={hasCard} onReveal={onReveal} />
@@ -447,15 +551,13 @@ export function DecisionStrip({
         aria-expanded={open}
         onClick={() => onToggle(!open)}
       >
-        {decisions.length + proposals.length === 0 ? null : (
+        {asked === 0 ? null : (
           <span className="decision-strip-dot" aria-hidden="true" />
         )}
-        {decisions.length + proposals.length === 0 ? null : (
-          <span className="decision-strip-count">
-            {needsDecisionCount(decisions.length + proposals.length)}
-          </span>
+        {asked === 0 ? null : (
+          <span className="decision-strip-count">{needsDecisionCount(asked)}</span>
         )}
-        {decisions.length + proposals.length === 0 || yours.length === 0 ? null : (
+        {asked === 0 || yours.length === 0 ? null : (
           <span className="decision-strip-sep" aria-hidden="true">·</span>
         )}
         {yours.length === 0 ? null : (
@@ -471,17 +573,21 @@ export function DecisionStrip({
           {/* The questions for a decider, and the only group that points anywhere.
               The proposals come first: a held one is a question about the ruler everything under
               it is measured with, and answering an evidence row against a ruler that is about to
-              move is the one order of reading this group can get wrong. */}
-          {decisions.length + proposals.length === 0 ? null : (
+              move is the one order of reading this group can get wrong. The settlement question
+              comes last, as its card does in the conversation. */}
+          {asked === 0 ? null : (
             <section className="decision-rail-group" aria-label={NEEDS_DECISION_LABEL}>
               <div className="decision-rail-head">
                 <span className="decision-rail-label">{NEEDS_DECISION_LABEL}</span>
-                <span className="decision-rail-oldest">{`oldest ${formatAge(oldest)}`}</span>
+                {aged.length === 0 ? null : (
+                  <span className="decision-rail-oldest">{`oldest ${formatAge(oldest)}`}</span>
+                )}
               </div>
               {proposals.length === 0 ? null : (
                 <CriteriaDecisionRows rows={proposals} onOpen={onOpenCriteria} />
               )}
               {decisions.length === 0 ? null : rowsFor(decisions)}
+              {confirmation ? <SettlementRow onReveal={onRevealConfirmation} /> : null}
             </section>
           )}
 
@@ -514,6 +620,7 @@ export function SessionDecisionStrip({
   sessionId,
   projectId,
   cards,
+  confirmation = false,
   onOpenCriteria,
 }: {
   sessionId: string;
@@ -523,9 +630,13 @@ export function SessionDecisionStrip({
   /** The rows whose evidence card this conversation draws, by `decisionRowKey`. Computed by the
    *  page, which mounts that card beside this strip, with the card's own filter. */
   cards?: ReadonlySet<string>;
+  /** Whether this conversation's settlement card is on screen and still a question, as the card
+   *  reported it to the page that mounts both (`SessionAcceptanceConfirmationCard`). */
+  confirmation?: boolean;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const phone = useMediaQuery(PHONE_QUERY);
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
     enabled: Boolean(sessionId),
@@ -554,11 +665,14 @@ export function SessionDecisionStrip({
     <DecisionStrip
       queue={pending.data}
       criteria={criteria.data ?? null}
+      confirmation={confirmation}
       onOpenCriteria={onOpenCriteria}
       open={open}
+      phone={phone}
       hasCard={(row) => cards?.has(decisionRowKey(row)) ?? false}
       onToggle={setOpen}
       onReveal={(row) => revealDecisionCard(row)}
+      onRevealConfirmation={() => revealSettlementCard()}
     />
   );
 }

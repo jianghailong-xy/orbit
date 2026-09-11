@@ -6,6 +6,9 @@ import { useEffect, useState } from 'react';
 // 960px ≈ where the 3-column desktop layout (nav 340 + list 264 + a usable conversation)
 // stops fitting, so portrait tablets and narrow windows get the stacked layout too.
 export const MOBILE_QUERY = '(max-width: 960px)';
+// A phone, narrower than that: the width index.css already treats as one (its
+// `@media (max-width: 600px)` rules, where a card's actions stack full-width). Keep them identical.
+export const PHONE_QUERY = '(max-width: 600px)';
 
 export function useMediaQuery(query: string): boolean {
   // Guarded rather than read straight: this also runs under `renderToStaticMarkup`, where there

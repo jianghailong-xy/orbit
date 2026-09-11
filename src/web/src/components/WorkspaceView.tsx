@@ -3168,6 +3168,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       .map(decisionRowKey),
   );
 
+  // Whether the settlement card below is on screen and still a question, as the card reports it:
+  // delivered and put down are the card's own state, so the strip is told rather than left to work
+  // out a second answer. Kept with the conversation it was reported in, because this view outlives
+  // navigation and the conversation just left must not answer for the next one.
+  const [openSettlementIn, setOpenSettlementIn] = useState<string | null>(null);
+  const reportSettlementQuestion = useCallback(
+    (open: boolean) => {
+      if (!selectedId) return;
+      setOpenSettlementIn((current) =>
+        open ? selectedId : current === selectedId ? null : current,
+      );
+    },
+    [selectedId],
+  );
+
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
   const decide = async (
@@ -5523,6 +5538,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId={selectedId}
             projectId={selectedSession?.projectId ?? null}
             cards={decisionCards}
+            confirmation={openSettlementIn === selectedId}
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
@@ -5644,11 +5660,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   confirmation standing and the criteria, and pressed straight at the confirmation
                   door. Keyed by the session like the two cards above, because whether it was
                   delivered or set aside belongs to this conversation, and by a key neither of them
-                  carries, for the reason the evidence card's note gives. */}
+                  carries, for the reason the evidence card's note gives. It reports whether it is on
+                  screen and still a question, and that report is what the pinned strip points at. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionAcceptanceConfirmationCard
                   key={`confirmation:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
+                  onOpenQuestion={reportSettlementQuestion}
                 />
               )}
               {selected &&
