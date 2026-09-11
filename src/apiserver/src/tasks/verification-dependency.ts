@@ -19,7 +19,7 @@
  * is not the thing that was checked. So the unit is an EPOCH, and it belongs to the SUBJECT —
  * which is also what a dependency edge is ABOUT:
  *
- *   > The subject's PASS epoch is open when its NEWEST LIVE check has an applied PASS and the
+ *   > The subject's PASS epoch is open when its NEWEST LIVE check has a settled PASS and the
  *   > subject is still DONE.
  *
  * ## The edge is judged by the subject, not by the row it names
@@ -49,7 +49,7 @@
  *    fix-and-re-run, and it is the same statement §13.2's PASS already makes when it resolves every
  *    unresolved condition about the subject — not only the ones its own verifier raised.
  *
- * ## The four facts beyond the verdict value
+ * ## The three facts beyond the verdict value
  *
  * `verdict = 'PASS'` alone is not enough, and each of the others closes a window somebody
  * downstream could otherwise start work in:
@@ -62,19 +62,18 @@
  *     own instructions forbid treating that as a task finishing.
  *  2. **No live run on the check.** A verdict written mid-turn is a conclusion the turn can still
  *     revise.
- *  3. **`APPLY_VERIFICATION_VERDICT` is APPLIED.** §13.2's consequences — the revert, the defect,
- *     the conditions — are what make a verdict *mean* something, and until the ledger says APPLIED
- *     none of them have happened. Releasing downstream before then is a race with the coordinator's
- *     own reconcile: the two would be acting on the same conclusion at the same instant, one
- *     starting work and the other reverting the subject under it.
- *  4. **The subject is DONE right now.** A FAIL reverts it (V4), and a person can reopen it. Either
+ *  3. **The subject is DONE right now.** A FAIL reverts it (V4), and a person can reopen it. Either
  *     way, what the check passed is no longer what is there.
+ *
+ * There was a fourth: `APPLY_VERIFICATION_VERDICT` APPLIED in `project_action`, so downstream
+ * work could not race the coordinator's reconcile while it applied §13.2's consequences. That
+ * reconcile belonged to the control loop and went with it (`6418a1e5`). Nothing has written the
+ * ledger since, so there is no race left to close — and a clause waiting on a row nobody writes
+ * held every PASS inside a Project shut for good.
  *
  * Every one of these is read from a CURRENT authoritative row, never from an event. That is what
  * makes out-of-order `task.updated` / `session.ended` delivery and a service restart uninteresting
- * here: this predicate has no memory to get ahead of itself with. A duplicate `verdictRevision` is
- * excluded one layer down — the ledger key is `(verifier, revision)`, so the second delivery of one
- * conclusion collides rather than applying twice.
+ * here: this predicate has no memory to get ahead of itself with.
  *
  * ## Two spellings, one rule
  *
@@ -111,8 +110,6 @@ export type VerificationEpochGate =
   | 'VERDICT_UNREVISIONED'
   /** The run did not end as a natural `task_done` success. */
   | 'RUN_NOT_SETTLED'
-  /** The conclusion has not been made durable by `APPLY_VERIFICATION_VERDICT` yet. */
-  | 'VERDICT_NOT_APPLIED'
   /** The check passed, but the subject is not DONE now — reverted by a FAIL, or reopened. */
   | 'SUBJECT_NOT_DONE';
 
@@ -122,7 +119,7 @@ export type VerificationEpochGate =
  * Read by `computeDependencyState` to choose between `BLOCKED` and `BLOCKED_FAILED`, which is the
  * same split `CANCELLED`/`FAILED` prerequisites already get. A conclusion that says no, and a
  * subject whose every check was cancelled, are both terminal until somebody acts; everything else
- * resolves on its own as the check runs and the coordinator applies it.
+ * resolves on its own as the check runs.
  */
 export const VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN: ReadonlySet<VerificationEpochGate> = new Set([
   'VERIFICATION_FAILED',
@@ -150,27 +147,6 @@ export interface VerificationEpochCheckFact {
   verdictRevision: string;
   /** §13.6 SU1: retired checks are not part of the epoch at all. */
   retired: boolean;
-  /**
-   * `APPLY_VERIFICATION_VERDICT` for exactly `(this check, this revision)` is APPLIED.
-   *
-   * `null` — not `false` — when the check is outside a Project: there is no ledger to have applied
-   * it, so demanding one would block every downstream task of every check filed outside a Project
-   * for good. The verdict column and the settled run are the durable facts those rows have.
-   */
-  verdictApplied: boolean | null;
-  /**
-   * `[K5]` criterion 7: the apply was tried to its bound and refused every time.
-   *
-   * Separate from `verdictApplied: false`, and that separation is the whole point. "Not applied
-   * yet" is a wait — the next pass will do it. "Not applied, and the retries are spent" is a stall
-   * that has already been escalated to a person, and reading the two as one sentence is how a
-   * project sits stopped with every liveness check green.
-   *
-   * OPTIONAL, and absent reads as false: a caller that does not look at the ledger's refusals is
-   * not entitled to claim a stall, and inventing one would tell somebody to go and fix a pass that
-   * is about to succeed.
-   */
-  verdictApplyExhausted?: boolean;
   runs: readonly VerificationRunFact[];
 }
 
@@ -251,7 +227,6 @@ export function verificationEpochGate(
   if (newest.verdict !== 'PASS') return 'VERIFICATION_INCONCLUSIVE';
   if (!(BigInt(newest.verdictRevision) > 0n)) return 'VERDICT_UNREVISIONED';
   if (!verificationRunSettled(newest)) return 'RUN_NOT_SETTLED';
-  if (newest.verdictApplied === false) return 'VERDICT_NOT_APPLIED';
   if (subject.status !== 'DONE') return 'SUBJECT_NOT_DONE';
   return null;
 }
@@ -282,7 +257,7 @@ export function verificationEpochGate(
  * rule is not a database boundary: a row that arrived by raw SQL, by a repair script or by a binary
  * that never heard of the rule is read by this fragment exactly like a legitimate one. Unscoped,
  * `epoch_newest` picks by `id DESC` across every owner, so a forged check in another owner's
- * project — DONE, PASS, revision > 0, its own run settled, its own ledger APPLIED — becomes THE
+ * project — DONE, PASS, revision > 0, its own run settled — becomes THE
  * newest check of somebody else's subject and opens their epoch. The same hole runs the other way
  * through `epoch_any`: one forged row makes a subject look verified-by-something and holds its
  * dependents for ever. Both are closed by refusing to let a check answer for a subject it does not
@@ -365,7 +340,7 @@ export function latestLiveVerificationCheckIdSql(subject: string): string {
  * This deliberately excludes the subject-status clause; `verificationSubjectPassedSql` owns it.
  * The dependency predicate also supplies that clause in its enclosing subject query. Keeping the
  * request and legacy routes here prevents Work overview from calling a bare verdict a PASS while
- * the dispatcher correctly waits for the natural run and applied action.
+ * the dispatcher correctly waits for the natural run.
  */
 export function verificationCheckPassedSql(check: string, subject: string): string {
   const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
@@ -388,14 +363,6 @@ export function verificationCheckPassedSql(check: string, subject: string): stri
            AND passed_run."end_reason" = '${VERIFICATION_RUN_END_REASON}'
            AND (passed_run."completed_at" IS NOT NULL OR passed_run."archived_at" IS NOT NULL)
       )
-      AND (${check}."project_id" IS NULL OR EXISTS (
-        SELECT 1 FROM "project_action" passed_action
-         WHERE passed_action."project_id" = ${check}."project_id"
-           AND passed_action."type"::text = 'APPLY_VERIFICATION_VERDICT'
-           AND passed_action."status"::text = 'APPLIED'
-           AND passed_action."subject_id" = ${check}."id"
-           AND passed_action."idempotency_key" = ${verificationVerdictActionKeySqlExpr(check)}
-      ))
     )
   )`;
 }
@@ -411,12 +378,10 @@ export function verificationSubjectPassedSql(subject: string): string {
 }
 
 /**
- * §8.2's permanent key for one conclusion's consequences, as one template in two languages.
- *
- * `projects/task-verification-verdict.ts` builds it for the writer; this builds the identical
- * string in SQL for the reader that has to ask "did that actually get applied". Internal UUIDs
- * throughout, because that is what the ledger's unique index is declared on — `uuid::text` is the
- * canonical lowercase hyphenated form, which is exactly how the writer spells it.
+ * §8.2's permanent key for one conclusion's consequences, as
+ * `projects/task-verification-verdict.ts` builds it for the ledger. Internal UUIDs throughout,
+ * because that is what the ledger's unique index is declared on. No dependency gate reads it back
+ * any more; see "The three facts beyond the verdict value" above.
  */
 export function verificationVerdictActionKeyOf(
   projectId: string,
@@ -424,11 +389,6 @@ export function verificationVerdictActionKeyOf(
   verdictRevision: string | bigint | number,
 ): string {
   return `pc:v1:${projectId}:verdict:${verifierTaskId}:${verdictRevision}`;
-}
-
-function verificationVerdictActionKeySqlExpr(alias: string): string {
-  return `'pc:v1:' || ${alias}."project_id"::text || ':verdict:' || ${alias}."id"::text `
-    + `|| ':' || ${alias}."verdict_revision"::text`;
 }
 
 /** One task row as the batch gate builder reads it — a check, a subject, or neither. */
@@ -440,10 +400,6 @@ export interface VerificationEpochTaskRow {
   verifiesTaskId: string | null;
   verdict: string | null;
   verdictRevision: string;
-  /** See `VerificationEpochCheckFact.verdictApplied`; `null` for a check outside a Project. */
-  verdictApplied: boolean | null;
-  /** See `VerificationEpochCheckFact.verdictApplyExhausted`. Absent reads as false. */
-  verdictApplyExhausted?: boolean;
   /** §13.6 SU1: `taskRetirement(row) != null`. */
   retired: boolean;
 }
@@ -507,8 +463,6 @@ export function verificationEpochGates(
       verdict: task.verdict,
       verdictRevision: task.verdictRevision,
       retired: task.retired,
-      verdictApplied: task.verdictApplied,
-      verdictApplyExhausted: task.verdictApplyExhausted === true,
       runs: runsByTaskId.get(task.id) ?? [],
     };
     const list = checksBySubject.get(task.verifiesTaskId);

@@ -49,7 +49,6 @@ function check(over: Partial<VerificationEpochCheckFact> = {}): VerificationEpoc
     verdict: 'PASS',
     verdictRevision: '1',
     retired: false,
-    verdictApplied: true,
     runs: [SETTLED_RUN],
     ...over,
   };
@@ -137,8 +136,6 @@ test('every genuine wait stays a wait', () => {
   const waits: Array<[string, VerificationEpochCheckFact[]]> = [
     // The check has not finished.
     ['VERIFICATION_IN_FLIGHT', [check({ status: 'IN_PROGRESS', runs: [LIVE_RUN] })]],
-    // The coordinator applies it on the next pass, which is a pass that is already scheduled.
-    ['VERDICT_NOT_APPLIED', [check({ verdictApplied: false })]],
   ];
   for (const [expected, checks] of waits) {
     assert.equal(gateOf(checks), expected);
@@ -176,8 +173,8 @@ test('the three gates the epoch already escalated keep their answer, in one voca
 test('the epoch map carries the stall, for the subject and for every check of it', () => {
   const epochs = verificationEpochGates(
     [
-      { id: 's', status: 'DONE', verifiesTaskId: null, verdict: null, verdictRevision: '0', retired: false, verdictApplied: null },
-      { id: 'v1', status: 'DONE', verifiesTaskId: 's', verdict: null, verdictRevision: '0', retired: false, verdictApplied: null },
+      { id: 's', status: 'DONE', verifiesTaskId: null, verdict: null, verdictRevision: '0', retired: false },
+      { id: 'v1', status: 'DONE', verifiesTaskId: 's', verdict: null, verdictRevision: '0', retired: false },
     ] as never,
     new Map([['v1', [SETTLED_RUN]]]),
   );
@@ -204,7 +201,7 @@ test('a stalled gate blocks downstream as BLOCKED_FAILED, not as an ordinary wai
   );
   // Absent reads as "asserts nothing", which is the pre-`[K5]` answer.
   assert.equal(
-    computeDependencyState([{ status: TaskStatus.DONE, verificationGate: 'VERDICT_NOT_APPLIED' }]),
+    computeDependencyState([{ status: TaskStatus.DONE, verificationGate: 'VERDICT_ABSENT' }]),
     'BLOCKED',
   );
 });
@@ -220,54 +217,20 @@ test('a stall never turns a satisfied epoch into a refusal', () => {
   );
 });
 
-test('a verdict waiting to be applied is a WAIT while there is budget left', () => {
-  // The distinction criterion 7 turns on. "Not applied yet" is the coordinator's next pass, which
-  // is already scheduled — telling somebody to go and look at it would be advice about a loop that
-  // is working. It is only a stall once nothing is going to try again.
-  assert.deepEqual(
-    verificationLiveness('VERDICT_NOT_APPLIED', check({ verdictApplyExhausted: false })),
-    { state: 'WAITING' },
-  );
-  // Absent reads as "not exhausted", so a caller that does not look at the ledger cannot invent one.
-  assert.deepEqual(verificationLiveness('VERDICT_NOT_APPLIED', check({})), { state: 'WAITING' });
-});
-
-test('…and a STALL once the apply has run out of attempts', () => {
-  const liveness = verificationLiveness(
-    'VERDICT_NOT_APPLIED', check({ verdictApplyExhausted: true }),
-  );
-  assert.equal(liveness.state, 'STALLED');
-  assert.equal(liveness.state === 'STALLED' && liveness.reason, 'VERDICT_APPLY_EXHAUSTED');
-  assert.equal(liveness.state === 'STALLED' && liveness.owner, 'USER');
-  // RL2: the sentence names the fix, and the fix is the one that also CLEARS the §11 row — a new
-  // revision, which is a new action key.
-  assert.match(
-    liveness.state === 'STALLED' ? liveness.requiredAction : '',
-    /revoke and re-record the verdict/,
-  );
-});
-
 test('every gate value has a liveness answer, and it is one of the two', () => {
   // Exhaustive over the union, so a gate added later cannot silently default to "wait" — which is
   // the shape of the defect this whole file is about.
   const gates: VerificationEpochGate[] = [
     'NO_LIVE_VERIFICATION', 'VERIFICATION_IN_FLIGHT', 'VERDICT_ABSENT', 'VERIFICATION_FAILED',
-    'VERIFICATION_INCONCLUSIVE', 'VERDICT_UNREVISIONED', 'RUN_NOT_SETTLED', 'VERDICT_NOT_APPLIED',
-    'SUBJECT_NOT_DONE',
+    'VERIFICATION_INCONCLUSIVE', 'VERDICT_UNREVISIONED', 'RUN_NOT_SETTLED', 'SUBJECT_NOT_DONE',
   ];
-  // Asked of a check with no run and NO spent budget, which is the shape that separates the gates
-  // that stall on their own value from the one that stalls on a fact in the ledger.
+  // Asked of a check with no run, which is the shape that separates the gates that stall on their
+  // own value from the ones that are an ordinary wait.
   const stalls = gates.filter((gate) => verificationGateStalled(gate, check({ runs: [] })));
   assert.deepEqual(stalls.sort(), [
     'NO_LIVE_VERIFICATION', 'RUN_NOT_SETTLED', 'VERDICT_ABSENT', 'VERDICT_UNREVISIONED',
     'VERIFICATION_FAILED', 'VERIFICATION_INCONCLUSIVE',
   ]);
-  // …and the ninth joins them once it is spent, so `VERDICT_NOT_APPLIED` is not a gate that can
-  // only ever answer "wait".
-  assert.equal(
-    verificationGateStalled('VERDICT_NOT_APPLIED', check({ runs: [], verdictApplyExhausted: true })),
-    true,
-  );
   for (const gate of gates) {
     const liveness = verificationLiveness(gate, check({ runs: [] }));
     if (liveness.state !== 'STALLED') continue;

@@ -157,12 +157,13 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
     // The two request clauses here — an OPEN request closing an older PASS, and a DECIDED PASS
     // standing in for the check's own facts — went with `task_judgment_request` on 2026-09-02.
-    // A check's own status, verdict, settled run and applied ledger action are the whole predicate
-    // now, which is what the surviving clauses below assert.
+    // A check's own status, verdict, revision and settled run are the whole predicate now, which is
+    // what the surviving clauses below assert.
     assert.doesNotMatch(sql, /task_judgment_request/);
     assert.match(sql, /epoch_check\."verdict" = 'PASS'/);
     assert.match(sql, /epoch_check\."verdict_revision" > 0/);
-    // Legacy PASS remains fail-closed on live/successful run evidence and application in-project.
+    // Legacy PASS remains fail-closed on live/successful run evidence. It waits for no ledger
+    // action: nothing has written one since the control loop went.
     assert.match(
       sql,
       /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
@@ -171,10 +172,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
       sql,
       /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
     );
-    assert.match(
-      sql,
-      /epoch_check\."project_id" IS NULL OR EXISTS \(\s*SELECT 1 FROM "project_action" passed_action[\s\S]*passed_action\."status"::text = 'APPLIED'/,
-    );
+    assert.doesNotMatch(sql, /"project_action"|APPLY_VERIFICATION_VERDICT/);
     assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
     assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);
   }

@@ -1,5 +1,5 @@
 /**
- * §13.3 DEP's database read: the four queries behind `verificationEpochGates`.
+ * §13.3 DEP's database read: the three queries behind `verificationEpochGates`.
  *
  * Its own module so `TasksService` and `TaskListsService` ask ONE function rather than each writing
  * the sibling walk — the Ready tab has to offer exactly the runs the Run button accepts, which is
@@ -12,12 +12,10 @@ import {
   VerificationEpochEntry,
   VerificationRunFact,
   verificationEpochGates,
-  verificationVerdictActionKeyOf,
 } from './verification-dependency';
-import { VERDICT_APPLY_EXHAUSTED } from '../projects/task-verification-verdict';
 
 /** Just the model accessors this read needs, so a transaction client is equally acceptable. */
-type EpochPrismaClient = Pick<PrismaService, 'task' | 'session' | 'projectAction'>;
+type EpochPrismaClient = Pick<PrismaService, 'task' | 'session'>;
 
 /**
  * §13.3 DEP for a set of candidate prerequisites: which of them have a PASS epoch, and what it says.
@@ -26,7 +24,7 @@ type EpochPrismaClient = Pick<PrismaService, 'task' | 'session' | 'projectAction
  * epoch is its subject's). Everything else — the ordinary case — is absent from the result and is
  * judged by its status alone.
  *
- * Four reads and one pure function, rather than a predicate written a second time in SQL: the
+ * Three reads and one pure function, rather than a predicate written a second time in SQL: the
  * shape is `verificationEpochGates`, exactly as the Coordinator's pass computes it from its
  * snapshot, so the loop and the API cannot reach different conclusions about the same rows.
  * `verificationEpochOpenSql` is the third spelling and belongs to the sweeps, which have no rows
@@ -84,16 +82,13 @@ prerequisiteIds: string[],
         && subjectProject.get(row.verifiesTaskId) === (row.projectId ?? null);
   const rows = loaded.filter(inSubjectScope);
   const checkIds = rows.filter((row) => row.verifiesTaskId != null).map((row) => row.id);
-  const [sessions, applied] = await Promise.all([
-    prisma.session.findMany({
-      where: { taskId: { in: checkIds } },
-      select: {
-        taskId: true, status: true, endReason: true,
-        completedAt: true, archivedAt: true, deletedAt: true,
-      },
-    }),
-    verdictActionKeys(prisma, rows),
-  ]);
+  const sessions = await prisma.session.findMany({
+    where: { taskId: { in: checkIds } },
+    select: {
+      taskId: true, status: true, endReason: true,
+      completedAt: true, archivedAt: true, deletedAt: true,
+    },
+  });
   const runs = new Map<string, VerificationRunFact[]>();
   for (const session of sessions) {
     if (!session.taskId) continue;
@@ -115,60 +110,8 @@ prerequisiteIds: string[],
       verifiesTaskId: row.verifiesTaskId,
       verdict: row.verdict as unknown as string | null,
       verdictRevision: String(row.verdictRevision),
-      // Outside a Project there is no ledger to have applied anything, and DEP4 reads that as
-      // "not applicable" rather than as "not applied" — see `VerificationEpochCheckFact`.
-      verdictApplied: row.projectId == null
-        ? null
-        : applied.applied.has(verificationVerdictActionKeyOf(
-            row.projectId, row.id, String(row.verdictRevision),
-          )),
-      // `[K5]`: absent outside a Project for `verdictApplied`'s reason — there is no ledger to have
-      // run out of attempts, so there is nothing to escalate.
-      verdictApplyExhausted: row.projectId != null
-        && applied.exhausted.has(verificationVerdictActionKeyOf(
-          row.projectId, row.id, String(row.verdictRevision),
-        )),
       retired: taskRetirement(row) != null,
     };
   });
   return verificationEpochGates(epochRows, runs);
-}
-
-/**
- * What the ledger says about these tasks' CURRENT verdict revisions: applied, or out of attempts.
- *
- * Asked by the action's own permanent key (§8.2) rather than by "some verdict action for this
- * task": a conclusion the check has since revised has its own key, and reading it as this one's
- * would let a superseded verdict release the work.
- */
-async function verdictActionKeys(
-prisma: EpochPrismaClient,
-rows: ReadonlyArray<{ id: string; projectId: string | null; verdictRevision: bigint }>,
-): Promise<{ applied: Set<string>; exhausted: Set<string> }> {
-  const keys = rows
-    .filter((row) => row.projectId != null)
-    .map((row) => verificationVerdictActionKeyOf(
-      row.projectId!, row.id, String(row.verdictRevision),
-    ));
-  const empty = { applied: new Set<string>(), exhausted: new Set<string>() };
-  if (keys.length === 0) return empty;
-  // One read for both facts, because they are the same row seen from two sides: APPLIED is DEP4's
-  // satisfaction, and a spent retry budget is `[K5]`'s liveness. Two queries would let a row
-  // change between them and make the two faces disagree about one action.
-  const actions = await prisma.projectAction.findMany({
-    where: { idempotencyKey: { in: keys }, type: 'APPLY_VERIFICATION_VERDICT' },
-    select: { idempotencyKey: true, status: true, reasonCode: true },
-  });
-  const applied = new Set<string>();
-  const exhausted = new Set<string>();
-  for (const action of actions) {
-    if (action.status === 'APPLIED') applied.add(action.idempotencyKey);
-    // The BUCKET the pass that spent the last attempt stamped, not a count re-derived here. It is
-    // on `reason_code` so that §11's condition detector — which sees a snapshot, and a snapshot
-    // carries no `detail` — can read the same fact this does.
-    else if (action.status === 'REFUSED' && action.reasonCode === VERDICT_APPLY_EXHAUSTED) {
-      exhausted.add(action.idempotencyKey);
-    }
-  }
-  return { applied, exhausted };
 }

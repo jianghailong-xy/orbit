@@ -427,8 +427,9 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
   assert.match(sql, /epoch_any\."project_id" IS NOT DISTINCT FROM epoch_any_subject\."project_id"/);
   assert.doesNotMatch(sql, /task_judgment_request/);
   assert.match(sql, /epoch_check\."verdict" = 'PASS'/);
-  // The PASS route — the only one left — is fail-closed: no occupying run, one successful
-  // task_done run, and (inside a project) an applied verdict action before it releases the edge.
+  // The PASS route — the only one left — is fail-closed: no occupying run and one successful
+  // task_done run before it releases the edge. It no longer waits for an applied verdict action:
+  // the control loop that wrote those is gone, so inside a project that clause never released.
   assert.match(
     sql,
     /NOT EXISTS \(\s*SELECT 1 FROM "session" passed_live[\s\S]*passed_live\."status"::text IN \('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'\)/,
@@ -437,10 +438,7 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
     sql,
     /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
-  assert.match(
-    sql,
-    /epoch_check\."project_id" IS NULL OR EXISTS \(\s*SELECT 1 FROM "project_action" passed_action[\s\S]*passed_action\."status"::text = 'APPLIED'/,
-  );
+  assert.doesNotMatch(sql, /"project_action"|APPLY_VERIFICATION_VERDICT/);
   // Load-bearing despite being logically implied by the two clauses around it: it is the only
   // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
   // hash-joining every dependency edge in the deployment (32ms -> 264ms on a 55k-edge database).

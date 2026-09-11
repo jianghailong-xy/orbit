@@ -43,15 +43,19 @@ test('the verification epoch is decided from the check itself, with no request l
       `${name} still projects a judgment onto an epoch`);
   }
 
-  // What decides an epoch now: the check's own status, verdict, revision, settled run and applied
-  // ledger action. Every one of those predates the judgment machinery.
+  // What decides an epoch now: the check's own status, verdict, revision and settled run, and the
+  // subject's own status. Every one of those predates the judgment machinery. The applied ledger
+  // action went with the control loop that wrote it, so neither reader may wait on it any more.
   const gate = DEPENDENCY.slice(DEPENDENCY.indexOf('export function verificationEpochGate'));
   const body = gate.slice(0, gate.indexOf('\n}\n'));
   for (const clause of ['VERIFICATION_IN_FLIGHT', 'VERDICT_ABSENT', 'VERIFICATION_FAILED',
-    'VERIFICATION_INCONCLUSIVE', 'VERDICT_UNREVISIONED', 'RUN_NOT_SETTLED',
-    'VERDICT_NOT_APPLIED', 'SUBJECT_NOT_DONE']) {
+    'VERIFICATION_INCONCLUSIVE', 'VERDICT_UNREVISIONED', 'RUN_NOT_SETTLED', 'SUBJECT_NOT_DONE']) {
     assert.ok(body.includes(clause), `the epoch gate lost its ${clause} clause`);
   }
+  assert.doesNotMatch(body, /VERDICT_NOT_APPLIED|verdictApplied/u,
+    'the epoch gate still waits for a ledger action nothing writes');
+  assert.doesNotMatch(EPOCH_READ, /projectAction|project_action|VERDICT_APPLY_EXHAUSTED/u,
+    'verification-epoch-read.ts still reads the ledger');
   // Chronology is the check's own creation time again, not a request's.
   const newest = DEPENDENCY.slice(DEPENDENCY.indexOf('export function newestLiveCheck'));
   assert.match(newest.slice(0, newest.indexOf('\n}\n')), /const aTime = a\.createdAt;/u);
@@ -62,9 +66,11 @@ test('the SQL fragments select and pass a check on its own facts', () => {
   const fragment = passed.slice(0, passed.indexOf('\n}\n'));
   assert.doesNotMatch(fragment, /passed_request|passed_legacy_request/u);
   for (const clause of ['"status" = \'DONE\'', '"verdict" = \'PASS\'', '"verdict_revision" > 0',
-    'passed_run', 'passed_action']) {
+    'passed_live', 'passed_run']) {
     assert.ok(fragment.includes(clause), `the PASS predicate lost ${clause}`);
   }
+  assert.doesNotMatch(fragment, /project_action|APPLY_VERIFICATION_VERDICT/u,
+    'the PASS predicate still waits for a ledger action nothing writes');
 
   const newest = DEPENDENCY.slice(DEPENDENCY.indexOf('export function latestLiveVerificationCheckIdSql'));
   const selector = newest.slice(0, newest.indexOf('\n}\n'));

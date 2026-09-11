@@ -35,7 +35,6 @@ function check(overrides: Partial<VerificationEpochCheckFact> = {}): Verificatio
     verdict: 'PASS',
     verdictRevision: '1',
     retired: false,
-    verdictApplied: true,
     runs: [SETTLED_RUN],
     ...overrides,
   };
@@ -71,7 +70,7 @@ test('a PASS with every fact behind it opens the epoch', () => {
 // The three N11 tests that stood here asked what a `task_judgment_request` did to an epoch: an
 // OPEN one held it, a DECIDED one opened or closed it, and request chronology outranked UUIDv4
 // byte order when picking the current verifier. All three inputs went with the request table on
-// 2026-09-02, so the epoch is decided by the check's own task/run/action facts — which is what
+// 2026-09-02, so the epoch is decided by the check's own task/run facts — which is what
 // every other test in this file already exercises. What replaces them is the assertion that the
 // removed inputs cannot come back in through the chronology tie-break.
 test('creation time, not byte order, still selects the current verifier', () => {
@@ -129,7 +128,7 @@ test('a cancelled or superseded check does not count, so cancelling them all is 
 });
 
 // ---------------------------------------------------------------------------
-// DEP3 / DEP4 — the facts beyond the verdict value
+// DEP3 — the facts beyond the verdict value
 // ---------------------------------------------------------------------------
 
 test('a PASS written while the run is still live is a conclusion the turn can still revise', () => {
@@ -163,10 +162,16 @@ test('a verdict with no run behind it at all has nothing to have concluded from'
   assert.equal(gate([check({ runs: [] })]), 'RUN_NOT_SETTLED');
 });
 
-test('a PASS whose consequences have not been applied does not release downstream yet', () => {
-  assert.equal(gate([check({ verdictApplied: false })]), 'VERDICT_NOT_APPLIED');
-  // Outside a Project there is no ledger, and DEP4 reads that as not-applicable, not as not-applied.
-  assert.equal(gate([check({ verdictApplied: null })]), null);
+test('a settled PASS is not held back for a ledger action nothing writes any more', () => {
+  // `APPLY_VERIFICATION_VERDICT` was written by the control loop's reconcile, which went with the
+  // loop (6418a1e5). A fact that still says `verdictApplied: false` — what every PASS inside a
+  // Project read as from 2026-08-23 on — must not be able to hold the epoch shut.
+  const unapplied = { ...check(), verdictApplied: false } as VerificationEpochCheckFact;
+  assert.equal(gate([unapplied]), null);
+  assert.equal(
+    computeDependencyState([{ status: TaskStatus.DONE, verificationGate: gate([unapplied]) }]),
+    'READY',
+  );
 });
 
 test('an unrevisioned verdict has no action identity, so it cannot be an applied one', () => {
@@ -218,14 +223,13 @@ function row(over: Record<string, unknown> = {}) {
     verifiesTaskId: 's',
     verdict: 'PASS' as string | null,
     verdictRevision: '1',
-    verdictApplied: true as boolean | null,
     retired: false,
     ...over,
   };
 }
 
 const SUBJECT_ROW = row({
-  id: 's', verifiesTaskId: null, verdict: null, verdictRevision: '0', verdictApplied: null,
+  id: 's', verifiesTaskId: null, verdict: null, verdictRevision: '0',
 });
 
 test('the SUBJECT is gated, and so is every check of it, with one answer between them', () => {
@@ -251,7 +255,7 @@ test("depending on a DONE subject whose check FAILED is blocked - the incident's
   const statusOf = new Map([['s', 'DONE'], ['v1', 'DONE']]);
   const edges = new Map<string, string | null>([['s', null], ['v1', null]]);
   assert.equal(dependencySatisfied('s', statusOf, edges, epochs), false);
-  // ...and the same world with an applied PASS releases it.
+  // ...and the same world with a settled PASS releases it.
   const passed = verificationEpochGates([SUBJECT_ROW, row({ verdict: 'PASS' })], RUNS);
   assert.equal(dependencySatisfied('s', statusOf, edges, passed), true);
 });
@@ -335,7 +339,7 @@ test('a DONE prerequisite with a gate is not READY, whatever its status says', (
 test('a conclusive NO needs a human; every other clause is an ordinary wait', () => {
   const waiting: VerificationEpochGate[] = [
     'VERIFICATION_IN_FLIGHT', 'VERDICT_ABSENT', 'VERDICT_UNREVISIONED',
-    'RUN_NOT_SETTLED', 'VERDICT_NOT_APPLIED', 'SUBJECT_NOT_DONE',
+    'RUN_NOT_SETTLED', 'SUBJECT_NOT_DONE',
   ];
   for (const verificationGate of waiting) {
     assert.equal(
@@ -374,7 +378,7 @@ test('the gate rides §13.6 SU9 to the chain tail, not only to the row the edge 
 });
 
 // ---------------------------------------------------------------------------
-// DEP4's key, in the one spelling both languages use
+// The §8.2 ledger key, as task-verification-verdict.ts mints it
 // ---------------------------------------------------------------------------
 
 test('the ledger key is the §8.2 one, built from internal ids and the exact revision', () => {

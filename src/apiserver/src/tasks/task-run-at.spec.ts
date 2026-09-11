@@ -319,10 +319,9 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
     sql,
     /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
-  assert.match(
-    sql,
-    /epoch_check\."project_id" IS NULL OR EXISTS \(\s*SELECT 1 FROM "project_action" passed_action[\s\S]*passed_action\."status"::text = 'APPLIED'/,
-  );
+  // ...and no ledger action: nothing has written `APPLY_VERIFICATION_VERDICT` since the control
+  // loop went, so waiting on one would hold every PASS inside a project.
+  assert.doesNotMatch(sql, /"project_action"|APPLY_VERIFICATION_VERDICT/);
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.
   assert.match(sql, /ORDER BY t\.run_at ASC, t\.id ASC/);

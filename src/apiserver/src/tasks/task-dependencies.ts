@@ -59,7 +59,7 @@ export function computeDependencyState(
   // A check that concluded NO — or that has no live check left to conclude anything — is terminal
   // in exactly the way a CANCELLED prerequisite is: nothing mechanical advances it, and the
   // sentence a person needs is "go and fix this", not "come back later". Every other gate is a
-  // wait, and resolves as the check runs and the coordinator applies what it found.
+  // wait, and resolves as the check runs.
   if (prerequisites.some((p) => p.verificationGate != null
     && VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN.has(p.verificationGate)))
     return 'BLOCKED_FAILED';
@@ -125,8 +125,6 @@ export function verificationGateMessage(gate: VerificationEpochGate): string {
       return 'its verdict predates revision tracking — re-run the check to record a new one';
     case 'RUN_NOT_SETTLED':
       return 'its verification run has not finished naturally yet';
-    case 'VERDICT_NOT_APPLIED':
-      return 'its PASS has not been applied yet — the coordinator applies it on the next pass';
     case 'SUBJECT_NOT_DONE':
       return 'the work it verified is not DONE any more';
   }

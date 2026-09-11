@@ -4,8 +4,6 @@ import { test } from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  ProjectActionStatus,
-  ProjectActionType,
   RunnerStatus,
   RunStatus,
   SessionDispatchOrigin,
@@ -18,7 +16,6 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
-import { verificationVerdictActionKeyOf } from '../tasks/verification-dependency';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -204,28 +201,9 @@ async function makeWorld(db: PrismaClient): Promise<World> {
       startsTaskWork: true,
     },
   });
-  const passed = await db.task.update({
-    where: { id: verifierPassed },
-    data: { verdict: TaskVerdict.PASS },
-    select: { verdictRevision: true },
-  });
-  await db.projectAction.create({
-    data: {
-      id: randomUUID(),
-      projectId,
-      idempotencyKey: verificationVerdictActionKeyOf(
-        projectId,
-        verifierPassed,
-        passed.verdictRevision,
-      ),
-      type: ProjectActionType.APPLY_VERIFICATION_VERDICT,
-      status: ProjectActionStatus.APPLIED,
-      subjectType: 'TASK',
-      subjectId: verifierPassed,
-      fencingToken: 1n,
-      detail: {},
-    },
-  });
+  // No ledger row behind it: nothing has written `project_action` since the control loop went, and
+  // a settled PASS is canonical on the check's own facts.
+  await db.task.update({ where: { id: verifierPassed }, data: { verdict: TaskVerdict.PASS } });
   await db.task.update({ where: { id: subjectPassed }, data: { status: TaskStatus.DONE } });
 
   const successor = await task('failed-successor');
@@ -310,7 +288,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.equal(state('verifier-failed')?.workState, 'DONE');
       });
 
-      await t.test('only a canonical settled/applied PASS completes the subject', () => {
+      await t.test('only a canonical settled PASS completes the subject', () => {
         assert.deepEqual(state('subject-passed'), {
           workState: 'DONE',
           verificationState: 'PASSED',
