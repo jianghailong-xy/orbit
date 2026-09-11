@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -181,11 +181,13 @@ function action(card: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
-/** React Query hands a settled result over on a macrotask and `act` drains only microtasks, so
- *  every turn yields one. */
+/** React Query hands every change to the card on its notify scheduler — a later task — and `act`
+ *  drains only microtasks, so every turn waits for a hand-off of its own on that same scheduler.
+ *  It runs after every hand-off queued before it, so the card has drawn them all when the turn
+ *  ends, however that scheduler is timed. */
 async function turn(): Promise<void> {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => notifyManager.schedule(() => resolve()));
   });
 }
 
@@ -391,6 +393,10 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
     expect(presses()).toEqual([`POST ${STANDING_PATH} ${CURRENT}`]);
 
     await until(() => standingReads() > readsBefore, 'the refusal to read the standing again');
+    // The refusal and the re-read it sets off run in the press's own microtasks, so that read can be
+    // on record before React Query has handed the card the press at all. A turn first: the button
+    // read is then the card that has been handed everything the press set off.
+    await turn();
     expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'the button came back before the re-read did')
       .toBe(true);
 
