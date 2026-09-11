@@ -1,16 +1,11 @@
 import { DownOutlined } from '@ant-design/icons';
 import { useId, useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Skeleton, Typography } from 'antd';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
-import {
-  acceptanceConfirmationKey,
-  confirmAcceptanceCriteria,
-  readAcceptanceConfirmation,
-} from '../lib/acceptanceConfirmation';
 import { useMediaQuery } from '../lib/useMediaQuery';
 
 /**
@@ -82,27 +77,14 @@ import { useMediaQuery } from '../lib/useMediaQuery';
  * authored legacy `acceptanceCriteria` text under its own heading and again here; 0229 removed
  * that text column too, and the per-item rows are the whole of it.
  *
- * THE ONE THING ON THIS CARD A PRINCIPAL DOES WRITE, AND WHY IT IS NOT ABOVE
- * -------------------------------------------------------------------------
- * Since 2026-09-08 the card also carries the account owner's exercise of
- * `CONFIRM_ACCEPTANCE_CRITERIA` — the HUMAN_ONLY act of saying that this set of criteria expresses
- * what the project is for. It is the (B) web entry decided in `docs/human-only-authority.md`
- * §"A2 follow-up (2026-09-08)", and everything about where it sits follows from what is written
- * above:
- *
- *  - It is about the complete SET, never one row. `coordinator-authority.ts` says the action grades
- *    whether the whole exam expresses the goal, so a per-criterion control would be a different
- *    act — and, drawn per row, would be the badge rail 0229 deleted wearing a checkbox.
- *  - It is a REGION OF ITS OWN, below the derived list and after the note, and the list above it
- *    is untouched. Everything up there is still computed with no principal's opinion in it; the
- *    confirmation is one recorded decision that says nothing about whether any criterion is met.
- *  - It names the VERSION. `GET /projects/:id/acceptance/confirmation` reports the digest of the
- *    criteria as they stand and the digest that was confirmed, so "this confirmation is no longer
- *    current" is a comparison the reader is SHOWN rather than one they have to make. The same
- *    digest is what the button sends, which is what makes the click a confirmation of the wording
- *    the person just read: an edit landing in between comes back 409, not a signature.
- *  - It concludes nothing about DONE. Confirming the ruler is not settling the project, nothing
- *    here writes `project.status`, and no state on this card derives one.
+ * THE CONFIRMATION IS NOT ON THIS CARD
+ * ------------------------------------
+ * From 2026-09-08 a region under the note carried the account owner's confirmation that the whole
+ * set expresses what the project is for (`CONFIRM_ACCEPTANCE_CRITERIA`). The owner removed it on
+ * 2026-09-11: the project's goal puts that question in the coordinator conversation, where
+ * `AcceptanceConfirmationCard.tsx` asks it, and the same button here would be a second
+ * confirmation surface. Nobody writes anything on this card, and it reads only the project
+ * document.
  */
 
 /** One task standing between a criterion and its work having met it, and the one thing that
@@ -378,160 +360,6 @@ function OutcomeNote() {
   );
 }
 
-/** How much of a digest a reader is shown. Twelve hex characters is the length a person can
- *  compare at a glance; the whole 64 stays on `title` and is what the button actually sends, so
- *  nothing is ever decided from the short form. */
-export const DIGEST_PREVIEW = 12;
-
-/** A version, named. `title` carries the whole digest because the short form is for the eye and
- *  the long one is what the server was asked about. */
-function Digest({ digest }: { digest: string }) {
-  return (
-    <code className="acceptance-confirmation-digest" title={digest}>
-      {digest.slice(0, DIGEST_PREVIEW)}
-    </code>
-  );
-}
-
-/** One instant in the reader's own clock, with the exact one kept beside it machine-readable —
- *  the same split `scheduledStart` makes, for the same reason: a time shown in UTC is the wrong
- *  time for everyone outside it, and a time shown only as prose cannot be checked. */
-function ConfirmedAt({ at }: { at: string }) {
-  const when = new Date(at);
-  if (Number.isNaN(when.getTime())) return null;
-  return (
-    <time dateTime={at} title={at}>
-      {when.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      })}
-    </time>
-  );
-}
-
-/**
- * The account owner's confirmation that this set of criteria expresses what the project is for —
- * the web entry for `CONFIRM_ACCEPTANCE_CRITERIA`, and the only thing on this card anybody writes.
- *
- * Its own read, not the project document's: the standing is a comparison of two stored facts and
- * has to be able to refresh on its own after a confirmation, without re-reading the project.
- *
- * Three drawings, because the server reports three states and the third one is the whole reason
- * the region names a version at all: a confirmation of criteria that have since been rewritten is
- * not a confirmation of what is on the screen, and the reader is shown that rather than left to
- * work it out. Both un-confirmed states offer the same button, and it always sends the version
- * standing NOW — never the one that was confirmed before.
- */
-function OwnerConfirmation({ projectId }: { projectId: string }) {
-  const qc = useQueryClient();
-  const standing = useQuery({
-    queryKey: acceptanceConfirmationKey(projectId),
-    queryFn: () => readAcceptanceConfirmation(projectId),
-    enabled: Boolean(projectId),
-  });
-  const confirm = useMutation({
-    mutationFn: (criteriaDigest: string) => confirmAcceptanceCriteria(projectId, criteriaDigest),
-    // The door returns the standing it just wrote, so the region redraws from the server's answer
-    // rather than from what this component assumed the press would do.
-    onSuccess: (next) => qc.setQueryData(acceptanceConfirmationKey(projectId), next),
-    // The refusal this door exists for is a digest that moved under the click, and its answer is
-    // to read the set again — so a failure re-reads instead of leaving a stale digest on a button
-    // beside the complaint about it.
-    onError: () => {
-      void qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(projectId) });
-    },
-  });
-
-  if (standing.isPending) {
-    return (
-      <div className="acceptance-confirmation">
-        <Skeleton active title={false} paragraph={{ rows: 1 }} />
-      </div>
-    );
-  }
-  if (standing.isError || standing.data === undefined) {
-    // Quiet on purpose. The criteria above loaded; an alert here would make a second read that
-    // failed look like a problem with the criteria themselves.
-    return (
-      <div className="acceptance-confirmation">
-        <div className="acceptance-confirmation-unread">
-          {'Owner confirmation could not be read'}
-          {standing.error instanceof Error ? ` — ${standing.error.message}` : '.'}
-        </div>
-      </div>
-    );
-  }
-
-  const { state, currentVersion, confirmation } = standing.data;
-  const stated = plural(currentVersion.material.length, 'criterion', 'criteria');
-  const failure = confirm.error instanceof Error ? confirm.error.message : null;
-
-  if (state === 'CONFIRMED' && confirmation !== null) {
-    return (
-      <div className="acceptance-confirmation">
-        <div className="acceptance-confirmation-head">Confirmed by the account owner</div>
-        <div className="acceptance-confirmation-state">
-          {`These ${stated} were confirmed to express this project's goal on `}
-          <ConfirmedAt at={confirmation.confirmedAt} />
-          {'.'}
-        </div>
-        <div className="acceptance-confirmation-version">
-          {'Version '}
-          <Digest digest={confirmation.criteriaDigest} />
-          {' — the wording that stands now. Editing any criterion ends this confirmation.'}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="acceptance-confirmation">
-      <div className="acceptance-confirmation-head">Owner confirmation</div>
-      <div className="acceptance-confirmation-state">
-        {confirmation === null
-          ? `Nobody has confirmed that these ${stated} express this project's goal.`
-          : 'The criteria changed after they were confirmed, so that confirmation no longer '
-            + 'covers what is stated above.'}
-      </div>
-      {confirmation === null ? null : (
-        <div className="acceptance-confirmation-prior">
-          {'Confirmed version '}
-          <Digest digest={confirmation.criteriaDigest} />
-          {' on '}
-          <ConfirmedAt at={confirmation.confirmedAt} />
-          {'.'}
-        </div>
-      )}
-      <div className="acceptance-confirmation-action">
-        <Button
-          type="primary"
-          size="small"
-          loading={confirm.isPending}
-          onClick={() => confirm.mutate(currentVersion.digest)}
-        >
-          Confirm these criteria
-        </Button>
-        <span className="acceptance-confirmation-version">
-          {'Records version '}
-          <Digest digest={currentVersion.digest} />
-          {` — the ${stated} above as they stand now.`}
-        </span>
-      </div>
-      {failure === null ? null : (
-        <Alert
-          className="acceptance-confirmation-failure"
-          type="warning"
-          showIcon
-          message={failure}
-        />
-      )}
-    </div>
-  );
-}
-
 /** What the list shows before and after the button is pressed. Exported because a static render
  *  cannot press it: the collapsed state is what the card's own suite asserts on, and both
  *  readings are asserted here. */
@@ -640,10 +468,6 @@ export function ProjectAcceptanceCard({
             </div>
           ) : null}
           <OutcomeNote />
-          {/* Below the derived list and below the note that explains it, so the note keeps its
-              referent and the one written fact on this card is plainly not part of what is read
-              off the work. See the header: about the whole SET, never a row. */}
-          <OwnerConfirmation projectId={projectId} />
         </>
       )}
     </Card>

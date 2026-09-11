@@ -341,7 +341,7 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
       },
     ],
     [
-      'the project page in this tab confirms it, on the key both surfaces read',
+      'a confirmed standing lands on the key the card reads, from elsewhere in this tab',
       async (qc) => {
         await act(async () => {
           qc.setQueryData(acceptanceConfirmationKey(PROJECT), standingOf('CONFIRMED'));
@@ -449,7 +449,7 @@ describe('reading the set, putting the question down, and confirming', SLOW, () 
     expect(presses()).toEqual([]);
   });
 
-  it('keeps a confirmation pressed here as recorded here, on the key the project page reads', async () => {
+  it('keeps a confirmation pressed here as recorded here, on the key the card reads', async () => {
     const { qc, card } = await delivered();
     await act(async () => {
       action(card(), ACCEPTANCE_CONFIRM_LABEL).click();

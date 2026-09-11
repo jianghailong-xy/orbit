@@ -410,6 +410,12 @@ and when, so "this confirmation is no longer current" is visible rather than inf
 
 The coordinator card's role under (B) is a prompt with a link, not an answer surface.
 
+> **2026-09-11:** the web entry is no longer on `ProjectAcceptanceCard.tsx`. The browser answers
+> this question in the project's coordinator conversation, on the card `AcceptanceConfirmationCard.tsx`
+> draws there, as iOS and macOS already did; the account owner removed the region described above
+> so that the project page is not a second confirmation surface. The paragraphs above record where
+> (B) first put the entry rather than the product. The door and its digest rule are unchanged.
+
 ### What is true today about project DONE, and what derives it
 
 > **Answered, 2026-09-08.** The last paragraph of this section said the deriver must not be built

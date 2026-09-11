@@ -317,10 +317,9 @@ export function AcceptanceConfirmationCard({
  * the owner's confirmation, and re-derived from both reads on every render after that.
  *
  * The standing is read under `acceptanceConfirmationKey` and the criteria under the project page's
- * own `['project', id]`, so a confirmation pressed on either surface redraws the other from the
- * door's answer. A press sends `currentVersion.digest` from the read the card is drawn from; the
- * door refuses a version that moved in between, and the answer to that refusal is to read the set
- * again — so a refusal re-reads, and the card stays busy until that read has landed.
+ * own `['project', id]`. A press sends `currentVersion.digest` from the read the card is drawn
+ * from; the door refuses a version that moved in between, and the answer to that refusal is to read
+ * the set again — so a refusal re-reads, and the card stays busy until that read has landed.
  */
 export function SessionAcceptanceConfirmationCard({
   projectId,

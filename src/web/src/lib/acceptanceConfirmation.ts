@@ -4,11 +4,10 @@ import { api } from '../api';
  * The account owner's confirmation of a project's stated criteria, as the browser reads and writes
  * it — `GET` and `POST /projects/:id/acceptance/confirmation`.
  *
- * In a module of its own because more than one surface asks the same question: the confirmation
- * region under a project page's criteria (`ProjectAcceptanceCard.tsx`) and the settlement card
- * drawn into that project's coordinator conversation (`AcceptanceConfirmationCard.tsx`). They share
- * this key, so a confirmation pressed on either redraws the other from the door's answer — and
- * neither surface's lifetime decides whether the other can still reach the door.
+ * The browser asks it in one place, the settlement card drawn into the project's coordinator
+ * conversation (`AcceptanceConfirmationCard.tsx`). The project page's criteria card carried a
+ * second confirmation region until the account owner removed it on 2026-09-11; these reads and the
+ * write were already out here, so that removal took nothing from the conversation's card.
  */
 
 /** One criterion as a confirmation names it: the three values the set's digest is taken over.

@@ -178,14 +178,6 @@ const headerKeys = (projectUuid: string) => {
   ];
 };
 
-// The acceptance card's ONE entry of its own, added 2026-09-08 with the owner's confirmation of
-// the stated criteria. The criteria are still read from the document above; the confirmation is a
-// second document with its own lifetime, because it has to refresh after a confirmation without
-// re-reading the project.
-const acceptanceKeys = (projectUuid: string) => [
-  ['project', encodeId(projectUuid), 'acceptance-confirmation'],
-];
-
 const task = (over: Record<string, unknown> = {}) => ({
   id: 't1',
   title: 'Design the landing page',
@@ -1338,7 +1330,6 @@ describe('ProjectDetailPage — top-level tasks', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
-      ...acceptanceKeys(P1),
       ...attributionKeys(P1),
     ]);
   });
@@ -1529,7 +1520,6 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...headerKeys(P1),
-      ...acceptanceKeys(P1),
       ...attributionKeys(P1),
     ]);
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();
