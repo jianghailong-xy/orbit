@@ -922,7 +922,8 @@ function walk(seed: number): void {
 }
 
 describe('invariants under arbitrary interleavings', () => {
-  it('never re-keys, never consumes twice, never consumes after confirmation, never moves backwards', () => {
+  // 250 walks are seconds of CPU on a loaded host, past vitest's 5s default: the budget is the walk's, not a retry.
+  it('never re-keys, never consumes twice, never consumes after confirmation, never moves backwards', { timeout: 180_000 }, () => {
     for (let seed = 1; seed <= 250; seed += 1) walk(seed);
   });
 });
