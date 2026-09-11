@@ -38,6 +38,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Interactive runner sessions](interactive-claude-runner-design.md) — the original long-lived session design.
 - [Session lifecycle](session-lifecycle-design.md) — run state, lifecycle state, and task state.
 - [Realtime control-plane stream](realtime-control-plane-stream.md) — user-level SSE events and replay.
+- [Watch contract](watch-contract.md) — the frozen domain and product semantics for persistent cross-Session
+  and cross-Task watching: the versioned typed predicate, the Watch/Match/Delivery state machines, why
+  `AWAITING_INPUT` is not task completion, and why realtime events are not the fact source.
 - [Session search](session-search-design.md) — server-side multilingual search.
 - [Rate-limit retry](quota-limit-retry-design.md) — usage-limit detection and automatic retry.
 - [Cross-platform badge sync](cross-platform-badge-sync.md) — attention state across clients.

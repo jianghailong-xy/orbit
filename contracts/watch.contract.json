@@ -1,0 +1,394 @@
+{
+  "name": "orbit.watch",
+  "contractVersion": 1,
+  "predicateVersion": 1,
+  "doc": "docs/watch-contract.md",
+  "baseline": {
+    "mainCommit": "88239c791f704faad01bf8c8a6144f85539c973a"
+  },
+
+  "resourceKinds": ["SESSION", "TASK", "TASK_LIST", "PROJECT"],
+  "watchableTargetKinds": ["SESSION", "TASK"],
+  "snapshotSourceKinds": ["TASK_LIST", "PROJECT"],
+
+  "leaves": {
+    "SESSION_TURN_SETTLED": {
+      "targetKind": "SESSION",
+      "definition": "session.status is not one of UNSETTLED_SESSION_STATUSES (PENDING, RUNNING).",
+      "sourceColumns": ["session.status"],
+      "authority": "src/apiserver/src/common/session-scheduling.ts UNSETTLED_SESSION_STATUSES",
+      "isNot": [
+        "SESSION_RUN_TERMINAL: AWAITING_INPUT and INTERRUPTED are settled but not terminal.",
+        "TASK_DONE: a settled turn says nothing about the task's completion criterion."
+      ]
+    },
+    "SESSION_RUN_TERMINAL": {
+      "targetKind": "SESSION",
+      "definition": "deriveSessionRunState is one of SUCCEEDED, FAILED, ENDED.",
+      "sourceColumns": ["session.status", "session.end_reason"],
+      "authority": "src/shared/src/enums.ts deriveSessionRunState"
+    },
+    "SESSION_LIFECYCLE_TERMINAL": {
+      "targetKind": "SESSION",
+      "definition": "deriveSessionLifecycleState is one of COMPLETED, TRASH.",
+      "sourceColumns": ["session.completed_at", "session.archived_at", "session.deleted_at"],
+      "authority": "src/shared/src/enums.ts deriveSessionLifecycleState"
+    },
+    "SESSION_NEEDS_ATTENTION": {
+      "targetKind": "SESSION",
+      "definition": "At least one Approval row for the session has status PENDING.",
+      "sourceColumns": ["approval.session_id", "approval.status"],
+      "authority": "src/apiserver/src/push/push.service.ts needsYouSessions"
+    },
+    "TASK_TERMINAL": {
+      "targetKind": "TASK",
+      "definition": "task.status is one of DONE, CANCELLED, FAILED.",
+      "sourceColumns": ["task.status"],
+      "authority": "src/shared/src/enums.ts TaskStatus"
+    },
+    "TASK_FAILED": {
+      "targetKind": "TASK",
+      "definition": "task.status is FAILED.",
+      "sourceColumns": ["task.status"]
+    },
+    "TASK_DONE": {
+      "targetKind": "TASK",
+      "definition": "task.status is DONE, which is the projection of a satisfied completion criterion and never a direct write.",
+      "sourceColumns": ["task.status"],
+      "authority": "docs/task-completion-criteria.md"
+    }
+  },
+
+  "aggregations": ["ALL", "ANY"],
+  "composites": ["ALL_OF", "ANY_OF"],
+  "targetSelectors": ["ALL_TARGETS"],
+
+  "grammar": {
+    "Predicate": [
+      "{ kind: 'ALL'|'ANY', over: 'ALL_TARGETS', leaf: <leaf name> }",
+      "{ kind: 'ALL_OF'|'ANY_OF', operands: Predicate[] }"
+    ],
+    "notes": [
+      "Closed set. No shell, no SQL, no log regex, no free-text expression.",
+      "A predicate is evaluated only against the columns its leaves declare in sourceColumns."
+    ]
+  },
+
+  "limits": {
+    "maxTargetsPerWatch": 200,
+    "maxPredicateDepth": 2,
+    "maxOperandsPerComposite": 4,
+    "minTtlSeconds": 60,
+    "defaultTtlSeconds": 86400,
+    "maxTtlSeconds": 2592000,
+    "continuousDebounceSeconds": 10,
+    "maxDeliveryAttempts": 8
+  },
+
+  "states": {
+    "watch": {
+      "values": [
+        "ACTIVE",
+        "PAUSED",
+        "MATCHED",
+        "EXPIRED",
+        "CANCELLED",
+        "REVOKED",
+        "UNRESOLVABLE"
+      ],
+      "terminal": ["MATCHED", "EXPIRED", "CANCELLED", "REVOKED", "UNRESOLVABLE"],
+      "initial": "ACTIVE",
+      "transitions": [
+        { "from": "ACTIVE", "to": "PAUSED", "trigger": "observer paused the watch" },
+        { "from": "PAUSED", "to": "ACTIVE", "trigger": "observer resumed the watch" },
+        {
+          "from": "ACTIVE",
+          "to": "MATCHED",
+          "trigger": "predicate true and mode is ONE_SHOT; the Match is recorded in the same transaction"
+        },
+        { "from": "ACTIVE", "to": "EXPIRED", "trigger": "now >= expiresAt with no match" },
+        { "from": "PAUSED", "to": "EXPIRED", "trigger": "now >= expiresAt; pausing does not extend TTL" },
+        { "from": "ACTIVE", "to": "CANCELLED", "trigger": "observer or owner cancelled" },
+        { "from": "PAUSED", "to": "CANCELLED", "trigger": "observer or owner cancelled" },
+        {
+          "from": "ACTIVE",
+          "to": "REVOKED",
+          "trigger": "permission recheck failed at evaluation or delivery time"
+        },
+        {
+          "from": "ACTIVE",
+          "to": "UNRESOLVABLE",
+          "trigger": "every target is GONE, so the predicate can never be decided"
+        }
+      ],
+      "continuousNote": "A CONTINUOUS watch stays ACTIVE after a match and increments generation."
+    },
+    "target": {
+      "values": ["OBSERVED", "SATISFIED", "GONE"],
+      "initial": "OBSERVED",
+      "transitions": [
+        { "from": "OBSERVED", "to": "SATISFIED", "trigger": "the watch's leaf is true for this target" },
+        { "from": "SATISFIED", "to": "OBSERVED", "trigger": "CONTINUOUS watch only: the leaf went false again" },
+        { "from": "OBSERVED", "to": "GONE", "trigger": "the target row was deleted" },
+        { "from": "SATISFIED", "to": "GONE", "trigger": "the target row was deleted" }
+      ]
+    },
+    "delivery": {
+      "values": ["PENDING", "IN_FLIGHT", "DELIVERED", "DEAD_LETTER"],
+      "terminal": ["DELIVERED", "DEAD_LETTER"],
+      "initial": "PENDING",
+      "transitions": [
+        { "from": "PENDING", "to": "IN_FLIGHT", "trigger": "a worker claimed it under (leaseOwner, leaseGeneration)" },
+        { "from": "IN_FLIGHT", "to": "DELIVERED", "trigger": "the action was performed exactly once" },
+        { "from": "IN_FLIGHT", "to": "PENDING", "trigger": "retryable failure or lease expiry; attempt count increments" },
+        { "from": "IN_FLIGHT", "to": "DEAD_LETTER", "trigger": "attempts reached maxDeliveryAttempts, or a terminal refusal" }
+      ]
+    }
+  },
+
+  "match": {
+    "immutable": true,
+    "uniqueness": "UNIQUE (watchId, generation)",
+    "carries": ["matchedAt", "reason", "generation", "perTargetSnapshot", "predicateVersion"],
+    "note": "A Match is a fact about the world. It is not a notification; the effect is a WatchDelivery."
+  },
+
+  "actions": [
+    {
+      "kind": "NOTIFY_USER",
+      "effect": "One user-visible notification, counted by the existing needs-you badge path."
+    },
+    {
+      "kind": "RESUME_SESSION",
+      "effect": "Enqueue exactly one ConversationTurn on the observer session through the normal queue entry point, carrying a structured payload.",
+      "payload": ["watchId", "generation", "reason", "changedTargets", "latestSnapshot"],
+      "idempotency": {
+        "clientTurnId": "watch:<watchId>:<generation>",
+        "why": "conversation_turn has UNIQUE (session_id, client_turn_id), so a redelivered match collapses onto the turn already enqueued instead of waking the session twice. This is the same mechanism TASK_RUN_TRIGGER already uses for sched:/dep:/first-run:/batch: turns.",
+        "authority": "src/apiserver/prisma/schema.prisma UNIQUE([sessionId, clientTurnId]); src/apiserver/src/tasks/task-run-identity.ts"
+      },
+      "sendIntent": {
+        "value": "NEXT_TURN",
+        "why": "A wake is new work, never a steer into the turn already running. CURRENT_WORK would be refused as CURRENT_WORK_UNAVAILABLE whenever no live in-flight message exists, which is precisely the common case for a parked observer."
+      },
+      "runningObserver": "No special case: an observer that is RUNNING keeps its status and the turn queues behind the running one (statusAfterTurnEnqueued leaves RUNNING alone and moves AWAITING_INPUT/INTERRUPTED to PENDING). Watch never resumes a session concurrently because it never bypasses the queue.",
+      "forbidden": "Polling logs or shell transcript text must never be put into the payload."
+    }
+  ],
+
+  "refusals": [
+    { "code": "EMPTY_TARGET_SET", "when": "The snapshot resolved to zero targets; ALL over an empty set would be vacuously true." },
+    { "code": "TARGET_KIND_MISMATCH", "when": "A leaf's targetKind does not match a target's kind." },
+    { "code": "TOO_MANY_TARGETS", "when": "targets exceed limits.maxTargetsPerWatch." },
+    { "code": "PREDICATE_TOO_DEEP", "when": "Nesting exceeds limits.maxPredicateDepth or operands exceed maxOperandsPerComposite." },
+    { "code": "UNKNOWN_PREDICATE_KIND", "when": "A kind outside aggregations/composites, or a leaf outside leaves." },
+    { "code": "PREDICATE_VERSION_UNSUPPORTED", "when": "The request's predicateVersion is not served by this build." },
+    { "code": "DYNAMIC_SET_UNSUPPORTED", "when": "A TASK_LIST/PROJECT ref was given as live membership rather than a creation-time snapshot source." },
+    { "code": "SELF_WATCH_LOOP", "when": "A RESUME_SESSION watch names its own observer session among its targets." },
+    { "code": "TTL_OUT_OF_RANGE", "when": "ttl is outside [minTtlSeconds, maxTtlSeconds]." },
+    { "code": "PERMISSION_DENIED", "when": "The observer cannot read every target at create time." }
+  ],
+
+  "factSource": {
+    "authoritative": "PostgreSQL rows named by each leaf's sourceColumns, read inside the evaluating transaction.",
+    "accelerantOnly": [
+      {
+        "channel": "control-plane SSE / in-memory hub",
+        "types": "ControlEventType in src/shared/src/realtime.ts",
+        "durability": "never persisted; at-most-once; no ack, no retry",
+        "ordering": "not guaranteed per connection (streamForUser uses mergeMap over an async mapper)",
+        "replay": "none: no cursor and no Last-Event-ID on the control plane",
+        "onRestart": "everything in flight is lost; the hub is process memory",
+        "namedDropPaths": [
+          "pg_notify failure is caught and warn-logged only",
+          "payload over MAX_NOTIFY_BYTES degrades to a seq-signal, and synthetic control events carry seq 0 with no persisted row to re-read",
+          "owner or session summary resolves null mid-flight"
+        ]
+      },
+      {
+        "channel": "project_event outbox",
+        "durability": "durable rows written by triggers",
+        "coalescing": "repeated signals collapse into one unconsumed row with an occurrences counter, so a consumer may not assume one row per occurrence"
+      }
+    ],
+    "coverageGap": {
+      "sessionTriggerColumns": ["status", "deleted_at", "merge_status"],
+      "authority": "src/apiserver/prisma/migrations/0133_session_event_source_update_scope/migration.sql",
+      "consequence": "session.completed_at is NOT in that column list, so moving a Session to Completed writes no outbox row at all, and Approval writes are on a different table entirely. SESSION_LIFECYCLE_TERMINAL and SESSION_NEEDS_ATTENTION therefore have leaves no durable event covers: the sweep is load-bearing for them, not a backstop."
+    },
+    "invariant": "Dropping every hint changes only latency. Liveness is owned by nextEvaluateAt plus the leased reconciliation sweep.",
+    "forbidden": "A Match must never be derived from the content of an event payload."
+  },
+
+  "vectors": [
+    {
+      "id": "awaiting-input-is-settled-not-terminal",
+      "given": { "session": { "status": "AWAITING_INPUT", "endReason": null, "completedAt": null, "deletedAt": null } },
+      "expect": {
+        "SESSION_TURN_SETTLED": true,
+        "SESSION_RUN_TERMINAL": false,
+        "SESSION_LIFECYCLE_TERMINAL": false
+      },
+      "why": "AWAITING_INPUT left PENDING/RUNNING, so the turn settled, but the session is alive and still Open."
+    },
+    {
+      "id": "awaiting-input-is-not-task-done",
+      "given": {
+        "session": { "status": "AWAITING_INPUT", "endReason": null },
+        "task": { "status": "IN_PROGRESS" }
+      },
+      "expect": { "SESSION_TURN_SETTLED": true, "TASK_DONE": false, "TASK_TERMINAL": false },
+      "why": "The headline separation: an agent parking for input is not a completion criterion being satisfied."
+    },
+    {
+      "id": "interrupted-bare-is-settled-not-terminal",
+      "given": { "session": { "status": "INTERRUPTED", "endReason": null } },
+      "expect": { "SESSION_TURN_SETTLED": true, "SESSION_RUN_TERMINAL": false },
+      "why": "A bare INTERRUPTED is a stopped turn on a live, schedulable session."
+    },
+    {
+      "id": "interrupted-with-end-reason-is-terminal",
+      "given": { "session": { "status": "INTERRUPTED", "endReason": "ended" } },
+      "expect": { "SESSION_TURN_SETTLED": true, "SESSION_RUN_TERMINAL": true },
+      "why": "Any recorded endReason means the session itself ended, settling ENDED."
+    },
+    {
+      "id": "succeeded-run-is-not-lifecycle-terminal",
+      "given": { "session": { "status": "SUCCEEDED", "endReason": null, "completedAt": null, "deletedAt": null } },
+      "expect": { "SESSION_RUN_TERMINAL": true, "SESSION_LIFECYCLE_TERMINAL": false },
+      "why": "Succeeded-and-Open is a normal state; run outcome and list membership are orthogonal."
+    },
+    {
+      "id": "succeeded-session-does-not-imply-task-done",
+      "given": { "session": { "status": "SUCCEEDED" }, "task": { "status": "OPEN" } },
+      "expect": { "SESSION_RUN_TERMINAL": true, "TASK_DONE": false },
+      "why": "DONE is the projection of a satisfied criterion, not of a session finishing."
+    },
+    {
+      "id": "cancelled-task-is-terminal-not-failed",
+      "given": { "task": { "status": "CANCELLED" } },
+      "expect": { "TASK_TERMINAL": true, "TASK_FAILED": false, "TASK_DONE": false },
+      "why": "Terminal is the union DONE/CANCELLED/FAILED; failure is the narrower question."
+    },
+    {
+      "id": "all-terminal-or-any-failed",
+      "given": {
+        "tasks": ["DONE", "DONE", "FAILED", "IN_PROGRESS", "OPEN", "DONE", "OPEN"],
+        "predicate": {
+          "kind": "ANY_OF",
+          "operands": [
+            { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+            { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+          ]
+        }
+      },
+      "expect": { "matches": true, "viaOperand": 1 },
+      "why": "The canonical agent request: wake me when all seven settle or any one fails. The ANY branch fires first."
+    },
+    {
+      "id": "all-over-empty-set-refused",
+      "given": { "targets": [], "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "refusal": "EMPTY_TARGET_SET" },
+      "why": "ALL over nothing is vacuously true and would fire instantly; it is refused at create instead."
+    },
+    {
+      "id": "kind-mismatch-refused",
+      "given": { "targets": [{ "kind": "SESSION" }], "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "refusal": "TARGET_KIND_MISMATCH" },
+      "why": "A task leaf cannot be evaluated against a session row."
+    },
+    {
+      "id": "already-true-at-create-matches-immediately",
+      "given": { "tasks": ["DONE", "DONE"], "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "matches": true, "generation": 1, "watchState": "MATCHED" },
+      "why": "Creation evaluates once; a satisfied condition produces a Match rather than waiting for a future change."
+    },
+    {
+      "id": "one-shot-second-crossing-produces-no-second-match",
+      "given": { "mode": "ONE_SHOT", "sequence": ["predicate true", "predicate false", "predicate true"] },
+      "expect": { "matchCount": 1, "uniqueOn": "(watchId, generation)" },
+      "why": "One-shot settles at MATCHED; the unique index makes a duplicate impossible rather than unlikely."
+    },
+    {
+      "id": "duplicate-and-out-of-order-hints-produce-one-match",
+      "given": { "hints": ["t2", "t1", "t2", "t1"] },
+      "expect": { "matchCount": 1 },
+      "why": "Hints only schedule evaluation; the row state decides, so replays and reordering are absorbed."
+    },
+    {
+      "id": "needs-attention-is-independent-of-settled",
+      "given": { "session": { "status": "RUNNING" }, "approvals": ["PENDING"] },
+      "expect": { "SESSION_NEEDS_ATTENTION": true, "SESSION_TURN_SETTLED": false },
+      "why": "A session blocked on an approval is asking a human something while its turn is still unsettled; needs-attention and settled are independent axes."
+    },
+    {
+      "id": "completed-session-emits-no-outbox-row",
+      "given": {
+        "session": { "status": "SUCCEEDED", "completedAt": "set" },
+        "outboxRow": false
+      },
+      "expect": { "SESSION_LIFECYCLE_TERMINAL": true, "decidedBy": "reconciliation sweep" },
+      "why": "The 0133 session trigger fires only on status/deleted_at/merge_status, so moving a session to Completed writes no durable event; a watch that trusted the event stream would wait forever."
+    },
+    {
+      "id": "dropped-hint-still-matches-via-reconciliation",
+      "given": { "hints": [], "reconciliationSweep": "runs" },
+      "expect": { "matchCount": 1 },
+      "why": "Correctness may not depend on the event stream; the sweep is what makes a lost NOTIFY a latency bug only."
+    },
+    {
+      "id": "target-deleted-is-excluded-and-recorded",
+      "given": { "tasks": ["DONE", "deleted"], "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "targetState": "GONE", "matches": true },
+      "why": "A GONE target leaves the set and is recorded; it is never silently counted as satisfied."
+    },
+    {
+      "id": "all-targets-gone-is-unresolvable-not-silent",
+      "given": { "tasks": ["deleted", "deleted"] },
+      "expect": { "watchState": "UNRESOLVABLE" },
+      "why": "A watch that can never be decided must say so; stopping quietly is the failure mode being designed out."
+    },
+    {
+      "id": "permission-revoked-before-delivery-yields-revoked",
+      "given": { "match": "recorded", "permissionRecheck": "fails" },
+      "expect": { "watchState": "REVOKED", "payloadDelivered": false },
+      "why": "Permission is rechecked at delivery, so revocation between create and match cannot leak target state."
+    },
+    {
+      "id": "ttl-expiry-wakes-a-waiting-observer",
+      "given": { "mode": "ONE_SHOT", "action": "RESUME_SESSION", "ttlReached": true, "matched": false },
+      "expect": { "watchState": "EXPIRED", "delivery": "one turn carrying EXPIRED" },
+      "why": "A session waiting on a watch that expires must be told, or it waits forever."
+    },
+    {
+      "id": "resume-into-running-session-queues-one-turn",
+      "given": { "observerSession": { "status": "RUNNING" }, "match": "recorded" },
+      "expect": { "conversationTurns": 1, "concurrentResume": false },
+      "why": "Delivery goes through the normal queue, so a running session is never concurrently resumed."
+    },
+    {
+      "id": "self-watch-resume-loop-refused",
+      "given": { "action": "RESUME_SESSION", "observerSessionId": "S1", "targets": [{ "kind": "SESSION", "id": "S1" }] },
+      "expect": { "refusal": "SELF_WATCH_LOOP" },
+      "why": "A session that wakes itself is an unbounded wake loop."
+    },
+    {
+      "id": "task-reopened-after-match-does-not-unmatch",
+      "given": { "match": { "generation": 1, "targetEpoch": 3 }, "then": "task reopened, epoch becomes 4" },
+      "expect": { "matchCount": 1, "matchMutated": false },
+      "why": "A Match is an immutable fact about the epoch it observed; later reopening does not rewrite history."
+    },
+    {
+      "id": "continuous-burst-coalesces-into-one-delivery",
+      "given": { "mode": "CONTINUOUS", "crossings": 12, "withinSeconds": 10 },
+      "expect": { "deliveries": 1 },
+      "why": "Debounce and coalescing are what keep a continuous watch from becoming a wake storm."
+    },
+    {
+      "id": "dynamic-set-refused-in-v1",
+      "given": { "targets": [{ "kind": "TASK_LIST", "id": "L1", "membership": "live" }] },
+      "expect": { "refusal": "DYNAMIC_SET_UNSUPPORTED" },
+      "why": "v1 freezes the target set at create; live membership needs sealed semantics that do not exist yet."
+    }
+  ]
+}
