@@ -192,6 +192,26 @@ func codexPlanUsageStateForEnv(env []string, cwd string) (codexStateSelection, e
 	return sharedCodexStateForEnv(env, cwd)
 }
 
+// codexSessionOnDefaultAccount reports whether a Codex session runs on the account the usage probe
+// reads, the runner's default: its app-server resolves the CODEX_HOME the runner's own environment
+// resolves, and its agent env sets no CODEX_API_KEY or OPENAI_* of its own — the variables
+// codexResetAccountOverride in @orbit/shared counts as an account override. processEnv is the env the
+// app-server is spawned with, its sticky CODEX_HOME included.
+func codexSessionOnDefaultAccount(agentEnv map[string]string, processEnv []string, execDir string) bool {
+	for key, value := range agentEnv {
+		if (key == "CODEX_API_KEY" || strings.HasPrefix(key, "OPENAI_")) && strings.TrimSpace(value) != "" {
+			return false
+		}
+	}
+	cwd, _ := os.Getwd()
+	defaultHome, err := effectiveCodexHome(os.Environ(), cwd)
+	if err != nil {
+		return false
+	}
+	home, err := effectiveCodexHome(processEnv, execDir)
+	return err == nil && home == defaultHome
+}
+
 func sharedCodexStateForEnv(env []string, cwd string) (codexStateSelection, error) {
 	codexHome, err := effectiveCodexHome(env, cwd)
 	if err != nil {

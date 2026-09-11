@@ -23,8 +23,9 @@ import (
 // The default account is the one the runner's own environment selects, exactly as for the usage
 // windows: a runner started with OPENAI_API_KEY or OPENAI_BASE_URL reads no Codex usage at all
 // (codexPlanUsageStateForEnv), so it reports no block and offers no reset. A session whose env
-// overrides the account (CODEX_HOME, CODEX_API_KEY, OPENAI_*) only reaches the probe through its
-// rolling rate-limit notifications, and those never create or change a block.
+// overrides the account (CODEX_HOME, CODEX_API_KEY, OPENAI_*) never reaches the probe
+// (codexSessionOnDefaultAccount), and a default-account session's rolling rate-limit notifications
+// never create or change a block.
 
 const codexResetFetchedAtLayout = "2006-01-02T15:04:05.000Z"
 

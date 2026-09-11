@@ -303,8 +303,9 @@ func TestCodexResetReadMarksUnsupportedAuthAndUnidentifiedAccounts(t *testing.T)
 // Only the runner's default Codex account can open reset. A runner whose own environment carries
 // custom API credentials reads no Codex usage — no app-server starts, no block is sent, and the
 // value never reaches the error or the log. A session running under an overridden account
-// (CODEX_HOME, CODEX_API_KEY, OPENAI_*) reaches the probe only through rolling rate-limit
-// notifications, and those can neither create a block nor change the default account's.
+// (CODEX_HOME, CODEX_API_KEY, OPENAI_*) is kept away from the probe
+// (TestCodexSessionRateLimitsFeedPlanUsageOnlyFromTheDefaultAccount), and a rolling rate-limit
+// notification that does reach it can neither create a block nor change the default account's.
 func TestCodexResetOverrideAccountsNeverOpenReset(t *testing.T) {
 	fixture := codexResetReadFixture(t, "details-complete")
 	for _, variable := range []string{"OPENAI_API_KEY", "OPENAI_BASE_URL"} {
@@ -551,14 +552,35 @@ func (f *fakeCodexBinary) lines(t *testing.T, name string) []string {
 	return out
 }
 
+// answerSessionsWith lets the fake serve sessions too: thread/start opens a thread, and frames follow
+// its answer the way a live session's notifications do.
+func (f *fakeCodexBinary) answerSessionsWith(t *testing.T, frames ...map[string]interface{}) {
+	t.Helper()
+	var after []byte
+	for _, frame := range frames {
+		data, err := json.Marshal(frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		after = append(append(after, data...), '\n')
+	}
+	thread, _ := json.Marshal(map[string]interface{}{"thread": map[string]interface{}{"id": "thread-fake-session"}})
+	for name, data := range map[string][]byte{"threadStart.json": thread, "afterThreadStart.jsonl": after} {
+		if err := os.WriteFile(filepath.Join(f.dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // runFakeCodexAppServer is `codex app-server --stdio` for the shim. It records the spawn and every
 // frame it receives, answers initialize, account/read and account/rateLimits/read from the answer
-// files, and refuses anything else as the real server refuses an unknown method —
+// files — thread/start too once a test serves sessions, saying that test's frames after the answer —
+// and refuses anything else as the real server refuses an unknown method —
 // account/rateLimitResetCredit/consume included, which the recording lets a test rule out.
 func runFakeCodexAppServer(dir string) int {
 	appendJSONL(filepath.Join(dir, "spawns.jsonl"), map[string]interface{}{"pid": os.Getpid(), "argv": os.Args[1:]})
 	answers := map[string]json.RawMessage{"initialize": json.RawMessage(`{"userAgent":"fake-codex/0.154.0"}`)}
-	for method, name := range map[string]string{codexAccountReadMethod: "account.json", codexRateLimitsReadMethod: "rateLimits.json"} {
+	for method, name := range map[string]string{codexAccountReadMethod: "account.json", codexRateLimitsReadMethod: "rateLimits.json", "thread/start": "threadStart.json"} {
 		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
 			answers[method] = data
 		}
@@ -585,6 +607,12 @@ func runFakeCodexAppServer(dir string) int {
 		data, _ := json.Marshal(reply)
 		if _, err := os.Stdout.Write(append(data, '\n')); err != nil {
 			return 1
+		}
+		if _, answered := answers[method]; answered && method == "thread/start" {
+			after, _ := os.ReadFile(filepath.Join(dir, "afterThreadStart.jsonl"))
+			if _, err := os.Stdout.Write(after); err != nil {
+				return 1
+			}
 		}
 	}
 	return 0

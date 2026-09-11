@@ -169,6 +169,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		// account's history into the existing partition.
 		processEnv = envWithValue(processEnv, "CODEX_HOME", state.CodexHome)
 	}
+	// Plan usage shows the runner's default account, its reset credits beside its windows. A session
+	// on any other account keeps its rolling rate limits out of those windows.
+	if !codexSessionOnDefaultAccount(job.Agent.Env, processEnv, execDir) {
+		onRateLimits = nil
+	}
 	// Persist the layout before spawning. A pre-thread failure can leave a directory
 	// behind; the marker prevents a later resume from mistaking shared state for an
 	// old session-local runtime (or vice versa).
