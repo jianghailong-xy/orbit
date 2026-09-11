@@ -379,6 +379,71 @@ func manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner string) 
 	return operationID != "" && leaseOwner != "" && strings.EqualFold(leaseOwner, processOwner)
 }
 
+// heartbeatMerge performs one heartbeat-delivered merge against the exact supervisor
+// epoch its heartbeat advertised, or answers why it did not. merge is mergeToMain.
+func heartbeatMerge(
+	pool *sessionPool,
+	req MergeCommand,
+	advertised heartbeatSupervisorSnapshot,
+	merge func(MergeCommand) mergeOutcome,
+) mergeOutcome {
+	release, receipt, admitted := pool.beginDrainedWorktreeOperation(
+		req.SessionID,
+		advertised.supervisor,
+		advertised.permitGeneration,
+		false,
+		"merge",
+		engineEvictionWaitCap,
+	)
+	if !admitted {
+		// Either the server already claimed this exact epoch before returning the
+		// heartbeat, or something is still writing the checkout. Close it explicitly,
+		// naming which: a silent drop would leave Resume permanently blocked on its
+		// operation owner, and a refusal that names the wrong reason reads as a
+		// control-plane race rather than as "wait for the writer".
+		logln("not merging", req.SessionID+":", receipt)
+		return mergeOutcome{Status: "error", Message: receipt}
+	}
+	if receipt != "" {
+		logln("merging", req.SessionID+":", receipt)
+	}
+	res := merge(req)
+	// Record where this session's work went before opening the gate.
+	rememberMergeTarget(req.SessionID, req.TargetBranch)
+	release()
+	res.Message = appendWorktreeReceipt(res.Message, receipt)
+	return res
+}
+
+// heartbeatCommit is heartbeatMerge for a commit, which also needs a live supervisor.
+// commit is commitWorktree.
+func heartbeatCommit(
+	pool *sessionPool,
+	req CommitCommand,
+	advertised heartbeatSupervisorSnapshot,
+	commit func(CommitCommand) commitOutcome,
+) commitOutcome {
+	release, receipt, admitted := pool.beginDrainedWorktreeOperation(
+		req.SessionID,
+		advertised.supervisor,
+		advertised.permitGeneration,
+		true,
+		"commit",
+		engineEvictionWaitCap,
+	)
+	if !admitted {
+		logln("not committing", req.SessionID+":", receipt)
+		return commitOutcome{Status: "error", Message: receipt}
+	}
+	if receipt != "" {
+		logln("committing", req.SessionID+":", receipt)
+	}
+	res := commit(req)
+	release()
+	res.Message = appendWorktreeReceipt(res.Message, receipt)
+	return res
+}
+
 type manualWorktreeOperationKey struct {
 	kind        string
 	sessionID   string
@@ -887,28 +952,7 @@ func runLoop(cfg *RunnerConfig) bool {
 					res, cached := mergeOutcomes[key]
 					mergeMu.Unlock()
 					if !cached {
-						release, admitted := pool.beginHeartbeatWorktreeOperation(
-							req.SessionID,
-							advertised.supervisor,
-							advertised.permitGeneration,
-							false,
-						)
-						if !admitted {
-							// Either the server already claimed this exact epoch before
-							// returning the heartbeat, or something is still writing the
-							// checkout. Close it explicitly, naming which: a silent drop
-							// would leave Resume permanently blocked on its operation owner,
-							// and a refusal that names the wrong reason reads as a
-							// control-plane race rather than as "wait for the writer".
-							reason := pool.worktreeOperationRefusal(req.SessionID, "merge")
-							logln("not merging", req.SessionID+":", reason)
-							res = mergeOutcome{Status: "error", Message: reason}
-						} else {
-							res = mergeToMain(req)
-							// Record where this session's work went before opening the gate.
-							rememberMergeTarget(req.SessionID, req.TargetBranch)
-							release()
-						}
+						res = heartbeatMerge(pool, req, advertised, mergeToMain)
 						if req.OperationID != "" {
 							mergeMu.Lock()
 							for old := range mergeOutcomes {
@@ -973,20 +1017,7 @@ func runLoop(cfg *RunnerConfig) bool {
 					res, cached := commitOutcomes[key]
 					mergeMu.Unlock()
 					if !cached {
-						release, admitted := pool.beginHeartbeatWorktreeOperation(
-							req.SessionID,
-							advertised.supervisor,
-							advertised.permitGeneration,
-							true,
-						)
-						if !admitted {
-							reason := pool.worktreeOperationRefusal(req.SessionID, "commit")
-							logln("not committing", req.SessionID+":", reason)
-							res = commitOutcome{Status: "error", Message: reason}
-						} else {
-							res = commitWorktree(req)
-							release()
-						}
+						res = heartbeatCommit(pool, req, advertised, commitWorktree)
 						if req.OperationID != "" {
 							mergeMu.Lock()
 							for old := range commitOutcomes {

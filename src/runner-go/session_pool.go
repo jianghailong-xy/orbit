@@ -75,6 +75,10 @@ type liveSession struct {
 	engineGeneration uint64
 	engineCancel     context.CancelFunc
 	evictRequested   bool
+	// agentMcpServers is agentMcpServerNames of the claim this engine generation was
+	// spawned from, taken when the generation is reserved. A warm engine goes on
+	// running the servers it started with, whatever a later claim says.
+	agentMcpServers []string
 
 	idleGeneration uint64
 	warmTimer      poolTimer
@@ -181,11 +185,15 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // background job by worktreeWritersLocked below — so this set is the whole
 // answer to "may something rewrite this checkout right now".
 //
-// The engine counts only while it can actually write: a turn is running, or one
-// of its background shells is still alive. A parked engine with neither writes
-// nothing — being a warm process waiting for the next turn is its entire job —
-// and counting it anyway would fence every merge on a warm session for the whole
-// of warmEngineTTL.
+// The engine counts only while a turn is running or one of its background shells
+// is still alive. A parked engine with neither still has processes standing in
+// the checkout: itself and its MCP servers. The engine and Orbit's own `orbit` MCP
+// server write nothing to the checkout between turns — waiting for the next turn
+// is their entire job — and counting them anyway would fence every merge on a warm
+// session for the whole of warmEngineTTL. An MCP server the agent configured
+// itself is not bound by that: nothing here knows what it writes, or when. It is
+// not counted either; merge and commit instead evict an engine that runs one,
+// servers and all, before they touch the checkout (beginDrainedWorktreeOperation).
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
 	for _, hold := range p.bgJobs[id] {
@@ -467,6 +475,131 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 			p.mu.Unlock()
 		})
 	}, true
+}
+
+// engineEvictionWaitCap bounds how long a merge or commit waits for the engine it
+// evicted to be reaped. Tearing a parked engine down is a process-group kill, so this
+// is reached only when something is wrong — and then the operation is refused rather
+// than run beside a process tree that may still be alive.
+const engineEvictionWaitCap = 30 * time.Second
+
+// agentMcpServerNames names the MCP servers of the agent's own that an engine spawned
+// from this claim runs beside Orbit's: the keys of Agent.McpConfig, which the Claude,
+// Kimi and OpenCode spawns all merge into the engine's configuration, minus `orbit`,
+// which each of them overwrites with the built-in server. Codex's spawn configures the
+// built-in server alone, so a Codex engine runs none of them.
+//
+// Decided from the configuration the runner builds, never by looking for processes:
+// that is ownership the runner constructed rather than inferred, and it reads the same
+// on every platform a runner runs on.
+func agentMcpServerNames(job *ClaimedSession) []string {
+	if job == nil || runtimeProvider(job) == providerCodex {
+		return nil
+	}
+	var names []string
+	for name := range job.Agent.McpConfig {
+		if name != "orbit" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names) // a receipt reads the same twice
+	return names
+}
+
+// beginDrainedWorktreeOperation is how merge and commit enter a checkout. It admits the
+// operation exactly as beginHeartbeatWorktreeOperation does, then drains the one kind of
+// process standing in the checkout that the holder set leaves out (worktreeHoldersLocked):
+// a parked engine running MCP servers the agent configured itself. That engine is
+// evicted — the same lossless recycle as the warm TTL, which the next turn cold-resumes —
+// and the operation begins only once its supervisor has reaped it.
+//
+// Admitted, it returns the release func and what the operation's receipt has to say
+// about that eviction ("" when there was none). Refused, it returns a nil release and the
+// refusal itself.
+func (p *sessionPool) beginDrainedWorktreeOperation(
+	id string,
+	expected *liveSession,
+	expectedPermit uint64,
+	requireSupervisor bool,
+	operation string,
+	wait time.Duration,
+) (func(), string, bool) {
+	release, admitted := p.beginHeartbeatWorktreeOperation(id, expected, expectedPermit, requireSupervisor)
+	if !admitted {
+		return nil, p.worktreeOperationRefusal(id, operation), false
+	}
+	servers, stopped := p.evictEngineWithAgentMcpServers(id, expected, wait)
+	if len(servers) == 0 {
+		return release, "", true
+	}
+	named := strings.Join(servers, ", ")
+	if !stopped {
+		release()
+		return nil, operation + " was refused: the engine evicted for it, which was running MCP servers" +
+			" the agent configured itself (" + named + "), had not stopped after " + wait.String(), false
+	}
+	evicted := "the engine was evicted for this " + operation +
+		": it was running MCP servers the agent configured itself (" + named + ")"
+	// The eviction took time a writer could have used to appear, and only admission has
+	// looked for one. A runner-hosted job outlives the engine that asked for it.
+	p.mu.Lock()
+	writing := p.worktreeWritersLocked(id)
+	p.mu.Unlock()
+	if writing {
+		release()
+		return nil, appendWorktreeReceipt(p.worktreeOperationRefusal(id, operation), evicted), false
+	}
+	return release, evicted, true
+}
+
+// evictEngineWithAgentMcpServers asks this session's parked engine to go if it runs MCP
+// servers of the agent's own, and waits until its supervisor has reaped it: session.go
+// reports engineStopped only after the engine's process group — servers included — is
+// gone. It returns the servers that engine was running and whether it stopped within
+// wait. The caller holds an admitted operation, whose `running` keeps a claim from
+// starting a replacement engine in the meantime.
+func (p *sessionPool) evictEngineWithAgentMcpServers(id string, expected *liveSession, wait time.Duration) ([]string, bool) {
+	p.mu.Lock()
+	s := p.sessions[id]
+	if s == nil || s != expected || !s.resident || len(s.agentMcpServers) == 0 {
+		p.mu.Unlock()
+		return nil, true
+	}
+	servers := append([]string(nil), s.agentMcpServers...)
+	generation := s.engineGeneration
+	cancel := p.requestEvictLocked(s)
+	p.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	for {
+		p.mu.Lock()
+		stopped := p.sessions[id] != s || !s.resident || s.engineGeneration != generation
+		changed := p.changed
+		p.mu.Unlock()
+		if stopped {
+			return servers, true
+		}
+		select {
+		case <-changed:
+		case <-deadline.C:
+			return servers, false
+		}
+	}
+}
+
+// appendWorktreeReceipt puts what admitting an operation took after the operation's own
+// message, so git's output stays the first thing a failed merge or commit says.
+func appendWorktreeReceipt(message, note string) string {
+	switch {
+	case note == "":
+		return message
+	case message == "":
+		return note
+	}
+	return message + "\n" + note
 }
 
 func (p *sessionPool) signalLocked(s *liveSession) {
@@ -871,6 +1004,7 @@ func (p *sessionPool) reserveEngine(s *liveSession, sessionCtx, shutdown context
 			s.engineGeneration++
 			s.engineCancel = nil
 			s.evictRequested = false
+			s.agentMcpServers = agentMcpServerNames(s.job)
 			gen, job := s.engineGeneration, s.job
 			p.signalLocked(s)
 			p.mu.Unlock()
