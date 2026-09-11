@@ -90,8 +90,9 @@ struct SelectableText: UIViewRepresentable {
     private var wraps: Bool { !segments.allSatisfy { $0.role == .code } }
 
     // The transcript's attachment store, used to fetch the bytes behind a tapped
-    // `orbit-attachment:` link, and the app model a failed fetch reports through. Both optional so a
-    // `SelectableText` outside those environments renders fine (its links just stay inert).
+    // `orbit-attachment:` link, and the app model a failed fetch reports through and a tapped task or
+    // session reference routes through. Both optional so a `SelectableText` outside those
+    // environments renders fine (its links just stay inert).
     @Environment(AttachmentImageStore.self) private var attachments: AttachmentImageStore?
     @Environment(AppModel.self) private var app: AppModel?
 
@@ -227,6 +228,8 @@ struct SelectableText: UIViewRepresentable {
                     // the selectable prose. The clip goes in once per link, not once per styled run.
                     if link != previousLink { result.append(paperclip(font: font, para: para)) }
                     attrs[.foregroundColor] = ProseInk.secondary.uiColor
+                } else if ReferenceLink.isInert(link) {
+                    // A project or task list this app has no screen for: its title reads as prose.
                 } else {
                     attrs[.link] = link
                 }
@@ -278,7 +281,8 @@ extension SelectableText {
     /// Holds the render key `updateUIView` compares against, and answers link taps: an
     /// `orbit-attachment:<id>` link isn't a URL anything can open (the bytes are bearer-guarded), so
     /// tapping one downloads the file and offers it through the share sheet — iOS's "download": Save
-    /// to Files, Save Image, AirDrop. Every other link keeps the system's default action.
+    /// to Files, Save Image, AirDrop. A task or session reference (`orbit-task:<id>`) opens it in the
+    /// app. Every other link keeps the system's default action.
     @MainActor final class Coordinator: NSObject, UITextViewDelegate {
         var key: Int?
         var attachments: AttachmentImageStore?
@@ -287,8 +291,11 @@ extension SelectableText {
 
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
                       defaultAction: UIAction) -> UIAction? {
-            guard case .link(let url) = textItem.content,
-                  let id = AttachmentLink.attachmentID(url) else { return defaultAction }
+            guard case .link(let url) = textItem.content else { return defaultAction }
+            if let route = ReferenceLink.route(url) {
+                return UIAction(title: "Open") { [weak self] _ in self?.app?.route(to: route) }
+            }
+            guard let id = AttachmentLink.attachmentID(url) else { return defaultAction }
             return UIAction(title: "Download") { [weak self, weak textView] _ in
                 self?.download(id, from: textView)
             }

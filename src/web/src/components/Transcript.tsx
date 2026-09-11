@@ -1556,9 +1556,11 @@ function CodeBlock({ children }: any) {
 }
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
-/** `#`-references the composer materialises. Both spellings of the id are accepted, since what a
- *  client holds is the base62 public id and older messages may carry the raw uuid. */
-const ORBIT_REFERENCE_RE = /^orbit-(list|task):([0-9a-zA-Z-]+)$/;
+/** `#`-references the composer materialises, and the same links agents are told to write when they
+ *  name a task, session, project or list to the user (runner-go agent_instructions.go), so a reply
+ *  reads as titles rather than bare ids. Both spellings of the id are accepted, since what a client
+ *  holds is the base62 public id and older messages may carry the raw uuid. */
+const ORBIT_REFERENCE_RE = /^orbit-(list|task|session|project):([0-9a-zA-Z-]+)$/;
 
 function attachmentIdFromSrc(src: unknown): string | null {
   if (typeof src !== 'string') return null;
@@ -1683,6 +1685,13 @@ function nodeText(node: ReactNode): string {
   return '';
 }
 
+const REFERENCE_ROUTES = {
+  list: { base: '/lists', label: 'Task list' },
+  task: { base: '/tasks', label: 'Task' },
+  session: { base: '/sessions', label: 'Session' },
+  project: { base: '/projects', label: 'Project' },
+} as const;
+
 /**
  * The route a `#`-reference points at, or null when the href is not one — including when the id
  * is unparseable, which prose is entitled to contain. A bad reference falls through to a plain
@@ -1694,9 +1703,8 @@ function referenceRoute(href: unknown): { path: string; label: string } | null {
   if (!m) return null;
   try {
     const id = encodeId(m[2]);
-    return m[1] === 'list'
-      ? { path: `/lists/${id}`, label: 'Task list' }
-      : { path: `/tasks/${id}`, label: 'Task' };
+    const { base, label } = REFERENCE_ROUTES[m[1] as keyof typeof REFERENCE_ROUTES];
+    return { path: `${base}/${id}`, label };
   } catch {
     return null;
   }

@@ -1057,6 +1057,20 @@ describe('transcript Markdown links', () => {
     expect(html).not.toContain('href=""');
   });
 
+  it('routes the session and project references an agent writes instead of a bare id', () => {
+    // The shape runner-go's agent instructions ask for when a reply names Orbit things.
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <MD>{`Filed under [Unify ids](orbit-project:${LIST_B62}); [the session running it](orbit-session:${LIST_UUID}) is on it.`}</MD>
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain(`href="/projects/${LIST_B62}"`);
+    expect(html).toContain(`href="/sessions/${LIST_B62}"`);
+    expect(html).toContain('the session running it');
+    expect(html).not.toContain('href=""');
+  });
+
   it('shows the title, not the id, for a task title carrying its own brackets', () => {
     // The composer escapes them; this is the other half of that contract, and the shape every
     // task title in this deployment has.

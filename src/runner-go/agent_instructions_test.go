@@ -35,6 +35,9 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		// whether it may act alone.
 		"never call project_create without one",
 		"from this same session",
+		// A reply names Orbit things by a link the clients draw as the title, not by a bare id.
+		"`[Fix login redirect](orbit-task:<id>)`",
+		"orbit-session:<id>",
 	} {
 		if !strings.Contains(got, phrase) {
 			t.Errorf("merged instructions do not contain %q", phrase)
@@ -145,7 +148,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "returned its id", "capabilities --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "returned its id", "orbit-session:<id>", "capabilities --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}

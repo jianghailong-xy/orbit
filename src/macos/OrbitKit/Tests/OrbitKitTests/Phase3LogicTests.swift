@@ -25,6 +25,31 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertNil(DeepLink.parse(URL(string: "orbit://bogus/x")!))     // unknown host
     }
 
+    // MARK: reference links
+
+    func testReferenceLinkRoutesTasksAndSessions() {
+        // What agents are told to write instead of a bare id; the ids are from a real reply.
+        XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-task:34MUgGQQWqTXPwyihadZ7")!),
+                       .task("34MUgGQQWqTXPwyihadZ7"))
+        XCTAssertEqual(ReferenceLink.route(URL(string: "orbit-session:5rYtl8WA1NSca2rDrCMHmW")!),
+                       .session("5rYtl8WA1NSca2rDrCMHmW"))
+        XCTAssertFalse(ReferenceLink.isInert(URL(string: "orbit-task:34MUgGQQWqTXPwyihadZ7")!))
+    }
+
+    func testReferenceLinkWithNowhereToGoIsInert() {
+        for raw in ["orbit-project:34MUgGQQWqTXPwyihadZ7", "orbit-list:34MUgGQQWqTXPwyihadZ7", "orbit-task:not-an-id"] {
+            XCTAssertNil(ReferenceLink.route(URL(string: raw)!), raw)
+            XCTAssertTrue(ReferenceLink.isInert(URL(string: raw)!), raw)
+        }
+    }
+
+    func testOtherLinksAreNotReferences() {
+        for raw in ["orbit-attachment:abc123", "orbit://task/abc", "https://example.com/orbit-task:abc"] {
+            XCTAssertNil(ReferenceLink.route(URL(string: raw)!), raw)
+            XCTAssertFalse(ReferenceLink.isInert(URL(string: raw)!), raw)
+        }
+    }
+
     // MARK: poll-diff → notification events
 
     func testNeedsApprovalTransition() {

@@ -40,6 +40,13 @@ struct OrbitiOSApp: App {
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                 }
+                // A `Text` link naming a task or session (`[title](orbit-task:<id>)`) opens it here —
+                // a table cell, say; transcript prose is a UITextView whose delegate does the same.
+                .environment(\.openURL, OpenURLAction { url in
+                    guard let route = ReferenceLink.route(url) else { return .systemAction }
+                    model.route(to: route)
+                    return .handled
+                })
                 // Both sides of this are keyed to `.background` — a REAL trip out of the foreground —
                 // and never to `.inactive`, which on iOS is the transient state for a notification
                 // banner, a Notification/Control Centre pull, the app switcher or a system dialog. The

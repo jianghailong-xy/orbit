@@ -41,3 +41,32 @@ public enum DeepLink {
         s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s
     }
 }
+
+/// A transcript link naming an Orbit object: `[title](orbit-task:<id>)`, and likewise
+/// `orbit-session:`, `orbit-project:` and `orbit-list:`. The composer's `#`-references send them and
+/// agents are told to write them instead of a bare id, so the reader sees a title. Mirrors web's
+/// `referenceRoute` (Transcript.tsx), except that this app has a screen only for tasks and sessions.
+public enum ReferenceLink {
+    /// Where tapping the link goes, or nil for anything but a task or session reference.
+    public static func route(_ url: URL) -> Route? {
+        guard let ref = parse(url), PublicID.toUUID(ref.id) != nil else { return nil }
+        switch ref.kind {
+        case "task":    return .task(ref.id)
+        case "session": return .session(ref.id)
+        default:        return nil
+        }
+    }
+
+    /// A reference this app can't open — a project or task list it has no screen for, or an id that
+    /// doesn't parse. A view draws its title as prose rather than a link whose tap could only do nothing.
+    public static func isInert(_ url: URL) -> Bool {
+        parse(url) != nil && route(url) == nil
+    }
+
+    private static func parse(_ url: URL) -> (kind: String, id: String)? {
+        guard let scheme = url.scheme?.lowercased(), scheme.hasPrefix("orbit-") else { return nil }
+        let kind = String(scheme.dropFirst("orbit-".count))
+        guard ["task", "session", "project", "list"].contains(kind) else { return nil }
+        return (kind, String(url.absoluteString.dropFirst(scheme.count + 1)))
+    }
+}

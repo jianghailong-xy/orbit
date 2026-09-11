@@ -52,6 +52,11 @@ func orbitCLIInstructionExecutable(exe string) string {
 // something it can check itself, which also catches the case where it wrote no task
 // at all and merely listed one in its reply.
 //
+// The reference paragraph exists because the tools answer with base62 ids, and an agent reporting
+// what it did pastes them into prose, where they are the one spelling the user cannot read. The
+// `orbit-<kind>:<id>` link is the shape the composer's #-references already use: clients draw its
+// text and route the click (web referenceRoute, OrbitKit ReferenceLink), so the id stays checkable.
+//
 // The project paragraph states the default first ("one task") and only then the
 // shape worth proposing, because the previous form stated only triggers, and one
 // of them -- "will not finish in this session" -- is arguable about any non-trivial
@@ -73,6 +78,9 @@ func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
 		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
 		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
+		"When you mention a task, session, project or task list to the user, link it by name instead of pasting its bare id: " +
+		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
+		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitProjectInstructions(insideRecordedWork) +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
