@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DecisionStrip,
   NEEDS_DECISION_LABEL,
-  NO_CARD_NOTE,
   POINTER_HINT,
   WAITING_ON_YOU_ACTION,
   WAITING_ON_YOU_LABEL,
@@ -33,9 +32,9 @@ import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDe
  *    a CENSUS of the rendered `<button>`s rather than a list of labels that should not appear:
  *    every control in the output has to be one of the two that navigate, so a re-added action is
  *    caught whether it is pressable, `disabled`, hidden by CSS or spelled some other way.
- *  - "A pointer that cannot point is not a pointer" is the other half of the same round. A row
- *    with no card on screen renders as text carrying the sentence saying why — not as a control
- *    that does nothing, which would have been worse than the button it replaced.
+ *  - "A row is counted where its card is" is the other half of the same round. A row whose card
+ *    this conversation does not draw is neither listed nor counted — not a control that does
+ *    nothing, and not a number about another project's tasks that nobody here can clear.
  *  - "No bulk answer" is not a feature anybody will notice missing — it is a property that quietly
  *    disappears the first time somebody with fifteen pending rows wants to be done with them.
  *  - And "nothing is shown to a reader who cannot act on it". The rows are found on the ACCOUNT,
@@ -130,18 +129,22 @@ const render = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
   renderToStaticMarkup(element);
 
 /** The two answers the page can give about a row: its card is on screen, or it is not. Most tests
- *  take the second, because that is the state a rail is in whenever no coordinator turn is live. */
+ *  take the first, because a row whose card is drawn in another conversation is not on this strip
+ *  at all — there would be nothing left to assert about. */
 const NO_CARDS = (): boolean => false;
 const EVERY_CARD = (): boolean => true;
 
 /** The strip as a reader first meets it: folded. */
-const collapsed = (payload: PendingDecisionQueue): string =>
-  render(<DecisionStrip queue={payload} open={false} onToggle={() => {}} />);
+const collapsed = (
+  payload: PendingDecisionQueue,
+  hasCard: (row: PendingDecisionRow) => boolean = EVERY_CARD,
+): string =>
+  render(<DecisionStrip queue={payload} open={false} hasCard={hasCard} onToggle={() => {}} />);
 
 /** And after the one interaction that opens it. */
 const expandedStrip = (
   payload: PendingDecisionQueue,
-  hasCard: (row: PendingDecisionRow) => boolean = NO_CARDS,
+  hasCard: (row: PendingDecisionRow) => boolean = EVERY_CARD,
 ): string =>
   render(<DecisionStrip queue={payload} open hasCard={hasCard} onToggle={() => {}} />);
 
@@ -427,11 +430,12 @@ describe('a question is put to the sessions that can answer it, and to no others
     expect(collapsed(payload)).toContain(needsDecisionCount(2));
     for (const hasCard of [NO_CARDS, EVERY_CARD]) {
       const html = expandedStrip(payload, hasCard);
+      const shown = hasCard === EVERY_CARD ? 2 : 0;
       expect(html).not.toContain('the SOURCE selector audit');
       expect(html).not.toContain(B.taskId);
       expect(html).not.toContain('run of the task it is deciding');
-      expect(occurrences(html, 'decision-rail-row')).toBe(2);
-      expect(occurrences(html, 'decision-rail-pointer')).toBe(hasCard === EVERY_CARD ? 2 : 0);
+      expect(occurrences(html, 'decision-rail-row')).toBe(shown);
+      expect(occurrences(html, 'decision-rail-pointer')).toBe(shown);
     }
   });
 });
@@ -443,9 +447,10 @@ describe('a question is put to the sessions that can answer it, and to no others
  * it could be a decision surface at all. Turning it into a pointer spends that: a row whose card
  * is not on screen has nowhere to go. The page answers which rows have one with the evidence card's
  * own filter (`evidenceDecisionCardRows`), so what the strip has to get right is what it does with
- * a `false` — which is to stop being a control and say why.
+ * a `false` — which is to leave the row out, count and all: its card, and the number that should
+ * lead with it, belong to the coordinator of the project its task is filed under.
  */
-describe('a row points at its card, or says there is none', () => {
+describe('a row points at its card, and is not on the strip without one', () => {
   const one = (over: Partial<PendingDecisionRow> = {}): PendingDecisionQueue => {
     const only = row({ taskId: 'task-open', ...over });
     return {
@@ -468,39 +473,25 @@ describe('a row points at its card, or says there is none', () => {
     expect(html).toContain('1h 30m');
   });
 
-  it('is not a control at all when there is no card to reach', () => {
-    const html = expandedStrip(one(), NO_CARDS);
+  it('is not on the strip, and not in its count, when this conversation draws no card for it', () => {
+    // A row whose card is drawn in another conversation is that coordinator's question. Kept here
+    // it could only be text saying so, under a number this reader could clear none of.
+    expect(expandedStrip(one(), NO_CARDS)).toBe('');
+    expect(collapsed(one(), NO_CARDS)).toBe('');
+  });
 
-    // The row is still there, and it is still readable — it is simply not something to press.
+  it('counts and lists only the rows whose card is here', () => {
+    // Three rows, one card. The one with a card is the whole group, and every number agrees.
+    const hasCard = (each: PendingDecisionRow): boolean => each.taskId === 'task-middle';
+    const html = expandedStrip(queue(), hasCard);
+
+    expect(collapsed(queue(), hasCard)).toContain(needsDecisionCount(1));
+    expect(html).toContain('oldest 2h');
     expect(occurrences(html, 'decision-rail-row')).toBe(1);
-    expect(html).toContain('the derived pending queue');
-    expect(html).toContain('decision-rail-inert');
-    expect(html).not.toContain('decision-rail-pointer');
-    expect(html).not.toContain(POINTER_HINT);
-    // Nothing inside the group is a button: the only one left in the whole render is the fold.
-    expect(occurrences(html, '<button')).toBe(1);
-    expect(html).toContain('decision-strip-line');
-  });
-
-  it('says what is happening instead, rather than leaving a dead row', () => {
-    // The acceptance's core: what replaces the pointer is a sentence, and it names where a
-    // decision is actually made. A blank row would be the same "pressed it, nothing happened"
-    // one step earlier.
-    const html = expandedStrip(one(), NO_CARDS);
-    expect(html).toContain('decision-rail-why');
-    expect(html).toContain(NO_CARD_NOTE);
-    expect(NO_CARD_NOTE.toLowerCase()).toContain('coordinator session');
-    // And it is gone the moment there is somewhere to go.
-    expect(expandedStrip(one(), EVERY_CARD)).not.toContain(NO_CARD_NOTE);
-  });
-
-  it('gives every row its own answer rather than one for the group', () => {
-    // Three rows, one card. The one with a card points; the other two say why they do not.
-    const html = expandedStrip(queue(), (each) => each.taskId === 'task-middle');
-
     expect(occurrences(html, 'decision-rail-pointer')).toBe(1);
-    expect(occurrences(html, 'decision-rail-inert')).toBe(2);
-    expect(occurrences(html, NO_CARD_NOTE)).toBe(2);
+    expect(html).not.toContain('decision-rail-inert');
+    expect(html).not.toContain('the decision door');
+    expect(html).not.toContain('the stalled inventory');
     // The pointer is on the row it belongs to.
     const pointer = html.slice(html.indexOf('decision-rail-pointer'));
     expect(pointer.slice(0, pointer.indexOf('</button>'))).toContain('the evidence envelope');
@@ -665,14 +656,13 @@ describe('a row the door would refuse whatever was pressed', () => {
     expect(html).toContain('quotes no project criterion');
     expect(html).toContain(WAITING_ON_YOU_ACTION);
     expect(html).toContain('submit another evidence revision quoting the project criterion');
-    // And the reason it is not a pointer is its own, not the generic one: there will never be a
-    // card for this row anywhere, so it is not told where one is drawn. Read off THIS group — the
-    // decidable row in the group above does carry the generic sentence, and a predicate over the
-    // whole strip would be answered by that one.
+    // And it is not a pointer: there will never be a card for this row anywhere. Read off THIS
+    // group — the decidable row in the group above is one, and a predicate over the whole strip
+    // would be answered by that.
     const group = html.slice(html.indexOf(WAITING_ON_YOU_LABEL));
     expect(group).toContain('decision-rail-inert');
+    expect(group).not.toContain('decision-rail-pointer');
     expect(group).toContain(WAITING_ON_YOU_ACTION);
-    expect(group).not.toContain(NO_CARD_NOTE);
   });
 
   it('still shows enough to chase the submission it is about', () => {

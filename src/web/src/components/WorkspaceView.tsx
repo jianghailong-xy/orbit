@@ -3159,10 +3159,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
 
-  // Which of those rows the pinned strip may point at: the ones the evidence card below is drawn
-  // for, by the card's own filter over the same read and the project this session coordinates. The
-  // strip counts and points; a row this conversation draws no card for is told so rather than given
-  // a pointer that goes nowhere.
+  // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
+  // the card's own filter over the same read and the project this session coordinates. The strip
+  // counts and points at those and no others; a row this conversation draws no card for is counted
+  // by the coordinator that draws it.
   const decisionCards = new Set(
     evidenceDecisionCardRows(pendingDecisions.data ?? null, selectedSession?.projectId ?? null)
       .map(decisionRowKey),

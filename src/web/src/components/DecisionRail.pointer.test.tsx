@@ -8,9 +8,9 @@ import { pendingDecisionsQuery } from '../lib/queries';
 import { ApprovalPanel } from './ApprovalPanel';
 import {
   DecisionStrip,
-  NO_CARD_NOTE,
   POINTER_HINT,
   decisionRowKey,
+  needsDecisionCount,
   revealDecisionCard,
   type PendingDecisionQueue,
   type PendingDecisionRow,
@@ -31,8 +31,8 @@ import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './Evidenc
  * The rail could decide without a live turn; that is what it gave up. So a pointer with nothing to
  * point at would be strictly worse than the button it replaced — a control that does nothing when
  * pressed, in place of one that worked. Every way a waiting row can lack a card in a conversation
- * is asserted below, and what is asserted is not "the click is a no-op" but that there is no
- * control to click.
+ * is asserted below, and what is asserted is not "the click is a no-op" but that the row is not on
+ * this strip at all, and not in its count.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -44,6 +44,7 @@ const PROJECT_ID = '34MPiBgZ80YpSKt0lmTQA';
 const OTHER_PROJECT_ID = '34LWcmLItBx6ytdO26XXF';
 const TASK_A = '34LMiluvx0jK63cj8arWl';
 const TASK_B = '34LVWtmeCNjbcCbCF2wDd';
+const TASK_C = '34LXq2fT1wZbN8mUe5RkA';
 
 function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
   return {
@@ -234,7 +235,6 @@ describe('a row points at the evidence card that answers it', () => {
     // navigation does not settle a question.
     await click(pointers(scope)[0]);
     expect(pointers(scope)).toHaveLength(1);
-    expect(strip(scope).textContent).not.toContain(NO_CARD_NOTE);
   });
 });
 
@@ -243,23 +243,16 @@ describe('a row points at the evidence card that answers it', () => {
  * card for it.
  *
  * Each case is a real thing that happens, and all of them come out of the card's own filter. What
- * each asserts is the same: the row is still there, it is NOT a control, it says where its card is
- * drawn, and nothing on the page carries its handle.
+ * each asserts is the same: the row is not on the strip and not in its count, and nothing on the
+ * page carries its handle.
  */
-describe('a row this conversation draws no card for is not a pointer', () => {
-  /** Nothing to press, and something to read, whichever way the card is missing. */
-  const expectInert = (scope: HTMLElement, r: PendingDecisionRow): void => {
-    const rail = strip(scope);
-    expect(rail.querySelector('.decision-rail-row'), 'the row itself is gone').not.toBeNull();
-    expect(rail.textContent).toContain(r.title);
+describe('a row this conversation draws no card for is not on its strip', () => {
+  /** Nothing to press and nothing to read, whichever way the card is missing. */
+  const expectAbsent = (scope: HTMLElement, r: PendingDecisionRow): void => {
+    // The only row in the read, so the strip has nothing left to say and is not drawn at all.
+    expect(scope.querySelector('.decision-strip'), 'the strip is still drawn').toBeNull();
+    expect(scope.textContent).not.toContain(r.title);
     expect(pointers(scope)).toHaveLength(0);
-    expect(rail.querySelector('.decision-rail-inert')).not.toBeNull();
-    // The only control left in the whole strip is the fold. Nothing inside the group is pressable
-    // — which is the assertion, rather than "the click does nothing".
-    expect([...rail.querySelectorAll('button')].map((each) => each.className)).toEqual([
-      'decision-strip-line',
-    ]);
-    expect(rail.textContent).toContain(NO_CARD_NOTE);
     expect(anchorFor(scope, r), 'something on the page publishes this row’s handle').toBeNull();
     expect(scrolled).toEqual([]);
   };
@@ -267,17 +260,33 @@ describe('a row this conversation draws no card for is not a pointer', () => {
   it('in a session that coordinates no project', async () => {
     // An ordinary conversation can still be handed rows it may decide; it draws a card for none.
     const only = row();
-    expectInert(await page({ rows: [only], projectId: null }), only);
+    expectAbsent(await page({ rows: [only], projectId: null }), only);
   });
 
   it('in a coordinator session, for a task filed under another project', async () => {
     const elsewhere = row({ projectId: OTHER_PROJECT_ID });
-    expectInert(await page({ rows: [elsewhere] }), elsewhere);
+    expectAbsent(await page({ rows: [elsewhere] }), elsewhere);
   });
 
   it('in a coordinator session, for a task filed under no project', async () => {
     const unfiled = row({ projectId: null });
-    expectInert(await page({ rows: [unfiled] }), unfiled);
+    expectAbsent(await page({ rows: [unfiled] }), unfiled);
+  });
+
+  it('counts only its own project’s row when the account has others waiting elsewhere', async () => {
+    // The screenshot this came from: a coordinator leading with "5 needs your decision", every one
+    // of them another project's task and none with a card in the conversation it sat above.
+    const own = row();
+    const elsewhere = row({ taskId: TASK_B, title: 'the evidence envelope', projectId: OTHER_PROJECT_ID });
+    const unfiled = row({ taskId: TASK_C, title: 'the stalled inventory', projectId: null });
+    const scope = await page({ rows: [elsewhere, own, unfiled] });
+
+    expect(strip(scope).querySelector('.decision-strip-count')?.textContent).toBe(needsDecisionCount(1));
+    expect(strip(scope).querySelectorAll('.decision-rail-row')).toHaveLength(1);
+    expect(pointers(scope)).toHaveLength(1);
+    expect(strip(scope).textContent).toContain(own.title);
+    expect(scope.textContent).not.toContain(elsewhere.title);
+    expect(scope.textContent).not.toContain(unfiled.title);
   });
 
   it('does not throw or scroll if a reveal is asked for anyway', async () => {

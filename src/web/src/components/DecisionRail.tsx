@@ -46,8 +46,8 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
  * output that nothing here answers anything — absence, not `disabled`, because a disabled button is
  * still a second door with a lock somebody can take off.
  *
- * A POINTER THAT CANNOT POINT SAYS SO
- * -----------------------------------
+ * A ROW IS COUNTED WHERE ITS CARD IS
+ * ----------------------------------
  * A pointer is only worth having if it arrives somewhere. The card is drawn from the same read as
  * these rows and waits on no turn, so what a waiting row can lack is a card in THIS conversation:
  * one is drawn only in the coordinator session of the project the row's task is filed under. An
@@ -56,9 +56,10 @@ import { pendingCriteriaDecisionsQuery, pendingDecisionsQuery } from '../lib/que
  * holds (`evidenceDecisionCardRows` in `EvidenceDecisionCard.tsx`): is there a card for this row
  * on screen.
  *
- * A row with one is a control. A row without one is NOT a control: it is text, and it carries the
- * sentence saying where its card is drawn instead. Trading a button that worked for a pointer that
- * does nothing when pressed would have been worse than changing nothing.
+ * A row without one is neither listed nor counted here. It used to stay, as text saying where its
+ * card was drawn instead, and every coordinator in the account then led with the same number about
+ * other projects' tasks — a count this conversation could clear none of. The row is still open, and
+ * the strip of the conversation that draws its card counts it.
  *
  * ONE LINE UNTIL ASKED
  * --------------------
@@ -219,16 +220,6 @@ export function decisionRowKey(row: Pick<PendingDecisionRow, 'taskId' | 'evidenc
 export const POINTER_HINT = 'Answer on its card ↓';
 
 /**
- * What a row says when there is no card to send anybody to.
- *
- * It names where the card IS drawn, so the absence reads as "not here" rather than as a failure —
- * and it promises no card later, because this conversation will never draw one for this row.
- */
-export const NO_CARD_NOTE =
-  'No card for this one in this conversation. Its decision card is drawn only in the coordinator '
-  + 'session of the project its task is filed under, so there is nothing to press here.';
-
-/**
  * What has to happen before this row becomes answerable, addressed to the party who can do it.
  *
  * There is one such party and this row is only ever shown to it: nothing the reader can press
@@ -329,19 +320,13 @@ function DecisionRows({
                   <RowFacts row={row} />
                 </div>
                 <div className="decision-rail-why">
-                  {row.decidability.decidable ? (
-                    <Typography.Text type="secondary">{NO_CARD_NOTE}</Typography.Text>
-                  ) : (
-                    <>
-                      <Typography.Text type="warning">
-                        {row.decidability.refusal
-                          ?? 'no decision can be recorded about this evidence'}
-                      </Typography.Text>
-                      <div>
-                        <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
-                      </div>
-                    </>
-                  )}
+                  <Typography.Text type="warning">
+                    {row.decidability.refusal
+                      ?? 'no decision can be recorded about this evidence'}
+                  </Typography.Text>
+                  <div>
+                    <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
+                  </div>
                 </div>
               </>
             )}
@@ -402,10 +387,11 @@ export function decidableCriteriaRows(
  * It takes the whole payload as a prop and issues no request, so a static render can assert what
  * each state puts on screen — including the states that are about absence.
  *
- * `NEEDS YOUR DECISION` is built from the rows this session may answer and from nothing else, and
- * the count on the collapsed line is the length of that same array. One array, so the number a
- * reader decides to stop on cannot promise more than the list under it delivers — and a row this
- * reader may not answer can never appear under a heading that says it should.
+ * `NEEDS YOUR DECISION` is built from the rows this session may answer on a card in this
+ * conversation and from nothing else, and the count on the collapsed line is the length of that
+ * same array. One array, so the number a reader decides to stop on cannot promise more than the
+ * list under it delivers — and a row this reader may not answer, or may answer only in another
+ * conversation, can never appear under a heading that says it should.
  */
 export function DecisionStrip({
   queue,
@@ -423,7 +409,7 @@ export function DecisionStrip({
   /** Expanded is a deliberate act; the default is the one line. */
   open: boolean;
   /** Whether this row's decision card is on screen and could still be answered. The default is
-   *  the honest one for a caller that does not know: no pointer, and the sentence saying why. */
+   *  the honest one for a caller that does not know: the row is neither listed nor counted. */
   hasCard?: (row: PendingDecisionRow) => boolean;
   onToggle: (open: boolean) => void;
   onReveal?: (row: PendingDecisionRow) => void;
@@ -431,8 +417,9 @@ export function DecisionStrip({
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
-  // session may not answer is not a question put to this session.
-  const decisions = queue.pending.filter((row) => row.independence.independent);
+  // session may not answer is not a question put to this session. Nor is one whose card another
+  // conversation draws: that coordinator's strip counts it, and this one could clear none of it.
+  const decisions = queue.pending.filter((row) => row.independence.independent && hasCard(row));
   // Oldest first is the order the server sends, so the age this group leads with is the first row's
   // rather than the payload's `oldestAgeSeconds`. Same reason the count comes from `decisions`:
   // every number on screen is read off the list under it, so there is no second value to drift.
