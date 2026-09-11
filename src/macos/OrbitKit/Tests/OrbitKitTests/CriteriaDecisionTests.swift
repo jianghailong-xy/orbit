@@ -136,6 +136,24 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertTrue(CriteriaDecisions.isOpen(unread))
     }
 
+    /// Dimmed whole exactly when the card stopped being a question — so, like the bar's count, it
+    /// parts company with `answerable` at `unread`, which stays bright.
+    func testAStaleCardIsDimmedAndALiveOrUnreadableOneIsNot() {
+        let live = CriteriaDecisions.standing(queue: queue([row("i-1")]), intentId: "i-1")
+        let moved = CriteriaDecisions.standing(queue: queue([row("i-1", decidable: false)]),
+                                               intentId: "i-1")
+        let replaced = CriteriaDecisions.standing(queue: queue([row("i-2", supersedes: "i-1")]),
+                                                  intentId: "i-1")
+        let settled = CriteriaDecisions.standing(queue: queue([]), intentId: "i-1")
+        let unread = CriteriaDecisions.standing(queue: nil, intentId: "i-1")
+        // The fixtures are the three dead states and not three copies of one.
+        XCTAssertEqual([moved, replaced, settled].map(CriteriaDecisions.badge),
+                       ["seal moved", "replaced", "settled"])
+
+        XCTAssertEqual([live, moved, replaced, settled, unread].map(CriteriaDecisions.isDimmed),
+                       [false, true, true, true, false])
+    }
+
     // MARK: what the card shows
 
     func testTheMetaLineCarriesTheProvenanceAndWhichRulerThisWasDraftedAgainst() {
@@ -518,6 +536,14 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertTrue(AcceptanceConfirmations.isOpen(confirmation(.stale)))
         XCTAssertFalse(AcceptanceConfirmations.isOpen(confirmation(.confirmed)))
         XCTAssertTrue(AcceptanceConfirmations.isOpen(nil))
+    }
+
+    func testOnlyAConfirmedSetDimsItsCardAndAnUnreadableOneStaysBright() {
+        XCTAssertFalse(AcceptanceConfirmations.isDimmed(confirmation(.unconfirmed)))
+        XCTAssertFalse(AcceptanceConfirmations.isDimmed(confirmation(.stale)))
+        XCTAssertTrue(AcceptanceConfirmations.isDimmed(confirmation(.confirmed)))
+        XCTAssertFalse(AcceptanceConfirmations.isDimmed(nil),
+                       "a standing this device could not read is not a card known to be dead")
     }
 
     func testAStaleConfirmationSaysWhichVersionWasConfirmedBefore() {
