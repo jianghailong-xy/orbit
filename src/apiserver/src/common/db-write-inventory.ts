@@ -1015,6 +1015,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "realtime/realtime.service.ts#failAbandonedWorktreeOperations", class: "MANY_ROWS", statements: 2 },
   { at: "realtime/realtime.service.ts#notifyRaw", class: "NOT_A_ROW_WRITE", statements: 1, note: "pg_notify, not a row write. Listed so the scan has somewhere to put it." },
   { at: "realtime/reaper.service.ts#purgeTrash", class: "MANY_ROWS", statements: 1 },
+  { at: "runner-api/codex-reset-plan-usage.ts#storeHeartbeatPlanUsage", class: "ONE_ROW_CAS", statements: 1, note: "A heartbeat's planUsage, compare-and-set on the stored value its Codex reset block was merged against (docs/codex-rate-limit-reset-contract.md §8). A lost race re-reads and merges again, at most PLAN_USAGE_CAS_ATTEMPTS times, then writes nothing and leaves the next heartbeat to report again; no attempt can store an older block over a newer one. Kept out of the heartbeat's own update, which stays one plain write to the hot runner row." },
   { at: "runner-api/runner-api.controller.ts#artifactResult", class: "ONE_ROW_CAS", statements: 1 },
   { at: "runner-api/runner-api.controller.ts#cloneResult", class: "ONE_ROW_CAS", statements: 1, note: "The CAS predicate is the fence as well as the guard: it names a workspace of THIS runner that is still CLONING, so a result arriving after the user retried the clone somewhere else matches nothing and writes nothing." },
   { at: "runner-api/runner-api.controller.ts#createApproval", class: "INSERT", statements: 1 },

@@ -122,8 +122,12 @@ func newClaudePlanUsageProbe() *planUsageProbe {
 	return &planUsageProbe{client: &http.Client{}, name: "claude plan-usage", fetch: fetchClaudePlanUsage}
 }
 
-func newCodexPlanUsageProbe() *planUsageProbe {
-	return &planUsageProbe{client: &http.Client{}, name: "codex plan-usage", fetch: fetchCodexPlanUsage}
+// newCodexPlanUsageProbe reads Codex usage for the runner process whose heartbeat leaseOwner is
+// leaseOwner: the generation of every rate-limit reset block the probe reads.
+func newCodexPlanUsageProbe(leaseOwner string) *planUsageProbe {
+	reader := &codexResetReader{leaseOwner: leaseOwner}
+	fetch := func(ctx context.Context, _ *http.Client) (*PlanUsage, error) { return fetchCodexPlanUsage(ctx, reader) }
+	return &planUsageProbe{client: &http.Client{}, name: "codex plan-usage", fetch: fetch}
 }
 
 // snapshot returns the latest usage, or nil if none has been fetched / it's
@@ -400,7 +404,7 @@ func parsePlanUsage(body []byte) (*PlanUsage, error) {
 	}, nil
 }
 
-func fetchCodexPlanUsage(ctx context.Context, _ *http.Client) (*PlanUsage, error) {
+func fetchCodexPlanUsage(ctx context.Context, reader *codexResetReader) (*PlanUsage, error) {
 	env := os.Environ()
 	cwd, _ := os.Getwd()
 	state, err := codexPlanUsageStateForEnv(env, cwd)
@@ -427,11 +431,7 @@ func fetchCodexPlanUsage(ctx context.Context, _ *http.Client) (*PlanUsage, error
 	if err != nil {
 		return nil, err
 	}
-	result, err := app.request(cctx, "account/rateLimits/read", nil)
-	if err != nil {
-		return nil, err
-	}
-	return parseCodexPlanUsage(result)
+	return reader.readCodexPlanUsage(cctx, app)
 }
 
 func startBareCodexAppServer(ctx context.Context, stateDir string, env []string, cwd string) (*codexAppServer, error) {
@@ -550,6 +550,11 @@ func mergeCodexPlanUsage(current, update *PlanUsage) *PlanUsage {
 	}
 	if merged.FetchedAt == "" {
 		merged.FetchedAt = current.FetchedAt
+	}
+	// A reset block comes only from this process's own reads — a rolling notification carries
+	// none — and never gives way to the block of a read that started earlier.
+	if !codexResetBlockSupersedes(merged.RateLimitReset, current.RateLimitReset) {
+		merged.RateLimitReset = current.RateLimitReset
 	}
 	merged.RateLimits = []PlanUsageRateLimit{{
 		LimitID:   merged.LimitID,

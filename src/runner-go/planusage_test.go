@@ -105,7 +105,7 @@ func TestCodexRateLimitSnapshotPrefersTopLevel(t *testing.T) {
 }
 
 func TestPlanUsageProbeMergesRollingCodexWindow(t *testing.T) {
-	p := newCodexPlanUsageProbe()
+	p := newCodexPlanUsageProbe(codexResetTestLeaseOwner)
 	p.store(codexPlanUsageFromSnapshot(map[string]interface{}{
 		"limitId":  "codex",
 		"planType": "plus",
@@ -130,7 +130,7 @@ func TestPlanUsageProbeMergesRollingCodexWindow(t *testing.T) {
 }
 
 func TestPlanUsageProbeIgnoresRollingUpdatesForOtherBuckets(t *testing.T) {
-	p := newCodexPlanUsageProbe()
+	p := newCodexPlanUsageProbe(codexResetTestLeaseOwner)
 	p.store(codexPlanUsageFromSnapshot(map[string]interface{}{
 		"limitId": "codex",
 		"primary": map[string]interface{}{"usedPercent": float64(18), "windowDurationMins": float64(10080)},
@@ -153,7 +153,7 @@ func TestPlanUsageProbeIgnoresRollingUpdatesForOtherBuckets(t *testing.T) {
 // A runner whose reads keep failing has no cached snapshot; a Spark-model session's
 // rolling update must not become the one displayed bucket by arriving first.
 func TestPlanUsageProbeIgnoresOtherBucketsBeforeAnyRead(t *testing.T) {
-	p := newCodexPlanUsageProbe()
+	p := newCodexPlanUsageProbe(codexResetTestLeaseOwner)
 
 	p.mergeCodexRateLimits(map[string]interface{}{
 		"limitId":   "codex_spark",
@@ -169,7 +169,7 @@ func TestPlanUsageProbeIgnoresOtherBucketsBeforeAnyRead(t *testing.T) {
 // Accounts whose plan bucket is not the default ID still track their own rolling
 // updates once a read has established which bucket that is.
 func TestPlanUsageProbeTracksNonDefaultPlanBucket(t *testing.T) {
-	p := newCodexPlanUsageProbe()
+	p := newCodexPlanUsageProbe(codexResetTestLeaseOwner)
 	p.store(codexPlanUsageFromSnapshot(map[string]interface{}{
 		"limitId": "codex_business",
 		"primary": map[string]interface{}{"usedPercent": float64(18), "windowDurationMins": float64(10080)},

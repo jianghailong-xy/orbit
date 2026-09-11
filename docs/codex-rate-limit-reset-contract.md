@@ -393,7 +393,9 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 | 6 | 同一毫秒、不同 generation | `REJECT_OLDER`（先到者保留） |
 | 7 | 同一毫秒、同一 generation：sequence 更大 / 相等 / 更小 | `ACCEPT_NEWER` / `REJECT_DUPLICATE` / `REJECT_OLDER` |
 
-写入：heartbeat 的 `planUsage` 其余部分照旧整体覆盖；块被拒时，写回保留已存储的块（在 `SELECT … FOR UPDATE` 的同一事务里合并）。
+写入：heartbeat 的 `planUsage` 其余部分照旧整体覆盖；块被拒时，写回保留已存储的块。实现是 compare-and-set，不开事务、不锁热行
+（`src/apiserver/src/runner-api/codex-reset-plan-usage.ts`）：读出存储值，`mergeHeartbeatPlanUsage` 合并，再以“`plan_usage`
+仍等于读出的值”为条件 `updateMany` 写回；条件落空说明有并发写入，重读重合并，至多 `PLAN_USAGE_CAS_ATTEMPTS` 次后放弃本次、等下一次 heartbeat。
 新鲜度（资格检查用）：`now − 15min ≤ fetchedAt ≤ now + 5min`。时钟跳变只会让 reset 暂时不可用，不会导致重复消费——
 防重复靠 key 与在途唯一，不靠快照。
 
@@ -415,7 +417,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 
 | 下游任务 | 模块 | 要做的事 |
 | --- | --- | --- |
-| 接入 Runner reset credit 权威读取与单调快照 | `src/runner-go/planusage.go`（`fetchCodexPlanUsage`、`parseCodexPlanUsage`、`mergeCodexPlanUsage`、`planUsageProbe`），新增指纹 key 读写；`src/apiserver/src/runner-api/runner-api.controller.ts` 的 heartbeat 写 `planUsage` | 生成块：`codexRateLimitResetFromRead` + `codexAccountFingerprint`，`fetchedAt` 取 read 开始时间，`generation` 为进程 `leaseOwner`，`sequence` 进程内递增；**`mergeCodexPlanUsage` 在 update 没有块时必须沿用 current 的块**（rolling 通知不带 reset credits）；apiserver 在事务里用 `orderCodexResetSnapshot` 合并写入 |
+| 接入 Runner reset credit 权威读取与单调快照 | `src/runner-go/planusage.go`（`fetchCodexPlanUsage`、`parseCodexPlanUsage`、`mergeCodexPlanUsage`、`planUsageProbe`），新增指纹 key 读写；`src/apiserver/src/runner-api/runner-api.controller.ts` 的 heartbeat 写 `planUsage` | 生成块：`codexRateLimitResetFromRead` + `codexAccountFingerprint`，`fetchedAt` 取 read 开始时间，`generation` 为进程 `leaseOwner`，`sequence` 进程内递增；**`mergeCodexPlanUsage` 在 update 没有块时必须沿用 current 的块**（rolling 通知不带 reset credits）；apiserver 用 `orderCodexResetSnapshot` 合并、以 compare-and-set 写入（§8） |
 | 实现 reset operation 接入与持久化 | Prisma schema 与迁移；`src/apiserver/src/runners/` 新路由；`src/shared/src/codec.ts` | 建表（§9.3）与 `Runner` 两个新列并在 heartbeat 里写入；§6.1 三个路由；`codexResetRefusal`、`newCodexResetOperation`、`codexResetCreateReplay`、`codexResetOperationView`；把 `clientRequestId`、`providerIdempotencyKey`、`claimLeaseOwner`、`operationId`、`heartbeatLeaseOwner` 加进 `NEVER_PUBLIC_ID_FIELDS`（`public-id-coverage.spec.ts` 会追问每个新的 `@db.Uuid` 列） |
 | 实现 heartbeat reset 命令与结果回执 | heartbeat 响应组装；新 runner 路由；`src/runner-go/runloop.go`、`transport.go` | `decideCodexResetDispatch` + `applyCodexResetResult` + `expireCodexResetOperation`，每次写入前 `codexResetTransitionViolations` 必须为空；runner 侧 `codexResetCommandDisposition` 与回执重试 |
 | 实现 Runner 幂等 consume 与权威刷新 | `src/runner-go`（新文件，复用 `codexAppServer`） | §6.4；`codexRateLimitResetCapabilityV1` 与 relay 在同一个提交里生效 |

@@ -30,6 +30,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import {
   AgentProvider,
   AgentExecConfig,
@@ -701,8 +702,6 @@ export class RunnerApiController {
         // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
         availableCommands: (dto?.commands ?? undefined) as Prisma.InputJsonValue | undefined,
         availableSkills: (dto?.skills ?? undefined) as Prisma.InputJsonValue | undefined,
-        // Latest provider plan-usage snapshot; older runners omit it (leave as-is).
-        planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
         // Capabilities belong to THIS authenticated process heartbeat, not to the machine forever.
@@ -748,6 +747,19 @@ export class RunnerApiController {
             : ((sanitizeRunnerRepoHealth(dto.repos) ?? []) as unknown as Prisma.InputJsonValue),
       },
     });
+    // Latest provider plan-usage snapshot; older runners omit it (leave as-is). Written on its own by
+    // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
+    // process, an older read, an old process or a late heartbeat never takes a newer one back.
+    if (dto?.planUsage != null) {
+      try {
+        if (!(await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner))) {
+          this.logger.warn(`runner ${runner.id}: planUsage not stored after ${PLAN_USAGE_CAS_ATTEMPTS} compare-and-set attempts; the next heartbeat reports it again`);
+        }
+      } catch (error) {
+        // Advisory telemetry, like the live diffs below: never fail the heartbeat for it.
+        this.logger.warn(`runner ${runner.id}: planUsage not stored (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,

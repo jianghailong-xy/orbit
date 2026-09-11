@@ -659,7 +659,7 @@ func runLoop(cfg *RunnerConfig) bool {
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := func() bool { return providerConfigured(providerClaude) }
 	go claudeUsageProbe.run(loopCtx, claudeActive, claudeIdle)
-	codexUsageProbe := newCodexPlanUsageProbe()
+	codexUsageProbe := newCodexPlanUsageProbe(t.leaseOwner)
 	codexActive := func() int { return activeProviderCount(providerCodex) }
 	codexIdle := func() bool { return providerConfigured(providerCodex) }
 	go codexUsageProbe.run(loopCtx, codexActive, codexIdle)
