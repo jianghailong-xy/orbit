@@ -144,29 +144,38 @@ const proposalsOf = (rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisio
   pending: rows,
 });
 
-const ORDINARY_ROW_TITLE = 'evidence this conversation draws no card for';
-/** What the ordinary conversation may decide: one row it draws no card for, so its strip is drawn
- *  and has something in it for the settlement row to be absent beside. */
+const ORDINARY_ROW_TITLE = 'evidence this conversation filed and must resubmit';
+/** What the ordinary conversation is shown: its own submission, waiting on a revision only it can
+ *  file. No card is drawn for it anywhere, and the strip lists it regardless — so the strip is
+ *  there, with something in it for the settlement row to be absent beside. */
 const ORDINARY_QUEUE: PendingDecisionQueue = {
   decidingSessionId: ORDINARY_PUBLIC,
-  count: 1,
-  oldestAgeSeconds: 600,
-  pending: [
+  count: 0,
+  oldestAgeSeconds: null,
+  pending: [],
+  waitingOnYou: [
     {
       taskId: TASK,
       title: ORDINARY_ROW_TITLE,
       projectId: PROJECT_PUBLIC,
-      criterion: { key: 'WIZvbV7Jv95soVSsV01Ux', text: 'the cards render from the derived read' },
+      criterion: null,
       evidenceRevision: '1',
       ageSeconds: 600,
-      claim: 'the pointer is drawn from the card’s own report',
+      claim: '',
       gaps: [],
       citations: [],
-      decidability: { decidable: true, refusal: null, requiredAction: null },
-      independence: { independent: true, disqualification: null, requiredAction: null },
+      decidability: {
+        decidable: false,
+        refusal: 'this evidence quotes no project criterion',
+        requiredAction: 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
+      },
+      independence: {
+        independent: false,
+        disqualification: 'this session is a run of the task it is deciding',
+        requiredAction: 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK',
+      },
     },
   ],
-  waitingOnYou: [],
 };
 
 /** What the stubbed server answers right now. Each case starts from settlement held on the owner:

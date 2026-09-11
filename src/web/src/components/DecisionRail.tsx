@@ -73,9 +73,9 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  * ---------------------------
  * A phone gets that judgment whole (project instruction #8): the line is the signal and pressing it
  * is the way through, straight to the highest card this conversation draws for a question it
- * counts, and no list ever opens under it. So on a phone it counts only what that press can reach —
- * a row with no card here is not counted there — and with nothing to reach it is not drawn. The rows
- * that need a sentence to say why they have no card keep the wider screens, where it has room.
+ * counts, and no list ever opens under it. So on a phone it counts only what that press can reach,
+ * and with nothing to reach it is not drawn. What only a sentence can carry — the resubmission a
+ * WAITING ON YOU row asks its submitter for — stays on the wider screens, where it has room.
  *
  * NOTHING IS SHOWN TO SOMEBODY WHO CANNOT ACT ON IT
  * ------------------------------------------------

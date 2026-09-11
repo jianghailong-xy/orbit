@@ -23,6 +23,9 @@ import {
  * never an answer, and on a phone a single line that no list opens under. Every assertion is a
  * predicate over the rendered output, and every absence sits beside the presence it is absent from.
  *
+ * Evidence rows are given a card on screen (`hasCard`) wherever they are meant to count: the strip
+ * lists a row only where its card is, so a row without one would say nothing about this question.
+ *
  * NO `../api` MOCK, as in `DecisionRail.test.tsx`: the strip takes its payload as props.
  */
 
@@ -99,6 +102,13 @@ function proposals(): PendingCriteriaDecisionQueue {
   };
 }
 
+/** What the door says about evidence it would refuse whoever answered. */
+const REFUSED = {
+  decidable: false,
+  refusal: 'this evidence quotes no project criterion',
+  requiredAction: 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
+} as const;
+
 type StripProps = Parameters<typeof DecisionStrip>[0];
 
 /** The strip as the page draws it: folded unless a case opens it, a desktop unless it says phone. */
@@ -137,8 +147,8 @@ describe('the settlement question in the strip', () => {
     expect(occurrences(withIt, 'decision-rail-row')).toBe(occurrences(without, 'decision-rail-row') + 1);
     expect(occurrences(withIt, SETTLEMENT_ROW_LABEL)).toBe(1);
     expect(without).not.toContain(SETTLEMENT_ROW_LABEL);
-    expect(render({ queue: queue(), confirmation: true })).toContain(needsDecisionCount(3));
-    expect(render({ queue: queue() })).toContain(needsDecisionCount(2));
+    expect(render({ queue: queue(), hasCard: EVERY_CARD, confirmation: true })).toContain(needsDecisionCount(3));
+    expect(render({ queue: queue(), hasCard: EVERY_CARD })).toContain(needsDecisionCount(2));
   });
 
   it('is a way to its card, said as where it goes', () => {
@@ -162,7 +172,7 @@ describe('the settlement question in the strip', () => {
     // Its card does not know when settlement began to wait on it, so the heading does not say.
     expect(opened).not.toContain('oldest');
     // Beside rows that have an age, the heading still leads with theirs.
-    expect(render({ queue: queue(), open: true, confirmation: true })).toContain('oldest 3h');
+    expect(render({ queue: queue(), open: true, hasCard: EVERY_CARD, confirmation: true })).toContain('oldest 3h');
   });
 });
 
@@ -217,11 +227,14 @@ describe('on a phone', () => {
   });
 
   it('counts only what the line can reach, and is not drawn when that is nothing', () => {
-    // The same rows with no card on screen: a desktop lists them, with the sentence saying why.
-    expect(render({ queue: queue(), open: true, hasCard: NO_CARDS })).toContain('decision-rail-inert');
+    // Rows with no card on screen: nowhere for the press to go.
     expect(render({ queue: queue(), phone: true, hasCard: NO_CARDS })).toBe('');
+    // A row the door would refuse, whatever the page says about a card: nowhere to go either.
+    const refused = queue({ pending: [row({ taskId: 'task-refused', decidability: { ...REFUSED } })] });
+    expect(render({ queue: refused, phone: true, hasCard: EVERY_CARD })).toBe('');
 
-    // A row waiting on this reader's own resubmission is never a way to a card either.
+    // A row waiting on this reader's own resubmission is never a way to a card: a desktop gives it
+    // its sentence, and a phone has no line to put it on.
     const mine = queue({
       count: 0,
       pending: [],
@@ -229,7 +242,7 @@ describe('on a phone', () => {
       waitingOnYou: [
         row({
           taskId: 'task-legacy',
-          decidability: { decidable: false, refusal: 'this evidence quotes no project criterion', requiredAction: 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION' },
+          decidability: { ...REFUSED },
           independence: { independent: false, disqualification: 'this session is a run of the task it is deciding', requiredAction: 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK' },
         }),
       ],
