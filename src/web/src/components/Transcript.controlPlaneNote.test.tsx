@@ -25,15 +25,14 @@ import { ExportCtx, type RunEvent, Transcript } from './Transcript';
  * those very characters — the bubble shows exactly what they typed and there is no entry, however
  * much it looks like a block.
  *
- * Coordinator context is the one of these an event stored before notes existed is still read for,
- * from its text. That older reading draws the very same entry, so one long conversation does not
- * show the same thing two ways.
+ * That holds for every block, a `#`-reference and a coordinator's role included: events stored
+ * before notes were recorded had theirs backfilled, so none of them is read out of the text.
  */
 
 const LABEL = '⊕ Orbit attached:';
 
 // The shapes the server appends (background-jobs-context.ts, list-events.service.ts,
-// coordinator-opening.ts).
+// coordinator-opening.ts, reference-expansion.ts).
 const BACKGROUND_JOBS = [
   '<background-jobs>',
   '  你不在的时候结束了：',
@@ -56,6 +55,16 @@ const COORDINATOR = [
   '你是项目（id: 34HvVYzGmE4NFDMiomVgi）的协调会话。',
   '这里用来协调任务，不是替任务干活。',
   '</orbit_project_coordinator_context>',
+].join('\n');
+
+const REFERENCED_TASK = [
+  '<referenced-task id="34MQb2AXbj3QAkZko92ob">',
+  '  标题   回填历史 user 事件的 controlPlaneNote',
+  '  状态   OPEN',
+  '  所属   (无列表) · 负责 orbit',
+  '  运行   共 1 次，其中执行过 turn 的 1 次；最近一次：RUNNING, 0 turns',
+  '  详情请用 task_get 自取。',
+  '</referenced-task>',
 ].join('\n');
 
 let container: HTMLDivElement;
@@ -147,21 +156,11 @@ async function expectFoldedEntry({ typed, block, kind, marker }: {
   expect(container.textContent).not.toContain(marker);
 }
 
-/** The person's bubble as `event` draws it in a fresh transcript: folded, then with its entry open. */
-async function drawnBubble(event: RunEvent): Promise<{ folded: string; open: string }> {
-  act(() => root.unmount());
-  root = createRoot(container);
-  await mount([event]);
-  const folded = bubble().outerHTML;
-  const toggle = attachedToggle();
-  expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
-  await click(toggle!);
-  return { folded, open: bubble().outerHTML };
-}
-
 describe.each([
   { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', marker: 'bgj_3a1af2b50428' },
   { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', marker: '累计 47 次' },
+  { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', marker: '的协调会话' },
+  { tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK, kind: 'referenced task', marker: '详情请用 task_get 自取' },
 ])('$tag', ({ typed, block, kind, marker }) => {
   it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to its original text', async () => {
     const appended = `\n\n${block}`;
@@ -178,29 +177,6 @@ describe.each([
     for (const line of block.split('\n')) expect(shown).toContain(line.trim());
     expect(attachedToggle()).toBeNull();
     expect(container.textContent).not.toContain('Orbit attached');
-  });
-});
-
-describe('<orbit_project_coordinator_context>', () => {
-  const typed = '把这个项目协调起来';
-  const appended = `\n\n${COORDINATOR}`;
-  const expected = { typed, block: COORDINATOR, kind: 'project coordinator context', marker: '的协调会话' };
-
-  it('with the note recorded: the same folded entry, named for the coordinator context', async () => {
-    await mount([userEvent(`${typed}${appended}`, appended)]);
-
-    await expectFoldedEntry(expected);
-  });
-
-  it('with no note: read from the text the older way, it is drawn as that very entry, folded and open alike', async () => {
-    await mount([userEvent(`${typed}${appended}`)]);
-
-    await expectFoldedEntry(expected);
-
-    const recorded = await drawnBubble(userEvent(`${typed}${appended}`, appended));
-    const read = await drawnBubble(userEvent(`${typed}${appended}`));
-    expect(read.folded).toBe(recorded.folded);
-    expect(read.open).toBe(recorded.open);
   });
 });
 

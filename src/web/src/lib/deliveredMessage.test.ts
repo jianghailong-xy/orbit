@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  describeInjected,
   describeNote,
   lastTypedUserMessageText,
-  splitDeliveredMessage,
   splitRecordedNote,
 } from './deliveredMessage';
 
@@ -35,77 +33,6 @@ const COORDINATOR = `<orbit_project_coordinator_context>
   这里用来协调任务，不是替任务干活。
 </orbit_project_coordinator_context>`;
 
-describe('splitDeliveredMessage', () => {
-  it('takes an appended block out of the bubble and keeps it verbatim', () => {
-    const out = splitDeliveredMessage(`把这个项目协调起来\n\n${COORDINATOR}`);
-
-    expect(out.text).toBe('把这个项目协调起来');
-    expect(out.injected).toHaveLength(1);
-    expect(out.injected[0].tag).toBe('orbit_project_coordinator_context');
-    // Verbatim, because the tooltip is the only remaining way to see what the model read.
-    expect(out.injected[0].text).toBe(COORDINATOR);
-  });
-
-  it('peels several blocks and keeps the order they were appended in', () => {
-    const out = splitDeliveredMessage(
-      `看下 #FineWeb\n\n${REF_LIST}\n\n${REF_TASK}\n\n${COORDINATOR}`,
-    );
-
-    expect(out.text).toBe('看下 #FineWeb');
-    expect(out.injected.map((b) => b.tag)).toEqual([
-      'referenced-list',
-      'referenced-task',
-      'orbit_project_coordinator_context',
-    ]);
-    expect(out.injected.at(-1)?.text).toBe(COORDINATOR);
-  });
-
-  it('leaves an ordinary message byte-identical', () => {
-    // Overwhelmingly the common case: one string comparison and nothing else happens.
-    const plain = '把 WARC 转换拆开并行跑，它不依赖去重完成。';
-
-    expect(splitDeliveredMessage(plain)).toEqual({ text: plain, injected: [] });
-  });
-
-  it('does not eat a tag the person typed mid-sentence', () => {
-    // The reason the match is anchored to the end. Someone asking about this very feature must
-    // not have their question silently rewritten.
-    const asking = `为什么 <referenced-task> 这个块会出现在我自己的气泡里？\n\n它是谁加的？`;
-
-    expect(splitDeliveredMessage(asking).text).toBe(asking);
-  });
-
-  it('does not strip an unclosed block', () => {
-    const broken = `问题\n\n<referenced-list id="x">\n  一半就断了`;
-
-    expect(splitDeliveredMessage(broken).injected).toEqual([]);
-  });
-
-  it('does not strip a tag that is not one of ours', () => {
-    const code = `帮我看下这段\n\n<my-component id="x">\n  <div/>\n</my-component>`;
-
-    expect(splitDeliveredMessage(code).injected).toEqual([]);
-  });
-
-  it('handles a message that is nothing but injected context', () => {
-    // A server-seeded turn with no text of its own.
-    const out = splitDeliveredMessage(`\n\n${COORDINATOR}`);
-
-    expect(out.text).toBe('');
-    expect(out.injected).toHaveLength(1);
-  });
-
-  it('never reads a condition board or a background-jobs block out of the text', () => {
-    // Those two are told apart by the note ingest records. Someone who pastes one into the
-    // composer — to ask why it showed up, say — sent exactly that, and must see exactly that.
-    for (const block of [CONDITIONS, BACKGROUND_JOBS]) {
-      const pasted = `这是什么？\n\n${block}`;
-
-      expect(splitDeliveredMessage(pasted)).toEqual({ text: pasted, injected: [] });
-    }
-  });
-});
-
 describe('splitRecordedNote', () => {
   it('splits exactly where the recorded note begins', () => {
     const note = `\n\n${BACKGROUND_JOBS}`;
@@ -130,36 +57,20 @@ describe('splitRecordedNote', () => {
   });
 });
 
-describe('describeInjected', () => {
-  it('names what was attached, so the reply is not unexplained', () => {
-    const { injected } = splitDeliveredMessage(`q\n\n${REF_LIST}\n\n${COORDINATOR}`);
-
-    expect(describeInjected(injected)).toBe('referenced list, project coordinator context');
-  });
-
-  it('counts a repeat instead of listing it twice', () => {
-    const { injected } = splitDeliveredMessage(`q\n\n${REF_TASK}\n\n${REF_TASK}`);
-
-    expect(describeInjected(injected)).toBe('referenced task ×2');
-  });
-});
-
 describe('describeNote', () => {
-  it('names a recorded note by the block it opens with, the two only a note can carry included', () => {
+  it('names a recorded note by the block it opens with', () => {
     expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('background jobs');
     expect(describeNote(CONDITIONS)).toBe('list conditions');
     expect(describeNote(COORDINATOR)).toBe('project coordinator context');
   });
 
-  it('names every block one delivery appended, the way the older reading names what it found', () => {
+  it('names every block one delivery appended, and counts a repeat instead of listing it twice', () => {
     // Delivery appends references, then the condition board, then background jobs, then the
     // coordinator's role: a coordinator with a build still running gets two blocks in one note.
     const appended = `\n\n${REF_TASK}\n\n${REF_TASK}\n\n${BACKGROUND_JOBS}\n\n${COORDINATOR}`;
 
     expect(describeNote(appended)).toBe('referenced task ×2, background jobs, project coordinator context');
-
-    const older = `\n\n${REF_LIST}\n\n${COORDINATOR}`;
-    expect(describeNote(older)).toBe(describeInjected(splitDeliveredMessage(`q${older}`).injected));
+    expect(describeNote(`\n\n${REF_LIST}\n\n${COORDINATOR}`)).toBe('referenced list, project coordinator context');
   });
 
   it('still names an opening it does not recognise, generically', () => {
@@ -171,9 +82,10 @@ describe('describeNote', () => {
 
 describe('lastTypedUserMessageText', () => {
   it('skips a newer image-only echo made non-empty solely by coordinator context', () => {
+    const note = `\n\n${COORDINATOR}`;
     const events = [
-      { type: 'user', payload: { text: `real question\n\n${COORDINATOR}` } },
-      { type: 'user', payload: { text: `\n\n${COORDINATOR}` } },
+      { type: 'user', payload: { text: `real question${note}`, controlPlaneNote: note } },
+      { type: 'user', payload: { text: note, controlPlaneNote: note } },
     ];
 
     expect(lastTypedUserMessageText(events, 'old opening', 2)).toBe('real question');
@@ -191,5 +103,17 @@ describe('lastTypedUserMessageText', () => {
     const events = [{ type: 'user', payload: { text: `部署一下${note}`, controlPlaneNote: note } }];
 
     expect(lastTypedUserMessageText(events, 'old opening', 1)).toBe('部署一下');
+  });
+
+  it.each([
+    ['<referenced-task>', REF_TASK],
+    ['<orbit_project_coordinator_context>', COORDINATOR],
+    ['<list-conditions>', CONDITIONS],
+    ['<background-jobs>', BACKGROUND_JOBS],
+  ])('re-sends a message with no recorded note as echoed, a %s block at its end included', (_, block) => {
+    // Only a recorded note says where the person's words end; without one, all of it is theirs.
+    const echoed = `这是什么？\n\n${block}`;
+
+    expect(lastTypedUserMessageText([{ type: 'user', payload: { text: echoed } }], 'old opening', 1)).toBe(echoed);
   });
 });

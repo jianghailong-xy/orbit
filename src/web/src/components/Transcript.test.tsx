@@ -963,17 +963,22 @@ describe('Orbit write tool cards', () => {
 describe('injected context in a user bubble', () => {
   // The runner echoes what it was *given*, so anything delivery appended lands inside the
   // person's own bubble looking like they typed it. Found on the deployed stack, not in a test.
-  // These events carry no recorded note, so they are read by their text — which only ever finds
-  // references and coordinator context; the condition board and background jobs are separated by
-  // the note alone (Transcript.controlPlaneNote.test.tsx).
+  // These events carry the note the apiserver records beside the echo (`controlPlaneNote`), which
+  // is the only thing that tells what was appended apart; an event without one is drawn exactly as
+  // echoed (Transcript.controlPlaneNote.test.tsx).
   const COORDINATOR = `<orbit_project_coordinator_context>
   你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
 </orbit_project_coordinator_context>`;
-  const userEvent = (text: string): RunEvent => ({ seq: 1, type: 'user', payload: { text } });
+  const appended = `\n\n${COORDINATOR}`;
+  const userEvent = (text: string, controlPlaneNote?: string): RunEvent => ({
+    seq: 1,
+    type: 'user',
+    payload: controlPlaneNote === undefined ? { text } : { text, controlPlaneNote },
+  });
 
   it('keeps the appended block out of the bubble body', () => {
     const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
+      <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
     );
 
     // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
@@ -984,7 +989,7 @@ describe('injected context in a user bubble', () => {
   });
 
   it('keeps the block one click away, so what the model read is not lost', () => {
-    const events = [userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)];
+    const events = [userEvent(`把这个项目协调起来${appended}`, appended)];
     const html = renderToStaticMarkup(<Transcript events={events} />);
     const exported = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
@@ -1003,7 +1008,7 @@ describe('injected context in a user bubble', () => {
 
   it('says that something was attached, so the reply is not unexplained', () => {
     const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来\n\n${COORDINATOR}`)]} />,
+      <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
     );
 
     expect(html).toContain('Orbit attached');
@@ -1018,7 +1023,7 @@ describe('injected context in a user bubble', () => {
   });
 
   it('does not offer to copy a message whose only text was injected', () => {
-    const html = renderToStaticMarkup(<Transcript events={[userEvent(`\n\n${COORDINATOR}`)]} />);
+    const html = renderToStaticMarkup(<Transcript events={[userEvent(appended, appended)]} />);
 
     expect(html).toContain('Orbit attached');
     expect(html).not.toContain('aria-label="Copy message"');

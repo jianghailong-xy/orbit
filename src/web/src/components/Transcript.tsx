@@ -46,10 +46,7 @@ import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api'
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
 import {
-  type DeliveredMessage,
-  describeInjected,
   describeNote,
-  splitDeliveredMessage,
   splitRecordedNote,
 } from '../lib/deliveredMessage';
 import { steerDeliveryState } from '../lib/steerDelivery';
@@ -1206,19 +1203,13 @@ function UserBubble({ node }: { node: TextNode }) {
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
-  // whose bubble this is. When the apiserver recorded what it appended, `node.note` holds it and
-  // `node.text` is already just the person's; an event with no note is read the older way, which
-  // finds references and coordinator context. Either way what was appended is one entry under the
-  // person's words (ControlPlaneNote), so a conversation stored across both reads as one. Copying
+  // whose bubble this is. The apiserver records what it appended: `node.note` holds it, `node.text`
+  // is already just the person's, and the note is one entry under their words (ControlPlaneNote).
+  // An event with no note is the echo as it came, however much of it looks like a block. Copying
   // and the length cap follow the typed text for the same reason: neither should be measured
   // against a block nobody wrote.
-  const { text: typed, injected }: DeliveredMessage =
-    node.note === undefined ? splitDeliveredMessage(node.text) : { text: node.text, injected: [] };
-  const attached = node.note
-    ? { kind: describeNote(node.note), text: node.note }
-    : injected.length > 0
-      ? { kind: describeInjected(injected), text: injected.map((b) => b.text).join('\n\n') }
-      : null;
+  const typed = node.text;
+  const attached = node.note ? { kind: describeNote(node.note), text: node.note } : null;
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
