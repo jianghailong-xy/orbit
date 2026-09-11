@@ -168,7 +168,8 @@ import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
-import type { PlanUsageSnapshot, SessionTurnIntent, SessionTurnPlacement } from '@orbit/shared';
+import { PlanUsageIndicator } from './PlanUsageIndicator';
+import type { SessionTurnIntent, SessionTurnPlacement } from '@orbit/shared';
 import {
   AgentProvider,
   derivePermissionSemantics,
@@ -358,8 +359,6 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
-const fmtReset = (d?: string): string =>
-  d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
 
 // 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge.
 const fmtTokens = (n: number): string =>
@@ -490,48 +489,6 @@ function ContextWindowIndicator({
       >
         <ContextRing pct={pct} tier={tier} />
         <span className="composer-usage-pct">{headline}</span>
-      </span>
-    </Popover>
-  );
-}
-
-// Compact plan-usage indicator for the composer footer (right of the effort pill).
-// The pill shows the binding/primary window; hover reveals every reported window.
-function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
-  const rows = planUsageRows(usage);
-  if (rows.length === 0) return null;
-  const primary = rows[0];
-  const pop = (
-    <div className="cu-pop">
-      {rows.map(({ key, label, groupLabel, window, percent, nearLimit }) => {
-        return (
-          <div className="cu-row" key={key}>
-            {groupLabel && <div className="cu-label">{groupLabel}</div>}
-            <div className="cu-head">
-              <span className="cu-label">{label}</span>
-              <span className="cu-pct">{percent}%</span>
-            </div>
-            <div className={`runner-util ${nearLimit ? 'full' : ''}`}>
-              <span className="runner-util-fill" style={{ width: `${percent}%` }} />
-            </div>
-            {window.resetsAt && (
-              <div className="cu-reset">Resets {fmtReset(window.resetsAt)}</div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-  return (
-    <Popover content={pop} title="Plan usage" placement="topRight" trigger={['hover', 'click']}>
-      <span
-        className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
-        aria-label={`Plan usage ${primary.percent}%`}
-      >
-        <span className="composer-usage-bar">
-          <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
-        </span>
-        <span className="composer-usage-pct">{primary.percent}%</span>
       </span>
     </Popover>
   );
@@ -6631,7 +6588,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </span>
             </Tooltip>
           )}
-          {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
+          {shownPlanUsage && (
+            <PlanUsageIndicator
+              usage={shownPlanUsage}
+              // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
+              // the built-in Codex runtime is offered them; the create route judges the workspace.
+              reset={shownProvider === 'codex' ? { runner, workspaceId: shownWorkspaceId } : undefined}
+            />
+          )}
           {/* Context stays visible even before the first turn reports tokens — a New Session reads
               "—". Rightmost pill, to the right of plan usage. */}
           {!(shownProvider === 'opencode' && shownModel === '') && (

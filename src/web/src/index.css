@@ -4639,6 +4639,16 @@ html[data-theme='dark'] .session-tag-chip {
   flex-direction: column;
   gap: 14px;
   min-width: 280px;
+  max-width: 320px;
+}
+/* With a reset credit the body changes with every state of it. One width keeps the popover from
+   jumping as the status line comes and goes; the cap keeps it on a narrow phone screen. */
+.cu-pop.cu-pop-reset {
+  width: min(320px, calc(100vw - 48px));
+}
+/* Focus lands on the popover body when a press opens it; the controls inside carry the rings. */
+.cu-pop:focus {
+  outline: none;
 }
 /* In the popover the gauge spans the full card — drop the runner slot-meter's
    200px cap it inherits from .runner-util, and run a touch taller than the
@@ -4672,6 +4682,159 @@ html[data-theme='dark'] .session-tag-chip {
   margin-top: 6px;
   font-size: 12px;
   color: var(--text-4);
+}
+/* The pill is a button now — it opens a popover that can hold an action — so it sheds the UA button
+   chrome and keeps the look the span had, with a ring for keyboard focus only. */
+button.composer-usage {
+  padding-block: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+button.composer-usage:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+/* A Codex reset is under way: a small pulse on the pill, so it still says so with the popover closed. */
+.composer-usage-resetting {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: cu-rc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes cu-rc-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-usage-resetting {
+    animation: none;
+  }
+}
+/* Codex earned reset credit, under the usage windows (docs/codex-rate-limit-reset-contract.md). The
+   status line is a live region that stays mounted while empty, so it spaces itself only when it
+   has something to say. */
+.cu-rc {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.cu-rc > * + * {
+  margin-top: 10px;
+}
+.cu-rc > .cu-rc-live:empty {
+  margin-top: 0;
+}
+.cu-rc-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--brand-tint);
+}
+.cu-rc-icon {
+  flex: none;
+  margin-top: 2px;
+  font-size: 22px;
+  color: var(--brand);
+}
+.cu-rc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cu-rc-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brand);
+}
+.cu-rc-count {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.cu-rc-meta {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.cu-rc-meta.cu-rc-stale {
+  color: var(--warning);
+}
+.cu-rc-live:focus {
+  outline: none;
+}
+.cu-rc-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.cu-rc-status-icon {
+  flex: none;
+  font-size: 14px;
+  line-height: 18px;
+}
+.cu-rc-status--progress .cu-rc-status-icon {
+  color: var(--brand);
+}
+.cu-rc-status--success .cu-rc-status-icon {
+  color: var(--success-solid);
+}
+.cu-rc-status--info .cu-rc-status-icon {
+  color: var(--text-3);
+}
+.cu-rc-status--warning .cu-rc-status-icon {
+  color: var(--warning-solid);
+}
+.cu-rc-status--error .cu-rc-status-icon {
+  color: var(--error-solid);
+}
+.cu-rc-status-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cu-rc-reason {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.cu-rc-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.cu-rc-confirm-text {
+  margin: 0 0 14px;
+  color: var(--text-2);
+}
+.cu-rc-confirm-usage {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-2);
+}
+.cu-rc-confirm-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.cu-rc-confirm-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 /* Staged image attachments — a row of thumbnail chips above the composer box. Each chip

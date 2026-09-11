@@ -146,6 +146,11 @@ export interface Runner {
   skills?: SlashCommandInfo[];
   // Provider quota for the account(s) this runner uses.
   planUsage?: PlanUsage | null;
+  // What Codex reset-credit admission reads about this machine: its declared capabilities and the
+  // last heartbeat's lease owner and draining flag. Absent from control planes that predate it.
+  capabilities?: string[];
+  heartbeatLeaseOwner?: string | null;
+  heartbeatDraining?: boolean | null;
   // Runtime model catalog reported by the runner.
   modelCatalog?: RunnerModelCatalog | null;
   // Effective default model reported by each built-in runtime on this runner.
