@@ -31,6 +31,8 @@ import { Prisma } from '@prisma/client';
  *
  * A row whose opener is unknown (null `turn_id`: raised outside a turn, or filed before 0252) is
  * never collected. The predicate has to be a fact, and "we do not know who raised it" is not one.
+ * The rows filed before 0252 were settled once instead, by migration 0258, on the two facts
+ * `SessionsService.listApprovals` reads; that migration says why no rule here could reach them.
  *
  * IT LEAVES A TRACE RATHER THAN DELETING
  * --------------------------------------

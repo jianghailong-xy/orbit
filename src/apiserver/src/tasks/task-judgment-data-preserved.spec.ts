@@ -438,6 +438,23 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        preserved row is read or written. The column is nullable with no default, a catalog-only
   //        change: there is no backfill, and every existing session reads NULL. Nothing reads it to
   //        allow or refuse anything; it is text a client displays.
+  //   0258 settled, once, the PENDING approvals 0252's reaper can never reach: rows filed before
+  //        `approval.turn_id` existed that nothing is asking any more. Read against every claim
+  //        above: it is one anonymous `DO` block holding one `UPDATE "approval"`, a relation this
+  //        file does not preserve, which moves `status` and `message` on the rows it matches and
+  //        nothing else. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, column, index, enum, type, function or trigger — a `DO` block runs
+  //        and is discarded, so it is not another writer of the DONE fence — and carries no
+  //        `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion` labels
+  //        survive. It has no INSERT and no DELETE. It READS `session`, a preserved relation, to
+  //        tell whether a session is still generating, and reads `tool_call` and Prisma's
+  //        `_prisma_migrations`; as with 0239's fence body and 0251's backfill, reading a row
+  //        drops, alters and rewrites nothing. Nothing reads a settled row to allow or refuse a
+  //        status: an approval is not a credential, and ABANDONED is not a decision.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -461,7 +478,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0252_approval_opening_turn',
       '0253_session_fast_mode',
       '0254_session_wait_anchors',
-      '0256_session_commit_result_message'],
+      '0256_session_commit_result_message',
+      '0258_approval_pre_opening_turn_abandoned'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
