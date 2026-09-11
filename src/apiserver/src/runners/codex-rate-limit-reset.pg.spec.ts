@@ -876,7 +876,15 @@ test('(11) consume and refresh are two persisted checkpoints, moved by the contr
     ['REFRESH_FAILED', 'CONFIRMED', 'FAILED', 'ACCOUNT_MISMATCH']);
   assert.equal(failed.key, key, 'the provider key survived every move');
 
-  // Settled, the slot is free. The next one reaches SUCCEEDED through alreadyRedeemed and a refreshed block.
+  // Settled, the slot is free, but not on a read from before the settlement: a credit was spent that no
+  // stored block shows yet. Only a read that started after the settlement admits the next one.
+  const unread = await post(w, machine, request());
+  assert.deepEqual([unread.status, unread.json], [409, { code: 'SNAPSHOT_STALE' }]);
+  const readAfter = new Date(Date.parse(String(failedView.completedAt)) + 1).toISOString();
+  await w.sql.query('UPDATE runner SET plan_usage = $2::jsonb WHERE id = $1',
+    [machine.id, planUsage(block(machine.leaseOwner, { fetchedAt: readAfter }))]);
+
+  // The next one reaches SUCCEEDED through alreadyRedeemed and a refreshed block.
   assert.equal((await post(w, machine, request())).status, 201);
   const next = (await stored(w, machine.id)).find((row) => row.id !== id)!;
   await claim(w, machine, next.id);
