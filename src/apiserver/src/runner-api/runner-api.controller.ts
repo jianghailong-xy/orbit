@@ -97,6 +97,7 @@ import {
   AbandonedSteer,
   ActivateTurnLeasesResponse,
   fastModeAvailable,
+  type CodexRateLimitResetResultRequest,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -993,12 +994,16 @@ export class RunnerApiController {
    * otherwise the refusal as 400 / 404 / 409 `{ code }`, after which the claim that sent it stops.
    * Scoped by the runner token alone — another runner's operation is not found — and not gated on the
    * capability header: a result answers a claim this machine already holds, whatever its process
-   * declares now.
+   * declares now. The body is typed for what it claims to be and carries no public id; nothing trusts
+   * that claim before `codexResetResultViolations` has checked it.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('codex-rate-limit-reset-result')
   @HttpCode(200)
-  async codexRateLimitResetResult(@CurrentRunner() runner: { id: string }, @Body() body: unknown) {
+  async codexRateLimitResetResult(
+    @CurrentRunner() runner: { id: string },
+    @Body() body: CodexRateLimitResetResultRequest,
+  ) {
     const answer = await receiveCodexResetResult(this.prisma, runner.id, body);
     if (answer.status !== 200) throw new HttpException(answer.body, answer.status);
     return answer.body;
