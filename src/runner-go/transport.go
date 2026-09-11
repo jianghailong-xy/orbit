@@ -615,6 +615,29 @@ func (t *Transport) commitResult(sessionID string, b CommitResultRequest) error 
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/commit-result", b, nil, 15*time.Second)
 }
 
+// codexRateLimitResetResult posts one Codex rate-limit reset result, already encoded, and returns the
+// control plane's receipt. A refusal (400/404/409 with a result rejection code) comes back as
+// *codexResetResultRefused, and a 2xx answer that is not a receipt as *codexResetReceiptInvalid; any
+// other failure is the transport's own error.
+func (t *Transport) codexRateLimitResetResult(ctx context.Context, body []byte) (CodexRateLimitResetResultResponse, error) {
+	var answer json.RawMessage
+	if err := t.do(ctx, "POST", codexResetResultPath, json.RawMessage(body), &answer, 30*time.Second); err != nil {
+		var httpErr *transportHTTPError
+		if errors.As(err, &httpErr) && (httpErr.statusCode == http.StatusBadRequest ||
+			httpErr.statusCode == http.StatusNotFound || httpErr.statusCode == http.StatusConflict) {
+			if refusal, decodeErr := decodeCodexResetWire([]byte(httpErr.body), codexResetResultRefusalViolations); decodeErr == nil {
+				return CodexRateLimitResetResultResponse{}, &codexResetResultRefused{code: refusal.Code}
+			}
+		}
+		return CodexRateLimitResetResultResponse{}, err
+	}
+	receipt, err := decodeCodexResetWire([]byte(answer), codexResetResultResponseViolations)
+	if err != nil {
+		return CodexRateLimitResetResultResponse{}, &codexResetReceiptInvalid{err: err}
+	}
+	return receipt, nil
+}
+
 func (t *Transport) artifactResult(sessionID string, b ArtifactResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/artifacts/result", b, nil, 15*time.Second)
 }

@@ -40,6 +40,11 @@ const NEWEST_FIRST: Prisma.CodexRateLimitResetOperationOrderByWithRelationInput[
   { id: 'desc' },
 ];
 
+const OLDEST_FIRST: Prisma.CodexRateLimitResetOperationOrderByWithRelationInput[] = [
+  { createdAt: 'asc' },
+  { id: 'asc' },
+];
+
 /** A move `codexResetTransitionViolations` refused. Nothing was written. */
 export class CodexResetTransitionRefused extends Error {
   constructor(
@@ -109,6 +114,16 @@ export class CodexRateLimitResetRepository {
   async byId(ownerId: string, runnerId: string, id: string): Promise<CodexRateLimitResetOperationState | null> {
     const row = await this.prisma.codexRateLimitResetOperation.findFirst({ where: { id, ownerId, runnerId } });
     return row && stateOf(row);
+  }
+
+  /** The ids of one runner's active operations, oldest first: what a heartbeat of that runner dispatches. */
+  async activeIdsOfRunner(runnerId: string): Promise<string[]> {
+    const rows = await this.prisma.codexRateLimitResetOperation.findMany({
+      where: { runnerId, ...ACTIVE },
+      select: { id: true },
+      orderBy: OLDEST_FIRST,
+    });
+    return rows.map((row) => row.id);
   }
 
   /**

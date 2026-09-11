@@ -301,6 +301,29 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 进程在任何一步崩溃：内存状态直接丢弃。服务端的 claim 60 秒后由新进程接管（代数加一），新进程从第 1 步重新开始；
 如果 consume 已经 CONFIRMED，它只会收到 REFRESH command。
 
+### 6.5 投递、回执与终态的边界
+
+实现：apiserver `src/apiserver/src/runner-api/codex-reset-relay.ts`（heartbeat 派发与 §6.3 路由），runner
+`src/runner-go/codex_rate_limit_reset_relay.go`；验证：`bash scripts/test-codex-reset-relay.sh`。
+
+| | 是什么 | 写库 | 丢失时 |
+| --- | --- | --- | --- |
+| 投递（delivery attempt） | 一次携带 command 的 heartbeat 响应 | 只有改变 claim 持有者的投递写行（首次 claim、满 60 秒后的接管）；向持有者重投不写任何列 | 下一次 heartbeat 原样重投，字节相同；apiserver 重启不影响，claim 在行上 |
+| 回执（receipt） | 对一条 result 的 200 应答：`APPLIED` 写了行；`DUPLICATE` 只是重述已记录的事实，不写 | 拒绝（400 / 404 / 409，体恰为 `{ code }`）不写 | runner 以相同字节退避重发（1 秒起翻倍，封顶 30 秒，最长 10 分钟，进程停止时放弃），得到同样的回执 |
+| 终态（terminal outcome） | 检查点进入非在途组合，`completedAt` 非空 | 此后任何写入都被拒（`codexResetTransitionViolations` 与 0255 触发器） | 迟到的 result：重述终态为 `DUPLICATE`，否则 `OPERATION_SETTLED` |
+
+- 每次 heartbeat（旧 runner 的也算）都对该 runner 的全部在途 operation 调用 `decideCodexResetDispatch`，所以期限在任何
+  heartbeat 上都会结算；只有带能力、带 lease、未 draining、本次存储块账户一致的进程才会被 claim 并收到 command。
+  响应里只在确有 command 时出现 `codexRateLimitResetRequest` 字段，旧 runner 的响应形状不变。
+- runner 端同一 claim（`operationId` + `claimGeneration`）同时只跑一个步骤，且同一 claim 的 CONSUME 在一个进程里只启动一次：
+  provider 只对“已完成 reset 的 key”承诺 `alreadyRedeemed`，得到 `nothingToReset` / `noCredit` 的 key 仍未花掉，
+  再调一次可能在已结算为“未消费”的 operation 背后花掉 credit。REFRESH 只是读取，同一 claim 可以再跑。
+- 进程开始 draining 后：收到而未启动的 claim 回 `RELEASED / RUNNER_DRAINING`；已启动 CONSUME 的 claim 不回
+  RELEASED（可能已调用上游），由步骤自己完成并回报。
+- 重启：apiserver 重启后照常派发与接收（状态全在行上）。runner 重启丢弃内存，旧 claim 满 60 秒由新进程接管（代数加一、
+  同一个 key）；旧进程的 result 按 `STALE_CLAIM` 拒绝，除非只是重述已记录的事实（`DUPLICATE`，对它 `next` 恒为 `STOP`）。
+- 本 relay 不声明 `codex-rate-limit-reset-v1`，runloop 里的 executor 为空：能力与 consume 同一提交生效（§4）。
+
 ---
 
 ## 7. 状态机与不变量
@@ -456,6 +479,7 @@ BEFORE UPDATE 触发器拒绝不可变列变化、检查点倒退、已结算行
 ```bash
 npm run test -w @orbit/shared        # 含 src/codexRateLimitReset.spec.ts
 (cd src/runner-go && go test ./...)   # 含 codex_rate_limit_reset_test.go
+bash scripts/test-codex-reset-relay.sh   # §6.5 的 relay：disposable PostgreSQL、runner fixture 与 Go relay
 ```
 
 | 测试 | 覆盖 |

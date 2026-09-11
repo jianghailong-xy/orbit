@@ -31,6 +31,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
+import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   AgentProvider,
   AgentExecConfig,
@@ -760,6 +761,23 @@ export class RunnerApiController {
         this.logger.warn(`runner ${runner.id}: planUsage not stored (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
       }
     }
+    // Codex rate-limit reset (docs/codex-rate-limit-reset-contract.md §6.2, §6.5): this runner's active
+    // operations expired, settled, claimed or redelivered for the process THIS heartbeat speaks for —
+    // its leaseOwner, its draining flag and the capabilities its own header declared — against the block
+    // the compare-and-set above left stored. Every heartbeat runs it, an old runner's too, because the
+    // deadlines settle there. On its own try, so a failure here costs only the reset step, which the
+    // next heartbeat hands over again from the row.
+    let codexRateLimitResetRequest: RunnerHeartbeatResponse['codexRateLimitResetRequest'];
+    try {
+      codexRateLimitResetRequest = await dispatchCodexResetCommand(this.prisma, {
+        runnerId: runner.id,
+        leaseOwner: heartbeatLeaseOwner,
+        draining: dto?.draining === true,
+        capabilities: reportedCapabilities,
+      });
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: codex reset relay skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
@@ -963,7 +981,27 @@ export class RunnerApiController {
       repoCleanupRequest,
       cloneRequests,
       refreshModelCatalog,
+      // Only when a claim holds a command for this process: an older runner's response stays the shape
+      // it always was, and a direct caller comparing responses sees no new key.
+      ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
     };
+  }
+
+  /**
+   * What one claimed Codex rate-limit reset step came to (docs/codex-rate-limit-reset-contract.md §6.3,
+   * §6.5): 200 with the receipt when the result was applied or restated a fact already recorded, and
+   * otherwise the refusal as 400 / 404 / 409 `{ code }`, after which the claim that sent it stops.
+   * Scoped by the runner token alone — another runner's operation is not found — and not gated on the
+   * capability header: a result answers a claim this machine already holds, whatever its process
+   * declares now.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('codex-rate-limit-reset-result')
+  @HttpCode(200)
+  async codexRateLimitResetResult(@CurrentRunner() runner: { id: string }, @Body() body: unknown) {
+    const answer = await receiveCodexResetResult(this.prisma, runner.id, body);
+    if (answer.status !== 200) throw new HttpException(answer.body, answer.status);
+    return answer.body;
   }
 
   /**

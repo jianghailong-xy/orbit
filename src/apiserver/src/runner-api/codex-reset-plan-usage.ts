@@ -18,6 +18,7 @@ import {
   orderCodexResetSnapshot,
   type CodexResetSnapshotOrder,
   type PlanUsage,
+  type PlanUsageRateLimitReset,
   type PlanUsageSnapshot,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -77,6 +78,39 @@ export async function storeHeartbeatPlanUsage(
         id: runnerId,
         planUsage: row.planUsage === null ? { equals: Prisma.AnyNull } : { equals: row.planUsage as Prisma.InputJsonValue },
       },
+      data: { planUsage: planUsage as Prisma.InputJsonValue },
+    });
+    if (written.count === 1) return true;
+  }
+  return false;
+}
+
+/**
+ * Writes the block a REFRESHED result carried (§6.3) into the stored Codex snapshot, by the same
+ * compare-and-set and under the same order: only when orderCodexResetSnapshot accepts it over the block
+ * stored now, `leaseOwner` being the result's. The rest of the snapshot stays as the last heartbeat
+ * reported it, and a runner with no stored Codex snapshot is given none — one holding nothing but a
+ * reset block would read as usage data (§2). Returns whether it wrote.
+ */
+export async function storeRefreshedCodexResetBlock(
+  prisma: PrismaService,
+  runnerId: string,
+  block: PlanUsageRateLimitReset,
+  leaseOwner: string,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < PLAN_USAGE_CAS_ATTEMPTS; attempt++) {
+    const row = await prisma.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } });
+    if (!row || !isObject(row.planUsage)) return false;
+    const stored = row.planUsage as PlanUsage;
+    const codex: PlanUsageSnapshot | undefined = stored.codex ?? (stored.provider === 'codex' ? stored : undefined);
+    if (!codex || !codexResetSnapshotAccepted(orderCodexResetSnapshot(codex.rateLimitReset, block, leaseOwner, new Date()))) {
+      return false;
+    }
+    const planUsage: PlanUsage = stored.codex
+      ? { ...stored, codex: { ...codex, rateLimitReset: block } }
+      : { ...codex, rateLimitReset: block };
+    const written = await prisma.runner.updateMany({
+      where: { id: runnerId, planUsage: { equals: row.planUsage as Prisma.InputJsonValue } },
       data: { planUsage: planUsage as Prisma.InputJsonValue },
     });
     if (written.count === 1) return true;

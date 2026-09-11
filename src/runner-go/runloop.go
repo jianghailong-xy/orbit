@@ -804,6 +804,11 @@ func runLoop(cfg *RunnerConfig) bool {
 	var heartbeatOps sync.WaitGroup
 	login := &loginRelay{}
 	install := &installRelay{}
+	// Codex rate-limit reset steps outlive the drain signal (a started step still reports), and are
+	// stopped only once the heartbeat has: nothing can be delivered to this process after that.
+	resetCtx, stopResets := context.WithCancel(context.Background())
+	defer stopResets()
+	resets := newCodexResetRelay(resetCtx, t, nil, &heartbeatOps)
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
@@ -848,6 +853,10 @@ func runLoop(cfg *RunnerConfig) bool {
 				logln("heartbeat failed:", err)
 				return
 			}
+			// The Codex rate-limit reset step a claim holds for this process, if any. First, so the
+			// command's freshness counts from when the response arrived. It never blocks, and a
+			// process that has begun draining since it sent the heartbeat hands an unstarted claim back.
+			resets.handle(resp.CodexRateLimitResetRequest, time.Now(), loopCtx.Err() != nil)
 			// Scan the directories this response named, ready for the next heartbeat. An older
 			// control plane sends none, which parks the scanner rather than clearing what it
 			// last found.
@@ -1505,6 +1514,9 @@ func runLoop(cfg *RunnerConfig) bool {
 	// An installer already running is joined, not killed: a half-applied `curl | bash` is worse
 	// than one that finishes while the runner shuts down.
 	install.stop()
+	// A reset step still waiting on a receipt gives up now rather than holding the self-update: this
+	// process is handed nothing more, and its claim goes to the successor under the same key.
+	stopResets()
 	heartbeatOps.Wait()
 	// A SIGTERM delivered after update discovery still means "stop", not
 	// "install". Stop signal forwarding first so this final channel check cannot
