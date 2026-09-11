@@ -5,6 +5,7 @@ export * from './dto';
 export * from './permissionSemantics';
 export * from './bashRules';
 export * from './codec';
+export * from './codexRateLimitReset';
 export * from './dbConflict';
 export * from './realtime';
 export * from './models';

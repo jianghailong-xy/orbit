@@ -285,6 +285,11 @@ type HeartbeatResponse struct {
 	// "no gate" — so nil replaces the last value rather than preserving it. Contrast
 	// MaxConcurrent, where 0 is not a legal setting and therefore does mean "no news".
 	MinFreeDiskMb *int `json:"minFreeDiskMb,omitempty"`
+	// The one Codex rate-limit reset step claimed for this process
+	// (docs/codex-rate-limit-reset-contract.md §6). Nil from older control planes and whenever no
+	// operation is claimed for it; nothing acts on it until this binary declares
+	// codex-rate-limit-reset-v1.
+	CodexRateLimitResetRequest *CodexRateLimitResetCommand `json:"codexRateLimitResetRequest,omitempty"`
 }
 
 // CloneCommand mirrors @orbit/shared: clone RepoURL onto this machine for WorkspaceID. The target

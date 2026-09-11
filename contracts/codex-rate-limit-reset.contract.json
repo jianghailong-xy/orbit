@@ -1,0 +1,249 @@
+{
+  "name": "orbit.codex-rate-limit-reset",
+  "protocolVersion": 1,
+  "doc": "docs/codex-rate-limit-reset-contract.md",
+  "fixtures": "contracts/codex-rate-limit-reset.fixtures.json",
+  "baseline": {
+    "mainCommit": "677300e128d79b154e45322db9ff9885276b6512",
+    "codexCli": "codex-cli 0.154.0",
+    "providerSchema": "docs/evidence/codex-rate-limit-reset-0.154.0"
+  },
+  "capability": "codex-rate-limit-reset-v1",
+  "provider": {
+    "accountReadMethod": "account/read",
+    "readMethod": "account/rateLimits/read",
+    "consumeMethod": "account/rateLimitResetCredit/consume",
+    "consumeParamKeys": ["idempotencyKey"],
+    "consumeOutcomes": ["reset", "nothingToReset", "noCredit", "alreadyRedeemed"],
+    "outcomeEffects": {
+      "reset": { "consumed": true, "refreshRequired": true },
+      "nothingToReset": { "consumed": false, "refreshRequired": false },
+      "noCredit": { "consumed": false, "refreshRequired": false },
+      "alreadyRedeemed": { "consumed": true, "refreshRequired": true }
+    }
+  },
+  "timing": {
+    "snapshotMaxAgeMs": 900000,
+    "snapshotFutureSkewMs": 300000,
+    "claimTakeoverAfterMs": 60000,
+    "consumeDeadlineMs": 600000,
+    "refreshDeadlineMs": 600000,
+    "commandFreshnessMs": 60000
+  },
+  "limits": {
+    "maxCreditDetails": 100,
+    "maxCreditTextLength": 1000,
+    "maxMessageLength": 500
+  },
+  "formats": {
+    "uuid": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    "timestampMs": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+    "timestampSeconds": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+  },
+  "accountFingerprint": {
+    "pattern": "^cxa1_[0-9a-f]{32}$",
+    "algorithm": "HMAC-SHA256(key, messagePrefix + accountId), first 16 bytes as lowercase hex, prefixed cxa1_",
+    "messagePrefix": "orbit.codex-account-fingerprint.v1\n",
+    "keyFile": "codex-account-fingerprint.key",
+    "keyBytes": 32
+  },
+  "enums": {
+    "support": ["SUPPORTED", "CREDITS_UNAVAILABLE", "PROVIDER_UNSUPPORTED", "UNSUPPORTED_AUTH", "ACCOUNT_UNIDENTIFIED"],
+    "phase": ["CONSUME", "REFRESH"],
+    "consumeState": ["PENDING", "CLAIMED", "CONFIRMED", "NOT_ATTEMPTED", "UNRESOLVED"],
+    "refreshState": ["NONE", "PENDING", "SUCCEEDED", "FAILED", "NOT_REQUIRED"],
+    "operationStatus": ["PENDING", "CONSUMING", "REFRESHING", "SUCCEEDED", "REFRESH_FAILED", "NOTHING_TO_RESET", "NO_CREDIT", "NOT_ATTEMPTED", "UNRESOLVED"],
+    "activeOperationStatus": ["PENDING", "CONSUMING", "REFRESHING"],
+    "resultKind": ["CONSUME_OUTCOME", "CONSUME_NOT_CALLED", "CONSUME_RETRYING", "RELEASED", "REFRESHED", "REFRESH_FAILED"],
+    "resultCode": ["ACCOUNT_MISMATCH", "UNSUPPORTED_AUTH", "PROVIDER_UNSUPPORTED", "PROTOCOL_UNSUPPORTED", "PROVIDER_ERROR", "PROVIDER_TIMEOUT", "APP_SERVER_UNAVAILABLE", "READ_FAILED", "ACCOUNT_UNIDENTIFIED", "RUNNER_DRAINING"],
+    "failureCode": ["ACCOUNT_MISMATCH", "UNSUPPORTED_AUTH", "PROVIDER_UNSUPPORTED", "PROTOCOL_UNSUPPORTED", "ACCOUNT_CHANGED", "CONSUME_EXPIRED", "REFRESH_EXPIRED"],
+    "refusalCode": ["REQUEST_ID_REUSED", "ACCOUNT_OVERRIDE", "OPERATION_IN_FLIGHT", "RUNNER_OFFLINE", "CAPABILITY_MISSING", "NO_ACTIVE_LEASE", "RUNNER_DRAINING", "SNAPSHOT_MISSING", "UNSUPPORTED_AUTH", "PROVIDER_UNSUPPORTED", "ACCOUNT_UNIDENTIFIED", "ACCOUNT_MISMATCH", "SNAPSHOT_STALE", "CREDITS_UNAVAILABLE", "NO_CREDIT_AVAILABLE"],
+    "resultRejection": ["INVALID_RESULT", "OPERATION_NOT_FOUND", "STALE_CLAIM", "OPERATION_SETTLED", "PHASE_MISMATCH", "OUTCOME_CONFLICT", "ACCOUNT_MISMATCH"],
+    "resultDisposition": ["APPLIED", "DUPLICATE"],
+    "nextStep": ["REFRESH", "RETRY_CONSUME", "RETRY_REFRESH", "STOP"],
+    "snapshotOrder": ["ACCEPT_FIRST", "ACCEPT_NEWER", "ACCEPT_REPLACES_UNTRUSTED", "REJECT_DUPLICATE", "REJECT_OLDER", "REJECT_UNTRUSTED", "REJECT_INVALID"]
+  },
+  "goEnums": ["support", "phase", "consumeState", "refreshState", "operationStatus", "resultKind", "resultCode", "failureCode", "resultRejection", "resultDisposition", "nextStep"],
+  "eligibilityOrder": ["ACCOUNT_OVERRIDE", "OPERATION_IN_FLIGHT", "RUNNER_OFFLINE", "CAPABILITY_MISSING", "NO_ACTIVE_LEASE", "RUNNER_DRAINING", "SNAPSHOT_MISSING", "UNSUPPORTED_AUTH", "PROVIDER_UNSUPPORTED", "ACCOUNT_UNIDENTIFIED", "ACCOUNT_MISMATCH", "SNAPSHOT_STALE", "CREDITS_UNAVAILABLE", "NO_CREDIT_AVAILABLE"],
+  "resultKinds": {
+    "CONSUME_OUTCOME": { "phases": ["CONSUME"], "carries": "outcome", "codes": [], "terminalCodes": [] },
+    "CONSUME_NOT_CALLED": {
+      "phases": ["CONSUME"],
+      "carries": "code",
+      "codes": ["ACCOUNT_MISMATCH", "UNSUPPORTED_AUTH", "PROVIDER_UNSUPPORTED", "PROTOCOL_UNSUPPORTED"],
+      "terminalCodes": ["ACCOUNT_MISMATCH", "UNSUPPORTED_AUTH", "PROVIDER_UNSUPPORTED", "PROTOCOL_UNSUPPORTED"]
+    },
+    "CONSUME_RETRYING": {
+      "phases": ["CONSUME"],
+      "carries": "code",
+      "codes": ["PROVIDER_ERROR", "PROVIDER_TIMEOUT", "APP_SERVER_UNAVAILABLE", "READ_FAILED", "ACCOUNT_UNIDENTIFIED"],
+      "terminalCodes": []
+    },
+    "RELEASED": { "phases": ["CONSUME", "REFRESH"], "carries": "code", "codes": ["RUNNER_DRAINING"], "terminalCodes": [] },
+    "REFRESHED": { "phases": ["REFRESH"], "carries": "rateLimitReset", "codes": [], "terminalCodes": [] },
+    "REFRESH_FAILED": {
+      "phases": ["REFRESH"],
+      "carries": "code",
+      "codes": ["READ_FAILED", "APP_SERVER_UNAVAILABLE", "ACCOUNT_UNIDENTIFIED", "ACCOUNT_MISMATCH"],
+      "terminalCodes": ["ACCOUNT_MISMATCH"]
+    }
+  },
+  "transitions": {
+    "consumeState": {
+      "PENDING": ["CLAIMED", "NOT_ATTEMPTED"],
+      "CLAIMED": ["CONFIRMED", "NOT_ATTEMPTED", "UNRESOLVED"],
+      "CONFIRMED": [],
+      "NOT_ATTEMPTED": [],
+      "UNRESOLVED": []
+    },
+    "refreshState": {
+      "NONE": ["PENDING", "NOT_REQUIRED"],
+      "PENDING": ["SUCCEEDED", "FAILED"],
+      "SUCCEEDED": [],
+      "FAILED": [],
+      "NOT_REQUIRED": []
+    }
+  },
+  "statusDerivation": [
+    { "consumeState": "PENDING", "consumeOutcome": null, "refreshState": "NONE", "status": "PENDING" },
+    { "consumeState": "CLAIMED", "consumeOutcome": null, "refreshState": "NONE", "status": "CONSUMING" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "PENDING", "status": "REFRESHING" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "alreadyRedeemed", "refreshState": "PENDING", "status": "REFRESHING" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "SUCCEEDED", "status": "SUCCEEDED" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "alreadyRedeemed", "refreshState": "SUCCEEDED", "status": "SUCCEEDED" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "FAILED", "status": "REFRESH_FAILED" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "alreadyRedeemed", "refreshState": "FAILED", "status": "REFRESH_FAILED" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "nothingToReset", "refreshState": "NOT_REQUIRED", "status": "NOTHING_TO_RESET" },
+    { "consumeState": "CONFIRMED", "consumeOutcome": "noCredit", "refreshState": "NOT_REQUIRED", "status": "NO_CREDIT" },
+    { "consumeState": "NOT_ATTEMPTED", "consumeOutcome": null, "refreshState": "NOT_REQUIRED", "status": "NOT_ATTEMPTED" },
+    { "consumeState": "UNRESOLVED", "consumeOutcome": null, "refreshState": "NOT_REQUIRED", "status": "UNRESOLVED" }
+  ],
+  "wire": {
+    "PlanUsageRateLimitReset": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "protocolVersion": ["required", "non-null"],
+        "support": ["required", "non-null"],
+        "accountFingerprint": ["optional", "non-null"],
+        "rateLimitResetCredits": ["required", "nullable"],
+        "fetchedAt": ["required", "non-null"],
+        "generation": ["required", "non-null"],
+        "sequence": ["required", "non-null"]
+      }
+    },
+    "PlanUsageRateLimitResetCredits": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "availableCount": ["required", "non-null"],
+        "credits": ["required", "nullable"]
+      }
+    },
+    "PlanUsageRateLimitResetCredit": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "id": ["required", "non-null"],
+        "resetType": ["required", "non-null"],
+        "status": ["required", "non-null"],
+        "grantedAt": ["required", "non-null"],
+        "expiresAt": ["required", "nullable"],
+        "title": ["required", "nullable"],
+        "description": ["required", "nullable"]
+      }
+    },
+    "CodexRateLimitResetCommand": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "protocolVersion": ["required", "non-null"],
+        "operationId": ["required", "non-null"],
+        "leaseOwner": ["required", "non-null"],
+        "claimGeneration": ["required", "non-null"],
+        "phase": ["required", "non-null"],
+        "accountFingerprint": ["required", "non-null"],
+        "providerIdempotencyKey": ["optional", "non-null"],
+        "requestedAt": ["required", "non-null"]
+      }
+    },
+    "CodexRateLimitResetResultRequest": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "protocolVersion": ["required", "non-null"],
+        "operationId": ["required", "non-null"],
+        "leaseOwner": ["required", "non-null"],
+        "claimGeneration": ["required", "non-null"],
+        "phase": ["required", "non-null"],
+        "kind": ["required", "non-null"],
+        "outcome": ["optional", "non-null"],
+        "code": ["optional", "non-null"],
+        "message": ["optional", "non-null"],
+        "observedAccountFingerprint": ["optional", "non-null"],
+        "rateLimitReset": ["optional", "non-null"]
+      }
+    },
+    "CodexRateLimitResetResultResponse": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "disposition": ["required", "non-null"],
+        "status": ["required", "non-null"],
+        "next": ["required", "non-null"]
+      }
+    },
+    "CodexRateLimitResetOperationView": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "id": ["required", "non-null"],
+        "runnerId": ["required", "non-null"],
+        "clientRequestId": ["required", "non-null"],
+        "accountFingerprint": ["required", "non-null"],
+        "status": ["required", "non-null"],
+        "consumeState": ["required", "non-null"],
+        "consumeOutcome": ["required", "nullable"],
+        "refreshState": ["required", "non-null"],
+        "failureCode": ["required", "nullable"],
+        "lastErrorCode": ["required", "nullable"],
+        "createdAt": ["required", "non-null"],
+        "updatedAt": ["required", "non-null"],
+        "consumeConfirmedAt": ["required", "nullable"],
+        "completedAt": ["required", "nullable"]
+      }
+    },
+    "CreateCodexRateLimitResetRequest": {
+      "layers": ["shared"],
+      "fields": {
+        "clientRequestId": ["required", "non-null"],
+        "accountFingerprint": ["required", "non-null"],
+        "workspaceId": ["optional", "non-null"]
+      }
+    },
+    "CodexRateLimitResetOperations": {
+      "layers": ["shared"],
+      "fields": {
+        "active": ["required", "nullable"],
+        "latest": ["required", "nullable"]
+      }
+    },
+    "CreateCodexRateLimitResetResponse": {
+      "layers": ["shared"],
+      "fields": {
+        "operation": ["required", "non-null"],
+        "replayed": ["required", "non-null"]
+      }
+    },
+    "CodexRateLimitResetRefusal": {
+      "layers": ["shared"],
+      "fields": {
+        "code": ["required", "non-null"],
+        "operationId": ["optional", "non-null"]
+      }
+    },
+    "CodexRateLimitResetResultRefusal": {
+      "layers": ["shared", "go"],
+      "fields": {
+        "code": ["required", "non-null"]
+      }
+    }
+  },
+  "extensions": {
+    "PlanUsageSnapshot": { "go": "PlanUsage", "fields": { "rateLimitReset": ["optional", "non-null"] } },
+    "RunnerHeartbeatResponse": { "go": "HeartbeatResponse", "fields": { "codexRateLimitResetRequest": ["optional", "non-null"] } }
+  }
+}

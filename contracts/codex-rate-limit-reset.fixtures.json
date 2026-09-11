@@ -1,0 +1,656 @@
+{
+  "contract": "contracts/codex-rate-limit-reset.contract.json",
+  "fingerprintKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "fingerprints": [
+    { "accountId": "acct_fixture_primary", "fingerprint": "cxa1_92381c922ad04574cc61964161fd5687" },
+    { "accountId": "acct_fixture_other", "fingerprint": "cxa1_ede5be98faa2e1e8d26377b61bc5b84d" }
+  ],
+  "providerReads": [
+    {
+      "name": "details-complete",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": {
+        "rateLimits": { "limitId": "codex", "primary": { "usedPercent": 100, "windowDurationMins": 300, "resetsAt": 1789000000 } },
+        "rateLimitResetCredits": {
+          "availableCount": 2,
+          "credits": [
+            { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": 1788000000, "expiresAt": 1790000000, "title": "Earned reset", "description": "Resets your current Codex usage limits." },
+            { "id": "rlrc_fixture_2", "resetType": "codexRateLimits", "status": "available", "grantedAt": 1788500000, "expiresAt": null, "title": null, "description": null }
+          ]
+        },
+        "accountId": "acct_fixture_primary"
+      },
+      "expect": {
+        "support": "SUPPORTED",
+        "accountId": "acct_fixture_primary",
+        "rateLimitResetCredits": {
+          "availableCount": 2,
+          "credits": [
+            { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-08-29T10:40:00Z", "expiresAt": "2026-09-21T14:13:20Z", "title": "Earned reset", "description": "Resets your current Codex usage limits." },
+            { "id": "rlrc_fixture_2", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-09-04T05:33:20Z", "expiresAt": null, "title": null, "description": null }
+          ]
+        }
+      }
+    },
+    {
+      "name": "details-null-count-only",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": {
+        "rateLimits": { "limitId": "codex" },
+        "rateLimitResetCredits": { "availableCount": 3, "credits": null },
+        "accountId": "acct_fixture_primary"
+      },
+      "expect": { "support": "SUPPORTED", "accountId": "acct_fixture_primary", "rateLimitResetCredits": { "availableCount": 3, "credits": null } }
+    },
+    {
+      "name": "details-empty-array",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "plus" }, "requiresOpenaiAuth": true },
+      "rateLimits": {
+        "rateLimits": { "limitId": "codex" },
+        "rateLimitResetCredits": { "availableCount": 0, "credits": [] },
+        "accountId": "acct_fixture_primary"
+      },
+      "expect": { "support": "SUPPORTED", "accountId": "acct_fixture_primary", "rateLimitResetCredits": { "availableCount": 0, "credits": [] } }
+    },
+    {
+      "name": "details-truncated-count-exceeds-rows",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": {
+        "rateLimits": { "limitId": "codex" },
+        "rateLimitResetCredits": {
+          "availableCount": 7,
+          "credits": [
+            { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": 1788000000, "expiresAt": 1790000000, "title": "Earned reset", "description": "Resets your current Codex usage limits." }
+          ]
+        },
+        "accountId": "acct_fixture_primary"
+      },
+      "expect": {
+        "support": "SUPPORTED",
+        "accountId": "acct_fixture_primary",
+        "rateLimitResetCredits": {
+          "availableCount": 7,
+          "credits": [
+            { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-08-29T10:40:00Z", "expiresAt": "2026-09-21T14:13:20Z", "title": "Earned reset", "description": "Resets your current Codex usage limits." }
+          ]
+        }
+      }
+    },
+    {
+      "name": "details-row-omits-nullable-keys-and-passes-unknown-values-through",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": {
+        "rateLimits": { "limitId": "codex" },
+        "rateLimitResetCredits": {
+          "availableCount": 1,
+          "credits": [{ "id": "rlrc_fixture_3", "resetType": "unknown", "status": "redeeming", "grantedAt": 1788500000 }]
+        },
+        "accountId": "acct_fixture_primary"
+      },
+      "expect": {
+        "support": "SUPPORTED",
+        "accountId": "acct_fixture_primary",
+        "rateLimitResetCredits": {
+          "availableCount": 1,
+          "credits": [{ "id": "rlrc_fixture_3", "resetType": "unknown", "status": "redeeming", "grantedAt": "2026-09-04T05:33:20Z", "expiresAt": null, "title": null, "description": null }]
+        }
+      }
+    },
+    {
+      "name": "details-malformed-row-drops-details-not-count",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": {
+        "rateLimits": { "limitId": "codex" },
+        "rateLimitResetCredits": {
+          "availableCount": 4,
+          "credits": [
+            { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": 1788000000, "expiresAt": 1790000000, "title": "Earned reset", "description": "Resets your current Codex usage limits." },
+            { "id": "rlrc_fixture_4", "resetType": "codexRateLimits", "status": "available" }
+          ]
+        },
+        "accountId": "acct_fixture_primary"
+      },
+      "expect": { "support": "SUPPORTED", "accountId": "acct_fixture_primary", "rateLimitResetCredits": { "availableCount": 4, "credits": null } }
+    },
+    {
+      "name": "summary-null",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex" }, "rateLimitResetCredits": null, "accountId": "acct_fixture_primary" },
+      "expect": { "support": "CREDITS_UNAVAILABLE", "accountId": "acct_fixture_primary", "rateLimitResetCredits": null }
+    },
+    {
+      "name": "summary-negative-count",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex" }, "rateLimitResetCredits": { "availableCount": -1, "credits": null }, "accountId": "acct_fixture_primary" },
+      "expect": { "support": "CREDITS_UNAVAILABLE", "accountId": "acct_fixture_primary", "rateLimitResetCredits": null }
+    },
+    {
+      "name": "summary-count-as-string",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex" }, "rateLimitResetCredits": { "availableCount": "2", "credits": [] }, "accountId": "acct_fixture_primary" },
+      "expect": { "support": "CREDITS_UNAVAILABLE", "accountId": "acct_fixture_primary", "rateLimitResetCredits": null }
+    },
+    {
+      "name": "summary-absent-older-cli",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex", "primary": { "usedPercent": 40, "windowDurationMins": 300, "resetsAt": 1789000000 } } },
+      "expect": { "support": "PROVIDER_UNSUPPORTED", "accountId": null, "rateLimitResetCredits": null }
+    },
+    {
+      "name": "account-id-null",
+      "account": { "account": { "type": "chatgpt", "email": "fixture@example.invalid", "planType": "pro" }, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex" }, "rateLimitResetCredits": { "availableCount": 1, "credits": null }, "accountId": null },
+      "expect": { "support": "ACCOUNT_UNIDENTIFIED", "accountId": null, "rateLimitResetCredits": null }
+    },
+    {
+      "name": "api-key-auth",
+      "account": { "account": { "type": "apiKey" }, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex" }, "rateLimitResetCredits": { "availableCount": 1, "credits": null }, "accountId": "acct_fixture_primary" },
+      "expect": { "support": "UNSUPPORTED_AUTH", "accountId": null, "rateLimitResetCredits": null }
+    },
+    {
+      "name": "signed-out",
+      "account": { "account": null, "requiresOpenaiAuth": true },
+      "rateLimits": { "rateLimits": { "limitId": "codex" } },
+      "expect": { "support": "UNSUPPORTED_AUTH", "accountId": null, "rateLimitResetCredits": null }
+    }
+  ],
+  "blocks": {
+    "valid": [
+      {
+        "name": "supported-details-complete",
+        "value": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": {
+            "availableCount": 2,
+            "credits": [
+              { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-08-29T10:40:00Z", "expiresAt": "2026-09-21T14:13:20Z", "title": "Earned reset", "description": "Resets your current Codex usage limits." },
+              { "id": "rlrc_fixture_2", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-09-04T05:33:20Z", "expiresAt": null, "title": null, "description": null }
+            ]
+          },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "supported-details-unknown",
+        "value": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": { "availableCount": 3, "credits": null },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "supported-details-truncated",
+        "value": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": {
+            "availableCount": 7,
+            "credits": [
+              { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-08-29T10:40:00Z", "expiresAt": "2026-09-21T14:13:20Z", "title": "Earned reset", "description": "Resets your current Codex usage limits." }
+            ]
+          },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "supported-zero-count-empty-details",
+        "value": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": { "availableCount": 0, "credits": [] },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "credits-unavailable",
+        "value": {
+          "protocolVersion": 1, "support": "CREDITS_UNAVAILABLE", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": null,
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "provider-unsupported",
+        "value": { "protocolVersion": 1, "support": "PROVIDER_UNSUPPORTED", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "unsupported-auth",
+        "value": { "protocolVersion": 1, "support": "UNSUPPORTED_AUTH", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "account-unidentified",
+        "value": { "protocolVersion": 1, "support": "ACCOUNT_UNIDENTIFIED", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "supported-without-credits",
+        "value": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "unavailable-with-credits",
+        "value": { "protocolVersion": 1, "support": "CREDITS_UNAVAILABLE", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": 1, "credits": null }, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "supported-without-fingerprint",
+        "value": { "protocolVersion": 1, "support": "SUPPORTED", "rateLimitResetCredits": { "availableCount": 1, "credits": null }, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "unidentified-with-fingerprint",
+        "value": { "protocolVersion": 1, "support": "ACCOUNT_UNIDENTIFIED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "negative-count",
+        "value": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": -1, "credits": null }, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "fractional-count",
+        "value": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": 1.5, "credits": null }, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "count-as-string",
+        "value": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": "2", "credits": null }, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "credits-summary-key-missing",
+        "value": { "protocolVersion": 1, "support": "UNSUPPORTED_AUTH", "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "detail-list-key-missing",
+        "value": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": 2 }, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "fetched-at-whole-seconds",
+        "value": { "protocolVersion": 1, "support": "UNSUPPORTED_AUTH", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "sequence-zero",
+        "value": { "protocolVersion": 1, "support": "UNSUPPORTED_AUTH", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 0 }
+      },
+      {
+        "name": "generation-not-a-uuid",
+        "value": { "protocolVersion": 1, "support": "UNSUPPORTED_AUTH", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "runner-a", "sequence": 7 }
+      },
+      {
+        "name": "protocol-version-2",
+        "value": { "protocolVersion": 2, "support": "UNSUPPORTED_AUTH", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "unknown-support",
+        "value": { "protocolVersion": 1, "support": "MAYBE", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      },
+      {
+        "name": "credit-missing-id",
+        "value": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": { "availableCount": 1, "credits": [{ "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-08-29T10:40:00Z", "expiresAt": null, "title": null, "description": null }] },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "credit-granted-at-unix-seconds",
+        "value": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": { "availableCount": 1, "credits": [{ "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": 1788000000, "expiresAt": null, "title": null, "description": null }] },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        }
+      },
+      {
+        "name": "credit-id-selection-field",
+        "value": { "protocolVersion": 1, "support": "UNSUPPORTED_AUTH", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7, "creditId": "rlrc_fixture_1" }
+      },
+      {
+        "name": "fingerprint-raw-account-id",
+        "value": { "protocolVersion": 1, "support": "CREDITS_UNAVAILABLE", "accountFingerprint": "acct_fixture_primary", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7 }
+      }
+    ]
+  },
+  "commands": {
+    "valid": [
+      {
+        "name": "consume",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "refresh-after-takeover",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "0b9e8d7c-6a5f-4e3d-8c2b-1a0f9e8d7c6b", "claimGeneration": 2, "phase": "REFRESH", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "consume-without-provider-key",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "refresh-with-provider-key",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "credit-id-present",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "creditId": "rlrc_fixture_1", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "provider-key-not-a-uuid",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "attempt-1", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "provider-key-uppercase",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3D4E5F60-7182-4A93-8B04-C1D2E3F4A5B6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "claim-generation-zero",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 0, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "protocol-version-2",
+        "value": { "protocolVersion": 2, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "combined-phase",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME_AND_REFRESH", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "fingerprint-missing",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      },
+      {
+        "name": "operation-id-public-id",
+        "value": { "protocolVersion": 1, "operationId": "34EAfvTNticUg1N1bLCzl", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+      }
+    ]
+  },
+  "results": {
+    "valid": [
+      {
+        "name": "consume-reset",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "reset", "observedAccountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687" }
+      },
+      {
+        "name": "consume-already-redeemed",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "alreadyRedeemed" }
+      },
+      {
+        "name": "consume-nothing-to-reset",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "nothingToReset" }
+      },
+      {
+        "name": "consume-no-credit",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "noCredit" }
+      },
+      {
+        "name": "consume-not-called-account-mismatch",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_NOT_CALLED", "code": "ACCOUNT_MISMATCH", "observedAccountFingerprint": "cxa1_ede5be98faa2e1e8d26377b61bc5b84d" }
+      },
+      {
+        "name": "consume-retrying-timeout",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_RETRYING", "code": "PROVIDER_TIMEOUT", "message": "account/rateLimitResetCredit/consume did not answer within 30s" }
+      },
+      {
+        "name": "released-while-draining",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "RELEASED", "code": "RUNNER_DRAINING" }
+      },
+      {
+        "name": "refreshed",
+        "value": {
+          "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESHED",
+          "rateLimitReset": {
+            "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+            "rateLimitResetCredits": { "availableCount": 1, "credits": [{ "id": "rlrc_fixture_2", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-09-04T05:33:20Z", "expiresAt": null, "title": null, "description": null }] },
+            "fetchedAt": "2026-09-11T04:22:12.004Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 8
+          }
+        }
+      },
+      {
+        "name": "refresh-failed-read",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESH_FAILED", "code": "READ_FAILED" }
+      },
+      {
+        "name": "refresh-failed-account-mismatch",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESH_FAILED", "code": "ACCOUNT_MISMATCH", "observedAccountFingerprint": "cxa1_ede5be98faa2e1e8d26377b61bc5b84d" }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "outcome-on-not-called",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_NOT_CALLED", "code": "ACCOUNT_MISMATCH", "outcome": "reset" }
+      },
+      {
+        "name": "not-called-without-code",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_NOT_CALLED" }
+      },
+      {
+        "name": "unknown-outcome",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "partial" }
+      },
+      {
+        "name": "refreshed-in-consume-phase",
+        "value": {
+          "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "REFRESHED",
+          "rateLimitReset": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": 1, "credits": null }, "fetchedAt": "2026-09-11T04:22:12.004Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 8 }
+        }
+      },
+      {
+        "name": "refreshed-block-from-another-process",
+        "value": {
+          "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESHED",
+          "rateLimitReset": { "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "rateLimitResetCredits": { "availableCount": 1, "credits": null }, "fetchedAt": "2026-09-11T04:22:12.004Z", "generation": "0b9e8d7c-6a5f-4e3d-8c2b-1a0f9e8d7c6b", "sequence": 8 }
+        }
+      },
+      {
+        "name": "code-not-allowed-for-kind",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESH_FAILED", "code": "RUNNER_DRAINING" }
+      },
+      {
+        "name": "outcome-with-code",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "reset", "code": "PROVIDER_ERROR" }
+      },
+      {
+        "name": "credit-id-field",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "reset", "creditId": "rlrc_fixture_1" }
+      },
+      {
+        "name": "protocol-version-2",
+        "value": { "protocolVersion": 2, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "reset" }
+      },
+      {
+        "name": "claim-generation-zero",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 0, "phase": "CONSUME", "kind": "CONSUME_OUTCOME", "outcome": "reset" }
+      },
+      {
+        "name": "refreshed-block-without-account",
+        "value": {
+          "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESHED",
+          "rateLimitReset": { "protocolVersion": 1, "support": "PROVIDER_UNSUPPORTED", "rateLimitResetCredits": null, "fetchedAt": "2026-09-11T04:22:12.004Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 8 }
+        }
+      },
+      {
+        "name": "refreshed-without-block",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "REFRESHED" }
+      },
+      {
+        "name": "retrying-in-refresh-phase",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "REFRESH", "kind": "CONSUME_RETRYING", "code": "PROVIDER_ERROR" }
+      },
+      {
+        "name": "observed-raw-account-id",
+        "value": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "kind": "CONSUME_NOT_CALLED", "code": "ACCOUNT_MISMATCH", "observedAccountFingerprint": "acct_fixture_other" }
+      }
+    ]
+  },
+  "resultResponses": {
+    "valid": [
+      { "name": "consume-applied-refresh-next", "value": { "disposition": "APPLIED", "status": "REFRESHING", "next": "REFRESH" } },
+      { "name": "duplicate-from-stale-claim", "value": { "disposition": "DUPLICATE", "status": "SUCCEEDED", "next": "STOP" } },
+      { "name": "retrying", "value": { "disposition": "APPLIED", "status": "CONSUMING", "next": "RETRY_CONSUME" } }
+    ],
+    "invalid": [
+      { "name": "unknown-status", "value": { "disposition": "APPLIED", "status": "DONE", "next": "STOP" } },
+      { "name": "next-missing", "value": { "disposition": "APPLIED", "status": "REFRESHING" } }
+    ]
+  },
+  "operationViews": {
+    "valid": [
+      {
+        "name": "pending",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "PENDING", "consumeState": "PENDING", "consumeOutcome": null, "refreshState": "NONE", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:10.500Z", "consumeConfirmedAt": null, "completedAt": null }
+      },
+      {
+        "name": "consuming-after-a-timeout",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "CONSUMING", "consumeState": "CLAIMED", "consumeOutcome": null, "refreshState": "NONE", "failureCode": null, "lastErrorCode": "PROVIDER_TIMEOUT", "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:45.010Z", "consumeConfirmedAt": null, "completedAt": null }
+      },
+      {
+        "name": "refreshing",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "REFRESHING", "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "PENDING", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:11.900Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": null }
+      },
+      {
+        "name": "succeeded-via-already-redeemed",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "SUCCEEDED", "consumeState": "CONFIRMED", "consumeOutcome": "alreadyRedeemed", "refreshState": "SUCCEEDED", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:12.300Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": "2026-09-11T04:22:12.300Z" }
+      },
+      {
+        "name": "refresh-failed",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "REFRESH_FAILED", "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "FAILED", "failureCode": "REFRESH_EXPIRED", "lastErrorCode": "READ_FAILED", "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:32:12.000Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": "2026-09-11T04:32:12.000Z" }
+      },
+      {
+        "name": "nothing-to-reset",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "NOTHING_TO_RESET", "consumeState": "CONFIRMED", "consumeOutcome": "nothingToReset", "refreshState": "NOT_REQUIRED", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:11.900Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": "2026-09-11T04:22:11.900Z" }
+      },
+      {
+        "name": "no-credit",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "NO_CREDIT", "consumeState": "CONFIRMED", "consumeOutcome": "noCredit", "refreshState": "NOT_REQUIRED", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:11.900Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": "2026-09-11T04:22:11.900Z" }
+      },
+      {
+        "name": "not-attempted-account-changed",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "NOT_ATTEMPTED", "consumeState": "NOT_ATTEMPTED", "consumeOutcome": null, "refreshState": "NOT_REQUIRED", "failureCode": "ACCOUNT_CHANGED", "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:40.000Z", "consumeConfirmedAt": null, "completedAt": "2026-09-11T04:22:40.000Z" }
+      },
+      {
+        "name": "unresolved-consume-expired",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "UNRESOLVED", "consumeState": "UNRESOLVED", "consumeOutcome": null, "refreshState": "NOT_REQUIRED", "failureCode": "CONSUME_EXPIRED", "lastErrorCode": "PROVIDER_TIMEOUT", "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:32:10.500Z", "consumeConfirmedAt": null, "completedAt": "2026-09-11T04:32:10.500Z" }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "status-disagrees-with-checkpoints",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "SUCCEEDED", "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "PENDING", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:11.900Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": "2026-09-11T04:22:11.900Z" }
+      },
+      {
+        "name": "provider-key-exposed",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "status": "PENDING", "consumeState": "PENDING", "consumeOutcome": null, "refreshState": "NONE", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:10.500Z", "consumeConfirmedAt": null, "completedAt": null }
+      },
+      {
+        "name": "outcome-before-confirmation",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "CONSUMING", "consumeState": "CLAIMED", "consumeOutcome": "reset", "refreshState": "NONE", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:10.500Z", "consumeConfirmedAt": null, "completedAt": null }
+      },
+      {
+        "name": "client-request-id-not-a-uuid",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "click-1", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "PENDING", "consumeState": "PENDING", "consumeOutcome": null, "refreshState": "NONE", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:10.500Z", "consumeConfirmedAt": null, "completedAt": null }
+      },
+      {
+        "name": "settled-without-completed-at",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "NO_CREDIT", "consumeState": "CONFIRMED", "consumeOutcome": "noCredit", "refreshState": "NOT_REQUIRED", "failureCode": null, "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:11.900Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": null }
+      },
+      {
+        "name": "failure-code-on-success",
+        "value": { "id": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "runnerId": "018f6d29-1111-7222-8333-944455566677", "clientRequestId": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f2a3b4c5d", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "status": "SUCCEEDED", "consumeState": "CONFIRMED", "consumeOutcome": "reset", "refreshState": "SUCCEEDED", "failureCode": "REFRESH_EXPIRED", "lastErrorCode": null, "createdAt": "2026-09-11T04:22:10.500Z", "updatedAt": "2026-09-11T04:22:12.300Z", "consumeConfirmedAt": "2026-09-11T04:22:11.900Z", "completedAt": "2026-09-11T04:22:12.300Z" }
+      }
+    ]
+  },
+  "heartbeats": {
+    "legacy": {
+      "status": "ONLINE",
+      "idleCapacity": 3,
+      "version": "0.1.180",
+      "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12",
+      "supervisedSessionIds": ["5b0d6c3e-2f1a-4e9b-8c7d-6a5b4c3d2e1f"],
+      "planUsage": {
+        "claude": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 12, "resetsAt": "2026-09-11T06:00:00Z" },
+          "sevenDay": { "utilization": 40.5, "resetsAt": "2026-09-14T00:00:00Z" },
+          "fetchedAt": "2026-09-11T04:20:00Z"
+        },
+        "codex": {
+          "provider": "codex",
+          "primary": { "utilization": 100, "resetsAt": "2026-09-11T08:00:00Z", "label": "5h limit", "windowDurationMins": 300 },
+          "secondary": { "utilization": 64, "resetsAt": "2026-09-15T00:00:00Z", "label": "Weekly limit", "windowDurationMins": 10080 },
+          "limitId": "codex",
+          "planType": "pro",
+          "rateLimitReachedType": "rate_limit_reached",
+          "rateLimits": [
+            {
+              "limitId": "codex",
+              "primary": { "utilization": 100, "resetsAt": "2026-09-11T08:00:00Z", "label": "5h limit", "windowDurationMins": 300 },
+              "secondary": { "utilization": 64, "resetsAt": "2026-09-15T00:00:00Z", "label": "Weekly limit", "windowDurationMins": 10080 }
+            }
+          ],
+          "fetchedAt": "2026-09-11T04:21:00Z"
+        },
+        "fetchedAt": "2026-09-11T04:21:00Z"
+      },
+      "runtimeDefaultModels": { "codex": "gpt-5.6-sol" },
+      "runsAsRoot": true
+    },
+    "nestedReset": {
+      "status": "ONLINE",
+      "idleCapacity": 3,
+      "version": "0.1.181",
+      "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12",
+      "planUsage": {
+        "claude": { "provider": "claude", "fiveHour": { "utilization": 12, "resetsAt": "2026-09-11T06:00:00Z" }, "fetchedAt": "2026-09-11T04:20:00Z" },
+        "codex": {
+          "provider": "codex",
+          "primary": { "utilization": 100, "resetsAt": "2026-09-11T08:00:00Z", "label": "5h limit", "windowDurationMins": 300 },
+          "limitId": "codex",
+          "rateLimits": [{ "limitId": "codex", "primary": { "utilization": 100, "resetsAt": "2026-09-11T08:00:00Z", "label": "5h limit", "windowDurationMins": 300 } }],
+          "rateLimitReset": {
+            "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+            "rateLimitResetCredits": {
+              "availableCount": 7,
+              "credits": [
+                { "id": "rlrc_fixture_1", "resetType": "codexRateLimits", "status": "available", "grantedAt": "2026-08-29T10:40:00Z", "expiresAt": "2026-09-21T14:13:20Z", "title": "Earned reset", "description": "Resets your current Codex usage limits." }
+              ]
+            },
+            "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+          },
+          "fetchedAt": "2026-09-11T04:21:30Z"
+        },
+        "fetchedAt": "2026-09-11T04:21:30Z"
+      },
+      "runtimeDefaultModels": { "codex": "gpt-5.6-sol" }
+    },
+    "flatReset": {
+      "status": "ONLINE",
+      "idleCapacity": 1,
+      "version": "0.1.181",
+      "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12",
+      "planUsage": {
+        "provider": "codex",
+        "primary": { "utilization": 20, "resetsAt": "2026-09-11T08:00:00Z", "label": "5h limit", "windowDurationMins": 300 },
+        "limitId": "codex",
+        "rateLimits": [{ "limitId": "codex", "primary": { "utilization": 20, "resetsAt": "2026-09-11T08:00:00Z", "label": "5h limit", "windowDurationMins": 300 } }],
+        "rateLimitReset": {
+          "protocolVersion": 1, "support": "SUPPORTED", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687",
+          "rateLimitResetCredits": { "availableCount": 3, "credits": null },
+          "fetchedAt": "2026-09-11T04:21:30.123Z", "generation": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "sequence": 7
+        },
+        "fetchedAt": "2026-09-11T04:21:30Z"
+      },
+      "runtimeDefaultModels": {}
+    }
+  },
+  "heartbeatResponses": {
+    "legacy": { "cancelSessionIds": [], "maxConcurrent": 4 },
+    "consume": {
+      "cancelSessionIds": [],
+      "maxConcurrent": 4,
+      "codexRateLimitResetRequest": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "6f1c2b7e-4d3a-4b8e-9c21-7a5e0d3f9b12", "claimGeneration": 1, "phase": "CONSUME", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "providerIdempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6", "requestedAt": "2026-09-11T04:22:10.500Z" }
+    },
+    "refresh": {
+      "cancelSessionIds": [],
+      "maxConcurrent": 4,
+      "codexRateLimitResetRequest": { "protocolVersion": 1, "operationId": "018f6d2a-7c3e-7a41-9b2d-5e6f7a8b9c0d", "leaseOwner": "0b9e8d7c-6a5f-4e3d-8c2b-1a0f9e8d7c6b", "claimGeneration": 2, "phase": "REFRESH", "accountFingerprint": "cxa1_92381c922ad04574cc61964161fd5687", "requestedAt": "2026-09-11T04:22:10.500Z" }
+    }
+  },
+  "consumeParams": {
+    "heartbeatResponse": "consume",
+    "expect": { "idempotencyKey": "3d4e5f60-7182-4a93-8b04-c1d2e3f4a5b6" }
+  }
+}

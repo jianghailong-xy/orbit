@@ -270,6 +270,61 @@ export interface PlanUsageRateLimit {
   credits?: PlanUsageCredits;
 }
 
+/** Whether the runner process that wrote a {@link PlanUsageRateLimitReset} block can reset Codex
+ *  rate-limit windows with an earned reset credit for the account it describes
+ *  (docs/codex-rate-limit-reset-contract.md §4). */
+export type CodexRateLimitResetSupport =
+  | 'SUPPORTED'
+  | 'CREDITS_UNAVAILABLE'
+  | 'PROVIDER_UNSUPPORTED'
+  | 'UNSUPPORTED_AUTH'
+  | 'ACCOUNT_UNIDENTIFIED';
+
+/** One earned reset credit as `account/rateLimits/read` details it, with the provider's unix-second
+ *  timestamps spelled as ISO-8601 like every other plan-usage time. Display only. */
+export interface PlanUsageRateLimitResetCredit {
+  /** Opaque provider id. Protocol v1 never sends it back as `creditId`. */
+  id: string;
+  /** Provider `resetType`, passed through (`codexRateLimits`, `unknown`, or a newer value). */
+  resetType: string;
+  /** Provider `status`, passed through (`available`, `redeeming`, `redeemed`, `unknown`, ...). */
+  status: string;
+  /** ISO-8601, UTC, whole seconds. */
+  grantedAt: string;
+  /** ISO-8601, UTC, whole seconds; null when the provider says the credit does not expire. */
+  expiresAt: string | null;
+  title: string | null;
+  description: string | null;
+}
+
+/** The provider's top-level `rateLimitResetCredits`. `availableCount` is the authoritative count.
+ *  `credits` is detail and never a count: null means only the count is known, [] means details
+ *  were fetched and none came back, and a list shorter than `availableCount` is truncated. */
+export interface PlanUsageRateLimitResetCredits {
+  availableCount: number;
+  credits: PlanUsageRateLimitResetCredit[] | null;
+}
+
+/** Earned rate-limit reset state of the runner's default Codex account, carried inside the Codex
+ *  plan-usage snapshot. Absent from runners that predate docs/codex-rate-limit-reset-contract.md,
+ *  which every reader treats as "reset not offered" — never as "zero credits". */
+export interface PlanUsageRateLimitReset {
+  /** The contract version this block was written under (CODEX_RATE_LIMIT_RESET_PROTOCOL_VERSION). */
+  protocolVersion: number;
+  support: CodexRateLimitResetSupport;
+  /** Non-sensitive account fingerprint, `cxa1_` + 32 hex. Present exactly when `support` is
+   *  SUPPORTED or CREDITS_UNAVAILABLE. */
+  accountFingerprint?: string;
+  /** Non-null exactly when `support` is SUPPORTED. */
+  rateLimitResetCredits: PlanUsageRateLimitResetCredits | null;
+  /** When the runner STARTED the read this block came from: ISO-8601, UTC, milliseconds. */
+  fetchedAt: string;
+  /** The runner process that made the read: its heartbeat `leaseOwner`. */
+  generation: string;
+  /** That process's read counter, strictly increasing from 1. Orders blocks sharing a `fetchedAt`. */
+  sequence: number;
+}
+
 export interface PlanUsageSnapshot {
   provider?: AgentProvider;
   /** Rolling 5-hour session limit. */
@@ -291,6 +346,9 @@ export interface PlanUsageSnapshot {
   credits?: PlanUsageCredits;
   /** All Codex limit buckets, in display order. */
   rateLimits?: PlanUsageRateLimit[];
+  /** Codex earned rate-limit reset state (docs/codex-rate-limit-reset-contract.md). Absent from
+   *  older runners and from non-Codex snapshots. */
+  rateLimitReset?: PlanUsageRateLimitReset;
   /** ISO-8601 when the runner fetched this. */
   fetchedAt?: string;
 }
@@ -562,6 +620,215 @@ export interface RunnerHeartbeatResponse {
    *  mean the same thing — no gate. The runner must therefore treat an absent field as "no
    *  floor" and not as "keep whatever you last heard". */
   minFreeDiskMb?: number | null;
+  /** The one Codex rate-limit reset step this runner process should perform
+   *  (docs/codex-rate-limit-reset-contract.md §6). Sent only to a process that declared
+   *  `codex-rate-limit-reset-v1`, heartbeats with a leaseOwner and is not draining; redelivered
+   *  every heartbeat until a result moves the operation on. Absent on older control planes. */
+  codexRateLimitResetRequest?: CodexRateLimitResetCommand;
+}
+
+/** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
+export type CodexRateLimitResetConsumeOutcome =
+  | 'reset'
+  | 'nothingToReset'
+  | 'noCredit'
+  | 'alreadyRedeemed';
+
+/** Which checkpoint a reset command or result is about: the provider consume, or the authoritative
+ *  read after it. */
+export type CodexRateLimitResetPhase = 'CONSUME' | 'REFRESH';
+
+/** The consume checkpoint of a reset operation. CONFIRMED, NOT_ATTEMPTED and UNRESOLVED are final. */
+export type CodexRateLimitResetConsumeState =
+  | 'PENDING'
+  | 'CLAIMED'
+  | 'CONFIRMED'
+  | 'NOT_ATTEMPTED'
+  | 'UNRESOLVED';
+
+/** The refresh checkpoint, kept apart from the consume one. SUCCEEDED, FAILED and NOT_REQUIRED are final. */
+export type CodexRateLimitResetRefreshState =
+  | 'NONE'
+  | 'PENDING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'NOT_REQUIRED';
+
+/** Derived from the two checkpoints; PENDING, CONSUMING and REFRESHING are the active ones. */
+export type CodexRateLimitResetOperationStatus =
+  | 'PENDING'
+  | 'CONSUMING'
+  | 'REFRESHING'
+  | 'SUCCEEDED'
+  | 'REFRESH_FAILED'
+  | 'NOTHING_TO_RESET'
+  | 'NO_CREDIT'
+  | 'NOT_ATTEMPTED'
+  | 'UNRESOLVED';
+
+export type CodexRateLimitResetResultKind =
+  | 'CONSUME_OUTCOME'
+  | 'CONSUME_NOT_CALLED'
+  | 'CONSUME_RETRYING'
+  | 'RELEASED'
+  | 'REFRESHED'
+  | 'REFRESH_FAILED';
+
+export type CodexRateLimitResetResultCode =
+  | 'ACCOUNT_MISMATCH'
+  | 'UNSUPPORTED_AUTH'
+  | 'PROVIDER_UNSUPPORTED'
+  | 'PROTOCOL_UNSUPPORTED'
+  | 'PROVIDER_ERROR'
+  | 'PROVIDER_TIMEOUT'
+  | 'APP_SERVER_UNAVAILABLE'
+  | 'READ_FAILED'
+  | 'ACCOUNT_UNIDENTIFIED'
+  | 'RUNNER_DRAINING';
+
+/** Why a settled operation did not reach SUCCEEDED / NOTHING_TO_RESET / NO_CREDIT. */
+export type CodexRateLimitResetFailureCode =
+  | 'ACCOUNT_MISMATCH'
+  | 'UNSUPPORTED_AUTH'
+  | 'PROVIDER_UNSUPPORTED'
+  | 'PROTOCOL_UNSUPPORTED'
+  | 'ACCOUNT_CHANGED'
+  | 'CONSUME_EXPIRED'
+  | 'REFRESH_EXPIRED';
+
+/** Why creating an operation was refused (409 body `code`). */
+export type CodexRateLimitResetRefusalCode =
+  | 'REQUEST_ID_REUSED'
+  | 'ACCOUNT_OVERRIDE'
+  | 'OPERATION_IN_FLIGHT'
+  | 'RUNNER_OFFLINE'
+  | 'CAPABILITY_MISSING'
+  | 'NO_ACTIVE_LEASE'
+  | 'RUNNER_DRAINING'
+  | 'SNAPSHOT_MISSING'
+  | 'UNSUPPORTED_AUTH'
+  | 'PROVIDER_UNSUPPORTED'
+  | 'ACCOUNT_UNIDENTIFIED'
+  | 'ACCOUNT_MISMATCH'
+  | 'SNAPSHOT_STALE'
+  | 'CREDITS_UNAVAILABLE'
+  | 'NO_CREDIT_AVAILABLE';
+
+/** Why a runner result was not applied (400/404/409 body `code`). */
+export type CodexRateLimitResetResultRejection =
+  | 'INVALID_RESULT'
+  | 'OPERATION_NOT_FOUND'
+  | 'STALE_CLAIM'
+  | 'OPERATION_SETTLED'
+  | 'PHASE_MISMATCH'
+  | 'OUTCOME_CONFLICT'
+  | 'ACCOUNT_MISMATCH';
+
+export type CodexRateLimitResetResultDisposition = 'APPLIED' | 'DUPLICATE';
+
+export type CodexRateLimitResetNextStep = 'REFRESH' | 'RETRY_CONSUME' | 'RETRY_REFRESH' | 'STOP';
+
+/** One step of a Codex rate-limit reset operation, handed to exactly one runner process. */
+export interface CodexRateLimitResetCommand {
+  protocolVersion: number;
+  /** The operation, a UUID echoed byte-for-byte (never a public id). */
+  operationId: string;
+  /** The process this delivery is claimed for: the heartbeat's own `leaseOwner`. */
+  leaseOwner: string;
+  /** Increases on every claim or takeover; results are fenced to (leaseOwner, claimGeneration). */
+  claimGeneration: number;
+  phase: CodexRateLimitResetPhase;
+  /** The account the operation is bound to. The runner re-reads the account before acting and
+   *  calls nothing when it no longer matches. */
+  accountFingerprint: string;
+  /** The operation's persisted provider idempotency key, present exactly on CONSUME. Sent to
+   *  `account/rateLimitResetCredit/consume` as `idempotencyKey`, alone: protocol v1 has no creditId. */
+  providerIdempotencyKey?: string;
+  /** When the user confirmed (the operation's createdAt), echoed for logs. */
+  requestedAt: string;
+}
+
+/** Runner → control plane: what one claimed reset step came to
+ *  (POST /runner/codex-rate-limit-reset-result). */
+export interface CodexRateLimitResetResultRequest {
+  protocolVersion: number;
+  operationId: string;
+  leaseOwner: string;
+  claimGeneration: number;
+  phase: CodexRateLimitResetPhase;
+  kind: CodexRateLimitResetResultKind;
+  /** Exactly on CONSUME_OUTCOME. */
+  outcome?: CodexRateLimitResetConsumeOutcome;
+  /** Exactly on the kinds that carry a code (CODEX_RATE_LIMIT_RESET_RESULT_KINDS). */
+  code?: CodexRateLimitResetResultCode;
+  /** Diagnostic text. Never a token, key, email or raw account id. */
+  message?: string;
+  /** The fingerprint the runner's own pre-action read produced, when it produced one. */
+  observedAccountFingerprint?: string;
+  /** Exactly on REFRESHED: the authoritative block read after the consume, by this same process. */
+  rateLimitReset?: PlanUsageRateLimitReset;
+}
+
+export interface CodexRateLimitResetResultResponse {
+  disposition: CodexRateLimitResetResultDisposition;
+  status: CodexRateLimitResetOperationStatus;
+  /** What the claim that sent the result should do next. */
+  next: CodexRateLimitResetNextStep;
+}
+
+/** Web → API: the user confirmed one reset (POST /runners/:id/codex-rate-limit-reset). */
+export interface CreateCodexRateLimitResetRequest {
+  /** Generated once per confirmation and reused for every retry of that same POST. */
+  clientRequestId: string;
+  /** The fingerprint of the snapshot the user confirmed against. */
+  accountFingerprint: string;
+  /** The workspace whose Plan usage the confirmation came from, when not the runner's own page. */
+  workspaceId?: string;
+}
+
+/** What the API shows of a reset operation. It never carries the provider idempotency key. */
+export interface CodexRateLimitResetOperationView {
+  id: string;
+  runnerId: string;
+  clientRequestId: string;
+  accountFingerprint: string;
+  status: CodexRateLimitResetOperationStatus;
+  consumeState: CodexRateLimitResetConsumeState;
+  consumeOutcome: CodexRateLimitResetConsumeOutcome | null;
+  refreshState: CodexRateLimitResetRefreshState;
+  failureCode: CodexRateLimitResetFailureCode | null;
+  /** The latest recoverable problem while the operation is still active. */
+  lastErrorCode: CodexRateLimitResetResultCode | null;
+  createdAt: string;
+  updatedAt: string;
+  consumeConfirmedAt: string | null;
+  completedAt: string | null;
+}
+
+/** GET /runners/:id/codex-rate-limit-reset: the active operation and the most recent one. */
+export interface CodexRateLimitResetOperations {
+  active: CodexRateLimitResetOperationView | null;
+  latest: CodexRateLimitResetOperationView | null;
+}
+
+/** 200/201 answer to POST /runners/:id/codex-rate-limit-reset. `replayed` is true when the
+ *  clientRequestId already existed and the stored operation is returned untouched. */
+export interface CreateCodexRateLimitResetResponse {
+  operation: CodexRateLimitResetOperationView;
+  replayed: boolean;
+}
+
+/** 409 body of POST /runners/:id/codex-rate-limit-reset. `operationId` names the operation in the
+ *  way: the active one for OPERATION_IN_FLIGHT, the existing one for REQUEST_ID_REUSED. */
+export interface CodexRateLimitResetRefusal {
+  code: CodexRateLimitResetRefusalCode;
+  operationId?: string;
+}
+
+/** 400/404/409 body of POST /runner/codex-rate-limit-reset-result. Whatever the code, the claim
+ *  that sent the result stops acting on that command. */
+export interface CodexRateLimitResetResultRefusal {
+  code: CodexRateLimitResetResultRejection;
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */

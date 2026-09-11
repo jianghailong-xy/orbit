@@ -95,6 +95,9 @@ type PlanUsage struct {
 	RateLimitReachedType string               `json:"rateLimitReachedType,omitempty"`
 	Credits              *CreditsSnapshot     `json:"credits,omitempty"`
 	RateLimits           []PlanUsageRateLimit `json:"rateLimits,omitempty"`
+	// Earned rate-limit reset state of the default Codex account
+	// (docs/codex-rate-limit-reset-contract.md). Nil until a reader fills it; omitted on the wire.
+	RateLimitReset *PlanUsageRateLimitReset `json:"rateLimitReset,omitempty"`
 
 	// Nested snapshots when more than one provider is available.
 	Claude *PlanUsage `json:"claude,omitempty"`
