@@ -163,6 +163,9 @@ const BLANK_GUARDED: Record<string, readonly string[]> = {
   // runner-agents-sanitize.spec.ts: 'a blank runnerId is a 400 on both routes, not a 500 and not
   // an unbind'.
   'runner-agents.controller.ts': ['runnerId'],
+  // runners/codex-rate-limit-reset.pg.spec.ts: 'a malformed body is a 400 and writes nothing', whose
+  // cases include a blank workspaceId.
+  'codex-rate-limit-reset.controller.ts': ['workspaceId'],
 };
 
 test('a blank body id is not decoded — the pipe hands it straight through', () => {

@@ -711,6 +711,11 @@ export class RunnerApiController {
         // acknowledge. Inbox dequeue rechecks the request header as the second fence.
         capabilities: reportedCapabilities ?? [],
         capabilitiesReportedAt: new Date(),
+        // What Codex rate-limit reset admission reads about the process sending this heartbeat
+        // (docs/codex-rate-limit-reset-contract.md §4). Overwritten every beat, so a runner too old
+        // to send a leaseOwner or a draining flag writes NULL: no active lease, not draining.
+        heartbeatLeaseOwner,
+        heartbeatDraining: typeof dto?.draining === 'boolean' ? dto.draining : null,
         // Per-engine health for the Providers page. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.

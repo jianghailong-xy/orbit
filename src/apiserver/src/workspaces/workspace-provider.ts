@@ -49,7 +49,8 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * database: 4.7ms and 930 rows scanned → 0.3ms and one row per workspace.
  */
 export async function lastProviderByWorkspace(
-  prisma: PrismaService,
+  // Only the raw query, so a caller inside a transaction can hand over its own client.
+  prisma: Pick<PrismaService, '$queryRaw'>,
   workspaceIds: Array<string | null | undefined>,
 ): Promise<Map<string, AgentProviderSeed>> {
   const ids = [...new Set(workspaceIds.filter((id): id is string => !!id))];

@@ -453,6 +453,28 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the client re-sends the order.',
   },
   {
+    at: 'runners/codex-rate-limit-reset.repository.ts#transition',
+    shape: 'TX_RETRIED',
+    locks: 'The one codex_rate_limit_reset_operation row, FOR UPDATE, then its UPDATE. No key column changes, so no foreign key is re-checked, and 0255\'s guard trigger reads only OLD and NEW of that row.',
+    identity: 'The operation id. The state to write is decided by `decide` from the row read under the lock, on every attempt.',
+    isolation: '',
+    attempts: 4,
+    replay: '`decide` and `codexResetTransitionViolations` run against the locked row rather than anything read before the transaction, so a re-run decides against the state that is actually there.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the caller re-issues the transition, which is decided again against the current row.',
+  },
+  {
+    at: 'runners/codex-rate-limit-reset.service.ts#create',
+    shape: 'TX_RETRIED',
+    locks: 'Reads until the one INSERT, which takes FOR KEY SHARE on its user and runner rows through the two foreign keys, and waits on a unique-index entry that a concurrent confirmation of the same request, or of the same runner and account, has not committed yet. No runner row is locked by name, so a heartbeat writing it is never waited for.',
+    identity: '`clientRequestId`, chosen by the client once per confirmation and reused by every retry. The operation id and the provider idempotency key are generated per attempt, and an attempt that rolled back never wrote either.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-reads the request id, the active operation and the runner before inserting, and the INSERT is ON CONFLICT DO NOTHING, so a re-run finds what an earlier or concurrent attempt committed (a replay, or the operation in flight) or inserts the one row.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the client re-sends the same clientRequestId and is answered with the replayed operation.',
+  },
+  {
     at: 'session-tags/session-tags.service.ts#setForSession',
     shape: 'TX_RETRIED',
     locks: 'session_tag_link rows for this session, then session_tag FOR KEY SHARE through the link FK — the inserts are ordered by tag id.',
@@ -842,6 +864,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/projects.service.ts#writeCoordinatorAgent', under: 'projects.update' },
   { at: 'projects/task-aggregation-writer.ts#applyTaskAggregations', under: 'projectReconcile.repeatableRead' },
   { at: 'runner-api/runner-api.controller.ts#lockSessionLeaseOwner', under: 'runnerApi.events, .turnComplete, .finalize' },
+  { at: 'runners/codex-rate-limit-reset.repository.ts#insertIfAbsent', under: 'codexRateLimitReset.create — one INSERT ... ON CONFLICT DO NOTHING of the operation that transaction just decided to create. Losing to a concurrent confirmation writes nothing and aborts nothing, and the caller reads what won in the same transaction.' },
   { at: 'sessions/merge-receipt.service.ts#fromRunnerMergeResult', under: 'runnerApi.mergeResult' },
   { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, queue.buildSession' },
   { at: 'sessions/sessions.service.ts#insertTurnLocked', under: 'sessions.insertTurn, .createTurn, .resume' },
@@ -1121,6 +1144,7 @@ export interface TriggerWriteSource {
  * acceptance fact and a plain task-status write no longer reaches a project through that path.
  */
 export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
+  {"table":"codex_rate_limit_reset_operation","trigger":"codex_rate_limit_reset_operation_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0255_codex_rate_limit_reset_operation","takes":[]},
   {"table":"executable_dead_man_event","trigger":"executable_dead_man_event_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0200_executable_acceptance_runtime_contract","takes":[]},
   {"table":"executable_dead_man_event","trigger":"executable_dead_man_expectation_guard","event":"BEFORE INSERT","kind":"ROW/STATEMENT","since":"0202_completion_ack_persistent_coordinator","takes":["executable_runtime_expectation LOCK"]},
   {"table":"executable_runtime_expectation","trigger":"executable_runtime_expectation_append_only","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0202_completion_ack_persistent_coordinator","takes":[]},

@@ -424,6 +424,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        catalog-only change: there is no backfill, and every existing session reads NULL, which
   //        is "not measured". Nothing reads either column to allow or refuse anything; they are
   //        clocks a notice displays.
+  //   0255 added `codex_rate_limit_reset_operation`, one row per confirmed Codex earned rate-limit
+  //        reset, and two nullable `runner` columns every heartbeat overwrites
+  //        (`heartbeat_lease_owner`, `heartbeat_draining`). Read against every claim above: neither
+  //        the new relation nor `runner` is one this file preserves. It does not touch `task`,
+  //        `project` or `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It REFERENCES
+  //        `user(id)` and `runner(id)`, which changes nothing about either row. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions. Unlike
+  //        0253 and 0254 it does create one function and one trigger —
+  //        `codex_rate_limit_reset_operation_guard`, BEFORE UPDATE on its own new table, reading only
+  //        that row's OLD and NEW — so it is not another writer of the DONE fence, which belongs to
+  //        `task`. It carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE statement,
+  //        so no preserved row is read or written. Nothing reads the new rows or columns to allow or
+  //        refuse a status: they decide whether one reset credit may be consumed.
   //   0256 added `session.commit_result_message`, the runner's message for a commit that went
   //        through, kept verbatim beside `commit_error`. Read against every claim above: like 0254
   //        it ALTERs `session` and nothing else — one `ALTER TABLE "session" ADD COLUMN` and one
@@ -478,6 +494,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0252_approval_opening_turn',
       '0253_session_fast_mode',
       '0254_session_wait_anchors',
+      '0255_codex_rate_limit_reset_operation',
       '0256_session_commit_result_message',
       '0258_approval_pre_opening_turn_abandoned'],
     'a later migration exists; re-read it before trusting the assertions above');

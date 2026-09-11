@@ -441,4 +441,13 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // stale/duplicate CTA and action-commit fencing.
   'ctaToken',
   'commitToken',
+  // Codex rate-limit reset (docs/codex-rate-limit-reset-contract.md §5, §9.2). The POST's own
+  // idempotency key and the provider consume key are compared byte for byte and name no row anybody
+  // looks up. The claim and heartbeat lease owners are process fences, like `leaseOwner`.
+  // `operationId` rides the runner command and the create refusal exactly as it is stored.
+  'clientRequestId',
+  'providerIdempotencyKey',
+  'claimLeaseOwner',
+  'heartbeatLeaseOwner',
+  'operationId',
 ]);

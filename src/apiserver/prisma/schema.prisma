@@ -314,6 +314,9 @@ model User {
 
   legacyEvidenceImports TaskLegacyEvidenceImport[]
 
+  /// Codex earned rate-limit resets this user confirmed.
+  codexRateLimitResetOperations CodexRateLimitResetOperation[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -509,6 +512,12 @@ model Runner {
   // on the machine — installEngine is then NULL). Both run a package manager against this
   // machine's one global prefix, so they share a slot instead of racing. NULL = 'install'.
   installMode    String?   @map("install_mode")
+  // What the LAST heartbeat said about the process sending it, overwritten by every heartbeat: its
+  // leaseOwner, and whether it is draining. Codex rate-limit reset admission reads both
+  // (docs/codex-rate-limit-reset-contract.md §4). A runner too old to send them writes NULL, which
+  // reads as no active lease and not draining.
+  heartbeatLeaseOwner String?  @map("heartbeat_lease_owner") @db.Uuid
+  heartbeatDraining   Boolean? @map("heartbeat_draining")
 
   sessions Session[]
   // Workspaces `orbit register` minted for this machine (one per project dir + tool).
@@ -520,6 +529,8 @@ model Runner {
   /// emptied `authorityRunnerId` would silently turn the binding into "whichever machine happens to
   /// answer", which is the ambiguity the whole SOURCE contract exists to remove.
   authoritativeForCodebases ProjectCodebase[]
+  /// Codex earned rate-limit resets confirmed against this machine's default Codex account.
+  codexRateLimitResetOperations CodexRateLimitResetOperation[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -4287,4 +4298,40 @@ model ModelProvider {
 
   @@index([ownerId])
   @@map("model_provider")
+}
+
+/// One confirmed Codex earned rate-limit reset (docs/codex-rate-limit-reset-contract.md §5, §7, §9.3).
+/// Read and written only through `runners/codex-rate-limit-reset.repository.ts`.
+///
+/// `clientRequestId` makes the browser's POST idempotent; `providerIdempotencyKey` makes the provider
+/// consume idempotent, is generated once with the row, and leaves the control plane only inside a
+/// CONSUME command. The two checkpoints (`consumeState`, `refreshState`) move independently and only
+/// forward. The database refuses anything else through what Prisma cannot express here: the CHECKs, the
+/// in-flight partial unique index over (runnerId, accountFingerprint) and the guard trigger.
+model CodexRateLimitResetOperation {
+  id                     String    @id @default(uuid(7)) @db.Uuid
+  ownerId                String    @map("owner_id") @db.Uuid
+  owner                  User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  runnerId               String    @map("runner_id") @db.Uuid
+  runner                 Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  accountFingerprint     String    @map("account_fingerprint")
+  clientRequestId        String    @map("client_request_id") @db.Uuid
+  providerIdempotencyKey String    @unique @map("provider_idempotency_key") @db.Uuid
+  consumeState           String    @map("consume_state")
+  consumeOutcome         String?   @map("consume_outcome")
+  refreshState           String    @map("refresh_state")
+  failureCode            String?   @map("failure_code")
+  lastErrorCode          String?   @map("last_error_code")
+  claimLeaseOwner        String?   @map("claim_lease_owner") @db.Uuid
+  claimGeneration        Int       @default(0) @map("claim_generation")
+  claimedAt              DateTime? @map("claimed_at") @db.Timestamptz(3)
+  claimsWithUnknownCall  Int       @default(0) @map("claims_with_unknown_call")
+  createdAt              DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime  @map("updated_at") @db.Timestamptz(3)
+  consumeConfirmedAt     DateTime? @map("consume_confirmed_at") @db.Timestamptz(3)
+  completedAt            DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  @@unique([ownerId, clientRequestId])
+  @@index([runnerId, createdAt])
+  @@map("codex_rate_limit_reset_operation")
 }
