@@ -734,22 +734,114 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.injected.count, 1)
     }
 
-    /// The bubble keeps what was typed; Orbit's own context rides alongside it so the view can name
-    /// it without putting it inside somebody's sentence.
-    func testDurableUserEventSplitsAppendedContextOutOfTheBubble() {
-        var r = TranscriptReducer()
+    // The shapes the server appends at delivery (background-jobs-context.ts, list-events.service.ts).
+    private let backgroundJobsBlock = """
+        <background-jobs>
+          你不在的时候结束了：
+            bgj_3a1af2b50428｜job｜npm run build｜completed｜退出码 0
+          这是控制面替你记下的，不是用户说的。
+        </background-jobs>
+        """
+    private let listConditionsBlock = """
+        <list-conditions list="l1" title="FineWeb">
+          配额挡住派发｜累计 47 次
+          以上是控制面在你上次收到消息之后观察到的，不是用户说的。
+        </list-conditions>
+        """
 
-        let echoed = """
-            这个列表现在什么情况？
+    /// A `user` event as ingest stores it: the runner's echo, with the note the apiserver recorded
+    /// beside it only when it recorded one.
+    private func userEvent(seq: Int, turnId: String? = nil, _ text: String, note: String? = nil) -> RunEvent {
+        var payload: [String: JSONValue] = ["text": .string(text)]
+        if let note { payload["controlPlaneNote"] = .string(note) }
+        return RunEvent(seq: seq, type: .user, turnId: turnId, payload: .object(payload))
+    }
 
-            <list-conditions list="l1" title="FineWeb">
-              配额挡住派发｜累计 47 次
-            </list-conditions>
-            """
-        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string(echoed)])))
+    /// The bubble keeps what was typed; what delivery appended rides alongside it as the one entry the
+    /// view names, and a snapshot keeps it. Where the typed words end is the note the apiserver
+    /// recorded when it stored the event — the only thing that tells these two blocks apart at all.
+    func testDurableUserEventSplitsAppendedContextOutOfTheBubble() throws {
+        for (typed, block, kind) in [("已经部署，请帮我测试", backgroundJobsBlock, "background jobs"),
+                                     ("这个列表现在什么情况？", listConditionsBlock, "list conditions")] {
+            var r = TranscriptReducer()
 
-        XCTAssertEqual(r.state.items[0].asUser?.text, "这个列表现在什么情况？")
-        XCTAssertEqual(r.state.items[0].asUser?.injected.count, 1)
+            r.apply(userEvent(seq: 1, "\(typed)\n\n\(block)", note: "\n\n\(block)"))
+
+            let bubble = r.state.items[0].asUser
+            XCTAssertEqual(bubble?.text, typed, "only what was typed is the person's own")
+            XCTAssertEqual(bubble?.attached?.kind, kind)
+            XCTAssertEqual(bubble?.attached?.text, block, "the entry opens to the block verbatim")
+
+            let restored = try JSONDecoder().decode(TranscriptReducer.self, from: JSONEncoder().encode(r))
+            XCTAssertEqual(restored.state.items[0].asUser?.attached?.text, block,
+                           "a session rehydrated from its snapshot still draws the entry")
+        }
+    }
+
+    /// Without a note nothing tells a block apart from words: someone who typed one sees it in their
+    /// bubble exactly as typed, and no entry is drawn for it, however much it looks like one.
+    func testWithoutANoteATypedBlockStaysInTheBubbleAsTyped() {
+        for block in [backgroundJobsBlock, listConditionsBlock] {
+            var r = TranscriptReducer()
+            let typed = "这是什么？\n\n\(block)"
+
+            r.apply(userEvent(seq: 1, typed))
+
+            XCTAssertEqual(r.state.items[0].asUser?.text, typed)
+            XCTAssertNil(r.state.items[0].asUser?.attached)
+        }
+    }
+
+    /// The text fallback compares what was typed with the typed part of the echo — for an event
+    /// carrying a note, the echo less the note. Compared with the whole echo it never matches: the
+    /// optimistic bubble would sit on "Sending…" with a duplicate of itself underneath, and a queued
+    /// send would leave its "Queued" placeholder behind beside the row that replaced it.
+    func testOptimisticUserReconcilesAgainstTheTypedPartOfARecordedNote() {
+        for block in [backgroundJobsBlock, listConditionsBlock] {
+            let typed = "已经部署，请帮我测试"
+            // No clientTurnId echoed and no turnId tagged yet: the text is all there is to match on.
+            let echo = userEvent(seq: 10, turnId: "turn-77", "\(typed)\n\n\(block)", note: "\n\n\(block)")
+
+            var idle = TranscriptReducer()
+            idle.addOptimisticUser(clientTurnId: "c9", text: typed)
+            idle.apply(echo)
+
+            XCTAssertEqual(idle.state.items.count, 1, "must reconcile, not duplicate")
+            XCTAssertEqual(idle.state.items[0].asUser?.pending, false, "no longer Sending…")
+            XCTAssertEqual(idle.state.items[0].asUser?.text, typed)
+            XCTAssertEqual(idle.state.items[0].asUser?.attached?.text, block)
+
+            var queued = TranscriptReducer()
+            queued.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string("on it")])))
+            queued.addOptimisticUser(clientTurnId: "c1", text: typed, queued: true)
+            queued.apply(echo)
+
+            XCTAssertTrue(queued.state.queued.isEmpty, "leased → no Queued placeholder left behind")
+            XCTAssertEqual(queued.state.items.count, 2, "[assistant, user] — no duplicate")
+            XCTAssertEqual(queued.state.items.last?.asUser?.pending, false)
+            XCTAssertEqual(queued.state.items.last?.asUser?.attached?.text, block)
+        }
+    }
+
+    /// Coordinator context is what an event stored before notes existed is still read for, from its
+    /// text. That older reading draws the very same entry a recorded note does, so one conversation
+    /// stored across the change does not show the same thing two ways.
+    func testCoordinatorContextIsOneEntryWithOrWithoutANote() {
+        let typed = "把这个项目协调起来"
+        let appended = "\n\n<orbit_project_coordinator_context>\n  你是项目的协调会话。\n</orbit_project_coordinator_context>"
+        var recorded = TranscriptReducer()
+        recorded.apply(userEvent(seq: 1, typed + appended, note: appended))
+        var read = TranscriptReducer()
+        read.apply(userEvent(seq: 1, typed + appended))
+
+        let viaNote = recorded.state.items[0].asUser, viaText = read.state.items[0].asUser
+        XCTAssertNotNil(viaNote?.note, "one told apart by its note…")
+        XCTAssertNil(viaText?.note, "…the other by the older reading")
+        XCTAssertEqual(viaNote?.text, typed)
+        XCTAssertEqual(viaText?.text, typed)
+        XCTAssertEqual(viaNote?.attached?.kind, "project coordinator context")
+        XCTAssertEqual(viaText?.attached?.kind, viaNote?.attached?.kind)
+        XCTAssertEqual(viaText?.attached?.text, viaNote?.attached?.text)
     }
 
     /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
