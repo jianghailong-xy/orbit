@@ -478,7 +478,12 @@ private struct NavigationDrawer: View {
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
             .contentMargins(.bottom, 60, for: .scrollContent)
-            .overlay(alignment: .bottom) { actionBar }
+            .overlay(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 8) {
+                    newSessionBlockedNote
+                    actionBar
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // One level below the content card's background (ChatGPT-style), so the undimmed white card
@@ -534,6 +539,26 @@ private struct NavigationDrawer: View {
         }
         .padding(.horizontal, DrawerMetrics.hInset)
         .padding(.bottom, 8)
+    }
+
+    /// Why New session is greyed out, over the bar — a disabled button with no reason reads as broken.
+    /// It only is when there's no workspace to start in; silent while the first fetch is still out.
+    @ViewBuilder
+    private var newSessionBlockedNote: some View {
+        if model.currentAgentID == nil, let reason = newSessionBlockedReason {
+            Text(reason)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, DrawerMetrics.hInset + 6)
+        }
+    }
+
+    private var newSessionBlockedReason: String? {
+        switch model.agents?.listPresentation {
+        case .failed?: return "New sessions need a connection to Orbit."
+        case .empty?: return "Add a workspace to start a session."
+        default: return nil
+        }
     }
 
     /// Shared chrome for a tappable drawer row: a consistent height and an inset, rounded selection
@@ -788,11 +813,41 @@ private struct NavigationDrawer: View {
     /// is metadata on each row rather than a parent the user must expand.
     @ViewBuilder
     private var agentsRows: some View {
-        if let agents = model.agents, !agents.items.isEmpty {
+        if let agents = model.agents {
+            if agents.loadState.lastLoadFailed { unreachableRow(agents) }
             ForEach(agents.orderedItems) { agent in
                 agentRow(agent, agents: agents)
             }
         }
+    }
+
+    /// Heads the Workspace rows when the list couldn't be fetched (offline, server down), so an empty
+    /// rail reads as "can't reach Orbit" rather than "your workspaces are gone"; rows kept from an
+    /// earlier fetch stay below it. The launch landing waits on this same list, so Retry goes through
+    /// `loadAgentsThenLand`.
+    private func unreachableRow(_ agents: AgentsModel) -> some View {
+        pill(selected: false) {
+            HStack(spacing: 12) {
+                Image(systemName: "wifi.exclamationmark")
+                    .frame(width: 24)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Can't reach Orbit")
+                    Text("Couldn't load workspaces")
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 6)
+                if agents.loading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Retry") { Task { await model.loadAgentsThenLand() } }
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+        .drawerRow()
     }
 
     /// A compact Workspace row: folder/offline state leads; Workspace · Runner carries identity; one

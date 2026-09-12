@@ -197,7 +197,7 @@ struct AgentContentColumn: View {
         // *unconditionally*. It used to hang off `AgentPanes`' list — inside the `if let` — which
         // left it missing on any column born on the placeholder branch: at cold launch the workspace
         // list is still loading (`AppModel.loadAgentsThenLand` resolves the landing agent only after
-        // the fetch), so this column first appears as "Select a workspace", and the search bar UIKit
+        // the fetch), so this column first appears on its placeholder branch, and the search bar UIKit
         // installs on the column's navigation item at that first configuration simply wasn't there to
         // install. Swapping the branch in afterwards doesn't add one — which is why the field stayed
         // gone (scrolling to the top didn't bring it back) until you left the section and came back,
@@ -220,8 +220,21 @@ struct AgentContentColumn: View {
                     )
                     #endif
             } else {
-                ContentUnavailableView("Select a workspace", systemImage: "folder",
-                                       description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
+                switch app.agents?.listPresentation {
+                case .loading?:
+                    ProgressView()
+                case .failed?:
+                    // Offline the sidebar has nothing to pick and the launch landing is still waiting
+                    // on a list that answers, so say the fetch failed rather than "Select a workspace".
+                    VStack(spacing: 10) {
+                        ContentUnavailableView("Workspaces couldn't be loaded", systemImage: "wifi.exclamationmark",
+                                               description: Text(app.agents?.errorText ?? "Request failed — check your connection."))
+                        Button("Retry") { Task { await app.loadAgentsThenLand() } }
+                    }
+                default:
+                    ContentUnavailableView("Select a workspace", systemImage: "folder",
+                                           description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
+                }
             }
         }
         #if os(iOS)

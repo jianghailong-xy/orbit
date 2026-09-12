@@ -119,6 +119,16 @@ struct SectionSidebar: View {
         .task { await model.loadAgentsThenLand() }
     }
 
+    /// The line standing in for an empty workspace list. It says there are none only after a fetch
+    /// that succeeded — offline the list couldn't be fetched, which isn't the same thing.
+    private func emptyWorkspacesText(_ none: String) -> String {
+        switch model.agents?.listPresentation {
+        case .failed?: return "Couldn't load workspaces"
+        case .empty?: return none
+        default: return "Loading…"
+        }
+    }
+
     #if os(iOS)
     @ViewBuilder
     private var workspaceRows: some View {
@@ -128,7 +138,7 @@ struct SectionSidebar: View {
                     .tag(SidebarSelection.agent(workspace.id))
             }
         } else {
-            Text(model.agents?.loading == true ? "Loading…" : "No workspaces")
+            Text(emptyWorkspacesText("No workspaces"))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
         }
@@ -147,7 +157,7 @@ struct SectionSidebar: View {
                     }
                 }
             } else {
-                Text(model.agents?.loading == true ? "Loading…" : "No agents")
+                Text(emptyWorkspacesText("No agents"))
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
         } label: {

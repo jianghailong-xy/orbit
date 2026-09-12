@@ -10,7 +10,9 @@ import OrbitKit
 final class RunnersModel {
     private(set) var runners: [Runner] = []
     private(set) var agents: [Agent] = []
-    private(set) var loading = false
+    /// How the runner-list fetches have gone, so a failed fetch never reads as "No runners"
+    /// (`LoadFailureLogic.presentation`).
+    private(set) var loadState = ListLoadState()
     var errorText: String?
     /// A freshly-minted runner token or enrollment token — surfaced once for the user to copy.
     var revealedToken: String?
@@ -26,12 +28,15 @@ final class RunnersModel {
     func agents(forRunner id: String) -> [Agent] { agents.filter { $0.runnerId == id } }
 
     func load() async {
-        loading = true
-        defer { loading = false }
+        loadState.begin()
         do {
             runners = try await api.runners()
             agents = (try? await api.agents()) ?? agents
-        } catch { errorText = friendly(error) }
+            loadState.succeed()
+        } catch {
+            errorText = friendly(error)
+            loadState.fail()
+        }
     }
 
     func setMaxConcurrent(_ id: String, _ n: Int) async {

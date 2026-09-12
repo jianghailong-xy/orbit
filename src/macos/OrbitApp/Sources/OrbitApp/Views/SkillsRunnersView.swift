@@ -36,12 +36,9 @@ struct SkillsView: View {
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .searchable(text: $search)
-            .overlay {
-                if groups.isEmpty {
-                    ContentUnavailableView(runners.loading ? "Loading…" : "No skills",
-                                           systemImage: "wand.and.stars")
-                }
-            }
+            .modifier(RunnersLoadOverlay(runners: runners, isEmpty: groups.isEmpty,
+                                         failedTitle: "Skills couldn't be loaded",
+                                         emptyTitle: "No skills", systemImage: "wand.and.stars"))
             .navigationTitle("Skills")
             .task { await runners.load() }
         } else {
@@ -81,12 +78,9 @@ struct RunnersListView: View {
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
-            .overlay {
-                if runners.runners.isEmpty {
-                    ContentUnavailableView(runners.loading ? "Loading…" : "No runners",
-                                           systemImage: "desktopcomputer")
-                }
-            }
+            .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
+                                         failedTitle: "Runners couldn't be loaded",
+                                         emptyTitle: "No runners", systemImage: "desktopcomputer"))
             .navigationTitle("Runners")
             .task { await runners.load() }
         } else {
@@ -113,12 +107,9 @@ struct RunnersSettingsList: View {
                         }
                     }
                 }
-                .overlay {
-                    if runners.runners.isEmpty {
-                        ContentUnavailableView(runners.loading ? "Loading…" : "No runners",
-                                               systemImage: "desktopcomputer")
-                    }
-                }
+                .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
+                                             failedTitle: "Runners couldn't be loaded",
+                                             emptyTitle: "No runners", systemImage: "desktopcomputer"))
                 .task { await runners.load() }
             } else {
                 ProgressView()
@@ -128,6 +119,55 @@ struct RunnersSettingsList: View {
     }
 }
 #endif
+
+/// How a `RunnersModel` list shows its load outcome, the way TasksView shows its own: a failed fetch
+/// with nothing in hand says so with Retry instead of reading as an empty list, and rows left from an
+/// earlier fetch stay up under a dismissible notice. `LoadFailureLogic.presentation` decides which, so
+/// "No runners" / "No skills" only ever follows a fetch that succeeded.
+private struct RunnersLoadOverlay: ViewModifier {
+    let runners: RunnersModel
+    /// Whether the list has no rows to show.
+    let isEmpty: Bool
+    let failedTitle: String
+    let emptyTitle: String
+    let systemImage: String
+
+    func body(content: Content) -> some View {
+        let presentation = LoadFailureLogic.presentation(runners.loadState, isEmpty: isEmpty)
+        return content
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if presentation == .content(showsError: true), let error = runners.errorText {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text(error).font(.orbitLabel).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button { runners.errorText = nil } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Dismiss error")
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.12))
+                }
+            }
+            .overlay {
+                switch presentation {
+                case .loading:
+                    ContentUnavailableView("Loading…", systemImage: systemImage)
+                case .failed:
+                    VStack(spacing: 10) {
+                        ContentUnavailableView(failedTitle, systemImage: "wifi.exclamationmark",
+                                               description: Text(runners.errorText ?? "Request failed — check your connection."))
+                        Button("Retry") { Task { await runners.load() } }
+                    }
+                case .empty:
+                    ContentUnavailableView(emptyTitle, systemImage: systemImage)
+                case .content:
+                    EmptyView()
+                }
+            }
+    }
+}
 
 struct RunnerRow: View {
     let runner: Runner

@@ -59,8 +59,8 @@ final class AppModel {
             tasks?.setSectionActive(selectedSection == .tasks)
         }
     }
-    /// Latches the one-shot default-landing resolution so it runs only after the first agent-list
-    /// load, and never overrides a later user/deep-link choice.
+    /// Latches the one-shot default-landing resolution so it runs only after the first successful
+    /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
     var selectedTaskID: String? {
         didSet {
@@ -572,6 +572,11 @@ final class AppModel {
                         // keep fresh (they have no poll at all) alongside the session snapshot.
                         scheduleLibraryRefresh(.agents)
                         scheduleLibraryRefresh(.tasks)
+                        // Runners has neither push nor poll: a list that failed while offline
+                        // would otherwise stay on its error until someone pulls to refresh.
+                        if let runners, runners.loadState.lastLoadFailed {
+                            Task { await runners.load() }
+                        }
                     case .event(let ev):
                         apply(ev)
                     }
@@ -780,6 +785,9 @@ final class AppModel {
                 if pass.fullTargets.contains(.agents) {
                     await self.agents?.load()
                     guard self.libraryRefreshGeneration == generation else { break }
+                    // A launch that couldn't reach the server left the landing open; this reload —
+                    // the reconnect path — is what finally answers it.
+                    self.resolveDefaultLanding()
                 }
                 if pass.fullTargets.contains(.tasks) {
                     await self.tasks?.refresh()
@@ -1598,36 +1606,35 @@ final class AppModel {
         }
     }
 
-    /// Load the agent list, then land on the first agent's session list (the app's home) if we're
-    /// still on the launch default. Runs the resolution once; a deep link / notification that
-    /// already chose an agent (or another section) is respected. No agents → the Runners section,
-    /// the native parallel of web's runners/register onboarding.
+    /// Load the agent list, then land on the app's home if we're still on the launch default — see
+    /// `resolveDefaultLanding`.
     func loadAgentsThenLand() async {
         await agents?.load()
-        guard !didResolveDefaultLanding else { return }
-        didResolveDefaultLanding = true
-        // Only claim the launch default: a deep link / notification that already chose an agent, a
-        // session (still resolving its agent), or another section is respected.
-        guard selectedSection == .agents, selectedAgentID == nil, selectedAgentSessionID == nil else { return }
-        let ordered = orderedAgents
-        // Prefer the agent you last used (persisted via `selectedAgentID`) so a cold launch reopens
-        // your context; fall back to the first agent, or Runners onboarding when there are none.
-        // Compared through `PublicID.storageKey` because the two sides come from different eras:
-        // `last` was written by whichever build ran before this one, while `$0.id` is however the
-        // server spells ids today (docs/public-id-migration-design.md). A raw `==` would silently
-        // stop matching across that change — no error, the app would just quietly forget which
-        // agent you were in and land on the first one.
-        // Note it selects the MATCHED AGENT's id, not the remembered string: they can be the same
-        // agent in two spellings, and everything downstream compares this against ids as the
-        // server spells them today.
-        if let last = UserDefaults.standard.string(forKey: Self.lastAgentKey),
-           let match = ordered.first(where: { PublicID.storageKey($0.id) == PublicID.storageKey(last) }) {
-            selectedAgentID = match.id
-        } else if let first = ordered.first?.id {
-            selectedAgentID = first
-        } else {
-            selectedSection = .runners
+        resolveDefaultLanding()
+    }
+
+    /// The one-shot launch landing: the agent you last used (persisted via `selectedAgentID`), else
+    /// the first agent, else the Runners section when the server says there are none — the native
+    /// parallel of web's runners/register onboarding. A deep link / notification that already chose
+    /// an agent, a session or another section is respected. Decided only off a successful agent
+    /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides
+    /// instead. The rules live in `LoadFailureLogic.defaultLanding`.
+    private func resolveDefaultLanding() {
+        guard !didResolveDefaultLanding, let agents else { return }
+        let landing = LoadFailureLogic.defaultLanding(
+            agents: agents.loadState,
+            orderedAgentIDs: orderedAgents.map(\.id),
+            lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey),
+            section: selectedSection,
+            selectedAgentID: selectedAgentID,
+            selectedSessionID: selectedAgentSessionID)
+        switch landing {
+        case .undecided: return
+        case .keepCurrent: break
+        case .agent(let id): selectedAgentID = id
+        case .runners: selectedSection = .runners
         }
+        didResolveDefaultLanding = true
     }
 
     func handle(_ intent: AppIntent) {

@@ -31,7 +31,10 @@ final class AgentsModel {
     /// Distinguishes an authoritative empty provider list from a request that has not succeeded.
     /// Unknown slugs must not be irreversibly treated as removed before this becomes true.
     private(set) var configuredProvidersLoaded = false
-    private(set) var loading = false
+    /// How the workspace-list fetches have gone: tells a failed fetch from an empty list, and holds
+    /// the launch landing open until one succeeds (`LoadFailureLogic`).
+    private(set) var loadState = ListLoadState()
+    var loading: Bool { loadState.loading }
     var errorText: String?
 
     // The selected agent's sessions for the current Open/Completed/Trash view.
@@ -49,6 +52,10 @@ final class AgentsModel {
 
     var groups: [AgentGroup] { AgentListLogic.grouped(items, runnerOrder: runnerOrder) }
     var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
+    /// What the workspace list shows where its rows would be: a failed fetch is never "no workspaces".
+    var listPresentation: ListLoadPresentation {
+        LoadFailureLogic.presentation(loadState, isEmpty: items.isEmpty)
+    }
 
     /// Display name for a group header (runner display-name, else id, else "Shared" for host).
     func runnerLabel(_ runnerId: String?) -> String {
@@ -88,8 +95,7 @@ final class AgentsModel {
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
 
     func load() async {
-        loading = true
-        defer { loading = false }
+        loadState.begin()
         do {
             items = try await api.agents()
             await refreshRunnerSnapshot()
@@ -99,7 +105,11 @@ final class AgentsModel {
                 configuredProviders = providers
                 configuredProvidersLoaded = true
             }
-        } catch { errorText = friendly(error) }
+            loadState.succeed()
+        } catch {
+            errorText = friendly(error)
+            loadState.fail()
+        }
     }
 
     /// Refresh only the Runner directory fields consumed by navigation and runtime defaults. This
