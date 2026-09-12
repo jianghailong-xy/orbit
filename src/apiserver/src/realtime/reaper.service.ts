@@ -23,6 +23,7 @@ import {
   CURRENT_WORK_SESSION_REAPED,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -323,6 +324,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           + `the session was reaped as ${status}.`,
       });
       const currentWorkTerminalized = currentWork.terminalizedTurnIds.length;
+      // A Watch wake still queued goes with the drain below, unrun: its delivery stops reading
+      // DELIVERED first (watches/watch-wake-drain.ts).
+      await deadLetterQueuedWatchWakes(tx, sessionId, `reaped as ${status}: ${reason}`);
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },

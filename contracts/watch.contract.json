@@ -135,14 +135,20 @@
     },
     "delivery": {
       "values": ["PENDING", "IN_FLIGHT", "DELIVERED", "DEAD_LETTER"],
-      "terminal": ["DELIVERED", "DEAD_LETTER"],
+      "terminal": ["DEAD_LETTER"],
       "initial": "PENDING",
       "transitions": [
         { "from": "PENDING", "to": "IN_FLIGHT", "trigger": "a worker claimed it under (leaseOwner, leaseGeneration)" },
         { "from": "IN_FLIGHT", "to": "DELIVERED", "trigger": "the action was performed exactly once" },
         { "from": "IN_FLIGHT", "to": "PENDING", "trigger": "retryable failure or lease expiry; attempt count increments" },
-        { "from": "IN_FLIGHT", "to": "DEAD_LETTER", "trigger": "attempts reached maxDeliveryAttempts, or a terminal refusal" }
-      ]
+        { "from": "IN_FLIGHT", "to": "DEAD_LETTER", "trigger": "attempts reached maxDeliveryAttempts, or a terminal refusal" },
+        {
+          "from": "DELIVERED",
+          "to": "DEAD_LETTER",
+          "trigger": "RESUME_SESSION only: the observer's run ended while the wake turn was still queued, and the drain that ended its queue answered the wake before any runner took it (OBSERVER_SESSION_ENDED)"
+        }
+      ],
+      "deliveredNote": "DELIVERED is final for NOTIFY_USER and for a wake a runner has taken. A RESUME_SESSION delivery is DELIVERED once its turn is queued; until a runner takes that turn, the end of the observer's run makes it a dead letter, because a wake never revives the session and the drained turn cannot be delivered again under its key."
     }
   },
 

@@ -911,6 +911,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // nothing holding a delivery row waits on a session. Also issued on its own, as one compare-and-set
   // on the lease generation, for a notification and for a turn an earlier attempt already queued.
   { at: 'watches/watch-delivery.service.ts#acknowledgeDelivery', under: 'sessions.createTurn' },
+  // A Watch wake its observer's ending drains unrun: the delivery that acknowledged it becomes a dead
+  // letter in the transaction that drains it. It takes only the delivery rows of that session's own
+  // wakes, after the caller holds the session, and nothing holding a delivery row waits on a session.
+  { at: 'watches/watch-wake-drain.ts#deadLetterQueuedWatchWakes', under: 'runnerApi turn-complete/finalize, sessions end and realtime reaper — each caller already owns the rank-30 Session transaction whose drain answers the wake unrun' },
   { at: 'watches/watch-evaluator.service.ts#land', under: 'watchEvaluator.evaluate' },
   // Test-only, and reachable only from the harness's own transaction.
 ];

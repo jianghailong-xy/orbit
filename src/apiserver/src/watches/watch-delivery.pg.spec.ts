@@ -8,7 +8,9 @@
  * the runner inbox claim and turn completion are `RunnerApiController`'s own, and `PushService` is real
  * down to its HTTP/2 request, which is the one thing replaced — each APNs request is recorded instead
  * of sent. Faults are injected in the database, by a trigger that refuses one session's turns or one
- * watch's delivery, so a failure travels the path a real one takes.
+ * watch's delivery, so a failure travels the path a real one takes. The endings that drain a queued
+ * wake unrun — a failed turn, a lost runner, a runner finalize, an owner's end — are driven through the
+ * production turn completion, reaper sweep, finalize and end.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-delivery.pg.spec.ts
  *
@@ -34,6 +36,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { PushService } from '../push/push.service';
+import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import type { CreateWatchDto } from './dto';
@@ -827,4 +830,157 @@ test('a started worker delivers what is due without being asked, and stops clean
   await eventually('the loop to deliver', () => onlyDelivery(watchId), (row) => row.state === 'DELIVERED');
   await delivery.stop();
   assert.equal(apns.filter((request) => request.payload.watchID === watchId).length, 1);
+});
+
+// ── a wake its observer's ending drains unrun ──────────────────────────────────────────────────
+
+interface QueuedWake {
+  observer: string;
+  watchId: string;
+  deliveryId: string;
+  wakeId: string;
+}
+
+/**
+ * An observer RUNNING a turn, with a wake queued behind it whose delivery is DELIVERED: the state each
+ * way that run can end meets (watch-wake-drain.ts).
+ */
+async function wakeQueuedBehindRunningTurn(owner: string, runner: string, pool: Worker): Promise<QueuedWake & { current: string }> {
+  const observer = await insertSession(owner, 'RUNNING', runner);
+  const current = randomUUID();
+  await sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","kind","content","status","delivered_at","lease_deadline_at")
+     VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
+    [current, observer, `current-${current}`],
+  );
+  const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
+  const { id: deliveryId } = await onlyDelivery(watchId);
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), deliveryId), ['DELIVERED']);
+  const [wake] = (await turnsOn(observer)).filter((turn) => turn.clientTurnId === `watch:${watchId}:1`);
+  assert.equal(wake?.status, 'PENDING', 'the wake waits behind the running turn');
+  return { observer, current, watchId, deliveryId, wakeId: wake.id };
+}
+
+/** The ending answered the wake away unrun, its delivery says so on the watch's own read, and nothing else about the watch moved. */
+async function assertDeadLettered(owner: string, queued: QueuedWake, ending: string): Promise<void> {
+  const [wake] = (await turnsOn(queued.observer)).filter((turn) => turn.id === queued.wakeId);
+  assert.equal(wake.status, 'ANSWERED', `${ending}: the queue is drained as it always was`);
+  const settled = await onlyDelivery(queued.watchId);
+  assert.equal(settled.state, 'DEAD_LETTER', `${ending}: a wake no runner took still reads ${settled.state}`);
+  assert.equal(settled.deadLettered, true, ending);
+  assert.equal(settled.delivered, false, ending);
+  assert.match(settled.lastError ?? '', /^OBSERVER_SESSION_ENDED: /, ending);
+  const view = await watches.get(owner, queued.watchId);
+  assert.equal(view.state, 'MATCHED', `${ending}: the watch is the terminal fact it was`);
+  assert.deepEqual(
+    view.matches.map((match) => match.deliveries.map(({ id, state, lastError }) => ({ id, state, lastError }))),
+    [[{ id: queued.deliveryId, state: 'DEAD_LETTER', lastError: settled.lastError }]],
+    `${ending}: one Match, and its dead letter is on the watch's read`,
+  );
+}
+
+test('a wake still queued when its observer\'s running turn fails is a dead letter, not DELIVERED; a wake the runner took stays delivered when its own turn fails', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
+  const inbox = runnerApi as unknown as {
+    dequeueTurn(
+      sessionId: string,
+      runnerId: string,
+      leaseGeneration: null,
+      acceptsSteer: boolean,
+      declaredCapabilities: readonly string[],
+    ): Promise<{ turnId: string } | null>;
+  };
+  const complete = (observer: string, turnId: string, status: 'SUCCEEDED' | 'FAILED') =>
+    runnerApi.turnComplete({ id: runner }, observer, {
+      turnId,
+      status,
+      subtype: status === 'FAILED' ? 'error_during_execution' : 'completed',
+      ...(status === 'FAILED' ? { result: 'API Error: 529 overloaded' } : {}),
+      numTurns: 2,
+      costUsd: 0,
+    } as never);
+  // Another observer of the same owner on the same runner, whose run nothing here ends.
+  const bystander = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+
+  const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  await complete(queued.observer, queued.current, 'FAILED');
+  assert.equal((await sessionOf(queued.observer)).status, 'FAILED');
+  await assertDeadLettered(owner, queued, 'the running turn failed');
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), queued.deliveryId), [], 'a dead letter is never claimed again');
+
+  // The control: the runner took the wake, and it is the wake's own turn that fails. The engine received
+  // it, so it was delivered, whatever its run came to.
+  const taken = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  await complete(taken.observer, taken.current, 'SUCCEEDED');
+  assert.equal((await inbox.dequeueTurn(taken.observer, runner, null, false, []))?.turnId, taken.wakeId, 'the runner took the wake');
+  await complete(taken.observer, taken.wakeId, 'FAILED');
+  assert.equal((await sessionOf(taken.observer)).status, 'FAILED', 'the run the wake started failed');
+  assert.equal((await onlyDelivery(taken.watchId)).state, 'DELIVERED', 'a wake the runner took was dead-lettered by its run failing');
+
+  const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+  assert.equal(waiting.status, 'PENDING', 'another observer lost its queued wake');
+  assert.equal((await onlyDelivery(bystander.watchId)).state, 'DELIVERED', 'the other observers\' endings dead-lettered this one\'s wake');
+});
+
+test('a wake still queued when its observer\'s runner is lost is a dead letter: the reaper finalizes the run and drains the wake unrun', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+
+  // The runner stops heartbeating past the offline window, and the production sweep runs.
+  await sql.query(`UPDATE "runner" SET "last_heartbeat_at" = now() - interval '10 minutes' WHERE "id" = $1`, [runner]);
+  const reaper = new ReaperService(pool.prisma as unknown as PrismaService, inert<never>());
+  await (reaper as unknown as { sweep(): Promise<void> }).sweep();
+
+  const { rows: [session] } = await sql.query<{ status: string; retryArmed: boolean }>(
+    `SELECT "status", "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
+    [queued.observer],
+  );
+  assert.deepEqual(session, { status: 'FAILED', retryArmed: true }, 'the reaper finalized the observer, with its retry armed');
+  await assertDeadLettered(owner, queued, 'the runner was lost');
+});
+
+test('a wake still queued when the runner finalizes its observer\'s run is a dead letter', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
+
+  await runnerApi.finalize({ id: runner }, queued.observer, { status: 'FAILED', error: 'the engine exited' } as never);
+  assert.equal((await sessionOf(queued.observer)).status, 'FAILED');
+  await assertDeadLettered(owner, queued, 'the runner finalized the run');
+});
+
+test('a wake still queued when its observer is ended is a dead letter, whether the observer was running or waiting for a runner slot', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  // The service the owner's end goes through, with its post-commit announcements sent nowhere.
+  const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, inert<never>());
+
+  const running = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  await sessions.end(owner, running.observer);
+  const ending = await sessionOf(running.observer);
+  assert.deepEqual([ending.status, ending.endReason, ending.cancelling], ['RUNNING', 'ended', true], 'the running observer is being ended');
+  await assertDeadLettered(owner, running, 'an end was requested while the observer ran');
+
+  // A parked observer the wake moved to PENDING is settled at once.
+  const parked = await insertSession(owner, 'AWAITING_INPUT', runner);
+  const parkedWatch = await matchedWatch(owner, 'RESUME_SESSION', parked);
+  const { id: parkedDelivery } = await onlyDelivery(parkedWatch);
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), parkedDelivery), ['DELIVERED']);
+  const [parkedWake] = await turnsOn(parked);
+  assert.equal((await sessionOf(parked)).status, 'PENDING', 'the wake queued the parked observer for a runner slot');
+  await sessions.end(owner, parked);
+  assert.equal((await sessionOf(parked)).status, 'CANCELLED');
+  await assertDeadLettered(
+    owner,
+    { observer: parked, watchId: parkedWatch, deliveryId: parkedDelivery, wakeId: parkedWake.id },
+    'an end was requested while the observer waited for a slot',
+  );
 });

@@ -169,6 +169,12 @@ Agent 最常要的那句话——「等这 7 个 Task 全部终态，或任一�
 `IN_FLIGHT` 由 `(leaseOwner, leaseGeneration)` 围栏；租约过期由别的 worker 接管。
 `maxDeliveryAttempts = 8` 之后进 `DEAD_LETTER`，**死信必须在界面上可见**。
 
+`RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队。runner 取走它之前观察者的 run 若已结束——当前 turn
+失败、runner 掉线被 reaper 终结、runner finalize、被请求结束——结束时的排空会把这个 turn 连同队列一起收掉，
+交付随之 `DELIVERED → DEAD_LETTER`（`OBSERVER_SESSION_ENDED`），不再报已送达：唤醒不复活会话，同一个
+`clientTurnId` 也无法再投一次。所以交付的终态只有 `DEAD_LETTER`；`DELIVERED` 只对 `NOTIFY_USER` 和已被
+runner 取走的唤醒是最终的。
+
 ---
 
 ## 4. 目标集合：创建时快照

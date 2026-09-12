@@ -142,6 +142,7 @@ import {
   CURRENT_WORK_SESSION_ENDED,
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
+import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -4890,6 +4891,9 @@ export class SessionsService {
         code: CURRENT_WORK_SESSION_ENDED,
         reason: 'CURRENT_WORK was not delivered because the session ended.',
       });
+      // Both branches below retire every queued message, a Watch wake among them: its delivery
+      // stops reading DELIVERED first (watches/watch-wake-drain.ts).
+      await deadLetterQueuedWatchWakes(tx, sessionId, `an end was requested: ${reason}`);
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },

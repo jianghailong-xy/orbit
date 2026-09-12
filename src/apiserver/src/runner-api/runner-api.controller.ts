@@ -133,6 +133,7 @@ import {
   requeueUnreadCurrentWorkSteers,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
@@ -3454,6 +3455,9 @@ export class RunnerApiController {
           reason: 'CURRENT_WORK was not delivered before its session turn failed.',
         });
         currentWorkTerminalized += terminalized.terminalizedTurnIds.length;
+        // A Watch wake queued behind the failed turn goes with the drain below, unrun: its delivery
+        // stops reading DELIVERED first (watches/watch-wake-drain.ts).
+        await deadLetterQueuedWatchWakes(tx, sessionId, 'its running turn failed');
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4192,6 +4196,9 @@ export class RunnerApiController {
           `Delivery could not be confirmed before the runner finalized the session as ${effectiveStatus}.`,
       });
       const currentWorkTerminalized = currentWork.terminalizedTurnIds.length;
+      // A Watch wake still queued goes with the drain below, unrun: its delivery stops reading
+      // DELIVERED first (watches/watch-wake-drain.ts).
+      await deadLetterQueuedWatchWakes(tx, sessionId, `the runner finalized it as ${effectiveStatus}`);
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
