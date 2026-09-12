@@ -66,7 +66,9 @@ type fakeStep struct {
 	// reader starts — and a script that uses it has no `await` steps to run.
 	Emit string `json:"emit,omitempty"`
 	// Await: user | control_request | control_response, optionally narrowed by Subtype
-	// (control_request) or RequestID (control_response).
+	// (control_request) or RequestID (control_response); or release, which waits for the
+	// test to call Release(Text) — a moment only the test can name, such as the engine
+	// starting a turn of its own after its session has parked.
 	Await     string                 `json:"await,omitempty"`
 	Subtype   string                 `json:"subtype,omitempty"`
 	Text      string                 `json:"text,omitempty"`
@@ -151,6 +153,8 @@ func runFakeClaude(dir string) int {
 					resp, _ := m["response"].(map[string]interface{})
 					return s.RequestID == "" || (resp != nil && resp["request_id"] == s.RequestID)
 				})
+			case "release":
+				ok = awaitRelease(filepath.Join(dir, "release-"+s.Text), closed)
 			default:
 				io.WriteString(os.Stderr, "fake claude: unknown await "+s.Await+"\n")
 				return 2
@@ -254,6 +258,25 @@ func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match 
 		case <-deadline:
 			io.WriteString(os.Stderr, "fake claude: timed out waiting for a frame\n")
 			return nil, false
+		}
+	}
+}
+
+// awaitRelease blocks until the test creates path (fakeClaude.Release), stdin closes, or
+// fakeClaudeTimeout passes.
+func awaitRelease(path string, closed <-chan struct{}) bool {
+	deadline := time.After(fakeClaudeTimeout)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		select {
+		case <-closed:
+			return false
+		case <-deadline:
+			io.WriteString(os.Stderr, "fake claude: timed out waiting for "+filepath.Base(path)+"\n")
+			return false
+		case <-time.After(5 * time.Millisecond):
 		}
 	}
 }
@@ -451,6 +474,14 @@ func (f *fakeClaude) WaitStdin(n int) []map[string]interface{} {
 			f.t.Fatalf("only %d stdin frame(s) recorded, want %d", len(got), n)
 		}
 		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// Release lets the script past its `release` await of that name.
+func (f *fakeClaude) Release(name string) {
+	f.t.Helper()
+	if err := os.WriteFile(filepath.Join(f.rec, "release-"+name), nil, 0o644); err != nil {
+		f.t.Fatal(err)
 	}
 }
 

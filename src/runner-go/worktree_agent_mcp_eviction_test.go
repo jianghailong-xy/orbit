@@ -547,6 +547,65 @@ func TestDrainedMergeRefusedWhenAJobStartsDuringTheEviction(t *testing.T) {
 	p.finish(live)
 }
 
+// An engine running a turn of its own is not recycled for a merge either. The merge waits
+// for that turn to end, and then drains the engine as it would any parked one.
+func TestDrainedMergeWaitsForATurnTheEngineRunsOnItsOwn(t *testing.T) {
+	p := newSessionPool(1)
+	live := agentMcpPoolSession(t, p, "ownturn", map[string]interface{}{
+		"agent-fs": map[string]interface{}{"command": "agent-fs-mcp"},
+	})
+	generation, _, ok := p.reserveEngine(live, context.Background(), context.Background())
+	if !ok {
+		t.Fatal("engine was not reserved")
+	}
+	evicted := make(chan struct{}, 1)
+	p.engineStarted(live, generation, func() {
+		evicted <- struct{}{}
+		go p.engineStopped(live, generation)
+	})
+	parkPoolSession(p, live)
+	p.engineTurnEvent(live, evToolUse, map[string]interface{}{"id": "toolu_own"})
+
+	type drained struct {
+		release func()
+		receipt string
+		ok      bool
+	}
+	merged := make(chan drained, 1)
+	go func() {
+		release, receipt, ok := drainedMerge(p, "ownturn", 10*time.Second)
+		merged <- drained{release, receipt, ok}
+	}()
+	select {
+	case <-evicted:
+		t.Fatal("the engine was recycled for a merge in the middle of a turn it was running on its own")
+	case r := <-merged:
+		if r.ok {
+			r.release()
+		}
+		t.Fatalf("the merge did not wait for the engine's turn (admitted=%v): %q", r.ok, r.receipt)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	p.engineTurnEvent(live, evTurnEnd, map[string]interface{}{})
+	select {
+	case r := <-merged:
+		if !r.ok {
+			t.Fatalf("the merge was refused after the engine's turn ended: %q", r.receipt)
+		}
+		r.release()
+		assertEvictionReceipt(t, "merge", r.receipt, "agent-fs")
+	case <-time.After(10 * time.Second):
+		t.Fatal("the merge never ran after the engine's turn ended")
+	}
+	select {
+	case <-evicted:
+	default:
+		t.Fatal("the merge ran without the engine having been asked to go")
+	}
+	p.finish(live)
+}
+
 // A warm engine runs the MCP servers it was spawned with. A claim that reuses it carries
 // whatever the agent's configuration says by then, which is not what is running — so the
 // decision follows the engine's own spawn, both ways round.

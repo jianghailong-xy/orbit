@@ -575,6 +575,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// moving it back would file whatever the stdout reader emitted in between under the
 	// wrong turn — which is the crossing this avoids rather than races.
 	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
+		// The one place a turn the engine runs on its own shows up at all. Told before the
+		// event is buffered, so nothing reading the stream is ahead of the pool.
+		pool.engineTurnEvent(live, eventType, payload)
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				lastErrMu.Lock()

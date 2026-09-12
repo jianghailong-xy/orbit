@@ -75,6 +75,10 @@ type liveSession struct {
 	engineGeneration uint64
 	engineCancel     context.CancelFunc
 	evictRequested   bool
+	// selfDrivenTurn: this resident engine is running a turn Orbit did not deliver — a
+	// Monitor event, a <task-notification>, a ScheduleWakeup. It holds no permit, and it
+	// is not idle either, so nothing that recycles warm engines takes it (engineTurnEvent).
+	selfDrivenTurn bool
 	// agentMcpServers is agentMcpServerNames of the claim this engine generation was
 	// spawned from, taken when the generation is reserved. A warm engine goes on
 	// running the servers it started with, whatever a later claim says.
@@ -555,7 +559,8 @@ func (p *sessionPool) beginDrainedWorktreeOperation(
 // evictEngineWithAgentMcpServers asks this session's parked engine to go if it runs MCP
 // servers of the agent's own, and waits until its supervisor has reaped it: session.go
 // reports engineStopped only after the engine's process group — servers included — is
-// gone. It returns the servers that engine was running and whether it stopped within
+// gone. An engine in the middle of a turn of its own is asked again once that turn ends.
+// It returns the servers that engine was running and whether it stopped within
 // wait. The caller holds an admitted operation, whose `running` keeps a claim from
 // starting a replacement engine in the meantime.
 func (p *sessionPool) evictEngineWithAgentMcpServers(id string, expected *liveSession, wait time.Duration) ([]string, bool) {
@@ -567,20 +572,25 @@ func (p *sessionPool) evictEngineWithAgentMcpServers(id string, expected *liveSe
 	}
 	servers := append([]string(nil), s.agentMcpServers...)
 	generation := s.engineGeneration
-	cancel := p.requestEvictLocked(s)
 	p.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
 	deadline := time.NewTimer(wait)
 	defer deadline.Stop()
 	for {
 		p.mu.Lock()
 		stopped := p.sessions[id] != s || !s.resident || s.engineGeneration != generation
+		var cancel context.CancelFunc
+		if !stopped {
+			// Every pass, not once: requestEvictLocked declines an engine running a turn of
+			// its own, and the end of that turn is one of the changes this loop wakes for.
+			cancel = p.requestEvictLocked(s)
+		}
 		changed := p.changed
 		p.mu.Unlock()
 		if stopped {
 			return servers, true
+		}
+		if cancel != nil {
+			cancel()
 		}
 		select {
 		case <-changed:
@@ -648,13 +658,15 @@ func (p *sessionPool) warmCountLocked() int {
 // Strict least-recently-active, with no exemption for any kind of work. The one
 // exemption there ever was — a deferral for a supervisor with a live background job —
 // is gone: that job is the runner's own child now, and survives the eviction it used
-// to have to be spared from. Re-evaluated alongside warmEngineTTL and deliberately
-// left at its tightest: warm engines hold only capacity no active turn is promised,
-// and the oldest one goes first.
+// to have to be spared from. An engine running a turn of its own is passed over like an
+// active one, and for the same reason — a turn is running in it — never for anything it
+// has left running in the background (engineTurnEvent). Re-evaluated alongside
+// warmEngineTTL and deliberately left at its tightest: warm engines hold only capacity
+// no active turn is promised, and the oldest one goes first.
 func (p *sessionPool) oldestWarmLocked(except string) *liveSession {
 	var oldest *liveSession
 	for _, s := range p.sessions {
-		if s.id == except || !s.resident || s.active || s.evictRequested {
+		if s.id == except || !s.resident || s.active || s.evictRequested || s.selfDrivenTurn {
 			continue
 		}
 		if oldest == nil || s.lastActive.Before(oldest.lastActive) ||
@@ -667,9 +679,10 @@ func (p *sessionPool) oldestWarmLocked(except string) *liveSession {
 
 // requestEvictLocked marks one concrete resident engine for silent recycling.
 // The returned cancel must run after releasing p.mu: process teardown can call
-// engineStopped and must never re-enter the pool under this lock.
+// engineStopped and must never re-enter the pool under this lock. An engine with a
+// turn running in it — Orbit's, or one of its own — is not recycled, and gets nil.
 func (p *sessionPool) requestEvictLocked(s *liveSession) context.CancelFunc {
-	if s == nil || !s.resident || s.active || s.evictRequested {
+	if s == nil || !s.resident || s.active || s.evictRequested || s.selfDrivenTurn {
 		return nil
 	}
 	s.evictRequested = true
@@ -905,9 +918,10 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 // moved the control-plane session to AWAITING_INPUT. The engine remains resident
 // and warm until its timer or LRU pressure recycles it.
 //
-// The timer wound here is one warmEngineTTL, with nothing that renews it: whatever
-// this session left running does not belong to the engine any more. lastActive, set
-// just below, is the LRU order.
+// The timer wound here is one warmEngineTTL, and nothing this session left running
+// renews it: that work does not belong to the engine any more. Only a turn the engine
+// runs on its own holds recycling off, and the end of that turn winds a fresh timer
+// (engineTurnEvent). lastActive, set with the timer, is the LRU order.
 func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
@@ -916,6 +930,14 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	}
 	s.active = false
 	p.releaseWorktreeFenceLocked(s.id, s)
+	p.armWarmTimerLocked(s)
+	p.signalLocked(s)
+	p.mu.Unlock()
+}
+
+// armWarmTimerLocked starts the warm TTL of an engine that has just gone idle, and makes
+// now its LRU position.
+func (p *sessionPool) armWarmTimerLocked(s *liveSession) {
 	s.lastActive = p.clock.Now()
 	s.idleGeneration++
 	idleGeneration := s.idleGeneration
@@ -929,8 +951,69 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	} else {
 		s.warmTimer = nil
 	}
+}
+
+// engineTurnSignal reads one event the way the control plane's engineTurnActiveAfter
+// (apiserver runner-api/engine-turn.ts) does. Assistant, thinking, tool_use and
+// tool_result are output only a generating engine produces; a turn_end, or a system
+// init/resumed handshake, says no turn is running. A Bash pair the runner ran itself — a
+// `!cmd`, an EXECUTABLE acceptance (shell.go) — wears the engine's tool shape under a
+// `shell-` id, and says nothing about the engine.
+func engineTurnSignal(eventType string, payload map[string]interface{}) (generating, ended bool) {
+	switch eventType {
+	case evAssistant, evThinking:
+		return true, false
+	case evToolUse, evToolResult:
+		id, _ := payload["id"].(string)
+		if id == "" {
+			id, _ = payload["toolUseId"].(string)
+		}
+		return !strings.HasPrefix(id, "shell-"), false
+	case evTurnEnd:
+		return false, true
+	case evSystem:
+		subtype, _ := payload["subtype"].(string)
+		return false, subtype == "init" || subtype == "resumed"
+	}
+	return false, false
+}
+
+// engineTurnEvent is how the pool sees a turn the engine runs on its own: a Monitor event,
+// a <task-notification>, a ScheduleWakeup. Such a turn holds no permit, and to the warm
+// TTL, requestEvictLocked and LRU alike a resident engine without one was idle, so it was
+// recycled mid-tool-call warmEngineTTL after the last turn Orbit delivered. The event
+// stream is the one place that turn shows up; the supervisor reports every event here.
+//
+// Output from a parked engine marks the turn; the turn's end, or the engine stopping,
+// clears the mark. Only a running turn is protected, never background work that might
+// start one. A turn that ends parked leaves an idle engine, whose warm TTL starts over
+// from that moment the way park starts it; one that a claim took over in the meantime
+// ends with the permit protecting the engine, and park still to come.
+func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload map[string]interface{}) {
+	generating, ended := engineTurnSignal(eventType, payload)
+	if !generating && !ended {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions[s.id] != s || !s.resident {
+		return
+	}
+	if generating {
+		if !s.active && !s.evictRequested {
+			s.selfDrivenTurn = true
+		}
+		return
+	}
+	if !s.selfDrivenTurn {
+		return
+	}
+	s.selfDrivenTurn = false
+	if !s.active {
+		p.armWarmTimerLocked(s)
+	}
+	// A cold start waiting at the resident cap may take this engine now.
 	p.signalLocked(s)
-	p.mu.Unlock()
 }
 
 func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
@@ -942,8 +1025,10 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 	return s.permitGeneration
 }
 
-// expireWarm recycles a warm engine when its TTL elapses. Nothing defers it: a
-// supervisor's background jobs are the runner's own children and keep running.
+// expireWarm recycles a warm engine when its TTL elapses. Background work never defers
+// it: a supervisor's background jobs are the runner's own children and keep running. A
+// turn the engine is running on its own does — requestEvictLocked declines — and the end
+// of that turn winds the next timer.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
@@ -1054,6 +1139,7 @@ func (p *sessionPool) engineStopped(s *liveSession, generation uint64) bool {
 	s.resident = false
 	s.engineCancel = nil
 	s.evictRequested = false
+	s.selfDrivenTurn = false
 	if s.warmTimer != nil {
 		s.warmTimer.Stop()
 		s.warmTimer = nil
