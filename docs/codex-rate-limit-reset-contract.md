@@ -232,10 +232,11 @@ Web 在 `active` 非空时每 2–3 秒 GET 一次；v1 不加实时推送帧。
 | `CAPABILITY_MISSING` | runner 版本不支持 | 禁用，提示升级 runner |
 | `SNAPSHOT_MISSING` / `UNSUPPORTED_AUTH` / `PROVIDER_UNSUPPORTED` / `ACCOUNT_UNIDENTIFIED` | 该账户或版本不支持 | 隐藏 |
 | `ACCOUNT_MISMATCH` | 用户确认时看到的账户已不是当前账户 | 刷新后重试 |
-| `SNAPSHOT_STALE` | 快照超过 15 分钟、来自未来超过 5 分钟，或读取开始不晚于 `readRequiredAfter`（可能已扣费的结算之后还没有新读） | 禁用，展示新鲜度 |
+| `SNAPSHOT_STALE` | 快照超过 15 分钟、来自未来超过 5 分钟，或读取开始不晚于 `readRequiredAfter`（可能已扣费的结算之后还没有新读） | 禁用，展示新鲜度；因 `readRequiredAfter` 禁用时说明上次 reset 可能已用掉 credit，刷新后再试 |
 | `CREDITS_UNAVAILABLE` / `NO_CREDIT_AVAILABLE` | 上游暂不可用 / 数量为 0 | 禁用 |
 
 资格检查按 `CODEX_RATE_LIMIT_RESET_ELIGIBILITY_ORDER` 依次进行，Web 禁用入口与 API 拒绝用的是同一个函数、同一个答案。
+Web 的 `readRequiredAfter` 从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 推出（runbook §2.4）；只看 `latest` 的例外见 runbook §8 R3。
 
 ### 6.2 API → Runner：heartbeat 响应 `codexRateLimitResetRequest`
 

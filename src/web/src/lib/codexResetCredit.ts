@@ -87,6 +87,12 @@ export const CODEX_RESET_REFUSAL_REASON: Readonly<Record<CodexRateLimitResetRefu
   NO_CREDIT_AVAILABLE: 'No reset credits available.',
 };
 
+/** SNAPSHOT_STALE for a block still inside the freshness window, which only `readRequiredAfter` refuses:
+ *  it was read before a reset that may have used a credit settled, and no read since has confirmed the
+ *  count. "Out of date" beside "Updated 2 min ago" would explain nothing. */
+export const CODEX_RESET_UNREFRESHED_SPEND_REASON =
+  "The last reset may have used a credit, and usage hasn't refreshed since. Try again once the runner refreshes it.";
+
 /** §6.1's "hide" answers: nothing about reset credits is worth drawing for these. */
 export const CODEX_RESET_HIDDEN_REFUSALS: ReadonlySet<CodexRateLimitResetRefusalCode> = new Set([
   'ACCOUNT_OVERRIDE',
@@ -97,12 +103,39 @@ export const CODEX_RESET_HIDDEN_REFUSALS: ReadonlySet<CodexRateLimitResetRefusal
 ]);
 
 /**
+ * The create route's `readRequiredAfter` for this account, read off the runner's operation list
+ * (CodexRateLimitResetRepository.unrefreshedSpendSettledAt): when the latest operation settled, if it is
+ * this account's and may have used a credit no refresh confirmed — consumeState UNRESOLVED, or CONFIRMED
+ * with refreshState FAILED. The latest is enough: one account's operations run one at a time, each was
+ * admitted only on a read later than every such settlement before it, and the stored block never moves
+ * back (contract §8). But the list's latest is the runner's, whatever its account: when another account's
+ * operation came after this account's last one, an earlier settlement is out of sight, and the create
+ * route can still refuse what the card offers (runbook §8 R3).
+ */
+function unrefreshedSpendSettledAt(
+  operations: CodexRateLimitResetOperations | null | undefined,
+  accountFingerprint: string,
+): string | null {
+  const latest = operations?.latest;
+  if (!latest || latest.accountFingerprint !== accountFingerprint) return null;
+  const unrefreshed =
+    latest.consumeState === 'UNRESOLVED' || (latest.consumeState === 'CONFIRMED' && latest.refreshState === 'FAILED');
+  return unrefreshed ? latest.completedAt : null;
+}
+
+/**
  * The reset card for one runner, or null when there is nothing to show: no block (an older runner),
  * a block that fails the contract, or a support answer the contract hides. The button's state is
  * `codexResetRefusal` over the same inputs the create route reads — the account override is the
- * create route's to judge, since only it knows the workspace's derived provider and env.
+ * create route's to judge, since only it knows the workspace's derived provider and env — with the
+ * runner's operation list standing in for the rows it reads about earlier resets.
  */
-export function codexResetCard(runner: CodexResetRunner, now: Date, activeOperation: boolean): CodexResetCard | null {
+export function codexResetCard(
+  runner: CodexResetRunner,
+  now: Date,
+  activeOperation: boolean,
+  operations?: CodexRateLimitResetOperations | null,
+): CodexResetCard | null {
   const block = codexRateLimitResetOf(runner.planUsage);
   if (!block || codexRateLimitResetViolations(block).length > 0) return null;
   if (block.support !== 'SUPPORTED' && block.support !== 'CREDITS_UNAVAILABLE') return null;
@@ -118,6 +151,7 @@ export function codexResetCard(runner: CodexResetRunner, now: Date, activeOperat
     runnerDraining: runner.heartbeatDraining === true,
     rateLimitReset: block,
     expectedAccountFingerprint: accountFingerprint,
+    readRequiredAfter: unrefreshedSpendSettledAt(operations, accountFingerprint),
   });
   return {
     block,
@@ -128,7 +162,14 @@ export function codexResetCard(runner: CodexResetRunner, now: Date, activeOperat
         ? { kind: 'ready' }
         : refusal === 'OPERATION_IN_FLIGHT'
           ? { kind: 'in-flight' }
-          : { kind: 'blocked', code: refusal, reason: CODEX_RESET_REFUSAL_REASON[refusal] },
+          : {
+              kind: 'blocked',
+              code: refusal,
+              reason:
+                refusal === 'SNAPSHOT_STALE' && codexResetSnapshotFresh(block, now)
+                  ? CODEX_RESET_UNREFRESHED_SPEND_REASON
+                  : CODEX_RESET_REFUSAL_REASON[refusal],
+            },
   };
 }
 

@@ -184,10 +184,16 @@ nothingToReset / noCredit（key 未花掉），另一个进程随后的调用可
 
 - `codexResetRefusal` 新增可选输入 `readRequiredAfter`。服务端取同一 runner + 账户最近一次 UNRESOLVED 或
   REFRESH_FAILED 的 `completedAt`（`CodexRateLimitResetRepository.unrefreshedSpendSettledAt`）。
-- 存储块的 `fetchedAt` 不晚于它时，拒为 `SNAPSHOT_STALE`。Web 的现有文案是
-  "Usage is out of date. Waiting for the runner to refresh it."。
+- 存储块的 `fetchedAt` 不晚于它时，拒为 `SNAPSHOT_STALE`。
+- Web 入口（`codexResetCard`）从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 取同一个值：`latest` 属于当前块的账户，
+  并且 consumeState 为 UNRESOLVED、或为 CONFIRMED 且 refreshState 为 FAILED 时，取它的 `completedAt`，传给同一个
+  `codexResetRefusal`。只看 `latest` 为什么就够、例外是什么，见 §8 R3。
+- 入口在新读之前禁用，文案是
+  "The last reset may have used a credit, and usage hasn't refreshed since. Try again once the runner refreshes it."；
+  块本身超过 15 分钟或来自未来时，文案仍是 "Usage is out of date. Waiting for the runner to refresh it."。
 - runner 的 usage probe 每 5 分钟（活跃）或 10 分钟（空闲）读一次，读到后自动放行。
-- **验证**：harness F14、F23；shared spec `refuses a block read no later than an unrefreshed spend settled`。
+- **验证**：harness F14、F23；shared spec `refuses a block read no later than an unrefreshed spend settled`；
+  web spec `codexResetCredit.test.ts` 的 `after a reset that may have used a credit no refresh confirmed`。
 
 ---
 
@@ -211,8 +217,9 @@ nothingToReset / noCredit（key 未花掉），另一个进程随后的调用可
 UI 分支（`orbit/plan-usage-reset-credit-42176c`）的文案：
 - UNRESOLVED："A credit may have been used — check the count once usage refreshes."
 - REFRESH_FAILED："used 1 credit … numbers may be out of date"。
-- 它的 `codexResetRefusal` 调用尚未传 `readRequiredAfter`，入口可能显示为可点，但 API 会以 409 `SNAPSHOT_STALE`
-  拒绝，界面按拒绝码显示"Usage is out of date"。见 §8 R3。
+- 入口在结算之后的新读到达之前禁用，说明
+  "The last reset may have used a credit, and usage hasn't refreshed since. Try again once the runner refreshes it."
+  （§2.4）。仍显示为可点的例外见 §8 R3。
 
 ---
 
@@ -364,7 +371,7 @@ bash scripts/test-codex-reset-fault-injection.sh
 | 跨 runner / 跨 owner | 用自己的 runner token 操作别人的 operation | 结果按认证 runnerId 围栏，他人 operation 一律 OPERATION_NOT_FOUND，且日志不输出其任何状态 | relay pg (9) | 通过；残余见 R5 |
 | runner token 持有者 | 伪造本 runner operation 的结果（如谎报 reset） | 信任边界：runner token 等于该机器的全部执行权；结果须属于当前 claim，且只能单调前进 | 契约 §6.3；relay pg (8) | 接受（设计边界） |
 | 重复消费：同 operation | 重试、重投、重启、旧进程造成二次扣费 | 单 key 加 provider 幂等；在途唯一；claim 续租加调用新鲜度；CONFIRMED 后只下发 REFRESH；终态不可变（应用层与触发器双层） | harness F1–F23；shared 随机交错；Go consume、relay、hardening 测试 | 通过；残余见 R1、R2 |
-| 误导用户再次确认 | 可能已扣费时显示"未扣费"，或基于旧数量再次确认 | §2.3 修复 NOT_ATTEMPTED 的误判；§2.4 准入等新读；`clientRequestId` 重放 | harness F14、F16、F23；Go `TestCodexResetConsumeNeverReportsNotCalledOnceACallWentOut`；shared 准入用例 | 通过；UI 侧见 R3 |
+| 误导用户再次确认 | 可能已扣费时显示"未扣费"，或基于旧数量再次确认 | §2.3 修复 NOT_ATTEMPTED 的误判；§2.4 准入等新读，Web 入口按同一值禁用并说明原因；`clientRequestId` 重放 | harness F14、F16、F23；Go `TestCodexResetConsumeNeverReportsNotCalledOnceACallWentOut`；shared 准入用例；web `codexResetCredit.test.ts`、`PlanUsageIndicator.test.tsx` | 通过；残余见 R3 |
 | 旧快照覆盖 | 旧进程或乱序 heartbeat 把数量改回扣费前 | 快照顺序比较加 CAS，REFRESHED 块同样经过比较 | harness F21；plan-usage pg spec；shared CAS 表 | 通过 |
 | 账户范围 | 切换账户后花掉另一个账户的 credit | 每次调用前在同一 app-server 上读账户，指纹不符不调用；续租要求存储块账户一致 | harness F15、F16、F17；Go consume 测试 | 通过 |
 | 自动化误扣真实 credit | CI 或测试消费真实 credit | 所有测试走 fake app-server；脚本在 PATH 最前放 guard `codex`，命中即红 | 四个脚本的 guard-hits 检查 | 通过 |
@@ -384,10 +391,16 @@ bash scripts/test-codex-reset-fault-injection.sh
   - 情形：runner 超时放弃调用后，Codex 后端仍可能在稍后处理该请求。
   - 影响：同 R1，同一 key 至多扣一次。
   - 暴露方式：迟到结果被拒时计入 anomaly；若没有迟到结果，以刷新数量为准。
-- **R3 UI 分支未传 `readRequiredAfter`**
-  - 情形：UNRESOLVED 或 REFRESH_FAILED 之后，入口可能显示为可点。
-  - 影响：API 拒为 409 `SNAPSHOT_STALE`，不会建 operation。
-  - 后续：需由 UI 或 E2E 任务确认界面对这一拒绝的呈现。
+- **R3 Web 入口只看列表里 runner 最近的一个 operation**
+  - 依据：Web 从 `GET /runners/:id/codex-rate-limit-reset` 的 `latest` 推出 `readRequiredAfter`（§2.4）。同一 runner + 账户的
+    operation 串行（在途唯一），每个都只在此前所有 UNRESOLVED / REFRESH_FAILED 结算之后开始的读上准入，存储块又不倒退
+    （契约 §8）。所以 `latest` 属于当前块的账户时，Web 推出的答案与服务端相同。
+  - 情形：`latest` 不分账户。账户 A 有在途 operation 时，runner 切到账户 B，在 B 上确认了一次 reset，然后切回 A 并读到 A 的块；
+    A 的 operation 撑过了 B 期间（B 上的 heartbeat 都落在它 claim 的 60 秒接管窗口内，或期间没有 heartbeat），在那次读取之后才
+    结算为 UNRESOLVED 或 REFRESH_FAILED。这时 `latest` 是 B 的 operation，入口显示为可点。
+  - 影响：API 拒为 409 `SNAPSHOT_STALE`，不会建 operation，界面显示拒绝原因。A 的下一次读取之后两边重新一致。
+  - 限界：需要切走又切回账户、切走期间在另一账户上完成一次确认，并且 A 的在途 operation 没在切走期间被结算
+    （claim 超过 60 秒没续租时，B 上的下一次 heartbeat 就会按 ACCOUNT_CHANGED 结算它）。
 - **R4 时钟偏差**
   - 情形：准入守卫比较 runner 时钟的 `fetchedAt` 与服务器时钟的 `completedAt`。
   - 影响：runner 时钟快于服务器时，结算前开始的读可能被当作结算后的读（提前放行，窗口等于偏差量）；

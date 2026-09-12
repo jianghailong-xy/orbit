@@ -10,7 +10,12 @@ import type {
   CodexRateLimitResetOperationView,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
-import { CODEX_RESET_CLIENT_TIMING, type CodexResetIntent, type CodexResetRunner } from '../lib/codexResetCredit';
+import {
+  CODEX_RESET_CLIENT_TIMING,
+  CODEX_RESET_UNREFRESHED_SPEND_REASON,
+  type CodexResetIntent,
+  type CodexResetRunner,
+} from '../lib/codexResetCredit';
 import {
   OTHER_FINGERPRINT,
   RESET_FINGERPRINT,
@@ -686,6 +691,28 @@ describe('the reset entry', () => {
     await until('the reset in flight', () => panelText().includes('Limits reset — refreshing usage…'));
     expect(button('Use reset credit')).toBeNull();
     expect(pill().getAttribute('aria-label')).toBe('Plan usage 92%, reset in progress');
+    expect(server.posts()).toHaveLength(0);
+  });
+
+  it('is disabled with the reason while the latest reset may have used a credit no read since has confirmed', async () => {
+    const server = new FakeResetApi();
+    const now = new Date();
+    // Settled a minute ago; resetRunner's block was read two minutes ago, before it.
+    const completedAt = new Date(now.getTime() - 60_000).toISOString();
+    server.ops.set('Op1', { ...resetOperation('UNRESOLVED'), updatedAt: completedAt, completedAt });
+    await mount(resetRunner(now));
+    await openUsage();
+    await until('the unrefreshed reset', () => panelText().includes(CODEX_RESET_UNREFRESHED_SPEND_REASON));
+    const use = button('Use reset credit')!;
+    expect(use.disabled).toBe(true);
+    expect(document.getElementById(use.getAttribute('aria-describedby')!)?.textContent).toBe(
+      CODEX_RESET_UNREFRESHED_SPEND_REASON,
+    );
+    // The block itself is fresh, so nothing on the card calls it out of date.
+    expect(panelText()).toContain('Updated 2 min ago');
+    expect(panelText()).not.toContain('out of date');
+    await click(use);
+    expect(confirmation()).toBeNull();
     expect(server.posts()).toHaveLength(0);
   });
 });

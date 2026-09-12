@@ -10,6 +10,7 @@ import {
 import { ApiError } from '../api';
 import {
   CODEX_RESET_REFUSAL_REASON,
+  CODEX_RESET_UNREFRESHED_SPEND_REASON,
   clearCodexResetIntent,
   codexResetCard,
   codexResetCountLabel,
@@ -136,6 +137,83 @@ describe('which reset entry a runner gets', () => {
     const nested = resetRunner(NOW);
     const flat = { ...nested, planUsage: nested.planUsage!.codex };
     expect(codexResetCard(flat, NOW, false)?.availability).toEqual({ kind: 'ready' });
+  });
+});
+
+describe('after a reset that may have used a credit no refresh confirmed', () => {
+  /** What the create route answers for this runner, given the readRequiredAfter it reads for the account
+   *  (CodexRateLimitResetRepository.unrefreshedSpendSettledAt). */
+  const admission = (runner: CodexResetRunner, readRequiredAfter: string | null) =>
+    codexResetRefusal({
+      now: NOW,
+      accountOverride: false,
+      activeOperation: false,
+      runnerOnline: runner.online === true,
+      runnerCapabilities: runner.capabilities,
+      heartbeatLeaseOwner: runner.heartbeatLeaseOwner,
+      runnerDraining: runner.heartbeatDraining === true,
+      rateLimitReset: codexRateLimitResetOf(runner.planUsage),
+      expectedAccountFingerprint: RESET_FINGERPRINT,
+      readRequiredAfter,
+    });
+  const readAt = (fetchedAt: string) => resetRunner(NOW, {}, resetBlock(NOW, { fetchedAt }));
+  const shifted = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+
+  // consumeState UNRESOLVED, and consumeState CONFIRMED with refreshState FAILED: both settle 30 s before NOW.
+  for (const settled of [resetOperation('UNRESOLVED'), resetOperation('REFRESH_FAILED')]) {
+    const completedAt = settled.completedAt!;
+    const operations = { active: null, latest: settled };
+
+    it(`${settled.status}: a block read no later than completedAt is blocked as SNAPSHOT_STALE, as the create route refuses it`, () => {
+      for (const fetchedAt of [minutesAgo(2), shifted(completedAt, -1), completedAt]) {
+        const runner = readAt(fetchedAt);
+        expect({ fetchedAt, availability: codexResetCard(runner, NOW, false, operations)?.availability }).toEqual({
+          fetchedAt,
+          availability: { kind: 'blocked', code: 'SNAPSHOT_STALE', reason: CODEX_RESET_UNREFRESHED_SPEND_REASON },
+        });
+        expect({ fetchedAt, admission: admission(runner, completedAt) }).toEqual({ fetchedAt, admission: 'SNAPSHOT_STALE' });
+      }
+    });
+
+    it(`${settled.status}: a block read after completedAt is ready, as the create route admits it`, () => {
+      const runner = readAt(shifted(completedAt, 1));
+      expect(codexResetCard(runner, NOW, false, operations)?.availability).toEqual({ kind: 'ready' });
+      expect(admission(runner, completedAt)).toBeNull();
+    });
+  }
+
+  it('asks for no newer read after another account’s settlement, or after one that spent nothing or was refreshed', () => {
+    const runner = readAt(minutesAgo(2));
+    const latest = [
+      resetOperation('UNRESOLVED', { accountFingerprint: OTHER_FINGERPRINT }),
+      resetOperation('REFRESH_FAILED', { accountFingerprint: OTHER_FINGERPRINT }),
+      ...(['SUCCEEDED', 'NOTHING_TO_RESET', 'NO_CREDIT', 'NOT_ATTEMPTED'] as const).map((status) => resetOperation(status)),
+    ];
+    for (const op of latest) {
+      const availability = codexResetCard(runner, NOW, false, { active: null, latest: op })?.availability;
+      expect({ status: op.status, account: op.accountFingerprint, availability }).toEqual({
+        status: op.status,
+        account: op.accountFingerprint,
+        availability: { kind: 'ready' },
+      });
+    }
+    // None of them is a row the create route's readRequiredAfter reads for this account.
+    expect(admission(runner, null)).toBeNull();
+  });
+
+  it('keeps the out-of-date reason for a block past the freshness window, whatever settled before it', () => {
+    const operations = { active: null, latest: resetOperation('UNRESOLVED') };
+    expect(codexResetCard(readAt(minutesAgo(16)), NOW, false, operations)?.availability).toEqual({
+      kind: 'blocked',
+      code: 'SNAPSHOT_STALE',
+      reason: CODEX_RESET_REFUSAL_REASON.SNAPSHOT_STALE,
+    });
+  });
+
+  it('tells the reader a credit may be gone and when to try again, and never that none was used', () => {
+    expect(CODEX_RESET_UNREFRESHED_SPEND_REASON).toContain('may have used a credit');
+    expect(CODEX_RESET_UNREFRESHED_SPEND_REASON).toContain('Try again once the runner refreshes it');
+    expect(CODEX_RESET_UNREFRESHED_SPEND_REASON).not.toMatch(/no credit|not used|out of date/i);
   });
 });
 

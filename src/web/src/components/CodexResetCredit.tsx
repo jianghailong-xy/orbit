@@ -314,7 +314,7 @@ export function useCodexResetCredit(
   }, [shown, visible]);
 
   const active = !!operation && codexResetOperationActive(operation);
-  const card = runner ? codexResetCard(runner, now, !!listedActive || active) : null;
+  const card = runner ? codexResetCard(runner, now, !!listedActive || active, operations.data) : null;
   const busy = create.phase === 'sending' || create.phase === 'retrying' || active;
 
   const openConfirm = () => {
