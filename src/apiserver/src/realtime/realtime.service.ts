@@ -167,6 +167,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('Realtime');
   private readonly instanceId = randomUUID();
   private readonly hub = new Subject<{ runId: string; event: NormalizedRunEvent }>();
+  /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
+  private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly inbox = new EventEmitter(); // event name = runId
   private listener?: Client;
   private connecting = false;
@@ -337,6 +339,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   publish(runId: string, event: NormalizedRunEvent): void {
     this.retainTurnPrefix(runId, event); // before the hub, so no subscriber can read it stale
     this.hub.next({ runId, event }); // same replica
+    this.published.next({ runId, event });
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
     // (a multibyte CJK/emoji event can be < 7000 chars but > 8000 bytes).
@@ -378,6 +381,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       filter((m) => m.runId === runId && !isLifecycleType(m.event.type)),
       map((m) => m.event),
     );
+  }
+
+  /**
+   * Every event THIS replica published, and nothing the NOTIFY bridge delivered from another one.
+   *
+   * For in-process consumers whose reaction is a database write. Every replica sees every event on
+   * the hub, so reacting there issues the same write once per replica; reacting here issues it once,
+   * where the event originated — the rule `publish` already applies to the badge sync. What a
+   * consumer may not assume is that it sees every change: an event is published after its write, at
+   * most once, and a crash in between loses it (docs/watch-contract.md §8).
+   */
+  localPublications(): Observable<{ runId: string; event: NormalizedRunEvent }> {
+    return this.published.asObservable();
   }
 
   /**

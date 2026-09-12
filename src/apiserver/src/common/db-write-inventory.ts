@@ -796,6 +796,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
   },
   {
+    at: 'watches/watch-evaluator.service.ts#evaluate',
+    shape: 'TX_RETRIED',
+    locks: 'watch FOR UPDATE (one row), then watch_target and watch_match writes whose only foreign-key parent is that row, already held. task, session and approval are read without a lock. Unranked in lock-order.ts because it cannot close a cycle: the unit holds nothing but its one watch row, and nothing holding a task or session lock waits on it except a session or user delete cascading into watch — which this unit never waits on in return.',
+    identity: 'The watch id, and the state and generation read under the row lock: the closing UPDATE is a compare-and-set on both, and `watch_match_watch_generation_key` makes a second Match of one generation a constraint rather than a race.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything the decision is a function of is read inside the closure under the row lock — the watch, its targets, every source column its leaves name, and the clock (`now()`). A re-run against the world the aborted attempt saw decides the same; against a world that moved it decides the newer one, which is the one to land. A watch another landing already settled is left alone.',
+    effects: 'None inside. The next pass is started by the caller, outside any transaction.',
+    answer: 'The pass logs it and goes on to the next watch; the claim lapses and the watch is due again on a later pass.',
+  },
+  {
     at: 'workspaces/workspaces.service.ts#reorder',
     shape: 'TX_RETRIED',
     locks: 'workspace rows, one UPDATE each, IN ID ORDER. This is the fix the audit was looking for: the statements used to run in the caller’s drag order, so two drags that move the same workspaces opposite ways took the same rows backwards.',
@@ -884,6 +895,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the
   // refusal it can raise is an authorization answer that rolls its caller's transaction back whole.
   { at: 'tasks/tasks.service.ts#refenceProjectScope', under: 'tasks.create, tasks.createMany, tasks.update' },
+  { at: 'watches/watch-evaluator.service.ts#land', under: 'watchEvaluator.evaluate' },
   // Test-only, and reachable only from the harness's own transaction.
 ];
 
@@ -1101,6 +1113,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/admin.controller.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },
+  { at: "watches/watch-evaluator.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The evaluation lease: a batch of due watches, each moved forward by the lease. `FOR UPDATE SKIP LOCKED` passes over any row a claim, hint or landing holds instead of waiting for it, so the statement has no wait edge and cannot be a deadlock victim; a watch it skips is still due on the next pass." },
+  { at: "watches/watch-evaluator.service.ts#markDue", class: "MANY_ROWS", statements: 1, note: "A hint: the live watches targeting a few rows are made due now. They are locked `ORDER BY id` inside the statement, so two hints naming overlapping watches take them in one order. A conflict it loses is a lost hint, which the reconciliation sweep already absorbs." },
   { at: "workspaces/workspaces.service.ts#create", class: "INSERT", statements: 1 },
   { at: "workspaces/workspaces.service.ts#redispatchClone", class: "ONE_ROW_CAS", statements: 1, note: "Re-arms a failed clone. The CAS on provisionState = FAILED is what makes a double-click one dispatch rather than two clones into the same directory." },
   { at: "workspaces/workspaces.service.ts#removePermissionRule", class: "ONE_ROW_CAS", statements: 1 },
