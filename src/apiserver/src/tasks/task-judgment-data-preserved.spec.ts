@@ -471,6 +471,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `_prisma_migrations`; as with 0239's fence body and 0251's backfill, reading a row
   //        drops, alters and rewrites nothing. Nothing reads a settled row to allow or refuse a
   //        status: an approval is not a credential, and ABANDONED is not a decision.
+  //   0259 created the four Watch relations — `watch`, `watch_target`, `watch_match` and
+  //        `watch_delivery` — for the persistent cross-session observation contract. Read against
+  //        every claim above: it is four `CREATE TABLE IF NOT EXISTS` statements and their
+  //        indexes, and there is no `ALTER TABLE` in the file at all, so `task`, `project` and
+  //        `project_acceptance_criterion_definition` are untouched — the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no enum, no function and no trigger — so it is not another writer of the DONE
+  //        fence — and carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive. It has no INSERT, UPDATE or DELETE of any
+  //        kind: the four tables are new and start empty, so unlike 0251 there is not even a
+  //        backfill reading a preserved row. It REFERENCES `user`("id") and `session`("id") from
+  //        two new foreign keys, which changes nothing about either — being pointed at is not
+  //        being written — and it deliberately puts NO foreign key on `watch_target`'s target, so
+  //        it adds no reference to `task` whatsoever. Nothing reads a Watch row to allow or refuse
+  //        a status: a watch observes a task's completion, it never decides one, and contract §9.1
+  //        states the separation the other way round too — a Watch may not become a dependency
+  //        gate or a fifth `dependencyState`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -496,7 +515,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0254_session_wait_anchors',
       '0255_codex_rate_limit_reset_operation',
       '0256_session_commit_result_message',
-      '0258_approval_pre_opening_turn_abandoned'],
+      '0258_approval_pre_opening_turn_abandoned',
+      '0259_watch_persistence'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

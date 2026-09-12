@@ -387,6 +387,21 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'sourceCodebaseId',
   'sourceResolvedByRunnerId',
   'authorityRunnerId',
+  // The Watch domain's five references (migration 0259). All five are addresses somebody follows:
+  // `watchId` and `matchId` name the observation and the fact it recorded, `observerSessionId`
+  // names the session parked on it, `targetResourceId` names the session or task being watched,
+  // and `snapshotSourceId` names the list or project a frozen target set was expanded from.
+  //
+  // None of them is a fence. The Watch delivery lease compares `leaseOwner`/`leaseGeneration`,
+  // which are already classified below and keep their exact bytes; these five are never compared
+  // to anything, they are looked up. `targetResourceId` and `snapshotSourceId` carry no foreign
+  // key on purpose — a target that was deleted still has to be nameable, which is what lets a
+  // reader find out it is GONE instead of seeing an opaque uuid.
+  'watchId',
+  'matchId',
+  'observerSessionId',
+  'targetResourceId',
+  'snapshotSourceId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

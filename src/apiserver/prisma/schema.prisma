@@ -317,6 +317,9 @@ model User {
   /// Codex earned rate-limit resets this user confirmed.
   codexRateLimitResetOperations CodexRateLimitResetOperation[]
 
+  /// Persistent observations this account is keeping (migration 0259).
+  watches          Watch[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -1289,6 +1292,10 @@ model Session {
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
+  /// Watches this session is the OBSERVER of — what it is parked waiting for (migration 0259).
+  /// Not what is being watched: a Watch names its targets in `watch_target`, which carries no
+  /// foreign key precisely so a deleted target can be recorded as GONE instead of erased.
+  observingWatches      Watch[]
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -4334,4 +4341,167 @@ model CodexRateLimitResetOperation {
   @@unique([ownerId, clientRequestId])
   @@index([runnerId, createdAt])
   @@map("codex_rate_limit_reset_operation")
+}
+
+/// A persistent observation: who is watching, what condition, what to do when it holds, and until
+/// when (migration 0259). The domain is frozen by `contracts/watch.contract.json` and explained in
+/// `docs/watch-contract.md`; every closed set below is transcribed from there and held to it by a
+/// CHECK rather than an enum type, so widening one is an ordinary DDL edit and
+/// `pg_get_constraintdef` prints the whole set to whoever asks.
+///
+/// The database is the fact source. Real-time events only ever schedule an evaluation earlier, so
+/// liveness is `nextEvaluateAt` plus a leased sweep — there is deliberately no event table, no
+/// outbox and no hint queue here (contract §8).
+model Watch {
+  id      String @id @default(uuid(7)) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /// `USER` | `SESSION`, held to that pair by a CHECK. The two halves agree in both directions:
+  /// a SESSION observer names its session, a USER observer names none.
+  observerType      String   @map("observer_type")
+  observerSessionId String?  @map("observer_session_id") @db.Uuid
+  observerSession   Session? @relation(fields: [observerSessionId], references: [id], onDelete: Cascade)
+
+  /// The typed predicate (contract §2): a term in a closed grammar, refused unless it is a JSON
+  /// object. No shell, no SQL, no log regex, no free-text expression.
+  predicate        Json
+  predicateVersion Int  @default(1) @map("predicate_version")
+
+  /// `ONE_SHOT` (default) | `CONTINUOUS`.
+  mode   String @default("ONE_SHOT")
+  /// `NOTIFY_USER` | `RESUME_SESSION`. Exactly one action per watch in v1.
+  action String
+  /// `ACTIVE` | `PAUSED` | `MATCHED` | `EXPIRED` | `CANCELLED` | `REVOKED` | `UNRESOLVABLE`.
+  /// The last five are terminal. `REVOKED` and `UNRESOLVABLE` are spelled out rather than folded
+  /// into a silent stop, because a watch that cannot continue has to say so.
+  state  String @default("ACTIVE")
+
+  /// Advanced by one per match. A ONE_SHOT watch stops at 1 — a CHECK refuses generation 2, which
+  /// is the state from which a second Match would have been legal.
+  generation Int @default(0)
+
+  /// TTL is mandatory: there is no "forever" to store. Expiry is delivered like a match is, so a
+  /// session waiting on a watch that expired is told rather than left waiting.
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// When the sweep should look next. NULL on a terminal watch, which is what keeps it out of the
+  /// due index entirely. A CHECK holds it at or before `expiresAt`, so the one sweep that reaches
+  /// due evaluation also reaches every expiry without a second index to keep in step.
+  nextEvaluateAt  DateTime? @map("next_evaluate_at") @db.Timestamptz(6)
+  lastEvaluatedAt DateTime? @map("last_evaluated_at") @db.Timestamptz(6)
+
+  /// Creation idempotency, unique per account: a retried create resolves to the watch already made.
+  idempotencyKey String? @map("idempotency_key")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  targets WatchTarget[]
+  matches WatchMatch[]
+
+  @@index([ownerId, state], map: "watch_owner_state_idx")
+  @@index([observerSessionId], map: "watch_observer_session_idx")
+  @@index([nextEvaluateAt], map: "watch_due_idx")
+  @@map("watch")
+}
+
+/// One target in a watch's set, frozen at create time (contract §4). The set never changes: live
+/// membership is `DYNAMIC_SET_UNSUPPORTED` in v1, because "a Task List gained a member after the
+/// Match" has no settled answer yet.
+model WatchTarget {
+  id      String @id @default(uuid(7)) @db.Uuid
+  watchId String @map("watch_id") @db.Uuid
+  watch   Watch  @relation(fields: [watchId], references: [id], onDelete: Cascade)
+
+  /// `SESSION` | `TASK` — the only watchable kinds.
+  targetKind String @map("target_kind")
+  /// Deliberately carries NO foreign key. A deleted target becomes GONE and leaves the set; a
+  /// cascade would erase the evidence for the UNRESOLVABLE conclusion on the way to reaching it.
+  targetResourceId String @map("target_resource_id") @db.Uuid
+
+  /// `OBSERVED` | `SATISFIED` | `GONE`. A CONTINUOUS watch may go back from SATISFIED to OBSERVED.
+  state String @default("OBSERVED")
+  /// The lifecycle epoch seen when the snapshot was taken. A Task reopened after a Match advances
+  /// its epoch and the Match is NOT rewritten — it was true about the epoch it observed, and
+  /// storing that epoch is what lets a later reader tell the two worlds apart.
+  targetEpoch Int @default(0) @map("target_epoch")
+
+  /// Where this target was expanded from, if it was not named directly. `TASK_LIST` | `PROJECT`,
+  /// recorded once; the watch has no live relationship with that source afterwards. Both halves
+  /// are present or neither.
+  snapshotSourceKind String? @map("snapshot_source_kind")
+  snapshotSourceId   String? @map("snapshot_source_id") @db.Uuid
+
+  lastEvaluatedAt DateTime? @map("last_evaluated_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// A target appears once per watch: named twice, it would be counted twice by ALL and ANY.
+  @@unique([watchId, targetKind, targetResourceId], map: "watch_target_watch_resource_key")
+  /// The hint path's read — "this row changed, who was watching it".
+  @@index([targetKind, targetResourceId], map: "watch_target_resource_idx")
+  @@map("watch_target")
+}
+
+/// The condition held, once, at a moment. IMMUTABLE: a fact about the world, not a notification —
+/// which is why redelivery, reconnection and restart cannot turn one into two.
+model WatchMatch {
+  id      String @id @default(uuid(7)) @db.Uuid
+  watchId String @map("watch_id") @db.Uuid
+  watch   Watch  @relation(fields: [watchId], references: [id], onDelete: Cascade)
+
+  generation Int
+  matchedAt  DateTime @default(now()) @map("matched_at") @db.Timestamptz(6)
+  /// Why it held, in the contract's vocabulary. Never a log line, never shell output.
+  reason     String
+  /// Which grammar decided it, so a Match stays interpretable under the rules that produced it.
+  predicateVersion Int @map("predicate_version")
+  /// The structured trigger snapshot: per-target state as it was when the condition held. A CHECK
+  /// refuses anything but a JSON object, which is where contract §6's ban on putting polling logs
+  /// or shell text into the payload is actually enforced.
+  perTargetSnapshot Json @map("per_target_snapshot")
+
+  deliveries WatchDelivery[]
+
+  /// Contract §5: the constraint that makes a second Match on a one-shot watch impossible rather
+  /// than unlikely.
+  @@unique([watchId, generation], map: "watch_match_watch_generation_key")
+  @@map("watch_match")
+}
+
+/// What was DONE about a Match, and whether it worked: retryable, leased, dead-letterable. A Match
+/// is the fact; this is the effect, and they are separate rows so a failed delivery never rewrites
+/// history and a replayed one never invents a second.
+model WatchDelivery {
+  id      String     @id @default(uuid(7)) @db.Uuid
+  matchId String     @map("match_id") @db.Uuid
+  match   WatchMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  action String
+  /// `PENDING` | `IN_FLIGHT` | `DELIVERED` | `DEAD_LETTER`.
+  state  String @default("PENDING")
+  /// Capped at the contract's `maxDeliveryAttempts` (8): past it the row is a dead letter, so a
+  /// ninth attempt is not something that can be recorded.
+  attempts Int @default(0)
+
+  /// The fence a worker holds while delivering. Both halves, so a stale process releasing late can
+  /// expire only its own generation. `IN_FLIGHT` and "leased with a deadline" imply each other.
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  leaseGeneration String?   @map("lease_generation") @db.Uuid
+  leaseDeadlineAt DateTime? @map("lease_deadline_at") @db.Timestamptz(6)
+
+  /// The retry clock, and the claim query's only predicate.
+  nextAttemptAt  DateTime? @map("next_attempt_at") @db.Timestamptz(6)
+  lastError      String?   @map("last_error")
+  deliveredAt    DateTime? @map("delivered_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// One delivery per match per action: a redelivered match adopts this row instead of enqueuing a
+  /// second wake.
+  @@unique([matchId, action], map: "watch_delivery_match_action_key")
+  /// The delivery worker's claim: pending and due.
+  @@index([nextAttemptAt], map: "watch_delivery_due_idx")
+  @@map("watch_delivery")
 }
