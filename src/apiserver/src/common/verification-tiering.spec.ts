@@ -125,8 +125,9 @@ test('(b) the gate typechecks against this tree\'s own Prisma Client, not a shar
   assert.match(gate, /tsc -p tsconfig\.outcome-reconciler\.json --noEmit/u);
   assert.doesNotMatch(gate, /tsc -p tsconfig\.test\.json/u);
   assert.match(gate, /CLIENT="\$API\/build\/node_modules\/@prisma\/client"/u);
-  // The same config, and therefore the same client, that the full run compiles the cases with.
-  assert.match(read(FULL_API), /tsc -p tsconfig\.outcome-reconciler\.json/u);
+  // The same config, and therefore the same client, that the full run compiles the cases with. The
+  // compiler may be named through `$TSC`, since the harness resolves it wherever npm put it.
+  assert.match(read(FULL_API), /(?:tsc|"\$TSC") -p tsconfig\.outcome-reconciler\.json/u);
   const config = JSON.parse(read('src/apiserver/tsconfig.outcome-reconciler.json')) as {
     compilerOptions: { paths: Record<string, string[]> };
   };
