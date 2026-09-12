@@ -386,6 +386,8 @@ final class AppModel {
             signedIn = true
         } catch APIError.unauthorized {
             errorText = "Invalid email or password"
+        } catch is TokenNotStoredError {
+            errorText = "Signed in, but this device couldn't save the session to the Keychain."
         } catch {
             errorText = "Sign-in failed — check the instance URL and that the server is reachable."
         }

@@ -11,6 +11,14 @@ public protocol TokenStore: AnyObject, Sendable {
     func setRefreshToken(_ token: String?, for serverURL: URL)
 }
 
+/// A sign-in the server accepted but the store didn't keep: the tokens aren't there when read back.
+/// On Apple platforms that is a Keychain write the OS refused — an unsigned simulator build has no
+/// Keychain entitlement. Surfaced at sign-in, because otherwise the next request goes out without a
+/// token, 401s, and drops the user back on the login screen with no reason given.
+public struct TokenNotStoredError: Error, Equatable {
+    public init() {}
+}
+
 /// Non-persistent store for tests, previews, and Linux builds.
 public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
     private var tokens: [String: String] = [:]

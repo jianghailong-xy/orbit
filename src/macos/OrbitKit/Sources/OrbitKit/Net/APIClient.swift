@@ -67,6 +67,14 @@ public final class APIClient: @unchecked Sendable {
         let res: LoginResponse = try await post("auth/login", body: LoginRequest(email: email, password: password))
         tokenStore.setToken(res.accessToken, for: baseURL)
         tokenStore.setRefreshToken(res.refreshToken, for: baseURL)
+        // Read back: the store can drop a write without saying so (see `TokenNotStoredError`), and
+        // half a session — an access token with no refresh token — would fail later just as silently.
+        guard tokenStore.token(for: baseURL) == res.accessToken,
+              tokenStore.refreshToken(for: baseURL) == res.refreshToken else {
+            tokenStore.setToken(nil, for: baseURL)
+            tokenStore.setRefreshToken(nil, for: baseURL)
+            throw TokenNotStoredError()
+        }
         return res
     }
 

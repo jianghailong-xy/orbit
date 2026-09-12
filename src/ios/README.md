@@ -50,9 +50,11 @@ brew install xcodegen          # once
 cd src/ios
 xcodegen generate              # regenerate Orbit.xcodeproj after any project.yml / file change
 open Orbit.xcodeproj           # ⌘R to run on a simulator
-# or headless:
-xcodebuild -project Orbit.xcodeproj -target Orbit -sdk iphonesimulator \
-  CODE_SIGNING_ALLOWED=NO build
+# or headless. Keep signing on: a simulator build signs ad hoc without a team, but an unsigned one
+# (CODE_SIGNING_ALLOWED=NO, fine for CI's compile check) can't use the Keychain, so sign-in
+# succeeds and then drops straight back to the login screen.
+xcodebuild -project Orbit.xcodeproj -scheme Orbit \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
 `Orbit.xcodeproj` is generated and git-ignored — edit `project.yml`, not the project. On Linux only
