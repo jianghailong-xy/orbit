@@ -32,8 +32,13 @@ public enum Approvals {
     /// server-computed `preview` of what would happen, and both are rendered as their own card.
     public static func isTaskBatch(toolName: String) -> Bool { toolName == "orbit_task_batch" }
     public static func isDagChange(toolName: String) -> Bool { toolName == "orbit_dag_change" }
+    /// The single creates, asked the same way: nothing is created on the owner's behalf without
+    /// their yes. These carry the body about to be written rather than a preview.
+    public static func isTaskCreate(toolName: String) -> Bool { toolName == "orbit_task_create" }
+    public static func isProjectCreate(toolName: String) -> Bool { toolName == "orbit_project_create" }
     public static func isOrbitAsk(toolName: String) -> Bool {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
+            || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
     }
 
     /// Classify an approval into the card it renders as. Keyed on `toolName` — the reliable

@@ -193,6 +193,9 @@ struct ToolApprovalCard: View {
         else { return nil }
         return Approvals.dagPreview(from: input)
     }
+    private var create: CreateApprovalPreview? {
+        approval.input.flatMap { Approvals.createPreview(toolName: approval.toolName ?? "", from: $0) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
@@ -221,6 +224,16 @@ struct ToolApprovalCard: View {
                              rows: dag.ops.map { $0.noop ? "\($0.sentence) (already so)" : $0.sentence },
                              more: 0,
                              mono: false)
+            } else if let create {
+                ApprovalHeader(symbol: create.isProject ? "folder.badge.plus" : "checklist",
+                               title: "Create \(create.isProject ? "project" : "task") “\(create.title)”?",
+                               tone: .orange, badge: create.isProject ? "new project" : "new task")
+                OrbitAskBody(impact: [],
+                             note: create.prose,
+                             detail: create.criteria.isEmpty ? "" : "Done when",
+                             rows: create.criteria,
+                             more: 0,
+                             mono: false)
             } else {
                 ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                                tone: .orange, badge: approval.toolName ?? "Tool")
@@ -244,7 +257,8 @@ struct ToolApprovalCard: View {
 
     private var allowButton: some View {
         Button { decide(console, approval, .allow) } label: {
-            Text(batch != nil ? "Create them" : dag != nil ? "Apply changes" : "Allow").approvalActionLabel()
+            Text(batch != nil ? "Create them" : create != nil ? "Create it" : dag != nil ? "Apply changes" : "Allow")
+                .approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
     }
@@ -261,7 +275,7 @@ struct ToolApprovalCard: View {
     }
     private var denyButton: some View {
         Button(role: .destructive) { decide(console, approval, .deny) } label: {
-            Text(batch != nil ? "Create nothing" : dag != nil ? "Leave the graph alone" : "Deny")
+            Text(batch != nil ? "Create nothing" : create != nil ? "Don't create" : dag != nil ? "Leave the graph alone" : "Deny")
                 .approvalActionLabel()
         }
         .buttonStyle(.bordered)

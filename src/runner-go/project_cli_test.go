@@ -935,6 +935,11 @@ func TestProjectCreateCarriesTheSessionItRanIn(t *testing.T) {
 	var body map[string]interface{}
 	coordinatorInstructions := "你现在是这个项目的协调会话，不是用来替它干活的。"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Inside a session the create asks first; answer yes so what is recorded is the write.
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		method, path = r.Method, r.URL.Path
 		session = r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -1002,6 +1007,10 @@ func TestProjectCreateTrimsTheSessionFromTheEnvironment(t *testing.T) {
 		var session string
 		sawSessionHeader := true
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/approvals") {
+				_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+				return
+			}
 			session = r.Header.Get("X-Orbit-Session-Id")
 			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
 			_, _ = w.Write([]byte(projectCreatedJSON))

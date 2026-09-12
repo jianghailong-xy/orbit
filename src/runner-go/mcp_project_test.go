@@ -787,6 +787,11 @@ func TestMCPProjectCreateCarriesTheCallingSession(t *testing.T) {
 	var body map[string]interface{}
 	coordinatorInstructions := "你现在是这个项目的协调会话，不是用来替它干活的。"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Inside a session the create asks first; answer yes so what is recorded is the write.
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		method, path = r.Method, r.URL.Path
 		session = r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -1024,9 +1029,9 @@ func TestMCPProjectUpdateRefusesAFenceWithNoFields(t *testing.T) {
 // The bar was deliberately RAISED after the copy proposed on nearly everything: the default answer
 // is now stated first and is a task, and the qualifying shape is a plan already worked out and
 // counted rather than a forecast — the old "will not finish in this session" trigger is arguable
-// about any non-trivial work, which is how it came to fire every time. Proposing also no longer
-// blocks: the description used to forbid recording anything while the question was open, which
-// made every proposal a halt.
+// about any non-trivial work, which is how it came to fire every time. The call itself is now the
+// question: it raises a confirmation card and waits for the answer, because nothing is created on
+// the owner's behalf without their yes.
 //
 // Asserted by keyword rather than by the paragraph: this copy will be reworded, and a test that
 // pins the whole of it turns every rewording into a failure that says nothing.
@@ -1040,8 +1045,8 @@ func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 		{"do not have to be asked", "the proposal is still the model's own move to make"},
 		{"task graph", "the reason to say out loud: the plan leaves the conversation"},
 		{"context", "and survives the context that would otherwise take it down"},
-		{"do not hold the work while you wait", "proposing must not halt the work it is about"},
-		{"never make it without an explicit yes", "it proposes rather than silently creating"},
+		{"puts a confirmation card in front of the user", "it asks rather than silently creating"},
+		{"nothing is created if they decline", "a no leaves nothing behind"},
 		{"do not ask twice", "one answer settles it for this body of work"},
 	} {
 		if !strings.Contains(description, want.phrase) {

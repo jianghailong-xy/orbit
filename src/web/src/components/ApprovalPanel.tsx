@@ -78,6 +78,41 @@ interface BatchPreview {
   titlesTruncated?: number;
 }
 
+/**
+ * Orbit's asks before a single create: one task, or one project. Nothing is created on the owner's
+ * behalf without their yes, so the card carries the body the runner is about to send and shows the
+ * parts of it a person decides on — what it is, and what would settle it.
+ */
+const isTaskCreate = (a: ApprovalInfo): boolean => a.toolName === 'orbit_task_create';
+const isProjectCreate = (a: ApprovalInfo): boolean => a.toolName === 'orbit_project_create';
+
+interface CreateInput {
+  title: string;
+  /** A task's description, or a project's goal. */
+  prose: string;
+  /** A task's acceptance criteria, or a project's stated criteria as a list; markdown either way. */
+  criteria: string;
+}
+
+function createInput(a: ApprovalInfo): CreateInput | null {
+  const project = isProjectCreate(a);
+  if (!project && !isTaskCreate(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const items = Array.isArray(obj.acceptanceCriteriaItems) ? obj.acceptanceCriteriaItems : [];
+  return {
+    title: text(obj.title),
+    prose: text(project ? obj.goal : obj.description),
+    criteria: project
+      ? items
+          .map((c) => text((c as { text?: unknown } | null)?.text))
+          .filter(Boolean)
+          .map((t) => `- ${t}`)
+          .join('\n')
+      : text(obj.acceptanceCriteria),
+  };
+}
+
 function batchPreview(input: unknown): BatchPreview {
   const obj = (input ?? {}) as { preview?: BatchPreview };
   return obj.preview ?? {};
@@ -108,6 +143,8 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
   // whole point of the card is that each batch releases a different set of tasks.
   if (a.toolName === 'AskUserQuestion' || isPlan(a) || isDagChange(a) || isBatch(a)) return [];
+  // Nor does a single create: a standing yes would be the owner's rule switched off.
+  if (isTaskCreate(a) || isProjectCreate(a)) return [];
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'
@@ -222,6 +259,7 @@ export function ApprovalPanel({
   const plan = isPlan(approval) ? planText(approval.input) : '';
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
+  const create = createInput(approval);
   return (
     <div className="approval-card">
       <div className="approval-head">
@@ -231,15 +269,22 @@ export function ApprovalPanel({
             ? `🔗 Confirm: restructure dependencies in ${dag.preview.listTitle ?? 'this list'}?`
             : batch
               ? `🧩 Confirm: create ${batch.taskCount ?? 0} task${batch.taskCount === 1 ? '' : 's'}?`
-              : `🔓 Approve tool call: ${approval.toolName}`}
+              : create
+                ? isProjectCreate(approval)
+                  ? `📁 Confirm: create project “${create.title}”?`
+                  : `📝 Confirm: create task “${create.title}”?`
+                : `🔓 Approve tool call: ${approval.toolName}`}
       </div>
-      <div className={`approval-body${plan ? ' is-plan' : ''}`}>
+      {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
+      <div className={`approval-body${plan || create ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown remarkPlugins={[remarkGfm]}>{plan}</Markdown>
         ) : dag ? (
           <DagChangeBody note={dag.note} preview={dag.preview} />
         ) : batch ? (
           <BatchCreateBody preview={batch} />
+        ) : create ? (
+          <CreateBody input={create} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -251,7 +296,7 @@ export function ApprovalPanel({
           disabled={!answerable}
           onClick={() => onDecide(approval.id, 'allow')}
         >
-          {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : batch ? 'Create them' : 'Approve'}
+          {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : batch ? 'Create them' : create ? 'Create it' : 'Approve'}
           {armed && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
@@ -276,9 +321,26 @@ export function ApprovalPanel({
               ? 'Leave the graph alone'
               : batch
                 ? 'Create nothing'
-                : 'Reject'}
+                : create
+                  ? "Don't create"
+                  : 'Reject'}
         </CardActionButton>
       </CardActions>
+    </div>
+  );
+}
+
+/** What a single create would write: what it is, then what would settle it. */
+function CreateBody({ input }: { input: CreateInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      {input.prose && <Markdown remarkPlugins={[remarkGfm]}>{input.prose}</Markdown>}
+      {input.criteria && (
+        <>
+          <p className="dag-approval-caption">Done when</p>
+          <Markdown remarkPlugins={[remarkGfm]}>{input.criteria}</Markdown>
+        </>
+      )}
     </div>
   );
 }

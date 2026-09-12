@@ -70,6 +70,54 @@ const render = (a: ApprovalInfo) => renderToStaticMarkup(<ApprovalPanel approval
 const batchApproval = (preview: Record<string, unknown>): ApprovalInfo =>
   ({ id: 'b1', toolName: 'orbit_task_batch', input: { preview } }) as ApprovalInfo;
 
+describe('single create approval', () => {
+  const create = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
+    ({ id: 'c1', toolName, input }) as ApprovalInfo;
+
+  it('names the task and shows what it is and what would settle it', () => {
+    const html = render(
+      create('orbit_task_create', {
+        title: 'Fix login redirect',
+        description: 'Users land on **/404** after signing in.',
+        acceptanceCriteria: 'Signing in lands on /home',
+        projectId: 'p1',
+      }),
+    );
+
+    expect(html).toContain('Confirm: create task “Fix login redirect”?');
+    expect(html).toContain('<strong>/404</strong>');
+    expect(html).toContain('Done when');
+    expect(html).toContain('Signing in lands on /home');
+    expect(html).toContain('Create it');
+    expect(html).toContain('Don&#x27;t create');
+    // The raw tool name over a JSON dump is exactly what this card replaces.
+    expect(html).not.toContain('orbit_task_create');
+  });
+
+  it('names the project and lists the criteria it states', () => {
+    const html = render(
+      create('orbit_project_create', {
+        title: 'Checkout rewrite',
+        goal: 'One-page checkout',
+        acceptanceCriteriaItems: [{ text: 'p95 under 1s', verificationMethod: 'dashboard' }],
+      }),
+    );
+
+    expect(html).toContain('Confirm: create project “Checkout rewrite”?');
+    expect(html).toContain('One-page checkout');
+    expect(html).toContain('<li>p95 under 1s</li>');
+  });
+
+  it('offers no standing yes', () => {
+    // Every create is its own decision; "always allow" would switch the owner's rule off.
+    for (const toolName of ['orbit_task_create', 'orbit_project_create']) {
+      expect(render(create(toolName, { title: 't' }))).not.toContain('Always allow');
+    }
+    // The same render of an ordinary tool still offers it, so the absence above is the card's doing.
+    expect(render(create('Read', { file_path: '/x' }))).toContain('Always allow');
+  });
+});
+
 describe('batch create approval', () => {
   it('leads with how many actually start, not how many are written', () => {
     // Fifty tasks that wait on each other cost two runs; fifty independent ones cost fifty. The

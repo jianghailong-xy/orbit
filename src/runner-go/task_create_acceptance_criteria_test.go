@@ -480,14 +480,16 @@ func TestMCPTaskCreateBatchSendsEveryItemsAcceptanceCriteria(t *testing.T) {
 }
 
 // A batch mixes tasks that state criteria with tasks that do not, and the ones that do not must
-// arrive without the field rather than with a blank or a neighbour's. Runs the ungated path
-// (startingNow 0) so the copy is exercised independently of the approval one above.
+// arrive without the field rather than with a blank or a neighbour's. The card is answered yes, so
+// what is decoded is the write itself.
 func TestMCPTaskCreateBatchLeavesAnItemWithoutCriteriaAlone(t *testing.T) {
 	var createBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
 			_, _ = w.Write([]byte(`{"taskCount":2,"startingNow":0}`))
+		case strings.Contains(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
 		default:
 			_ = json.NewDecoder(r.Body).Decode(&createBody)
 			_, _ = w.Write([]byte(`[{"id":"t1"},{"id":"t2"}]`))

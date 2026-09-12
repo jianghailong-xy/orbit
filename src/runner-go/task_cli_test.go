@@ -208,6 +208,11 @@ func TestTaskCLICreateAttributesToAgentInSession(t *testing.T) {
 	var gotHeader, gotSession string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Inside a session the create asks first; answer yes so what is recorded is the write.
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/tasks" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
 		}
@@ -259,6 +264,16 @@ func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 	var gotHeader, gotSession string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Inside a session the batch is previewed and asked about first; neither is the write this
+		// test counts.
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
+			_, _ = w.Write([]byte(`{"taskCount":2,"startingNow":0}`))
+			return
+		case strings.Contains(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		requests++
 		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/tasks/batch-create" {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)

@@ -28,12 +28,14 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		"Most newly discovered work is one task",
 		"4 or more steps that depend on one another",
 		"you may propose recording it as an Orbit Project",
-		"Do not stop and wait for the answer",
 		"do not propose the same body of work twice",
-		// The one clause that did NOT soften: a project is created by a yes, never by the
-		// model deciding the shape qualifies. Raising the bar changes when it asks, not
-		// whether it may act alone.
-		"never call project_create without one",
+		// The owner's rule: nothing is created on their behalf without a yes, and the yes is the
+		// card the create raises, never the model deciding the shape qualifies. Saying first what is
+		// about to be created is what keeps that card from arriving unannounced.
+		"writes nothing until they confirm it",
+		"first say in a sentence or two what you are about to create",
+		"do not create it another way",
+		"Its confirmation card is the user's answer",
 		"from this same session",
 		// A reply names Orbit things by a link the clients draw as the title, not by a bare id.
 		"`[Fix login redirect](orbit-task:<id>)`",
@@ -176,10 +178,10 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 			t.Errorf("free conversation is told %q", want)
 		}
 	}
-	// The one clause neither form may drop: a project is created by a yes, in either shape.
+	// The one clause neither form may drop: nothing is created without the user's yes, in either shape.
 	for _, form := range []string{open, inside} {
-		if !strings.Contains(form, "never call project_create without one") {
-			t.Errorf("form does not keep the explicit-yes rule: %q", form)
+		if !strings.Contains(form, "writes nothing until they confirm it") {
+			t.Errorf("form does not keep the confirm-first rule: %q", form)
 		}
 	}
 }

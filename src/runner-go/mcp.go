@@ -418,6 +418,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			body["acceptanceCriteriaItems"] = items
 		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, projectCreateApprovalToolName, body); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this project: "+declined, false)
+		}
 		// The calling session goes with it, the same as it does on task_create — here so the
 		// server can bind THIS session as the new project's coordinator, which is what makes
 		// opening the project later come back to this conversation instead of starting another.
@@ -546,6 +551,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		if err := requireRunnerTaskCompletionDeclaration(body); err != nil {
 			return toolResult(err.Error(), true)
+		}
+		if declined, err := askBeforeCreate(s.t, s.sessionID, taskCreateApprovalToolName, body); err != nil {
+			return toolResult(err.Error(), true)
+		} else if declined != "" {
+			return toolResult("the human rejected this task: "+declined, false)
 		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
@@ -991,68 +1001,84 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 // same way and rendered by two cards that read alike.
 const batchApprovalToolName = "orbit_task_batch"
 
+// taskCreateApprovalToolName and projectCreateApprovalToolName key the cards for the two single
+// creates. The owner asked that nothing be created on their behalf without their saying yes first,
+// so from inside a session every create is asked: one task, a batch, or a project alike.
+const (
+	taskCreateApprovalToolName    = "orbit_task_create"
+	projectCreateApprovalToolName = "orbit_project_create"
+)
+
+// askBeforeCreate files a card for a create and blocks until the human answers it. It returns
+// declined == "" for a yes, and otherwise the reason to hand back in place of the write. The MCP
+// tools and the CLI both call it, so an agent refused at one door does not find the other open.
+//
+// Headless (no session) there is nobody to ask and no card to show, so the write goes ahead as it
+// always has. Anything but a yes writes nothing — a denial, an abandoned card, a status this runner
+// does not know — and a transport failure is an error, never a silent yes.
+func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}) (declined string, err error) {
+	if sessionID == "" {
+		return "", nil
+	}
+	id, err := t.createApproval(context.Background(), sessionID, map[string]interface{}{
+		"toolName": toolName,
+		"input":    input,
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not register approval: %w", err)
+	}
+	// Unbounded, exactly like permissionPrompt: this asks a human who may be asleep, and a deadline
+	// here would turn "not answered yet" into a refusal nobody gave.
+	for {
+		dec, err := t.pollApproval(context.Background(), sessionID, id)
+		if err != nil {
+			return "", fmt.Errorf("approval poll failed: %w", err)
+		}
+		switch dec.Status {
+		case "PENDING":
+			continue
+		case "ALLOWED":
+			return "", nil
+		}
+		if dec.Message != "" {
+			return dec.Message, nil
+		}
+		return "denied by the user", nil
+	}
+}
+
+// askBeforeBatch is askBeforeCreate for a batch, whose card carries the server-computed preview:
+// fifty titles say nothing, and the counts — above all how many start running within the minute —
+// are what the human is actually deciding on.
+func askBeforeBatch(t *Transport, agentID, sessionID string, bodies []map[string]interface{}) (declined string, err error) {
+	if sessionID == "" {
+		return "", nil
+	}
+	preview, err := t.batchPreview(agentID, sessionID, map[string]interface{}{"tasks": bodies})
+	if err != nil {
+		return "", fmt.Errorf("batch preview failed: %w", err)
+	}
+	return askBeforeCreate(t, sessionID, batchApprovalToolName, map[string]interface{}{
+		"tasks":   bodies,
+		"preview": json.RawMessage(preview),
+	})
+}
+
 // createBatchWithApproval puts a batch of new tasks in front of a human before writing any of it.
 //
 // This is the tool that builds a DAG, and it is the most consequential thing an agent does here
 // while looking like the least: fifty titles say nothing, and what actually happens is some number
 // of runs starting within the minute. This deployment has the cautionary case — one session
 // created 43 lists and ~21,500 tasks before anybody looked.
-//
-// A single task_create stays ungated on purpose. It writes one task and can start one run, and
-// gating the most ordinary operation an agent performs would make it unusable; the batch is where
-// the reach is, and it is the only place `dependsOnRefs` — a DAG in one call — can be expressed.
 func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map[string]interface{} {
-	body := map[string]interface{}{"tasks": bodies}
-	if s.sessionID == "" {
-		// Headless (a CLI-shaped call with no session): there is nobody to ask and no card to
-		// show, so the write goes ahead exactly as it did before.
-		return s.createBatchNow(body)
-	}
-	preview, err := s.t.batchPreview(s.agentID, s.sessionID, body)
+	declined, err := askBeforeBatch(s.t, s.agentID, s.sessionID, bodies)
 	if err != nil {
-		return toolResult("batch preview failed: "+err.Error(), true)
+		return toolResult(err.Error(), true)
 	}
-	// Ask about the consequence, not about the operation.
-	//
-	// What an approval protects is runs starting — real model calls, real money, real side
-	// effects — not rows being written. A batch that starts nothing is a bookkeeping write, and
-	// gating those made the tool unusable at any real scale: fifty items per call means a
-	// 27,000-task campaign is 550 cards, none of which decide anything.
-	//
-	// This also gives the escape hatch back to the human without a new switch. Building into a
-	// paused list, or with autoRunWhenReady off, starts nothing — so it is never asked — and one
-	// deliberate unpause releases the campaign afterwards. `paused` was already the control for
-	// "I am still assembling this"; it now does that job here too.
-	var startsNow struct {
-		StartingNow int `json:"startingNow"`
+	if declined != "" {
+		return toolResult("the human rejected this batch: "+declined, false)
 	}
-	if err := json.Unmarshal(preview, &startsNow); err == nil && startsNow.StartingNow == 0 {
-		return s.createBatchNow(body)
-	}
-	input := map[string]interface{}{"tasks": bodies, "preview": json.RawMessage(preview)}
-	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
-		"toolName": batchApprovalToolName,
-		"input":    input,
-	})
-	if err != nil {
-		return toolResult("could not register approval: "+err.Error(), true)
-	}
-	for {
-		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
-		if err != nil {
-			return toolResult("approval poll failed: "+err.Error(), true)
-		}
-		switch dec.Status {
-		case "ALLOWED":
-			return s.createBatchNow(body)
-		case "DENIED":
-			msg := dec.Message
-			if msg == "" {
-				msg = "denied by the user"
-			}
-			return toolResult("the human rejected this batch: "+msg, false)
-		}
-	}
+	return s.createBatchNow(map[string]interface{}{"tasks": bodies})
 }
 
 func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]interface{} {
@@ -1939,9 +1965,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"sentence or two and say why — a project moves the plan out of this conversation " +
 				"and into the task graph, so when this session ends or your context runs out the " +
 				"plan is still there and whoever picks it up next does not have to re-derive it. " +
-				"Then carry on: do not hold the work while you wait. This call is the answer to that " +
-				"question, not a way around asking it — never make it without an explicit yes, and " +
-				"do not ask twice about the same body of work. The " +
+				"This call is how you ask: it puts a confirmation card in front of the user and BLOCKS " +
+				"until they answer, and nothing is created if they decline — then a task is the right " +
+				"record, and do not ask twice about the same body of work. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
 				"it is for. Created from inside a session, the project is bound to THIS session " +
@@ -2099,7 +2125,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
+			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
 			"inputSchema": func() map[string]interface{} {
 				return obj(taskCreateProps(), "title", "completionCriterion")
 			}(),

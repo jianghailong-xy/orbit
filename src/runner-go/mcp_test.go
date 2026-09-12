@@ -885,19 +885,21 @@ func TestMCPTaskCreateBatchWritesNothingWhenDenied(t *testing.T) {
 
 // Headless there is nobody to ask, so the write must go ahead exactly as it did before rather
 // than blocking forever on an approval no UI will ever show.
-// A batch that starts nothing is a bookkeeping write. Gating those made the tool unusable: fifty
-// items per call means a 27,000-task campaign is 550 cards, none of which decide anything. It is
-// also how a human opts out without a new switch — build into a paused list, release it once.
-func TestMCPTaskCreateBatchDoesNotAskWhenNothingStarts(t *testing.T) {
+// A batch that starts nothing used to go through unasked, as a bookkeeping write. The owner's rule
+// is that nothing is created on their behalf without a yes, and fifty tasks that wait are still
+// fifty tasks they did not agree to.
+func TestMCPTaskCreateBatchAsksEvenWhenNothingStarts(t *testing.T) {
 	var asked bool
 	var wrote bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
 			_, _ = w.Write([]byte(`{"taskCount":50,"startingNow":0,"needsManualStart":50}`))
-		case strings.Contains(r.URL.Path, "approval"):
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
 			asked = true
-			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
 		default:
 			wrote = true
 			_, _ = w.Write([]byte(`[{"id":"t1"}]`))
@@ -913,11 +915,11 @@ func TestMCPTaskCreateBatchDoesNotAskWhenNothingStarts(t *testing.T) {
 	if res["isError"] == true {
 		t.Fatalf("batch returned an error: %#v", res["content"])
 	}
-	if asked {
-		t.Fatal("a batch that starts nothing still raised an approval")
+	if !asked {
+		t.Fatal("a batch that starts nothing was written without asking")
 	}
 	if !wrote {
-		t.Fatal("the batch was not written")
+		t.Fatal("an approved batch was not written")
 	}
 }
 

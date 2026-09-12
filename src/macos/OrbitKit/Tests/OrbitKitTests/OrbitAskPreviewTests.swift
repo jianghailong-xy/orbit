@@ -17,12 +17,34 @@ final class OrbitAskPreviewTests: XCTestCase {
         // Every batch creates a different set of tasks and every restructure releases a different
         // set; a standing yes is the gate switched off, not a preference. Web refuses it too, and
         // the weaker client would otherwise win.
-        for tool in ["orbit_task_batch", "orbit_dag_change"] {
+        for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create"] {
             XCTAssertNil(Approvals.rememberRule(toolName: tool, input: json("{}")),
                          "\(tool) must not offer Allow & remember")
         }
         // An ordinary tool still can.
         XCTAssertNotNil(Approvals.rememberRule(toolName: "Read", input: json("{}")))
+    }
+
+    // MARK: single create
+
+    func testSingleCreateShowsWhatWouldBeWritten() {
+        let task = Approvals.createPreview(toolName: "orbit_task_create", from: json("""
+            {"title":"Fix login redirect","description":"why","acceptanceCriteria":"lands on /home","projectId":"p1"}
+            """))!
+        XCTAssertFalse(task.isProject)
+        XCTAssertEqual(task.title, "Fix login redirect")
+        XCTAssertEqual(task.prose, "why")
+        XCTAssertEqual(task.criteria, ["lands on /home"])
+
+        let project = Approvals.createPreview(toolName: "orbit_project_create", from: json("""
+            {"title":"Checkout","goal":"one page","acceptanceCriteriaItems":[{"text":"p95 < 1s","verificationMethod":"dashboard"}]}
+            """))!
+        XCTAssertTrue(project.isProject)
+        XCTAssertEqual(project.prose, "one page")
+        XCTAssertEqual(project.criteria, ["p95 < 1s"])
+
+        // Every other approval keeps its own card.
+        XCTAssertNil(Approvals.createPreview(toolName: "orbit_task_batch", from: json("{}")))
     }
 
     // MARK: batch preview

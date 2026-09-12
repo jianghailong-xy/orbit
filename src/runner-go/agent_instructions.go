@@ -78,6 +78,9 @@ func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
 		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
 		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
+		"Creating a task, a batch of tasks or a project puts a confirmation card in front of the user and writes nothing " +
+		"until they confirm it, so first say in a sentence or two what you are about to create and why. If they decline, " +
+		"do not create it another way.\n\n" +
 		"When you mention a task, session, project or task list to the user, link it by name instead of pasting its bare id: " +
 		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
@@ -102,7 +105,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 func orbitProjectInstructions(insideRecordedWork bool) string {
 	if insideRecordedWork {
 		return "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
-			"as a task and say what you filed. It lands under the same project this one belongs to, without your naming it. " +
+			"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
 			"Do not propose recording it as an Orbit Project from here -- work found while executing either belongs to the " +
 			"body of work you are already in, or is a separate undertaking that is the user's to start, and the task you " +
 			"filed is what puts it in front of them. A project is only ever created by an explicit yes: never call " +
@@ -111,9 +114,9 @@ func orbitProjectInstructions(insideRecordedWork bool) string {
 	return "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
 		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +
 		"parts of it over days, you may propose recording it as an Orbit Project instead -- say why in a sentence or two, then " +
-		"keep working. Do not stop and wait for the answer, and do not propose the same body of work twice. A project is only " +
-		"ever created by an explicit yes: never call project_create without one. After yes, create the Project from this same " +
-		"session so the conversation becomes its coordinator; do not switch or open a session for it.\n\n"
+		"call project_create from this same session so the conversation becomes its coordinator; do not switch or open a " +
+		"session for it. Its confirmation card is the user's answer: if they decline, a task is the right record, and do not " +
+		"propose the same body of work twice.\n\n"
 }
 
 // insideRecordedWork reports whether this session is already executing something Orbit has

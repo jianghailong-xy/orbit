@@ -64,7 +64,37 @@ public struct BatchApprovalPreview: Equatable, Sendable {
     public let titlesTruncated: Int
 }
 
+/// What a single create would write, read straight off the body the runner is about to send.
+public struct CreateApprovalPreview: Equatable, Sendable {
+    public let isProject: Bool
+    public let title: String
+    /// The task's description, or the project's goal.
+    public let prose: String
+    /// The task's acceptance criteria, or each of the project's stated criteria.
+    public let criteria: [String]
+}
+
 public extension Approvals {
+
+    /// The body carried on an `orbit_task_create` / `orbit_project_create` approval, or nil for any
+    /// other approval.
+    static func createPreview(toolName: String, from input: JSONValue) -> CreateApprovalPreview? {
+        let isProject = isProjectCreate(toolName: toolName)
+        guard isProject || isTaskCreate(toolName: toolName) else { return nil }
+        var criteria: [String] = []
+        if isProject {
+            if case .array(let raw)? = input["acceptanceCriteriaItems"] {
+                criteria = raw.compactMap { $0["text"]?.stringValue }.filter { !$0.isEmpty }
+            }
+        } else if let text = input["acceptanceCriteria"]?.stringValue, !text.isEmpty {
+            criteria = [text]
+        }
+        return CreateApprovalPreview(
+            isProject: isProject,
+            title: input["title"]?.stringValue ?? "",
+            prose: input[isProject ? "goal" : "description"]?.stringValue ?? "",
+            criteria: criteria)
+    }
 
     /// The restructure preview carried on an `orbit_dag_change` approval, or nil when absent.
     static func dagPreview(from input: JSONValue) -> DagApprovalPreview? {

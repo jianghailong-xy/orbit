@@ -20,6 +20,11 @@ func captureCreateBody(t *testing.T, path string) (*httptest.Server, *[]map[stri
 	t.Helper()
 	var bodies []map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A create from inside a session asks first; answer yes and keep the recording to the write.
+		if strings.Contains(r.URL.Path, "/approvals") {
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != path {
 			t.Errorf("request = %s %s, want POST %s", r.Method, r.URL.Path, path)
 		}
