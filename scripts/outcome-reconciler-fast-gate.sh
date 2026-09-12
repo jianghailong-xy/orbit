@@ -121,18 +121,22 @@ fi
 # stage 1 prunes.
 # ---------------------------------------------------------------------------------------------
 echo '==> fast-gate [2/3]: tsc --noEmit'
+# Whichever node_modules npm put the two CLIs in: the apiserver workspace's until the 2026-09-09
+# dependabot bumps (#74, #78), the root one since.
+PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
+TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 CLIENT="$API/build/node_modules/@prisma/client"
 if [ ! -f "$CLIENT/index.d.ts" ] || [ "$API/prisma/schema.prisma" -nt "$CLIENT/index.d.ts" ]; then
   echo '    generating the isolated Prisma Client for this tree'
   node "$REPO/scripts/outcome-reconciler-isolated-prisma-schema.mjs" \
     "$API/prisma/schema.prisma" "$API/build/outcome-reconciler-prisma.schema.prisma" "$CLIENT"
-  ( cd "$API" && ./node_modules/.bin/prisma format \
+  ( cd "$API" && "$PRISMA" format \
     --schema build/outcome-reconciler-prisma.schema.prisma >/dev/null )
-  ( cd "$API" && ./node_modules/.bin/prisma generate \
+  ( cd "$API" && "$PRISMA" generate \
     --schema build/outcome-reconciler-prisma.schema.prisma >/dev/null )
 fi
 ( cd "$REPO" && npm run build -w @orbit/shared >/dev/null )
-( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.outcome-reconciler.json --noEmit )
+( cd "$API" && "$TSC" -p tsconfig.outcome-reconciler.json --noEmit )
 
 # ---------------------------------------------------------------------------------------------
 # Stage 3: the specs this change is answerable for.
@@ -143,7 +147,7 @@ if [ "${#DEFERRED[@]}" -gt 0 ]; then
 fi
 if [ "${#RUNNABLE[@]}" -gt 0 ]; then
   printf '    %s\n' "${RUNNABLE[@]}"
-  ( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.outcome-reconciler.json )
+  ( cd "$API" && "$TSC" -p tsconfig.outcome-reconciler.json )
   COMPILED=()
   for SPEC in "${RUNNABLE[@]}"; do
     RELATIVE="${SPEC#src/apiserver/src/}"

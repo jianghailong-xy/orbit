@@ -160,10 +160,10 @@ if [ "$MAIN" != "$REPO" ]; then
   link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
 fi
 
-# TypeScript 7 is installed per workspace: the repo root still hoists the 5.9.3 that
-# @nestjs/cli pins, so take the apiserver copy when it is there. Prisma 7 is installed per workspace
-# too — npm no longer hoists it to the repo root. Resolved HERE rather than at the top of the file
-# because in a worktree neither binary exists until the links above are made.
+# TypeScript 7 and Prisma 7 were installed per workspace, beside a root that hoisted the 5.9.3 that
+# @nestjs/cli pinned, until the 2026-09-09 bumps (#74, #78) moved both to the root; so take the
+# apiserver copy when it is there and the root's otherwise. Resolved HERE rather than at the top of
+# the file because in a worktree neither binary exists until the links above are made.
 TSC="$API/node_modules/.bin/tsc"
 [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 PRISMA="$API/node_modules/.bin/prisma"
@@ -176,24 +176,38 @@ PRISMA="$API/node_modules/.bin/prisma"
 # that the two entries which have to be ours can be real directories.
 if [ "$MAIN" != "$REPO" ]; then
   NM="$API/node_modules"; MAIN_NM="$MAIN/src/apiserver/node_modules"
+  # Where the main checkout's install put the two packages this step pairs, asked of Node rather
+  # than named: npm kept both under the apiserver workspace until the 2026-09-09 dependabot bumps
+  # (#74, #78) hoisted them to the root, and `$MAIN_NM/@prisma/client` then named nothing at all.
+  pkg_dir() { ( cd "$MAIN/src/apiserver" && node -p "path.dirname(require.resolve('$1/package.json'))" ); }
+  CLIENT_PKG="$(pkg_dir @prisma/client)" || die "no @prisma/client under $MAIN — run npm install in the main checkout first"
+  PRISMA_PKG="$(pkg_dir prisma)" || die "no prisma under $MAIN — run npm install in the main checkout first"
   [ -L "$NM" ] && rm -f "$NM"
   mkdir -p "$NM/@prisma" "$NM/.prisma"
   for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
     [ -e "$d" ] || continue
-    case "$(basename "$d")" in @prisma|.prisma) continue ;; esac
+    case "$(basename "$d")" in @prisma|.prisma|prisma) continue ;; esac
     link "$d" "$NM/$(basename "$d")"
   done
   for d in "$MAIN_NM/@prisma"/*; do
+    [ -e "$d" ] || continue
     [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
   done
+  # The CLI goes beside the copy below, wherever it was installed. `prisma generate` resolves
+  # `prisma` and `@prisma/client` from the schema's directory without following links, and refuses
+  # with `Could not resolve @prisma/client` unless both sit in the same node_modules — so a private
+  # client here with the CLI only at the root fails exactly as a missing client does.
+  link "$PRISMA_PKG" "$NM/prisma"
   # A copy, ~75MB, once per worktree: `prisma generate` finds the package by walking up from the
   # schema's directory, and through a link it would find — and write beside — the main checkout's.
   # It also has to be in place BEFORE generating, which otherwise fails with `Could not resolve
-  # @prisma/client`.
-  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ]; then
-    echo "==> copying @prisma/client out of $MAIN (this worktree needs its own)"
-    rm -rf "$NM/@prisma/client"
-    cp -r "$MAIN_NM/@prisma/client" "$NM/@prisma/client" || die "could not copy @prisma/client"
+  # @prisma/client`. Copied again when the main checkout's package.json differs from the copy's, so
+  # a dependency bump reaches a worktree that already has one; the generated client goes with it.
+  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ] ||
+     ! cmp -s "$CLIENT_PKG/package.json" "$NM/@prisma/client/package.json"; then
+    echo "==> copying @prisma/client out of $CLIENT_PKG (this worktree needs its own)"
+    rm -rf "$NM/@prisma/client" "$NM/.prisma/client"
+    cp -r "$CLIENT_PKG" "$NM/@prisma/client" || die "could not copy @prisma/client"
   fi
   # ~6s, so only when this branch's schema is newer than what was generated from it last time.
   GENERATED="$NM/.prisma/client/index.d.ts"

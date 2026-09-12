@@ -48,13 +48,17 @@ mkdir -p "$BUILD"
 CASE_DIR="$(mktemp -d "$BUILD/outcome-reconciler-full-api-cases.XXXXXX")"
 
 echo '==> full-api: compile every API test'
+# Whichever node_modules npm put the two CLIs in: the apiserver workspace's until the 2026-09-09
+# dependabot bumps (#74, #78), the root one since.
+PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
+TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 ( cd "$REPO" && node scripts/outcome-reconciler-isolated-prisma-schema.mjs \
   "$API/prisma/schema.prisma" \
   "$API/build/outcome-reconciler-prisma.schema.prisma" \
   "$API/build/node_modules/@prisma/client" )
-( cd "$API" && ./node_modules/.bin/prisma format \
+( cd "$API" && "$PRISMA" format \
   --schema "$API/build/outcome-reconciler-prisma.schema.prisma" >/dev/null )
-( cd "$API" && ./node_modules/.bin/prisma generate \
+( cd "$API" && "$PRISMA" generate \
   --schema "$API/build/outcome-reconciler-prisma.schema.prisma" >/dev/null )
 ( cd "$API" && cmp -s \
   build/outcome-reconciler-prisma.schema.prisma \
@@ -63,8 +67,8 @@ echo '==> full-api: compile every API test'
   exit 1
 }
 ( cd "$REPO" && npm run build -w @orbit/shared >/dev/null )
-( cd "$API" && ./node_modules/.bin/tsc --build --clean tsconfig.outcome-reconciler.json )
-( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.outcome-reconciler.json )
+( cd "$API" && "$TSC" --build --clean tsconfig.outcome-reconciler.json )
+( cd "$API" && "$TSC" -p tsconfig.outcome-reconciler.json )
 # The checked-out worktree intentionally reuses /root/orbit/node_modules. Its workspace link for
 # @orbit/shared therefore points at the deployed checkout, not this immutable candidate. Node
 # searches build/node_modules before that shared dependency tree, so pin the runtime import to the

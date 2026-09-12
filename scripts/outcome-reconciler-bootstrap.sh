@@ -36,12 +36,16 @@ done
 docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc 'SELECT 1' >/dev/null
 SYSTEM_ID="$(docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB" -tAc \
   'SELECT system_identifier FROM pg_control_system()' | tr -d '[:space:]')"
+# Whichever node_modules npm put the two CLIs in: the apiserver workspace's until the 2026-09-09
+# dependabot bumps (#74, #78), the root one since.
+PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
+TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 echo "==> bootstrap: migrate empty database"
-( cd "$API" && DATABASE_URL="$URL" ./node_modules/.bin/prisma migrate deploy \
+( cd "$API" && DATABASE_URL="$URL" "$PRISMA" migrate deploy \
   --schema prisma/schema.prisma >/dev/null )
 
 echo "==> bootstrap: compile server and focused acceptance tree"
-( cd "$API" && ./node_modules/.bin/tsc -p tsconfig.test.json )
+( cd "$API" && "$TSC" -p tsconfig.test.json )
 
 TS_TAP="$TMP/typescript.tap"
 echo "==> bootstrap: protocol, merge fence, writer fence and inventory tests"

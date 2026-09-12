@@ -119,12 +119,13 @@ if [ "$MAIN" != "$REPO" ]; then
   link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
   link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
 fi
-# TypeScript 7 and Prisma 7 are installed per workspace; the repo root still hoists the 5.9.3 that
-# @nestjs/cli pins, so prefer the apiserver's copy of each. Resolved HERE and not up with the other
+# TypeScript 7 and Prisma 7 were installed per workspace, beside a root that hoisted the 5.9.3 that
+# @nestjs/cli pinned, until the 2026-09-09 bumps (#74, #78) moved both to the root; so prefer the
+# apiserver's copy of each and fall back to the root's. Resolved HERE and not up with the other
 # constants, because "prefer" is a question about the links above: a worktree that has none of them
-# yet answers "not executable" to both preferred paths, and both fallbacks then lie. The root has no
+# yet answers "not executable" to both preferred paths, and both fallbacks then lie. The root had no
 # prisma at all, so the run died at `prisma migrate deploy` with the container already up; and the
-# root's tsc IS that 5.9.3, so the guard below passed and a first run compiled the whole test tree
+# root's tsc WAS that 5.9.3, so the guard below passed and a first run compiled the whole test tree
 # with the wrong compiler without saying so. Hence also the version echo: which compiler built this
 # tree is the thing that failed silently, so it is printed rather than assumed.
 TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
@@ -139,24 +140,38 @@ echo "==> tsc $TSC ($("$TSC" --version))"
 # generating there is how every concurrent session's tree goes red.
 if [ "$MAIN" != "$REPO" ]; then
   NM="$API/node_modules"; MAIN_NM="$MAIN/src/apiserver/node_modules"
+  # Where the main checkout's install put the two packages this step pairs, asked of Node rather
+  # than named: npm kept both under the apiserver workspace until the 2026-09-09 dependabot bumps
+  # (#74, #78) hoisted them to the root, and `$MAIN_NM/@prisma/client` then named nothing at all.
+  pkg_dir() { ( cd "$MAIN/src/apiserver" && node -p "path.dirname(require.resolve('$1/package.json'))" ); }
+  CLIENT_PKG="$(pkg_dir @prisma/client)" || die "no @prisma/client under $MAIN — run npm install in the main checkout first"
+  PRISMA_PKG="$(pkg_dir prisma)" || die "no prisma under $MAIN — run npm install in the main checkout first"
   [ -L "$NM" ] && rm -f "$NM"
   mkdir -p "$NM/@prisma" "$NM/.prisma"
   for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
     [ -e "$d" ] || continue
-    case "$(basename "$d")" in @prisma|.prisma) continue ;; esac
+    case "$(basename "$d")" in @prisma|.prisma|prisma) continue ;; esac
     link "$d" "$NM/$(basename "$d")"
   done
   for d in "$MAIN_NM/@prisma"/*; do
+    [ -e "$d" ] || continue
     [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
   done
+  # The CLI goes beside the copy below, wherever it was installed. `prisma generate` resolves
+  # `prisma` and `@prisma/client` from the schema's directory without following links, and refuses
+  # with `Could not resolve @prisma/client` unless both sit in the same node_modules — so a private
+  # client here with the CLI only at the root fails exactly as a missing client does.
+  link "$PRISMA_PKG" "$NM/prisma"
   # A copy, ~75MB, once per worktree: `prisma generate` finds the package by walking up from the
   # schema's directory, and through a link it would find — and write beside — the main checkout's.
   # It also has to be in place BEFORE generating, which otherwise fails with `Could not resolve
-  # @prisma/client`.
-  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ]; then
-    echo "==> copying @prisma/client out of $MAIN (this worktree needs its own)"
-    rm -rf "$NM/@prisma/client"
-    cp -r "$MAIN_NM/@prisma/client" "$NM/@prisma/client" || die "could not copy @prisma/client"
+  # @prisma/client`. Copied again when the main checkout's package.json differs from the copy's, so
+  # a dependency bump reaches a worktree that already has one; the generated client goes with it.
+  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ] ||
+     ! cmp -s "$CLIENT_PKG/package.json" "$NM/@prisma/client/package.json"; then
+    echo "==> copying @prisma/client out of $CLIENT_PKG (this worktree needs its own)"
+    rm -rf "$NM/@prisma/client" "$NM/.prisma/client"
+    cp -r "$CLIENT_PKG" "$NM/@prisma/client" || die "could not copy @prisma/client"
   fi
   # ~6s, so only when this branch's schema is newer than what was generated from it last time.
   GENERATED="$NM/.prisma/client/index.d.ts"
