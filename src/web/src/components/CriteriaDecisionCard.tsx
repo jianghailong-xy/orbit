@@ -42,7 +42,9 @@ import { pendingCriteriaDecisionsQuery } from '../lib/queries';
  * that has gone stale shows NO diff. The derived read drops a proposal the moment it is settled or
  * displaced, so the proposed criteria are genuinely not published any more, and a card that still
  * displayed them would be displaying a frozen copy — the exact thing this card does not keep. What
- * is left is the address, what happened to it, and two buttons that cannot be pressed.
+ * is left is the address, what happened to it, and two buttons that cannot be pressed. For a
+ * proposal answered at another end, "what happened" includes WHICH answer: the read publishes the
+ * recent answers beside the questions (`settled`) — the outcome and its seals, never the proposal.
  */
 
 /** One criterion as the proposal states it. `id` is null for one the proposal is adding. */
@@ -170,6 +172,25 @@ export interface PendingCriteriaDecisionRow {
   decidability: CriteriaDecisionDecidability;
 }
 
+/**
+ * One proposal the read says WAS answered: which answer, and what it did to the seal.
+ *
+ * Only the card that was pressed is handed the door's response. Every other card for the same
+ * proposal used to go stale knowing only that somebody had answered — the account owner refused one
+ * in a browser on 2026-09-11 and found the phone's card dimmed with no way to tell which answer it
+ * had been given. The answer is a committed row, so it arrives on the same derived read as the rest
+ * of the card. Never the proposal's words: a stale card still shows no diff.
+ */
+export interface SettledCriteriaDecision {
+  intentId: string;
+  decision: CriteriaDecision;
+  decidedAt: string;
+  /** The seal the answer was given against. */
+  baseSeal: string;
+  /** The seal standing afterwards: `baseSeal` again for a refusal, moved by an approval. */
+  resultingSeal: string;
+}
+
 /** The derived read: every proposal of one project that is still a question, oldest first. */
 export interface PendingCriteriaDecisionQueue {
   readAt: string;
@@ -178,6 +199,11 @@ export interface PendingCriteriaDecisionQueue {
   oldestAgeSeconds: number | null;
   decidableCount: number;
   pending: PendingCriteriaDecisionRow[];
+  /**
+   * The proposals most recently answered, newest first. Absent from a server older than this
+   * bundle — and a card whose answer is not here says only that it was answered.
+   */
+  settled?: SettledCriteriaDecision[];
 }
 
 /** What the door returns once it has answered one — read back, not recomputed here. */
@@ -210,6 +236,13 @@ export const CRITERIA_DECISION_HEADING =
 export const CRITERIA_DECISION_STALE_HEADING = 'This decision is no longer yours to make';
 /** And the one for a card that cannot say: this browser has not managed the read. */
 export const CRITERIA_DECISION_UNREAD_HEADING = 'This card could not be re-read just now';
+/**
+ * The two a card carries instead of the stale heading once the read names the answer given at
+ * another end — the verdict first, because "which was it?" is the question a dimmed card was left
+ * unable to answer.
+ */
+export const CRITERIA_DECISION_REFUSED_HEADING = 'Refused at another end — the ruler did not move';
+export const CRITERIA_DECISION_APPROVED_HEADING = 'Approved at another end — the ruler moved';
 export const APPROVE_LABEL = 'Approve & re-seal';
 export const REFUSE_LABEL = 'Refuse';
 
@@ -340,11 +373,15 @@ export function shortSeal(seal: string): string {
  *   * BASE_SEAL_MOVED — the row is in the read and the server says it would not: the ruler this
  *     proposal was composed against is not the one in force. The read returns it precisely so this
  *     can be explained rather than left as a card that vanished.
- *   * SUPERSEDED — the row is gone AND a proposal still pending names it as the one it displaced.
- *     Read off the supersession link rather than off timestamps, for the same reason the server
- *     does: two proposals can share a moment.
- *   * ALREADY_SETTLED — the row is gone and nothing pending claims to have displaced it. Somebody
- *     answered it, at another end, and the door would now refuse this card with its own code.
+ *   * SUPERSEDED — the row is gone AND a proposal still pending names it as the one it displaced,
+ *     and the read names no answer to it. Read off the supersession link rather than off
+ *     timestamps, for the same reason the server does: two proposals can share a moment.
+ *   * ALREADY_SETTLED — the row is gone and somebody answered it, at another end, and the door would
+ *     now refuse this card with its own code. `settled` is that answer when the read names it, and
+ *     null when it does not (a server older than this bundle, or an answer older than the ones the
+ *     read carries) — a card that can then say only that it was answered. The answer is looked for
+ *     BEFORE the supersession link: the door takes an answer from a card that had not re-read yet,
+ *     so a displaced proposal can still have been answered, and then the answer is what happened.
  *
  * `UNREAD` is the fifth and is not a state of the proposal at all — it is the state of this
  * browser: the read has not come back. A card that cannot re-derive itself must not offer an
@@ -354,7 +391,7 @@ export type CriteriaDecisionStanding =
   | { state: 'DECIDABLE'; intentId: string; row: PendingCriteriaDecisionRow }
   | { state: 'BASE_SEAL_MOVED'; intentId: string; row: PendingCriteriaDecisionRow }
   | { state: 'SUPERSEDED'; intentId: string; replacement: PendingCriteriaDecisionRow }
-  | { state: 'ALREADY_SETTLED'; intentId: string }
+  | { state: 'ALREADY_SETTLED'; intentId: string; settled: SettledCriteriaDecision | null }
   | { state: 'UNREAD'; intentId: string };
 
 export function criteriaDecisionStanding(
@@ -368,10 +405,12 @@ export function criteriaDecisionStanding(
       ? { state: 'DECIDABLE', intentId, row }
       : { state: 'BASE_SEAL_MOVED', intentId, row };
   }
+  const settled = (queue.settled ?? []).find((answer) => answer.intentId === intentId) ?? null;
+  if (settled) return { state: 'ALREADY_SETTLED', intentId, settled };
   const replacement =
     queue.pending.find((pending) => pending.supersededIntentId === intentId) ?? null;
   if (replacement) return { state: 'SUPERSEDED', intentId, replacement };
-  return { state: 'ALREADY_SETTLED', intentId };
+  return { state: 'ALREADY_SETTLED', intentId, settled: null };
 }
 
 /** Whether the door would take an answer to this card: true for exactly one of the five. */
@@ -423,13 +462,31 @@ export function staleExplanation(standing: CriteriaDecisionStanding): string | n
         + 'anybody is asking for any more. Nothing was applied. The replacement is the proposal '
         + `now waiting for a decision, composed against ${shortSeal(standing.replacement.baselineSeal)}.`
       );
-    case 'ALREADY_SETTLED':
+    case 'ALREADY_SETTLED': {
+      // The answer, when the read names one, in the seals the door compared: a refusal moved
+      // nothing, and an approval moved the ruler from one seal to another.
+      const { settled } = standing;
+      if (settled?.decision === 'REJECT') {
+        return (
+          `Refused at another end. Nothing was applied: the criteria on record stayed as they were, `
+          + `and the seal stayed ${shortSeal(settled.baseSeal)}. A decision sent from this card now `
+          + `would be refused with ${CRITERIA_DECISION_ALREADY_SETTLED}.`
+        );
+      }
+      if (settled?.decision === 'APPROVE') {
+        return (
+          `Approved at another end. The weakening was applied: the ruler moved, and the seal went `
+          + `from ${shortSeal(settled.baseSeal)} to ${shortSeal(settled.resultingSeal)}. A decision `
+          + `sent from this card now would be refused with ${CRITERIA_DECISION_ALREADY_SETTLED}.`
+        );
+      }
       return (
         'Already answered. This proposal is no longer one of the project’s pending ones — the '
         + 'answer was recorded at another end, and a decision sent from this card now would be '
         + `refused with ${CRITERIA_DECISION_ALREADY_SETTLED}. Nothing on this card was applied by `
         + 'you, and nothing here can change what was.'
       );
+    }
     case 'UNREAD':
       return (
         'This card could not be re-read just now, so what it is asking about cannot be shown. It '
@@ -442,11 +499,17 @@ export function staleExplanation(standing: CriteriaDecisionStanding): string | n
 
 /**
  * The card's heading, which says which of three things the reader is looking at: a question, a
- * question somebody else has already settled, or a card this browser could not re-derive.
+ * question somebody else has already settled — with the answer they gave, when the read names it —
+ * or a card this browser could not re-derive.
  */
 export function headingFor(standing: CriteriaDecisionStanding): string {
   if (standing.state === 'DECIDABLE') return CRITERIA_DECISION_HEADING;
   if (standing.state === 'UNREAD') return CRITERIA_DECISION_UNREAD_HEADING;
+  if (standing.state === 'ALREADY_SETTLED' && standing.settled) {
+    return standing.settled.decision === 'APPROVE'
+      ? CRITERIA_DECISION_APPROVED_HEADING
+      : CRITERIA_DECISION_REFUSED_HEADING;
+  }
   return CRITERIA_DECISION_STALE_HEADING;
 }
 

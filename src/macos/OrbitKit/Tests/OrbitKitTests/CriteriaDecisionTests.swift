@@ -40,14 +40,25 @@ final class CriteriaDecisionTests: XCTestCase {
                     requiredAction: "REFILE_AGAINST_THE_CURRENT_STANDARD_SET"))
     }
 
-    private func queue(_ rows: [PendingCriteriaDecisionRow]) -> PendingCriteriaDecisionQueue {
+    private func queue(_ rows: [PendingCriteriaDecisionRow],
+                       settled: [SettledCriteriaDecision] = []) -> PendingCriteriaDecisionQueue {
         PendingCriteriaDecisionQueue(
             readAt: "2026-09-09T12:04:00.000Z",
             projectId: "proj-1",
             count: rows.count,
             oldestAgeSeconds: rows.first?.ageSeconds,
             decidableCount: rows.filter { $0.decidability.decidable }.count,
-            pending: rows)
+            pending: rows,
+            settled: settled)
+    }
+
+    /// One answer as the read publishes it. A refusal leaves the seal where it was.
+    private func answer(_ intentID: String, _ decision: CriteriaDecisionAnswer,
+                        base: String = "6b1d02ea11223344",
+                        resulting: String? = nil) -> SettledCriteriaDecision {
+        SettledCriteriaDecision(intentId: intentID, decision: decision,
+                                decidedAt: "2026-09-11T15:40:00.000Z",
+                                baseSeal: base, resultingSeal: resulting ?? base)
     }
 
     // MARK: the five standings
@@ -152,6 +163,77 @@ final class CriteriaDecisionTests: XCTestCase {
 
         XCTAssertEqual([live, moved, replaced, settled, unread].map(CriteriaDecisions.isDimmed),
                        [false, true, true, true, false])
+    }
+
+    // MARK: an answer given at another end
+
+    /// The card the account owner photographed on 2026-09-11: refused in a browser, and on the phone
+    /// a dimmed card that could not say which answer it had been given. The read names the answer
+    /// now, and the card says it in each place a reader looks — the badge, the line, the reason.
+    func testARefusalAtAnotherEndSaysRefusedAndThatNothingMoved() {
+        let standing = CriteriaDecisions.standing(
+            queue: queue([], settled: [answer("i-1", .reject, base: "6b1d02ea1122aaaa")]),
+            intentId: "i-1")
+        guard case .alreadySettled(let named?) = standing.state else {
+            return XCTFail("expected the answer the read names, got \(standing.state)")
+        }
+        XCTAssertEqual(named.decision, .reject)
+        XCTAssertEqual(CriteriaDecisions.badge(standing), "refused")
+        XCTAssertEqual(CriteriaDecisions.heading(standing), CriteriaDecisions.refusedHeading)
+        let why = CriteriaDecisions.staleExplanation(standing) ?? ""
+        XCTAssertTrue(why.hasPrefix("Refused at another end."), why)
+        XCTAssertTrue(why.contains("Nothing was applied"), why)
+        XCTAssertTrue(why.contains("the seal stayed 6b1d02ea1122."), why)
+        XCTAssertTrue(why.contains(CriteriaDecisions.alreadySettledRefusal), why)
+        XCTAssertFalse(why.contains("Approved"), why)
+        // Still dead and still dimmed: naming the answer changes what the card says, not what it
+        // offers.
+        XCTAssertFalse(standing.answerable)
+        XCTAssertFalse(CriteriaDecisions.isOpen(standing))
+        XCTAssertTrue(CriteriaDecisions.isDimmed(standing))
+    }
+
+    func testAnApprovalAtAnotherEndSaysApprovedAndWhichSealTheRulerMovedTo() {
+        let standing = CriteriaDecisions.standing(
+            queue: queue([], settled: [answer("i-1", .approve, base: "6b1d02ea1122aaaa",
+                                              resulting: "9c4f7a1bb001bbbb")]),
+            intentId: "i-1")
+        XCTAssertEqual(CriteriaDecisions.badge(standing), "approved")
+        XCTAssertEqual(CriteriaDecisions.heading(standing), CriteriaDecisions.approvedHeading)
+        let why = CriteriaDecisions.staleExplanation(standing) ?? ""
+        XCTAssertTrue(why.hasPrefix("Approved at another end."), why)
+        XCTAssertTrue(why.contains("the seal went from 6b1d02ea1122 to 9c4f7a1bb001."), why)
+        XCTAssertFalse(why.contains("Nothing was applied"), why)
+        XCTAssertFalse(standing.answerable)
+        XCTAssertTrue(CriteriaDecisions.isDimmed(standing))
+    }
+
+    /// The negative control for both: an answer the read names for ANOTHER proposal says nothing
+    /// about this one, which is known only to have been answered.
+    func testAnAnswerToAnotherProposalLeavesThisCardSayingOnlyThatItWasAnswered() {
+        let standing = CriteriaDecisions.standing(
+            queue: queue([], settled: [answer("i-2", .reject)]), intentId: "i-1")
+        guard case .alreadySettled(.none) = standing.state else {
+            return XCTFail("expected an answer the read does not name, got \(standing.state)")
+        }
+        XCTAssertEqual(CriteriaDecisions.badge(standing), "settled")
+        XCTAssertEqual(CriteriaDecisions.heading(standing), CriteriaDecisions.staleHeading)
+        let why = CriteriaDecisions.staleExplanation(standing) ?? ""
+        XCTAssertTrue(why.hasPrefix("Already answered."), why)
+    }
+
+    /// An answer on record is what happened to a proposal even when a newer one also names it as
+    /// displaced: the door takes an answer from a card that had not re-read, so both can be true —
+    /// and "Superseded … Nothing was applied" would then be wrong about an approval.
+    func testAnAnswerOnRecordOutranksTheSupersessionLink() {
+        let replacement = row("i-2", supersedes: "i-1")
+        let answered = CriteriaDecisions.standing(
+            queue: queue([replacement], settled: [answer("i-1", .approve, resulting: "9c4f7a1bb001")]),
+            intentId: "i-1")
+        XCTAssertEqual(CriteriaDecisions.badge(answered), "approved")
+        // The same queue without the answer is the supersession it always was.
+        let displaced = CriteriaDecisions.standing(queue: queue([replacement]), intentId: "i-1")
+        XCTAssertEqual(CriteriaDecisions.badge(displaced), "replaced")
     }
 
     // MARK: what the card shows
@@ -442,7 +524,12 @@ final class CriteriaDecisionTests: XCTestCase {
               "changed":[]}]},
            "supersededIntentId":null,
            "decidability":{"decidable":false,"refusal":"PROJECT_CRITERIA_DECISION_BASE_SEAL_MOVED",
-                           "requiredAction":"REFILE_AGAINST_THE_CURRENT_STANDARD_SET"}}]}
+                           "requiredAction":"REFILE_AGAINST_THE_CURRENT_STANDARD_SET"}}],
+         "settled":[
+           {"intentId":"i0","decision":"REJECT","decidedAt":"2026-09-09T11:00:00.000Z",
+            "baseSeal":"aaa","resultingSeal":"aaa"},
+           {"intentId":"i-1","decision":"APPROVE","decidedAt":"2026-09-09T10:00:00.000Z",
+            "baseSeal":"ccc","resultingSeal":"aaa"}]}
         """
         let decoded = try JSONDecoder().decode(PendingCriteriaDecisionQueue.self,
                                                from: Data(json.utf8))
@@ -459,6 +546,38 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(diff.entries[0].onRecord?.text, "was t")
         let standing = CriteriaDecisions.standing(queue: decoded, intentId: "i1")
         XCTAssertFalse(standing.answerable)
+        // And the answers, in the door's own spelling of the decision.
+        XCTAssertEqual(decoded.settled.map(\.intentId), ["i0", "i-1"])
+        XCTAssertEqual(decoded.settled.map(\.decision), [.reject, .approve])
+        XCTAssertEqual(decoded.settled[1].baseSeal, "ccc")
+        XCTAssertEqual(decoded.settled[1].resultingSeal, "aaa")
+        XCTAssertEqual(CriteriaDecisions.badge(CriteriaDecisions.standing(queue: decoded,
+                                                                          intentId: "i0")),
+                       "refused")
+    }
+
+    /// A server OLDER than this build sends no `settled` at all. The queue still decodes, and a card
+    /// whose proposal has gone says what it said before answers were published: that it was
+    /// answered, and nothing about which answer.
+    func testAReadWithoutAnswersStillDecodesAndTheCardSaysOnlyAlreadyAnswered() throws {
+        let json = """
+        {"readAt":"2026-09-11T15:41:00.000Z","projectId":"p1","count":0,"oldestAgeSeconds":null,
+         "decidableCount":0,"pending":[]}
+        """
+        let decoded = try JSONDecoder().decode(PendingCriteriaDecisionQueue.self,
+                                               from: Data(json.utf8))
+        XCTAssertTrue(decoded.settled.isEmpty)
+        let standing = CriteriaDecisions.standing(queue: decoded, intentId: "i1")
+        guard case .alreadySettled(.none) = standing.state else {
+            return XCTFail("expected a card that can say only that it was answered, "
+                               + "got \(standing.state)")
+        }
+        XCTAssertEqual(CriteriaDecisions.badge(standing), "settled")
+        XCTAssertEqual(CriteriaDecisions.heading(standing), CriteriaDecisions.staleHeading)
+        let why = CriteriaDecisions.staleExplanation(standing) ?? ""
+        XCTAssertTrue(why.hasPrefix("Already answered."), why)
+        XCTAssertFalse(why.contains("Refused") || why.contains("Approved"), why)
+        XCTAssertTrue(CriteriaDecisions.isDimmed(standing))
     }
 
     func testTheConfirmationStandingDecodesItsThreeStates() throws {

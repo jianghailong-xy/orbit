@@ -5,6 +5,7 @@ import {
   type CriteriaWeakeningAction,
   type ProposedCriterion,
 } from './criteria-weakening-intent';
+import type { CriteriaDecision } from './dto';
 import {
   type StatedAcceptanceCriterion,
   criteriaFromDefinitions,
@@ -65,10 +66,10 @@ export const CRITERIA_DECISION_REFILE_ACTION = 'REFILE_AGAINST_THE_CURRENT_STAND
  * why not.
  *
  * Only one refusal can reach a row this read returns, and it is `BASE_SEAL_MOVED`: a settled
- * proposal is not returned at all (see below), so `ALREADY_SETTLED` is a refusal the DOOR gives to
- * a caller holding a stale id rather than a state this read can report. It is named beside the
- * other for that reason — the two are the door's set, and a reader of this file should be able to
- * see which of them this read can and cannot produce.
+ * proposal is not returned in `pending` (see below), so `ALREADY_SETTLED` is a refusal the DOOR
+ * gives to a caller holding a stale id rather than a state this read can report on a row. It is
+ * named beside the other for that reason — the two are the door's set, and a reader of this file
+ * should be able to see which of them this read can and cannot produce.
  */
 export interface CriteriaDecisionDecidability {
   /** True when the decision door would not refuse this proposal for want of a live baseline. */
@@ -495,6 +496,42 @@ export interface PendingCriteriaDecision {
 }
 
 /**
+ * One proposal that WAS a question and has been answered: which answer, and what it did to the seal.
+ *
+ * WHY THE ANSWER IS PART OF THIS READ
+ * -----------------------------------
+ * A card is drawn in every client that saw the proposal pending, and only the one whose button was
+ * pressed is handed the door's response. Every other card went stale knowing only that somebody had
+ * answered: on 2026-09-11 the account owner refused a proposal in a browser and the phone's card
+ * could only dim, with no way to say which answer it had been given. The answer is a committed row
+ * (`project_criteria_decision`), so it is derived here like everything else on the card rather than
+ * remembered by the client that pressed.
+ *
+ * NOT THE PROPOSAL. The outcome and the two seals the door compared, and nothing else: a settled
+ * proposal's words stay unpublished, so a stale card still keeps no diff.
+ */
+export interface SettledCriteriaDecision {
+  /** The proposal that was answered — the same address `pending[].intentId` gave it. */
+  intentId: string;
+  decision: CriteriaDecision;
+  decidedAt: Date;
+  /** The seal the answer was given against. */
+  baseSeal: string;
+  /** The seal standing afterwards: `baseSeal` again for a REJECT, moved by an APPROVE. */
+  resultingSeal: string;
+}
+
+/**
+ * How many answers the read carries: the most recent, newest first.
+ *
+ * A card exists only for a proposal its client saw pending, and a project holds one pending
+ * proposal at a time, so the answers a client can still be showing a card for are the last few —
+ * not the project's whole history, on a read that is polled every twenty seconds. A card whose
+ * answer is older than these says what it said before answers were published: that it was answered.
+ */
+export const SETTLED_CRITERIA_DECISIONS_LIMIT = 20;
+
+/**
  * What this project's owner is being asked about: the count, the oldest age, and the rows.
  *
  * A list rather than the single row the write path enforces, and deliberately: "one pending
@@ -513,6 +550,10 @@ export interface PendingCriteriaDecisionQueue {
   /** How many of them a decision could actually be recorded on today. */
   decidableCount: number;
   pending: PendingCriteriaDecision[];
+  /** The proposals most recently ANSWERED, newest first and at most
+   *  `SETTLED_CRITERIA_DECISIONS_LIMIT` of them — what a card that stopped being a question says
+   *  happened to it. Never counted above: an answered question is not a question. */
+  settled: SettledCriteriaDecision[];
 }
 
 /** The stored `action`, or null for a row whose JSONB is not one this reader understands. */
@@ -566,10 +607,11 @@ export async function stillUnanswered<T extends { id: string; action: unknown }>
  *
  * THE THREE WAYS A ROW STOPS BEING A QUESTION, AND WHY TWO OF THEM VANISH AND ONE DOES NOT
  * ----------------------------------------------------------------------------------------
- *   * SETTLED — somebody answered it. The row is not returned at all, exactly as the evidence
+ *   * SETTLED — somebody answered it. The row is not returned in `pending`, exactly as the evidence
  *     queue drops a revision that carries a decision: an answered question is not a question, and
  *     it has to disappear from EVERY reader's next read rather than from the one that happened to
- *     be listening.
+ *     be listening. What the answer WAS comes back beside it, in `settled`, for the cards still on
+ *     screen at every other end — which have to say which answer they were given.
  *   * SUPERSEDED — a later proposal about the same project replaced it. Also not returned, and for
  *     a stricter reason than "it is old": what the owner would be approving is not what anybody is
  *     asking for any more. Read off the supersession links themselves rather than off `created_at`,
@@ -600,6 +642,7 @@ export async function readPendingCriteriaDecisions(
   });
 
   const pending: PendingCriteriaDecision[] = [];
+  let settled: SettledCriteriaDecision[] = [];
   if (rows.length > 0) {
     const open = await stillUnanswered(tx, rows);
     // The set in force, read ONCE: its seal is what this read calls "moved" — computed by the
@@ -643,6 +686,9 @@ export async function readPendingCriteriaDecisions(
         },
       });
     }
+    // Inside the branch: a decision row names the proposal it answers, so a project that has
+    // never filed one has no answers to read.
+    settled = await recentlySettledCriteriaDecisions(tx, ownerId, projectId);
   }
 
   return {
@@ -652,6 +698,7 @@ export async function readPendingCriteriaDecisions(
     oldestAgeSeconds: pending.length === 0 ? null : pending[0].ageSeconds,
     decidableCount: pending.filter((row) => row.decidability.decidable).length,
     pending,
+    settled,
   };
 }
 
@@ -791,6 +838,31 @@ async function settledIntentIds(
     ...decisions.map((decision) => decision.intentId),
     ...commits.map((commit) => commit.intentId),
   ]);
+}
+
+/**
+ * The answers `settled` carries, newest first — off the decision door's own rows.
+ *
+ * `project_criteria_decision` and not the union `settledIntentIds` takes: the decision row is where
+ * both outcomes land together with the two seals the door compared, while a commit written by
+ * 0195's generic machine carries neither an answer nor seals — a card for one says only that it was
+ * answered. Read down `project_criteria_decision_recent_idx` (0249), which is this order.
+ */
+async function recentlySettledCriteriaDecisions(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+): Promise<SettledCriteriaDecision[]> {
+  const rows = await tx.projectCriteriaDecision.findMany({
+    where: { ownerId, projectId },
+    // The intent id breaks a tie, so two answers recorded in one microsecond still come back in one
+    // order rather than in whichever order the scan found them.
+    orderBy: [{ decidedAt: 'desc' }, { intentId: 'desc' }],
+    take: SETTLED_CRITERIA_DECISIONS_LIMIT,
+    select: { intentId: true, decision: true, decidedAt: true, baseSeal: true, resultingSeal: true },
+  });
+  // 0249's CHECK is what makes the cast a fact: `decision` is APPROVE or REJECT on every row.
+  return rows.map((row) => ({ ...row, decision: row.decision as CriteriaDecision }));
 }
 
 /**
