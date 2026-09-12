@@ -34,6 +34,10 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
  * A Match is written together with its `watch_delivery` row, in the transaction that records the
  * Match — by the create path or by the evaluator's landing — so there is never a fact with nowhere to
  * say whether anybody was told. `(match_id, action)` is unique, so that row is the only one there is.
+ * A RESUME_SESSION watch that expires unmatched gets a row of its own (`kind` EXPIRY, migration 0261).
+ * The landing that makes the watch EXPIRED writes it, and there is at most one per watch: a session
+ * waiting on a watch is told when the watch ends, not only when it matches (contract §5). The statements
+ * below claim, retry and dead-letter both kinds of row alike.
  *
  * THE LEASE
  * A claim moves due PENDING rows to IN_FLIGHT under a fresh `lease_generation`, in one statement that
@@ -44,12 +48,14 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
  *
  * ONE TURN PER GENERATION
  * RESUME_SESSION goes through `SessionsService.createTurn`, the normal queue entry point, with
- * `clientTurnId = watch:<watchId>:<generation>` and `intent: NEXT_TURN`. The acknowledgement is
- * written INSIDE that call's transaction — after the observer's row is locked, before the turn is
+ * `clientTurnId = watch:<watchId>:<generation>` and `intent: NEXT_TURN`; an expiry's turn goes the
+ * same way under `watch:<watchId>:expired`, a key no generation number can collide with. The
+ * acknowledgement is written INSIDE that call's transaction — after the observer's row is locked, before the turn is
  * inserted — so the turn and DELIVERED commit together or not at all, and a stale lease rolls its
  * turn back. A retry after an acknowledgement that never happened meets the turn already queued
  * under the same key, which `createTurn` replays instead of writing a second; the content is built
- * from the immutable Match alone, so the replay compares equal.
+ * only from rows that never change (the Match, or the expired watch and its delivery's snapshot),
+ * so the replay compares equal.
  *
  * The session's state needs no special case to be safe: a RUNNING observer keeps running and the
  * turn queues behind the current one, AWAITING_INPUT and INTERRUPTED go PENDING and wait for a runner
@@ -112,6 +118,11 @@ export function watchTurnClientId(watchId: string, generation: number): string {
   return `watch:${watchId}:${generation}`;
 }
 
+/** The turn key a watch's expiry is written under (contract §5). A watch expires at most once, and no generation number spells `expired`. */
+export function watchExpiryTurnClientId(watchId: string): string {
+  return `watch:${watchId}:expired`;
+}
+
 const OBSERVER_SELECT = {
   status: true,
   endReason: true,
@@ -123,12 +134,18 @@ const OBSERVER_SELECT = {
 
 type ObserverRow = Prisma.SessionGetPayload<{ select: typeof OBSERVER_SELECT }>;
 
+interface DeliveredWatch {
+  id: string;
+  ownerId: string;
+  observerSessionId: string | null;
+}
+
 interface DeliveredMatch {
   generation: number;
   matchedAt: Date;
   reason: string;
   perTargetSnapshot: Prisma.JsonValue;
-  watch: { id: string; ownerId: string; observerSessionId: string | null };
+  watch: DeliveredWatch;
 }
 
 /** A refusal no retry can change: the delivery is a dead letter at once, with the code first in `last_error`. */
@@ -316,13 +333,23 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
             watch: { select: { id: true, ownerId: true, observerSessionId: true } },
           },
         },
+        watch: { select: { id: true, ownerId: true, observerSessionId: true, expiresAt: true } },
+        expirySnapshot: true,
       },
     });
     if (!delivery) return 'LEASE_LOST';
-    const { match } = delivery;
+    const { match, watch } = delivery;
     try {
-      if (delivery.action === 'RESUME_SESSION') {
-        await this.resumeObserver(claim, match);
+      if (!match) {
+        // An expiry. `watch_delivery_kind_shape_chk` guarantees such a row names its watch, carries its
+        // snapshot, and is RESUME_SESSION.
+        await this.resumeObserver(
+          claim, watch!, watchExpiryTurnClientId(watch!.id), watchExpiryTurnContent(watch!, delivery.expirySnapshot),
+        );
+      } else if (delivery.action === 'RESUME_SESSION') {
+        await this.resumeObserver(
+          claim, match.watch, watchTurnClientId(match.watch.id, match.generation), watchTurnContent(match.watch.id, match),
+        );
       } else if (!(await acknowledgeDelivery(this.prisma, claim))) {
         return 'LEASE_LOST';
       }
@@ -330,7 +357,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
       if (error instanceof DeliveryLeaseLost) return 'LEASE_LOST';
       return this.fail(claim, error);
     }
-    if (delivery.action === 'NOTIFY_USER') {
+    if (match && delivery.action === 'NOTIFY_USER') {
       // After the acknowledgement committed, never before: see AT MOST ONE NOTIFICATION above.
       await this.push.notifyWatchMatched({
         ownerId: match.watch.ownerId,
@@ -342,16 +369,14 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     return 'DELIVERED';
   }
 
-  private async resumeObserver(claim: ClaimedWatchDelivery, match: DeliveredMatch): Promise<void> {
-    const { watch } = match;
+  private async resumeObserver(claim: ClaimedWatchDelivery, watch: DeliveredWatch, clientTurnId: string, content: string): Promise<void> {
     const sessionId = watch.observerSessionId;
     if (!sessionId) throw new DeliveryRefused('OBSERVER_SESSION_GONE', 'the watch names no observer session');
-    const clientTurnId = watchTurnClientId(watch.id, match.generation);
     try {
       await this.sessions.createTurn(
         watch.ownerId,
         sessionId,
-        { clientTurnId, content: watchTurnContent(watch.id, match), intent: 'NEXT_TURN' },
+        { clientTurnId, content, intent: 'NEXT_TURN' },
         {
           // Called under the observer's row lock, after `createTurn` refused Trash, an ending session
           // and a terminal run, and before the turn is written: what is decided here commits with the
@@ -371,7 +396,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
       }
       if (error instanceof BadRequestException) throw new DeliveryRefused('TURN_REFUSED', messageOf(error));
       // The key already names a turn whose content differs — queued by a build that worded the payload
-      // differently. It is still this generation's one turn, so the wake has happened.
+      // differently. It is still the one turn this key names, so the wake has happened.
       if (!(error instanceof ConflictException) || !(await this.turnQueued(sessionId, clientTurnId))) throw error;
     }
     // The turn is on the session: written just now together with the acknowledgement, or replayed from
@@ -503,6 +528,35 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
       evaluatedAt: snapshot.evaluatedAt,
       targets: snapshot.targets.length,
       omitted: `too large for one turn; GET /api/watches/${watchId} returns it whole`,
+    },
+  });
+}
+
+/**
+ * The message an expiry wake carries (contract §5): one line saying the watch EXPIRED before its
+ * condition ever held, then the structured payload — `watchId`, `state`, `expiresAt` and the
+ * `latestSnapshot` the expiring evaluation took — as JSON. An expired watch and its delivery's snapshot
+ * never change, so every attempt writes the same bytes. As with a Match, a snapshot too large for one
+ * turn is replaced by its size and where to read it.
+ */
+function watchExpiryTurnContent(watch: { id: string; expiresAt: Date }, expirySnapshot: Prisma.JsonValue): string {
+  const snapshot = expirySnapshot as unknown as WatchSnapshot;
+  const expiresAt = watch.expiresAt.toISOString();
+  const header = [
+    `Orbit Watch ${watch.id} EXPIRED at ${expiresAt} without its condition ever holding.`,
+    '',
+    'This turn was queued by the watch, not typed by a person. The watch has ended and will not wake this session again. What its last evaluation saw:',
+  ].join('\n');
+  const render = (payload: Record<string, unknown>) => `${header}\n\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
+  const base = { watchId: watch.id, state: 'EXPIRED', expiresAt };
+  const whole = render({ ...base, latestSnapshot: snapshot });
+  if (whole.length <= MAX_PROMPT_CHARS) return whole;
+  return render({
+    ...base,
+    latestSnapshot: {
+      evaluatedAt: snapshot.evaluatedAt,
+      targets: snapshot.targets.length,
+      omitted: `too large for one turn; GET /api/watches/${watch.id} returns it whole`,
     },
   });
 }

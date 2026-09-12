@@ -18,6 +18,20 @@ import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { describePredicate, leafHolds, predicateHolds, predicateLeaves, type WatchTargetFact } from './watch-predicate';
 import { assertLeavesFitTargets, assertPredicateVersion, parseRequestedPredicate, watchRefusal } from './watch-request';
 
+/** A delivery as a client reads it: a retry in progress and a dead letter are read here. */
+const DELIVERY_VIEW_SELECT = {
+  id: true,
+  action: true,
+  state: true,
+  attempts: true,
+  nextAttemptAt: true,
+  lastError: true,
+  deliveredAt: true,
+  deadLetteredAt: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.WatchDeliverySelect;
+
 /** What a client reads back. Never the owner id: the caller is the owner. */
 const WATCH_VIEW_SELECT = {
   id: true,
@@ -47,24 +61,16 @@ const WATCH_VIEW_SELECT = {
       reason: true,
       predicateVersion: true,
       perTargetSnapshot: true,
-      // What the Match caused and whether it worked: a retry in progress and a dead letter are read here.
-      deliveries: {
-        select: {
-          id: true,
-          action: true,
-          state: true,
-          attempts: true,
-          nextAttemptAt: true,
-          lastError: true,
-          deliveredAt: true,
-          deadLetteredAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: { createdAt: 'asc' },
-      },
+      // What the Match caused and whether it worked.
+      deliveries: { select: DELIVERY_VIEW_SELECT, orderBy: { createdAt: 'asc' } },
     },
     orderBy: { generation: 'asc' },
+  },
+  // What the watch's expiry caused (contract §5): at most one, for a RESUME_SESSION watch that expired
+  // unmatched, with the snapshot its turn carries.
+  expiryDeliveries: {
+    select: { ...DELIVERY_VIEW_SELECT, expirySnapshot: true },
+    orderBy: { createdAt: 'asc' },
   },
 } satisfies Prisma.WatchSelect;
 

@@ -503,6 +503,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `task_completion_criterion` labels survive, and it has no INSERT, UPDATE or DELETE, so no
   //        row is read or written. Nothing reads the index to allow or refuse a status: it only
   //        makes returning an abandoned delivery lease cheap.
+  //   0261 let a `watch_delivery` row carry a Watch's expiry as well as a Match, so that contract
+  //        §5's turn can reach a session waiting on a watch that expired unmatched. Read against
+  //        every claim above: it ALTERs `watch_delivery`, a table 0259 created and this file does not
+  //        preserve, and nothing else. On that table it adds three columns (`kind` with a constant
+  //        default, plus the nullable `watch_id` and `expiry_snapshot`), makes `match_id` nullable, and
+  //        adds a foreign key from `watch_id` to `watch`, two CHECKs and one partial unique index. It
+  //        does not touch `task`, `project` or `project_acceptance_criterion_definition`, so the 0177
+  //        pair, `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions. It creates
+  //        no table, enum, type, function or trigger, so it is not another writer of the DONE fence.
+  //        It has no `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion` labels
+  //        survive. It has no INSERT, UPDATE or DELETE: the default is a catalog-only change, so
+  //        existing deliveries become MATCH rows without being written. Nothing reads a delivery to
+  //        allow or refuse a status: a delivery records whether a session was told, and decides
+  //        nothing about the task it watched.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -530,7 +546,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0256_session_commit_result_message',
       '0258_approval_pre_opening_turn_abandoned',
       '0259_watch_persistence',
-      '0260_watch_delivery_lease_expiry_idx'],
+      '0260_watch_delivery_lease_expiry_idx',
+      '0261_watch_expiry_delivery'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

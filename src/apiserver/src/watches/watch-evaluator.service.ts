@@ -60,7 +60,8 @@ import {
  *
  * NOT HERE
  * What a Match causes — a turn, a notification — is the delivery worker's; its row joins the Match
- * inside `land`. CONTINUOUS watches get expiry and GONE bookkeeping but never a Match: when a
+ * inside `land`, and so does the row for the turn a RESUME_SESSION watch's expiry owes its observer
+ * (contract §5). CONTINUOUS watches get expiry and GONE bookkeeping but never a Match: when a
  * continuous watch has crossed again needs the edge, debounce and budget semantics the continuous
  * subscription work defines, and nothing creates one before then.
  */
@@ -165,6 +166,8 @@ interface WatchDecision {
   nextEvaluateAt: Date | null;
   targetStates: TargetStateChange[];
   match: { reason: string; snapshot: Record<string, unknown> } | null;
+  /** Set exactly when the decision is EXPIRED: the snapshot an expiry delivery carries. */
+  expirySnapshot: Record<string, unknown> | null;
 }
 
 @Injectable()
@@ -402,6 +405,17 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
           ON CONFLICT ("match_id", "action") DO NOTHING`;
       }
     }
+    if (decision.expirySnapshot && read.action === 'RESUME_SESSION') {
+      // Contract §5: a watch that expires unmatched still owes the session waiting on it one turn that
+      // says so. That delivery's row joins this landing the way a Match's row joins the Match: EXPIRED
+      // and its delivery commit together or not at all, and `watch_delivery_expiry_watch_key` allows
+      // one per watch. A watch that matched is terminal, so no later landing reaches this line.
+      await tx.$executeRaw`
+        INSERT INTO "watch_delivery" ("id", "kind", "watch_id", "action", "expiry_snapshot", "next_attempt_at")
+        VALUES (${randomUUID()}::uuid, 'EXPIRY', ${watchId}::uuid, ${read.action},
+                ${JSON.stringify(decision.expirySnapshot)}::jsonb, now())
+        ON CONFLICT ("watch_id") WHERE "watch_id" IS NOT NULL DO NOTHING`;
+    }
     const landed = await tx.$executeRaw`
       UPDATE "watch"
       SET "state" = ${decision.state},
@@ -458,15 +472,27 @@ function decide(
 ): WatchDecision {
   const now = watch.now.getTime();
   const expired = now >= watch.expiresAt.getTime();
-  const settle = (outcome: 'EXPIRED' | 'UNRESOLVABLE' | 'REVOKED', targetStates: TargetStateChange[] = []): WatchDecision => ({
-    outcome, state: outcome, generation: watch.generation, nextEvaluateAt: null, targetStates, match: null,
+  const settle = (outcome: 'UNRESOLVABLE' | 'REVOKED', targetStates: TargetStateChange[] = []): WatchDecision => ({
+    outcome, state: outcome, generation: watch.generation, nextEvaluateAt: null, targetStates, match: null, expirySnapshot: null,
+  });
+  // Contract §5: an expiry is delivered too, so it carries what this evaluation saw, in a Match snapshot's shape.
+  const expire = (
+    seen: ReadonlyArray<{ target: TargetRow; fact: OwnedFact | undefined }>,
+    targetStates: TargetStateChange[],
+    leaves: readonly WatchLeaf[],
+  ): WatchDecision => ({
+    outcome: 'EXPIRED', state: 'EXPIRED', generation: watch.generation, nextEvaluateAt: null, targetStates, match: null,
+    expirySnapshot: snapshotOf(watch, seen, targetStates, leaves),
   });
   const schedule = (at: Date, targetStates: TargetStateChange[] = []): WatchDecision => ({
-    outcome: 'SCHEDULED', state: watch.state, generation: watch.generation, nextEvaluateAt: at, targetStates, match: null,
+    outcome: 'SCHEDULED', state: watch.state, generation: watch.generation, nextEvaluateAt: at, targetStates, match: null, expirySnapshot: null,
   });
 
   // Pausing stops evaluation, not the clock (contract §3): a paused watch is looked at again at its expiry and not before.
-  if (watch.state === 'PAUSED') return expired ? settle('EXPIRED') : schedule(watch.expiresAt);
+  // A paused watch skips the permission recheck, so its expiry lists the targets only as recorded, with none of their rows.
+  if (watch.state === 'PAUSED') {
+    return expired ? expire(targets.map((target) => ({ target, fact: undefined })), [], []) : schedule(watch.expiresAt);
+  }
 
   const observed = targets.map((target) => ({
     target,
@@ -487,7 +513,7 @@ function decide(
   const predicate = watch.predicateVersion === WATCH_PREDICATE_VERSION ? parseWatchPredicate(watch.predicate) : null;
   // Not a term this build can decide. Guessing would be worse than waiting: it keeps its schedule,
   // and its TTL still ends it visibly.
-  if (!predicate) return expired ? settle('EXPIRED', gone) : schedule(reconcileAt, gone);
+  if (!predicate) return expired ? expire(observed, gone, []) : schedule(reconcileAt, gone);
 
   const leaves = predicateLeaves(predicate);
   const liveFacts = live.map(({ fact }) => fact);
@@ -516,12 +542,13 @@ function decide(
         reason: describePredicate(predicate, liveFacts),
         snapshot: snapshotOf(watch, observed, changes, leaves),
       },
+      expirySnapshot: null,
     };
   }
-  return expired ? settle('EXPIRED', changes) : schedule(reconcileAt, changes);
+  return expired ? expire(observed, changes, leaves) : schedule(reconcileAt, changes);
 }
 
-/** The structured trigger snapshot a Match carries: every target as this evaluation saw it. */
+/** The structured snapshot a Match or an expiry carries: every target as this evaluation saw it. */
 function snapshotOf(
   watch: WatchRow,
   observed: ReadonlyArray<{ target: TargetRow; fact: OwnedFact | undefined }>,

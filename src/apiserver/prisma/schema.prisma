@@ -4398,6 +4398,9 @@ model Watch {
 
   targets WatchTarget[]
   matches WatchMatch[]
+  /// The delivery a RESUME_SESSION watch's expiry owes its observer (migration 0261). A partial unique
+  /// index on `watch_delivery.watch_id` allows at most one per watch.
+  expiryDeliveries WatchDelivery[]
 
   @@index([ownerId, state], map: "watch_owner_state_idx")
   @@index([observerSessionId], map: "watch_observer_session_idx")
@@ -4472,9 +4475,20 @@ model WatchMatch {
 /// is the fact; this is the effect, and they are separate rows so a failed delivery never rewrites
 /// history and a replayed one never invents a second.
 model WatchDelivery {
-  id      String     @id @default(uuid(7)) @db.Uuid
-  matchId String     @map("match_id") @db.Uuid
-  match   WatchMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  id String @id @default(uuid(7)) @db.Uuid
+
+  /// `MATCH` | `EXPIRY` (migration 0261). A CHECK holds each row to the one thing its kind is
+  /// about: a MATCH row names its Match; an EXPIRY row names a RESUME_SESSION watch that expired
+  /// unmatched and carries the snapshot that evaluation took (contract §5).
+  kind    String      @default("MATCH")
+  matchId String?     @map("match_id") @db.Uuid
+  match   WatchMatch? @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  /// Set only on an EXPIRY row, and unique among those rows (a partial index): one expiry per watch.
+  watchId String?     @map("watch_id") @db.Uuid
+  watch   Watch?      @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  /// An EXPIRY row's structured snapshot. It is written in the same transaction as the EXPIRED
+  /// state and never changes, so every attempt builds the same turn.
+  expirySnapshot Json? @map("expiry_snapshot")
 
   action String
   /// `PENDING` | `IN_FLIGHT` | `DELIVERED` | `DEAD_LETTER`.

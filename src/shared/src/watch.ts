@@ -164,6 +164,14 @@ export interface WatchMatchView {
   deliveries: WatchDeliveryView[];
 }
 
+/**
+ * The turn a RESUME_SESSION watch that expired unmatched owes its observer (contract §5), and whether it
+ * got there. `expirySnapshot` is what the expiring evaluation saw, in a Match snapshot's shape.
+ */
+export interface WatchExpiryDeliveryView extends WatchDeliveryView {
+  expirySnapshot: WatchSnapshot;
+}
+
 export interface WatchView {
   id: string;
   observerType: WatchObserverType;
@@ -182,4 +190,6 @@ export interface WatchView {
   updatedAt: string;
   targets: WatchTargetView[];
   matches: WatchMatchView[];
+  /** At most one, and only for a RESUME_SESSION watch that expired unmatched. A dead letter shows here just as it does on a Match. */
+  expiryDeliveries: WatchExpiryDeliveryView[];
 }
