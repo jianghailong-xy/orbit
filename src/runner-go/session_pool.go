@@ -12,21 +12,20 @@ import (
 // continuation. The Orbit session itself remains resumable after this expires; only
 // the local coding-runtime supervisor is recycled.
 //
-// Now that an agent's background jobs are the runner's own children, recycling a warm
-// engine costs nothing but the next turn's startup: it is a pure latency cache, and
-// it pays for that cache in resident memory for the whole TTL whether or not the next
-// turn ever comes. Measured on this host on 2026-09-07, over two samples of the
-// engines the runner supervised (five, then two): 265-273 MB RSS / 199-235 MB PSS
-// per engine. The host has 24 GB of RAM, its 8 GB of swap 100% consumed, and a
-// global OOM on 2026-08-31 that the kernel resolved by killing a 9.8 GB process
-// inside orbit-runner-root.service.
+// The value is the owner's decision, not something derived here: on 2026-09-12 the
+// owner set it to four hours. A warm engine saves the next turn's startup and holds
+// its resident memory while it waits, but this TTL is not what bounds that memory —
+// the pool is. Resident engines, active and warm together, are capped at
+// maxConcurrent, and warm ones only hold capacity no active turn is promised: a turn
+// that needs the slot evicts the least-recently-active warm engine first. A longer
+// TTL therefore means fewer cold starts, and once the pool is full it is LRU eviction,
+// not this timer, that recycles engines.
 //
-// Four hours meant holding ~200 MB per parked session for four hours to save one
-// engine start. Forty-five minutes still covers what the cache is for — a session
-// that gets another turn in the same sitting — and hands the rest of the day back to
-// the host. This number moves down or stays put, never up: a warm engine is a
-// convenience, and this machine has already shown what it does when memory runs out.
-const warmEngineTTL = 45 * time.Minute
+// Measured on this host on 2026-09-12: nine engines at 1826 MB PSS together (~200 MB
+// each), 13.4 GB of memory available, all 8191 MB of swap in use. maxConcurrent is 16
+// in this host's config and the control plane lowers it to 12, so resident engines
+// top out near 2.4 GB here, and near 3.2 GB at 16.
+const warmEngineTTL = 4 * time.Hour
 
 type poolTimer interface {
 	Stop() bool
