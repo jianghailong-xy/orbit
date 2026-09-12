@@ -2100,6 +2100,12 @@ scanLoop:
 			case turnID = <-pending:
 			default:
 			}
+			// The result answers this message even when its echo never came (a slash command
+			// is not replayed as our frame). Settle it before anything below can end the
+			// process, or teardown reports an answered message as undelivered.
+			if d, ok := deliveries.acknowledgeAnswered(turnID); ok {
+				reportDelivery(d.turnID, deliveryAcknowledged, "", false)
+			}
 			// A target result and a target-bearing frame commit share activeOrbitMu. If the
 			// frame committed but its replay ACK has not been observed, Claude may still have
 			// it in stdin after emitting this result. Kill this generation before any B can be

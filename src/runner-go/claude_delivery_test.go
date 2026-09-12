@@ -280,6 +280,31 @@ func TestDeliveryLedgerAnswersNothingWhenNoMessageIsOutstanding(t *testing.T) {
 	}
 }
 
+// A result is an answer too. The CLI does not replay everything it runs — a slash command is
+// recorded as a `<command-name>` string, not as our frame — so a message can be answered by its
+// turn's result without ever being echoed. The result settles that message, and the next
+// replay lines up with the next message rather than with the one already answered.
+func TestDeliveryLedgerLetsAResultAnswerAMessageThatWasNeverReplayed(t *testing.T) {
+	l := &deliveryLedger{}
+	command, next := newMessageDelivery("turn-1", false), newMessageDelivery("turn-2", false)
+	l.accept(command, newWriteReceipt())
+
+	answered, ok := l.acknowledgeAnswered("turn-1")
+	if !ok || answered != command {
+		t.Fatalf("the result answered %v, want the message it belongs to", answered)
+	}
+	if len(l.outstanding()) != 0 {
+		t.Error("a message its result answered is still outstanding")
+	}
+	if _, ok := l.acknowledgeAnswered("turn-1"); ok {
+		t.Error("a message already answered was answered a second time")
+	}
+	l.accept(next, newWriteReceipt())
+	if got, ok := l.acknowledgeNext(); !ok || got != next {
+		t.Fatalf("the next replay answered %v, want turn-2 — not the message its result already answered", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // telling a replay from the CLI's own user-role traffic
 // ---------------------------------------------------------------------------

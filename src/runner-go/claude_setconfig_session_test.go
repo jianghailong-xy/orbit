@@ -361,7 +361,8 @@ func TestLocalCommandStdoutIsNotAUserMessageAndAcknowledgesNothing(t *testing.T)
 					{Await: "control_request", Subtype: ctrlSetModel},
 					{Emit: "control_response"},
 					tc.echo,
-					{Emit: "result", Text: "done"},
+					// No result: a turn's result settles its message too, so it would acknowledge
+					// turn-1 in both cases and hide what the echo step did.
 					{Emit: "eof"},
 				},
 				[]scriptedTurn{

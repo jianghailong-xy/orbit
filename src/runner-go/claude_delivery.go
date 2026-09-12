@@ -19,7 +19,8 @@ import (
 //	pending       built by the poller; nothing has taken responsibility for it yet
 //	enqueued      the runtime accepted it — it will be written, in this order
 //	written       its bytes are in the CLI's stdin
-//	acknowledged  the CLI echoed it back (--replay-user-messages): it is in the conversation
+//	acknowledged  the CLI echoed it back (--replay-user-messages), or its turn's result came
+//	              back without an echo: it is in the conversation
 //	requeued      it never arrived AND that is provable, so it goes back to being an ordinary
 //	              queued message — the one non-delivery that is not a loss
 //	failed        it will never arrive, and why
@@ -122,6 +123,25 @@ func (l *deliveryLedger) acknowledgeNext() (*messageDelivery, bool) {
 	l.queue = l.queue[1:]
 	d.state = deliveryAcknowledged
 	return d, true
+}
+
+// acknowledgeAnswered settles the message a result just answered, if its echo never came.
+// The CLI does not replay everything it runs: a slash command (`/upgrade`, `/compact`) is
+// recorded as a `<command-name>` string rather than as the frame we sent. The result is the
+// engine's own answer to that message, so it settles it — and takes it out of the queue
+// before the next frame is written, which is what keeps the next replay lined up with the
+// next message instead of with this one.
+func (l *deliveryLedger) acknowledgeAnswered(turnID string) (*messageDelivery, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for i, d := range l.queue {
+		if d.turnID == turnID {
+			l.queue = append(l.queue[:i], l.queue[i+1:]...)
+			d.state = deliveryAcknowledged
+			return d, true
+		}
+	}
+	return nil, false
 }
 
 // fail records that a message will never arrive and drops it from the correlation queue,

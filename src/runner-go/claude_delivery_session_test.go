@@ -445,6 +445,48 @@ func TestSessionSettlesAnUnconfirmedMessageInsteadOfRepeatingIt(t *testing.T) {
 	}
 }
 
+// A message the CLI answered without echoing it. Slash commands are the everyday case:
+// `/upgrade` and `/compact` reach the transcript as `<command-name>` strings, not as a replay
+// of our frame. Left for an echo that never comes, the message sat at the head of the
+// correlation queue: the next message's echo acknowledged it, every later message was answered
+// one place off, and the last one was reported "Not delivered" when the process went away —
+// on a message that had been answered.
+func TestSessionLetsAResultAnswerAMessageTheCLINeverEchoed(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"}, // run, answered, never replayed
+			{Emit: "result", Text: "upgraded"},
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "done"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{
+			messageTurn("turn-1", "/upgrade"),
+			messageTurn("turn-2", "carry on"),
+		}, nil)
+
+	var acked []string
+	for _, p := range run.deliveryReports() {
+		switch p["delivery"] {
+		case string(deliveryAcknowledged):
+			acked = append(acked, p["turnId"].(string))
+		case string(deliveryFailed):
+			t.Errorf("an answered message was reported undelivered: %v", p)
+		}
+	}
+	if !equalStrings(acked, []string{"turn-1", "turn-2"}) {
+		t.Fatalf("acknowledged %v, want turn-1 by its result and then turn-2 by its own echo", acked)
+	}
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	for _, s := range run.settled {
+		if s.Status != stSucceeded {
+			t.Errorf("%s settled %q, want both answered turns to stay succeeded", s.TurnID, s.Status)
+		}
+	}
+}
+
 // The engine is on its way out, so the message cannot reach it. However far it got, it is
 // never reported written or acknowledged, its bubble never claims to be delivered, and the
 // turn settles as a failure instead of sitting unanswered behind a message the user
