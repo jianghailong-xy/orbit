@@ -28,7 +28,7 @@
  * ---------------------
  *   (1) is the paired negative for (2): the same GET, against the same project, before any
  *       proposal exists. Without it "the proposal reads out" is also what a reader that returns
- *       everything would say.
+ *       everything would say. Its answers are an empty list as well, not a missing key.
  *   (2) the owner's read carries the key, and every field name the card reads, with `intentId` in
  *       the spelling the door takes back.
  *   (3) THE KEY DOES NOT LEAVE BY THE OTHER PATH. Two facts over the SAME rows, so the only thing
@@ -41,7 +41,15 @@
  *       this read gave it — the comparison `criteriaDecisionStanding` makes to decide whether a
  *       card is SUPERSEDED or merely ALREADY_SETTLED.
  *   (6) a proposal that was answered is gone, and it was answered with the key this read handed
- *       over. That is what makes (2) a claim about a usable key rather than about a string.
+ *       over. That is what makes (2) a claim about a usable key rather than about a string. Its
+ *       ANSWER reads out in its place, in `settled` — the outcome and both seals, under the address
+ *       `pending` gave the proposal — which is how a card still on screen at another end can say
+ *       Approved rather than only "answered".
+ *   (7) the same for a refusal, newest first, with the seal left where it was; and never for the
+ *       proposal (5) displaced, which left `pending` without anybody answering it — "no longer
+ *       pending" is not "answered".
+ *   (8) the answers are the most recent ones, not the project's history: one past the limit, the
+ *       oldest drops out and the next-oldest stays.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/criteria-pending-owner-read.pg.spec.ts
  *
@@ -66,7 +74,10 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import { readPendingCriteriaDecisions } from './criteria-pending-decisions';
+import {
+  SETTLED_CRITERIA_DECISIONS_LIMIT,
+  readPendingCriteriaDecisions,
+} from './criteria-pending-decisions';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectsController } from './projects.controller';
@@ -272,6 +283,14 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
     pending: (answer.json.pending ?? []) as Array<Record<string, unknown>>,
   });
 
+  /** The answers the read carries beside the questions. A response without the key fails here, as
+   *  itself, rather than reading as a project on which nothing was ever answered. */
+  const answersOf = (answer: Sent): Array<Record<string, unknown>> => {
+    const settled = answer.json.settled;
+    assert.ok(Array.isArray(settled), `the read carries no answers: ${answer.body}`);
+    return settled as Array<Record<string, unknown>>;
+  };
+
   // Three criteria, so that two DIFFERENT loosening edits exist to be made.
   await state([{ text: FIRST }, { text: SECOND }, { text: THIRD }]);
 
@@ -288,6 +307,8 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
       assert.equal(answer.json.projectId, projectPublicId,
         'the queue names the project it is about, in the spelling the caller asked with');
       assert.equal(typeof answer.json.readAt, 'string', 'the read stamps itself');
+      assert.deepEqual(answersOf(answer), [],
+        'and nothing has been answered: an empty list of answers, not a missing one');
     });
 
   let firstProposalId = '';
@@ -418,7 +439,8 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
       const later = await newestProposal();
       assert.notEqual(later.id, firstProposalId, 'the second edit filed a proposal of its own');
 
-      const queue = queueOf(await readPending());
+      const read = await readPending();
+      const queue = queueOf(read);
       assert.equal(queue.count, 1, 'one question at a time: the displaced one is not still asked');
       const [row] = queue.pending;
       assert.equal(row.intentId, uuidToBase62(later.id), 'the survivor is the newer proposal');
@@ -431,7 +453,13 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
       assert.equal(row.supersededIntentId, firstProposalPublicId,
         'the survivor names the displaced proposal by the id this read gave it');
       assert.equal(row.commitToken, later.commitToken, 'and it carries its own key, not the old one');
+      // Displaced is not answered. Nobody answered the first proposal, so the read has no answer to
+      // report for it — the negative for (6) and (7): `settled` is what the door recorded, not
+      // every proposal that stopped being pending.
+      assert.deepEqual(answersOf(read), [], 'a displaced proposal was not answered by anybody');
     });
+
+  let approvedIntentPublicId = '';
 
   await t.test('(6) the key this read handed over answers the door, and then the proposal is gone',
     async () => {
@@ -449,12 +477,97 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
       assert.equal(decided.status, 201, `the door answered ${decided.status}: ${decided.body}`);
       assert.equal(decided.json.applied, true, 'an APPROVE applies the edit that was held');
 
-      const after = queueOf(await readPending());
+      const read = await readPending();
+      const after = queueOf(read);
       assert.deepEqual(after.pending, [], 'an answered question is not a question');
       assert.equal(after.count, 0);
       assert.equal(after.decidableCount, 0);
       assert.equal(after.oldestAgeSeconds, null);
       // And the edit landed, so "gone from the queue" is not "the fixture stopped working".
       assert.deepEqual((await stated()).map((criterion) => criterion.text), [FIRST, SECOND]);
+
+      // What every OTHER end is told: the answer, on the read each card derives itself from.
+      const answers = answersOf(read);
+      assert.equal(answers.length, 1, 'the one answer this project has had');
+      const [approval] = answers;
+      assert.deepEqual(
+        Object.keys(approval).filter((key) => !key.endsWith('PublicId')).sort(),
+        ['baseSeal', 'decidedAt', 'decision', 'intentId', 'resultingSeal'],
+        'the answer and its two seals, and nothing of the proposal: a stale card keeps no diff',
+      );
+      // Under the address `pending` gave the proposal — the comparison a card makes to find it.
+      assert.equal(approval.intentId, row.intentId);
+      assert.equal(approval.decision, 'APPROVE');
+      assert.equal(approval.baseSeal, row.currentSeal, 'the seal the answer was given against');
+      assert.equal(approval.resultingSeal, decided.json.resultingSeal, 'the seal it left standing');
+      assert.notEqual(approval.resultingSeal, approval.baseSeal, 'an approval moved the ruler');
+      assert.equal(approval.decidedAt, decided.json.decidedAt, 'when the door recorded it');
+      approvedIntentPublicId = approval.intentId as string;
     });
+
+  let refusedIntentPublicId = '';
+
+  await t.test('(7) a refusal reads out too, newest first, and says the seal did not move',
+    async () => {
+      const before = await stated();
+      // Drop SECOND: a loosening, so it is held rather than written.
+      await state([{ id: idOf(before, FIRST), text: FIRST }]);
+      const held = await readPending();
+      const [row] = queueOf(held).pending;
+      assert.ok(row, 'the edit above filed a proposal for the owner to answer');
+      // One step before the only change this case makes: not answered yet, so no answer.
+      assert.ok(!answersOf(held).some((each) => each.intentId === row.intentId),
+        'a proposal nobody has answered has no answer to report');
+
+      const refused = await send(
+        'POST',
+        `/api/projects/${projectPublicId}/acceptance/criteria-decisions/${row.intentId as string}`,
+        { commitToken: row.commitToken, decision: 'REJECT', baseSeal: row.currentSeal },
+      );
+      assert.equal(refused.status, 201, `the door answered ${refused.status}: ${refused.body}`);
+      assert.equal(refused.json.applied, false, 'a REJECT applies nothing');
+
+      const read = await readPending();
+      assert.deepEqual(queueOf(read).pending, [], 'answered, so not a question');
+      const answers = answersOf(read);
+      assert.deepEqual(
+        answers.map((each) => [each.intentId, each.decision]),
+        [[row.intentId, 'REJECT'], [approvedIntentPublicId, 'APPROVE']],
+        'both answers, newest first',
+      );
+      const [refusal] = answers;
+      assert.equal(refusal.baseSeal, row.currentSeal);
+      assert.equal(refusal.resultingSeal, refusal.baseSeal, 'a refusal leaves the seal where it was');
+      assert.deepEqual((await stated()).map((criterion) => criterion.text), [FIRST, SECOND],
+        'and leaves the criteria where they were');
+      refusedIntentPublicId = row.intentId as string;
+    });
+
+  await t.test('(8) the answers are the most recent ones, not the project’s history', async () => {
+    // (6) and (7) left two. Answer enough more that the window has to drop exactly one: each a
+    // proposal of its own — FIRST reworded, which is held like any rewrite — refused at the door.
+    for (let round = 0; round < SETTLED_CRITERIA_DECISIONS_LIMIT - 1; round += 1) {
+      const before = await stated();
+      await state([
+        { id: idOf(before, FIRST), text: `${FIRST} (reworded ${round})` },
+        { id: idOf(before, SECOND), text: SECOND },
+      ]);
+      const filed = await newestProposal();
+      await projects.decideCriteriaChange(ownerId, projectId, filed.id, {
+        commitToken: filed.commitToken, decision: 'REJECT', baseSeal: filed.baselineSeal,
+      } as never);
+    }
+
+    const answers = answersOf(await readPending());
+    assert.equal(answers.length, SETTLED_CRITERIA_DECISIONS_LIMIT,
+      `${SETTLED_CRITERIA_DECISIONS_LIMIT + 1} answers on record, and the read carries the limit`);
+    assert.ok(!answers.some((each) => each.intentId === approvedIntentPublicId),
+      'the oldest answer is the one that dropped out');
+    assert.equal(answers[answers.length - 1].intentId, refusedIntentPublicId,
+      'and the next-oldest is still the last one in: the window is one past its edge, not two');
+    const times = answers.map((each) => Date.parse(each.decidedAt as string));
+    assert.deepEqual([...times].sort((a, b) => b - a), times, 'newest first, all the way down');
+    assert.ok(answers.every((each) => each.decision === 'REJECT'),
+      'every answer left in the window is one of the refusals');
+  });
 });

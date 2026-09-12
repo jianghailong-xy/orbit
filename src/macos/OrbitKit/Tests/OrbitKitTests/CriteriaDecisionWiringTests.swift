@@ -129,6 +129,23 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                        "which is exactly the wiring this test exists to prevent coming back")
     }
 
+    /// THE LINE UNDER THE TITLE IS OrbitKit'S HEADING, ON EVERY CARD THAT CANNOT BE ANSWERED.
+    ///
+    /// That line is where "Refused at another end" reaches a phone: on 2026-09-11 a refused card
+    /// arrived dimmed, with a badge and nothing that said which answer it had been given. So the
+    /// heading is drawn from the derived standing, exactly while the buttons are dead — detaching
+    /// it, or gating it on anything else, is what turns this red.
+    func testTheVerdictUnderTheTitleIsTheDerivedHeadingOnEveryCardThatCannotBeAnswered() throws {
+        let card = try weakeningCard()
+        guard let gate = card.range(of: "if !standing.answerable {") else {
+            return XCTFail("the line under the title is no longer drawn for a card nobody can answer")
+        }
+        let drawn = card[gate.upperBound...].prefix(while: { $0 != "}" })
+        XCTAssertTrue(drawn.contains("Text(CriteriaDecisions.heading(standing))"),
+                      "the verdict is OrbitKit's heading for the derived standing — the words that "
+                          + "name an answer given at another end")
+    }
+
     /// A REWRITE IS DRAWN AS ONE MERGED LINE, FROM THE SERVER'S CUT.
     ///
     /// The thing this catches is the layout coming back: two paragraphs per rewrite is what put

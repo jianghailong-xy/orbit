@@ -49,15 +49,16 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
 
     /// The web card's source with its string literals put back together.
     ///
-    /// TypeScript wraps a long sentence as `'…' + '…'` across lines, and where that wrap falls is a
-    /// formatting decision while the words are the contract. So adjacent literals are joined, and a
-    /// value sitting on the line under its `=` is pulled up — which lets every assertion below name
-    /// the declaration it is about rather than guess at the wrapping.
+    /// TypeScript wraps a long sentence as `'…' + '…'` — or, when a seal is spliced into it, as
+    /// backtick templates joined the same way — across lines, and where that wrap falls is a
+    /// formatting decision while the words are the contract. So adjacent literals are joined
+    /// whichever quotes they use, and a value sitting on the line under its `=` is pulled up — which
+    /// lets every assertion below name the declaration it is about rather than guess at the wrapping.
     private func flatWebCard() throws -> String {
         let source = try String(contentsOf: try repoRoot().appendingPathComponent(Self.webCard),
                                 encoding: .utf8)
         return source
-            .replacingOccurrences(of: "'\\s*\\+\\s*'", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "['`]\\s*\\+\\s*['`]", with: "", options: .regularExpression)
             .replacingOccurrences(of: "=\\s*\\n\\s*'", with: "= '", options: .regularExpression)
     }
 
@@ -81,6 +82,22 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
                       file: file, line: line)
     }
 
+    /// A sentence the web end composes around interpolations, matched as the template it writes.
+    private func assertContains(_ web: String, _ needle: String, _ what: String,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(web.contains(needle),
+                      "\(what) drifted: the web card no longer contains \(needle.debugDescription)",
+                      file: file, line: line)
+    }
+
+    /// This end's sentence, with the values it was rendered from put back as the web template's own
+    /// interpolations — so the whole sentence is compared, and not only the words around a seal.
+    private func template(_ rendered: String, _ values: [(String, String)]) -> String {
+        values.reduce(rendered) { line, pair in
+            line.replacingOccurrences(of: pair.0, with: pair.1)
+        }
+    }
+
     // MARK: the words on the card
 
     /// The heading in each of the three states, and the two answers.
@@ -93,6 +110,10 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
                        "the heading of a card that can no longer be answered")
         assertDeclares(web, "CRITERIA_DECISION_UNREAD_HEADING", CriteriaDecisions.unreadHeading,
                        "the heading of a card that could not be re-read")
+        assertDeclares(web, "CRITERIA_DECISION_REFUSED_HEADING", CriteriaDecisions.refusedHeading,
+                       "the heading of a card refused at another end")
+        assertDeclares(web, "CRITERIA_DECISION_APPROVED_HEADING", CriteriaDecisions.approvedHeading,
+                       "the heading of a card approved at another end")
         assertDeclares(web, "APPROVE_LABEL", CriteriaDecisions.approveLabel, "the approve action")
         assertDeclares(web, "REFUSE_LABEL", CriteriaDecisions.refuseLabel, "the refuse action")
     }
@@ -105,6 +126,37 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
         assertDeclares(web, "NOTHING_IS_ON_HOLD", CriteriaDecisions.nothingIsOnHold,
                        "the line saying what is not at stake")
         assertLiteral(web, CriteriaDecisions.goneBody, "the body of a stale card")
+    }
+
+    /// What a card answered at another end says about the answer — the sentence the account owner
+    /// could not find on a dimmed card on 2026-09-11 — compared whole.
+    ///
+    /// Rendered here from sentinel seals and put back as the web template's own interpolations, so a
+    /// word changed anywhere in it is a red, not only one beside a seal. The sentinels are letters
+    /// only and neither contains the other, so replacing one cannot touch the other or the code.
+    func testWhatACardAnsweredAtAnotherEndSaysMatchesWordForWord() throws {
+        let web = try flatWebCard()
+        let base = "deadbeefcafedeadbeefcafe"
+        let resulting = "facadebeadedfacadebeaded"
+        func said(_ decision: CriteriaDecisionAnswer) -> String {
+            let read = PendingCriteriaDecisionQueue(
+                readAt: "2026-09-11T15:41:00.000Z", projectId: "p", count: 0, decidableCount: 0,
+                pending: [],
+                settled: [SettledCriteriaDecision(
+                    intentId: "i", decision: decision, decidedAt: "2026-09-11T15:40:00.000Z",
+                    baseSeal: base, resultingSeal: decision == .approve ? resulting : base)])
+            return CriteriaDecisions.staleExplanation(
+                CriteriaDecisions.standing(queue: read, intentId: "i")) ?? ""
+        }
+        let interpolations = [
+            (CriteriaDecisions.alreadySettledRefusal, "${CRITERIA_DECISION_ALREADY_SETTLED}"),
+            (CriteriaDecisions.shortSeal(base), "${shortSeal(settled.baseSeal)}"),
+            (CriteriaDecisions.shortSeal(resulting), "${shortSeal(settled.resultingSeal)}"),
+        ]
+        assertContains(web, "`\(template(said(.reject), interpolations))`",
+                       "what a card refused at another end says")
+        assertContains(web, "`\(template(said(.approve), interpolations))`",
+                       "what a card approved at another end says")
     }
 
     // MARK: the words the diff is said in

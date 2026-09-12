@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest';
 import {
   APPROVE_LABEL,
   CRITERIA_DECISION_ALREADY_SETTLED,
+  CRITERIA_DECISION_APPROVED_HEADING,
   CRITERIA_DECISION_BASE_SEAL_MOVED,
   CRITERIA_DECISION_HEADING,
+  CRITERIA_DECISION_REFUSED_HEADING,
   CRITERIA_DECISION_STALE_HEADING,
   CRITERION_ADDED_LABEL,
   CRITERION_DROPPED_LABEL,
@@ -26,6 +28,7 @@ import {
   isAnswerable,
   shortSeal,
   unchangedLine,
+  type CriteriaDecision,
   type CriteriaDecisionResult,
   type CriteriaDecisionStanding,
   type CriteriaProposalChangeEntry,
@@ -34,6 +37,7 @@ import {
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
   type ProposedCriterion,
+  type SettledCriteriaDecision,
 } from './CriteriaDecisionCard';
 import {
   CRITERIA_ROW_LABEL,
@@ -143,7 +147,15 @@ function row(over: Partial<PendingCriteriaDecisionRow> = {}): PendingCriteriaDec
   };
 }
 
-function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue {
+/**
+ * The read as a server publishes it. Called without `settled` it is the read of a server older than
+ * the answers, so the key is left off rather than set to an empty list — that is what such a server
+ * sends.
+ */
+function queue(
+  rows: PendingCriteriaDecisionRow[],
+  settled?: SettledCriteriaDecision[],
+): PendingCriteriaDecisionQueue {
   return {
     readAt: '2026-09-09T03:56:08.733Z',
     projectId: '34LWcmLItBx6ytdO26XXF',
@@ -151,6 +163,22 @@ function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue
     oldestAgeSeconds: rows.length === 0 ? null : rows[0].ageSeconds,
     decidableCount: rows.filter((each) => each.decidability.decidable).length,
     pending: rows,
+    ...(settled ? { settled } : {}),
+  };
+}
+
+/** One answer as the read publishes it: a refusal leaves the seal where it was. */
+function answer(
+  decision: CriteriaDecision,
+  over: Partial<SettledCriteriaDecision> = {},
+): SettledCriteriaDecision {
+  return {
+    intentId: row().intentId,
+    decision,
+    decidedAt: '2026-09-11T15:40:00.000Z',
+    baseSeal: SEAL_DRAFTED,
+    resultingSeal: decision === 'APPROVE' ? SEAL_MOVED : SEAL_DRAFTED,
+    ...over,
   };
 }
 
@@ -174,9 +202,14 @@ function escaped(text: string): string {
     .replace(/'/gu, '&#x27;');
 }
 
-/** The opening tag of the button carrying this label, so `disabled` can be asked about. */
+/**
+ * The opening tag of the button carrying this label, so `disabled` can be asked about.
+ *
+ * Found as the button's whole text rather than as a substring of the page: a card refused at another
+ * end says "Refused" in its heading, above a button that says `Refuse`.
+ */
 function buttonFor(html: string, label: string): string {
-  const at = html.indexOf(escaped(label));
+  const at = html.indexOf(`>${escaped(label)}</button>`);
   expect(at, `no control labelled ${label}`).toBeGreaterThan(-1);
   const opened = html.lastIndexOf('<button', at);
   expect(opened, `${label} is not inside a button`).toBeGreaterThan(-1);
@@ -592,6 +625,98 @@ describe('a card whose question has moved on', () => {
     // a reader their decision is no longer theirs to make would be inventing one.
     expect(html).not.toContain(CRITERIA_DECISION_STALE_HEADING);
     expect(html).not.toContain(CRITERIA_DECISION_ALREADY_SETTLED);
+  });
+});
+
+/**
+ * ANSWERED AT ANOTHER END — AND WHICH ANSWER.
+ *
+ * The owner refused a proposal in a browser on 2026-09-11 and found the phone's card dimmed with
+ * nothing on it that said which answer it had been given: the read dropped the proposal and said
+ * nothing about why. It now publishes the recent answers beside the questions, and these cases feed
+ * that read — never a hand-built standing — and assert what the card concludes from it.
+ *
+ * The two answers are each other's control (a card that always said refused fails the second), and
+ * the last two are the controls on the read: an answer to a different proposal, and a server that
+ * publishes no answers at all, both leave the card saying only that it was answered.
+ */
+describe('a card whose proposal was answered at another end', () => {
+  const answered = row();
+  /** Whether the card's own element — the outermost tag of its markup — is dimmed. */
+  const dimmed = (html: string): boolean => /^<div\b[^>]*\bclass="[^"]*\bis-stale\b/u.test(html);
+
+  it('says it was refused, and that nothing moved', () => {
+    const standing = criteriaDecisionStanding(queue([], [answer('REJECT')]), answered.intentId);
+    expect(standing.state).toBe('ALREADY_SETTLED');
+    const html = card(standing);
+    expect(html).toContain(CRITERIA_DECISION_REFUSED_HEADING);
+    expect(html).toContain('Refused at another end. Nothing was applied');
+    expect(html).toContain(`the seal stayed ${shortSeal(SEAL_DRAFTED)}.`);
+    expect(html).toContain(CRITERIA_DECISION_ALREADY_SETTLED);
+    expect(html).not.toContain(CRITERIA_DECISION_APPROVED_HEADING);
+    expect(html).not.toContain(shortSeal(SEAL_MOVED));
+    // Naming the answer changes what the card says, not what it offers.
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(true);
+    expect(dimmed(html)).toBe(true);
+  });
+
+  it('says it was approved, and which seal the ruler moved from and to', () => {
+    const standing = criteriaDecisionStanding(queue([], [answer('APPROVE')]), answered.intentId);
+    const html = card(standing);
+    expect(html).toContain(CRITERIA_DECISION_APPROVED_HEADING);
+    expect(html).toContain(
+      `the seal went from ${shortSeal(SEAL_DRAFTED)} to ${shortSeal(SEAL_MOVED)}.`,
+    );
+    expect(html).not.toContain(CRITERIA_DECISION_REFUSED_HEADING);
+    expect(html.toLowerCase()).not.toContain('nothing was applied');
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(isDisabled(html, REFUSE_LABEL)).toBe(true);
+    expect(dimmed(html)).toBe(true);
+  });
+
+  it('names the answer even when a newer proposal also names it as displaced', () => {
+    // The door takes an answer from a card that had not re-read, so both can be on record — and
+    // "Superseded … Nothing was applied" would then be wrong about an approval.
+    const replacement = row({
+      intentId: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
+      supersededIntentId: answered.intentId,
+    });
+    const both = criteriaDecisionStanding(
+      queue([replacement], [answer('APPROVE')]),
+      answered.intentId,
+    );
+    expect(card(both)).toContain(CRITERIA_DECISION_APPROVED_HEADING);
+    // The same read without the answer is the supersession it always was.
+    expect(criteriaDecisionStanding(queue([replacement], []), answered.intentId).state)
+      .toBe('SUPERSEDED');
+  });
+
+  it('says only that it was answered when the answer in the read is another proposal’s', () => {
+    const standing = criteriaDecisionStanding(
+      queue([], [answer('REJECT', { intentId: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f' })]),
+      answered.intentId,
+    );
+    const html = card(standing);
+    expect(html).toContain(CRITERIA_DECISION_STALE_HEADING);
+    expect(html.toLowerCase()).toContain('already answered');
+    expect(html).not.toContain(CRITERIA_DECISION_REFUSED_HEADING);
+    expect(html).not.toContain('Refused at another end');
+  });
+
+  it('from a server that publishes no answers, says what it said before: already answered', () => {
+    const read = queue([]);
+    // The input really is that server's: the key is absent, not an empty list.
+    expect('settled' in read).toBe(false);
+    const standing = criteriaDecisionStanding(read, answered.intentId);
+    expect(standing).toEqual({ state: 'ALREADY_SETTLED', intentId: answered.intentId, settled: null });
+    const html = card(standing);
+    expect(html).toContain(CRITERIA_DECISION_STALE_HEADING);
+    expect(html.toLowerCase()).toContain('already answered');
+    expect(html).not.toContain(CRITERIA_DECISION_REFUSED_HEADING);
+    expect(html).not.toContain(CRITERIA_DECISION_APPROVED_HEADING);
+    expect(isDisabled(html, APPROVE_LABEL)).toBe(true);
+    expect(dimmed(html)).toBe(true);
   });
 });
 

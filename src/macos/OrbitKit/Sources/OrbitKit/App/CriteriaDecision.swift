@@ -32,7 +32,9 @@ import Foundation
    ways a card goes stale are conclusions about the derived read rather than local state somebody
    has to remember to clear. A consequence worth stating because it looks like a bug: a stale card
    shows NO diff. The read stops publishing a settled or displaced proposal and this card kept no
-   copy, which is the property being bought.
+   copy, which is the property being bought. What the read does publish about an answered proposal
+   is the answer (`settled`: the outcome and its two seals), so a card answered at another end says
+   which answer it was given — still keeping nothing but the address.
 
    ONE SOURCE FOR TWO CLIENTS
    --------------------------
@@ -41,10 +43,11 @@ import Foundation
    mirror is `src/web/src/components/CriteriaDecisionCard.tsx` (filed under the same project
    criterion as this file) — the strings below are copied from it deliberately, the way
    `EvidenceDecisions` copies `EvidenceDecisionCard`'s. That file is on main now, so the copy is no
-   longer on trust: `CriteriaDecisionCopyParityTests` reads it and compares the three headings, the two
-   actions, the two paragraphs and the two refusal codes, and a counterpart it cannot find is a
-   FAILURE rather than a skip. What it does not compare is the title, the badge and the spelling of
-   the provenance mark: those differ by end on purpose, for the reason the next section gives.
+   longer on trust: `CriteriaDecisionCopyParityTests` reads it and compares the headings, the two
+   actions, the paragraphs — what a card answered at another end says among them — and the two
+   refusal codes, and a counterpart it cannot find is a FAILURE rather than a skip. What it does not
+   compare is the title, the badge and the spelling of the provenance mark: those differ by end on
+   purpose, for the reason the next section gives.
 
    WHAT THE PHONE SAYS DIFFERENTLY, AND WHY
    ----------------------------------------
@@ -294,6 +297,34 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
     }
 }
 
+/// One proposal the read says WAS answered: which answer, and what it did to the seal.
+///
+/// Only the card whose button was pressed is handed the door's response. Every other card for the
+/// same proposal went stale knowing only that somebody had answered — which is what the account
+/// owner met on 2026-09-11, refusing in a browser and finding the phone's card dimmed with no way to
+/// tell which answer it had been given. The answer is a committed row, so it arrives on the same
+/// derived read as the rest of the card. It is the outcome and the two seals, never the proposal's
+/// words: a stale card still shows no diff.
+public struct SettledCriteriaDecision: Codable, Equatable, Sendable {
+    public let intentId: String
+    public let decision: CriteriaDecisionAnswer
+    /// ISO-8601, as JSON carries it. Never parsed here.
+    public let decidedAt: String
+    /// The seal the answer was given against.
+    public let baseSeal: String
+    /// The seal standing afterwards: `baseSeal` again for a refusal, moved by an approval.
+    public let resultingSeal: String
+
+    public init(intentId: String, decision: CriteriaDecisionAnswer, decidedAt: String,
+                baseSeal: String, resultingSeal: String) {
+        self.intentId = intentId
+        self.decision = decision
+        self.decidedAt = decidedAt
+        self.baseSeal = baseSeal
+        self.resultingSeal = resultingSeal
+    }
+}
+
 /// Every proposal of one project that is still a question, oldest first.
 public struct PendingCriteriaDecisionQueue: Codable, Equatable, Sendable {
     public let readAt: String
@@ -303,15 +334,35 @@ public struct PendingCriteriaDecisionQueue: Codable, Equatable, Sendable {
     /// How many of them a decision could actually be recorded on today.
     public let decidableCount: Int
     public let pending: [PendingCriteriaDecisionRow]
+    /// The proposals most recently ANSWERED, newest first — what a card that stopped being a
+    /// question says happened to it. Empty from a server older than this build.
+    public let settled: [SettledCriteriaDecision]
 
     public init(readAt: String, projectId: String, count: Int, oldestAgeSeconds: Int? = nil,
-                decidableCount: Int, pending: [PendingCriteriaDecisionRow]) {
+                decidableCount: Int, pending: [PendingCriteriaDecisionRow],
+                settled: [SettledCriteriaDecision] = []) {
         self.readAt = readAt
         self.projectId = projectId
         self.count = count
         self.oldestAgeSeconds = oldestAgeSeconds
         self.decidableCount = decidableCount
         self.pending = pending
+        self.settled = settled
+    }
+
+    /// Decoded by hand for one field, for `CriteriaProposalChangeEntry`'s reason: this client and
+    /// the API do not ship together, so `settled` is absent from every response an apiserver older
+    /// than this build gives — and that is a card saying only that it was answered, never a queue
+    /// that fails to decode.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        readAt = try values.decode(String.self, forKey: .readAt)
+        projectId = try values.decode(String.self, forKey: .projectId)
+        count = try values.decode(Int.self, forKey: .count)
+        oldestAgeSeconds = try values.decodeIfPresent(Int.self, forKey: .oldestAgeSeconds)
+        decidableCount = try values.decode(Int.self, forKey: .decidableCount)
+        pending = try values.decode([PendingCriteriaDecisionRow].self, forKey: .pending)
+        settled = try values.decodeIfPresent([SettledCriteriaDecision].self, forKey: .settled) ?? []
     }
 }
 
@@ -469,8 +520,10 @@ public struct CriteriaDecisionStanding: Equatable, Sendable {
         /// the supersession link rather than off timestamps, for the same reason the server does:
         /// two proposals can share a moment.
         case superseded(replacement: PendingCriteriaDecisionRow)
-        /// The row is gone and nothing pending claims to have displaced it: somebody answered it.
-        case alreadySettled
+        /// The row is gone and somebody answered it — with the answer when the read names it, and
+        /// nil when it does not (a server older than this build, or an answer older than the ones
+        /// the read carries), which is a card that can say only that it was answered.
+        case alreadySettled(SettledCriteriaDecision?)
         /// The read has not come back.
         case unread
     }
@@ -526,6 +579,11 @@ public enum CriteriaDecisions {
     public static let liveHeading = "A weakening change to this project’s ruler needs your decision"
     public static let staleHeading = "This decision is no longer yours to make"
     public static let unreadHeading = "This card could not be re-read just now"
+    /// The two that stand in for `staleHeading` once the read names the answer given at another
+    /// end — the verdict first, because "which was it?" is the question a dimmed card was left
+    /// unable to answer.
+    public static let refusedHeading = "Refused at another end — the ruler did not move"
+    public static let approvedHeading = "Approved at another end — the ruler moved"
 
     public static let approveLabel = "Approve & re-seal"
     public static let refuseLabel = "Refuse"
@@ -596,6 +654,10 @@ public enum CriteriaDecisions {
 
     /// Where one delivered card stands RIGHT NOW, derived from the read and from nothing else.
     /// A nil queue is the read not having come back, which is `unread` and not "nothing pending".
+    ///
+    /// An answer on record is looked for BEFORE the supersession link: the door takes an answer
+    /// from a card that had not re-read yet, so a displaced proposal can still have been answered —
+    /// and then the answer, not the displacement, is what happened to it.
     public static func standing(queue: PendingCriteriaDecisionQueue?,
                                 intentId: String) -> CriteriaDecisionStanding {
         guard let queue else { return CriteriaDecisionStanding(intentId: intentId, state: .unread) }
@@ -604,29 +666,41 @@ public enum CriteriaDecisions {
                 intentId: intentId,
                 state: row.decidability.decidable ? .decidable(row) : .baseSealMoved(row))
         }
+        if let answer = queue.settled.first(where: { $0.intentId == intentId }) {
+            return CriteriaDecisionStanding(intentId: intentId, state: .alreadySettled(answer))
+        }
         if let replacement = queue.pending.first(where: { $0.supersededIntentId == intentId }) {
             return CriteriaDecisionStanding(intentId: intentId,
                                             state: .superseded(replacement: replacement))
         }
-        return CriteriaDecisionStanding(intentId: intentId, state: .alreadySettled)
+        return CriteriaDecisionStanding(intentId: intentId, state: .alreadySettled(nil))
     }
 
-    /// The line under the title: which of three things the reader is looking at.
+    /// The line under the title: which of three things the reader is looking at — and, for a
+    /// proposal answered at another end whose answer the read names, which answer.
     public static func heading(_ standing: CriteriaDecisionStanding) -> String {
         switch standing.state {
         case .decidable:    return liveHeading
         case .unread:       return unreadHeading
+        case .alreadySettled(let answer?):
+            return answer.decision == .approve ? approvedHeading : refusedHeading
         default:            return staleHeading
         }
     }
 
-    /// The badge: the live one, or the one word that says why this card is dead.
+    /// The badge: the live one, or the one word that says why this card is dead — which, for an
+    /// answer the read names, is the answer.
     public static func badge(_ standing: CriteriaDecisionStanding) -> String {
         switch standing.state {
         case .decidable:     return liveBadge
         case .baseSealMoved: return "seal moved"
         case .superseded:    return "replaced"
-        case .alreadySettled: return "settled"
+        case .alreadySettled(let answer):
+            switch answer?.decision {
+            case .approve?: return "approved"
+            case .reject?:  return "refused"
+            case nil:       return "settled"
+            }
         case .unread:        return "unread"
         }
     }
@@ -667,6 +741,17 @@ public enum CriteriaDecisions {
             out += "approving here is not what anybody is asking for any more. Nothing was applied. "
             out += "The replacement is the proposal now waiting for a decision, composed against "
             out += "\(shortSeal(replacement.baselineSeal))."
+            return out
+        case .alreadySettled(let answer?) where answer.decision == .reject:
+            var out = "Refused at another end. Nothing was applied: the criteria on record stayed as "
+            out += "they were, and the seal stayed \(shortSeal(answer.baseSeal)). A decision sent "
+            out += "from this card now would be refused with \(alreadySettledRefusal)."
+            return out
+        case .alreadySettled(let answer?):
+            var out = "Approved at another end. The weakening was applied: the ruler moved, and the "
+            out += "seal went from \(shortSeal(answer.baseSeal)) to "
+            out += "\(shortSeal(answer.resultingSeal)). A decision sent from this card now would be "
+            out += "refused with \(alreadySettledRefusal)."
             return out
         case .alreadySettled:
             var out = "Already answered. This proposal is no longer one of the project’s pending "
