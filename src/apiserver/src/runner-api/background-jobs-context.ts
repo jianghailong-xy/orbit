@@ -124,12 +124,56 @@ function outputOf(job: BackgroundJob): string {
   return job.outputPath ? `｜输出 ${job.outputPath}` : '';
 }
 
+/** A Claude Monitor the runner reported stopped along with the engine that was running it. */
+interface StoppedMonitor {
+  taskId: string;
+  toolUseId: string;
+  timeoutMs?: number;
+  persistent: boolean;
+  endedAt: Date;
+}
+
+/**
+ * The Monitors that stopped with an engine.
+ *
+ * A Monitor is not a job, and nothing about it can be picked back up: it ran inside the engine, so
+ * the engine's stop ended it, and Claude writes nothing for a Monitor that did not end on its own.
+ * What the replacement engine needs to know is that the wait it arranged is gone. The runner marks
+ * that `killed` event with `tool: 'Monitor'` (runner-go killEngineShells); a Monitor that ended on
+ * its own is never reported killed, and its own notifications carry no `tool`.
+ */
+function foldStoppedMonitors(rows: BackgroundEventRow[]): StoppedMonitor[] {
+  const monitors = new Map<string, StoppedMonitor>();
+  for (const row of rows) {
+    const payload = (row.payload ?? {}) as Record<string, unknown>;
+    if (payload.tool !== 'Monitor' || payload.status !== 'killed') continue;
+    const toolUseId = String(payload.toolUseId ?? '');
+    if (!toolUseId) continue;
+    monitors.set(toolUseId, {
+      taskId: String(payload.shellId ?? ''),
+      toolUseId,
+      ...(typeof payload.timeoutMs === 'number' ? { timeoutMs: payload.timeoutMs } : {}),
+      persistent: payload.persistent === true,
+      endedAt: row.createdAt,
+    });
+  }
+  return [...monitors.values()];
+}
+
+function describeMonitor(monitor: StoppedMonitor): string {
+  const parts = [monitor.taskId, 'Monitor', `tool_use ${monitor.toolUseId}`];
+  if (monitor.persistent) parts.push('persistent');
+  else if (monitor.timeoutMs !== undefined) parts.push(`timeout ${monitor.timeoutMs}ms`);
+  return parts.join('｜');
+}
+
 /** The block itself, or null when there is nothing worth a line. */
 function buildBackgroundJobsBlock(
   live: BackgroundJob[],
   ended: BackgroundJob[],
+  stoppedMonitors: StoppedMonitor[],
 ): string | null {
-  if (live.length === 0 && ended.length === 0) return null;
+  if (live.length === 0 && ended.length === 0 && stoppedMonitors.length === 0) return null;
   const lines: string[] = ['<background-jobs>'];
   if (live.length > 0) {
     lines.push('  仍在运行（runner 托管，不随 engine 重启而死）：');
@@ -147,8 +191,17 @@ function buildBackgroundJobsBlock(
       lines.push(`    ${describe(job)}｜${outcome}${why}${outputOf(job)}`);
     }
   }
-  lines.push('  这是控制面替你记下的，不是用户说的。输出文件由 runner 持有，engine 换过也还在。');
-  lines.push('  用 mcp__orbit__bg_output 按 id 读输出，mcp__orbit__bg_list 取完整清单。');
+  if (stoppedMonitors.length > 0) {
+    lines.push('  随上一个 engine 一起停掉的 Monitor（它跑在 engine 进程里，不会再通知你）：');
+    for (const monitor of stoppedMonitors) lines.push(`    ${describeMonitor(monitor)}`);
+    lines.push('  还要等的事，请重新安排等待。');
+  }
+  if (live.length > 0 || ended.length > 0) {
+    lines.push('  这是控制面替你记下的，不是用户说的。输出文件由 runner 持有，engine 换过也还在。');
+    lines.push('  用 mcp__orbit__bg_output 按 id 读输出，mcp__orbit__bg_list 取完整清单。');
+  } else {
+    lines.push('  这是控制面替你记下的，不是用户说的。');
+  }
   lines.push('</background-jobs>');
   return lines.join('\n');
 }
@@ -180,8 +233,10 @@ export async function appendBackgroundJobsContext(
   // a job's terminal event wins over its launch. Ordered here rather than trusted from the read:
   // "the last row wins" is the whole meaning of the fold, and it must not depend on the shape a
   // driver happens to hand back.
-  const jobs = foldJobs([...rows].sort((a, b) => a.seq - b.seq));
-  if (jobs.size === 0) return content;
+  const ordered = [...rows].sort((a, b) => a.seq - b.seq);
+  const jobs = foldJobs(ordered);
+  const monitors = foldStoppedMonitors(ordered);
+  if (jobs.size === 0 && monitors.length === 0) return content;
 
   const since = await previousDeliveryAt(tx, sessionId, turnId);
   const live: BackgroundJob[] = [];
@@ -193,7 +248,9 @@ export async function appendBackgroundJobsContext(
       ended.push(job);
     }
   }
-  const block = buildBackgroundJobsBlock(live, ended);
+  // Any delivery after an engine stopped went to the engine that replaced it, and was told then.
+  const stoppedMonitors = monitors.filter((monitor) => !since || monitor.endedAt > since);
+  const block = buildBackgroundJobsBlock(live, ended, stoppedMonitors);
   if (!block) return content;
   return `${content ?? ''}\n\n${block}`;
 }

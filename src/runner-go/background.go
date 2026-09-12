@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,12 @@ var (
 	bgLaunchID   = regexp.MustCompile(`running in background with ID:\s+(\S+?)[.\s]`)
 	bgLaunchPath = regexp.MustCompile(`written to:\s+(\S+\.output)`)
 )
+
+// Parsed from the Monitor tool_result, which names the task and how long it may run:
+// "Monitor started (task b97q4j1iy, timeout 2400000ms). You will be notified on each event. …"
+// "Monitor started (task blltn4ypz, persistent — runs until TaskStop or session end). …"
+// Anchored: the receipt is the whole result, and text that merely quotes one is not a Monitor.
+var monitorStarted = regexp.MustCompile(`^Monitor started \(task ([A-Za-z0-9_-]+), (?:timeout ([0-9]+)ms|(persistent)\b)`)
 
 // Text that only DESCRIBES that format matches both regexes as readily as a
 // launch does, and production carried three shells scraped out of such text
@@ -104,6 +111,10 @@ type bgTailer struct {
 	live     map[string]liveShell // toolUseId → its running tail
 	seen     map[string]bool      // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
 	terminal map[string]bool      // toolUseId already reported in a terminal state
+	// monitors are the Claude Monitors the engine is running, keyed by the launching tool_use id.
+	// A Monitor only watches, so it is no writer of the checkout: it holds nothing and nothing
+	// counts it. It is kept so the engine's stop can say the Monitor stopped with it.
+	monitors map[string]engineMonitor
 	// jobs are the background processes this runner spawned and waits on itself
 	// (background_job.go), keyed by the id the runner issued. Retained after they
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
@@ -130,6 +141,14 @@ type liveShell struct {
 	engineOwned bool
 }
 
+// engineMonitor is what a Monitor's start receipt says about it: which task it is, and whether it
+// runs until a timeout or until something stops it.
+type engineMonitor struct {
+	taskID     string
+	timeoutMs  int64
+	persistent bool
+}
+
 func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *bgTailer {
 	// Own a cancellable child so stopAll reliably ends the watcher goroutine even when the
 	// parent context outlives a normally-ended session run.
@@ -142,6 +161,7 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 		live:     map[string]liveShell{},
 		seen:     map[string]bool{},
 		terminal: map[string]bool{},
+		monitors: map[string]engineMonitor{},
 		jobs:     map[string]*bgJob{},
 	}
 }
@@ -208,9 +228,13 @@ func (b *bgTailer) markTerminal(toolUseID string) bool {
 
 // onToolResult inspects a tool_result's text for the "running in background" confirmation and,
 // when found, starts tailing that process's output file. toolUseID correlates the tail (and
-// the later completion) with the launching Bash call.
+// the later completion) with the launching Bash call. A Monitor's start receipt is registered
+// instead (noteMonitorStart).
 func (b *bgTailer) onToolResult(toolUseID, content string) {
 	if toolUseID == "" || content == "" {
+		return
+	}
+	if b.noteMonitorStart(toolUseID, content) {
 		return
 	}
 	idM := bgLaunchID.FindStringSubmatch(content)
@@ -222,6 +246,29 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 		return // text describing the launch format, not a shell that exists
 	}
 	b.startTail(toolUseID, idM[1], pathM[1], true)
+}
+
+// noteMonitorStart registers a Monitor from its start receipt, reporting whether content was one.
+// A Monitor runs its watch command inside the engine and wakes the agent on each event, so it ends
+// when the engine is recycled — and Claude writes a <task-notification> only for a Monitor that
+// ends on its own. Registering it is what lets killEngineShells say so. It writes nothing in the
+// checkout, so it is deliberately not declared to b.holds: a watcher left waiting on CI must neither
+// fence merges nor take an admission slot.
+func (b *bgTailer) noteMonitorStart(toolUseID, content string) bool {
+	m := monitorStarted.FindStringSubmatch(content)
+	if m == nil {
+		return false
+	}
+	monitor := engineMonitor{taskID: m[1], persistent: m[3] != ""}
+	if m[2] != "" {
+		monitor.timeoutMs, _ = strconv.ParseInt(m[2], 10, 64)
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.stopping {
+		b.monitors[toolUseID] = monitor
+	}
+	return true
 }
 
 // startTail begins tailing path for the given background shell (no-op if already tailing
@@ -384,10 +431,12 @@ func readCapped(path string) string {
 	return string(data)
 }
 
-// stop ends the tail for a completed/failed/killed background task.
+// stop ends the tail for a completed/failed/killed background task, and retires a Monitor that
+// reached a terminal state on its own.
 func (b *bgTailer) stop(toolUseID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	delete(b.monitors, toolUseID)
 	if s, ok := b.live[toolUseID]; ok {
 		s.cancel()
 		delete(b.live, toolUseID)
@@ -395,8 +444,8 @@ func (b *bgTailer) stop(toolUseID string) {
 	}
 }
 
-// killEngineShells reports every still-running shell of the provider process as killed and
-// stops its tail. Those shells are children of that process, so they're gone the moment it
+// killEngineShells reports every still-running shell and Monitor of the provider process as
+// killed and stops its tail. Those shells are children of that process, so they're gone the moment it
 // stops — but Claude only writes a <task-notification> for a shell that ends on its own, so
 // without this a left-up dev server or watcher stays "running" for the rest of the session:
 // the tray never resolves it, and Session.runningBgShells keeps painting a parked session as
@@ -415,6 +464,8 @@ func (b *bgTailer) killEngineShells() {
 		b.releaseHold(id)
 		killed = append(killed, killedShell{toolUseID: id, shellID: s.shellID})
 	}
+	monitors := b.monitors
+	b.monitors = map[string]engineMonitor{}
 	b.mu.Unlock()
 	for _, s := range killed {
 		if !b.markTerminal(s.toolUseID) {
@@ -426,6 +477,27 @@ func (b *bgTailer) killEngineShells() {
 			"status":    "killed",
 			"summary":   "Background command stopped with the session runtime that launched it",
 		})
+	}
+	// A Monitor ran inside the same process, and nothing else will ever say it stopped: the agent's
+	// wait is simply gone. `tool` is how the control plane tells it from a shell and lists it for
+	// the engine that replaces this one (apiserver background-jobs-context.ts).
+	for toolUseID, m := range monitors {
+		if !b.markTerminal(toolUseID) {
+			continue // its own notification already reported a terminal state
+		}
+		payload := map[string]interface{}{
+			"shellId":   m.taskID,
+			"toolUseId": toolUseID,
+			"status":    "killed",
+			"tool":      "Monitor",
+			"summary":   "Monitor stopped with the session runtime that ran it; it will send no more events",
+		}
+		if m.persistent {
+			payload["persistent"] = true
+		} else {
+			payload["timeoutMs"] = m.timeoutMs
+		}
+		b.emit(evBackgroundTask, payload)
 	}
 }
 
@@ -445,6 +517,7 @@ func (b *bgTailer) stopAll() {
 		delete(b.live, id)
 		b.releaseHold(id)
 	}
+	b.monitors = map[string]engineMonitor{}
 	b.mu.Unlock()
 	if b.cancel != nil {
 		b.cancel() // ends watchJSONL (and anything else bound to b.ctx)

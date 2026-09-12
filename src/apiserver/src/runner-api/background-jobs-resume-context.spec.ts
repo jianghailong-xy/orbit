@@ -260,6 +260,35 @@ test("an engine-owned shell is not offered as work the agent can pick back up", 
   assert.equal(turn.content, content);
 });
 
+test('lists a Monitor that stopped with its engine', async () => {
+  // A Claude Monitor runs inside the engine, so a recycled engine takes it along, and Claude writes
+  // nothing about it. The runner's `killed` event is the only record; without it the resumed agent
+  // goes on believing the wait it arranged will wake it.
+  const { dequeue } = harness({
+    events: [
+      jobEvent(1, WHILE_AWAY, {
+        shellId: 'b97q4j1iy',
+        toolUseId: 'toolu_monitor',
+        status: 'killed',
+        tool: 'Monitor',
+        timeoutMs: 2400000,
+        summary: 'Monitor stopped with the session runtime that ran it; it will send no more events',
+      }),
+    ],
+  });
+
+  const turn = await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION);
+
+  assert.ok(turn, 'the inbox handed back no turn at all');
+  const text = turn.content ?? '';
+  assert.match(text, /继续吧。/, 'the message the person actually sent must survive');
+  assert.ok(text.includes('b97q4j1iy'), `the stopped Monitor's task id is missing from:\n${text}`);
+  assert.ok(text.includes('toolu_monitor'), `the stopped Monitor's tool_use id is missing from:\n${text}`);
+  assert.match(text, /重新安排/, 'the agent must be told to arrange the wait again');
+  // Not a job: there is no output file to read and nothing to pick back up.
+  assert.ok(!text.includes('mcp__orbit__bg_output'), `a stopped Monitor was offered as a job:\n${text}`);
+});
+
 test('a session that never ran a background job is delivered exactly what was sent', async () => {
   const { dequeue, content } = harness({ events: [] });
 
