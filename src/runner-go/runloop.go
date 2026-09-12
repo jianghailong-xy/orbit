@@ -499,6 +499,45 @@ func unstartedWorktreeCommands(
 // worktreeCommandRelease is one claimed-but-unexecuted git command to hand back.
 type worktreeCommandRelease manualWorktreeOperationKey
 
+// runnerAgentList is this machine's agents as `GET /runner/me` last listed them. The slash-asset
+// and repo-health scans cover their workDirs, and a plan-usage probe keeps polling its provider
+// while idle only if one of them runs that provider.
+type runnerAgentList struct {
+	mu     sync.Mutex
+	agents []RunnerAgent
+}
+
+// refresh re-reads the list; a failed read keeps the last one.
+func (l *runnerAgentList) refresh(t *Transport) {
+	me, err := t.me()
+	if err != nil {
+		return
+	}
+	l.mu.Lock()
+	l.agents = append([]RunnerAgent(nil), me.Agents...)
+	l.mu.Unlock()
+}
+
+func (l *runnerAgentList) snapshot() []RunnerAgent {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]RunnerAgent(nil), l.agents...)
+}
+
+// providerConfigured reports whether any listed agent runs provider; one that names none runs Claude.
+func (l *runnerAgentList) providerConfigured(provider string) bool {
+	for _, a := range l.snapshot() {
+		p := strings.ToLower(strings.TrimSpace(a.Provider))
+		if p == "" {
+			p = providerClaude
+		}
+		if p == provider {
+			return true
+		}
+	}
+	return false
+}
+
 // runLoop returns true only when it drained because a newer runner release was
 // published. The caller performs the existing atomic self-update after all live
 // sessions have detached; SIGINT/SIGTERM continue to return false and exit.
@@ -570,34 +609,10 @@ func runLoop(cfg *RunnerConfig) bool {
 	// runner's default dir (host-level) plus
 	// each agent's workDir, tagged with the agent's id so the composer can scope the
 	// `/` menu to the session's agent (host-level assets show for every agent).
-	var runnerAgentsMu sync.Mutex
-	var runnerAgents []RunnerAgent
-	refreshRunnerAgents := func() {
-		me, err := t.me()
-		if err != nil {
-			return
-		}
-		runnerAgentsMu.Lock()
-		runnerAgents = append([]RunnerAgent(nil), me.Agents...)
-		runnerAgentsMu.Unlock()
-	}
-	agentSnapshot := func() []RunnerAgent {
-		runnerAgentsMu.Lock()
-		defer runnerAgentsMu.Unlock()
-		return append([]RunnerAgent(nil), runnerAgents...)
-	}
-	providerConfigured := func(provider string) bool {
-		for _, a := range agentSnapshot() {
-			p := strings.ToLower(strings.TrimSpace(a.Provider))
-			if p == "" {
-				p = providerClaude
-			}
-			if p == provider {
-				return true
-			}
-		}
-		return false
-	}
+	var runnerAgents runnerAgentList
+	refreshRunnerAgents := func() { runnerAgents.refresh(t) }
+	agentSnapshot := runnerAgents.snapshot
+	providerConfigured := runnerAgents.providerConfigured
 	assetRoots := func() []assetRoot {
 		roots := []assetRoot{{base: cfg.WorkDir}}
 		for _, a := range agentSnapshot() {

@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 // Wire DTOs — JSON tags mirror @orbit/shared exactly (camelCase). The control
 // plane's ValidationPipe passes these plain objects through unchanged.
 
@@ -513,7 +515,27 @@ type MeResponse struct {
 	Version         *string       `json:"version"`
 	Labels          []string      `json:"labels"`
 	MaxConcurrent   int           `json:"maxConcurrent"`
-	Agents          []RunnerAgent `json:"agents"`
+	Agents          []RunnerAgent `json:"agents"` // decoded from `workspaces`; see UnmarshalJSON
+}
+
+// UnmarshalJSON reads Agents from `workspaces`: since the Agent → Workspace rename (migration 0094)
+// that is the key `GET /runner/me` lists them under, and no alias mirrors it back to `agents`.
+// Decoding `agents` alone left every runner with an empty list, so an idle runner never polled
+// its providers' plan usage. An apiserver older than the rename sends only `agents`, still read.
+func (m *MeResponse) UnmarshalJSON(data []byte) error {
+	type plain MeResponse
+	var body struct {
+		plain
+		Workspaces []RunnerAgent `json:"workspaces"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return err
+	}
+	*m = MeResponse(body.plain)
+	if body.Workspaces != nil {
+		m.Agents = body.Workspaces
+	}
+	return nil
 }
 
 // RunnerAgent is one agent registered under this machine's runner, as reported by
