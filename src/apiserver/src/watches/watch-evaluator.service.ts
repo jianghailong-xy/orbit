@@ -93,11 +93,18 @@ export interface WatchEvaluation {
   matchId: string | null;
 }
 
-/** Session events that can move a session leaf's source columns: status, lifecycle and approvals. */
+/**
+ * Session events that can move a session leaf's source columns: status, lifecycle and approvals.
+ * SESSION_UPDATED is among them because it is the only one a turn that ends without failing
+ * publishes after /turn-complete commits the settled status: the TURN_END the runner flushed ahead
+ * of that call went out while the row still read RUNNING. A rename or a tag edit announces it too,
+ * which costs each watch on that session one evaluation that re-reads the rows.
+ */
 const SESSION_HINT_EVENTS: ReadonlySet<string> = new Set([
   RunEventType.STATUS,
   RunEventType.SESSION_ENDED,
   RunEventType.SESSION_CREATED,
+  RunEventType.SESSION_UPDATED,
   RunEventType.APPROVAL_REQUEST,
   RunEventType.APPROVAL_RESOLVED,
 ]);
