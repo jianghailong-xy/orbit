@@ -4,14 +4,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   DecisionStrip,
-  NEEDS_DECISION_LABEL,
-  POINTER_HINT,
+  GO_TO_CARD_HINT,
+  GO_TO_NEXT_CARD_HINT,
   WAITING_ON_YOU_ACTION,
   WAITING_ON_YOU_LABEL,
   decisionRowKey,
   formatAge,
   needsDecisionCount,
   waitingOnYouCount,
+  wayPosition,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -24,24 +25,28 @@ import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDe
  * absent, this many of these exist. None of them pins a paragraph verbatim, because a test that
  * does passes while the screen lies and fails when somebody fixes a typo.
  *
- * The reverse assertions are the point of the file, and there are now four of them.
+ * The reverse assertions are the point of the file, and there are now five of them.
  *
- *  - "Nothing here answers anything" is what this round is about. The strip used to carry Confirm
- *    and Send back and post them itself, which made two decision surfaces for one fact; on
- *    2026-09-09 they raced and the loser got `EVIDENCE_JUDGMENT_ALREADY_DECIDED`. The assertion is
- *    a CENSUS of the rendered `<button>`s rather than a list of labels that should not appear:
- *    every control in the output has to be one of the two that navigate, so a re-added action is
- *    caught whether it is pressable, `disabled`, hidden by CSS or spelled some other way.
- *  - "A row is counted where its card is" is the other half of the same round. A row whose card
- *    this conversation does not draw is neither listed nor counted — not a control that does
- *    nothing, and not a number about another project's tasks that nobody here can clear.
+ *  - "Nothing here answers anything". The strip used to carry Confirm and Send back and post them
+ *    itself, which made two decision surfaces for one fact; on 2026-09-09 they raced and the loser
+ *    got `EVIDENCE_JUDGMENT_ALREADY_DECIDED`. The assertion is a CENSUS of the rendered `<button>`s
+ *    rather than a list of labels that should not appear: every control in the output has to be one
+ *    of the lines, which only move the reader, so a re-added action is caught whether it is
+ *    pressable, `disabled`, hidden by CSS or spelled some other way.
+ *  - "A question is counted where its card is". A row whose card this conversation does not draw is
+ *    not counted — not a number about another project's tasks that nobody here can clear.
+ *  - "No list of the questions" (the owner's call, 2026-09-12). The line goes to the cards, and the
+ *    cards are the list; a strip that grew its rows back would pass every other assertion here.
  *  - "No bulk answer" is not a feature anybody will notice missing — it is a property that quietly
  *    disappears the first time somebody with fifteen pending rows wants to be done with them.
  *  - And "nothing is shown to a reader who cannot act on it". The rows are found on the ACCOUNT,
  *    so the failure mode is not that a session sees too few — it is that every session sees all of
  *    them, one fact painted onto as many faces as there are open windows. That regression is
  *    invisible to any test that renders one session, so the test below renders four and asserts
- *    the group appears in exactly the ones with standing to answer.
+ *    the count appears in exactly the ones with standing to answer.
+ *
+ * What a press does is asked of a real document in `DecisionRail.pointer.test.tsx`; a static render
+ * can only say what the line offers before anything is pressed.
  *
  * NO `../api` MOCK and none needed: `DecisionStrip` takes its payload as a prop and issues no
  * request. The last test in the file holds that property in place.
@@ -129,20 +134,20 @@ const render = (element: Parameters<typeof renderToStaticMarkup>[0]): string =>
   renderToStaticMarkup(element);
 
 /** The two answers the page can give about a row: its card is on screen, or it is not. Most tests
- *  take the first, because a row whose card is drawn in another conversation is not on this strip
+ *  take the first, because a row whose card is drawn in another conversation is not counted here
  *  at all — there would be nothing left to assert about. */
 const NO_CARDS = (): boolean => false;
 const EVERY_CARD = (): boolean => true;
 
-/** The strip as a reader first meets it: folded. */
-const collapsed = (
+/** The strip as a reader first meets it: the WAITING ON YOU fold shut. */
+const folded = (
   payload: PendingDecisionQueue,
   hasCard: (row: PendingDecisionRow) => boolean = EVERY_CARD,
 ): string =>
   render(<DecisionStrip queue={payload} open={false} hasCard={hasCard} onToggle={() => {}} />);
 
-/** And after the one interaction that opens it. */
-const expandedStrip = (
+/** And with that fold open: the one interaction left that puts rows on screen. */
+const unfolded = (
   payload: PendingDecisionQueue,
   hasCard: (row: PendingDecisionRow) => boolean = EVERY_CARD,
 ): string =>
@@ -184,75 +189,82 @@ function codeOf(source: string): string {
     .join('\n');
 }
 
-/** The two controls this strip is allowed to have, both of which move a reader rather than write
- *  anything: the fold, and a row that points at its card. */
-const NAVIGATION = ['decision-strip-line', 'decision-rail-pointer'];
+/** The one kind of control this strip is allowed to have, which moves a reader rather than writes
+ *  anything: a line — the one that goes to the cards, and the WAITING ON YOU fold. */
+const NAVIGATION = ['decision-strip-line'];
 
 function strayControls(html: string): string[] {
   return buttonTags(html).filter((tag) => !NAVIGATION.some((cls) => tag.includes(cls)));
 }
 
-describe('the collapsed strip', () => {
-  const mixed = queue({
-    waitingOnYou: [undecidable({
-      taskId: 'task-legacy',
-      title: 'the SOURCE contract rebase',
-      independence: { ...DISQUALIFIED },
-    })],
+describe('the line', () => {
+  it('names the oldest question and how long it has waited, with no list of the rest under it', () => {
+    for (const html of [folded(queue()), unfolded(queue())]) {
+      expect(occurrences(html, 'decision-strip-line')).toBe(1);
+      expect(occurrences(html, 'decision-strip-title')).toBe(1);
+      // The oldest of the three, in its own words, and its age.
+      expect(html).toContain('>the decision door<');
+      expect(html).toContain(`>${formatAge(3 * HOUR)}<`);
+      // The cards are the list: no heading, no row, and not a word from the other two.
+      expect(occurrences(html, 'decision-rail-row')).toBe(0);
+      expect(html).not.toContain('decision-strip-body');
+      expect(html).not.toContain('the evidence envelope');
+      expect(html).not.toContain('the stalled inventory');
+      expect(html).not.toContain('3t4PyphGUWQtzDGfvOLY9R');
+    }
   });
 
-  it('is one line carrying two numbers and nothing else', () => {
-    const html = collapsed(mixed);
-
-    expect(occurrences(html, 'decision-strip-line')).toBe(1);
-    expect(occurrences(html, 'decision-strip-count')).toBe(2);
-    expect(html).toContain(needsDecisionCount(3));
-    expect(html).toContain(waitingOnYouCount(1));
+  it('names the oldest whatever order the read arrived in', () => {
+    const html = folded(queue({
+      pending: [
+        row({ taskId: 'task-newest', title: 'the stalled inventory', ageSeconds: 40 * 60 }),
+        row({ taskId: 'task-oldest', title: 'the decision door', ageSeconds: 3 * HOUR }),
+      ],
+    }));
+    expect(html).toContain('>the decision door<');
+    expect(html).not.toContain('the stalled inventory');
   });
 
-  it('says nothing about any individual row until it is asked to', () => {
-    const html = collapsed(mixed);
+  it('says how many there are to a screen reader, and where it stands among them to everybody', () => {
+    const html = folded(queue());
+    expect(html).toContain(`aria-label="${needsDecisionCount(3)}: the decision door"`);
+    expect(html).toContain(wayPosition(1, 3));
+    expect(wayPosition(2, 3)).toBe('2 of 3');
 
-    // No group headings, no rows: the counts are the whole of the folded state.
-    expect(html).not.toContain(NEEDS_DECISION_LABEL);
-    expect(html).not.toContain(WAITING_ON_YOU_LABEL);
-    expect(html).not.toContain('the decision door');
-    expect(html).not.toContain('the SOURCE contract rebase');
-    expect(occurrences(html, 'decision-rail-row')).toBe(0);
+    // One question has nothing to stand among.
+    const one = folded(queue({ pending: [row({ taskId: 'task-only' })] }));
+    expect(one).toContain(`aria-label="${needsDecisionCount(1)}: the derived pending queue"`);
+    expect(one).not.toContain(wayPosition(1, 1));
+    expect(one).not.toContain('decision-strip-sep');
   });
 
-  it('opens only on a deliberate act, and says which state it is in', () => {
-    // The fold is a real control with a real state, so a reader (and a screen reader) can tell
-    // whether there is more without pressing it to find out.
-    expect(collapsed(mixed)).toContain('aria-expanded="false"');
-    const opened = expandedStrip(mixed);
-    expect(opened).toContain('aria-expanded="true"');
-    // And only then does anything about a row exist on screen.
-    expect(opened).toContain(NEEDS_DECISION_LABEL);
-    expect(opened).toContain('the decision door');
+  it('is a way to the cards rather than a fold, and says where the first press goes', () => {
+    for (const payload of [queue(), queue({ pending: [row({ taskId: 'task-only' })] })]) {
+      const tags = buttonTags(folded(payload));
+      expect(tags).toHaveLength(1);
+      expect(tags[0]).not.toContain('aria-expanded');
+      // Before any press it goes to the question it names; "the next" is for the presses after.
+      expect(tags[0]).toContain(`title="${GO_TO_CARD_HINT}"`);
+    }
+    expect(GO_TO_NEXT_CARD_HINT).not.toBe(GO_TO_CARD_HINT);
   });
 
-  it('carries one number when only one group has anything in it', () => {
-    const onlyDecisions = collapsed(queue());
-    expect(occurrences(onlyDecisions, 'decision-strip-count')).toBe(1);
-    expect(onlyDecisions).toContain(needsDecisionCount(3));
+  it('carries the mark of attention only when something is being asked of the reader', () => {
+    expect(folded(queue())).toContain('decision-strip-dot');
 
-    const onlyWaiting = collapsed(queue({
+    const onlyWaiting = folded(queue({
       count: 0,
       pending: [],
       oldestAgeSeconds: null,
       waitingOnYou: [undecidable({ taskId: 'task-legacy', independence: { ...DISQUALIFIED } })],
     }));
-    expect(occurrences(onlyWaiting, 'decision-strip-count')).toBe(1);
     expect(onlyWaiting).toContain(waitingOnYouCount(1));
-    // Nothing is being asked of this reader, so the mark of attention is not there either.
+    expect(onlyWaiting).not.toContain('needs your decision');
     expect(onlyWaiting).not.toContain('decision-strip-dot');
-    expect(collapsed(queue())).toContain('decision-strip-dot');
   });
 
   it('renders nothing at all when nothing is waiting', () => {
-    const html = collapsed(queue({ count: 0, pending: [], oldestAgeSeconds: null }));
-    expect(html).toBe('');
+    expect(folded(queue({ count: 0, pending: [], oldestAgeSeconds: null }))).toBe('');
   });
 });
 
@@ -263,7 +275,7 @@ describe('the collapsed strip', () => {
  * rather than as a list of forbidden labels — the two ways the property comes back are somebody
  * re-adding the buttons `disabled` (still a door, still one lock away) and somebody adding an
  * action worded differently. A census catches both. The negative control is to put either back:
- * one extra `<button>` that is not the fold or a pointer, and `strayControls` stops being empty.
+ * one extra `<button>` that is not a line, and `strayControls` stops being empty.
  */
 describe('nothing in the strip answers anything', () => {
   /** Every shape the strip can take, in one array, so the census is asked of all of them and not
@@ -277,19 +289,20 @@ describe('nothing in the strip answers anything', () => {
       waitingOnYou: [undecidable({ taskId: 'task-legacy', independence: { ...DISQUALIFIED } })],
     };
     return [
-      collapsed(queue()),
-      collapsed(mine),
-      expandedStrip(queue(), NO_CARDS),
-      expandedStrip(queue(), EVERY_CARD),
-      expandedStrip(mine, NO_CARDS),
-      expandedStrip(mine, EVERY_CARD),
-      // One row pointing and its neighbours not: the mixed state, which is the usual one.
-      expandedStrip(queue(), (each) => each.taskId === 'task-middle'),
+      folded(queue()),
+      folded(mine),
+      unfolded(queue()),
+      unfolded(mine, NO_CARDS),
+      unfolded(mine),
+      // One row with a card and its neighbours without: the mixed state, which is the usual one.
+      folded(queue(), (each) => each.taskId === 'task-middle'),
     ];
   };
 
-  it('renders no control other than the fold and the pointers', () => {
+  it('renders no control other than the lines', () => {
     for (const html of everyState()) {
+      // Drawn, so the census is asked of a strip and not of an empty string.
+      expect(html).toContain('decision-strip-line');
       expect(strayControls(html)).toEqual([]);
     }
   });
@@ -333,9 +346,9 @@ describe('nothing in the strip answers anything', () => {
  *
  * The queue is found on the ACCOUNT — there is nowhere else to find it, since a question is a shape
  * some task's columns have. What is put in front of a reader is a different question, and getting
- * it wrong does not look like a missing row: it looks like every open session showing the same
- * list, most of whose rows their reader can do nothing about. So these render N sessions of the
- * SAME account-level facts and assert the group appears in exactly the ones with standing.
+ * it wrong does not look like a missing question: it looks like every open session leading with
+ * the same number, most of which their reader can do nothing about. So these render N sessions of
+ * the SAME account-level facts and assert the count appears in exactly the ones with standing.
  */
 describe('a question is put to the sessions that can answer it, and to no others', () => {
   const A = row({ taskId: 'task-a', title: 'the SOURCE contract rebase', ageSeconds: 33 * HOUR });
@@ -370,13 +383,13 @@ describe('a question is put to the sessions that can answer it, and to no others
     { name: 'the run that did all three', did: ['task-a', 'task-b', 'task-c'], answerable: [] },
   ];
 
-  it('does not render the same account-level list once per open session', () => {
+  it('does not put the same account-level count in front of every open session', () => {
     const showing = READERS.filter(
-      (reader) => expandedStrip(accountWide(reader.did)).includes(NEEDS_DECISION_LABEL),
+      (reader) => folded(accountWide(reader.did)).includes('needs your decision'),
     );
 
-    // N readers of one account, M groups rendered, and M is decided by standing rather than by how
-    // many sessions happen to be open. Before this, every one of the four rendered it.
+    // N readers of one account, M lines drawn, and M is decided by standing rather than by how
+    // many sessions happen to be open. Before this, every one of the four drew it.
     expect(READERS.length).toBe(4);
     expect(showing.map((reader) => reader.name)).toEqual([
       'the coordinator',
@@ -385,72 +398,51 @@ describe('a question is put to the sessions that can answer it, and to no others
     ]);
   });
 
-  it('does not show the group at all to a session that may answer nothing', () => {
-    const html = expandedStrip(accountWide(['task-a', 'task-b', 'task-c']));
-
-    // Absent, not greyed: a heading that says DECIDE over rows nobody here may decide is the same
+  it('draws nothing at all for a session that may answer nothing', () => {
+    // Absent, not greyed: a line that says DECIDE over questions nobody here may decide is the same
     // false promise the card was fixed for, said one level up.
-    expect(html).not.toContain(NEEDS_DECISION_LABEL);
-    expect(html).not.toContain('the SOURCE contract rebase');
-    expect(occurrences(html, 'decision-rail-row')).toBe(0);
-    // And the folded line does not offer a count for a group that is not there.
-    expect(collapsed(accountWide(['task-a', 'task-b', 'task-c']))).toBe('');
+    expect(folded(accountWide(['task-a', 'task-b', 'task-c']))).toBe('');
+    expect(unfolded(accountWide(['task-a', 'task-b', 'task-c']))).toBe('');
   });
 
-  it('shows a reader the rows it may answer, and the count agrees with the list', () => {
+  it('counts for a reader exactly the questions it may answer', () => {
     for (const reader of READERS.filter((each) => each.answerable.length > 0)) {
-      const payload = accountWide(reader.did);
-      const html = expandedStrip(payload);
-      const folded = collapsed(payload);
-
-      expect(occurrences(html, 'decision-rail-row'), reader.name).toBe(reader.answerable.length);
-      expect(folded, reader.name).toContain(needsDecisionCount(reader.answerable.length));
-      for (const answerable of reader.answerable) {
-        const title = [A, B, C].find((each) => each.taskId === answerable)!.title;
-        expect(html, `${reader.name} cannot see ${answerable}`).toContain(title);
-      }
-      for (const own of reader.did) {
-        const title = [A, B, C].find((each) => each.taskId === own)!.title;
-        expect(html, `${reader.name} was asked about its own work`).not.toContain(title);
-      }
+      expect(folded(accountWide(reader.did)), reader.name)
+        .toContain(needsDecisionCount(reader.answerable.length));
     }
   });
 
   /**
-   * The one row, said as the acceptance names it: a row this session may not answer is neither
-   * counted nor listed — and, now that a row can be a control, is not offered a pointer either.
+   * The one row, said as the acceptance names it: a row this session may not answer is not counted.
    *
-   * Held over BOTH answers the page can give about a live card, because the pointer is the one
-   * thing on a row that a scope bug could newly leak: a strip that took `hasCard` as the whole
-   * question would light one on a row it must not be showing at all.
+   * Held over BOTH answers the page can give about a live card, because the card is the one thing a
+   * scope bug could newly leak through: a strip that took `hasCard` as the whole question would count
+   * a row it must not be offering at all.
    */
-  it('leaves a row this session did the work for out of the count, the list and the pointers', () => {
+  it('leaves a row this session did the work for out of the count, whatever the page says about its card', () => {
     const payload = accountWide(['task-b']);
 
-    expect(collapsed(payload)).toContain(needsDecisionCount(2));
-    for (const hasCard of [NO_CARDS, EVERY_CARD]) {
-      const html = expandedStrip(payload, hasCard);
-      const shown = hasCard === EVERY_CARD ? 2 : 0;
+    expect(folded(payload, EVERY_CARD)).toContain(needsDecisionCount(2));
+    expect(folded(payload, NO_CARDS)).toBe('');
+    for (const html of [folded(payload, EVERY_CARD), unfolded(payload, EVERY_CARD)]) {
       expect(html).not.toContain('the SOURCE selector audit');
       expect(html).not.toContain(B.taskId);
       expect(html).not.toContain('run of the task it is deciding');
-      expect(occurrences(html, 'decision-rail-row')).toBe(shown);
-      expect(occurrences(html, 'decision-rail-pointer')).toBe(shown);
     }
   });
 });
 
 /**
- * The pointer, and the state this round had to answer before it could exist: no card to point at.
+ * The card, and the state this round had to answer before the line could point at all: no card.
  *
  * The rail used to be able to decide whether or not a coordinator turn was running, which is why
- * it could be a decision surface at all. Turning it into a pointer spends that: a row whose card
- * is not on screen has nowhere to go. The page answers which rows have one with the evidence card's
- * own filter (`evidenceDecisionCardRows`), so what the strip has to get right is what it does with
- * a `false` — which is to leave the row out, count and all: its card, and the number that should
+ * it could be a decision surface at all. Turning it into a pointer spends that: a question whose
+ * card is not on screen has nowhere to go. The page answers which rows have one with the evidence
+ * card's own filter (`evidenceDecisionCardRows`), so what the strip has to get right is what it does
+ * with a `false` — which is to leave the row out of the count: its card, and the number that should
  * lead with it, belong to the coordinator of the project its task is filed under.
  */
-describe('a row points at its card, and is not on the strip without one', () => {
+describe('a question is counted where its card is', () => {
   const one = (over: Partial<PendingDecisionRow> = {}): PendingDecisionQueue => {
     const only = row({ taskId: 'task-open', ...over });
     return {
@@ -462,50 +454,24 @@ describe('a row points at its card, and is not on the strip without one', () => 
     };
   };
 
-  it('is a control when the card is on screen, and says where it goes', () => {
-    const html = expandedStrip(one(), EVERY_CARD);
-
-    expect(occurrences(html, 'decision-rail-pointer')).toBe(1);
-    expect(html).toContain(POINTER_HINT);
-    // Still the same four facts a row has always led with.
-    expect(html).toContain('the derived pending queue');
-    expect(html).toContain('rev 2');
-    expect(html).toContain('1h 30m');
+  it('is not counted, and draws no strip, when this conversation draws no card for it', () => {
+    // A row whose card is drawn in another conversation is that coordinator's question. Counted
+    // here, it would be a number this reader could clear none of.
+    expect(folded(one(), NO_CARDS)).toBe('');
+    expect(folded(one(), EVERY_CARD)).toContain(needsDecisionCount(1));
   });
 
-  it('is not on the strip, and not in its count, when this conversation draws no card for it', () => {
-    // A row whose card is drawn in another conversation is that coordinator's question. Kept here
-    // it could only be text saying so, under a number this reader could clear none of.
-    expect(expandedStrip(one(), NO_CARDS)).toBe('');
-    expect(collapsed(one(), NO_CARDS)).toBe('');
+  it('counts only the rows whose card is here', () => {
+    // Three rows, one card: one question, and a line that says it goes to one card.
+    const html = folded(queue(), (each) => each.taskId === 'task-middle');
+    expect(html).toContain(needsDecisionCount(1));
+    expect(buttonTags(html)[0]).toContain(`title="${GO_TO_CARD_HINT}"`);
   });
 
-  it('counts and lists only the rows whose card is here', () => {
-    // Three rows, one card. The one with a card is the whole group, and every number agrees.
-    const hasCard = (each: PendingDecisionRow): boolean => each.taskId === 'task-middle';
-    const html = expandedStrip(queue(), hasCard);
-
-    expect(collapsed(queue(), hasCard)).toContain(needsDecisionCount(1));
-    expect(html).toContain('oldest 2h');
-    expect(occurrences(html, 'decision-rail-row')).toBe(1);
-    expect(occurrences(html, 'decision-rail-pointer')).toBe(1);
-    expect(html).not.toContain('decision-rail-inert');
-    expect(html).not.toContain('the decision door');
-    expect(html).not.toContain('the stalled inventory');
-    // The pointer is on the row it belongs to.
-    const pointer = html.slice(html.indexOf('decision-rail-pointer'));
-    expect(pointer.slice(0, pointer.indexOf('</button>'))).toContain('the evidence envelope');
-  });
-
-  it('never points at a row the door itself would refuse, whatever the page says', () => {
-    // Belt and braces, and deliberately: no ask is ever raised over an undecidable row, so a
-    // `true` here could only come from a page that got the key wrong. It costs a sentence.
-    const html = expandedStrip(
-      { ...one(), pending: [undecidable({ taskId: 'task-open' })] },
-      EVERY_CARD,
-    );
-    expect(html).not.toContain('decision-rail-pointer');
-    expect(html).toContain('decision-rail-inert');
+  it('never counts a row the door itself would refuse, whatever the page says', () => {
+    // Belt and braces, and deliberately: no card is ever drawn for an undecidable row, so a `true`
+    // here could only come from a page that got the key wrong. It costs a sentence.
+    expect(folded({ ...one(), pending: [undecidable({ taskId: 'task-open' })] }, EVERY_CARD)).toBe('');
   });
 
   it('names the row and the version it is about, so a stale read points nowhere', () => {
@@ -517,7 +483,7 @@ describe('a row points at its card, and is not on the strip without one', () => 
 });
 
 describe('there is no way to answer more than one at a time', () => {
-  const three = expandedStrip(queue(), EVERY_CARD);
+  const three = unfolded(queue(), EVERY_CARD);
 
   it('renders no selection control a bulk action could be built on', () => {
     expect(three).not.toContain('type="checkbox"');
@@ -549,20 +515,20 @@ describe('the strip is a read face', () => {
   it('renders the whole payload it was handed without issuing a request', () => {
     // No `../api` is mocked anywhere in this file, and every test above renders. A component that
     // fetched on render would have thrown on the missing token, so this holds the property that
-    // the rows come from the server's derived read and nothing is assembled here.
-    expect(expandedStrip(queue())).toContain(NEEDS_DECISION_LABEL);
+    // the count comes from the server's derived read and nothing is assembled here.
+    expect(folded(queue())).toContain(needsDecisionCount(3));
   });
 });
 
 /**
  * The rows no decision can be recorded about, and the one session they are ever sent to.
  *
- * They are not decisions and they are not put among them. Every row under the heading that asks
- * for a decision is one the reader could act on; these go to the party who can clear them — the
- * submitter, in the session that filed them — and to nobody else at all. Showing everybody else a
- * greyed copy was the same one fact on as many faces as there were open windows, said politely: a
- * reader chasing the stalled population has the report of stalled tasks to read, and does not need
- * it pinned to every screen in the account.
+ * They are not decisions and they are not counted among them. Every question the line counts is one
+ * the reader could act on; these go to the party who can clear them — the submitter, in the session
+ * that filed them — and to nobody else at all. Showing everybody else a greyed copy was the same one
+ * fact on as many faces as there were open windows, said politely: a reader chasing the stalled
+ * population has the report of stalled tasks to read, and does not need it pinned to every screen in
+ * the account. No card is drawn for one anywhere, so they are the one fold left on the strip.
  */
 describe('a row the door would refuse whatever was pressed', () => {
   const legacy = undecidable({ taskId: 'task-legacy', title: 'the SOURCE contract rebase' });
@@ -592,36 +558,45 @@ describe('a row the door would refuse whatever was pressed', () => {
     };
   };
 
-  it('is never listed among the decisions, and never counted as one', () => {
-    const html = expandedStrip(mine());
+  it('is never counted as a decision, and is a line and a fold of its own', () => {
+    const shut = folded(mine());
 
-    expect(html).toContain(NEEDS_DECISION_LABEL);
-    expect(html).toContain(WAITING_ON_YOU_LABEL);
-    expect(html).toContain('the SOURCE contract rebase');
     // The number the strip leads with counts only what a decider can answer. A "2" that includes
     // one nobody can answer is the same false promise one level up.
-    expect(collapsed(mine())).toContain(needsDecisionCount(1));
-    expect(collapsed(mine())).toContain(waitingOnYouCount(1));
+    expect(shut).toContain(needsDecisionCount(1));
+    expect(shut).toContain(waitingOnYouCount(1));
+    expect(occurrences(shut, 'decision-strip-line')).toBe(2);
+    // The question first, as the way to its card; the fold under it, shut until it is opened.
+    expect(shut.indexOf(needsDecisionCount(1))).toBeLessThan(shut.indexOf(waitingOnYouCount(1)));
+    expect(occurrences(shut, 'aria-expanded="false"')).toBe(1);
+    expect(shut).not.toContain(WAITING_ON_YOU_LABEL);
+    expect(shut).not.toContain('the SOURCE contract rebase');
+  });
+
+  it('opens on a deliberate act, and opens only its own rows', () => {
+    const html = unfolded(mine());
+
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain(WAITING_ON_YOU_LABEL);
     expect(html).toContain('1 to resubmit');
-    // And it is below, in the other group: the answerable row comes before that group's heading,
-    // the unanswerable one after it.
-    expect(html.indexOf('the derived pending queue')).toBeLessThan(html.indexOf(WAITING_ON_YOU_LABEL));
-    expect(html.indexOf(WAITING_ON_YOU_LABEL)).toBeLessThan(html.indexOf('the SOURCE contract rebase'));
+    expect(html).toContain('the SOURCE contract rebase');
+    // The question beside it stays on its one line: opening this fold does not list the decisions.
+    const group = html.slice(html.indexOf(WAITING_ON_YOU_LABEL));
+    expect(group).not.toContain('the derived pending queue');
+    expect(occurrences(html, 'decision-rail-row')).toBe(1);
   });
 
   it('is not shown at all to a session that is not the one who filed it', () => {
-    // The payload for every other reader, rendered: the decidable question is still there and the
-    // stall is simply not, in any group and under any heading. Before this round the same fact
+    // The payload for every other reader, rendered: the decidable question is still counted and the
+    // stall is simply not there, on any line and under any heading. Before this round the same fact
     // came back to all of them as a greyed line headed with an apology for existing.
-    const html = expandedStrip(theirs());
+    const html = unfolded(theirs());
 
-    expect(html).toContain(NEEDS_DECISION_LABEL);
-    expect(html).toContain('the derived pending queue');
+    expect(html).toContain(needsDecisionCount(1));
     expect(html).not.toContain(WAITING_ON_YOU_LABEL);
+    expect(html).not.toContain('waiting on you');
     expect(html).not.toContain('the SOURCE contract rebase');
-    expect(occurrences(html, 'decision-rail-row')).toBe(1);
-    // And the folded line carries one number, because there is one group.
-    expect(occurrences(collapsed(theirs()), 'decision-strip-count')).toBe(1);
+    expect(occurrences(html, 'decision-strip-line')).toBe(1);
   });
 
   /**
@@ -634,9 +609,9 @@ describe('a row the door would refuse whatever was pressed', () => {
   it('never says a word about a submitter this reader is not', () => {
     for (const payload of [mine(), theirs(), queue()]) {
       for (const html of [
-        collapsed(payload),
-        expandedStrip(payload, NO_CARDS),
-        expandedStrip(payload, EVERY_CARD),
+        folded(payload),
+        unfolded(payload, NO_CARDS),
+        unfolded(payload, EVERY_CARD),
       ]) {
         expect(html.toLowerCase()).not.toContain('waiting on the submitter');
         expect(html.toUpperCase()).not.toContain('NOTHING FOR YOU TO DO HERE');
@@ -646,30 +621,25 @@ describe('a row the door would refuse whatever was pressed', () => {
   });
 
   it('reads as an instruction in the one session that can act on it', () => {
-    const html = expandedStrip(mine());
+    const html = unfolded(mine());
 
-    // Its own group, addressed to the reader, with the row it is about under it.
-    expect(html).toContain(WAITING_ON_YOU_LABEL);
-    expect(html).toContain('the SOURCE contract rebase');
     // The reason is the door's own, and the sentence after it says what to do about it — on the
-    // row, not behind a disclosure, because it is the only thing this group has to say.
+    // row, not behind a second disclosure, because it is the only thing this group has to say.
     expect(html).toContain('quotes no project criterion');
     expect(html).toContain(WAITING_ON_YOU_ACTION);
     expect(html).toContain('submit another evidence revision quoting the project criterion');
-    // And it is not a pointer: there will never be a card for this row anywhere. Read off THIS
-    // group — the decidable row in the group above is one, and a predicate over the whole strip
-    // would be answered by that.
+    // And not a control: there will never be a card for this row anywhere.
     const group = html.slice(html.indexOf(WAITING_ON_YOU_LABEL));
     expect(group).toContain('decision-rail-inert');
-    expect(group).not.toContain('decision-rail-pointer');
-    expect(group).toContain(WAITING_ON_YOU_ACTION);
+    expect(group).not.toContain('<button');
   });
 
   it('still shows enough to chase the submission it is about', () => {
-    const html = expandedStrip(mine());
+    const html = unfolded(mine());
 
     expect(html).toContain('rev 2');
     expect(html).toContain('no stated criterion');
+    expect(html).toContain(formatAge(90 * 60));
   });
 });
 
@@ -745,16 +715,5 @@ describe('the row says when, in whole units', () => {
     expect(formatAge(3 * HOUR)).toBe('3h');
     expect(formatAge(90 * 60)).toBe('1h 30m');
     expect(formatAge(50 * HOUR)).toBe('2d 2h');
-  });
-
-  it('leads the group with the oldest, and puts the age on every row', () => {
-    const html = expandedStrip(queue());
-    expect(html).toContain('oldest 3h');
-    expect(occurrences(html, 'decision-rail-row')).toBe(3);
-    expect(html.indexOf('the decision door')).toBeLessThan(html.indexOf('the evidence envelope'));
-    expect(html.indexOf('the evidence envelope')).toBeLessThan(html.indexOf('the stalled inventory'));
-    expect(html).toContain('3t4PyphGUWQtzDGfvOLY9R');
-    expect(occurrences(html, 'rev 2')).toBe(3);
-    expect(html).toContain('40m');
   });
 });

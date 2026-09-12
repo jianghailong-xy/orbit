@@ -1,30 +1,34 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ACCEPTANCE_CONFIRM_LABEL, ACCEPTANCE_NOT_YET_LABEL } from './AcceptanceConfirmationCard';
-import type { PendingCriteriaDecisionQueue } from './CriteriaDecisionCard';
+import {
+  ACCEPTANCE_CONFIRMATION_TITLE,
+  ACCEPTANCE_CONFIRM_LABEL,
+  ACCEPTANCE_NOT_YET_LABEL,
+} from './AcceptanceConfirmationCard';
+import { CRITERIA_DECISION_HEADING, type PendingCriteriaDecisionQueue } from './CriteriaDecisionCard';
 import {
   DecisionStrip,
-  NEEDS_DECISION_LABEL,
-  POINTER_HINT,
-  SETTLEMENT_ROW_LABEL,
+  GO_TO_CARD_HINT,
   needsDecisionCount,
   waitingOnYouCount,
+  wayPosition,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
 
 /**
- * What the settlement question puts in the strip, given the page's answer about its card — and, on
- * a phone, what the strip is at all.
+ * What the settlement question puts in the strip, given the page's answer about its card — on a
+ * desktop and on a phone, which draw the same line.
  *
  * `confirmation` is the card's own report, passed on by the page; `WorkspaceView.settlementPointer
  * .test.tsx` holds that wiring against the real card. What only a render of the strip can hold is
- * what the answer draws: one more row and one more in the count, a row that is a way to the card and
- * never an answer, and on a phone a single line that no list opens under. Every assertion is a
- * predicate over the rendered output, and every absence sits beside the presence it is absent from.
+ * what the answer draws: one more in the count of a line that is a way to the cards and never an
+ * answer, where it stands in the order the line names questions in, and no list under it on any
+ * screen. Every assertion is a predicate over the rendered output, and every absence sits beside the
+ * presence it is absent from.
  *
- * Evidence rows are given a card on screen (`hasCard`) wherever they are meant to count: the strip
- * lists a row only where its card is, so a row without one would say nothing about this question.
+ * Evidence rows are given a card on screen (`hasCard`) wherever they are meant to count: the line
+ * counts a row only where its card is, so a row without one would say nothing about this question.
  *
  * NO `../api` MOCK, as in `DecisionRail.test.tsx`: the strip takes its payload as props.
  */
@@ -68,7 +72,8 @@ function queue(over: Partial<PendingDecisionQueue> = {}): PendingDecisionQueue {
 
 const NOTHING = queue({ count: 0, pending: [], oldestAgeSeconds: null });
 
-/** One held weakening of the same project's criteria, which the owner can answer. */
+/** One held weakening of the same project's criteria, which the owner can answer — filed a minute
+ *  ago, so younger than every evidence row above. */
 function proposals(): PendingCriteriaDecisionQueue {
   const wording = { text: 'the pg spec may be skipped', verificationMethod: 'EXECUTABLE', completionCriterionOverrideReason: null };
   return {
@@ -111,7 +116,7 @@ const REFUSED = {
 
 type StripProps = Parameters<typeof DecisionStrip>[0];
 
-/** The strip as the page draws it: folded unless a case opens it, a desktop unless it says phone. */
+/** The strip as the page draws it: the fold shut unless a case opens it, a desktop unless it says phone. */
 const render = (props: Partial<StripProps> & { queue: PendingDecisionQueue }): string =>
   renderToStaticMarkup(<DecisionStrip open={false} onToggle={() => {}} {...props} />);
 
@@ -131,48 +136,49 @@ function buttonTags(html: string): string[] {
     .map((chunk) => `<button${chunk.split('>')[0]}>`);
 }
 
-/** The controls the strip may carry, every one of which moves the reader rather than writes: the
- *  fold, a row pointing at its card, and a weakening's way to its card. */
-const WAYS = ['decision-strip-line', 'decision-rail-pointer', 'decision-rail-criteria-summary'];
+/** The words the line names its question in: the text of its title span. */
+function named(html: string): string | null {
+  const match = /<span class="decision-strip-title">([^<]*)<\/span>/u.exec(html);
+  return match ? match[1] : null;
+}
+
+/** The one kind of control the strip may carry, which moves the reader rather than writes: a line. */
+const WAYS = ['decision-strip-line'];
 
 function strayControls(html: string): string[] {
   return buttonTags(html).filter((tag) => !WAYS.some((cls) => tag.includes(cls)));
 }
 
-describe('the settlement question in the strip', () => {
-  it('is exactly one more row, and one more in the count', () => {
+describe('the settlement question on the line', () => {
+  it('is exactly one more in the count, and no row', () => {
     const without = render({ queue: queue(), open: true, hasCard: EVERY_CARD });
     const withIt = render({ queue: queue(), open: true, hasCard: EVERY_CARD, confirmation: true });
 
-    expect(occurrences(withIt, 'decision-rail-row')).toBe(occurrences(without, 'decision-rail-row') + 1);
-    expect(occurrences(withIt, SETTLEMENT_ROW_LABEL)).toBe(1);
-    expect(without).not.toContain(SETTLEMENT_ROW_LABEL);
-    expect(render({ queue: queue(), hasCard: EVERY_CARD, confirmation: true })).toContain(needsDecisionCount(3));
-    expect(render({ queue: queue(), hasCard: EVERY_CARD })).toContain(needsDecisionCount(2));
+    expect(without).toContain(needsDecisionCount(2));
+    expect(withIt).toContain(needsDecisionCount(3));
+    expect(occurrences(withIt, 'decision-rail-row')).toBe(0);
+    expect(withIt).not.toContain('decision-strip-body');
   });
 
-  it('is a way to its card, said as where it goes', () => {
-    const html = render({ queue: NOTHING, open: true, confirmation: true });
-    const at = html.indexOf(SETTLEMENT_ROW_LABEL);
-    expect(at).toBeGreaterThan(-1);
-    const button = html.slice(html.lastIndexOf('<button', at), html.indexOf('</button>', at));
-    expect(button).toContain('decision-rail-pointer');
-    expect(button).toContain(POINTER_HINT);
+  it('comes after every question that has an age, as its card comes after theirs', () => {
+    // It has no age to give, so the line goes on naming the oldest evidence beside it.
+    const html = render({ queue: queue(), hasCard: EVERY_CARD, confirmation: true });
+    expect(named(html)).toBe('the decision door');
+    expect(html).not.toContain(ACCEPTANCE_CONFIRMATION_TITLE);
+    expect(html).toContain(wayPosition(1, 3));
   });
 
-  it('draws the strip on its own, under a heading that claims no age for it', () => {
+  it('draws the line on its own, in its card’s own words and with no age', () => {
     // Nothing waiting and no settlement question: no strip at all, the state this is the opposite of.
     expect(render({ queue: NOTHING })).toBe('');
-    const folded = render({ queue: NOTHING, confirmation: true });
-    expect(folded).toContain(needsDecisionCount(1));
-    expect(folded).toContain('decision-strip-dot');
-    const opened = render({ queue: NOTHING, open: true, confirmation: true });
-    expect(opened).toContain(NEEDS_DECISION_LABEL);
-    expect(occurrences(opened, 'decision-rail-row')).toBe(1);
-    // Its card does not know when settlement began to wait on it, so the heading does not say.
-    expect(opened).not.toContain('oldest');
-    // Beside rows that have an age, the heading still leads with theirs.
-    expect(render({ queue: queue(), open: true, hasCard: EVERY_CARD, confirmation: true })).toContain('oldest 3h');
+    const html = render({ queue: NOTHING, open: true, confirmation: true });
+    expect(named(html)).toBe(ACCEPTANCE_CONFIRMATION_TITLE);
+    expect(html).toContain(needsDecisionCount(1));
+    expect(html).toContain('decision-strip-dot');
+    // No age, and one question has no position to stand in.
+    expect(html).not.toContain('decision-strip-quiet');
+    expect(buttonTags(html)).toHaveLength(1);
+    expect(buttonTags(html)[0]).toContain(`title="${GO_TO_CARD_HINT}"`);
   });
 });
 
@@ -187,7 +193,7 @@ describe('nothing the settlement question puts in the strip answers it', () => {
     render({ queue: queue(), criteria: proposals(), phone: true, hasCard: EVERY_CARD, confirmation: true, onOpenCriteria: () => {} }),
   ];
 
-  it('renders no control other than the fold and the ways to a card', () => {
+  it('renders no control other than the line', () => {
     for (const html of everyState()) {
       // Drawn, so the census below is asked of a strip and not of an empty string.
       expect(html).toContain('decision-strip-line');
@@ -203,38 +209,61 @@ describe('nothing the settlement question puts in the strip answers it', () => {
   });
 });
 
-describe('on a phone', () => {
+describe('the same line on a desktop and on a phone', () => {
   it('is one line whatever the fold was left at, and never a list', () => {
+    for (const phone of [false, true]) {
+      const screen = phone ? 'phone' : 'desktop';
+      const html = render({
+        queue: queue(),
+        criteria: proposals(),
+        open: true,
+        phone,
+        hasCard: EVERY_CARD,
+        confirmation: true,
+        onOpenCriteria: () => {},
+      });
+
+      expect(buttonTags(html), screen).toHaveLength(1);
+      expect(html, screen).not.toContain('aria-expanded');
+      expect(html, screen).not.toContain('decision-strip-body');
+      expect(occurrences(html, 'decision-rail-row'), screen).toBe(0);
+      // One question named, and one number for everything the line can reach: the weakening, two
+      // evidence rows, the settlement question.
+      expect(occurrences(html, 'decision-strip-title'), screen).toBe(1);
+      expect(html, screen).toContain(needsDecisionCount(4));
+      expect(html, screen).toContain(wayPosition(1, 4));
+    }
+  });
+
+  it('names the weakening ahead of older evidence, because it moves the ruler the evidence is read against', () => {
     const html = render({
       queue: queue(),
       criteria: proposals(),
-      open: true,
-      phone: true,
       hasCard: EVERY_CARD,
-      confirmation: true,
       onOpenCriteria: () => {},
     });
-
-    expect(buttonTags(html)).toHaveLength(1);
-    expect(html).toContain('decision-strip-line');
-    expect(html).not.toContain('aria-expanded');
-    expect(html).not.toContain('decision-strip-body');
-    expect(occurrences(html, 'decision-rail-row')).toBe(0);
-    expect(html).not.toContain(SETTLEMENT_ROW_LABEL);
-    // One number, for everything the line can reach: the weakening, two evidence rows, the settlement question.
-    expect(occurrences(html, 'decision-strip-count')).toBe(1);
-    expect(html).toContain(needsDecisionCount(4));
+    expect(named(html)).toBe(CRITERIA_DECISION_HEADING);
+    expect(html).toContain('>1m<');
+    expect(html).not.toContain('the decision door');
   });
 
   it('counts only what the line can reach, and is not drawn when that is nothing', () => {
-    // Rows with no card on screen: nowhere for the press to go.
-    expect(render({ queue: queue(), phone: true, hasCard: NO_CARDS })).toBe('');
-    // A row the door would refuse, whatever the page says about a card: nowhere to go either.
-    const refused = queue({ pending: [row({ taskId: 'task-refused', decidability: { ...REFUSED } })] });
-    expect(render({ queue: refused, phone: true, hasCard: EVERY_CARD })).toBe('');
+    for (const phone of [false, true]) {
+      const screen = phone ? 'phone' : 'desktop';
+      // Rows with no card on screen: nowhere for the press to go.
+      expect(render({ queue: queue(), phone, hasCard: NO_CARDS }), screen).toBe('');
+      // A row the door would refuse, whatever the page says about a card: nowhere to go either.
+      const refused = queue({ pending: [row({ taskId: 'task-refused', decidability: { ...REFUSED } })] });
+      expect(render({ queue: refused, phone, hasCard: EVERY_CARD }), screen).toBe('');
+      // A weakening with no way given to open its card is not a question the line can take anyone to.
+      expect(render({ queue: NOTHING, criteria: proposals(), phone }), screen).toBe('');
+      // The settlement question is counted only while its card is there, so it is always reached.
+      expect(render({ queue: queue(), phone, hasCard: NO_CARDS, confirmation: true }), screen)
+        .toContain(needsDecisionCount(1));
+    }
+  });
 
-    // A row waiting on this reader's own resubmission is never a way to a card: a desktop gives it
-    // its sentence, and a phone has no line to put it on.
+  it('gives a row waiting on the reader’s own resubmission its fold on a desktop, and a phone no line for it', () => {
     const mine = queue({
       count: 0,
       pending: [],
@@ -249,8 +278,5 @@ describe('on a phone', () => {
     });
     expect(render({ queue: mine })).toContain(waitingOnYouCount(1));
     expect(render({ queue: mine, phone: true })).toBe('');
-
-    // The settlement question is counted only while its card is there, so it is always reached.
-    expect(render({ queue: queue(), phone: true, hasCard: NO_CARDS, confirmation: true })).toContain(needsDecisionCount(1));
   });
 });

@@ -40,9 +40,7 @@ import {
   type SettledCriteriaDecision,
 } from './CriteriaDecisionCard';
 import {
-  CRITERIA_ROW_LABEL,
   DecisionStrip,
-  NEEDS_DECISION_LABEL,
   needsDecisionCount,
   type PendingDecisionQueue,
 } from './DecisionRail';
@@ -897,23 +895,21 @@ describe('the floor under the card', () => {
   };
   const strip = (criteria: PendingCriteriaDecisionQueue): string =>
     renderToStaticMarkup(
-      <DecisionStrip queue={empty} criteria={criteria} open onToggle={() => {}} />,
+      <DecisionStrip queue={empty} criteria={criteria} open onToggle={() => {}} onOpenCriteria={() => {}} />,
     );
 
-  it('lists a held proposal as a row, and counts it in the one line above', () => {
+  it('counts a held proposal in the one line, and lists nothing under it', () => {
     // The floor exists because the card can be missed: nobody answered, nothing was written, and
-    // the question is still there on the next read.
+    // the question is still there on the next read. The line is the way back to its card, and the
+    // card is where the facts about it are read.
     const html = strip(queue([row()]));
-    expect(html).toContain(CRITERIA_ROW_LABEL);
-    expect(html).toContain(NEEDS_DECISION_LABEL);
     expect(html).toContain(needsDecisionCount(1));
-    // The row states the facts a reader needs before opening anything.
-    expect(html).toContain(shortSeal(SEAL_DRAFTED));
-    expect(html).toContain('2 criteria proposed');
+    expect(html).not.toContain('decision-rail-row');
+    expect(html).not.toContain('2 criteria proposed');
   });
 
-  it('does not list one nobody can answer', () => {
-    // A row under a heading that says DECIDE, whose every answer the door refuses, is the exact
+  it('does not count one nobody can answer', () => {
+    // A number that says DECIDE over a proposal whose every answer the door refuses is the exact
     // bug this strip was fixed for once already. The card explains that one where it was met.
     const html = strip(
       queue([
@@ -927,7 +923,7 @@ describe('the floor under the card', () => {
         }),
       ]),
     );
-    expect(html).not.toContain(CRITERIA_ROW_LABEL);
+    expect(html).toBe('');
   });
 
   it('answers nothing itself', () => {

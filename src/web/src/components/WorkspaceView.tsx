@@ -160,7 +160,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
-import { SessionDecisionStrip, decisionRowKey } from './DecisionRail';
+import { SessionDecisionStrip, decisionRowKey, revealCriteriaCard } from './DecisionRail';
 import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
 import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
 import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
@@ -5542,11 +5542,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
-            onOpenCriteria={(row) =>
-              document
-                .getElementById(`criteria-decision-${row.intentId}`)
-                ?.scrollIntoView({ block: 'center' })
-            }
+            onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
           />
         )}
 

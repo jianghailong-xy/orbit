@@ -5311,6 +5311,8 @@ html[data-theme='dark'] .session-tag-chip {
   text-align: left;
   cursor: pointer;
   font-size: 13px;
+  /* Set, so the strip keeps its height whichever script the question it names is written in. */
+  line-height: 20px;
   color: var(--text-1);
 }
 .decision-strip-line:hover {
@@ -5330,7 +5332,17 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .decision-strip-quiet,
 .decision-strip-sep {
+  flex: none;
+  white-space: nowrap;
   color: var(--text-3);
+}
+/* The question the line goes to, in its own words: cut short rather than wrapped, because the strip
+   is one line and the age and position after it must stay readable. */
+.decision-strip-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .decision-strip-caret {
   flex: none;
@@ -5342,8 +5354,8 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   color: var(--text-2);
 }
-/* Expanded, the groups scroll inside the strip rather than pushing the conversation down the
-   screen: the pinned area has a ceiling and the transcript keeps its own space. */
+/* Unfolded, the WAITING ON YOU rows scroll inside the strip rather than pushing the conversation
+   down the screen: the pinned area has a ceiling and the transcript keeps its own space. */
 .decision-strip-body {
   max-height: 46vh;
   overflow-y: auto;
@@ -5360,15 +5372,9 @@ html[data-theme='dark'] .session-tag-chip {
   font-weight: 600;
   color: var(--text-1);
 }
-.decision-rail-count,
-.decision-rail-oldest {
+.decision-rail-count {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
-}
-/* The second group sits under the first, separated: it asks something different of the reader,
-   not something weaker. */
-.decision-rail-group + .decision-rail-group {
-  border-top: 1px solid var(--border);
 }
 /* Not greyed: every row that reaches this group is an instruction the reader can act on. */
 .decision-rail-mine .decision-rail-label {
@@ -5382,9 +5388,8 @@ html[data-theme='dark'] .session-tag-chip {
 .decision-rail-row {
   border-top: 1px solid var(--border-subtle);
 }
-/* Layout only, and shared by both shapes a row can take. Nothing here says "pressable": the
-   cursor and the hover belong to the variant that IS a control, so a row that is only text does
-   not advertise a press that would do nothing. */
+/* Layout only. Nothing here says "pressable": a row is only text, so it does not advertise a press
+   that would do nothing. */
 .decision-rail-summary {
   display: flex;
   align-items: baseline;
@@ -5412,22 +5417,8 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
 }
-/* A row with somewhere to go, and one without: the same four facts, and only one of them a
-   control. The pointer earns a hover and a cursor because pressing it does something; the inert
-   row gets neither, so the difference is visible before it is pressed rather than after. */
-.decision-rail-pointer {
-  cursor: pointer;
-}
-.decision-rail-pointer:hover {
-  background: var(--bg-hover);
-}
 .decision-rail-inert {
   cursor: default;
-}
-.decision-rail-goto {
-  flex: none;
-  font-size: 12px;
-  color: var(--accent, #3b82f6);
 }
 /* Why there is nothing to press. Set as text, indented under the row it is about. */
 .decision-rail-why {
@@ -7476,13 +7467,6 @@ html[data-theme='dark'] .session-tag-chip {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
   color: var(--text-3);
-}
-/* The strip's row for one of these: the same summary line as an evidence row, ending in the way
-   through to the card rather than in an age. */
-.decision-rail-open {
-  flex: none;
-  font-size: 12px;
-  color: var(--brand);
 }
 /* On a phone the three buttons can't share one row: the long "auto-allow future …"
    label shrinks to a 5-6 line block and drags the others into tall boxes. Stack them

@@ -523,17 +523,14 @@ describe('one waiting completion decision on the session page', { timeout: 30_00
     expect(verdictControls(question)).toEqual([]);
   });
 
-  it('points the pinned strip’s row at the evidence card', async () => {
+  it('points the pinned strip’s line at the evidence card', async () => {
     const page = await sessionPage();
-    await act(async () => {
-      page.querySelector<HTMLButtonElement>('.decision-strip-line')!.click();
-    });
-    const pointers = [...page.querySelectorAll<HTMLButtonElement>('.decision-rail-pointer')];
-    expect(pointers, 'the waiting row is not a pointer on this page').toHaveLength(1);
+    const lines = [...page.querySelectorAll<HTMLButtonElement>('.decision-strip-line')];
+    expect(lines, 'the waiting row is not a line on this page').toHaveLength(1);
 
     scrolled.length = 0;
     await act(async () => {
-      pointers[0].click();
+      lines[0].click();
     });
     expect(scrolled).toEqual([page.querySelector('.evidence-decision')]);
   });

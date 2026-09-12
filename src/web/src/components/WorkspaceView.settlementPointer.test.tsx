@@ -8,9 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 import type { PendingCriteriaDecisionQueue, PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
 import {
-  CRITERIA_ROW_LABEL,
-  SETTLEMENT_ROW_LABEL,
   needsDecisionCount,
+  waitingOnYouCount,
+  wayPosition,
   type PendingDecisionQueue,
 } from './DecisionRail';
 import { ACCEPTANCE_CONFIRM_LABEL, ACCEPTANCE_NOT_YET_LABEL } from './AcceptanceConfirmationCard';
@@ -20,15 +20,15 @@ import {
 } from '../lib/acceptanceConfirmation';
 
 /**
- * The settlement question in the pinned strip, where the owner meets it: the real WorkspaceView, a
+ * The settlement question on the pinned line, where the owner meets it: the real WorkspaceView, a
  * coordinator conversation whose settlement card is drawn, the ways that card stops being a question
  * — confirmed at another end, put down, never drawn — and the pages that never draw one.
  *
  * The strip is told whether the card is on screen and still a question, and the card is what tells
  * it (`SessionAcceptanceConfirmationCard`'s `onOpenQuestion`, kept by the page). That wiring is the
  * claim, so nothing here hands the strip that answer: every case mounts the page and lets the card
- * report. Every "no row" is asserted on a strip that is drawn and open, beside a row it does carry or
- * after the row it carried, so an empty strip is never a strip that was not going to say anything.
+ * report. Every "not counted" is asserted on a line that is drawn, beside a question it does count or
+ * after the count it carried, so an empty strip is never a strip that was not going to say anything.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -109,8 +109,8 @@ function standingOf(state: StandardSetConfirmationStanding['state']): StandardSe
 const criteriaOf = (...met: boolean[]) =>
   met.map((satisfied, index) => ({ id: `c${index + 1}`, ordinal: index + 1, text: `condition ${index + 1} holds`, satisfied }));
 
-/** A weakening held against the same project: a question the strip already lists, so the settlement
- *  row is measured as one MORE row rather than as the strip appearing at all. */
+/** A weakening held against the same project: a question the line already counts, so the settlement
+ *  question is measured as one MORE rather than as the strip appearing at all. */
 function held(): PendingCriteriaDecisionRow {
   const wording = { text: 'the pg spec may be skipped', verificationMethod: 'EXECUTABLE', completionCriterionOverrideReason: null };
   return {
@@ -146,8 +146,8 @@ const proposalsOf = (rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisio
 
 const ORDINARY_ROW_TITLE = 'evidence this conversation filed and must resubmit';
 /** What the ordinary conversation is shown: its own submission, waiting on a revision only it can
- *  file. No card is drawn for it anywhere, and the strip lists it regardless — so the strip is
- *  there, with something in it for the settlement row to be absent beside. */
+ *  file. No card is drawn for it anywhere, and the strip shows it regardless, on a line of its own —
+ *  so the strip is there, with something in it for the settlement question to be absent beside. */
 const ORDINARY_QUEUE: PendingDecisionQueue = {
   decidingSessionId: ORDINARY_PUBLIC,
   count: 0,
@@ -389,64 +389,47 @@ async function reread(queryKey: readonly unknown[], reads: () => number): Promis
 }
 
 const strip = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.decision-strip');
-const rows = (): HTMLElement[] => [...(strip()?.querySelectorAll<HTMLElement>('.decision-rail-row') ?? [])];
-/** The strip's rows, each as the kind of question it is, so the list can be compared whole. */
-const rowKinds = (): string[] =>
-  rows().map((row) => {
-    const text = row.textContent ?? '';
-    if (text.includes(SETTLEMENT_ROW_LABEL)) return 'settlement';
-    if (text.includes(CRITERIA_ROW_LABEL)) return 'weakening';
-    if (text.includes(ORDINARY_ROW_TITLE)) return 'evidence';
-    return `unrecognised: ${text}`;
-  });
-const settlementRows = (): HTMLElement[] =>
-  rows().filter((row) => (row.textContent ?? '').includes(SETTLEMENT_ROW_LABEL));
+/** The line that counts the questions and goes to their cards: the one line on the strip that is
+ *  not a fold. */
+const questionLine = (): HTMLButtonElement | null =>
+  [...(strip()?.querySelectorAll<HTMLButtonElement>('.decision-strip-line') ?? [])]
+    .find((line) => !line.hasAttribute('aria-expanded')) ?? null;
+/** What that line counts, as it says it to a screen reader, or null when no such line is drawn. */
+const counted = (): string | null =>
+  questionLine()?.getAttribute('aria-label')?.split(': ')[0] ?? null;
 const settlementCards = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.settlement-card')];
 
-/** Opens the strip once it is drawn. On a desktop the rows are behind the fold, and opening it is a
- *  deliberate act; the strip keeps it open across conversations, so this presses only if it is shut. */
-async function unfold(): Promise<void> {
-  await waitForUi(() => {
-    expect(strip()?.querySelector('.decision-strip-line'), 'the strip was never drawn').toBeTruthy();
+/** Presses the line, and returns every element that press scrolled to. */
+async function pressLine(): Promise<Element[]> {
+  const line = questionLine();
+  if (!line) throw new Error('there is no line to press');
+  const before = scrolled.length;
+  await act(async () => {
+    line.click();
   });
-  const line = strip()!.querySelector<HTMLButtonElement>('.decision-strip-line')!;
-  if (line.getAttribute('aria-expanded') !== 'true') {
-    await act(async () => {
-      line.click();
-    });
-  }
+  return scrolled.slice(before);
 }
 
-/** A coordinator conversation whose settlement card has been drawn and pointed at, strip open.
+/** A coordinator conversation whose settlement card has been drawn beside the held weakening.
  *  Asserts only what the cases below stand on, so each of them fails on its own claim. */
 async function coordinatorWithTheCard(): Promise<void> {
   await mount(`/sessions/${COORDINATOR_PUBLIC}`);
   await waitForUi(() => {
     expect(settlementCards()).toHaveLength(1);
-  });
-  await unfold();
-  await waitForUi(() => {
-    expect(rowKinds()).toEqual(['weakening', 'settlement']);
+    expect(counted()).toBe(needsDecisionCount(2));
   });
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 }
 
-describe('the settlement question in the pinned strip', { timeout: 60_000 }, () => {
-  it('is one more row, pointing at the card, while the card is on screen and still a question', async () => {
-    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
-    await waitForUi(() => {
-      expect(settlementCards()).toHaveLength(1);
-    });
-    await unfold();
-    // Beside the weakening the strip already listed: exactly one row more, and it is this one.
-    await waitForUi(() => {
-      expect(rowKinds()).toEqual(['weakening', 'settlement']);
-    });
-    expect(strip()!.querySelector('.decision-strip-count')?.textContent).toBe(needsDecisionCount(2));
-    expect(settlementRows()[0]!.querySelector('button.decision-rail-pointer'), 'the row is not a pointer').toBeTruthy();
+describe('the settlement question on the pinned line', { timeout: 60_000 }, () => {
+  it('is one more in the count while the card is on screen and still a question, and opens no list', async () => {
+    await coordinatorWithTheCard();
+    expect(questionLine()!.hasAttribute('aria-expanded'), 'the line is a fold').toBe(false);
+    expect(strip()!.querySelectorAll('.decision-strip-body, .decision-rail-row'), 'a list is drawn under the line')
+      .toHaveLength(0);
   });
 
-  it('stops pointing once the set is confirmed at another end, while the card stays where it was', async () => {
+  it('stops counting it once the set is confirmed at another end, while the card stays where it was', async () => {
     await coordinatorWithTheCard();
     server.standing = standingOf('CONFIRMED');
     await reread(acceptanceConfirmationKey(PROJECT_PUBLIC), () => confirmationReads);
@@ -455,48 +438,46 @@ describe('the settlement question in the pinned strip', { timeout: 60_000 }, () 
       expect(settlementCards()[0]?.querySelector('.settlement-card-stale')?.textContent ?? '').toContain('Already confirmed');
     });
     await waitForUi(() => {
-      expect(rowKinds(), 'a set confirmed at another end is still pointed at as a question').toEqual(['weakening']);
+      expect(counted(), 'a set confirmed at another end is still counted as a question').toBe(needsDecisionCount(1));
     });
     expect(settlementCards()).toHaveLength(1);
   });
 
-  it('points at nothing while the card has not been drawn, and at the card once it is', async () => {
+  it('counts nothing for the card while it has not been drawn, and counts it once it is', async () => {
     server.criteria = criteriaOf(true, false);
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
-    await unfold();
-    // Drawn, open, listing what it does list, and both of the card's reads answered.
+    // Drawn, counting what it does count, and both of the card's reads answered.
     await waitForUi(() => {
-      expect(rowKinds()).toContain('weakening');
+      expect(counted()).toBe(needsDecisionCount(1));
       expect(confirmationReads).toBeGreaterThan(0);
       expect(documentReads).toBeGreaterThan(0);
     });
     await settle();
-    expect(rowKinds(), 'the strip pointed at a card that was never drawn').toEqual(['weakening']);
+    expect(counted(), 'the line counted a card that was never drawn').toBe(needsDecisionCount(1));
     expect(settlementCards()).toEqual([]);
 
-    // The one fact under test changes, and the same page draws the card and points at it.
+    // The one fact under test changes, and the same page draws the card and counts it.
     server.criteria = criteriaOf(true, true);
     await reread(['project', PROJECT_PUBLIC], () => documentReads);
     await waitForUi(() => {
-      expect(rowKinds()).toEqual(['weakening', 'settlement']);
+      expect(counted()).toBe(needsDecisionCount(2));
     });
     expect(settlementCards()).toHaveLength(1);
   });
 
-  it('points at nothing in a conversation that coordinates no project, straight after one that did', async () => {
+  it('counts nothing for it in a conversation that coordinates no project, straight after one that did', async () => {
     await coordinatorWithTheCard();
     await go(`/sessions/${ORDINARY_PUBLIC}`);
-    await unfold();
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[ORDINARY_PUBLIC]}, opening`);
-      expect(rowKinds()).toContain('evidence');
+      expect(strip()?.textContent ?? '').toContain(waitingOnYouCount(1));
     });
     await settle();
-    expect(rowKinds(), 'a conversation with no project was pointed at a settlement card').toEqual(['evidence']);
+    expect(questionLine(), 'a conversation with no project was given a line to a settlement card').toBeNull();
     expect(settlementCards()).toEqual([]);
   });
 
-  it('leaves no pointer on New session, and points at the card again on the way back', async () => {
+  it('leaves no line on New session, and counts the card again on the way back', async () => {
     await coordinatorWithTheCard();
     await go(NEW_SESSION_PATH);
     // New session really is what is on screen, so a missing strip is not a view still loading.
@@ -504,18 +485,16 @@ describe('the settlement question in the pinned strip', { timeout: 60_000 }, () 
       expect(mounted().querySelector('.workspace-sessions.workspace-draft')).toBeTruthy();
     });
     await settle();
-    expect(mounted().textContent, 'New session was left a pointer to a settlement card').not.toContain(SETTLEMENT_ROW_LABEL);
     expect(strip(), 'New session was left the strip').toBeNull();
     expect(settlementCards()).toEqual([]);
 
     await go(`/sessions/${COORDINATOR_PUBLIC}`);
-    await unfold();
     await waitForUi(() => {
-      expect(rowKinds()).toEqual(['weakening', 'settlement']);
+      expect(counted()).toBe(needsDecisionCount(2));
     });
   });
 
-  it('stops pointing once the card is put down with Not yet', async () => {
+  it('stops counting it once the card is put down with Not yet', async () => {
     await coordinatorWithTheCard();
     const notYet = [...settlementCards()[0]!.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')]
       .find((button) => button.textContent === ACCEPTANCE_NOT_YET_LABEL)!;
@@ -526,31 +505,50 @@ describe('the settlement question in the pinned strip', { timeout: 60_000 }, () 
       expect(settlementCards()).toEqual([]);
     });
     await waitForUi(() => {
-      expect(rowKinds(), 'a card put down is still pointed at').toEqual(['weakening']);
+      expect(counted(), 'a card put down is still counted').toBe(needsDecisionCount(1));
     });
   });
 
-  it('takes the reader to the card when pressed, and asks the server nothing', async () => {
+  it('takes the reader to the card with one press when it is the only question, and asks the server nothing', async () => {
+    server.proposals = [];
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(settlementCards()).toHaveLength(1);
+      expect(counted()).toBe(needsDecisionCount(1));
+    });
+    const card = settlementCards()[0]!;
+    const requestedBefore = requested.length;
+
+    const arrived = await pressLine();
+
+    expect(arrived, 'the press scrolled nothing, or more than the card').toEqual([card]);
+    expect(requested.slice(requestedBefore), 'a press on the line asked the server for something').toEqual([]);
+    expect(strip()!.querySelectorAll('.decision-strip-body, .decision-rail-row'), 'a list opened under the line')
+      .toHaveLength(0);
+  });
+
+  it('reaches the card after the weakening drawn above it, one press each, and says which it went to', async () => {
     await coordinatorWithTheCard();
     const card = settlementCards()[0]!;
-    const pointer = settlementRows()[0]!.querySelector<HTMLButtonElement>('button')!;
-    const scrolledBefore = scrolled.length;
     const requestedBefore = requested.length;
-    await act(async () => {
-      pointer.click();
-    });
-    const arrived = scrolled.slice(scrolledBefore);
-    expect(arrived, 'the press scrolled nothing, or more than the card').toHaveLength(1);
-    expect(arrived[0], 'the press did not take the reader to the settlement card').toBe(card);
-    expect(requested.slice(requestedBefore), 'a press on the pointer asked the server for something').toEqual([]);
+
+    const weakening = mounted().querySelector<HTMLElement>('.criteria-decision');
+    expect(weakening, 'the weakening card was not drawn').toBeTruthy();
+    const first = await pressLine();
+    expect(first, 'the first press did not go to the weakening drawn above the settlement card').toEqual([weakening]);
+    expect(questionLine()!.textContent).toContain(wayPosition(1, 2));
+
+    const second = await pressLine();
+    expect(second, 'the second press did not take the reader to the settlement card').toEqual([card]);
+    expect(questionLine()!.textContent).toContain(wayPosition(2, 2));
+    expect(requested.slice(requestedBefore), 'a press on the line asked the server for something').toEqual([]);
   });
 
   it('offers no answer to the settlement question on the strip, only the way to its card', async () => {
     await coordinatorWithTheCard();
-    // Every control the strip has moves the reader somewhere: the fold, and a row that points at a card.
-    const ways = ['decision-strip-line', 'decision-rail-criteria-summary', 'decision-rail-pointer'];
+    // Every control the strip has moves the reader somewhere: a line, and nothing else.
     const stray = [...strip()!.querySelectorAll<HTMLButtonElement>('button')]
-      .filter((button) => !ways.some((cls) => button.classList.contains(cls)));
+      .filter((button) => !button.classList.contains('decision-strip-line'));
     expect(stray.map((button) => button.outerHTML), 'the strip grew a control that goes nowhere').toEqual([]);
     expect(strip()!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
     expect(strip()!.textContent).not.toContain(ACCEPTANCE_NOT_YET_LABEL);
@@ -560,29 +558,24 @@ describe('the settlement question in the pinned strip', { timeout: 60_000 }, () 
   });
 });
 
-describe('the settlement question in the pinned strip on a phone', { timeout: 60_000 }, () => {
-  it('is one line that never opens into a list, and the line itself takes the reader to the card', async () => {
+describe('the settlement question on the pinned line on a phone', { timeout: 60_000 }, () => {
+  it('is the same one line, and the line itself takes the reader to the card', async () => {
     viewport = 393;
     server.proposals = [];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(settlementCards()).toHaveLength(1);
-      expect(strip()?.querySelector('.decision-strip-count')?.textContent).toBe(needsDecisionCount(1));
+      expect(counted()).toBe(needsDecisionCount(1));
     });
     const controls = [...strip()!.querySelectorAll<HTMLButtonElement>('button')];
     expect(controls.map((button) => button.className), 'the phone strip is not one line').toEqual(['decision-strip-line']);
     expect(controls[0]!.hasAttribute('aria-expanded'), 'the phone line is a fold').toBe(false);
 
     const card = settlementCards()[0]!;
-    const scrolledBefore = scrolled.length;
     const requestedBefore = requested.length;
-    await act(async () => {
-      controls[0]!.click();
-    });
+    const arrived = await pressLine();
     expect(requested.slice(requestedBefore), 'the phone line asked the server for something').toEqual([]);
-    const arrived = scrolled.slice(scrolledBefore);
-    expect(arrived, 'the phone line scrolled nothing, or more than the card').toHaveLength(1);
-    expect(arrived[0], 'the phone line did not take the reader to the settlement card').toBe(card);
+    expect(arrived, 'the phone line scrolled nothing, or more than the card').toEqual([card]);
     expect(strip()!.querySelectorAll('.decision-strip-body, .decision-rail-row'), 'a list opened under the phone line')
       .toHaveLength(0);
   });

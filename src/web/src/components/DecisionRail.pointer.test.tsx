@@ -8,31 +8,34 @@ import { pendingDecisionsQuery } from '../lib/queries';
 import { ApprovalPanel } from './ApprovalPanel';
 import {
   DecisionStrip,
-  POINTER_HINT,
+  GO_TO_CARD_HINT,
+  GO_TO_NEXT_CARD_HINT,
   decisionRowKey,
   needsDecisionCount,
   revealDecisionCard,
+  wayPosition,
   type PendingDecisionQueue,
   type PendingDecisionRow,
 } from './DecisionRail';
 import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
 
 /**
- * The pointer, end to end: the rail and the evidence card in one document, as the page composes them.
+ * The line, end to end: the strip and the evidence cards in one document, as the page composes them.
  *
- * `DecisionRail.test.tsx` renders the strip alone and can only ask what it PUT on screen. The claim
- * this file makes is about two components agreeing — the rail points at a handle and the card
- * publishes it — so neither file can hold it and this one renders both. The strip's `hasCard` is
- * not hand-fed either: it is computed the way `WorkspaceView` computes it, with the card's own
- * filter (`evidenceDecisionCardRows`) over the read the card is drawn from.
+ * `DecisionRail.test.tsx` renders the strip alone and can only ask what it PUT on screen. The claims
+ * this file makes are about a press — the line points at a handle and the card publishes it, and
+ * with several cards each press goes on to the next and the line names the one it went to — so
+ * neither file can hold them and this one renders both. The strip's `hasCard` is not hand-fed either:
+ * it is computed the way `WorkspaceView` computes it, with the card's own filter
+ * (`evidenceDecisionCardRows`) over the read the card is drawn from.
  *
  * WHY THE "NO CARD" HALF IS THE POINT
  * -----------------------------------
  * The rail could decide without a live turn; that is what it gave up. So a pointer with nothing to
  * point at would be strictly worse than the button it replaced — a control that does nothing when
  * pressed, in place of one that worked. Every way a waiting row can lack a card in a conversation
- * is asserted below, and what is asserted is not "the click is a no-op" but that the row is not on
- * this strip at all, and not in its count.
+ * is asserted below, and what is asserted is not "the click is a no-op" but that the question is
+ * not in the line's count at all, and no press can reach for it.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -45,6 +48,7 @@ const OTHER_PROJECT_ID = '34LWcmLItBx6ytdO26XXF';
 const TASK_A = '34LMiluvx0jK63cj8arWl';
 const TASK_B = '34LVWtmeCNjbcCbCF2wDd';
 const TASK_C = '34LXq2fT1wZbN8mUe5RkA';
+const MINUTE = 60;
 
 function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
   return {
@@ -53,7 +57,7 @@ function row(over: Partial<PendingDecisionRow> = {}): PendingDecisionRow {
     projectId: PROJECT_ID,
     criterion: { key: '6KG2mjp63PrtVvGwxRLvFY', text: 'one decision surface, and this is not it' },
     evidenceRevision: '2',
-    ageSeconds: 20 * 60,
+    ageSeconds: 20 * MINUTE,
     claim: 'the rail no longer posts a decision',
     gaps: [],
     citations: [
@@ -98,6 +102,9 @@ function lookalike(r: PendingDecisionRow): ApprovalInfo {
 /** Which elements were scrolled to, in order, and which one each call was made on. jsdom has no
  *  `scrollIntoView` at all, so this is the whole implementation rather than a spy over one. */
 const scrolled: Element[] = [];
+/** Which elements were given the mark that says "this is the card the press meant", in order. jsdom
+ *  has no Web Animations either, so this stands in for `animate`. */
+const marked: Element[] = [];
 
 beforeAll(() => {
   (Element.prototype as unknown as { scrollIntoView: () => void }).scrollIntoView = function (
@@ -105,64 +112,53 @@ beforeAll(() => {
   ): void {
     scrolled.push(this);
   };
+  (Element.prototype as unknown as { animate: () => unknown }).animate = function (
+    this: Element,
+  ): unknown {
+    marked.push(this);
+    return { pause() {}, play() {} };
+  };
 });
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-const clients: QueryClient[] = [];
+let client: QueryClient | null = null;
 
 afterEach(async () => {
   scrolled.length = 0;
+  marked.length = 0;
   const mounted = root;
   root = null;
   if (mounted) await act(async () => mounted.unmount());
   container?.remove();
   container = null;
-  for (const qc of clients.splice(0)) qc.clear();
+  client?.clear();
+  client = null;
   apiMock.mockReset();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
-async function mount(ui: JSX.Element): Promise<HTMLElement> {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const node = document.createElement('div');
-  document.body.appendChild(node);
-  const nextRoot = createRoot(node);
-  container = node;
-  root = nextRoot;
-  await act(async () => nextRoot.render(ui));
-  return node;
-}
-
-/**
- * The page in miniature: the pinned strip, the evidence card under it and any question cards after
- * that, over one read that has already come back — wired the way `WorkspaceView` wires them,
- * including the one computation that decides whether a row is a pointer at all.
- */
-async function page({
-  rows,
-  projectId = PROJECT_ID,
-  approvals = [],
-}: {
+interface PageProps {
   rows: PendingDecisionRow[];
   /** The project this session coordinates; null for an ordinary session. */
   projectId?: string | null;
   approvals?: ApprovalInfo[];
-}): Promise<HTMLElement> {
+}
+
+/**
+ * The page in miniature: the pinned strip, the evidence cards under it and any question cards after
+ * that, over one read that has already come back — wired the way `WorkspaceView` wires them,
+ * including the one computation that decides whether a row is counted at all.
+ */
+function composition({ rows, projectId = PROJECT_ID, approvals = [] }: PageProps): JSX.Element {
   const payload = queue(rows);
-  const qc = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, refetchOnMount: false, retryOnMount: false, refetchOnWindowFocus: false },
-    },
-  });
-  clients.push(qc);
-  qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, payload);
+  client!.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, payload);
   const cards = new Set(evidenceDecisionCardRows(payload, projectId).map(decisionRowKey));
-  return mount(
-    <QueryClientProvider client={qc}>
+  return (
+    <QueryClientProvider client={client!}>
       <DecisionStrip
         queue={payload}
-        open
+        open={false}
         hasCard={(each) => cards.has(decisionRowKey(each))}
         onToggle={() => {}}
         onReveal={(each) => revealDecisionCard(each)}
@@ -171,15 +167,42 @@ async function page({
       {approvals.map((approval) => (
         <ApprovalPanel key={approval.id} approval={approval} onDecide={() => {}} />
       ))}
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+}
+
+async function page(props: PageProps): Promise<HTMLElement> {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, refetchOnMount: false, retryOnMount: false, refetchOnWindowFocus: false },
+    },
+  });
+  const node = document.createElement('div');
+  document.body.appendChild(node);
+  const nextRoot = createRoot(node);
+  container = node;
+  root = nextRoot;
+  await act(async () => nextRoot.render(composition(props)));
+  return node;
+}
+
+/** The same page after the read comes back different, with the strip still mounted — as a re-read
+ *  arrives on a page that stays open. */
+async function repage(props: PageProps): Promise<void> {
+  await act(async () => root!.render(composition(props)));
 }
 
 const strip = (scope: HTMLElement): HTMLElement =>
   scope.querySelector<HTMLElement>('.decision-strip')!;
 
-const pointers = (scope: HTMLElement): HTMLButtonElement[] =>
-  [...scope.querySelectorAll<HTMLButtonElement>('.decision-rail-pointer')];
+/** The line that goes to the cards. */
+const line = (scope: HTMLElement): HTMLButtonElement =>
+  scope.querySelector<HTMLButtonElement>('.decision-strip-line')!;
+
+/** The question the line names, in its own words. */
+const named = (scope: HTMLElement): string | null =>
+  line(scope).querySelector('.decision-strip-title')?.textContent ?? null;
 
 /** The element that carries this row's handle, or null when nothing on the page publishes it. */
 const anchorFor = (scope: HTMLElement, r: PendingDecisionRow): HTMLElement | null =>
@@ -191,8 +214,8 @@ async function click(button: HTMLElement): Promise<void> {
   });
 }
 
-describe('a row points at the evidence card that answers it', () => {
-  it('takes the reader to the card Orbit drew for that row, not to a question that reads like one', async () => {
+describe('the line takes the reader to the evidence card that answers it', () => {
+  it('goes to the card Orbit drew for that row, not to a question that reads like one', async () => {
     const only = row();
     const scope = await page({ rows: [only], approvals: [lookalike(only)] });
 
@@ -204,37 +227,102 @@ describe('a row points at the evidence card that answers it', () => {
     expect(card.getAttribute('data-decision-row')).toBe(decisionRowKey(only));
     expect(card.matches('.approval-card.evidence-decision'), 'the handle is not the evidence card').toBe(true);
     expect(scope.querySelector('.chat-q-opt-btn'), 'the look-alike question is not on screen').not.toBeNull();
+    expect(named(scope)).toBe(only.title);
 
     expect(scrolled).toEqual([]);
-    await click(pointers(scope)[0]);
+    await click(line(scope));
 
     // The assertion this test exists for: the jump HAPPENED, and it arrived at that card.
     expect(scrolled).toEqual([card]);
+    // And the card is marked as the one the press meant.
+    expect(marked, 'the card the line went to is not marked').toEqual([card]);
     // Drawn from the read the page already holds: nothing was asked of the server to get here.
     expect(apiMock).not.toHaveBeenCalled();
   });
 
-  it('sends each row to its own card, not to the first one on the page', async () => {
-    const a = row();
-    const b = row({ taskId: TASK_B, title: 'the evidence envelope', evidenceRevision: '1' });
+  it('names the oldest first, goes to each card in turn, and names the one it went to', async () => {
+    const a = row({ ageSeconds: 40 * MINUTE });
+    const b = row({ taskId: TASK_B, title: 'the evidence envelope', evidenceRevision: '1', ageSeconds: 20 * MINUTE });
     const scope = await page({ rows: [a, b] });
 
-    expect(pointers(scope)).toHaveLength(2);
-    await click(pointers(scope)[1]);
+    // Before any press: the oldest, where the first press goes, and how many there are.
+    expect(named(scope)).toBe(a.title);
+    expect(line(scope).textContent).toContain('40m');
+    expect(line(scope).textContent).toContain(wayPosition(1, 2));
+    expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(2)}: ${a.title}`);
+    expect(line(scope).getAttribute('title')).toBe(GO_TO_CARD_HINT);
 
-    expect(scrolled).toEqual([anchorFor(scope, b)]);
-    expect(scrolled[0]).not.toBe(anchorFor(scope, a));
+    await click(line(scope));
+    expect(scrolled).toEqual([anchorFor(scope, a)]);
+    expect(named(scope)).toBe(a.title);
+    expect(line(scope).textContent).toContain(wayPosition(1, 2));
+    // From here a press goes on, and the line says so.
+    expect(line(scope).getAttribute('title')).toBe(GO_TO_NEXT_CARD_HINT);
+
+    await click(line(scope));
+    expect(scrolled).toEqual([anchorFor(scope, a), anchorFor(scope, b)]);
+    expect(named(scope)).toBe(b.title);
+    expect(line(scope).textContent).toContain('20m');
+    expect(line(scope).textContent).toContain(wayPosition(2, 2));
+
+    await click(line(scope));
+    expect(scrolled.at(-1), 'the press after the last card did not go back to the first').toBe(anchorFor(scope, a));
+    expect(named(scope)).toBe(a.title);
+    expect(line(scope).textContent).toContain(wayPosition(1, 2));
+    // Each press marked the card it went to, and only that one.
+    expect(marked).toEqual([anchorFor(scope, a), anchorFor(scope, b), anchorFor(scope, a)]);
+
+    // Three presses, and no list ever opened under the line; nothing was asked of the server.
+    expect(strip(scope).querySelectorAll('.decision-strip-body, .decision-rail-row')).toHaveLength(0);
+    expect(apiMock).not.toHaveBeenCalled();
   });
 
-  it('offers the pointer as a destination rather than as an answer', async () => {
+  it('names the oldest whatever order the read arrived in, and goes there first', async () => {
+    const newer = row({ taskId: TASK_B, title: 'the evidence envelope', evidenceRevision: '1', ageSeconds: 5 * MINUTE });
+    const older = row({ ageSeconds: 3 * 60 * MINUTE });
+    const scope = await page({ rows: [newer, older] });
+
+    expect(named(scope)).toBe(older.title);
+    expect(line(scope).textContent).toContain('3h');
+    await click(line(scope));
+    expect(scrolled).toEqual([anchorFor(scope, older)]);
+  });
+
+  it('names the first again when the card it last went to is answered in between', async () => {
+    const a = row({ ageSeconds: 30 * MINUTE });
+    const b = row({ taskId: TASK_B, title: 'the evidence envelope', evidenceRevision: '1', ageSeconds: 20 * MINUTE });
+    const c = row({ taskId: TASK_C, title: 'the stalled inventory', evidenceRevision: '1', ageSeconds: 10 * MINUTE });
+    const scope = await page({ rows: [a, b, c] });
+
+    await click(line(scope));
+    await click(line(scope));
+    expect(scrolled.at(-1)).toBe(anchorFor(scope, b));
+    expect(named(scope)).toBe(b.title);
+    expect(line(scope).textContent).toContain(wayPosition(2, 3));
+
+    // b is answered: the next read no longer has it, so the line cannot still be "on" it.
+    await repage({ rows: [a, c] });
+    expect(named(scope), 'the line still names a card that is no longer a question').toBe(a.title);
+    expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(2)}: ${a.title}`);
+    expect(line(scope).textContent).toContain(wayPosition(1, 2));
+
+    await click(line(scope));
+    expect(scrolled.at(-1)).toBe(anchorFor(scope, a));
+    expect(named(scope)).toBe(a.title);
+  });
+
+  it('offers the line as a destination rather than as an answer', async () => {
     const only = row();
     const scope = await page({ rows: [only] });
 
-    expect(strip(scope).textContent).toContain(POINTER_HINT);
-    // And pressing it wrote nothing: the strip still says exactly what it said, because a
-    // navigation does not settle a question.
-    await click(pointers(scope)[0]);
-    expect(pointers(scope)).toHaveLength(1);
+    expect(line(scope).getAttribute('title')).toBe(GO_TO_CARD_HINT);
+    expect(line(scope).textContent).toContain('20m');
+    // Pressing it wrote nothing: a navigation does not settle a question, so the line says what it
+    // said — and with one card there is no position to claim and no "next" to promise.
+    await click(line(scope));
+    expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(1)}: ${only.title}`);
+    expect(line(scope).textContent).not.toMatch(/\d of \d/u);
+    expect(line(scope).getAttribute('title')).toBe(GO_TO_CARD_HINT);
   });
 });
 
@@ -243,8 +331,8 @@ describe('a row points at the evidence card that answers it', () => {
  * card for it.
  *
  * Each case is a real thing that happens, and all of them come out of the card's own filter. What
- * each asserts is the same: the row is not on the strip and not in its count, and nothing on the
- * page carries its handle.
+ * each asserts is the same: the row is not in the line's count, no press reaches for it, and
+ * nothing on the page carries its handle.
  */
 describe('a row this conversation draws no card for is not on its strip', () => {
   /** Nothing to press and nothing to read, whichever way the card is missing. */
@@ -252,7 +340,6 @@ describe('a row this conversation draws no card for is not on its strip', () => 
     // The only row in the read, so the strip has nothing left to say and is not drawn at all.
     expect(scope.querySelector('.decision-strip'), 'the strip is still drawn').toBeNull();
     expect(scope.textContent).not.toContain(r.title);
-    expect(pointers(scope)).toHaveLength(0);
     expect(anchorFor(scope, r), 'something on the page publishes this row’s handle').toBeNull();
     expect(scrolled).toEqual([]);
   };
@@ -273,28 +360,30 @@ describe('a row this conversation draws no card for is not on its strip', () => 
     expectAbsent(await page({ rows: [unfiled] }), unfiled);
   });
 
-  it('counts only its own project’s row when the account has others waiting elsewhere', async () => {
+  it('counts only its own project’s row when the account has others waiting elsewhere, and goes only to its card', async () => {
     // The screenshot this came from: a coordinator leading with "5 needs your decision", every one
-    // of them another project's task and none with a card in the conversation it sat above.
+    // of them another project's task and none with a card in the conversation it sat above. The
+    // others are older, and still not the one the line names.
     const own = row();
-    const elsewhere = row({ taskId: TASK_B, title: 'the evidence envelope', projectId: OTHER_PROJECT_ID });
-    const unfiled = row({ taskId: TASK_C, title: 'the stalled inventory', projectId: null });
+    const elsewhere = row({ taskId: TASK_B, title: 'the evidence envelope', projectId: OTHER_PROJECT_ID, ageSeconds: 90 * MINUTE });
+    const unfiled = row({ taskId: TASK_C, title: 'the stalled inventory', projectId: null, ageSeconds: 60 * MINUTE });
     const scope = await page({ rows: [elsewhere, own, unfiled] });
 
-    expect(strip(scope).querySelector('.decision-strip-count')?.textContent).toBe(needsDecisionCount(1));
-    expect(strip(scope).querySelectorAll('.decision-rail-row')).toHaveLength(1);
-    expect(pointers(scope)).toHaveLength(1);
-    expect(strip(scope).textContent).toContain(own.title);
+    expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(1)}: ${own.title}`);
+    await click(line(scope));
+    await click(line(scope));
+    expect(scrolled).toEqual([anchorFor(scope, own), anchorFor(scope, own)]);
     expect(scope.textContent).not.toContain(elsewhere.title);
     expect(scope.textContent).not.toContain(unfiled.title);
   });
 
-  it('does not throw or scroll if a reveal is asked for anyway', async () => {
+  it('does not throw, scroll or mark anything if a reveal is asked for anyway', async () => {
     // The last line of defence: `hasCard` is computed at render and pressed a moment later, so it
     // can go stale. Reveal says it did not arrive instead of scrolling something else.
     const only = row();
     await page({ rows: [only], projectId: null });
     expect(revealDecisionCard(only)).toBe(false);
     expect(scrolled).toEqual([]);
+    expect(marked).toEqual([]);
   });
 });

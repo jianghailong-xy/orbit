@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
+import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
 import {
-  shortSeal,
+  CRITERIA_DECISION_HEADING,
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
 } from './CriteriaDecisionCard';
@@ -42,13 +43,13 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  * else. Until 2026-09-10 that card was an `AskUserQuestion` a coordinator turn raised; it is drawn
  * from the same read as these rows now, and no question an agent asks is taken for it. What is kept
  * here is the one thing the card cannot do: stay pinned while the conversation scrolls, and say at
- * a glance how many are waiting. The rows are POINTERS. Pressing one takes the reader to the card,
+ * a glance how many are waiting. The line is a POINTER. Pressing it takes the reader to a card,
  * which is a navigation and not an answer, and `DecisionRail.test.tsx` asserts over the rendered
  * output that nothing here answers anything — absence, not `disabled`, because a disabled button is
  * still a second door with a lock somebody can take off.
  *
- * A ROW IS COUNTED WHERE ITS CARD IS
- * ----------------------------------
+ * A QUESTION IS COUNTED WHERE ITS CARD IS
+ * ---------------------------------------
  * A pointer is only worth having if it arrives somewhere. The card is drawn from the same read as
  * these rows and waits on no turn, so what a waiting row can lack is a card in THIS conversation:
  * one is drawn only in the coordinator session of the project the row's task is filed under. An
@@ -57,33 +58,38 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  * holds (`evidenceDecisionCardRows` in `EvidenceDecisionCard.tsx`): is there a card for this row
  * on screen.
  *
- * A row without one is neither listed nor counted here. It used to stay, as text saying where its
- * card was drawn instead, and every coordinator in the account then led with the same number about
- * other projects' tasks — a count this conversation could clear none of. The row is still open, and
- * the strip of the conversation that draws its card counts it.
+ * A row without one is not counted here. It used to be listed, as text saying where its card was
+ * drawn instead, and every coordinator in the account then led with the same number about other
+ * projects' tasks — a count this conversation could clear none of. The row is still open, and the
+ * strip of the conversation that draws its card counts it.
  *
- * ONE LINE UNTIL ASKED
- * --------------------
- * Collapsed is two numbers and nothing else. This blocks no turn, so it must not look like the
- * approval card, which does; expanding is a deliberate act. The same judgment the iOS Needs-you
- * banner was settled on: one signal and one way through to the thing, never a cascade of badges
- * saying the same fact in four places.
+ * ONE LINE, AND PRESSING IT IS THE WAY THROUGH
+ * --------------------------------------------
+ * The line is the signal and pressing it goes to the card: the judgment the iOS Needs-you banner was
+ * settled on, one signal and one way through to the thing, never a cascade of badges saying the
+ * same fact in four places. A phone had it first (project instruction #8); every screen has it now.
+ * It blocks no turn, so it must not look like the approval card, which does.
  *
- * ON A PHONE, NOT EVEN A FOLD
- * ---------------------------
- * A phone gets that judgment whole (project instruction #8): the line is the signal and pressing it
- * is the way through, straight to the highest card this conversation draws for a question it
- * counts, and no list ever opens under it. So on a phone it counts only what that press can reach,
- * and with nothing to reach it is not drawn. What only a sentence can carry — the resubmission a
- * WAITING ON YOU row asks its submitter for — stays on the wider screens, where it has room.
+ * With several questions no list opens under it, and the line does not lead with a bare number
+ * either (the owner's calls, 2026-09-12). The cards already are that list, drawn together in the
+ * conversation, and a second copy pinned above them was one more thing to read before reaching the
+ * one to answer; a count said how many without saying what. So the line names ONE question in its
+ * card's own words — the oldest, with weakenings ahead of evidence and the settlement question last —
+ * with how long it has waited and where it stands among the rest. Each press goes to the next card
+ * and the line names the one it went to, back to the first after the last. Where it went is kept as
+ * that card's key rather than as an index, so a card answered in between is simply not there any
+ * more, and the line names the first again. The count itself is said to a screen reader.
+ *
+ * What only a sentence can carry — the resubmission a WAITING ON YOU row asks its submitter for —
+ * stays on the wider screens, where it has room, as the one fold left. A phone has no line for it.
  *
  * NOTHING IS SHOWN TO SOMEBODY WHO CANNOT ACT ON IT
  * ------------------------------------------------
- * `NEEDS YOUR DECISION` lists rows THIS session may answer and nothing else. The server already
- * scopes its read that way; the filter here is the second half of the same rule rather than a
- * second opinion about it — it reads `independence.independent`, which is the decision door's own
- * answer carried on the row, and it is what keeps the count and the list from ever disagreeing.
- * A row a reader may not answer under a heading that says DECIDE is the same broken promise this
+ * The line counts questions THIS session may answer and nothing else. The server already scopes its
+ * read that way; the filter here is the second half of the same rule rather than a second opinion
+ * about it — it reads `independence.independent`, which is the decision door's own answer carried on
+ * the row, and it is what keeps the count and the cards a press reaches from ever disagreeing. A
+ * number that says DECIDE over a question the reader may not answer is the same broken promise this
  * card was fixed for once already.
  *
  * TWO GROUPS, BECAUSE THE DOOR HAS TWO ANSWERS
@@ -153,8 +159,8 @@ export interface PendingDecisionRow {
 export interface PendingDecisionQueue {
   decidingSessionId: string;
   /** How many rows this session is asked to decide — `pending` only, never the groups summed.
-   *  On the wire, and not what the strip renders: every number on screen is read off the list it
-   *  sits above, so the two can never come apart. */
+   *  On the wire, and not what the strip renders: every number on screen is read off what it
+   *  counts, so the two can never come apart. */
   count: number;
   oldestAgeSeconds: number | null;
   pending: PendingDecisionRow[];
@@ -164,87 +170,113 @@ export interface PendingDecisionQueue {
 
 /** The strip's own name, for the reader of a screen reader and for a test asking "is it there". */
 export const STRIP_LABEL = 'Open questions';
-/** The group that asks something of this reader. Nothing else goes under it. */
-export const NEEDS_DECISION_LABEL = 'NEEDS YOUR DECISION';
 /** The group this reader is the one to clear, by submitting another revision. */
 export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
 
 /**
- * ── THE SECOND ROW TYPE: A HELD CRITERIA WEAKENING ───────────────────────────────────────────
+ * Take the reader to the settlement card: the third kind of question the line counts.
  *
- * The strip has always listed one kind of question — a completion decision about one task's
- * evidence. This adds the other: a proposal to make this project's ruler LOOSER, which the account
- * owner answers and nobody else can.
- *
- * WHY IT IS A ROW HERE AND NOT A SECOND STRIP
- * -------------------------------------------
- * Because it is the same fact this strip already exists to state: what is open, recomputed from the
- * ledger every read. The proposal's own card is delivered into the conversation and can be missed —
- * the reader is asleep, the engine abandons the turn, the tab was closed — and none of that writes
- * anything, so the question is still there on the next read. That is what this row is: the floor
- * under a card that may never be answered, and it comes from the same derived read the card does
- * (`readPendingCriteriaDecisions`), so the two can never disagree about what is pending.
- *
- * ONLY THE ONES A READER CAN ACTUALLY ANSWER
- * ------------------------------------------
- * A proposal whose base seal has moved is undecidable for everybody: the door refuses every answer
- * to it, and what clears it is the PROPOSER refiling against the ruler in force. Listing it under a
- * heading that says DECIDE would be the exact bug this card was fixed for once already — so it is
- * not listed, and the explanation of why lives on its card, where the reader met the question. The
- * count above the list is read off the list, as every number here is.
- */
-export const CRITERIA_ROW_LABEL = 'A weakening of this project’s criteria is waiting for you';
-/** The row's second line: what is proposed, against which ruler, and how long it has waited. */
-export function criteriaRowDetail(row: PendingCriteriaDecisionRow): string {
-  return (
-    `${row.proposed.length} criteria proposed · base seal ${shortSeal(row.baselineSeal)} · filed `
-    + `${formatAge(row.ageSeconds)} ago`
-  );
-}
-/** The affordance that takes the reader to the card in the conversation. */
-export const CRITERIA_ROW_OPEN = 'Open';
-
-/**
- * ── THE THIRD ROW TYPE: THE SETTLEMENT QUESTION ──────────────────────────────────────────────
- *
- * Whether this project's criteria, together, are what "done" means: the question Orbit draws into
+ * Whether this project's criteria, together, are what "done" means is the question Orbit draws into
  * the coordinator conversation (`AcceptanceConfirmationCard.tsx`) once it is the last thing the
  * project's DONE waits on. The card stays where it was drawn while the conversation goes on, and
  * nothing pinned said it was there.
  *
- * THE CARD'S ANSWER, NOT A SECOND ONE
- * -----------------------------------
- * The row is shown while that card is on screen and still a question, which is how iOS's needs-you
- * bar counts it (`openQuestionRowIDs`, `AcceptanceConfirmations.isOpen`) — and the card is what says
- * so. Neither half can be read back off the standing: a delivered card stays when the criteria move,
- * Not yet takes it away, and a set confirmed at another end leaves it on screen but no longer asking.
- * So nothing here decides when that card is drawn; the page passes on what the card reported.
+ * It is counted while that card is on screen and still a question, which is how iOS's needs-you bar
+ * counts it (`openQuestionRowIDs`, `AcceptanceConfirmations.isOpen`) — and the card is what says so.
+ * Neither half can be read back off the standing: a delivered card stays when the criteria move, Not
+ * yet takes it away, and a set confirmed at another end leaves it on screen but no longer asking. So
+ * nothing here decides when that card is drawn; the page passes on what the card reported. The
+ * confirmation binds a version of the set and is pressed on the card with that set readable under
+ * the button, so a press here scrolls to the card and asks the server nothing.
  *
- * A WAY TO THE CARD, AND NOTHING ELSE
- * -----------------------------------
- * The confirmation binds a version of the set, and it is pressed on the card with that set readable
- * under the button. A press here scrolls to the card and asks the server nothing.
+ * A conversation draws at most one, so its class is the handle. Returns whether it arrived, as
+ * `revealDecisionCard` does.
  */
-export const SETTLEMENT_ROW_LABEL =
-  'Settlement is waiting on your confirmation of this project’s criteria';
-
-/** Take the reader to the settlement card. A conversation draws at most one, so its class is the
- *  handle. Returns whether it arrived, as `revealDecisionCard` does. */
 export function revealSettlementCard(scope: ParentNode = document): boolean {
   const card = scope.querySelector<HTMLElement>('.settlement-card');
   if (!card) return false;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  markReached(card);
   return true;
 }
 
+/** Take the reader to a held weakening's card, which carries its intent in its id. Returns whether
+ *  it arrived, as `revealDecisionCard` does. */
+export function revealCriteriaCard(intentId: string, scope: Document = document): boolean {
+  const card = scope.getElementById(`criteria-decision-${intentId}`);
+  if (!card) return false;
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  markReached(card);
+  return true;
+}
 
-/** The two numbers the collapsed line is made of, and the only two it may carry. */
+/** How long the mark takes to fade once the card it is on has stopped moving. */
+const REACHED_FADE_MS = 1400;
+/** Frames the card must hold still after it has moved to count as arrived; frames it may sit
+ *  unmoved before that counts as "it was there already"; and the most a press waits for either. */
+const REST_FRAMES = 6;
+const UNMOVED_FRAMES = 30;
+const MAX_REST_WAIT_FRAMES = 300;
+
+/**
+ * Mark the card a press took the reader to: a ring held while the conversation scrolls to it, which
+ * fades once the card has arrived.
+ *
+ * The cards are drawn together at the foot of the conversation, so the scroll alone often does not
+ * say which one a press meant: the last of them cannot be centred, and the next one is usually on
+ * screen already. A mark that began fading at the press was gone by the time a long scroll landed,
+ * so it is held until the card stops moving — and a smooth scroll can take several frames to start,
+ * so a card that has not moved yet is not taken to have arrived until it has sat still for longer.
+ * It is an animation of its own rather than a class, so it touches nothing React renders and starts
+ * over cleanly when the same card is reached again.
+ */
+function markReached(card: HTMLElement): void {
+  if (typeof card.animate !== 'function') return;
+  const accent = getComputedStyle(card).getPropertyValue('--accent').trim() || '#3b82f6';
+  const ring = card.animate(
+    [{ boxShadow: `0 0 0 2px ${accent}` }, { boxShadow: '0 0 0 2px transparent' }],
+    { duration: REACHED_FADE_MS, easing: 'ease-out' },
+  );
+  ring.pause();
+  let lastTop = card.getBoundingClientRect().top;
+  let moved = false;
+  let still = 0;
+  let frames = 0;
+  const waitForRest = () => {
+    const top = card.getBoundingClientRect().top;
+    // A shift of a pixel or two is the page settling around the card — the line above re-laid out
+    // with another question's words — and not the scroll.
+    if (Math.abs(top - lastTop) <= 2) {
+      still += 1;
+    } else {
+      moved = true;
+      still = 0;
+    }
+    lastTop = top;
+    frames += 1;
+    const arrived = still >= (moved ? REST_FRAMES : UNMOVED_FRAMES);
+    if (arrived || frames >= MAX_REST_WAIT_FRAMES) ring.play();
+    else requestAnimationFrame(waitForRest);
+  };
+  requestAnimationFrame(waitForRest);
+}
+
+
+/** What the line says: how many questions a press can reach, and how many submissions wait on the
+ *  reader's own revision. */
 export function needsDecisionCount(rows: number): string {
   return `${rows} needs your decision`;
 }
 export function waitingOnYouCount(rows: number): string {
   return `${rows} waiting on you`;
 }
+/** Which of several cards the last press went to, in the order the conversation draws them. */
+export function wayPosition(at: number, of: number): string {
+  return `${at} of ${of}`;
+}
+/** What pressing the line does, said as the destination rather than as the act. */
+export const GO_TO_CARD_HINT = 'Go to its card';
+export const GO_TO_NEXT_CARD_HINT = 'Go to the next card';
 
 /**
  * How a row here and a card over there name the same thing.
@@ -257,9 +289,6 @@ export function waitingOnYouCount(rows: number): string {
 export function decisionRowKey(row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>): string {
   return `${row.taskId}@${row.evidenceRevision}`;
 }
-
-/** What the pointer offers, said as the destination rather than as the act. */
-export const POINTER_HINT = 'Answer on its card ↓';
 
 /**
  * What has to happen before this row becomes answerable, addressed to the party who can do it.
@@ -279,8 +308,8 @@ export const WAITING_ON_YOU_ACTION =
  *
  * The card publishes `data-decision-row` from `decisionRowKey`, so the handle is a pure function
  * of the row and there is no map between the two to keep in step. Returns whether it arrived: the
- * caller only offers the pointer when the card's own filter says there is one, and a `false` here
- * means that answer went stale between the render and the press.
+ * line only counts a row the card's own filter says has a card, and a `false` here means that answer
+ * went stale between the render and the press.
  */
 export function revealDecisionCard(
   row: Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>,
@@ -290,6 +319,7 @@ export function revealDecisionCard(
   const card = scope.querySelector<HTMLElement>(`[data-decision-row="${key}"]`);
   if (!card) return false;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  markReached(card);
   return true;
 }
 
@@ -304,7 +334,7 @@ export function formatAge(seconds: number): string {
   return hours % 24 === 0 ? `${days}d` : `${days}d ${hours % 24}h`;
 }
 
-/** The four facts a row leads with, in both of the shapes a row can take. */
+/** The four facts a row leads with. */
 function RowFacts({ row }: { row: PendingDecisionRow }) {
   return (
     <>
@@ -319,10 +349,10 @@ function RowFacts({ row }: { row: PendingDecisionRow }) {
 }
 
 /**
- * Whether a row is a pointer: both halves of the door's own answer, and then whether the card
- * exists. A row the door would refuse has nowhere to go by construction — no card is ever drawn for
- * one — so this says the same thing twice on purpose: the pointer appears only for a row that could
- * be answered by this reader on a card that is on screen. The phone line counts exactly these.
+ * Whether the line can take the reader to this row's card: both halves of the door's own answer,
+ * and then whether the card exists. A row the door would refuse has nowhere to go by construction —
+ * no card is ever drawn for one — so this says the same thing twice on purpose: the line counts a
+ * row only if it could be answered by this reader on a card that is on screen.
  */
 function pointsAtCard(
   row: PendingDecisionRow,
@@ -332,89 +362,27 @@ function pointsAtCard(
 }
 
 /**
- * One group's rows: a pointer where there is somewhere to point, and a sentence where there is not.
- *
- * Extracted so both groups share one row renderer: a group that grew its own would be a second
- * place for "what a row shows" to drift, and the difference between the groups is which rows are
- * in them, never how a row reads.
+ * The rows waiting on this reader's own resubmission: the facts, and the sentence saying what clears
+ * them. Not a control. No card is drawn for one of these anywhere, and a control that goes nowhere
+ * is worse than none.
  */
-function DecisionRows({
-  group,
-  hasCard,
-  onReveal,
-}: {
-  group: PendingDecisionRow[];
-  hasCard: (row: PendingDecisionRow) => boolean;
-  onReveal: (row: PendingDecisionRow) => void;
-}) {
+function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
   return (
     <ul className="decision-rail-list">
-      {group.map((row) => {
-        const pointable = pointsAtCard(row, hasCard);
-        return (
-          <li className="decision-rail-row" key={row.taskId}>
-            {pointable ? (
-              <button
-                className="decision-rail-summary decision-rail-pointer"
-                type="button"
-                onClick={() => onReveal(row)}
-              >
-                <RowFacts row={row} />
-                <span className="decision-rail-goto">{POINTER_HINT}</span>
-              </button>
-            ) : (
-              <>
-                {/* Not a button. There is nowhere to go, and a control that goes nowhere is the
-                    thing this round replaced a working button with if it is left pressable. */}
-                <div className="decision-rail-summary decision-rail-inert">
-                  <RowFacts row={row} />
-                </div>
-                <div className="decision-rail-why">
-                  <Typography.Text type="warning">
-                    {row.decidability.refusal
-                      ?? 'no decision can be recorded about this evidence'}
-                  </Typography.Text>
-                  <div>
-                    <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
-                  </div>
-                </div>
-              </>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/**
- * The held proposals, as rows: what is being asked, and one way through to the card that asks it.
- *
- * The row answers nothing itself. There is one decision surface for a proposal — the card the
- * server delivered into the conversation — and a second set of buttons here would be two faces
- * racing for one answer, which this account has already paid for once. So the row states the fact
- * and opens the card; the ONE RULE is met by having no action that could be refused at all.
- */
-function CriteriaDecisionRows({
-  rows,
-  onOpen,
-}: {
-  rows: PendingCriteriaDecisionRow[];
-  onOpen?: (row: PendingCriteriaDecisionRow) => void;
-}) {
-  return (
-    <ul className="decision-rail-list decision-rail-criteria">
-      {rows.map((row) => (
-        <li className="decision-rail-row" key={row.intentId}>
-          <button
-            className="decision-rail-summary decision-rail-criteria-summary"
-            type="button"
-            onClick={() => onOpen?.(row)}
-          >
-            <span className="decision-rail-task">{CRITERIA_ROW_LABEL}</span>
-            <span className="decision-rail-criterion">{criteriaRowDetail(row)}</span>
-            <span className="decision-rail-open">{CRITERIA_ROW_OPEN}</span>
-          </button>
+      {group.map((row) => (
+        <li className="decision-rail-row" key={row.taskId}>
+          <div className="decision-rail-summary decision-rail-inert">
+            <RowFacts row={row} />
+          </div>
+          <div className="decision-rail-why">
+            <Typography.Text type="warning">
+              {row.decidability.refusal
+                ?? 'no decision can be recorded about this evidence'}
+            </Typography.Text>
+            <div>
+              <Typography.Text>{WAITING_ON_YOU_ACTION}</Typography.Text>
+            </div>
+          </div>
         </li>
       ))}
     </ul>
@@ -422,28 +390,19 @@ function CriteriaDecisionRows({
 }
 
 /**
- * The settlement question, as a row: what is asked, and the way to the card that asks it. Its one
- * control is a pointer, for the reason the note above the row type gives.
- */
-function SettlementRow({ onReveal }: { onReveal: () => void }) {
-  return (
-    <ul className="decision-rail-list decision-rail-settlement">
-      <li className="decision-rail-row">
-        <button
-          className="decision-rail-summary decision-rail-pointer"
-          type="button"
-          onClick={onReveal}
-        >
-          <span className="decision-rail-task">{SETTLEMENT_ROW_LABEL}</span>
-          <span className="decision-rail-goto">{POINTER_HINT}</span>
-        </button>
-      </li>
-    </ul>
-  );
-}
-
-/**
- * The proposals a reader at this screen could actually answer — see the row type's note above.
+ * The held weakenings a reader at this screen could actually answer: the second kind of question the
+ * line counts.
+ *
+ * A proposal to make this project's ruler LOOSER is answered by the account owner and nobody else.
+ * Its card is delivered into the conversation and can be missed — the reader is asleep, the engine
+ * abandons the turn, the tab was closed — and none of that writes anything, so the question is
+ * still there on the next read. The count comes from the same derived read the card does
+ * (`readPendingCriteriaDecisions`), so the two can never disagree about what is pending.
+ *
+ * A proposal whose base seal has moved is undecidable for everybody: the door refuses every answer
+ * to it, and what clears it is the PROPOSER refiling against the ruler in force. Counting it under a
+ * line that says DECIDE would be the exact bug this card was fixed for once already — so it is not
+ * counted, and the explanation of why lives on its card, where the reader met the question.
  */
 export function decidableCriteriaRows(
   criteria: PendingCriteriaDecisionQueue | null | undefined,
@@ -452,17 +411,23 @@ export function decidableCriteriaRows(
 }
 
 
+/** Oldest first: the order the line names questions in, within each kind. */
+function oldestFirst<T extends { ageSeconds: number }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => b.ageSeconds - a.ageSeconds);
+}
+
 /**
- * The strip itself: presentational, pinned, and one line until somebody asks for more.
+ * The strip itself: presentational, pinned, and one line that goes to the cards.
  *
  * It takes the whole payload as a prop and issues no request, so a static render can assert what
- * each state puts on screen — including the states that are about absence.
+ * each state puts on screen — including the states that are about absence. The one thing it keeps
+ * is which card the last press went to, so the line can name it and the next press can go on.
  *
- * `NEEDS YOUR DECISION` is built from the rows this session may answer on a card in this
- * conversation and from nothing else, and the count on the collapsed line is the length of that
- * same array. One array, so the number a reader decides to stop on cannot promise more than the
- * list under it delivers — and a row this reader may not answer, or may answer only in another
- * conversation, can never appear under a heading that says it should.
+ * The line names one question — the oldest, until a press has gone somewhere — and its count is the
+ * length of the array of cards a press can reach, and of nothing else: the questions this session
+ * may answer on a card in this conversation. One array, so the number cannot promise more than the
+ * presses deliver — and a question this reader may not answer, or may answer only in another
+ * conversation, is never counted or named.
  */
 export function DecisionStrip({
   queue,
@@ -483,12 +448,12 @@ export function DecisionStrip({
   /** Whether this conversation's settlement card is on screen and still a question: the card's own
    *  report, passed on by the page. False wherever no such card is drawn. */
   confirmation?: boolean;
-  /** Expanded is a deliberate act; the default is the one line. */
+  /** Whether the WAITING ON YOU rows are unfolded: the one fold left, and a deliberate act. */
   open: boolean;
-  /** A phone, where the line is the way through rather than a fold (ON A PHONE, above). */
+  /** A phone, which has no line for the WAITING ON YOU sentence (ONE LINE, above). */
   phone?: boolean;
   /** Whether this row's decision card is on screen and could still be answered. The default is
-   *  the honest one for a caller that does not know: the row is neither listed nor counted. */
+   *  the honest one for a caller that does not know: the row is not counted. */
   hasCard?: (row: PendingDecisionRow) => boolean;
   onToggle: (open: boolean) => void;
   onReveal?: (row: PendingDecisionRow) => void;
@@ -497,120 +462,111 @@ export function DecisionStrip({
   /** Where the reader goes to answer the settlement question: its card. */
   onRevealConfirmation?: () => void;
 }) {
+  const [at, setAt] = useState<string | null>(null);
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
   // session may not answer is not a question put to this session. Nor is one whose card another
   // conversation draws: that coordinator's strip counts it, and this one could clear none of it.
-  const decisions = queue.pending.filter((row) => row.independence.independent && hasCard(row));
-  // Oldest first is the order the server sends, so the age this group leads with is the first row's
-  // rather than the payload's `oldestAgeSeconds`. Same reason the count comes from `decisions`:
-  // every number on screen is read off the list under it, so there is no second value to drift.
-  const yours = queue.waitingOnYou ?? [];
-  const proposals = decidableCriteriaRows(criteria);
-  // Everything under `NEEDS YOUR DECISION`, which is what the line's first number counts.
-  const asked = decisions.length + proposals.length + (confirmation ? 1 : 0);
-
-  if (phone) {
-    // Only what the press can reach, in the order the conversation draws the cards — weakenings,
-    // then evidence, then the settlement question — so it goes to the highest of them.
-    const ways = [
-      ...(onOpenCriteria ? proposals.map((row) => () => onOpenCriteria(row)) : []),
-      ...decisions.filter((row) => pointsAtCard(row, hasCard)).map((row) => () => onReveal(row)),
-      ...(confirmation ? [onRevealConfirmation] : []),
-    ];
-    if (ways.length === 0) return null;
-    return (
-      <div className="decision-strip" aria-label={STRIP_LABEL}>
-        <button className="decision-strip-line" type="button" onClick={() => ways[0]()}>
-          <span className="decision-strip-dot" aria-hidden="true" />
-          <span className="decision-strip-count">{needsDecisionCount(ways.length)}</span>
-          <span className="decision-strip-caret" aria-hidden="true">↓</span>
-        </button>
-      </div>
-    );
-  }
-
-  if (asked === 0 && yours.length === 0) return null;
-  // Three kinds under one heading, so the age it leads with is the oldest of everything under it
-  // that has an age. The settlement question has none to give — its card does not know when
-  // settlement began to wait on it — and the heading does not invent one for it.
-  const aged = [...proposals, ...decisions];
-  const oldest = Math.max(...aged.map((row) => row.ageSeconds), 0);
-
-  const rowsFor = (group: PendingDecisionRow[]) => (
-    <DecisionRows group={group} hasCard={hasCard} onReveal={onReveal} />
-  );
+  const decisions = queue.pending.filter((row) => pointsAtCard(row, hasCard));
+  const yours = phone ? [] : (queue.waitingOnYou ?? []);
+  // Every card a press can reach, oldest first within each kind, each named in the words its card
+  // uses and kept under a key that outlives a re-read of the queue. Weakenings lead: a held one is a
+  // question about the ruler everything else is measured with, and deciding evidence against a ruler
+  // about to move is the one order of reading that can go wrong. The settlement question has no age
+  // to give, and comes last, as its card does.
+  const ways: Array<{ key: string; label: string; ageSeconds: number | null; go: () => void }> = [
+    ...(onOpenCriteria
+      ? oldestFirst(decidableCriteriaRows(criteria)).map((row) => ({
+        key: `weakening:${row.intentId}`,
+        label: CRITERIA_DECISION_HEADING,
+        ageSeconds: row.ageSeconds,
+        go: () => onOpenCriteria(row),
+      }))
+      : []),
+    ...oldestFirst(decisions).map((row) => ({
+      key: `evidence:${decisionRowKey(row)}`,
+      label: row.title,
+      ageSeconds: row.ageSeconds,
+      go: () => onReveal(row),
+    })),
+    ...(confirmation
+      ? [{ key: 'settlement', label: ACCEPTANCE_CONFIRMATION_TITLE, ageSeconds: null, go: onRevealConfirmation }]
+      : []),
+  ];
+  if (ways.length === 0 && yours.length === 0) return null;
+  // Where the last press went, while that card is still one to go to. Until a press has gone
+  // anywhere the line names the first, which is where the first press goes.
+  const here = ways.findIndex((way) => way.key === at);
+  const shown = ways[Math.max(here, 0)];
+  const step = () => {
+    const way = ways[(here + 1) % ways.length];
+    way.go();
+    setAt(way.key);
+  };
 
   return (
     <div className="decision-strip" aria-label={STRIP_LABEL}>
-      {/* The collapsed state, and the whole of it: at most two numbers, on one line, with no
-          control that answers anything. It blocks no turn and must not look like the approval card,
-          which does. */}
-      <button
-        className="decision-strip-line"
-        type="button"
-        aria-expanded={open}
-        onClick={() => onToggle(!open)}
-      >
-        {asked === 0 ? null : (
+      {/* The whole of what the questions get: the one the line is on, how long it has waited, where
+          it stands among the rest, and the way to its card — with no control that answers anything.
+          The count is said to a screen reader, which cannot glance down at the cards. */}
+      {shown === undefined ? null : (
+        <button
+          className="decision-strip-line"
+          type="button"
+          aria-label={`${needsDecisionCount(ways.length)}: ${shown.label}`}
+          title={here < 0 || ways.length < 2 ? GO_TO_CARD_HINT : GO_TO_NEXT_CARD_HINT}
+          onClick={step}
+        >
           <span className="decision-strip-dot" aria-hidden="true" />
-        )}
-        {asked === 0 ? null : (
-          <span className="decision-strip-count">{needsDecisionCount(asked)}</span>
-        )}
-        {asked === 0 || yours.length === 0 ? null : (
-          <span className="decision-strip-sep" aria-hidden="true">·</span>
-        )}
-        {yours.length === 0 ? null : (
+          <span className="decision-strip-title">{shown.label}</span>
+          {shown.ageSeconds === null ? null : (
+            <span className="decision-strip-quiet">{formatAge(shown.ageSeconds)}</span>
+          )}
+          {ways.length < 2 ? null : (
+            <>
+              <span className="decision-strip-sep" aria-hidden="true">·</span>
+              <span className="decision-strip-quiet">
+                {wayPosition(Math.max(here, 0) + 1, ways.length)}
+              </span>
+            </>
+          )}
+          <span className="decision-strip-caret" aria-hidden="true">↓</span>
+        </button>
+      )}
+
+      {/* The submissions this session is the one to fix, and the only undecidable rows that reach
+          any session at all. No card anywhere to go to, so they get the one fold left and the
+          sentence saying what clears them — not greyed, because that sentence is an instruction to
+          the reader rather than news about somebody else. */}
+      {yours.length === 0 ? null : (
+        <button
+          className="decision-strip-line"
+          type="button"
+          aria-expanded={open}
+          onClick={() => onToggle(!open)}
+        >
           <span className="decision-strip-count decision-strip-quiet">
             {waitingOnYouCount(yours.length)}
           </span>
-        )}
-        <span className="decision-strip-caret" aria-hidden="true">{open ? '▴' : '▾'}</span>
-      </button>
-
-      {open ? (
+          <span className="decision-strip-caret" aria-hidden="true">{open ? '▴' : '▾'}</span>
+        </button>
+      )}
+      {yours.length === 0 || !open ? null : (
         <div className="decision-strip-body">
-          {/* The questions for a decider, and the only group that points anywhere.
-              The proposals come first: a held one is a question about the ruler everything under
-              it is measured with, and answering an evidence row against a ruler that is about to
-              move is the one order of reading this group can get wrong. The settlement question
-              comes last, as its card does in the conversation. */}
-          {asked === 0 ? null : (
-            <section className="decision-rail-group" aria-label={NEEDS_DECISION_LABEL}>
-              <div className="decision-rail-head">
-                <span className="decision-rail-label">{NEEDS_DECISION_LABEL}</span>
-                {aged.length === 0 ? null : (
-                  <span className="decision-rail-oldest">{`oldest ${formatAge(oldest)}`}</span>
-                )}
-              </div>
-              {proposals.length === 0 ? null : (
-                <CriteriaDecisionRows rows={proposals} onOpen={onOpenCriteria} />
-              )}
-              {decisions.length === 0 ? null : rowsFor(decisions)}
-              {confirmation ? <SettlementRow onReveal={onRevealConfirmation} /> : null}
-            </section>
-          )}
-
-          {/* The submissions this session is the one to fix, and the only undecidable rows that
-              reach any session at all. Not greyed, because the sentence about the next revision is
-              an instruction to the reader rather than news about somebody else. */}
-          {yours.length === 0 ? null : (
-            <section className="decision-rail-group decision-rail-mine" aria-label={WAITING_ON_YOU_LABEL}>
-              <div className="decision-rail-head">
-                <span className="decision-rail-label">{WAITING_ON_YOU_LABEL}</span>
-                <span className="decision-rail-count">{`${yours.length} to resubmit`}</span>
-              </div>
-              {rowsFor(yours)}
-            </section>
-          )}
+          <section className="decision-rail-group decision-rail-mine" aria-label={WAITING_ON_YOU_LABEL}>
+            <div className="decision-rail-head">
+              <span className="decision-rail-label">{WAITING_ON_YOU_LABEL}</span>
+              <span className="decision-rail-count">{`${yours.length} to resubmit`}</span>
+            </div>
+            <DecisionRows group={yours} />
+          </section>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
 /**
- * The wired strip: one query, the fold, and a pointer per row that has somewhere to point.
+ * The wired strip: the reads, the line that goes to the cards, and the one fold left.
  *
  * There is no mutation. The only thing this component can do to the server is read from it, which
  * is the whole of what this round was about: `decideEvidence` and the two buttons that called it
@@ -625,7 +581,7 @@ export function SessionDecisionStrip({
 }: {
   sessionId: string;
   /** The project this session coordinates, when it coordinates one. Its held criteria proposals
-   *  are the strip's second row type; an ordinary session reads nothing extra. */
+   *  are the strip's second kind of question; an ordinary session reads nothing extra. */
   projectId?: string | null;
   /** The rows whose evidence card this conversation draws, by `decisionRowKey`. Computed by the
    *  page, which mounts that card beside this strip, with the card's own filter. */
