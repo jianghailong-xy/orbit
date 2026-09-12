@@ -521,7 +521,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/sessions.service.ts#createTurn',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge and conversation_turn/startup receipt children (rank 60).',
+    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge and conversation_turn/startup receipt children (rank 60); for a Watch wake, the delivery row its acknowledgement writes through `participateSendTransaction`, which no transaction holding a delivery row waits on a session for.',
     identity: "The caller's `clientTurnId` and message, both above the closure.",
     isolation: '',
     attempts: 4,
@@ -809,7 +809,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'watches/watch-evaluator.service.ts#evaluate',
     shape: 'TX_RETRIED',
-    locks: 'watch FOR UPDATE (one row), then watch_target and watch_match writes whose only foreign-key parent is that row, already held. task, session and approval are read without a lock. Unranked in lock-order.ts because it cannot close a cycle: the unit holds nothing but its one watch row, and nothing holding a task or session lock waits on it except a session or user delete cascading into watch — which this unit never waits on in return.',
+    locks: 'watch FOR UPDATE (one row), then watch_target and watch_match writes whose only foreign-key parent is that row, already held, and the watch_delivery row of a Match it records, whose parent is that new Match. task, session and approval are read without a lock. Unranked in lock-order.ts because it cannot close a cycle: the unit holds nothing but its one watch row, and nothing holding a task or session lock waits on it except a session or user delete cascading into watch — which this unit never waits on in return.',
     identity: 'The watch id, and the state and generation read under the row lock: the closing UPDATE is a compare-and-set on both, and `watch_match_watch_generation_key` makes a second Match of one generation a constraint rather than a race.',
     isolation: '',
     attempts: 4,
@@ -906,6 +906,11 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the
   // refusal it can raise is an authorization answer that rolls its caller's transaction back whole.
   { at: 'tasks/tasks.service.ts#refenceProjectScope', under: 'tasks.create, tasks.createMany, tasks.update' },
+  // A Watch wake's acknowledgement, written inside the turn's own transaction so the two commit
+  // together. It takes only the delivery's row, after createTurn holds the observer session, and
+  // nothing holding a delivery row waits on a session. Also issued on its own, as one compare-and-set
+  // on the lease generation, for a notification and for a turn an earlier attempt already queued.
+  { at: 'watches/watch-delivery.service.ts#acknowledgeDelivery', under: 'sessions.createTurn' },
   { at: 'watches/watch-evaluator.service.ts#land', under: 'watchEvaluator.evaluate' },
   // Test-only, and reachable only from the harness's own transaction.
 ];
@@ -1124,6 +1129,9 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/admin.controller.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },
+  { at: "watches/watch-delivery.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The delivery lease: a batch of due PENDING deliveries moved to IN_FLIGHT, each under its own lease generation. `FOR UPDATE SKIP LOCKED` passes over a row another claim or settlement holds instead of waiting for it, so the statement has no wait edge; a delivery it skips is still due on the next pass." },
+  { at: "watches/watch-delivery.service.ts#fail", class: "ONE_ROW_CAS", statements: 1, note: "A failed attempt, recorded only while the claim's lease generation is still the row's: back to PENDING on the backoff, or a dead letter at the attempt cap or on a refusal. A lost CAS means a takeover holds the row and settles it." },
+  { at: "watches/watch-delivery.service.ts#reclaimExpired", class: "MANY_ROWS", statements: 1, note: "The lease-expiry sweep: in-flight deliveries whose lease ran out go back to PENDING with the lost attempt counted, or become dead letters. `FOR UPDATE SKIP LOCKED`, so a row whose worker is still settling it is left to that worker's CAS." },
   { at: "watches/watch-evaluator.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The evaluation lease: a batch of due watches, each moved forward by the lease. `FOR UPDATE SKIP LOCKED` passes over any row a claim, hint or landing holds instead of waiting for it, so the statement has no wait edge and cannot be a deadlock victim; a watch it skips is still due on the next pass." },
   { at: "watches/watch-evaluator.service.ts#markDue", class: "MANY_ROWS", statements: 1, note: "A hint: the live watches targeting a few rows are made due now. They are locked `ORDER BY id` inside the statement, so two hints naming overlapping watches take them in one order. A conflict it loses is a lost hint, which the reconciliation sweep already absorbs." },
   { at: "watches/watches.service.ts#transition", class: "ONE_ROW_CAS", statements: 1, note: "One compare-and-set per attempt, on the state and expiry the decision was read from. A lost CAS re-reads and decides again, at most three times, then answers 409." },

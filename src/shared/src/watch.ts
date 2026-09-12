@@ -38,6 +38,8 @@ export const WATCH_LIMITS = {
   minTtlSeconds: 60,
   defaultTtlSeconds: 86_400,
   maxTtlSeconds: 2_592_000,
+  /** The failed attempt that brings a delivery's `attempts` here makes it a dead letter. */
+  maxDeliveryAttempts: 8,
 } as const;
 
 export type WatchState = 'ACTIVE' | 'PAUSED' | 'MATCHED' | 'EXPIRED' | 'CANCELLED' | 'REVOKED' | 'UNRESOLVABLE';
@@ -132,6 +134,26 @@ export interface WatchTargetView {
   lastEvaluatedAt: string | null;
 }
 
+export type WatchDeliveryState = 'PENDING' | 'IN_FLIGHT' | 'DELIVERED' | 'DEAD_LETTER';
+
+/**
+ * What a Match caused, and whether it worked. `attempts` counts the attempts that failed; the one that
+ * reaches `WATCH_LIMITS.maxDeliveryAttempts` leaves a `DEAD_LETTER`, which keeps its `lastError`.
+ */
+export interface WatchDeliveryView {
+  id: string;
+  action: WatchAction;
+  state: WatchDeliveryState;
+  attempts: number;
+  /** When the next attempt is due, or the last one was. */
+  nextAttemptAt: string | null;
+  lastError: string | null;
+  deliveredAt: string | null;
+  deadLetteredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WatchMatchView {
   id: string;
   generation: number;
@@ -139,6 +161,7 @@ export interface WatchMatchView {
   reason: string;
   predicateVersion: number;
   perTargetSnapshot: WatchSnapshot;
+  deliveries: WatchDeliveryView[];
 }
 
 export interface WatchView {

@@ -25,6 +25,7 @@ import { PushModule } from './push/push.module';
 import { ProvidersModule } from './providers/providers.module';
 import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconciler-http.module';
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
+import { WatchDeliveryModule } from './watches/watch-delivery.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
     ProvidersModule,
     OutcomeReconcilerHttpModule,
     WatchEvaluatorModule,
+    WatchDeliveryModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

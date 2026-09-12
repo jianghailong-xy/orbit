@@ -4503,5 +4503,8 @@ model WatchDelivery {
   @@unique([matchId, action], map: "watch_delivery_match_action_key")
   /// The delivery worker's claim: pending and due.
   @@index([nextAttemptAt], map: "watch_delivery_due_idx")
+  /// The lease-expiry sweep: what is in flight under a lease that ran out (migration 0260, partial
+  /// on IN_FLIGHT like the claim's index is on PENDING).
+  @@index([leaseDeadlineAt], map: "watch_delivery_lease_expiry_idx")
   @@map("watch_delivery")
 }

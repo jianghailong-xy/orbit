@@ -40,7 +40,30 @@ const WATCH_VIEW_SELECT = {
     orderBy: [{ targetKind: 'asc' }, { targetResourceId: 'asc' }],
   },
   matches: {
-    select: { id: true, generation: true, matchedAt: true, reason: true, predicateVersion: true, perTargetSnapshot: true },
+    select: {
+      id: true,
+      generation: true,
+      matchedAt: true,
+      reason: true,
+      predicateVersion: true,
+      perTargetSnapshot: true,
+      // What the Match caused and whether it worked: a retry in progress and a dead letter are read here.
+      deliveries: {
+        select: {
+          id: true,
+          action: true,
+          state: true,
+          attempts: true,
+          nextAttemptAt: true,
+          lastError: true,
+          deliveredAt: true,
+          deadLetteredAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
     orderBy: { generation: 'asc' },
   },
 } satisfies Prisma.WatchSelect;

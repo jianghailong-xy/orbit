@@ -490,6 +490,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        a status: a watch observes a task's completion, it never decides one, and contract §9.1
   //        states the separation the other way round too — a Watch may not become a dependency
   //        gate or a fifth `dependencyState`.
+  //   0260 added one partial index, `watch_delivery_lease_expiry_idx` on `watch_delivery`
+  //        ("lease_deadline_at") WHERE "state" = 'IN_FLIGHT', for the Watch delivery worker's
+  //        lease-expiry sweep. Read against every claim above: it is a single `CREATE INDEX IF NOT
+  //        EXISTS` on a table 0259 created and nothing else — no `ALTER TABLE`, so `task`, `project`
+  //        and `project_acceptance_criterion_definition` are untouched, the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, enum, type, function or trigger — so it is not another writer of the
+  //        DONE fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT, UPDATE or DELETE, so no
+  //        row is read or written. Nothing reads the index to allow or refuse a status: it only
+  //        makes returning an abandoned delivery lease cheap.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -516,7 +529,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0255_codex_rate_limit_reset_operation',
       '0256_session_commit_result_message',
       '0258_approval_pre_opening_turn_abandoned',
-      '0259_watch_persistence'],
+      '0259_watch_persistence',
+      '0260_watch_delivery_lease_expiry_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

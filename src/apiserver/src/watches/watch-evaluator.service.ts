@@ -127,6 +127,7 @@ interface WatchRow {
   ownerId: string;
   state: string;
   mode: string;
+  action: string;
   predicate: unknown;
   predicateVersion: number;
   generation: number;
@@ -343,7 +344,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   async evaluate(watchId: string): Promise<WatchEvaluation> {
     return withTransactionRetry(this.prisma, async (tx): Promise<WatchEvaluation> => {
       const [watch] = await tx.$queryRaw<WatchRow[]>`
-        SELECT "owner_id" AS "ownerId", "state", "mode", "predicate",
+        SELECT "owner_id" AS "ownerId", "state", "mode", "action", "predicate",
                "predicate_version" AS "predicateVersion", "generation",
                "expires_at" AS "expiresAt", now() AS "now"
         FROM "watch"
@@ -384,6 +385,15 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
         ON CONFLICT ("watch_id", "generation") DO NOTHING
         RETURNING "id"`;
       matchId = recorded?.id ?? null;
+      if (matchId) {
+        // The effect's row joins the fact in the transaction that records it: a Match that commits
+        // has its delivery, and one that rolls back takes its delivery with it. A Match adopted above
+        // already has the delivery that was written with it, and `(match_id, action)` keeps one.
+        await tx.$executeRaw`
+          INSERT INTO "watch_delivery" ("id", "match_id", "action", "next_attempt_at")
+          VALUES (${randomUUID()}::uuid, ${matchId}::uuid, ${read.action}, now())
+          ON CONFLICT ("match_id", "action") DO NOTHING`;
+      }
     }
     const landed = await tx.$executeRaw`
       UPDATE "watch"

@@ -353,6 +353,43 @@ export class PushService {
     }
   }
 
+  /**
+   * The alert a NOTIFY_USER watch's Match causes (docs/watch-contract.md §6). The delivery worker
+   * calls it only after it has acknowledged the delivery, so it runs at most once per generation;
+   * collapsed on the watch and generation all the same, so nothing could ever stack a second banner
+   * for one. Best-effort like the other pushes: a failure is logged, never thrown.
+   *
+   * No badge: that count means "sessions needing your reply", and a watch that fired is not one.
+   */
+  async notifyWatchMatched(input: {
+    ownerId: string;
+    watchId: string;
+    generation: number;
+    /** The Match's reason, in the contract's vocabulary. */
+    reason: string;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: { title: 'Watch matched', body: input.reason },
+          sound: 'default',
+          'thread-id': `watch-${input.watchId}`,
+        },
+        watchID: input.watchId,
+        generation: input.generation,
+        kind: 'watch-matched',
+      });
+      await this.deliver(tokens, body, 'alert', '10', auth, `watch-${input.watchId}-${input.generation}`);
+    } catch (err) {
+      this.log.warn(`watch notify failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
    *  Mirrors the client's SessionGrouping.needsYou exactly: an Open, non-ending RUNNING session
    *  with at least one PENDING approval. Counting sessions (not approval rows) keeps the badge equal
