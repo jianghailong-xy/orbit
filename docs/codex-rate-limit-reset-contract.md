@@ -217,6 +217,9 @@ heartbeat 的发出时刻）：
    `activeOperation`、`runnerOnline`、`Runner.capabilities`、最近 heartbeat 的 `leaseOwner` / `draining`、
    `codexRateLimitResetOf(Runner.planUsage)`、请求里的指纹，以及同一 runner + 账户最近一次 UNRESOLVED / REFRESH_FAILED
    的 `completedAt`（`readRequiredAfter`：可能已扣费而数量未经刷新确认）。
+   结果为 `OPERATION_IN_FLIGHT` 时，先再查一次第 2 步的 `(ownerId, clientRequestId)`，查到就按第 2 步回答。事务是
+   READ COMMITTED，每条语句读到的是它开始前已提交的数据：同一请求的另一次并发 POST 可能在第 2 步之后、读在途 operation
+   之前提交，这时在途的正是本请求自己的 operation，回答是 200 重放而不是 409。
 4. `newCodexResetOperation({ …, providerIdempotencyKey: randomUUID(), now })` 并 INSERT。撞 `(ownerId, clientRequestId)`
    唯一约束 → 回到第 2 步重放；撞在途唯一约束 → 409 `OPERATION_IN_FLIGHT`。
 
@@ -227,7 +230,7 @@ Web 在 `active` 非空时每 2–3 秒 GET 一次；v1 不加实时推送帧。
 | --- | --- | --- |
 | `REQUEST_ID_REUSED` | 同一个 `clientRequestId` 用在了别的 runner 或账户上 | 客户端 bug：换新 id |
 | `ACCOUNT_OVERRIDE` | 该上下文不跑在 runner 默认 Codex 账户上 | 隐藏 |
-| `OPERATION_IN_FLIGHT` | 已有在途操作 | 附着到 `operationId`，展示 pending |
+| `OPERATION_IN_FLIGHT` | 已有另一次确认（另一个 `clientRequestId`）的在途操作 | 附着到 `operationId`，展示 pending |
 | `RUNNER_OFFLINE` / `NO_ACTIVE_LEASE` / `RUNNER_DRAINING` | runner 暂不可派发 | 禁用，提示离线或升级中 |
 | `CAPABILITY_MISSING` | runner 版本不支持 | 禁用，提示升级 runner |
 | `SNAPSHOT_MISSING` / `UNSUPPORTED_AUTH` / `PROVIDER_UNSUPPORTED` / `ACCOUNT_UNIDENTIFIED` | 该账户或版本不支持 | 隐藏 |

@@ -97,13 +97,14 @@ export class CodexRateLimitResetService {
         });
         if (!runner) throw new NotFoundException('runner not found');
         const now = new Date();
+        const replayOf = (existing: CodexRateLimitResetOperationState) => {
+          const replay = codexResetCreateReplay(existing, { runnerId, accountFingerprint: request.accountFingerprint });
+          if (replay === 'REQUEST_ID_REUSED') throw refused(replay, existing.id);
+          return { operation: existing, replayed: true };
+        };
         for (let pass = 1; pass <= INSERT_PASSES; pass += 1) {
           const existing = await this.operations.byClientRequest(tx, ownerId, request.clientRequestId);
-          if (existing) {
-            const replay = codexResetCreateReplay(existing, { runnerId, accountFingerprint: request.accountFingerprint });
-            if (replay === 'REQUEST_ID_REUSED') throw refused(replay, existing.id);
-            return { operation: existing, replayed: true };
-          }
+          if (existing) return replayOf(existing);
           const active = await this.operations.activeFor(tx, runnerId, request.accountFingerprint);
           const refusal = codexResetRefusal({
             now,
@@ -118,6 +119,13 @@ export class CodexRateLimitResetService {
             expectedAccountFingerprint: request.accountFingerprint,
             readRequiredAfter: await this.operations.unrefreshedSpendSettledAt(tx, runnerId, request.accountFingerprint),
           });
+          if (refusal === 'OPERATION_IN_FLIGHT') {
+            // Each statement reads what had committed when it started, so the operation in flight can be this
+            // request's own: a concurrent POST of it that committed after the request id was read above. Read
+            // again after the in-flight read, the request id sees it whenever that is so.
+            const committedSince = await this.operations.byClientRequest(tx, ownerId, request.clientRequestId);
+            if (committedSince) return replayOf(committedSince);
+          }
           if (refusal) throw refused(refusal, refusal === 'OPERATION_IN_FLIGHT' ? active?.id : undefined);
           const operation = newCodexResetOperation({
             id: randomUUID(),
