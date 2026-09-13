@@ -846,10 +846,9 @@ public struct TranscriptReducer: Sendable, Codable {
         // back to comparing this against the text the person typed: an unsplit body never matches,
         // so such a message would strand its optimistic bubble on "Sending…" and append a duplicate
         // next to it. Where the typed words end is the note the apiserver recorded beside the echo;
-        // only an event stored without one is read the older way, from its text.
+        // an event stored without one is shown exactly as it was echoed.
         let recorded = splitRecordedNote(str(ev, "text"), note: str(ev, "controlPlaneNote"))
-        let delivered = recorded.map { DeliveredMessage(text: $0.text, injected: []) }
-            ?? splitDeliveredMessage(str(ev, "text") ?? str(ev, "content") ?? "")
+        let body = recorded?.text ?? str(ev, "text") ?? str(ev, "content") ?? ""
         // How far the runner had got with this message when it filed the event, and whether it
         // was filed as a steer — the message written into the turn already running. Both ride the
         // durable event, so a reload rebuilds the indicator instead of showing a message that
@@ -863,7 +862,6 @@ public struct TranscriptReducer: Sendable, Codable {
         // for the same block — arriving with the whole text and no open bubble to fill — would
         // then append the reply a SECOND time, in full, under the partial copy.
         if !steer { flushStreaming() }
-        let body = delivered.text
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -893,7 +891,6 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.pending = false
                 if let tid = ev.turnId { b.turnId = tid }    // adopt the id if we matched by text
                 if !body.isEmpty { b.text = body }
-                b.injected = delivered.injected
                 b.note = recorded?.note
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
@@ -912,7 +909,7 @@ public struct TranscriptReducer: Sendable, Codable {
         state.items.append(.user(UserBubble(id: nextID(), text: body, attachments: atts, ts: ev.ts,
                                             clientTurnId: cid, turnId: ev.turnId, pending: false,
                                             undelivered: delivery == "failed",
-                                            injected: delivered.injected, note: recorded?.note,
+                                            note: recorded?.note,
                                             steer: steer, delivery: delivery)))
     }
 

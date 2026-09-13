@@ -111,23 +111,17 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// of its own. Replaces the "Sending…"/"Queued" indicator with "Not delivered" instead of
     /// leaving a message that is going nowhere looking like it is still on its way.
     public var undelivered: Bool
-    /// What delivery appended to this message, as the older reading (`splitDeliveredMessage`) finds
-    /// it in an event stored without a note — a `#`-reference expansion, a coordinator's standing
-    /// role — kept verbatim and out of `text`. The runner echoes what it *received*, so without this
-    /// separation Orbit's own generated context sits inside the person's bubble as if they had typed
-    /// it. Drawn through `attached`.
-    public var injected: [String]
     /// What the apiserver recorded, when it stored this message's `user` event, as appended at
-    /// delivery (`controlPlaneNote`), trimmed — see `splitRecordedNote`. Already out of `text`; when
-    /// present it alone says where the person's words end, and `injected` is empty.
+    /// delivery (`controlPlaneNote`), trimmed — see `splitRecordedNote`. Already out of `text`: it
+    /// alone says where the person's words end. Nil when the event carried no note, and then the
+    /// bubble is exactly what the runner echoed — nothing is read out of the text.
     public var note: String?
     /// What delivery appended, as the one entry the view draws in the bubble under the person's
-    /// words — named for its kind, and opening to the text the model read — whichever way it was
-    /// told apart, so a conversation stored across both reads as one. Nil when nothing was.
+    /// words — named for its kind, and opening to the text the model read. Nil when the event
+    /// carried no note, so nothing is drawn as Orbit's own.
     public var attached: (kind: String, text: String)? {
-        if let note { return (describeNote(note), note) }
-        if injected.isEmpty { return nil }
-        return (describeInjected(injected), injected.joined(separator: "\n\n"))
+        guard let note else { return nil }
+        return (describeNote(note), note)
     }
     /// Filed by the server as a steer: written into the turn that was already running rather than
     /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
@@ -143,7 +137,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
-                undelivered: Bool = false, injected: [String] = [], note: String? = nil,
+                undelivered: Bool = false, note: String? = nil,
                 steer: Bool = false, delivery: String? = nil) {
         self.id = id
         self.text = text
@@ -154,7 +148,6 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.pending = pending
         self.queued = queued
         self.undelivered = undelivered
-        self.injected = injected
         self.note = note
         self.steer = steer
         self.delivery = delivery
@@ -163,7 +156,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered, injected
+        case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery
     }
     public init(from decoder: Decoder) throws {
@@ -177,7 +170,6 @@ public struct UserBubble: Equatable, Sendable, Codable {
         pending = (try? c.decodeIfPresent(Bool.self, forKey: .pending)) ?? false
         queued = (try? c.decodeIfPresent(Bool.self, forKey: .queued)) ?? false
         undelivered = (try? c.decodeIfPresent(Bool.self, forKey: .undelivered)) ?? false
-        injected = (try? c.decodeIfPresent([String].self, forKey: .injected)) ?? []
         note = try? c.decodeIfPresent(String.self, forKey: .note)
         steer = (try? c.decodeIfPresent(Bool.self, forKey: .steer)) ?? false
         delivery = try? c.decodeIfPresent(String.self, forKey: .delivery)
