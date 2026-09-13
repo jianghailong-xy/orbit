@@ -13,30 +13,15 @@ import Foundation
 // Where the person's words end is what the apiserver recorded when it stored the event
 // (`controlPlaneNote`, see `splitRecordedNote`), never what the text happens to look like: someone
 // who types a `<background-jobs>` block into the composer sees it in their bubble exactly as typed.
-// An event with no note is still read the older way, from its end (`splitDeliveredMessage`), which
-// is what keeps the bubbles of messages stored before notes were recorded as they were.
+// An event that carries no note is shown exactly as it was echoed. Events stored before notes were
+// recorded had theirs backfilled by the apiserver's own rule (2026-09-11), so no client needs a
+// reading of the text to fall back on.
 //
 // Web fixes this in `src/web/src/lib/deliveredMessage.ts`; this is the same rule for iOS and
 // macOS, which share OrbitKit. It matters more here than it looks: the reducer falls back to
 // comparing message text when reconciling an optimistic bubble against its durable event, and on
 // iOS those two race. An unsplit body never equals the text the person typed, so a message with
 // anything appended would strand its bubble on "Sending…" and append a duplicate beside it.
-
-/// The blocks an event with no recorded note is still read for. Nothing else is ever removed from a
-/// person's message — `<list-conditions>` and `<background-jobs>` included: those two are told apart
-/// by the note alone, so typing one into the composer never makes it disappear.
-let injectedTags = [
-    "referenced-list",
-    "referenced-task",
-    "orbit_project_coordinator_context",
-]
-
-public struct DeliveredMessage: Equatable, Sendable {
-    /// What the person typed.
-    public let text: String
-    /// What was appended to it, verbatim and in the order it was appended.
-    public let injected: [String]
-}
 
 /// A `user` event's text split where the apiserver recorded that the person's words end.
 ///
@@ -52,55 +37,9 @@ public func splitRecordedNote(_ text: String?, note: String?) -> (text: String, 
     return (String(decoding: text.utf8.dropLast(note.utf8.count), as: UTF8.self), trimmed)
 }
 
-/// Split a delivered message into what was typed and what was appended to it.
-///
-/// Works backwards from the end — where delivery appends — rather than matching anywhere, because
-/// a person is entitled to write `<referenced-task>` in the middle of a sentence without having it
-/// silently eaten.
-///
-/// Finding the closing tag first and then its opening, rather than one pattern spanning both, is
-/// what makes two *identical adjacent* blocks come out as two: a single pattern with a
-/// backreference and an end anchor has its lazy middle expand straight past the first close to
-/// reach the anchor, swallowing both into one. A message naming two tasks produces exactly that.
-public func splitDeliveredMessage(_ raw: String) -> DeliveredMessage {
-    var text = raw
-    var injected: [String] = []
-    while true {
-        guard let (tag, closeRange) = trailingCloseTag(in: text) else { break }
-        let opening = "\n\n<\(tag)"
-        guard let openRange = text.range(of: opening, options: .backwards,
-                                         range: text.startIndex..<closeRange.lowerBound) else { break }
-        // `<tag>` or `<tag ...>`, never `<tag-something-else>`.
-        let afterName = openRange.upperBound
-        guard afterName < text.endIndex,
-              text[afterName] == ">" || text[afterName].isWhitespace else { break }
-        let block = String(text[openRange.lowerBound..<closeRange.upperBound])
-        injected.insert(block.trimmingCharacters(in: .whitespacesAndNewlines), at: 0)
-        text = String(text[text.startIndex..<openRange.lowerBound])
-    }
-    return DeliveredMessage(text: text, injected: injected)
-}
-
-/// The tag whose closing element ends `text` (ignoring trailing whitespace), and that element's
-/// range. Nil when the string does not end in one of ours.
-private func trailingCloseTag(in text: String) -> (tag: String, range: Range<String.Index>)? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    for tag in injectedTags {
-        let close = "\n</\(tag)>"
-        guard trimmed.hasSuffix("</\(tag)>"),
-              let range = text.range(of: close, options: .backwards) else { continue }
-        // Only when nothing but whitespace follows it — delivery appends at the end, and matching
-        // mid-string would eat a tag the person wrote themselves.
-        let rest = text[range.upperBound...]
-        guard rest.allSatisfy({ $0.isWhitespace }) else { continue }
-        return (tag, range)
-    }
-    return nil
-}
-
 /// What each of Orbit's blocks is called where it is shown — the same table as web's `TAG_LABEL`.
-/// `<list-conditions>` and `<background-jobs>` have names too, though no text is ever read for
-/// them: only a recorded note shows them (`describeNote`).
+/// None of them is ever read out of a person's text: only a recorded note shows one (`describeNote`),
+/// which is also what keeps a paste of one inside the bubble it was typed into.
 let injectedTagLabels: [String: String] = [
     "referenced-list": "referenced list",
     "referenced-task": "referenced task",
@@ -138,15 +77,7 @@ private func countNames(_ names: [String]) -> String {
     }.joined(separator: ", ")
 }
 
-/// "referenced list, referenced task ×2" — what was attached, counted where it repeats.
-///
-/// Named rather than merely counted: "2 blocks attached" tells the reader nothing about why the
-/// reply mentions something they never asked about, which is the entire reason this line exists.
-public func describeInjected(_ blocks: [String]) -> String {
-    countNames(blocks.map { blockName(openingTag($0)) })
-}
-
-/// A recorded note named the same way: "background jobs, project coordinator context".
+/// "referenced list, referenced task ×2" — what a recorded note holds, counted where it repeats.
 ///
 /// Only a name. The note was told apart from the person's words by where the apiserver recorded it
 /// ends (`splitRecordedNote`), so nothing here decides what is shown as theirs. Delivery can append

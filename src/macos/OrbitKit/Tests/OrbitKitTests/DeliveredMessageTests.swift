@@ -39,79 +39,6 @@ final class DeliveredMessageTests: XCTestCase {
         </orbit_project_coordinator_context>
         """
 
-    // MARK: the older reading, for an event stored without a note
-
-    func testTakesAnAppendedBlockOutOfTheBubbleAndKeepsItVerbatim() {
-        let out = splitDeliveredMessage("把这个项目协调起来\n\n\(coordinator)")
-
-        XCTAssertEqual(out.text, "把这个项目协调起来")
-        // Verbatim: the entry is the only remaining way to see what the model actually read.
-        XCTAssertEqual(out.injected, [coordinator])
-    }
-
-    func testPeelsSeveralBlocksInAppendOrder() {
-        let out = splitDeliveredMessage("看下 #FineWeb\n\n\(refList)\n\n\(refTask)\n\n\(coordinator)")
-
-        XCTAssertEqual(out.text, "看下 #FineWeb")
-        XCTAssertEqual(out.injected, [refList, refTask, coordinator])
-        XCTAssertEqual(describeInjected(out.injected),
-                       "referenced list, referenced task, project coordinator context")
-    }
-
-    func testTwoIdenticalAdjacentBlocksComeOutAsTwo() {
-        // A message naming two tasks produces exactly this. The web version got it wrong first:
-        // one pattern with a backreference and an end anchor swallows both into one.
-        let out = splitDeliveredMessage("q\n\n\(refTask)\n\n\(refTask)")
-
-        XCTAssertEqual(out.injected.count, 2)
-        XCTAssertEqual(describeInjected(out.injected), "referenced task ×2")
-    }
-
-    func testLeavesAnOrdinaryMessageAlone() {
-        // Overwhelmingly the common case.
-        let plain = "把 WARC 转换拆开并行跑，它不依赖去重完成。"
-
-        XCTAssertEqual(splitDeliveredMessage(plain), DeliveredMessage(text: plain, injected: []))
-    }
-
-    func testDoesNotEatATagTheUserTypedMidSentence() {
-        // Why the match is anchored to the end: someone asking about this very feature must not
-        // have their question silently rewritten.
-        let asking = "为什么 <referenced-task> 这个块会出现在我自己的气泡里？\n\n它是谁加的？"
-
-        XCTAssertEqual(splitDeliveredMessage(asking).text, asking)
-    }
-
-    func testDoesNotStripAnUnclosedBlock() {
-        let broken = "问题\n\n<referenced-list id=\"x\">\n  一半就断了"
-
-        XCTAssertTrue(splitDeliveredMessage(broken).injected.isEmpty)
-    }
-
-    func testDoesNotStripSomebodyElsesTag() {
-        let code = "帮我看下这段\n\n<my-component id=\"x\">\n  <div/>\n</my-component>"
-
-        XCTAssertTrue(splitDeliveredMessage(code).injected.isEmpty)
-    }
-
-    func testHandlesAMessageThatIsNothingButInjectedContext() {
-        // A server-seeded turn with no text of its own.
-        let out = splitDeliveredMessage("\n\n\(coordinator)")
-
-        XCTAssertEqual(out.text, "")
-        XCTAssertEqual(out.injected.count, 1)
-    }
-
-    func testNeverReadsAConditionBoardOrABackgroundJobsBlockOutOfTheText() {
-        // Those two are told apart by the note ingest records. Someone who pastes one into the
-        // composer — to ask why it showed up, say — sent exactly that, and must see exactly that.
-        for block in [conditions, backgroundJobs] {
-            let pasted = "这是什么？\n\n\(block)"
-
-            XCTAssertEqual(splitDeliveredMessage(pasted), DeliveredMessage(text: pasted, injected: []))
-        }
-    }
-
     // MARK: where the apiserver recorded that the person's words end
 
     func testSplitsExactlyWhereTheRecordedNoteBegins() {
@@ -147,29 +74,24 @@ final class DeliveredMessageTests: XCTestCase {
         XCTAssertEqual(splitRecordedNote("line one\r\(note)", note: note)?.text, "line one\r")
     }
 
-    // MARK: naming what was attached
+    // MARK: naming what delivery appended
 
-    func testNamesWhatWasAttachedSoTheReplyIsNotUnexplained() {
-        let out = splitDeliveredMessage("q\n\n\(refList)\n\n\(coordinator)")
-
-        XCTAssertEqual(describeInjected(out.injected), "referenced list, project coordinator context")
-    }
-
-    func testNamesARecordedNoteByTheBlockItOpensWithTheTwoOnlyANoteCanCarryIncluded() {
+    func testNamesARecordedNoteByTheBlockItOpensWith() {
         XCTAssertEqual(describeNote("\n\n\(backgroundJobs)"), "background jobs")
         XCTAssertEqual(describeNote(conditions), "list conditions")
         XCTAssertEqual(describeNote(coordinator), "project coordinator context")
+        XCTAssertEqual(describeNote(refList), "referenced list")
+        XCTAssertEqual(describeNote(refTask), "referenced task")
     }
 
-    func testNamesEveryBlockOneDeliveryAppendedTheWayTheOlderReadingNamesWhatItFound() {
+    func testNamesEveryBlockOneDeliveryAppended() {
         // Delivery appends references, then the condition board, then background jobs, then the
         // coordinator's role: a coordinator with a build still running gets two blocks in one note.
         let appended = "\n\n\(refTask)\n\n\(refTask)\n\n\(backgroundJobs)\n\n\(coordinator)"
 
         XCTAssertEqual(describeNote(appended), "referenced task ×2, background jobs, project coordinator context")
-
-        let older = "\n\n\(refList)\n\n\(coordinator)"
-        XCTAssertEqual(describeNote(older), describeInjected(splitDeliveredMessage("q\(older)").injected))
+        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"),
+                       "referenced list, project coordinator context")
     }
 
     func testStillNamesAnOpeningItDoesNotRecogniseGenerically() {
@@ -250,9 +172,10 @@ final class DeliveredMessageTests: XCTestCase {
         XCTAssertTrue(bubble.contains(".gridCellUnsizedAxes(.horizontal)"),
                       "parted from the words by a rule that does not widen a bubble hugging its text")
         XCTAssertTrue(entry.contains(#"Text("⊕ Orbit attached: \(attached.kind)")"#),
-                      "signed as web signs it, with the kind its note or the older reading was named")
+                      "signed as web signs it, with the kind its note was named")
         XCTAssertTrue(entry.contains("Text(attached.text)"), "and opening to the text the model read")
         XCTAssertFalse(view.contains("bubble.injected"),
-                       "a note and the older reading are one entry: nothing is drawn from `injected` alone")
+                       "the entry is what the apiserver recorded and nothing else: the bubble carries "
+                           + "no second reading of its own text to draw from")
     }
 }

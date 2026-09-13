@@ -715,23 +715,17 @@ final class TranscriptReducerTests: XCTestCase {
     /// the body it echoes, so an unsplit comparison never matches an untagged optimistic bubble —
     /// the message would sit on "Sending…" forever with a duplicate of itself underneath.
     func testOptimisticUserReconcilesWhenDeliveryAppendedContext() {
+        let typed = "帮我看下 #FineWeb 为什么卡住了"
         var r = TranscriptReducer()
-        r.addOptimisticUser(clientTurnId: "c9", text: "帮我看下 #FineWeb 为什么卡住了")
+        r.addOptimisticUser(clientTurnId: "c9", text: typed)
 
         // No clientTurnId echoed and no turnId tagged yet: the text fallback is the only match left.
-        let echoed = """
-            帮我看下 #FineWeb 为什么卡住了
-
-            <referenced-list id="l1">
-              标题   FineWeb CC-MAIN-2025-26
-            </referenced-list>
-            """
-        r.apply(RunEvent(seq: 10, type: .user, payload: .object(["text": .string(echoed)])))
+        r.apply(userEvent(seq: 10, "\(typed)\n\n\(refListBlock)", note: "\n\n\(refListBlock)"))
 
         XCTAssertEqual(r.state.items.count, 1, "must reconcile, not duplicate")
         XCTAssertEqual(r.state.items[0].asUser?.pending, false)
-        XCTAssertEqual(r.state.items[0].asUser?.text, "帮我看下 #FineWeb 为什么卡住了")
-        XCTAssertEqual(r.state.items[0].asUser?.injected.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.text, typed)
+        XCTAssertEqual(r.state.items[0].asUser?.attached?.kind, "referenced list")
     }
 
     // The shapes the server appends at delivery (background-jobs-context.ts, list-events.service.ts).
@@ -747,6 +741,22 @@ final class TranscriptReducerTests: XCTestCase {
           配额挡住派发｜累计 47 次
           以上是控制面在你上次收到消息之后观察到的，不是用户说的。
         </list-conditions>
+        """
+    private let refListBlock = """
+        <referenced-list id="l1">
+          标题   FineWeb CC-MAIN-2025-26
+        </referenced-list>
+        """
+    private let refTaskBlock = """
+        <referenced-task id="550e8400-e29b-41d4-a716-446655440000">
+          标题   [W 009/250] → WARC
+        </referenced-task>
+        """
+    private let coordinatorBlock = """
+        <orbit_project_coordinator_context>
+          你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
+          这里用来协调任务，不是替任务干活。
+        </orbit_project_coordinator_context>
         """
 
     /// A `user` event as ingest stores it: the runner's echo, with the note the apiserver recorded
@@ -792,6 +802,23 @@ final class TranscriptReducerTests: XCTestCase {
         }
     }
 
+    /// The blocks Orbit's own delivery also uses for a `#`-reference and a promoted coordinator's
+    /// standing role, pasted at the end of a message the person typed themselves. Nothing records
+    /// anything appended to that event, so the paste is their own words: shown as typed, uncut, and
+    /// drawn as nothing — Orbit's entry is only ever what the apiserver recorded (`controlPlaneNote`).
+    func testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped() {
+        for block in [refListBlock, refTaskBlock, coordinatorBlock] {
+            var r = TranscriptReducer()
+            let typed = "这是什么？\n\n\(block)"
+
+            r.apply(userEvent(seq: 1, typed))
+
+            XCTAssertEqual(r.state.items[0].asUser?.text, typed,
+                           "an event with no note is shown exactly as it was echoed")
+            XCTAssertNil(r.state.items[0].asUser?.attached, "and nothing is drawn as Orbit's own")
+        }
+    }
+
     /// The text fallback compares what was typed with the typed part of the echo — for an event
     /// carrying a note, the echo less the note. Compared with the whole echo it never matches: the
     /// optimistic bubble would sit on "Sending…" with a duplicate of itself underneath, and a queued
@@ -823,25 +850,20 @@ final class TranscriptReducerTests: XCTestCase {
         }
     }
 
-    /// Coordinator context is what an event stored before notes existed is still read for, from its
-    /// text. That older reading draws the very same entry a recorded note does, so one conversation
-    /// stored across the change does not show the same thing two ways.
-    func testCoordinatorContextIsOneEntryWithOrWithoutANote() {
+    /// A promoted coordinator's standing role reaches the bubble as the one entry any other recorded
+    /// note does: the person's own words, and what delivery appended named and opening to its text.
+    /// An event with no note is shown as it was echoed instead — a pasted coordinator block stays in
+    /// the bubble it was typed into (`testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped`).
+    func testCoordinatorContextIsOneEntry() {
         let typed = "把这个项目协调起来"
-        let appended = "\n\n<orbit_project_coordinator_context>\n  你是项目的协调会话。\n</orbit_project_coordinator_context>"
-        var recorded = TranscriptReducer()
-        recorded.apply(userEvent(seq: 1, typed + appended, note: appended))
-        var read = TranscriptReducer()
-        read.apply(userEvent(seq: 1, typed + appended))
+        var r = TranscriptReducer()
+        r.apply(userEvent(seq: 1, "\(typed)\n\n\(coordinatorBlock)", note: "\n\n\(coordinatorBlock)"))
 
-        let viaNote = recorded.state.items[0].asUser, viaText = read.state.items[0].asUser
-        XCTAssertNotNil(viaNote?.note, "one told apart by its note…")
-        XCTAssertNil(viaText?.note, "…the other by the older reading")
-        XCTAssertEqual(viaNote?.text, typed)
-        XCTAssertEqual(viaText?.text, typed)
-        XCTAssertEqual(viaNote?.attached?.kind, "project coordinator context")
-        XCTAssertEqual(viaText?.attached?.kind, viaNote?.attached?.kind)
-        XCTAssertEqual(viaText?.attached?.text, viaNote?.attached?.text)
+        let bubble = r.state.items[0].asUser
+        XCTAssertEqual(bubble?.note, coordinatorBlock)
+        XCTAssertEqual(bubble?.text, typed)
+        XCTAssertEqual(bubble?.attached?.kind, "project coordinator context")
+        XCTAssertEqual(bubble?.attached?.text, coordinatorBlock)
     }
 
     /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
