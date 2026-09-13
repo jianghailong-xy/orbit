@@ -35,6 +35,18 @@ const bgGuardForeignJobReason = "That id belongs to an Orbit runner-hosted backg
 	" this CLI's task registry. Use mcp__orbit__bg_output to read it, mcp__orbit__bg_kill to stop it," +
 	" and mcp__orbit__bg_list to see them all."
 
+// ScheduleWakeup keeps its timer inside the engine process: recycling the engine or restarting the
+// runner loses the wakeup, a resumed engine never re-arms it, and it does not fire while a Monitor or
+// background shell is still running (task 34NGdppVIQ5iLJBaHZ406 checked this call by call). No shape
+// of the call is worth letting through — stop:true only ends a loop kept by that same timer — so every
+// call is routed to the wakeup the control plane holds.
+const bgGuardScheduleWakeupReason = "Orbit holds this session's wakeups on its server. Claude's ScheduleWakeup is" +
+	" unavailable here: its timer lives inside this coding-engine process, so recycling the engine (idle TTL," +
+	" memory pressure) or restarting the runner loses the wakeup, and it does not fire while a Monitor or a" +
+	" background task is still running. Use mcp__orbit__schedule_wakeup instead — the same delaySeconds," +
+	" reason and prompt, and stop: true cancels the pending one. When it is due, Orbit starts a turn in this" +
+	" session even if this engine is gone by then."
+
 // hookInput is the PreToolUse payload Claude Code writes on the hook's stdin.
 type hookInput struct {
 	HookEventName string                 `json:"hook_event_name"`
@@ -62,6 +74,9 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 		if asBool(in.ToolInput["run_in_background"]) {
 			decision, reason = "deny", bgGuardDenyReason
 		}
+	// Every call, whatever it asks for: see bgGuardScheduleWakeupReason.
+	case "ScheduleWakeup":
+		decision, reason = "deny", bgGuardScheduleWakeupReason
 	// The readers for the engine's own background tasks (old names and new). A
 	// runner-hosted job is not one, and the id says so — the runner issued that
 	// prefix itself, so this is not a guess about who owns what.

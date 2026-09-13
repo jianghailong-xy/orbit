@@ -763,6 +763,47 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// needs to read it either way — it is what decides whether a human has actually been told.
 		return toolResult(prettyJSON(raw), false)
 
+	case "schedule_wakeup":
+		// No session id to take: a wakeup is always for the session this server runs in.
+		if s.sessionID == "" {
+			return toolResult("schedule_wakeup wakes the session it is called from, and this MCP server is not running inside one", true)
+		}
+		body := map[string]interface{}{"stop": true}
+		if !getBool(args, "stop") {
+			delay, ok := args["delaySeconds"].(float64)
+			if !ok {
+				return toolResult("delaySeconds (a number of seconds) is required unless stop is true", true)
+			}
+			reason := getString(args, "reason")
+			if reason == "" {
+				return toolResult("reason is required unless stop is true", true)
+			}
+			body = map[string]interface{}{"delaySeconds": delay, "reason": reason}
+			if prompt := getString(args, "prompt"); prompt != "" {
+				body["prompt"] = prompt
+			}
+		}
+		receipt, err := s.t.scheduleWakeup(s.sessionID, body)
+		if err != nil {
+			return toolResult("schedule_wakeup failed: "+err.Error(), true)
+		}
+		if receipt.Outcome == "CANCELLED" {
+			if receipt.Cancelled == 0 {
+				return toolResult("There was no pending wakeup to cancel.", false)
+			}
+			return toolResult("Pending wakeup cancelled: nothing will wake this session.", false)
+		}
+		var note strings.Builder
+		fmt.Fprintf(&note, "Wakeup scheduled for %s (in %ds)", receipt.DueAt, receipt.DelaySeconds)
+		if receipt.Clamped {
+			note.WriteString(", clamped to [60, 3600]")
+		}
+		if receipt.Replaced {
+			note.WriteString(", replacing the one that was pending")
+		}
+		note.WriteString(". Orbit's server holds it: when it is due, a turn starts in this session even if this engine has been recycled by then. Nothing more to do this turn.")
+		return toolResult(note.String(), false)
+
 	case "session_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -2347,6 +2388,33 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The line to show. The session's title is already the alert's heading, so don't restate it — say only what happened or what you need.",
 				},
 			}, "message"),
+		},
+		{
+			"name": "schedule_wakeup",
+			"description": "Wake this session later. Orbit's server holds the timer: when it is due, a turn starts in " +
+				"this session carrying your reason and prompt — even if this engine was recycled or the runner restarted " +
+				"in the meantime, and even while a Monitor or background job is still running. Use it instead of Claude's " +
+				"ScheduleWakeup, which is refused here because its timer lives inside the engine process. One wakeup waits " +
+				"per session: a new call replaces the pending one, and stop: true cancels it. To wait for something that " +
+				"ends by itself (CI, a build, a deploy), prefer bg_run with wakeOnExit, which wakes you when it happens.",
+			"inputSchema": obj(map[string]interface{}{
+				"delaySeconds": map[string]interface{}{
+					"type":        "number",
+					"description": "Seconds from now to wake up, clamped to [60, 3600]. Required unless stop is true.",
+				},
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "One sentence on what you are waiting for; it is said back to you when you are woken. Required unless stop is true.",
+				},
+				"prompt": map[string]interface{}{
+					"type":        "string",
+					"description": "What the woken turn should do: the next step, or the /loop input to continue with.",
+				},
+				"stop": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Cancel the pending wakeup instead of scheduling one.",
+				},
+			}),
 		},
 	}
 	if includeOrchestration {

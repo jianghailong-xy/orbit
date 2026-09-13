@@ -29,6 +29,9 @@ var cliParityExemptTools = map[string]string{
 	"bg_output": "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
 	"bg_kill":   "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
 	"bg_list":   "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
+	// schedule_wakeup takes no session id: it wakes the session it is called from, which a terminal
+	// outside one does not have, and inside one the agent reaches it over MCP.
+	"schedule_wakeup": "wakes the calling session: there is no session to wake at a terminal outside one",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.

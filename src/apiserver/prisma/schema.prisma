@@ -1262,6 +1262,7 @@ model Session {
   events                RunEvent[]
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
+  scheduledWakeups      SessionScheduledWakeup[]
   toolCalls             ToolCall[]
   llmUsage              LlmUsage[]
   approvals             Approval[]
@@ -1677,6 +1678,31 @@ model BackgroundJobWake {
 
   @@unique([sessionId, clientTurnId, jobId])
   @@map("background_job_wake")
+}
+
+/// A wakeup a session asked the control plane to hold (runner-api/scheduled-wakeup.ts), because Claude
+/// Code's own ScheduleWakeup keeps its timer in the engine process that Orbit recycles. PENDING until it
+/// is due, then filed onto the session's `bg-wake:` turn (DELIVERED, `clientTurnId`) or not, because the
+/// session had ended (DROPPED); a later request replaces it (SUPERSEDED) and a stop cancels it
+/// (CANCELLED). At most one PENDING row per session: a partial unique index, migration 0264.
+model SessionScheduledWakeup {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  sessionId    String    @map("session_id") @db.Uuid
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// PENDING | DELIVERED | DROPPED | SUPERSEDED | CANCELLED
+  state        String    @default("PENDING")
+  delaySeconds Int       @map("delay_seconds")
+  reason       String
+  prompt       String?
+  dueAt        DateTime  @map("due_at") @db.Timestamptz(3)
+  /// The wake turn it was filed onto.
+  clientTurnId String?   @map("client_turn_id")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  settledAt    DateTime? @map("settled_at") @db.Timestamptz(3)
+
+  /// The worker's read: waiting and due (partial on PENDING in the migration).
+  @@index([dueAt], map: "session_scheduled_wakeup_due_idx")
+  @@map("session_scheduled_wakeup")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.

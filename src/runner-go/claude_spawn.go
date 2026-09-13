@@ -146,6 +146,7 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 			"PreToolUse": []map[string]interface{}{
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
+				{"matcher": "ScheduleWakeup", "hooks": guard},
 			},
 		}
 	}

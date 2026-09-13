@@ -927,6 +927,24 @@ func (t *Transport) backgroundWake(sessionID string, wake bgWake) (backgroundWak
 	return receipt, err
 }
 
+// scheduledWakeupReceipt is what the control plane did with a schedule_wakeup call: holds a wakeup for
+// the session until dueAt (SCHEDULED), or cancelled the one waiting (CANCELLED).
+type scheduledWakeupReceipt struct {
+	Outcome      string `json:"outcome"`
+	DueAt        string `json:"dueAt,omitempty"`
+	DelaySeconds int    `json:"delaySeconds,omitempty"`
+	Clamped      bool   `json:"clamped,omitempty"`
+	Replaced     bool   `json:"replaced,omitempty"`
+	Cancelled    int    `json:"cancelled,omitempty"`
+}
+
+// scheduleWakeup asks the control plane to wake the session later — or, with body["stop"], not to.
+func (t *Transport) scheduleWakeup(sessionID string, body map[string]interface{}) (scheduledWakeupReceipt, error) {
+	var receipt scheduledWakeupReceipt
+	err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/scheduled-wakeup", body, &receipt, taskOpTimeout)
+	return receipt, err
+}
+
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.

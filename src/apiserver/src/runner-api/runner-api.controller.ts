@@ -162,6 +162,13 @@ import {
   sessionHasEnded,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import {
+  appendScheduledWakeupContext,
+  cancelScheduledWakeup,
+  ScheduledWakeupDto,
+  type ScheduledWakeupReceipt,
+  scheduleWakeup,
+} from './scheduled-wakeup';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { withControlPlaneNote } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
@@ -2543,14 +2550,15 @@ export class RunnerApiController {
             content = (await this.listEvents?.appendFor(tx, sessionId, content)) ?? content;
           }
         }
-        // A turn filed to wake the session for its background jobs carries nobody's words: what it
-        // says is those wakes, written in here at delivery so that all of it is recorded as the
-        // control plane's note (control-plane-note.ts). Outside the branch above for the reason the
-        // block below gives — a wake handed out again after its runner died still has to say why.
-        // Not best-effort: this block is the turn, and one delivered without it wakes the agent for
-        // nothing, so a failure rolls the claim back and leaves the turn queued for the next poll.
+        // A turn filed to wake the session for its background jobs, or for a wakeup it scheduled,
+        // carries nobody's words: what it says is those wakes, written in here at delivery so that all
+        // of it is recorded as the control plane's note (control-plane-note.ts). Outside the branch
+        // above for the reason the block below gives — a wake handed out again after its runner died
+        // still has to say why. Not best-effort: this block is the turn, and one delivered without it
+        // wakes the agent for nothing, so a failure rolls the claim back and leaves the turn queued.
         if (t.kind === 'message' && isBackgroundWakeTurn(t.clientTurnId)) {
           content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+          content = (await appendScheduledWakeupContext(tx, sessionId, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
         // Outside the branch above on purpose: a re-delivery replaced the person's text with a
@@ -2902,6 +2910,26 @@ export class RunnerApiController {
       if (e instanceof SessionNotSendable || e instanceof NotFoundException) return { outcome: 'DROPPED' };
       throw e;
     }
+  }
+
+  /**
+   * The agent in this session asks to be woken later — or, with `stop`, no longer (runner-go
+   * `schedule_wakeup`). Claude Code's own ScheduleWakeup keeps that timer inside the engine process,
+   * which Orbit recycles and a runner restart kills; held here instead, the wakeup outlives both. When
+   * it is due, the scheduled-wakeup worker files it onto the session's wake turn
+   * (scheduled-wakeup.worker.ts), and no runner is involved until one claims that turn.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/scheduled-wakeup')
+  @HttpCode(200)
+  async scheduledWakeup(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: ScheduledWakeupDto,
+  ): Promise<ScheduledWakeupReceipt> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    if (dto.stop === true) return cancelScheduledWakeup(this.prisma, sessionId);
+    return scheduleWakeup(this.prisma, sessionId, dto);
   }
 
   /** A single interactive turn finished; retain or release its active-turn slot. */

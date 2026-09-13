@@ -531,6 +531,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        three `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no
   //        DELETE — the key's `ON DELETE CASCADE` is a referential action on the new table's rows.
   //        Nothing reads a wake to allow or refuse a status: a wake is a turn's content, not a decision.
+  //   0264 adds one relation of its own, `session_scheduled_wakeup`: the wakeups a session asks the
+  //        control plane to hold until they are due. Read against every claim above: it creates that
+  //        table, a CHECK on its own `state` column, a foreign key from it to `session`, one partial
+  //        unique index and one partial index, which constrain the new rows and leave `session` as it
+  //        was. It does not touch `task`, `project` or `project_acceptance_criterion_definition`, so the
+  //        0177 pair, `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it creates no
+  //        enum, type, function or trigger, and carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no DELETE —
+  //        the key's `ON DELETE CASCADE` is a referential action on the new table's rows. Nothing reads a
+  //        wakeup to allow or refuse a status: a wakeup says when a turn is filed, not what is decided.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -560,7 +572,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0259_watch_persistence',
       '0260_watch_delivery_lease_expiry_idx',
       '0261_watch_expiry_delivery',
-      '0262_background_job_wake'],
+      '0262_background_job_wake',
+      '0264_session_scheduled_wakeup'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
