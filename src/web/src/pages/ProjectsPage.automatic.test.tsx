@@ -225,16 +225,17 @@ async function tick(): Promise<void> {
   });
 }
 
-/** Tick until `ready` holds, rather than a fixed number of times. The project document, the
- *  coordinator status and the panorama each land on their own macrotask, and a suite running two
- *  files at once does not deliver them on a schedule this file can count — a fixed loop passes
- *  alone and fails beside its neighbours, which is the flake this avoids rather than assumes. */
+/** Tick until `ready` holds, for up to twenty seconds rather than a fixed number of ticks. The
+ *  project document, the coordinator status and the panorama each land on their own macrotask, and
+ *  a loaded host does not deliver them on a schedule this file can count — so the bound is time,
+ *  and it sits well inside the cases' timeout below: a switch that never draws fails HERE, by name,
+ *  rather than as a case vitest gave up on. */
 async function waitFor(ready: () => boolean, what: string): Promise<void> {
-  for (let i = 0; i < 80; i += 1) {
-    if (ready()) return;
+  const deadline = Date.now() + 20_000;
+  while (!ready()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
     await tick();
   }
-  throw new Error(`timed out waiting for ${what}`);
 }
 
 async function mount(): Promise<void> {
@@ -280,7 +281,12 @@ async function press(element: HTMLElement): Promise<void> {
   await tick();
 }
 
-describe('ProjectsPage — the Automatic switch', () => {
+// Past the 5s default because each case mounts the WHOLE detail page through `act` on real timers,
+// and the first mount on a loaded host takes several times that. Running out is not one red: vitest
+// gives up on the case with its body still running, that body's `act()` calls overlap the next
+// case's, and React's act scope is left unbalanced — later cases then queue renders that are never
+// flushed and wait for a switch that is never drawn. That is how one slow mount read as six reds.
+describe('ProjectsPage — the Automatic switch', { timeout: 60_000 }, () => {
   it('draws it ON from a project whose coordinatorEnabled is true', async () => {
     serve(detail({ coordinatorEnabled: true }));
     await mount();
