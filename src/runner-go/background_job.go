@@ -69,6 +69,13 @@ const (
 	// evInterrupt reason "runner_restart", which marks a turn cut short, not a process killed.
 	bgRunnerShutdownReason = "runner_shutdown"
 
+	// bgSessionCancelledReason marks a kill the session's cancellation made: the control plane
+	// cancelled the session, or its supervisor lost the session to a newer owner, and the jobs went
+	// at once with the context they run under. Not `drain` or `drain_cap`: those are a session end
+	// handled the way the two kinds are for, and a cancel handles neither kind that way. Not
+	// runner_shutdown either, which is the runner going away under a session that was not ending.
+	bgSessionCancelledReason = "session_cancelled"
+
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
 )
@@ -324,6 +331,13 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 
 	b.mu.Lock()
 	reason := job.killReason
+	if reason == "" && b.ctx.Err() != nil {
+		// Every kill this tailer makes is named before it cancels (killJob, drainJobs, stopAll), so
+		// a job that ends unnamed once the context is cancelled went with that cancellation: the
+		// session's, which reaches the process without the tailer.
+		reason, _ = b.drainReasonsLocked()
+		job.killReason = reason
+	}
 	status := bgStatusCompleted
 	switch {
 	case reason != "":
@@ -652,11 +666,16 @@ func (b *bgTailer) runnerStoppingLocked() bool {
 }
 
 // drainReasonsLocked names what a drain's kills are filed as — a service's, and a job's that
-// outlasted the budget: the session's own end, or the runner's stop once that has begun. Caller
-// holds b.mu.
+// outlasted the budget: the session's own end, its cancellation once the context the jobs run
+// under is gone, or the runner's stop once that has begun. Caller holds b.mu.
 func (b *bgTailer) drainReasonsLocked() (service, overBudget string) {
 	if b.runnerStoppingLocked() {
 		return bgRunnerShutdownReason, bgRunnerShutdownReason
+	}
+	// stopAll names its kills before it cancels the context itself, so a cancelled one here is
+	// the session's: a drain racing that cancellation files what it ends as the cancellation does.
+	if b.ctx.Err() != nil {
+		return bgSessionCancelledReason, bgSessionCancelledReason
 	}
 	return "drain", bgDrainCapReason
 }

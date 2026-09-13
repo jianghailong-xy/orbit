@@ -518,6 +518,20 @@ func (b *bgTailer) stopAll() {
 	// that stop's too.)
 	b.drainJobs(bgDrainWaitCap)
 	b.mu.Lock()
+	// A job started while that drain was waiting is in no snapshot of it, and cancelling b.ctx
+	// below is what ends it. Name that end first, as the drain names what it could not wait out:
+	// once the context is cancelled, an end nobody named reads as the session's cancellation
+	// (finishJob). Under the lock that closes the registration gate, so none can start in between.
+	service, overBudget := b.drainReasonsLocked()
+	for _, job := range b.jobs {
+		if job.status != bgStatusRunning || job.killReason != "" {
+			continue
+		}
+		job.killReason = overBudget
+		if job.kind == bgKindService {
+			job.killReason = service
+		}
+	}
 	b.stopping = true
 	stopShutdownDrain := b.stopShutdownDrain
 	for id, s := range b.live {

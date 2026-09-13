@@ -512,6 +512,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// the same lock that appends the event and drain every generation before /turn-complete.
 	coordinatorContextBarrier := &coordinatorContextFlushBarrier{}
 	emissionGate := &eventEmissionGate{}
+	// What the background tailer emits goes through a gate of its own. A failed turn seals
+	// emissionGate on the provider's way out, and only after that does the supervisor drain the
+	// session's runner-hosted jobs: the drain's kills, and the exit codes of the jobs it waited
+	// out, were refused at the provider's seal. The supervisor seals this one itself, once
+	// bg.stopAll has joined every background emitter and before the drain that precedes the
+	// terminal acknowledgement, so that drain still sends a buffer nothing can append to.
+	bgEmissionGate := &eventEmissionGate{}
 	flushGate := newEventFlushGate()
 	criticalFlushFence := &criticalEventFlushFence{}
 	flushWithContext := func(ctx context.Context) error {
@@ -568,13 +575,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Baseline for the shared-checkout warning below, taken before this session runs anything
 	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
 	sharedDirt := watchSharedCheckout(job.WT)
-	// emitFor files one event against a turn the caller names, instead of against whatever
-	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
-	// event belongs to the steer's turn, while every byte the engine is streaming at that
-	// moment still belongs to the turn being steered. Moving the cursor to emit it and
-	// moving it back would file whatever the stdout reader emitted in between under the
-	// wrong turn — which is the crossing this avoids rather than races.
-	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
+	// emitThrough buffers one event, filed against turnID, if gate still admits it.
+	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
 		pool.engineTurnEvent(live, eventType, payload)
@@ -585,7 +587,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				lastErrMu.Unlock()
 			}
 		}
-		emissionGate.run(func() {
+		gate.run(func() {
 			seqMu.Lock()
 			s := seq
 			seq++
@@ -601,13 +603,25 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
 	}
-	// The ordinary path: whatever turn the session is attributing to right now.
-	emit := func(eventType string, payload map[string]interface{}) {
-		curTurnMu.Lock()
-		tid := curTurn
-		curTurnMu.Unlock()
-		emitFor(tid, eventType, payload)
+	// emitFor files one event against a turn the caller names, instead of against whatever
+	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
+	// event belongs to the steer's turn, while every byte the engine is streaming at that
+	// moment still belongs to the turn being steered. Moving the cursor to emit it and
+	// moving it back would file whatever the stdout reader emitted in between under the
+	// wrong turn — which is the crossing this avoids rather than races.
+	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
+		emitThrough(emissionGate, turnID, eventType, payload)
 	}
+	// The ordinary path: whatever turn the session is attributing to right now, through gate.
+	emitOn := func(gate *eventEmissionGate) emitFn {
+		return func(eventType string, payload map[string]interface{}) {
+			curTurnMu.Lock()
+			tid := curTurn
+			curTurnMu.Unlock()
+			emitThrough(gate, tid, eventType, payload)
+		}
+	}
+	emit := emitOn(emissionGate)
 
 	// Snappier streaming for interactive: flush every 250ms (vs 1s one-shot).
 	stopFlush := make(chan struct{})
@@ -645,7 +659,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The pool is told about every shell tailed here: a background shell writes
 	// this session's checkout for as long as it runs, and a merge/commit/GC that
 	// only looked at the turn permit would rewrite the checkout under it.
-	bg := newBgTailer(sessionCtx, emit, pool.worktreeHoldsFor(job.SessionID))
+	bg := newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
 	// A runner that stops — re-executing into an update, or its service stopped — ends these
 	// jobs too, and that is not this session ending. Its drain starts the moment the runner
@@ -934,10 +948,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// That process and every provider worker are joined now. Stop runner-owned
 		// background work too, perform one stable event drain, then settle the exact
 		// request before releasing the inbox generation or allowing a replacement.
+		// Background work still emits past the provider's seal — the drain's kills among
+		// it — until stopAll has joined it; seal its gate behind that, so the drain below
+		// is stable and nothing it did not send can follow the acknowledgement.
 		var terminalAckErr error
 		terminalAckStatus := ""
 		if ack, ok := pendingTerminalAck.load(); ok {
 			bg.stopAll()
+			bgEmissionGate.seal()
 			if pool.permitGeneration(live) != ack.permitGeneration {
 				terminalAckErr = fmt.Errorf("failed-turn terminal ack crossed its local permit generation")
 				localDetach()
@@ -1073,6 +1091,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Provider and background emitters are joined above. Seal as the final local
 	// backstop, then drain the now-stable buffer before any server finalization.
 	emissionGate.seal()
+	bgEmissionGate.seal()
 	stopEventFlusher()
 	if leaseResetGeneration != "" {
 		if err := retirePendingGeneration(); err != nil {

@@ -28,11 +28,18 @@ import (
 // and never sent is precisely the failure, and listening to emit() could not see it.
 
 // runnerStopControlPlane hands out queued turns, keeps every event the runner delivers, and can
-// hold lease releases the way an overloaded control plane answers them late.
+// hold lease releases the way an overloaded control plane answers them late. Like the real control
+// plane it takes no events for a session it has closed — by a turn completion that ends the
+// session, or by /finalize — and keeps what arrives after apart: a report sent too late was not
+// delivered.
 type runnerStopControlPlane struct {
 	mu           sync.Mutex
 	inbox        []RunInboxResponse
 	events       []RunEvent
+	late         []RunEvent
+	closed       bool
+	completions  []TurnCompleteRequest
+	finalizes    []RunFinalizeRequest
 	holdReleases bool
 	releases     chan struct{}
 	releaseOnce  sync.Once
@@ -62,7 +69,36 @@ func (c *runnerStopControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 		var batch RunEventBatch
 		if json.NewDecoder(r.Body).Decode(&batch) == nil {
 			c.mu.Lock()
-			c.events = append(c.events, batch.Events...)
+			if c.closed {
+				// The real control plane refuses these with 409 ("session is no longer open"). Taken
+				// quietly here, so a verdict is read off what was accepted rather than off how the
+				// runner takes a refusal.
+				c.late = append(c.late, batch.Events...)
+			} else {
+				c.events = append(c.events, batch.Events...)
+			}
+			c.mu.Unlock()
+		}
+	case strings.HasSuffix(r.URL.Path, "/turn-complete"):
+		var req TurnCompleteRequest
+		if json.NewDecoder(r.Body).Decode(&req) == nil {
+			// A failed turn of the session's own ends the session, and the answer says so.
+			ends := req.Status == stFailed && req.Subtype != subtypeSteer && req.Subtype != subtypeUnknownKind
+			c.mu.Lock()
+			c.completions = append(c.completions, req)
+			c.closed = c.closed || ends
+			c.mu.Unlock()
+			if ends {
+				_ = json.NewEncoder(w).Encode(TurnCompleteResponse{OK: true, Status: stFailed})
+				return
+			}
+		}
+	case strings.HasSuffix(r.URL.Path, "/finalize"):
+		var req RunFinalizeRequest
+		if json.NewDecoder(r.Body).Decode(&req) == nil {
+			c.mu.Lock()
+			c.finalizes = append(c.finalizes, req)
+			c.closed = true
 			c.mu.Unlock()
 		}
 	case strings.HasSuffix(r.URL.Path, "/release-leases"):
@@ -109,16 +145,52 @@ func (c *runnerStopControlPlane) delivered(match func(RunEvent) bool) bool {
 	return false
 }
 
-// terminalReports is every terminal background_task the control plane received for one job.
+// terminalReports is every terminal background_task the control plane accepted for one job.
 func (c *runnerStopControlPlane) terminalReports(jobID string) []map[string]interface{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return terminalReportsOf(c.events, jobID)
+}
+
+// lateTerminalReports is every terminal background_task for one job that arrived after the session
+// was closed, and so was never accepted.
+func (c *runnerStopControlPlane) lateTerminalReports(jobID string) []map[string]interface{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return terminalReportsOf(c.late, jobID)
+}
+
+func terminalReportsOf(events []RunEvent, jobID string) []map[string]interface{} {
 	var out []map[string]interface{}
-	for _, e := range c.events {
+	for _, e := range events {
 		if e.Type == evBackgroundTask && asString(e.Payload["toolUseId"]) == jobID &&
 			isTerminalBgStatus(asString(e.Payload["status"])) {
 			out = append(out, e.Payload)
 		}
+	}
+	return out
+}
+
+// lateEvents is every event that arrived after the session was closed.
+func (c *runnerStopControlPlane) lateEvents() []RunEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]RunEvent(nil), c.late...)
+}
+
+func (c *runnerStopControlPlane) turnCompletions() []TurnCompleteRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]TurnCompleteRequest(nil), c.completions...)
+}
+
+// finalizeStatuses is the status of every /finalize the runner sent, in order.
+func (c *runnerStopControlPlane) finalizeStatuses() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []string
+	for _, f := range c.finalizes {
+		out = append(out, f.Status)
 	}
 	return out
 }
