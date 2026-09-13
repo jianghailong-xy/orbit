@@ -42,11 +42,21 @@
  * decision about the world that can be told what the world is has stopped being about the world.
  * `wake-disposition.service.ts` reads all five observations and folds them here.
  *
- *   * `criterionExemptionArgued` — the task's `completion_criterion_override_reason`, which is
+ *   * `criterionExemptionArgued` — the task's `completion_criterion_override_reason`, when it is
  *     prose somebody wrote to say that Orbit's own objection to the shape of the acceptance prose
  *     does not apply to this work. The column's contract already says the text is audit evidence
  *     and is "never interpreted as completion evidence"; leaning on it to merge would be
  *     interpreting it.
+ *     The same column also holds the record `task-completion-criterion-change-guard.ts` writes
+ *     when an edit moves a task's criterion: `[criterion-change FROM->TO] <reason>`. That record
+ *     says the criterion moved and why, not that one does not apply, and reading it as an argument
+ *     is what halted two projects' coordinators in 2026-09. It is recognised by that door's own
+ *     `readTaskCriterionChange`, never by a second pattern here. The two never share the column —
+ *     the door replaces the whole value — so a value that reads back as a record is a record
+ *     whatever its reason says (weighing that sentence would be evaluating it, which §1 refuses),
+ *     and every other non-blank value is an argument, including one merely shaped like a record.
+ *     The one spelling this cannot tell apart is creation prose written as a well-formed record,
+ *     which `task_get` already reports as a change too.
  *   * `statedCriterionMoved` — the criterion's `revision` today against the snapshot the task was
  *     filed with. A stale snapshot means the exam moved after the work was declared against it,
  *     and `coordinator-authority.ts` puts EDIT_ACCEPTANCE_CRITERIA in HUMAN_ONLY: the only
@@ -101,7 +111,10 @@ export const BLOCKER_KIND_FOR: Readonly<Record<BlockerReason, string>> = {
 
 /** Everything the fold may look at. Every field is an observation; none is a setting. */
 export interface DeliveryObservations {
-  /** Whether the work carries written prose arguing a criterion does not apply to it. */
+  /**
+   * Whether the work carries written prose arguing a criterion does not apply to it. A record that
+   * its criterion was changed is not that prose (§2).
+   */
   criterionExemptionArgued: boolean;
   /** Whether the stated criterion's wording moved after this work was declared against it. */
   statedCriterionMoved: boolean;

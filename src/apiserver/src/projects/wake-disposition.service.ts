@@ -10,6 +10,7 @@ import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   readExecutableAcceptanceOutcome,
 } from '../tasks/executable-acceptance-round';
+import { readTaskCriterionChange } from '../tasks/task-completion-criterion-change-guard';
 import {
   type BlockerDisposition,
   type DeliveryObservations,
@@ -459,7 +460,10 @@ export class WakeDispositionService {
       .flatMap((row) => row.servingTasks.map((task) => ({
         taskId: task.id,
         observed: {
-          criterionExemptionArgued: (task.completionCriterionOverrideReason ?? '').trim() !== '',
+          // Written prose only: the record the criterion-change door keeps in the same column says
+          // the criterion moved, not that one does not apply (`blocker-disposition.ts` §2).
+          criterionExemptionArgued: (task.completionCriterionOverrideReason ?? '').trim() !== ''
+            && readTaskCriterionChange(task.completionCriterionOverrideReason) === null,
           // A snapshot that disagrees with the criterion it names. A task filed against no
           // criterion has no snapshot to disagree, and says nothing about the standard moving.
           statedCriterionMoved:

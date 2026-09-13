@@ -932,3 +932,124 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
       await stack.db.$disconnect();
     }
   });
+
+// (d) -----------------------------------------------------------------------------------------
+/**
+ * The sentence the criterion-change door was given for the Watch project's 2026-09-12 pair, each of
+ * which then raised CRITERION_EXEMPTION_ARGUED without arguing anything: the column held the
+ * door's record of a criterion that had moved, not prose saying one did not apply.
+ */
+const SWITCH_REASON = '该任务早于显式完成判定机制创建，EVIDENCE_JUDGMENT 是兼容回填值。';
+
+/** The production row of that kind that WAS an argument (2026-09-06). */
+const ARGUED_EXEMPTION =
+  '验收含「只有 accepted checkpoint 能成为下游基线在类型或约束层可断言」这类结构性要求，'
+  + '要看约束定义而不是命令退出码。';
+
+test('a criterion-change record is not an argued exemption: the delivery the change door moved '
+  + 'reaches its coordinator, and the same delivery carrying a written argument still stops',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    const fixtures: Fixture[] = [];
+    try {
+      // The record, written by the only door that writes one: filed on EVIDENCE_JUDGMENT, then
+      // moved onto its command by the account owner, who is asked why. Nothing here spells it.
+      const switched = await fixture(stack, 'criterion-switched');
+      fixtures.push(switched);
+      const [switchedStated] = await state(stack, switched, [STATED.CONTROL]);
+      const switchedChore = await releasableSibling(stack, switched, '切过判据那一份之后的下一条');
+      const switchedTask = await serve(stack, switched, switchedStated!.key, '切过判据的那一份', {
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+        acceptanceCommand: undefined,
+        acceptanceExpectedExitCode: undefined,
+      });
+      await stack.tasks.update(switched.ownerId, switchedTask, {
+        ...CHECK,
+        completionCriterion: 'EXECUTABLE',
+        completionCriterionOverrideReason: SWITCH_REASON,
+      } as never);
+
+      // The argument, filed the way (a)'s is: at creation, beside the task's own command.
+      const argued = await fixture(stack, 'exemption-argued');
+      fixtures.push(argued);
+      const [arguedStated] = await state(stack, argued, [STATED.EXEMPTION]);
+      const arguedChore = await releasableSibling(stack, argued, '写了豁免理由那一份之后的下一条');
+      const arguedTask = await serve(stack, argued, arguedStated!.key, '写了豁免理由的那一份', {
+        completionCriterionOverrideReason: ARGUED_EXEMPTION,
+      });
+
+      // The column is the only variable. Both rows settle on the same command, authorize the same
+      // paths and were declared against a criterion nobody moved — and neither column is blank, so
+      // "nothing stopped" below cannot be the column simply being empty.
+      const [switchedRow, arguedRow] = await Promise.all([switchedTask, arguedTask].map((id) =>
+        stack.db.task.findUniqueOrThrow({
+          where: { id },
+          select: {
+            title: true, description: true, acceptanceCriteria: true, completionCriterion: true,
+            acceptanceCommand: true, acceptanceExpectedExitCode: true, criterionRevision: true,
+            completionCriterionOverrideReason: true,
+          },
+        })));
+      assert.equal(switchedRow.completionCriterionOverrideReason,
+        `[criterion-change EVIDENCE_JUDGMENT->EXECUTABLE] ${SWITCH_REASON}`,
+        'the change door did not store the record this case is about');
+      assert.equal(arguedRow.completionCriterionOverrideReason, ARGUED_EXEMPTION,
+        'the create door did not store the argument this case is about');
+      for (const field of [
+        'completionCriterion', 'acceptanceCommand', 'acceptanceExpectedExitCode', 'criterionRevision',
+      ] as const) {
+        assert.equal(switchedRow[field], arguedRow[field],
+          `the two deliveries differ in ${field}, not only in what the column holds`);
+      }
+      assert.deepEqual(declaredPaths(switchedRow), declaredPaths(arguedRow),
+        'the two deliveries do not authorize the same paths');
+
+      await deliver(stack, switched, switchedTask, 'criterion-switched', IN_SCOPE);
+      const [switchedSpent] = criterionFor(stack, switched, switchedStated!.key);
+
+      // 1 — the record stops nothing. And not only "raised nothing", which a unit that never ran
+      // would also do: the fact reached the coordinator with the action a passed round is given,
+      // and the next task was released.
+      assert.equal(switchedSpent?.blockerKind, undefined,
+        'a criterion-change record was read as an argued exemption');
+      assert.equal(await blockerCount(stack.db, switched.projectId), 0,
+        'the delivery the change door moved raised a blocker anyway');
+      assert.equal(switchedSpent?.outcome, 'DELIVERED',
+        'the switched delivery\'s fact did not reach the coordinator');
+      assert.equal(switchedSpent?.action, 'MERGE_AND_RELEASE_NEXT',
+        'the switched delivery settled nothing either — this half would be green over a dead unit');
+      assert.equal(await messagesTo(stack.db, switched.coordinatorSessionId), 1,
+        'the coordinator was not told about the switched delivery');
+      assert.equal(await sessionsOf(stack.db, switchedChore), 1,
+        'the switched delivery did not release the next task');
+
+      await deliver(stack, argued, arguedTask, 'exemption-argued', IN_SCOPE);
+      const [arguedSpent] = criterionFor(stack, argued, arguedStated!.key);
+
+      // 2 — the positive control: the same delivery with written prose in that column still asks a
+      // person, and still merges and releases nothing until somebody has.
+      assert.equal(arguedSpent?.outcome, 'CONSUMED', 'the argued delivery\'s fact took the wrong terminal');
+      assert.equal(arguedSpent?.blockerKind, BLOCKER_KIND_FOR.CRITERION_EXEMPTION_ARGUED,
+        'a written exemption argument no longer stops the delivery');
+      assert.equal(arguedSpent?.action, undefined,
+        'the argued delivery both stopped and chose an action');
+      assert.equal(await blockerCount(stack.db, argued.projectId), 1,
+        'the argued delivery raised something other than exactly one blocker');
+      const [arguedBlocker] = await openBlockers(stack.db, argued.projectId);
+      assert.equal(arguedBlocker?.subjectId, arguedTask, 'the blocker is about a different task');
+      assert.equal((arguedBlocker?.detail as { reason?: string })?.reason,
+        'CRITERION_EXEMPTION_ARGUED', 'the blocker was raised for a different reason');
+      assert.equal(await messagesTo(stack.db, argued.coordinatorSessionId), 0,
+        'the argued delivery told the coordinator to merge it anyway');
+      assert.equal(await sessionsOf(stack.db, arguedChore), 0,
+        'the argued delivery released the next task anyway');
+
+      for (const f of fixtures) {
+        assert.equal(await landedReceipts(stack.db, f.projectId), 0,
+          'this case performed a merge; the action is computed and merging is somebody else’s');
+      }
+    } finally {
+      for (const f of fixtures) teardown(f);
+      await stack.db.$disconnect();
+    }
+  });
