@@ -24,6 +24,7 @@ import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
 } from '../tasks/task-completion-criterion';
+import { newestLiveCheck } from '../tasks/verification-dependency';
 
 export const TASK_COMPLETION_POLICIES = [
   'MANUAL',
@@ -54,6 +55,12 @@ export interface AggregationTaskFact {
   completionCriterion?: TaskCompletionCriterionValue | null;
   verifiesTaskId: string | null;
   verdict: TaskVerdictValue | null;
+  /**
+   * Orders a check among its subject's other checks, ahead of `id`: N11 gives a verifier its
+   * request's UUIDv4 id, so id order is not chronology (see `VerificationEpochTaskRow`). Optional,
+   * and absent falls back to id order exactly as `newestLiveCheck` does.
+   */
+  createdAt?: Date | string | null;
   /**
    * §13.6 SU6: this attempt was replaced or abandoned. Optional, and absent reads as "not retired"
    * — a snapshot taken before the columns existed must aggregate to what it originally did.
@@ -639,6 +646,19 @@ function recompute(
   // dispatched again, so no run will ever give this check a verdict — it is outstanding in the same
   // arithmetic as an unfinished one and in none of the ways that matter.
   let verificationsUnconcludable = 0;
+  // An explicit VERIFICATION criterion is decided on ONE check: the subject's newest live one, as
+  // chosen by the `newestLiveCheck` §13.3's dependency gate opens the PASS epoch on. A newer PASS
+  // is the fix-and-re-run an older FAIL must not hold shut, and a newer check that has not passed
+  // re-opens what an older PASS answered, so older checks drop out of every count below — `[K5]`'s
+  // included. Legacy fixtures (criterion omitted) keep counting every live check.
+  const newestCheck = explicitVerificationCriterion
+    ? newestLiveCheck(verifierTasks.map((verifier) => ({
+        id: verifier.id,
+        createdAt: verifier.createdAt,
+        status: effective.get(verifier.id) ?? verifier.status,
+        retired: obsolete.has(verifier.id),
+      })))
+    : null;
   for (const verifier of verifierTasks) {
     // A retired check is neither a pass nor an outstanding one: the re-run that replaced it is
     // itself pointed at this subject and is counted on its own row. Leaving it outstanding would
@@ -646,6 +666,7 @@ function recompute(
     // is precisely the shape this project's own 04R / 04R2 / 04R3 history has.
     const status = effective.get(verifier.id) ?? verifier.status;
     if (!verificationIsLive({ status, retired: obsolete.has(verifier.id) })) continue;
+    if (explicitVerificationCriterion && verifier.id !== newestCheck?.id) continue;
     // Under N2 a coordinator/verifier records the independent verdict but may not write DONE.
     // For an explicitly declared VERIFICATION criterion, PASS is therefore the terminal evidence
     // itself; requiring the verifier row to be DONE would make the criterion unreachable. Legacy
@@ -800,7 +821,9 @@ function gapReason(counts: {
   // false of a check that reached DONE and recorded nothing: that row will never move again, and
   // reading it as a wait is what left this shape with no write, no gap, no condition, and one WARN
   // every sixty seconds. One live check is enough to make it an ordinary wait again, which is why
-  // this asks that EVERY outstanding one has stopped.
+  // this asks that EVERY outstanding one has stopped. Under an explicit VERIFICATION criterion
+  // `recompute` counts only the newest live check, so that check is the whole of "every": an older
+  // one still running cannot decide the subject past a newer one that stopped.
   if (policy === 'VERIFICATION_PASSED' && childrenSettled && counts.passed === 0
       && counts.verificationsOutstanding > 0
       && counts.verificationsOutstanding === counts.verificationsUnconcludable) {

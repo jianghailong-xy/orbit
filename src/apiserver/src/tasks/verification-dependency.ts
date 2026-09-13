@@ -157,7 +157,9 @@ export interface VerificationEpochSubjectFact {
 }
 
 /** A check counts toward the epoch unless it was retired or cancelled (§13.2 V8-d, same rule). */
-export function verificationCountsTowardEpoch(check: VerificationEpochCheckFact): boolean {
+export function verificationCountsTowardEpoch(
+  check: Pick<VerificationEpochCheckFact, 'status' | 'retired'>,
+): boolean {
   return !check.retired && check.status !== 'CANCELLED';
 }
 
@@ -187,11 +189,12 @@ export function verificationRunSettled(check: VerificationEpochCheckFact): boole
  *
  * Exported because `[K5]`'s liveness rule has to answer about the SAME row the gate answered about;
  * picking the newest check a second time, by a second spelling, is how two faces come to describe
- * two different worlds.
+ * two different worlds. §13.1's aggregation decides an explicit VERIFICATION criterion on this row
+ * for the same reason, which is why it asks only for the fields the choice reads.
  */
-export function newestLiveCheck(
-  checks: readonly VerificationEpochCheckFact[],
-): VerificationEpochCheckFact | null {
+export function newestLiveCheck<
+  T extends Pick<VerificationEpochCheckFact, 'id' | 'createdAt' | 'status' | 'retired'>,
+>(checks: readonly T[]): T | null {
   const live = checks.filter(verificationCountsTowardEpoch)
     .sort((a, b) => {
       const aTime = a.createdAt;

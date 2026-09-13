@@ -55,6 +55,7 @@ export interface AggregationScope {
 
 type ScopeRow = {
   id: string;
+  createdAt: Date;
   status: AggregationTaskStatus;
   parentTaskId: string | null;
   completionPolicy: AggregationTaskFact['completionPolicy'];
@@ -67,6 +68,8 @@ type ScopeRow = {
 
 const SCOPE_SELECT = {
   id: true,
+  // Orders a subject's checks for `newestLiveCheck`, ahead of the id: N11 verifier ids are UUIDv4.
+  createdAt: true,
   status: true,
   parentTaskId: true,
   completionPolicy: true,
@@ -151,6 +154,7 @@ export async function collectAggregationScope(
   return {
     facts: [...byId.values()].map((row) => ({
       id: row.id,
+      createdAt: row.createdAt,
       status: row.status,
       parentTaskId: row.parentTaskId,
       completionPolicy: row.completionPolicy,

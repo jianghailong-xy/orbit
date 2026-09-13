@@ -23,6 +23,7 @@ function task(
     criterion?: AggregationTaskFact['completionCriterion'];
     verifies?: string;
     verdict?: TaskVerdictValue;
+    created?: string;
   } = {},
 ): AggregationTaskFact {
   return {
@@ -33,6 +34,7 @@ function task(
     completionCriterion: options.criterion,
     verifiesTaskId: options.verifies ?? null,
     verdict: options.verdict ?? null,
+    createdAt: options.created,
   };
 }
 
@@ -289,6 +291,89 @@ const CASES: Case[] = [
       task('v', 'OPEN', { verifies: 'p' }),
     ],
     expect: ['p:DONE->OPEN'],
+  },
+  // An explicit VERIFICATION criterion is decided on the subject's NEWEST live check, the row §13.3's
+  // dependency gate opens the PASS epoch on. The first case is the 2026-08-30 shape: fixed, checked
+  // again and passed, and held OPEN by the FAIL that asked for the fix.
+  {
+    name: 'explicit VERIFICATION: a newer PASS completes the subject past an older FAIL',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T12:00:00Z' }),
+      task('v2', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: ['p:OPEN->DONE'],
+  },
+  {
+    name: 'explicit VERIFICATION: a newer FAIL holds the subject open over an older PASS',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T12:00:00Z' }),
+      task('v2', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: [],
+  },
+  {
+    name: 'explicit VERIFICATION: a newer check still without a verdict holds it open',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T12:00:00Z' }),
+      task('v2', 'OPEN', { verifies: 'p', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: [],
+  },
+  {
+    name: 'explicit VERIFICATION: a newer FAIL reopens a subject an older PASS completed',
+    tasks: [
+      task('p', 'DONE', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T12:00:00Z' }),
+      task('v2', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: ['p:DONE->OPEN'],
+  },
+  {
+    // N11 gives a verifier its request's UUIDv4 id, so "newest" is creation time first: `v9` sorts
+    // after `v1` by id and was filed before it.
+    name: 'explicit VERIFICATION: creation time, not id order, decides which check is newest',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v9', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T12:00:00Z' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: ['p:OPEN->DONE'],
+  },
+  {
+    name: 'explicit VERIFICATION: a CANCELLED newer check leaves the older PASS deciding',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T12:00:00Z' }),
+      task('v2', 'CANCELLED', { verifies: 'p', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: ['p:OPEN->DONE'],
+  },
+  {
+    name: 'explicit VERIFICATION: a retired newer check leaves the older PASS deciding',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T12:00:00Z' }),
+      {
+        ...task('v2', 'FAILED', { verifies: 'p', created: '2026-08-30T13:00:00Z' }),
+        retirement: 'ABANDONED',
+      },
+    ],
+    expect: ['p:OPEN->DONE'],
+  },
+  {
+    // The pre-N1 spelling keeps its every-live-check rule over the same rows the first case above
+    // completes on.
+    name: 'criterion omitted: a newer PASS does not outvote an older FAIL',
+    tasks: [
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED' }),
+      task('a', 'DONE', { parent: 'p' }),
+      task('v1', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T12:00:00Z' }),
+      task('v2', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T13:00:00Z' }),
+    ],
+    expect: [],
   },
   {
     name: 'a verification that finished without a verdict is not a pass',
@@ -673,4 +758,58 @@ test('a check that DID conclude is aggregated exactly as before', () => {
   ]);
   assert.equal(plan.aggregations[0]?.taskId, 'v');
   assert.equal(plan.aggregations[0]?.to, 'DONE');
+});
+
+// An explicit VERIFICATION criterion counts only the check it is decided on — in its evidence, and
+// in `[K5]`'s gap, which has to describe the same row §13.3's liveness does.
+
+test('an explicit VERIFICATION completion counts only the check it was decided on', () => {
+  const tasks = [
+    task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+    task('v1', 'DONE', { verifies: 'p', verdict: 'FAIL', created: '2026-08-30T12:00:00Z' }),
+    task('v2', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T13:00:00Z' }),
+  ];
+  const plan = planTaskAggregation(tasks);
+  assert.deepEqual(plan.aggregations, [{
+    taskId: 'p',
+    from: 'OPEN',
+    to: 'DONE',
+    policy: 'VERIFICATION_PASSED',
+    reason: 'VERIFICATION_PASSED',
+    evidence: {
+      children: { total: 0, done: 0, cancelled: 0, outstanding: 0 },
+      // `total` is every check naming the subject; the older FAIL is in it and in nothing else.
+      verifications: { total: 2, passed: 1, outstanding: 0, unconcludable: 0 },
+    },
+  }]);
+  // Picking the newest is a sort, so the answer must not depend on the snapshot's order (AG1).
+  assert.deepEqual(planTaskAggregation([...tasks].reverse()), plan);
+});
+
+test('explicit VERIFICATION reads VERIFICATION_CANNOT_CONCLUDE off the newest check alone', () => {
+  // The older check can still run, but it decides nothing any more: the newer one finished without
+  // a verdict and shadows it, which is also what §13.3's liveness says about the same rows. (The
+  // DONE child keeps `gapReason`'s children clause out of the way; it runs first either way.)
+  const stalled = planTaskAggregation([
+    task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+    task('a', 'DONE', { parent: 'p' }),
+    task('v1', 'OPEN', { verifies: 'p', created: '2026-08-30T12:00:00Z' }),
+    task('v2', 'DONE', { verifies: 'p', created: '2026-08-30T13:00:00Z' }),
+  ]);
+  assert.deepEqual(stalled.aggregations, []);
+  assert.equal(stalled.completionGaps.length, 1);
+  assert.equal(stalled.completionGaps[0]?.reason, 'VERIFICATION_CANNOT_CONCLUDE');
+  assert.deepEqual(stalled.completionGaps[0]?.evidence.verifications,
+    { total: 2, passed: 0, outstanding: 1, unconcludable: 1 });
+
+  // The other way round: an older check that concluded nothing no longer stalls a subject whose
+  // newer check passed.
+  const passed = planTaskAggregation([
+    task('p', 'OPEN', { policy: 'VERIFICATION_PASSED', criterion: 'VERIFICATION' }),
+    task('a', 'DONE', { parent: 'p' }),
+    task('v1', 'DONE', { verifies: 'p', created: '2026-08-30T12:00:00Z' }),
+    task('v2', 'DONE', { verifies: 'p', verdict: 'PASS', created: '2026-08-30T13:00:00Z' }),
+  ]);
+  assert.deepEqual(moves(passed), ['p:OPEN->DONE']);
+  assert.deepEqual(passed.completionGaps, []);
 });
