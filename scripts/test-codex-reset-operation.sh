@@ -15,9 +15,9 @@
 #      provider key absent from every body, both checkpoints persisted apart, and illegal or backward
 #      moves refused by the repository and by the database, including under concurrent transactions.
 #   2. THE MIGRATION, FORWARD AND BACK, on a second disposable PostgreSQL. A schema is compared as the
-#      text of `pg_dump --schema-only`. Rolled back with down.sql, a database migrated to 0255 must be
-#      identical to one migrated only to 0254 — and must differ from it before the rollback, which is
-#      the control that the comparison can see 0255 at all. Rolled forward again by
+#      text of `pg_dump --schema-only`. Rolled back with down.sql, a database given every migration must
+#      be identical to one given every migration but 0255 — and must differ from it before the rollback,
+#      which is the control that the comparison can see 0255 at all. Rolled forward again by
 #      `prisma migrate deploy`, after deleting the ledger row as down.sql says to, it must be identical
 #      to the 0255 database again. Both scripts also run a second time on top of themselves, and the
 #      rollback runs over rows.
@@ -102,26 +102,28 @@ migration_round_trip() {
   sql postgres -c 'CREATE DATABASE pccreset_before' </dev/null >/dev/null &&
     sql postgres -c 'CREATE DATABASE pccreset_after' </dev/null >/dev/null || { red "could not create the databases"; return; }
 
-  # Every migration below 0255, byte for byte, replayed from a directory of its own by the frontier config.
+  # Every migration but 0255, byte for byte, replayed from a directory of its own by the frontier config. Not
+  # every migration below 0255: main has later ones too (0256, 0258), which production applied before 0255
+  # and which a rolled-back database keeps.
   mkdir -p "$WORK/frontier"
   cp "$API/prisma/migrations/migration_lock.toml" "$WORK/frontier/"
   local dir name
   for dir in "$API"/prisma/migrations/[0-9][0-9][0-9][0-9]_*/; do
     name="$(basename "$dir")"
-    (( 10#${name%%_*} < 10#${UNIT%%_*} )) && cp -R "$dir" "$WORK/frontier/$name"
+    [ "$name" != "$UNIT" ] && cp -R "$dir" "$WORK/frontier/$name"
   done
-  echo "==> prisma migrate deploy: pccreset_before to 0254, pccreset_after to $UNIT"
+  echo "==> prisma migrate deploy: pccreset_before with every migration but $UNIT, pccreset_after with all of them"
   ( cd "$API" && DATABASE_URL="$(url pccreset_before)" \
       ORBIT_FRONTIER_PRISMA_SCHEMA="$API/prisma/schema.prisma" ORBIT_FRONTIER_PRISMA_MIGRATIONS="$WORK/frontier" \
       "$PRISMA" migrate deploy --config prisma.frontier.config.ts >"$WORK/deploy-before.log" 2>&1 ) ||
-    { cat "$WORK/deploy-before.log"; red "prisma migrate deploy up to 0254 failed"; return; }
+    { cat "$WORK/deploy-before.log"; red "prisma migrate deploy without $UNIT failed"; return; }
   ( cd "$API" && DATABASE_URL="$(url pccreset_after)" "$PRISMA" migrate deploy >"$WORK/deploy-after.log" 2>&1 ) ||
-    { cat "$WORK/deploy-after.log"; red "prisma migrate deploy up to $UNIT failed"; return; }
+    { cat "$WORK/deploy-after.log"; red "prisma migrate deploy with $UNIT failed"; return; }
   dump pccreset_before >"$WORK/before.sql" && dump pccreset_after >"$WORK/after.sql" || { red "pg_dump failed"; return; }
 
   # The control: before any rollback the two schemas differ, exactly by what 0255 creates.
   if cmp -s "$WORK/before.sql" "$WORK/after.sql"; then
-    red "the 0254 and $UNIT schemas dump identically — this comparison cannot see 0255"
+    red "the schemas with and without $UNIT dump identically — this comparison cannot see 0255"
     return
   fi
   local object
@@ -131,7 +133,7 @@ migration_round_trip() {
                 'CREATE TRIGGER codex_rate_limit_reset_operation_guard BEFORE UPDATE' \
                 'heartbeat_lease_owner uuid' 'heartbeat_draining boolean'; do
     grep -qF "$object" "$WORK/after.sql" || red "the $UNIT schema has no '$object'"
-    grep -qF "$object" "$WORK/before.sql" && red "the 0254 schema already has '$object'"
+    grep -qF "$object" "$WORK/before.sql" && red "the schema without $UNIT already has '$object'"
   done
 
   # Rows to roll back over: an operation, and a runner whose new columns hold values.
@@ -152,7 +154,7 @@ SQL
   local round
   for round in 1 2; do
     sql pccreset_after <"$API/prisma/migrations/$UNIT/down.sql" >/dev/null || { red "down.sql failed on run $round"; return; }
-    same_schema "$WORK/before.sql" pccreset_after "rolled back (down.sql run $round), the schema is not the 0254 one" || return
+    same_schema "$WORK/before.sql" pccreset_after "rolled back (down.sql run $round), the schema is not the one without $UNIT" || return
   done
   [ "$(sql pccreset_after -c 'SELECT count(*) FROM "runner"' </dev/null)" = 1 ] ||
     red "the rollback lost the runner row it ran over"
