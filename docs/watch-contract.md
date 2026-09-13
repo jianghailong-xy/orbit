@@ -169,7 +169,8 @@ Agent 最常要的那句话——「等这 7 个 Task 全部终态，或任一�
 `IN_FLIGHT` 由 `(leaseOwner, leaseGeneration)` 围栏；租约过期由别的 worker 接管。
 `maxDeliveryAttempts = 8` 之后进 `DEAD_LETTER`，**死信必须在界面上可见**。
 
-`RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队。runner 取走它之前观察者的 run 若已结束——当前 turn
+`RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队，Match 的唤醒（`watch:<watchId>:<generation>`）和到期的
+唤醒（`watch:<watchId>:expired`，§5）都是如此。runner 取走它之前观察者的 run 若已结束——当前 turn
 失败、runner 掉线被 reaper 终结、runner finalize、被请求结束——结束时的排空会把这个 turn 连同队列一起收掉，
 交付随之 `DELIVERED → DEAD_LETTER`（`OBSERVER_SESSION_ENDED`），不再报已送达：唤醒不复活会话，同一个
 `clientTurnId` 也无法再投一次。所以交付的终态只有 `DEAD_LETTER`；`DELIVERED` 只对 `NOTIFY_USER` 和已被
@@ -209,6 +210,8 @@ runner 取走的唤醒是最终的。
 **TTL**：`expiresAt` 必填，范围 `[60s, 30d]`，默认 24h，超出 → `TTL_OUT_OF_RANGE`。
 **到期同样要交付**：一个 `RESUME_SESSION` 的 Watch 到期而没有成立，也要给观察者一个带
 `EXPIRED` 的 turn。否则等在它上面的会话就永远等下去了——这正是这个项目要消灭的东西。
+这个 turn 以 `watch:<watchId>:expired` 入队，交付规则与 Match 的唤醒相同：runner 取走它之前观察者的 run
+若已结束，排空时交付同样 `DELIVERED → DEAD_LETTER`（`OBSERVER_SESSION_ENDED`，§3），不会停在已送达。
 
 ---
 

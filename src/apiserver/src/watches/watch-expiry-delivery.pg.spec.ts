@@ -8,7 +8,9 @@
  *
  * The cases use the collaborators production uses: the evaluator's own landing,
  * `SessionsService.createTurn` writing real `conversation_turn` rows, and `RunnerApiController`'s inbox
- * claim and turn completion. A case reaches expiry by moving `expires_at` into the past rather than
+ * claim and turn completion. The endings that drain a queued expiry unrun — a failed turn, a lost
+ * runner, a runner finalize, an owner's end — are driven through the production turn completion, reaper
+ * sweep, finalize and end. A case reaches expiry by moving `expires_at` into the past rather than
  * waiting out the 60-second minimum TTL. The evaluator compares that column with the database clock,
  * so both routes reach the same state.
  *
@@ -36,6 +38,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
+import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import type { CreateWatchDto } from './dto';
@@ -264,13 +267,16 @@ interface DeliveryRow {
   lastError: string | null;
   snapshot: { evaluatedAt: string; targets: unknown[] } | null;
   due: boolean;
+  delivered: boolean;
+  deadLettered: boolean;
 }
 
 /** Every delivery a watch has: its Matches' and its expiry's. */
 async function deliveriesOf(watchId: string): Promise<DeliveryRow[]> {
   const { rows } = await sql.query<DeliveryRow>(
     `SELECT d."id", d."kind", d."action", d."state", d."attempts", d."last_error" AS "lastError",
-            d."expiry_snapshot" AS "snapshot", d."next_attempt_at" <= now() AS "due"
+            d."expiry_snapshot" AS "snapshot", d."next_attempt_at" <= now() AS "due",
+            d."delivered_at" IS NOT NULL AS "delivered", d."dead_lettered_at" IS NOT NULL AS "deadLettered"
        FROM "watch_delivery" d LEFT JOIN "watch_match" m ON m."id" = d."match_id"
       WHERE d."watch_id" = $1 OR m."watch_id" = $1
       ORDER BY d."created_at", d."id"`,
@@ -742,4 +748,158 @@ test('with the evaluator and the delivery worker running and nothing called by h
   const next = await inbox.dequeueTurn(observer, runner, null, false, []);
   assert.equal(next?.turnId, wake.id, 'the expiry turn is the next thing the runner is handed');
   assert.ok(wake.content && next?.content?.includes(wake.content), 'with the content it was queued with');
+});
+
+// ── an expiry its observer's ending drains unrun ───────────────────────────────────────────────
+
+interface QueuedExpiry {
+  observer: string;
+  watchId: string;
+  deliveryId: string;
+  wakeId: string;
+}
+
+/**
+ * An observer RUNNING a turn, with its expiry queued behind it and the expiry's delivery DELIVERED: the
+ * state each way that run can end meets (watch-wake-drain.ts).
+ */
+async function expiryQueuedBehindRunningTurn(
+  owner: string,
+  runner: string,
+  pool: ReturnType<typeof worker>,
+): Promise<QueuedExpiry & { current: string }> {
+  const observer = await insertSession(owner, 'RUNNING', runner);
+  const current = randomUUID();
+  await sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","kind","content","status","delivered_at","lease_deadline_at")
+     VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
+    [current, observer, `current-${current}`],
+  );
+  const watchId = await expiredWatch(owner, observer);
+  const { id: deliveryId } = await onlyExpiry(watchId);
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), deliveryId), ['DELIVERED']);
+  const [wake] = (await turnsOn(observer)).filter((turn) => turn.clientTurnId === `watch:${watchId}:expired`);
+  assert.equal(wake?.status, 'PENDING', 'the expiry waits behind the running turn');
+  return { observer, current, watchId, deliveryId, wakeId: wake.id };
+}
+
+/** The ending answered the expiry away unrun, its delivery says so on the watch's own read, and the watch is the terminal fact it was. */
+async function assertExpiryDeadLettered(owner: string, queued: QueuedExpiry, ending: string): Promise<void> {
+  const [wake] = (await turnsOn(queued.observer)).filter((turn) => turn.id === queued.wakeId);
+  assert.equal(wake.status, 'ANSWERED', `${ending}: the queue is drained as it always was`);
+  const settled = await onlyExpiry(queued.watchId);
+  assert.equal(settled.state, 'DEAD_LETTER', `${ending}: an expiry no runner took still reads ${settled.state}`);
+  assert.equal(settled.deadLettered, true, ending);
+  assert.equal(settled.delivered, false, ending);
+  assert.match(settled.lastError ?? '', /^OBSERVER_SESSION_ENDED: /, ending);
+  const view = await watches.get(owner, queued.watchId);
+  assert.equal(view.state, 'EXPIRED', `${ending}: the watch is the terminal fact it was`);
+  assert.deepEqual(
+    view.expiryDeliveries.map(({ id, state, lastError }) => ({ id, state, lastError })),
+    [{ id: queued.deliveryId, state: 'DEAD_LETTER', lastError: settled.lastError }],
+    `${ending}: its dead letter is on the watch's read`,
+  );
+}
+
+test('an expiry still queued when its observer\'s running turn fails is a dead letter, not DELIVERED; an expiry the runner took stays delivered when its own turn fails', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
+  const inbox = runnerApi as unknown as {
+    dequeueTurn(
+      sessionId: string,
+      runnerId: string,
+      leaseGeneration: null,
+      acceptsSteer: boolean,
+      declaredCapabilities: readonly string[],
+    ): Promise<{ turnId: string } | null>;
+  };
+  const complete = (observer: string, turnId: string, status: 'SUCCEEDED' | 'FAILED') =>
+    runnerApi.turnComplete({ id: runner }, observer, {
+      turnId,
+      status,
+      subtype: status === 'FAILED' ? 'error_during_execution' : 'completed',
+      ...(status === 'FAILED' ? { result: 'API Error: 529 overloaded' } : {}),
+      numTurns: 2,
+      costUsd: 0,
+    } as never);
+  // Another observer of the same owner on the same runner, whose run nothing here ends.
+  const bystander = await expiryQueuedBehindRunningTurn(owner, runner, pool);
+
+  const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
+  await complete(queued.observer, queued.current, 'FAILED');
+  assert.equal((await sessionOf(queued.observer)).status, 'FAILED');
+  await assertExpiryDeadLettered(owner, queued, 'the running turn failed');
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), queued.deliveryId), [], 'a dead letter is never claimed again');
+
+  // The control: the runner took the expiry, and it is the expiry's own turn that fails. The engine
+  // received it, so it was delivered, whatever its run came to.
+  const taken = await expiryQueuedBehindRunningTurn(owner, runner, pool);
+  await complete(taken.observer, taken.current, 'SUCCEEDED');
+  assert.equal((await inbox.dequeueTurn(taken.observer, runner, null, false, []))?.turnId, taken.wakeId, 'the runner took the expiry');
+  await complete(taken.observer, taken.wakeId, 'FAILED');
+  assert.equal((await sessionOf(taken.observer)).status, 'FAILED', 'the run the expiry started failed');
+  assert.equal((await onlyExpiry(taken.watchId)).state, 'DELIVERED', 'an expiry the runner took was dead-lettered by its run failing');
+
+  const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+  assert.equal(waiting.status, 'PENDING', 'another observer lost its queued expiry');
+  assert.equal((await onlyExpiry(bystander.watchId)).state, 'DELIVERED', 'the other observers\' endings dead-lettered this one\'s expiry');
+});
+
+test('an expiry still queued when its observer\'s runner is lost is a dead letter: the reaper finalizes the run and drains the expiry unrun', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
+
+  // The runner stops heartbeating past the offline window, and the production sweep runs.
+  await sql.query(`UPDATE "runner" SET "last_heartbeat_at" = now() - interval '10 minutes' WHERE "id" = $1`, [runner]);
+  const reaper = new ReaperService(pool.prisma as unknown as PrismaService, inert<never>());
+  await (reaper as unknown as { sweep(): Promise<void> }).sweep();
+
+  const { rows: [session] } = await sql.query<{ status: string; retryArmed: boolean }>(
+    `SELECT "status", "retry_at" IS NOT NULL AS "retryArmed" FROM "session" WHERE "id" = $1`,
+    [queued.observer],
+  );
+  assert.deepEqual(session, { status: 'FAILED', retryArmed: true }, 'the reaper finalized the observer, with its retry armed');
+  await assertExpiryDeadLettered(owner, queued, 'the runner was lost');
+});
+
+test('an expiry still queued when the runner finalizes its observer\'s run is a dead letter, and so is a Match\'s wake queued beside it', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
+  // The same observer also waits on a watch that matched: its wake queues behind the expiry's.
+  const matched = await createWatch(owner, { targets: [await insertTask(owner, 'FAILED')], observerSessionId: queued.observer });
+  assert.equal(matched.state, 'MATCHED');
+  const [{ id: matchDeliveryId }] = await deliveriesOf(matched.id);
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), matchDeliveryId), ['DELIVERED']);
+  assert.deepEqual(
+    (await turnsOn(queued.observer)).filter((turn) => turn.status === 'PENDING').map((turn) => turn.clientTurnId),
+    [`watch:${queued.watchId}:expired`, `watch:${matched.id}:1`],
+  );
+  const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
+
+  await runnerApi.finalize({ id: runner }, queued.observer, { status: 'FAILED', error: 'the engine exited' } as never);
+  assert.equal((await sessionOf(queued.observer)).status, 'FAILED');
+  await assertExpiryDeadLettered(owner, queued, 'the runner finalized the run');
+  const [matchSettled] = await deliveriesOf(matched.id);
+  assert.equal(matchSettled.state, 'DEAD_LETTER', 'the Match\'s wake queued beside the expiry still reads DELIVERED');
+  assert.match(matchSettled.lastError ?? '', /^OBSERVER_SESSION_ENDED: /);
+});
+
+test('an expiry still queued when its running observer is ended is a dead letter', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  // The service the owner's end goes through, with its post-commit announcements sent nowhere.
+  const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, inert<never>());
+  const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
+
+  await sessions.end(owner, queued.observer);
+  const ending = await sessionOf(queued.observer);
+  assert.deepEqual([ending.status, ending.endReason, ending.cancelling], ['RUNNING', 'ended', true], 'the running observer is being ended');
+  await assertExpiryDeadLettered(owner, queued, 'an end was requested while the observer ran');
 });

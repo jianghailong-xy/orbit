@@ -145,10 +145,10 @@
         {
           "from": "DELIVERED",
           "to": "DEAD_LETTER",
-          "trigger": "RESUME_SESSION only: the observer's run ended while the wake turn was still queued, and the drain that ended its queue answered the wake before any runner took it (OBSERVER_SESSION_ENDED)"
+          "trigger": "RESUME_SESSION only: the observer's run ended while the wake turn was still queued (a Match's, keyed watch:<watchId>:<generation>, or an expiry's, keyed watch:<watchId>:expired), and the drain that ended its queue answered the wake before any runner took it (OBSERVER_SESSION_ENDED)"
         }
       ],
-      "deliveredNote": "DELIVERED is final for NOTIFY_USER and for a wake a runner has taken. A RESUME_SESSION delivery is DELIVERED once its turn is queued; until a runner takes that turn, the end of the observer's run makes it a dead letter, because a wake never revives the session and the drained turn cannot be delivered again under its key."
+      "deliveredNote": "DELIVERED is final for NOTIFY_USER and for a wake a runner has taken. A RESUME_SESSION delivery, a Match's or an expiry's, is DELIVERED once its turn is queued; until a runner takes that turn, the end of the observer's run makes it a dead letter, because a wake never revives the session and the drained turn cannot be delivered again under its key."
     }
   },
 
