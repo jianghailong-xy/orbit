@@ -661,6 +661,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only looked at the turn permit would rewrite the checkout under it.
 	bg := newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
+	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
+	// end it — between turns, where the agent is not there to see the events stop coming, and
+	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers
+	// both, up to the pool's own ceiling. Lock-free on the tailer's side on purpose: the pool
+	// holds p.mu when it asks, and this tailer reaches into the pool from under b.mu.
+	clearMonitorProbe := pool.setMonitorProbe(live, bg.hasLiveMonitors)
+	defer clearMonitorProbe()
 	// A runner that stops — re-executing into an update, or its service stopped — ends these
 	// jobs too, and that is not this session ending. Its drain starts the moment the runner
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -115,8 +116,14 @@ type bgTailer struct {
 	terminal map[string]bool      // toolUseId already reported in a terminal state
 	// monitors are the Claude Monitors the engine is running, keyed by the launching tool_use id.
 	// A Monitor only watches, so it is no writer of the checkout: it holds nothing and nothing
-	// counts it. It is kept so the engine's stop can say the Monitor stopped with it.
+	// counts it. It is kept so the engine's stop can say the Monitor stopped with it, and so the
+	// warm pool can decline to recycle an engine one is still watching from (hasLiveMonitors).
 	monitors map[string]engineMonitor
+	// monitorsLive is len(monitors), maintained beside every edit of the map. The pool asks this
+	// question while holding p.mu, and this tailer reaches into the pool from under b.mu
+	// (holdFor/releaseHold, which call the worktree hold registry), so a probe that took b.mu
+	// under p.mu would close that cycle. It reads no lock at all.
+	monitorsLive atomic.Int64
 	// jobs are the background processes this runner spawned and waits on itself
 	// (background_job.go), keyed by the id the runner issued. Retained after they
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
@@ -296,9 +303,18 @@ func (b *bgTailer) noteMonitorStart(toolUseID, content string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !b.stopping {
+		if _, reregistered := b.monitors[toolUseID]; !reregistered {
+			b.monitorsLive.Add(1)
+		}
 		b.monitors[toolUseID] = monitor
 	}
 	return true
+}
+
+// hasLiveMonitors reports whether any Monitor the engine started is still running. Called by
+// the pool under p.mu, so it takes no lock: b.mu would invert against holdFor.
+func (b *bgTailer) hasLiveMonitors() bool {
+	return b.monitorsLive.Load() > 0
 }
 
 // startTail begins tailing path for the given background shell (no-op if already tailing
@@ -466,7 +482,10 @@ func readCapped(path string) string {
 func (b *bgTailer) stop(toolUseID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	delete(b.monitors, toolUseID)
+	if _, live := b.monitors[toolUseID]; live {
+		delete(b.monitors, toolUseID)
+		b.monitorsLive.Add(-1)
+	}
 	if s, ok := b.live[toolUseID]; ok {
 		s.cancel()
 		delete(b.live, toolUseID)
@@ -496,6 +515,7 @@ func (b *bgTailer) killEngineShells() {
 	}
 	monitors := b.monitors
 	b.monitors = map[string]engineMonitor{}
+	b.monitorsLive.Add(-int64(len(monitors)))
 	b.mu.Unlock()
 	for _, s := range killed {
 		if !b.markTerminal(s.toolUseID) {
@@ -564,6 +584,7 @@ func (b *bgTailer) stopAll() {
 		delete(b.live, id)
 		b.releaseHold(id)
 	}
+	b.monitorsLive.Add(-int64(len(b.monitors)))
 	b.monitors = map[string]engineMonitor{}
 	b.mu.Unlock()
 	if stopShutdownDrain != nil {

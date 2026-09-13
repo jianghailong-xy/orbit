@@ -54,8 +54,11 @@ func TestMain(m *testing.M) {
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
 	// Emit: system_init | assistant | tool_use | tool_result | result | control_request |
-	// control_response | replay_user | local_command_stdout | stop_reading | eof (eof exits,
-	// closing stdout).
+	// control_response | replay_user | local_command_stdout | task_notification | stop_reading |
+	// eof (eof exits, closing stdout).
+	//
+	// task_notification is a background task's lifecycle report, which Claude sends as a
+	// user-role message holding one bare string — the same shape as its local-command output.
 	//
 	// replay_user is what --replay-user-messages does: echo the user frame just awaited
 	// back on stdout, verbatim, as the CLI does when it reads one off stdin.
@@ -315,6 +318,15 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 			"message": map[string]interface{}{
 				"role": "user", "content": "<local-command-stdout>" + s.Text + "</local-command-stdout>",
 			},
+		}), nil
+	case "task_notification":
+		// What the CLI writes when it hands a background task's lifecycle report to the model:
+		// a user-role message whose content is the bare "<task-notification>…</task-notification>"
+		// string. Written out here for the same reason as local_command_stdout above: the shape is
+		// what the runner routes on, so the two sides of that contract stay independent.
+		return marshalFrame(map[string]interface{}{
+			"type": "user", "session_id": sessionID, "parent_tool_use_id": nil,
+			"message": map[string]interface{}{"role": "user", "content": s.Text},
 		}), nil
 	case "tool_result":
 		// Tool results come back as a user-role message, per the Anthropic message protocol.

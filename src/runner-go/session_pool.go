@@ -27,6 +27,21 @@ import (
 // top out near 2.4 GB here, and near 3.2 GB at 16.
 const warmEngineTTL = 4 * time.Hour
 
+// warmResidencyHardCap is the absolute ceiling on one idle engine's warm residency, every
+// renewal for a live Monitor included. A Monitor runs its watch command inside the engine
+// process, so recycling the engine ends a watch the agent asked for and is waiting on, and
+// Claude writes a <task-notification> only for a Monitor that ends by itself: the wait is
+// simply gone (stage 1 reports it; this is the part that does not do it in the first place).
+//
+// The pin is a deferral, not an exemption. But a deferral that a running process renews is a
+// deferral a Monitor that watches forever renews forever, and this host has a global-OOM
+// history (2026-08-31: five runner drops in one day, swap fully consumed). Peak memory is
+// bounded elsewhere — warm engines never exceed the resident cap — so what this bounds is how
+// long one watch may hold a slot: 12h, measured from the end of the last turn Orbit delivered
+// (liveSession.lastOrbitTurnAt). Long enough to outlive a watch somebody still has a session
+// open for, and the slot comes back inside a day.
+const warmResidencyHardCap = 12 * time.Hour
+
 type poolTimer interface {
 	Stop() bool
 }
@@ -82,6 +97,17 @@ type liveSession struct {
 	idleGeneration uint64
 	warmTimer      poolTimer
 	lastActive     time.Time // LRU key: when active -> warm most recently
+	// lastOrbitTurnAt is when the last turn ORBIT delivered ended — park, and nothing else. The
+	// warm timer moves lastActive at the end of a turn the engine started on its own, and the
+	// Monitor pin must not move with it: an engine a Monitor keeps waking would otherwise push
+	// its own ceiling forward on every wake and never reach it.
+	lastOrbitTurnAt time.Time
+
+	// monitorProbe is this run's read-only "does the engine still have a Monitor running"
+	// query, and nil where no tailer is at stake. A plain func keeps the tailer out of the
+	// pool. It is called under p.mu, and the tailer calls into the pool from under its own
+	// lock (bgTailer.holdFor), so it must be lock-free on the tailer's side.
+	monitorProbe func() bool
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -566,6 +592,60 @@ func (p *sessionPool) warmCountLocked() int {
 	return n
 }
 
+// setMonitorProbe installs one session run's Monitor liveness query and returns the
+// deregistration func. The supervisor pointer is the epoch token: a probe belonging to a
+// superseded run can neither install onto nor uninstall from its replacement.
+func (p *sessionPool) setMonitorProbe(s *liveSession, probe func() bool) func() {
+	p.mu.Lock()
+	if p.sessions[s.id] == s {
+		s.monitorProbe = probe
+	}
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		if p.sessions[s.id] == s {
+			s.monitorProbe = nil
+		}
+		p.mu.Unlock()
+	}
+}
+
+// monitorPinDeadlineLocked returns the instant after which this warm engine stops being held
+// for its Monitor, or the zero time when nothing is holding it at all: no probe registered, no
+// Monitor running, or the cap already spent. Past the cap a Monitor that is still running no
+// longer defers anything, which is what makes the pin bounded.
+//
+// This is the only place the cap is expressed. Every path that can recycle a warm engine reads
+// it — the timer (expireWarm, through warmTimerDelayLocked) and the victim search
+// (oldestWarmLocked) — so no engine can be held by one and taken by the other.
+//
+// The window starts at the last turn Orbit delivered, never at lastActive: engineTurnEvent
+// moves lastActive when a Monitor's own wake ends, and a pin measured from there would be
+// renewed by the very Monitor it is bounding.
+func (p *sessionPool) monitorPinDeadlineLocked(s *liveSession) time.Time {
+	if s.monitorProbe == nil || !s.monitorProbe() {
+		return time.Time{}
+	}
+	deadline := s.lastOrbitTurnAt.Add(warmResidencyHardCap)
+	if !p.clock.Now().Before(deadline) {
+		return time.Time{}
+	}
+	return deadline
+}
+
+// warmTimerDelayLocked is how long this engine's next warm timer runs: one warmEngineTTL, or
+// whatever a live Monitor's pin has left of it when that is shorter. A pin is a deferral that
+// is re-decided at every one of those timers, never a single long nap to the cap.
+func (p *sessionPool) warmTimerDelayLocked(s *liveSession) time.Duration {
+	delay := warmEngineTTL
+	if deadline := p.monitorPinDeadlineLocked(s); !deadline.IsZero() {
+		if remaining := deadline.Sub(p.clock.Now()); remaining < delay {
+			delay = remaining
+		}
+	}
+	return delay
+}
+
 // oldestWarmLocked returns the LRU warm process that is not already on its way
 // out. Stable id ordering breaks equal-timestamp ties, making behavior and tests
 // deterministic.
@@ -575,18 +655,27 @@ func (p *sessionPool) warmCountLocked() int {
 // is gone: that job is the runner's own child now, and survives the eviction it used
 // to have to be spared from. An engine running a turn of its own is passed over like an
 // active one, and for the same reason — a turn is running in it — never for anything it
-// has left running in the background (engineTurnEvent). Re-evaluated alongside
-// warmEngineTTL and deliberately left at its tightest: warm engines hold only capacity
-// no active turn is promised, and the oldest one goes first.
+// has left running in the background (engineTurnEvent).
+//
+// An engine still holding a live Monitor sorts after every engine that is not, so it is
+// chosen only when nothing else is left. That is a deprioritization, not an exemption:
+// capacity pressure still recycles it — a session waiting to start is never starved by a
+// watch — and so does warmResidencyHardCap, which ends the pin outright. Either way the
+// Monitor goes through killEngineShells and is reported killed, so the agent is told on
+// resume rather than left waiting on events that will never come.
 func (p *sessionPool) oldestWarmLocked(except string) *liveSession {
 	var oldest *liveSession
+	oldestPinned := false
 	for _, s := range p.sessions {
 		if s.id == except || !s.resident || s.active || s.evictRequested || s.selfDrivenTurn {
 			continue
 		}
-		if oldest == nil || s.lastActive.Before(oldest.lastActive) ||
-			(s.lastActive.Equal(oldest.lastActive) && s.id < oldest.id) {
-			oldest = s
+		pinned := !p.monitorPinDeadlineLocked(s).IsZero()
+		if oldest == nil || (oldestPinned && !pinned) ||
+			(pinned == oldestPinned &&
+				(s.lastActive.Before(oldest.lastActive) ||
+					(s.lastActive.Equal(oldest.lastActive) && s.id < oldest.id))) {
+			oldest, oldestPinned = s, pinned
 		}
 	}
 	return oldest
@@ -658,6 +747,9 @@ func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, a
 		wake:             make(chan struct{}),
 		done:             make(chan struct{}),
 		lastActive:       p.clock.Now(),
+		// A registered session has no engine yet; park sets the real anchor. Well-defined
+		// rather than zero so a pin can never be measured from the year 1.
+		lastOrbitTurnAt: p.clock.Now(),
 	}
 	if active {
 		s.permitGeneration = 1
@@ -834,9 +926,11 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 // and warm until its timer or LRU pressure recycles it.
 //
 // The timer wound here is one warmEngineTTL, and nothing this session left running
-// renews it: that work does not belong to the engine any more. Only a turn the engine
+// renews it: that work does not belong to the engine any more. A turn the engine
 // runs on its own holds recycling off, and the end of that turn winds a fresh timer
-// (engineTurnEvent). lastActive, set with the timer, is the LRU order.
+// (engineTurnEvent). A Monitor still running in the engine defers it too, and re-defers at
+// every timer, up to warmResidencyHardCap from this park (monitorPinDeadlineLocked).
+// lastActive, set with the timer, is the LRU order.
 func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
@@ -844,6 +938,7 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 		return
 	}
 	s.active = false
+	s.lastOrbitTurnAt = p.clock.Now()
 	p.releaseWorktreeFenceLocked(s.id, s)
 	p.armWarmTimerLocked(s)
 	p.signalLocked(s)
@@ -854,13 +949,20 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 // now its LRU position.
 func (p *sessionPool) armWarmTimerLocked(s *liveSession) {
 	s.lastActive = p.clock.Now()
+	p.rewarmLocked(s)
+}
+
+// rewarmLocked winds the next warm timer without moving the LRU position, which a renewal
+// did not earn: a timer that fired is replaced by whatever the session's Monitor pin has
+// left of it (warmTimerDelayLocked).
+func (p *sessionPool) rewarmLocked(s *liveSession) {
 	s.idleGeneration++
 	idleGeneration := s.idleGeneration
 	if s.warmTimer != nil {
 		s.warmTimer.Stop()
 	}
 	if s.resident && !s.evictRequested {
-		s.warmTimer = p.clock.AfterFunc(warmEngineTTL, func() {
+		s.warmTimer = p.clock.AfterFunc(p.warmTimerDelayLocked(s), func() {
 			p.expireWarm(s, idleGeneration)
 		})
 	} else {
@@ -943,11 +1045,18 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 // expireWarm recycles a warm engine when its TTL elapses. Background work never defers
 // it: a supervisor's background jobs are the runner's own children and keep running. A
 // turn the engine is running on its own does — requestEvictLocked declines — and the end
-// of that turn winds the next timer.
+// of that turn winds the next timer. A Monitor still running inside the engine does too,
+// and is the one deferral that has to re-arm the timer here: the engine is genuinely idle,
+// so nothing else will come along to wind it.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
 		s.idleGeneration != idleGeneration {
+		p.mu.Unlock()
+		return
+	}
+	if !p.monitorPinDeadlineLocked(s).IsZero() {
+		p.rewarmLocked(s)
 		p.mu.Unlock()
 		return
 	}
