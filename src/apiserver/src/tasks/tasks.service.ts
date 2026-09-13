@@ -734,6 +734,39 @@ function conflictingUniqueKey(error: unknown): string {
 const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
 
 /**
+ * This task's CURRENT dispatch moment has already had its automatic run: a condition on a
+ * `task_run_request receipt`, correlated to an outer `task t`.
+ *
+ * Both candidate predicates below dispatch through `dispatchReadyTask`, which names its request
+ * `TASK_RUN_TRIGGER.dependency(task, epoch)`, and `execute` answers a COMPLETED receipt from the
+ * receipt before it reads anything else. So once a moment has had its run, every later pass over
+ * that moment is handed the same run back — `ok: true`, about a Session that may have ended long
+ * ago. The sweep counted that as a dispatch, logging `-> auto-run` and spending a materialisation
+ * slot on it every minute, while nothing started the task again (2026-09-12: six tasks, the oldest
+ * for three weeks).
+ *
+ * The moment does not move on when its run ends, and that is 0137's transition table working, not
+ * a hole in it: an epoch advances on a task-row fact — this task's `status` or `run_at`, a
+ * prerequisite's `status`, the edges — and a Session ending is none of those. Where an ended run is
+ * meant to go back into the pool, a status write says so (`reclaimStalledTask` returning an
+ * IN_PROGRESS task to OPEN advances the epoch). An OPEN task whose run was stopped or failed has had
+ * this moment's automatic run; another one is a new moment's to start, or a person's (Run Now names
+ * its own request and is fenced by no moment).
+ *
+ * In the SQL rather than after the scan, because both scans spend a budget inside the statement:
+ * the independent scan's `rank <= free` window and `dispatchIndependentSiblingsOf`'s LIMIT. The
+ * token is `TASK_RUN_TRIGGER.dependency` spelled in SQL — a UUID's text form is the lowercase one
+ * Prisma returns, a BIGINT's is its digits — and `receipt`/`moment` rather than `r`/`e`, because the
+ * sweep's own scan joins `runner r` and `task_dispatch_epoch e` around it.
+ */
+const AUTO_RUN_MOMENT_DISPATCHED_SQL = Prisma.sql`
+  receipt.owner_id = t.owner_id
+  AND receipt.action_kind = ${TASK_RUN_ACTION.execute}
+  AND receipt.request_token = 'dep:' || t.id::text || ':'
+    || (SELECT moment.epoch FROM task_dispatch_epoch moment WHERE moment.task_id = t.id)::text
+  AND receipt.status = 'COMPLETED'`;
+
+/**
  * The auto-run sweep's candidate predicate (see reconcileReadyTasks), correlated to an outer
  * `task t`. Deliberately NOT the same predicate as RUNNABLE_TASK_SQL, and the two must not be
  * merged: this one is deployment-wide (no owner scope), requires status exactly OPEN rather
@@ -817,7 +850,11 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
         TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
         ', ',
       )})
-  )`;
+  )
+  -- ...nor is a task whose current dispatch moment has already had its automatic run. Offering it
+  -- again is answered from that moment's receipt with the run it already started, and starts
+  -- nothing (AUTO_RUN_MOMENT_DISPATCHED_SQL).
+  AND NOT EXISTS (SELECT 1 FROM task_run_request receipt WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL})`;
 
 /**
  * The candidate predicate for a Project's tasks that depend on NOTHING (see
@@ -832,8 +869,9 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
  * Every other clause is the same clause spelled the same way, because these are the standing rules
  * about dispatching a task rather than anything to do with which pass found it: OPEN, opted into
  * auto-run, not held by a paused list, an assignee bound to a runner, no schedule still in the
- * future, not retired, and nothing already occupying it (TASK_OCCUPYING, so an idle-but-live
- * session counts).
+ * future, not retired, nothing already occupying it (TASK_OCCUPYING, so an idle-but-live
+ * session counts), and no automatic run already had at its current dispatch moment
+ * (AUTO_RUN_MOMENT_DISPATCHED_SQL).
  *
  * `dependenciesSatisfiedSql` is the one clause deliberately NOT restated: a task with no edges
  * satisfies it vacuously, so it could only ever permit, and a gate that cannot refuse is one more
@@ -858,7 +896,8 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
         TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
         ', ',
       )})
-  )`;
+  )
+  AND NOT EXISTS (SELECT 1 FROM task_run_request receipt WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL})`;
 
 /**
  * The scheduled sweep's candidate predicate (see dispatchDueScheduledTasks), correlated to an
@@ -6926,9 +6965,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Read the same successor-tail facts as task_list, Run Now, both automatic starters and the
     // commit gate. The relation above intentionally remains the stored audit edge (W); readiness
     // is answered by the current work holder at the trusted chain tail (S).
-    const [dependencyFacts, supersession] = await Promise.all([
+    const [dependencyFacts, supersession, autoRunSkipped] = await Promise.all([
       this.dependencyFactsFor(ownerId, [id]),
       this.supersession(ownerId, task),
+      this.autoRunSkipped(ownerId, task),
     ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -6938,6 +6978,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
       blocked: !canRun(dependencyState),
+      autoRunSkipped,
       // The last change to this task's completion criterion, read back out of the audit column the
       // change door writes: which criterion it moved away from, which it landed on, and why.
       // Derived rather than stored a second time — the reason column already carries all three, and
@@ -6945,6 +6986,61 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Null on every task whose criterion is still the one it was declared with.
       completionCriterionChange: readTaskCriterionChange(task.completionCriterionOverrideReason),
       ...supersession,
+    };
+  }
+
+  /**
+   * Why the auto-run sweep leaves this task alone although it looks ready to start — for the one
+   * cause that says so nowhere else: its current dispatch moment has already had its automatic run
+   * (AUTO_RUN_MOMENT_DISPATCHED_SQL), so neither candidate predicate selects it. Null for every task
+   * that is not what holds.
+   *
+   * On the read because no other surface will ever carry it. The refusals the sweep leaves to its
+   * log — quota, disk, the failure backoff, no free slot — are re-offered every minute and clear by
+   * themselves; a task out of the candidate set is never offered, so it leaves no log line, and it
+   * stays out until somebody starts it or its dispatch moment moves on.
+   *
+   * Asked only of a task the predicates could otherwise select, OPEN and opted into auto-run, and
+   * not while a run occupies it: that run is what holds the task then, and naming the moment would
+   * send a reader after the wrong cause. `sessionId` is the receipt's, so it still names the run
+   * after that Session has been purged; `sessionStatus` is null then.
+   */
+  private async autoRunSkipped(
+    ownerId: string,
+    task: { id: string; status: string; autoRunWhenReady: boolean },
+  ) {
+    if (task.status !== TaskStatus.OPEN || !task.autoRunWhenReady) return null;
+    const [row] = await this.prisma.$queryRaw<Array<{
+      epoch: bigint;
+      sessionId: string | null;
+      sessionStatus: RunStatus | null;
+    }>>(Prisma.sql`
+      SELECT current_moment.epoch, receipt.result->>'sessionId' AS "sessionId",
+             s.status AS "sessionStatus"
+        FROM task t
+        JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
+        JOIN task_run_request receipt ON ${AUTO_RUN_MOMENT_DISPATCHED_SQL}
+        LEFT JOIN session s ON s.id = (receipt.result->>'sessionId')::uuid
+       WHERE t.id = ${task.id}::uuid
+         AND t.owner_id = ${ownerId}::uuid
+         AND NOT EXISTS (
+           SELECT 1 FROM session occupying
+            WHERE occupying.task_id = t.id
+              AND occupying.status IN (${Prisma.join(
+                TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+                ', ',
+              )})
+         )`);
+    if (!row) return null;
+    return {
+      code: 'MOMENT_ALREADY_DISPATCHED' as const,
+      dispatchEpoch: row.epoch.toString(),
+      sessionId: row.sessionId,
+      sessionStatus: row.sessionStatus,
+      requiredAction:
+        'start the task by hand (Run Now / task_start). The auto-run sweep does not start one ' +
+        'dispatch moment twice; a new moment — the task rescheduled, or its own or a ' +
+        "prerequisite's status changing — makes it a candidate again",
     };
   }
 
@@ -8464,9 +8560,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * and started none of them, which is the asymmetry this backstop exists to close.
    *
    * Repeating the pass is only safe while something stops a *terminated* run from making its
-   * task a candidate again: execute()'s session dedup covers a run still in flight, but the
-   * moment one ends the task matches again a minute later. The quota gate and the failure
-   * backoff below are what bound that — without them this is an unbounded respawn loop.
+   * task a candidate again: execute()'s session dedup covers a run still in flight, and once one
+   * ends, AUTO_RUN_MOMENT_DISPATCHED_SQL keeps its task out until the task's dispatch moment moves
+   * on — before it, the pass re-offered the task every minute and was answered with the ended run.
+   * When the moment does move on, the quota gate and the failure backoff below are what bound the
+   * next attempt — without them this is an unbounded respawn loop.
    */
   private async reconcileReadyTasks(): Promise<void> {
     // AUTO_RUN_READY_SQL resolves READY database-side — the task HAS prerequisites and none of

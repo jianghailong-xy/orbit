@@ -39,6 +39,19 @@ const valuesOf = (strings: unknown, rest: unknown[]): unknown[] =>
     : rest;
 
 /**
+ * Whether a statement is one of the receipt's OWN — and what `withReceiptStore` routes by.
+ *
+ * Every one of them addresses the table by its quoted name (`INSERT INTO "task_run_request"`,
+ * `UPDATE "task_run_request"`, `SELECT … FROM "task_run_request"`, in `TasksService` and in the
+ * effect fence in `SessionsService`). The auto-run candidate predicates name it too, unquoted,
+ * inside a correlated `NOT EXISTS`: that statement is still the sweep's candidate scan, and the
+ * double answering the scan has to go on answering it. Matched on the bare name, the scan would
+ * reach this store instead, come back empty, and a sweep fixture composed here would pass without
+ * ever having had a candidate.
+ */
+const RECEIPT_STATEMENT = /"task_run_request"/;
+
+/**
  * A receipt store keyed the way the row is: `(owner, door, token)`. Nothing here is keyed by
  * anything narrower, because that collision — two owners, or two tasks under one durable automatic
  * token — is precisely what the real key exists to prevent.
@@ -52,7 +65,7 @@ export function fakeReceiptStore(): FakeReceiptStore {
     $executeRaw: async (strings: unknown, ...rest: unknown[]) => {
       const sql = textOf(strings);
       const values = valuesOf(strings, rest);
-      if (!/task_run_request/.test(sql)) return 0;
+      if (!RECEIPT_STATEMENT.test(sql)) return 0;
       if (/INSERT INTO "task_run_request"/.test(sql)) {
         const [owner, kind, token, fingerprint] = values as string[];
         const id = key(owner, kind, token);
@@ -125,7 +138,7 @@ export function fakeReceiptStore(): FakeReceiptStore {
     $queryRaw: async (strings: unknown, ...rest: unknown[]) => {
       const sql = textOf(strings);
       const values = valuesOf(strings, rest);
-      if (!/task_run_request/.test(sql)) return [];
+      if (!RECEIPT_STATEMENT.test(sql)) return [];
       if (/UPDATE "task_run_request"/.test(sql) && /RETURNING/.test(sql)) {
         // `[holder, leaseSeconds, owner, kind, token]` — the shape `leaseRunRequest` interpolates.
         const [holder, , owner, kind, token] = values as [string, unknown, string, string, string];
@@ -171,7 +184,7 @@ export function withReceiptStore<T extends Record<string, unknown>>(
     $executeRaw?: (...args: unknown[]) => Promise<number>;
     $queryRaw?: (...args: unknown[]) => Promise<unknown[]>;
   };
-  const mine = (strings: unknown) => /task_run_request/.test(textOf(strings));
+  const mine = (strings: unknown) => RECEIPT_STATEMENT.test(textOf(strings));
   return {
     ...double,
     rows: store.rows,
