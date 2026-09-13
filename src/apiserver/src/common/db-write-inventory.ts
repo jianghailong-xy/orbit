@@ -820,7 +820,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'watches/watch-evaluator.service.ts#evaluate',
     shape: 'TX_RETRIED',
-    locks: 'watch FOR UPDATE (one row), then watch_target and watch_match writes whose only foreign-key parent is that row, already held, and one watch_delivery row: either the row of a Match it records, whose parent is that new Match, or the row of the expiry it lands, whose parent is the watch row it already holds. task, session and approval are read without a lock. Unranked in lock-order.ts because it cannot close a cycle: the unit holds nothing but its one watch row, and nothing holding a task or session lock waits on it except a session or user delete cascading into watch — which this unit never waits on in return.',
+    locks: 'watch FOR UPDATE (one row), then watch_target and watch_match writes whose only foreign-key parent is that row, already held, and one watch_delivery row: either the row of a Match it records, whose parent is that new Match, or the row of the end it lands (an expiry, a revocation or an unresolvable end), whose parent is the watch row it already holds. task, session and approval are read without a lock. Unranked in lock-order.ts because it cannot close a cycle: the unit holds nothing but its one watch row, and nothing holding a task or session lock waits on it except a session or user delete cascading into watch — which this unit never waits on in return.',
     identity: 'The watch id, and the state and generation read under the row lock: the closing UPDATE is a compare-and-set on both, and `watch_match_watch_generation_key` makes a second Match of one generation a constraint rather than a race.',
     isolation: '',
     attempts: 4,

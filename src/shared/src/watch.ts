@@ -165,11 +165,14 @@ export interface WatchMatchView {
 }
 
 /**
- * The turn a RESUME_SESSION watch that expired unmatched owes its observer (contract §5), and whether it
- * got there. `expirySnapshot` is what the expiring evaluation saw, in a Match snapshot's shape.
+ * The turn a RESUME_SESSION watch that ended unmatched owes its observer (contract §3, §5), and whether
+ * it got there. `kind` says how the watch ended. `expirySnapshot` is what the expiring evaluation saw, in
+ * a Match snapshot's shape, and null on the other two kinds: a REVOKED watch reports nothing about its
+ * targets (§7), and an UNRESOLVABLE watch has none left.
  */
 export interface WatchExpiryDeliveryView extends WatchDeliveryView {
-  expirySnapshot: WatchSnapshot;
+  kind: 'EXPIRY' | 'REVOKED' | 'UNRESOLVABLE';
+  expirySnapshot: WatchSnapshot | null;
 }
 
 export interface WatchView {
@@ -190,6 +193,6 @@ export interface WatchView {
   updatedAt: string;
   targets: WatchTargetView[];
   matches: WatchMatchView[];
-  /** At most one, and only for a RESUME_SESSION watch that expired unmatched. A dead letter shows here just as it does on a Match. */
+  /** At most one, and only for a RESUME_SESSION watch that expired, was revoked or became unresolvable; a cancelled watch has none. A dead letter shows here just as it does on a Match. */
   expiryDeliveries: WatchExpiryDeliveryView[];
 }

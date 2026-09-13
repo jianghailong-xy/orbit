@@ -34,10 +34,11 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
  * A Match is written together with its `watch_delivery` row, in the transaction that records the
  * Match — by the create path or by the evaluator's landing — so there is never a fact with nowhere to
  * say whether anybody was told. `(match_id, action)` is unique, so that row is the only one there is.
- * A RESUME_SESSION watch that expires unmatched gets a row of its own (`kind` EXPIRY, migration 0261).
- * The landing that makes the watch EXPIRED writes it, and there is at most one per watch: a session
- * waiting on a watch is told when the watch ends, not only when it matches (contract §5). The statements
- * below claim, retry and dead-letter both kinds of row alike.
+ * A RESUME_SESSION watch that ends unmatched gets a row of its own, whose `kind` says how it ended:
+ * EXPIRY (migration 0261), REVOKED or UNRESOLVABLE (0263). The landing that ends the watch writes it,
+ * and there is at most one per watch: a session waiting on a watch is told when the watch ends, not
+ * only when it matches (contract §3, §5). A cancelled watch gets none, because its owner or its observer
+ * ended it. The statements below claim, retry and dead-letter every kind of row alike.
  *
  * THE LEASE
  * A claim moves due PENDING rows to IN_FLIGHT under a fresh `lease_generation`, in one statement that
@@ -48,14 +49,14 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
  *
  * ONE TURN PER GENERATION
  * RESUME_SESSION goes through `SessionsService.createTurn`, the normal queue entry point, with
- * `clientTurnId = watch:<watchId>:<generation>` and `intent: NEXT_TURN`; an expiry's turn goes the
- * same way under `watch:<watchId>:expired`, a key no generation number can collide with. The
- * acknowledgement is written INSIDE that call's transaction — after the observer's row is locked, before the turn is
- * inserted — so the turn and DELIVERED commit together or not at all, and a stale lease rolls its
- * turn back. A retry after an acknowledgement that never happened meets the turn already queued
- * under the same key, which `createTurn` replays instead of writing a second; the content is built
- * only from rows that never change (the Match, or the expired watch and its delivery's snapshot),
- * so the replay compares equal.
+ * `clientTurnId = watch:<watchId>:<generation>` and `intent: NEXT_TURN`; a watch's end goes the same
+ * way under `watch:<watchId>:expired`, `:revoked` or `:unresolvable`, keys no generation number can
+ * collide with. The acknowledgement is written INSIDE that call's transaction — after the observer's row
+ * is locked, before the turn is inserted — so the turn and DELIVERED commit together or not at all, and
+ * a stale lease rolls its turn back. A retry after an acknowledgement that never happened meets the turn
+ * already queued under the same key, which `createTurn` replays instead of writing a second; the content
+ * is built only from rows that never change (the Match; the expired watch and its delivery's snapshot;
+ * the revoked or unresolvable watch's id and its delivery's kind), so the replay compares equal.
  *
  * The session's state needs no special case to be safe: a RUNNING observer keeps running and the
  * turn queues behind the current one, AWAITING_INPUT and INTERRUPTED go PENDING and wait for a runner
@@ -121,6 +122,24 @@ export function watchTurnClientId(watchId: string, generation: number): string {
 /** The turn key a watch's expiry is written under (contract §5). A watch expires at most once, and no generation number spells `expired`. */
 export function watchExpiryTurnClientId(watchId: string): string {
   return `watch:${watchId}:expired`;
+}
+
+/**
+ * What a revoked or unresolvable watch's turn says about how it ended, and that is all it says: a REVOKED
+ * watch reports nothing about what it watched (contract §7), and an UNRESOLVABLE watch has nothing left to
+ * report.
+ */
+const WATCH_END_MEANING = {
+  REVOKED: 'its permission recheck failed, so it stopped and reports nothing about what it watched',
+  UNRESOLVABLE: 'every target it watched is gone, so its condition can never be decided',
+} as const;
+
+/** A watch end whose turn carries nothing but the state's name (migration 0263). */
+export type BareWatchEnd = keyof typeof WATCH_END_MEANING;
+
+/** The turn key a revoked or unresolvable watch's end is written under (contract §3). A watch ends once, and no generation number spells either word. */
+export function watchEndTurnClientId(watchId: string, end: BareWatchEnd): string {
+  return `watch:${watchId}:${end.toLowerCase()}`;
 }
 
 const OBSERVER_SELECT = {
@@ -324,6 +343,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
       where: { id: claim.id, state: 'IN_FLIGHT', leaseGeneration: claim.leaseGeneration },
       select: {
         action: true,
+        kind: true,
         match: {
           select: {
             generation: true,
@@ -340,12 +360,17 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     if (!delivery) return 'LEASE_LOST';
     const { match, watch } = delivery;
     try {
-      if (!match) {
+      if (!match && delivery.kind === 'EXPIRY') {
         // An expiry. `watch_delivery_kind_shape_chk` guarantees such a row names its watch, carries its
         // snapshot, and is RESUME_SESSION.
         await this.resumeObserver(
           claim, watch!, watchExpiryTurnClientId(watch!.id), watchExpiryTurnContent(watch!, delivery.expirySnapshot),
         );
+      } else if (!match) {
+        // A REVOKED or UNRESOLVABLE end. The same CHECK guarantees such a row names its watch, is
+        // RESUME_SESSION and carries no snapshot, so nothing about the targets can reach its turn.
+        const end = delivery.kind as BareWatchEnd;
+        await this.resumeObserver(claim, watch!, watchEndTurnClientId(watch!.id, end), watchEndTurnContent(watch!.id, end));
       } else if (delivery.action === 'RESUME_SESSION') {
         await this.resumeObserver(
           claim, match.watch, watchTurnClientId(match.watch.id, match.generation), watchTurnContent(match.watch.id, match),
@@ -559,6 +584,22 @@ function watchExpiryTurnContent(watch: { id: string; expiresAt: Date }, expirySn
       omitted: `too large for one turn; GET /api/watches/${watch.id} returns it whole`,
     },
   });
+}
+
+/**
+ * The message a revoked or unresolvable watch's wake carries (contract §3, §7): one line naming the state
+ * the watch ended in and what that means, then the structured payload — `watchId` and `state` — as JSON,
+ * and nothing else. No target and no snapshot: a REVOKED watch reports nothing it can no longer read, and
+ * an UNRESOLVABLE watch's targets are all gone. Neither input ever changes, so every attempt writes the
+ * same bytes.
+ */
+function watchEndTurnContent(watchId: string, end: BareWatchEnd): string {
+  const header = [
+    `Orbit Watch ${watchId} ended ${end}: ${WATCH_END_MEANING[end]}.`,
+    '',
+    'This turn was queued by the watch, not typed by a person. The watch has ended and will not wake this session again.',
+  ].join('\n');
+  return `${header}\n\n\`\`\`json\n${JSON.stringify({ watchId, state: end }, null, 2)}\n\`\`\``;
 }
 
 function messageOf(error: unknown): string {

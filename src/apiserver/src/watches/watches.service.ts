@@ -66,10 +66,11 @@ const WATCH_VIEW_SELECT = {
     },
     orderBy: { generation: 'asc' },
   },
-  // What the watch's expiry caused (contract §5): at most one, for a RESUME_SESSION watch that expired
-  // unmatched, with the snapshot its turn carries.
+  // What the watch's end caused (contract §3, §5): at most one, for a RESUME_SESSION watch that expired,
+  // was revoked or became unresolvable, with `kind` saying which and, for an expiry, the snapshot its
+  // turn carries.
   expiryDeliveries: {
-    select: { ...DELIVERY_VIEW_SELECT, expirySnapshot: true },
+    select: { ...DELIVERY_VIEW_SELECT, kind: true, expirySnapshot: true },
     orderBy: { createdAt: 'asc' },
   },
 } satisfies Prisma.WatchSelect;

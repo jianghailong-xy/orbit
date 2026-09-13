@@ -113,4 +113,30 @@ describe('watch contract', () => {
     expect(new Set(kinds).size).toBe(kinds.length);
     for (const a of CONTRACT.actions) expect(a.effect, `${a.kind} has no effect`).toBeTruthy();
   });
+
+  it('says for every terminal state whether the session waiting on the watch is told, each end under its own turn key', () => {
+    const resume = CONTRACT.actions.find((a: any) => a.kind === 'RESUME_SESSION');
+    const delivered: Record<string, { clientTurnId: string; payload: string[] }> = resume.endTurns.delivered;
+    const notDelivered: Record<string, string> = resume.endTurns.notDelivered;
+    // MATCHED is the one end not listed: the Match's own wake tells the session, under the generation key.
+    const classified = [...Object.keys(delivered), ...Object.keys(notDelivered)];
+    expect([...classified, 'MATCHED'].sort(), 'a terminal state is unclassified, or classified twice').toEqual(
+      [...CONTRACT.states.watch.terminal].sort(),
+    );
+    const keys = [resume.idempotency.clientTurnId, ...Object.values(delivered).map((end) => end.clientTurnId)];
+    expect(new Set(keys).size, 'two wakes share a turn key').toBe(keys.length);
+    for (const [state, end] of Object.entries(delivered)) {
+      expect(end.clientTurnId, `${state}'s key could be read as a generation`).toMatch(/^watch:<watchId>:[a-z]+$/u);
+      expect(end.payload.slice(0, 2), `${state}'s turn does not name the watch and its end`).toEqual(['watchId', 'state']);
+    }
+    // Contract §7: a revoked watch's turn names its end and nothing about what it watched.
+    expect(delivered.REVOKED.payload).toEqual(['watchId', 'state']);
+    for (const state of classified) {
+      const told = state in delivered;
+      const pinned = CONTRACT.vectors.some(
+        (v: any) => v.expect.watchState === state && typeof v.expect.delivery === 'string' && (v.expect.delivery === 'none') !== told,
+      );
+      expect(pinned, `no vector pins whether ${state} tells the waiting session`).toBe(true);
+    }
+  });
 });

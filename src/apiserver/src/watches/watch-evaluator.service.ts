@@ -60,10 +60,11 @@ import {
  *
  * NOT HERE
  * What a Match causes — a turn, a notification — is the delivery worker's; its row joins the Match
- * inside `land`, and so does the row for the turn a RESUME_SESSION watch's expiry owes its observer
- * (contract §5). CONTINUOUS watches get expiry and GONE bookkeeping but never a Match: when a
- * continuous watch has crossed again needs the edge, debounce and budget semantics the continuous
- * subscription work defines, and nothing creates one before then.
+ * inside `land`, and so does the row for the turn a RESUME_SESSION watch's end owes its observer when
+ * the watch expires, is revoked or becomes unresolvable (contract §3, §5). CONTINUOUS watches get expiry
+ * and GONE bookkeeping but never a Match: when a continuous watch has crossed again needs the edge,
+ * debounce and budget semantics the continuous subscription work defines, and nothing creates one
+ * before then.
  */
 
 /** How long a claim keeps a due watch from every other worker. Far longer than one evaluation. */
@@ -93,6 +94,17 @@ export interface WatchEvaluation {
   /** The Match this evaluation recorded, if it recorded one. */
   matchId: string | null;
 }
+
+/**
+ * The kind of delivery row a RESUME_SESSION watch's end owes its observer, by the outcome that ended it
+ * (contract §3, §5). A Match has a delivery of its own. CANCELLED is never an evaluation's outcome, and it
+ * wakes nobody: cancelling is something the owner or the observer did.
+ */
+const END_DELIVERY_KIND: Partial<Record<WatchEvaluationOutcome, string>> = {
+  EXPIRED: 'EXPIRY',
+  REVOKED: 'REVOKED',
+  UNRESOLVABLE: 'UNRESOLVABLE',
+};
 
 /**
  * Session events that can move a session leaf's source columns: status, lifecycle and approvals.
@@ -405,15 +417,18 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
           ON CONFLICT ("match_id", "action") DO NOTHING`;
       }
     }
-    if (decision.expirySnapshot && read.action === 'RESUME_SESSION') {
-      // Contract §5: a watch that expires unmatched still owes the session waiting on it one turn that
-      // says so. That delivery's row joins this landing the way a Match's row joins the Match: EXPIRED
-      // and its delivery commit together or not at all, and `watch_delivery_expiry_watch_key` allows
-      // one per watch. A watch that matched is terminal, so no later landing reaches this line.
+    const endKind = END_DELIVERY_KIND[decision.outcome];
+    if (endKind && read.action === 'RESUME_SESSION') {
+      // Contract §3, §5: a watch that ends unmatched still owes the session waiting on it one turn that
+      // says how it ended. That delivery's row joins this landing the way a Match's row joins the Match:
+      // the end and its delivery commit together or not at all, and `watch_delivery_expiry_watch_key`
+      // allows one per watch, whichever way it ended. Only an expiry carries a snapshot; a REVOKED watch
+      // reports nothing about its targets (§7). A watch that matched is terminal, so no later landing
+      // reaches this line.
       await tx.$executeRaw`
         INSERT INTO "watch_delivery" ("id", "kind", "watch_id", "action", "expiry_snapshot", "next_attempt_at")
-        VALUES (${randomUUID()}::uuid, 'EXPIRY', ${watchId}::uuid, ${read.action},
-                ${JSON.stringify(decision.expirySnapshot)}::jsonb, now())
+        VALUES (${randomUUID()}::uuid, ${endKind}, ${watchId}::uuid, ${read.action},
+                ${decision.expirySnapshot ? JSON.stringify(decision.expirySnapshot) : null}::jsonb, now())
         ON CONFLICT ("watch_id") WHERE "watch_id" IS NOT NULL DO NOTHING`;
     }
     const landed = await tx.$executeRaw`

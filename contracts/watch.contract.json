@@ -188,7 +188,30 @@
         "why": "A wake is new work, never a steer into the turn already running. CURRENT_WORK would be refused as CURRENT_WORK_UNAVAILABLE whenever no live in-flight message exists, which is precisely the common case for a parked observer."
       },
       "runningObserver": "No special case: an observer that is RUNNING keeps its status and the turn queues behind the running one (statusAfterTurnEnqueued leaves RUNNING alone and moves AWAITING_INPUT/INTERRUPTED to PENDING). Watch never resumes a session concurrently because it never bypasses the queue.",
-      "forbidden": "Polling logs or shell transcript text must never be put into the payload."
+      "forbidden": "Polling logs or shell transcript text must never be put into the payload.",
+      "endTurns": {
+        "why": "A session waiting on a watch is told when the watch ends unmatched, or it waits forever (§3, §5). A watch reaches one terminal state, so it owes at most one such turn, and each end's key ends in a word no generation number spells.",
+        "delivered": {
+          "EXPIRED": {
+            "clientTurnId": "watch:<watchId>:expired",
+            "payload": ["watchId", "state", "expiresAt", "latestSnapshot"]
+          },
+          "REVOKED": {
+            "clientTurnId": "watch:<watchId>:revoked",
+            "payload": ["watchId", "state"],
+            "note": "§7: the turn names the end and nothing about the targets, their state or any snapshot."
+          },
+          "UNRESOLVABLE": {
+            "clientTurnId": "watch:<watchId>:unresolvable",
+            "payload": ["watchId", "state"],
+            "note": "Every target is GONE, so nothing about them is left to report."
+          }
+        },
+        "notDelivered": {
+          "CANCELLED": "The owner or the observer cancelled the watch, so nobody waiting on it is left uninformed."
+        },
+        "notifyUser": "A NOTIFY_USER watch has no waiting session, so none of these ends is delivered for it."
+      }
     }
   ],
 
@@ -405,6 +428,33 @@
       "given": { "targets": [{ "kind": "TASK_LIST", "id": "L1", "membership": "live" }] },
       "expect": { "refusal": "DYNAMIC_SET_UNSUPPORTED" },
       "why": "v1 freezes the target set at create; live membership needs sealed semantics that do not exist yet."
+    },
+    {
+      "id": "revoked-wakes-a-waiting-observer-with-no-target-state",
+      "given": { "mode": "ONE_SHOT", "action": "RESUME_SESSION", "permissionRecheck": "fails", "matched": false },
+      "expect": {
+        "watchState": "REVOKED",
+        "delivery": "one turn carrying REVOKED",
+        "clientTurnId": "watch:<watchId>:revoked",
+        "payload": ["watchId", "state"]
+      },
+      "why": "A revoked watch may not tell anyone what it can no longer read, and it may not leave the session waiting on it waiting forever either."
+    },
+    {
+      "id": "unresolvable-wakes-a-waiting-observer",
+      "given": { "mode": "ONE_SHOT", "action": "RESUME_SESSION", "tasks": ["deleted", "deleted"], "matched": false },
+      "expect": {
+        "watchState": "UNRESOLVABLE",
+        "delivery": "one turn carrying UNRESOLVABLE",
+        "clientTurnId": "watch:<watchId>:unresolvable"
+      },
+      "why": "A watch that can never be decided has to say so to the session waiting on it, not only to whoever reads the watch."
+    },
+    {
+      "id": "cancelled-watch-wakes-nobody",
+      "given": { "action": "RESUME_SESSION", "cancelledBy": "the owner or the observer" },
+      "expect": { "watchState": "CANCELLED", "delivery": "none" },
+      "why": "The owner or the observer cancelled the watch, so nobody waiting on it is left uninformed."
     }
   ]
 }

@@ -531,6 +531,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        three `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no
   //        DELETE — the key's `ON DELETE CASCADE` is a referential action on the new table's rows.
   //        Nothing reads a wake to allow or refuse a status: a wake is a turn's content, not a decision.
+  //   0263 let a `watch_delivery` row carry a Watch's REVOKED or UNRESOLVABLE end as well, so that a
+  //        session waiting on a watch that can no longer be decided or read is told, as contract §3
+  //        requires. Read against every claim above: it ALTERs `watch_delivery`, a table 0259 created
+  //        and this file does not preserve, and nothing else. On that table it drops 0261's two CHECKs
+  //        and adds them back under the same names, each widened by the two new kinds, and it adds no
+  //        column, index or foreign key. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions. It creates
+  //        no table, enum, type, function or trigger, so it is not another writer of the DONE fence.
+  //        It has no `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion` labels
+  //        survive. It has no INSERT, UPDATE or DELETE: adding a CHECK back reads the `watch_delivery`
+  //        rows to validate them and writes none. Nothing reads a delivery to allow or refuse a status:
+  //        a delivery records whether a session was told, and decides nothing about the task it watched.
   //   0264 adds one relation of its own, `session_scheduled_wakeup`: the wakeups a session asks the
   //        control plane to hold until they are due. Read against every claim above: it creates that
   //        table, a CHECK on its own `state` column, a foreign key from it to `session`, one partial
@@ -573,6 +588,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0260_watch_delivery_lease_expiry_idx',
       '0261_watch_expiry_delivery',
       '0262_background_job_wake',
+      '0263_watch_revoked_unresolvable_delivery',
       '0264_session_scheduled_wakeup'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

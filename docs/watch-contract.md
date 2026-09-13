@@ -45,7 +45,8 @@
 6. **TTL 必填且有上限；到期也要交付。** 等在 Watch 上的会话不会被静默遗忘（§5）。
 7. **唤醒复用 ConversationTurn 的唯一键。** `clientTurnId = watch:<watchId>:<generation>`，
    重复交付塌缩成同一个 turn，而不是第二次唤醒（§6）。
-8. **权限在交付时复核，不只在创建时。** 撤销后不投递载荷，状态进 `REVOKED` 而不是悄悄停掉（§7）。
+8. **权限在交付时复核，不只在创建时。** 撤销后不投递载荷，状态进 `REVOKED` 而不是悄悄停掉；等在它上面的
+   会话只收到一个说明 `REVOKED` 的 turn，不含任何目标状态（§3、§7）。
 9. **停不下来的 Watch 必须可见。** 目标全没了是 `UNRESOLVABLE`，不是沉默（§3）。
 
 ---
@@ -162,6 +163,19 @@ Agent 最常要的那句话——「等这 7 个 Task 全部终态，或任一�
 `REVOKED` 与 `UNRESOLVABLE` 单列，是因为**「盯不下去了」必须说出来**。悄悄停掉是这个项目要设计掉的
 失败模式，不是可接受的省事做法。
 
+**说出来，也包括告诉等在它上面的会话。** `RESUME_SESSION` 的 Watch 没有成立就结束时，要给观察者交付恰好一个说明终态的
+turn。三种终态各用一个 key 入队（§6）：
+
+- `EXPIRED`（§5）：`watch:<watchId>:expired`
+- `REVOKED`：`watch:<watchId>:revoked`
+- `UNRESOLVABLE`：`watch:<watchId>:unresolvable`
+
+Watch 只会进入一个终态，所以这样的 turn 最多一个。`REVOKED` 的载荷只有 `watchId` 与 `state`，不带任何目标、目标状态或快照（§7）。
+`UNRESOLVABLE` 的目标已经全部 `GONE`，载荷也只有这两项。
+
+**`CANCELLED` 不交付**：取消是 owner 或观察者自己的动作，不会有谁不知情地一直等下去。`NOTIFY_USER` 的 Watch
+没有在等的会话，以上终态都不交付。
+
 **WatchTarget**：`OBSERVED → SATISFIED`（leaf 成立）、`→ GONE`（目标行被删）。continuous 允许
 `SATISFIED → OBSERVED`（条件又不成立了）。
 
@@ -235,6 +249,8 @@ turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，�
   `UNIQUE (session_id, client_turn_id)`，所以重投的 Match 会塌缩到已经入队的那个 turn 上，
   而不是第二次唤醒。这与 `TASK_RUN_TRIGGER` 给 `sched:` / `dep:` / `first-run:` / `batch:`
   用的是同一个机制，**不要新造一套幂等**。
+- Watch 没有成立就结束时（§3），终态 turn 的 key 是 `watch:<watchId>:expired` / `:revoked` / `:unresolvable`。
+  这些后缀都不是数字，不会与任何 generation 的键冲突；重投同样塌缩到已经入队的那个 turn 上。
 - `sendIntent = NEXT_TURN`。唤醒是新工作，不是插进正在跑的那个 turn。用 `CURRENT_WORK` 会在
   没有在飞的 message turn 时被 `CURRENT_WORK_UNAVAILABLE` 拒绝——而「观察者正停着」恰恰是最常见的情况。
 - **运行中的观察者不需要特例**：`statusAfterTurnEnqueued` 让 `RUNNING` 保持 `RUNNING`、
@@ -255,6 +271,8 @@ turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，�
 
 **关键规则：权限在交付时再复核一次。** 创建与成立之间可能隔很久，期间访问可能被撤销；
 复核失败 → `REVOKED`，**不投递任何载荷**。只在创建时检查等于允许用一个旧 Watch 去读现在读不到的状态。
+等在它上面的 `RESUME_SESSION` 观察者仍会收到一个 turn，告诉它 Watch 以 `REVOKED` 结束。这个 turn 只有 `watchId` 与
+`state` 两项，不含任何目标、目标状态或快照（§3）。
 
 **自唤醒保护**：`RESUME_SESSION` 的 Watch 把自己的观察者会话列为目标 → `SELF_WATCH_LOOP`。
 一个能唤醒自己的会话是一个没有上界的唤醒环。
@@ -342,7 +360,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 
 ## 10. 边界测试向量
 
-全部 25 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
+全部 28 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
 `watchContract.spec.ts` 保证每条都有 `given` / `expect` / `why`、id 唯一、
 引用的拒绝码与状态都是本契约声明过的，且**每个 leaf 至少被一条向量覆盖**。
 
@@ -373,6 +391,9 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 | 23 | `task-reopened-after-match-does-not-unmatch` | Match 不可变 |
 | 24 | `continuous-burst-coalesces-into-one-delivery` | debounce |
 | 25 | `dynamic-set-refused-in-v1` | **动态集合不进首版** |
+| 26 | `revoked-wakes-a-waiting-observer-with-no-target-state` | 撤销也要叫醒等的人，但**不带任何目标状态** |
+| 27 | `unresolvable-wakes-a-waiting-observer` | 判不了也要告诉等的人 |
+| 28 | `cancelled-watch-wakes-nobody` | 取消是自己的动作，不交付 |
 
 ---
 

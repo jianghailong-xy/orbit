@@ -4457,8 +4457,9 @@ model Watch {
 
   targets WatchTarget[]
   matches WatchMatch[]
-  /// The delivery a RESUME_SESSION watch's expiry owes its observer (migration 0261). A partial unique
-  /// index on `watch_delivery.watch_id` allows at most one per watch.
+  /// The delivery a RESUME_SESSION watch's end owes its observer, by `kind`: its expiry (migration
+  /// 0261), or its REVOKED or UNRESOLVABLE end (0263). A partial unique index on
+  /// `watch_delivery.watch_id` allows at most one per watch, whichever way it ended.
   expiryDeliveries WatchDelivery[]
 
   @@index([ownerId, state], map: "watch_owner_state_idx")
@@ -4536,17 +4537,19 @@ model WatchMatch {
 model WatchDelivery {
   id String @id @default(uuid(7)) @db.Uuid
 
-  /// `MATCH` | `EXPIRY` (migration 0261). A CHECK holds each row to the one thing its kind is
-  /// about: a MATCH row names its Match; an EXPIRY row names a RESUME_SESSION watch that expired
-  /// unmatched and carries the snapshot that evaluation took (contract §5).
+  /// `MATCH` | `EXPIRY` (migration 0261) | `REVOKED` | `UNRESOLVABLE` (0263). A CHECK holds each row
+  /// to the one thing its kind is about: a MATCH row names its Match; the other three name a
+  /// RESUME_SESSION watch that ended that way unmatched, and only an EXPIRY row carries the snapshot
+  /// its evaluation took (contract §5). A REVOKED row says nothing about the targets (§7).
   kind    String      @default("MATCH")
   matchId String?     @map("match_id") @db.Uuid
   match   WatchMatch? @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  /// Set only on an EXPIRY row, and unique among those rows (a partial index): one expiry per watch.
+  /// Set only on an EXPIRY, REVOKED or UNRESOLVABLE row, and unique among those rows (a partial
+  /// index): one end delivery per watch, whichever way it ended.
   watchId String?     @map("watch_id") @db.Uuid
   watch   Watch?      @relation(fields: [watchId], references: [id], onDelete: Cascade)
-  /// An EXPIRY row's structured snapshot. It is written in the same transaction as the EXPIRED
-  /// state and never changes, so every attempt builds the same turn.
+  /// An EXPIRY row's structured snapshot, and NULL on every other kind. It is written in the same
+  /// transaction as the EXPIRED state and never changes, so every attempt builds the same turn.
   expirySnapshot Json? @map("expiry_snapshot")
 
   action String
