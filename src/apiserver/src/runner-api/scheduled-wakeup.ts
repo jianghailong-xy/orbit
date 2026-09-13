@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma/client';
 import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
-import { withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { stripNul } from './strip-nul';
 
@@ -58,38 +57,40 @@ export type ScheduledWakeupReceipt =
   | { outcome: 'SCHEDULED'; id: string; dueAt: string; delaySeconds: number; clamped: boolean; replaced: boolean }
   | { outcome: 'CANCELLED'; cancelled: number };
 
-/** Hold a wakeup for the session, replacing the one waiting, if any. */
+/**
+ * Hold a wakeup for the session, replacing the one waiting, if any. Inside the runner door's retried
+ * transaction (runnerApi.scheduledWakeup): the waiting row is superseded and the new one inserted
+ * together, or neither is.
+ */
 export async function scheduleWakeup(
-  prisma: PrismaService,
+  tx: Prisma.TransactionClient,
   sessionId: string,
   dto: ScheduledWakeupDto,
 ): Promise<ScheduledWakeupReceipt> {
   const requested = Math.round(Number(dto.delaySeconds));
   const delaySeconds = Math.min(SCHEDULED_WAKEUP_MAX_DELAY_SECONDS, Math.max(SCHEDULED_WAKEUP_MIN_DELAY_SECONDS, requested));
-  const reason = stripNul(dto.reason ?? '');
-  const prompt = dto.prompt ? stripNul(dto.prompt) : null;
-  return withTransactionRetry(
-    prisma,
-    async (tx) => {
-      const superseded = await tx.sessionScheduledWakeup.updateMany({
-        where: { sessionId, state: 'PENDING' },
-        data: { state: 'SUPERSEDED', settledAt: new Date() },
-      });
-      const held = await tx.sessionScheduledWakeup.create({
-        data: { sessionId, delaySeconds, reason, prompt, dueAt: new Date(Date.now() + delaySeconds * 1_000) },
-        select: { id: true, dueAt: true },
-      });
-      return {
-        outcome: 'SCHEDULED' as const,
-        id: held.id,
-        dueAt: held.dueAt.toISOString(),
-        delaySeconds,
-        clamped: delaySeconds !== requested,
-        replaced: superseded.count > 0,
-      };
+  const superseded = await tx.sessionScheduledWakeup.updateMany({
+    where: { sessionId, state: 'PENDING' },
+    data: { state: 'SUPERSEDED', settledAt: new Date() },
+  });
+  const held = await tx.sessionScheduledWakeup.create({
+    data: {
+      sessionId,
+      delaySeconds,
+      reason: stripNul(dto.reason ?? ''),
+      prompt: dto.prompt ? stripNul(dto.prompt) : null,
+      dueAt: new Date(Date.now() + delaySeconds * 1_000),
     },
-    { label: 'runnerApi.scheduledWakeup' },
-  );
+    select: { id: true, dueAt: true },
+  });
+  return {
+    outcome: 'SCHEDULED',
+    id: held.id,
+    dueAt: held.dueAt.toISOString(),
+    delaySeconds,
+    clamped: delaySeconds !== requested,
+    replaced: superseded.count > 0,
+  };
 }
 
 /** Cancel the session's waiting wakeup. Nothing waiting is an answer, not an error. */

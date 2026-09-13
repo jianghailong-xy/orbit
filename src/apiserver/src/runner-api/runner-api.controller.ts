@@ -2929,7 +2929,11 @@ export class RunnerApiController {
   ): Promise<ScheduledWakeupReceipt> {
     await this.assertSessionOwnership(sessionId, runner.id);
     if (dto.stop === true) return cancelScheduledWakeup(this.prisma, sessionId);
-    return scheduleWakeup(this.prisma, sessionId, dto);
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => scheduleWakeup(tx, sessionId, dto),
+      loggedRetry(this.logger, 'runnerApi.scheduledWakeup'),
+    );
   }
 
   /** A single interactive turn finished; retain or release its active-turn slot. */

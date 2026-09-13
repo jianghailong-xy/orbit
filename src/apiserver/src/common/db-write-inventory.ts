@@ -442,7 +442,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the runner re-posts.',
   },
   {
-    at: 'runner-api/scheduled-wakeup.ts#scheduleWakeup',
+    at: 'runner-api/runner-api.controller.ts#scheduledWakeup',
     shape: 'TX_RETRIED',
     locks: "session_scheduled_wakeup only (rank 60): the session's waiting wakeup, if there is one, is marked SUPERSEDED and the new one inserted. No parent row is locked — the session is never waited on here — and the delivery that settles a wakeup (createTurn's coalesce, under the Session lock) reaches the same child row after its parent, so the two meet on that row alone.",
     identity: 'None above the closure: every request is a new wakeup. The partial unique index over PENDING rows keeps one waiting wakeup per session.',
@@ -898,6 +898,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'runner-api/runner-api.controller.ts#lockSessionLeaseOwner', under: 'runnerApi.events, .turnComplete, .finalize' },
   { at: 'runner-api/background-job-wake.ts#fileBackgroundJobWake', under: "sessions.createTurn's coalesce hook, for runnerApi.backgroundWake — under the rank-30 Session lock createTurn already holds. It writes one background_job_wake child row of that session, keyed by session, wake turn and job (a read, then one INSERT or one UPDATE of that row), so it adds no lock outside the one its caller holds, and a retried createTurn re-runs it from the same read" },
   { at: 'runner-api/scheduled-wakeup.ts#markScheduledWakeupDelivered', under: "sessions.createTurn's coalesce hook, for ScheduledWakeupWorker.deliver — under the rank-30 Session lock createTurn already holds. One compare-and-set of that session's session_scheduled_wakeup child row, PENDING to DELIVERED, so it adds no lock outside the one its caller holds; a lost CAS throws, which rolls the turn back with it, and a retried createTurn re-runs the same CAS" },
+  { at: 'runner-api/scheduled-wakeup.ts#scheduleWakeup', under: 'runnerApi.scheduledWakeup' },
   { at: 'runners/codex-rate-limit-reset.repository.ts#insertIfAbsent', under: 'codexRateLimitReset.create — one INSERT ... ON CONFLICT DO NOTHING of the operation that transaction just decided to create. Losing to a concurrent confirmation writes nothing and aborts nothing, and the caller reads what won in the same transaction.' },
   { at: 'sessions/merge-receipt.service.ts#fromRunnerMergeResult', under: 'runnerApi.mergeResult' },
   { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, queue.buildSession' },
