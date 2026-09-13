@@ -15,17 +15,22 @@ import {
   CRITERION_DROPPED_LABEL,
   CRITERION_REWORDED_LABEL,
   CriteriaDecisionCard,
+  CriteriaDecisionReceipt,
   DROPPED_RUN_TITLE,
   INLINE_DIFF_LEGEND,
   METHOD_LABEL,
   PROVENANCE_LABEL,
   REFUSE_LABEL,
+  REPLY_NOT_SENT,
+  REPLY_SENT_TO_SESSION,
+  REPLY_WRITTEN_ON_TASK,
   changeSummary,
   criteriaApprovedLine,
   criteriaDecisionRequest,
   criteriaDecisionStanding,
   criteriaRefusedLine,
   isAnswerable,
+  receiptClock,
   shortSeal,
   unchangedLine,
   type CriteriaDecision,
@@ -883,6 +888,89 @@ describe('what a decision leaves in the transcript', () => {
     const refused = criteriaRefusedLine(result());
     expect(refused.toLowerCase()).toContain('nothing was applied');
     expect(refused).toContain(shortSeal(SEAL_DRAFTED));
+  });
+});
+
+describe('the receipt a card answered in this window leaves in its place', () => {
+  const DECIDED_AT = '2026-09-13T05:42:00.000Z';
+  const SENT_AT = '2026-09-13T05:42:04.000Z';
+  const SESSION_TITLE = '执行任务：改写项目硬约束 1、3 与判据 2';
+  const TASK_TITLE = '改写项目硬约束 1、3 与判据 2';
+  const answered = (reply?: CriteriaDecisionResult['reply']): CriteriaDecisionResult => ({
+    intentId: row().intentId,
+    decision: 'APPROVE',
+    decidedAt: DECIDED_AT,
+    baseSeal: SEAL_DRAFTED,
+    resultingSeal: SEAL_MOVED,
+    applied: true,
+    ...(reply === undefined ? {} : { reply }),
+  });
+  const toSession = {
+    channel: 'SESSION',
+    sessionId: '4loVMXEZpNVNZAWLb9Wq4D',
+    sessionTitle: SESSION_TITLE,
+    turnId: '2kQ7xVb9LmN3pR5sT8wYz',
+    sentAt: SENT_AT,
+  } as const;
+  const receipt = (result: CriteriaDecisionResult): string =>
+    renderToStaticMarkup(<CriteriaDecisionReceipt result={result} />);
+
+  it('says what was recorded, and that the session that asked was sent it', () => {
+    const html = receipt(answered(toSession));
+    expect(html).toContain(`✓ Approved by you at ${receiptClock(DECIDED_AT)}`);
+    expect(html).toContain(
+      `<b>${REPLY_SENT_TO_SESSION}</b> (${SESSION_TITLE}) at ${receiptClock(SENT_AT)}`,
+    );
+    // Still Orbit's card and no longer a question: the mark stays, the actions are gone.
+    expect(html).toContain(PROVENANCE_LABEL);
+    expect(html).not.toContain(APPROVE_LABEL);
+    expect(html).not.toContain(REFUSE_LABEL);
+  });
+
+  it('says the same of a refusal', () => {
+    const html = receipt({
+      ...answered(toSession),
+      decision: 'REJECT',
+      applied: false,
+      resultingSeal: SEAL_DRAFTED,
+    });
+    expect(html).toContain(`✓ Refused by you at ${receiptClock(DECIDED_AT)}`);
+    expect(html).toContain(`<b>${REPLY_SENT_TO_SESSION}</b>`);
+  });
+
+  it('says the answer was written on the task when the session that asked had ended', () => {
+    const html = receipt(answered({
+      channel: 'TASK_COMMENT',
+      sessionId: toSession.sessionId,
+      taskId: '34OEE9IKfkRxRckbnd0Fy',
+      taskTitle: TASK_TITLE,
+      commentId: '5hJ2dF6gK9nM1qW4eR7tY',
+      sentAt: SENT_AT,
+    }));
+    expect(html).toContain(
+      `<b>${REPLY_WRITTEN_ON_TASK}</b> (${TASK_TITLE}) at ${receiptClock(SENT_AT)}`,
+    );
+    expect(html).not.toContain(REPLY_SENT_TO_SESSION);
+  });
+
+  it('says why nobody was told, instead of claiming a reply that was not sent', () => {
+    const html = receipt(answered({
+      channel: 'NOT_SENT',
+      sessionId: toSession.sessionId,
+      reason: 'SESSION_ENDED_WITHOUT_TASK',
+    }));
+    expect(html).toContain(REPLY_NOT_SENT.SESSION_ENDED_WITHOUT_TASK);
+    expect(html).not.toContain(REPLY_SENT_TO_SESSION);
+    expect(html).not.toContain(REPLY_WRITTEN_ON_TASK);
+  });
+
+  it('claims no reply for a change nobody proposed through a session, or from an older server', () => {
+    for (const html of [receipt(answered(null)), receipt(answered())]) {
+      expect(html).toContain(`✓ Approved by you at ${receiptClock(DECIDED_AT)}`);
+      expect(html).not.toContain(REPLY_SENT_TO_SESSION);
+      expect(html).not.toContain(REPLY_WRITTEN_ON_TASK);
+      expect(html).not.toContain('not sent');
+    }
   });
 });
 

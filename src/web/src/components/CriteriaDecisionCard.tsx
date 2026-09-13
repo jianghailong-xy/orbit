@@ -206,6 +206,28 @@ export interface PendingCriteriaDecisionQueue {
   settled?: SettledCriteriaDecision[];
 }
 
+/** Why the answer did not reach the session that proposed the change — the door's own code. */
+export type CriteriaDecisionReplyUnsent =
+  | 'SESSION_GONE'
+  | 'SESSION_ENDED_WITHOUT_TASK'
+  | 'DELIVERY_FAILED';
+
+/**
+ * Where Orbit sent the answer to the session that asked for the change: a turn on that session, a
+ * comment on its task when the session had already ended, or nowhere, with the reason.
+ */
+export type CriteriaDecisionReply =
+  | { channel: 'SESSION'; sessionId: string; sessionTitle: string; turnId: string; sentAt: string }
+  | {
+      channel: 'TASK_COMMENT';
+      sessionId: string;
+      taskId: string;
+      taskTitle: string;
+      commentId: string;
+      sentAt: string;
+    }
+  | { channel: 'NOT_SENT'; sessionId: string; reason: CriteriaDecisionReplyUnsent };
+
 /** What the door returns once it has answered one — read back, not recomputed here. */
 export interface CriteriaDecisionResult {
   intentId: string;
@@ -215,6 +237,11 @@ export interface CriteriaDecisionResult {
   resultingSeal: string;
   /** True for an APPROVE and only an APPROVE: whether any criterion actually moved. */
   applied: boolean;
+  /**
+   * Where the answer went. Null when the owner filed the change with no session, so nobody was
+   * waiting on it; absent from a server older than this bundle.
+   */
+  reply?: CriteriaDecisionReply | null;
 }
 
 /** The two answers the door takes. There is deliberately no third that leaves it pending. */
@@ -811,6 +838,82 @@ export function criteriaDecisionLine(result: CriteriaDecisionResult): string {
 }
 
 /**
+ * THE RECEIPT A CARD ANSWERED HERE LEAVES IN ITS PLACE
+ * ----------------------------------------------------
+ * The session that asked for the change is waiting on this answer, and the door now sends it
+ * there itself. So a pressed card keeps its head and trades everything under it for one line:
+ * what was recorded, and where the proposing session was told — a turn on that session, a comment
+ * on its task when the session had already ended, or why it could not be told at all.
+ *
+ * Drawn from the door's response and from nothing else, like the transcript line above: what
+ * happened here is an event, and the pending read no longer publishes a settled proposal.
+ */
+export const REPLY_SENT_TO_SESSION = 'sent to the proposing session';
+export const REPLY_WRITTEN_ON_TASK = 'the proposing session had ended — written on its task';
+export const REPLY_NOT_SENT: Record<CriteriaDecisionReplyUnsent, string> = {
+  SESSION_GONE: 'not sent — the proposing session no longer exists',
+  SESSION_ENDED_WITHOUT_TASK: 'not sent — the proposing session had ended and ran no task',
+  DELIVERY_FAILED: 'not sent — the reply could not be delivered',
+};
+
+/** A receipt's clock: hours and minutes, as the evidence receipt says it. */
+export function receiptClock(at: string): string {
+  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** What was recorded, and when: the first half of the receipt line. */
+export function criteriaVerdictReceipt(result: CriteriaDecisionResult): string {
+  const verdict = result.decision === 'APPROVE' ? 'Approved' : 'Refused';
+  return `✓ ${verdict} by you at ${receiptClock(result.decidedAt)}`;
+}
+
+/** Where the proposing session was told, as the second half of the line, or null for nobody. */
+function ReplyReceipt({ reply }: { reply: CriteriaDecisionReply | null }): JSX.Element | null {
+  if (reply?.channel === 'SESSION') {
+    return (
+      <>
+        {' · '}
+        <b>{REPLY_SENT_TO_SESSION}</b>
+        {` (${reply.sessionTitle}) at ${receiptClock(reply.sentAt)}`}
+      </>
+    );
+  }
+  if (reply?.channel === 'TASK_COMMENT') {
+    return (
+      <>
+        {' · '}
+        <b>{REPLY_WRITTEN_ON_TASK}</b>
+        {` (${reply.taskTitle}) at ${receiptClock(reply.sentAt)}`}
+      </>
+    );
+  }
+  if (reply?.channel === 'NOT_SENT') {
+    return <>{` · ${REPLY_NOT_SENT[reply.reason] ?? 'not sent'}`}</>;
+  }
+  return null;
+}
+
+export function CriteriaDecisionReceipt({ result }: { result: CriteriaDecisionResult }): JSX.Element {
+  return (
+    <div
+      className="approval-card criteria-decision is-answered"
+      id={`criteria-decision-${result.intentId}`}
+    >
+      <div className="approval-head criteria-decision-head">
+        <span className="criteria-decision-heading">{CRITERIA_DECISION_HEADING}</span>
+        <span className="criteria-provenance" title={PROVENANCE_TITLE}>
+          {PROVENANCE_LABEL}
+        </span>
+      </div>
+      <p className="criteria-decision-receipt">
+        <span className="criteria-decision-verdict">{criteriaVerdictReceipt(result)}</span>
+        <ReplyReceipt reply={result.reply ?? null} />
+      </p>
+    </div>
+  );
+}
+
+/**
  * The wired cards: one per proposal this window has been shown, each re-derived on every render.
  *
  * WHY THE WINDOW REMEMBERS THE ADDRESS AND NOTHING ELSE
@@ -837,6 +940,8 @@ export function SessionCriteriaDecisionCard({
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [seen, setSeen] = useState<string[]>([]);
+  // The answers given in this window, by address — each drawn as its receipt where its card was.
+  const [answered, setAnswered] = useState<Record<string, CriteriaDecisionResult>>({});
   const pending = useQuery({
     ...pendingCriteriaDecisionsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
@@ -856,11 +961,12 @@ export function SessionCriteriaDecisionCard({
     mutationFn: ({ row, decision }: { row: PendingCriteriaDecisionRow; decision: CriteriaDecision }) =>
       decideCriteriaChange(row, decision),
     onSuccess: (result) => {
-      // The card that was answered HERE gives way to the line describing what it did: what is true
-      // now is a fact about the criteria, and what happened is an event in this conversation. Left
-      // on screen it would go stale into "answered at another end", which is the one reading of
-      // its own answer this window can be sure is wrong.
-      setSeen((previous) => previous.filter((intentId) => intentId !== result.intentId));
+      // The card that was answered HERE gives way to its receipt, in the same place: what is true
+      // now is a fact about the criteria, and what happened — the answer, and where the session
+      // that asked was told it — is an event in this conversation. Left as a card it would go
+      // stale into "answered at another end", which is the one reading of its own answer this
+      // window can be sure is wrong.
+      setAnswered((previous) => ({ ...previous, [result.intentId]: result }));
       onDecided?.(criteriaDecisionLine(result));
       void qc.invalidateQueries({
         queryKey: pendingCriteriaDecisionsQuery(projectId ?? '').queryKey,
@@ -872,6 +978,8 @@ export function SessionCriteriaDecisionCard({
   return (
     <>
       {seen.map((intentId) => {
+        const result = answered[intentId];
+        if (result) return <CriteriaDecisionReceipt key={intentId} result={result} />;
         const standing = criteriaDecisionStanding(pending.isError ? null : queue, intentId);
         return (
           <CriteriaDecisionCard

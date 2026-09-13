@@ -7569,6 +7569,20 @@ button.composer-usage:focus-visible {
 .criteria-decision-heading {
   min-width: 0;
 }
+/* The receipt a card answered in this window leaves in its place (`CriteriaDecisionReceipt`): the
+   question's head, then one line saying what was recorded and where the proposing session was told. */
+.criteria-decision-receipt {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-1);
+  background: var(--bg-raised);
+}
+.criteria-decision-verdict {
+  color: var(--success);
+  font-weight: 600;
+}
 /* The mark. Boxed and set apart from the heading it follows, because its whole job is to be
    distinguishable at a glance from anything an agent could have typed into the conversation. */
 .criteria-provenance {

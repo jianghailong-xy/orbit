@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>05 exceptions and questions</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  .approval-card { margin: 0; }
+  .approval-body.is-plan { padding: 10px 14px 6px; }
+  .neutral-card { border: 1px solid var(--border) !important; background: var(--bg-raised) !important; }
+  .neutral-card .approval-head { background: var(--bg-subtle) !important; border-bottom-color: var(--border-subtle) !important; }
+  .q-text { font-size: 14px; line-height: 1.6; margin: 2px 0 8px; }
+  .q-opt { display: flex; gap: 9px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); margin: 6px 0; font-size: 13.5px; }
+  .q-opt.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-tint); }
+  .q-radio { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border); margin-top: 3px; background: #fff; }
+  .q-opt.on .q-radio { border: 5px solid var(--brand); }
+  .q-rec { font-size: 11px; font-weight: 600; color: var(--success); background: var(--success-bg); border: 1px solid var(--success-border); border-radius: 4px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+  .q-meta { font-size: 12.5px; color: var(--text-2); margin: 8px 0 2px; }
+  .answered { font-size: 13px; padding: 10px 14px; }
+  .who-line { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-2); padding: 0 14px 10px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">5 · 例外待办和协调会话提问：每件事都有负责人、有终点</h1>
+  <p class="m-sub zh">左边是先交给协调会话的例外（出现在协调会话的卡片区和项目页 Open items）；右边是需要你本人处理的卡片。</p>
+
+  <div class="m-grid2">
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">新</span>集成冲突 → 先交给协调会话</div>
+        <div class="approval-card neutral-card m-mark"><span class="m-n">1</span>
+          <div class="approval-head head-flex"><span>Merge conflict — needs a fix on the task branch</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">runner 托管作业支持「事件发生时叫醒会话」</span>
+              <span class="k">Into</span><span class="v"><span class="a-mono">project/bg-jobs</span> at <span class="a-mono">b70a446</span> · nothing landed</span>
+              <span class="k">Files</span><span class="v"><span class="a-mono">src/runner-go/session_pool.go · background.go · mcp.go</span></span>
+              <span class="k">After a fix</span><span class="v">push to the task branch — Orbit re-integrates and re-checks on its own</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Open task session</span><span class="a-btn">Hand to owner</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 18m · goes to the owner at 2h</div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">新</span>合并后检查失败 → 先交给协调会话</div>
+        <div class="approval-card neutral-card">
+          <div class="approval-head head-flex"><span>Checks failed on the combined tree</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">核实 ScheduleWakeup 是否随 warm 回收丢失</span>
+              <span class="k">Check</span><span class="v"><span class="a-mono">cd src/runner-go &amp;&amp; go test -count=1 ./...</span> · <span class="bad">exit 1</span> after 5m 40s</span>
+            </div>
+            <div class="m-log">--- FAIL: TestScheduleWakeupSurvivesWarmEviction (2.31s)
+    wake_test.go:88: wake not delivered after eviction
+FAIL	orbit	341.207s</div>
+            <div class="kv"><span class="k">Branch</span><span class="v">unchanged — the task passed on its own branch; it fails only combined with project/bg-jobs</span></div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Open task session</span><span class="a-btn">View full log</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 5m · goes to the owner at 2h</div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">新</span>任务失败（包括 runner 停止、会话被回收）→ 先交给协调会话</div>
+        <div class="approval-card neutral-card">
+          <div class="approval-head head-flex"><span class="bad">Task failed</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Task</span><span class="v">有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">How</span><span class="v">acceptance command exited 1 (expected 0)</span>
+              <span class="k">Retries</span><span class="v">attempt 2 of 3 in this chain — the 3rd failure goes straight to the owner</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Retry</span><span class="a-btn">Open session</span><span class="a-btn danger">Cancel task</span></div>
+          <div class="who-line"><span class="a-dot" style="background:var(--brand)"></span>Owner: coordinator · waiting 1h 58m</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">新</span>超时没人处理 → 同一件事升级给你</div>
+        <div class="approval-card criteria-decision m-mark"><span class="m-n">2</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">Now yours — no one acted on this for 2h</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">What</span><span class="v">Task failed twice: 有存活 Monitor 的 warm engine 不回收（带硬上限）</span>
+              <span class="k">Coordinator</span><span class="v">was told 2h 6m ago · it is running another turn and has not picked this up</span>
+              <span class="k">Waiting on it</span><span class="v">1 task · 核实 ScheduleWakeup 是否随 warm 回收丢失</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Ask the coordinator again</span><span class="a-btn">Open task session</span><span class="a-btn danger">Cancel task</span></div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k new">新</span>协调会话向你提问：系统卡片，不是聊天记录里的一段话</div>
+        <div class="approval-card m-mark"><span class="m-n">3</span>
+          <div class="approval-head head-flex"><span>The coordinator has a question</span><span class="criteria-provenance prov-brand">FROM COORDINATOR</span></div>
+          <div class="approval-body is-plan">
+            <div class="q-text">t3 已合入项目分支。t4（事件发生时叫醒会话）和 t7（有存活 Monitor 不回收）现在都能开工，但两者都改 <span class="a-mono">session_pool.go</span>。先开哪个？</div>
+            <div class="q-opt on"><span class="q-radio"></span><span>Start t4 first, then t7 once t4 lands<span class="q-rec">Recommended</span></span></div>
+            <div class="q-opt"><span class="q-radio"></span><span>Start both now — expect a merge conflict to resolve</span></div>
+            <div class="q-opt"><span class="q-radio"></span><span>Hold both</span></div>
+            <div class="q-meta">Blocks: t4 · t7 &nbsp;·&nbsp; If you don’t answer: nothing starts; reminder at 2h</div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Send answer</span><span class="grow"></span><span class="card-foot">asked 35m ago</span></div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k state">答完</span>答案送给当时的协调会话，协调会话换了也不会丢</div>
+        <div class="approval-card evidence-decision-receipt" style="border:1px solid var(--border);background:var(--bg-raised)">
+          <div class="answered"><span class="ok">✓ Answered</span> · Start t4 first, then t7 once t4 lands<div class="card-foot" style="margin-top:3px">by you 2m ago · delivered to the current coordinator (2nd of this project) · t4 started</div></div>
+        </div>
+      </div>
+      <ul class="m-notes zh" style="margin-top:0">
+        <li><span class="m-n">1</span><span><b>冲突、检查失败、任务失败都会生成一张卡</b>，写明负责人、已等时长、多久后升级。先交给协调会话；如果协调会话正在跑别的轮次，等它这一轮结束后一定送到，不再丢。</span></li>
+        <li><span class="m-n">2</span><span><b>2 小时没人处理，同一件事升级给你</b>。卡片上直接给出可做的动作。<b>超时只会提醒你，不会让 agent 被定时叫醒。</b></span></li>
+        <li><span class="m-n">3</span><span><b>协调会话提问变成系统卡片</b>：给出选项和推荐项，写明挡住了哪些任务、不回答会怎样。回答后答案送给当时的协调会话，协调会话换了也收得到。</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>03 tasks and criteria</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  .t-group { font-size: 12.5px; font-weight: 650; color: var(--text-2); margin: 14px 0 2px; }
+  .t-group:first-of-type { margin-top: 4px; }
+  .t-row { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-top: 1px solid var(--border-subtle); font-size: 13.5px; min-width: 0; }
+  .t-title { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-waits { font-size: 12px; color: #d48806; white-space: nowrap; }
+  .t-blocks { font-size: 12px; color: #0958d9; white-space: nowrap; }
+  .t-dim { opacity: .55; }
+  .t-mark { flex: none; width: 12px; display: inline-flex; justify-content: center; }
+  .c-row { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+  .c-row:first-of-type { border-top: 0; }
+  .c-ord { flex: none; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+  .c-ord.met { background: var(--success-solid); color: #fff; }
+  .c-ord.unmet { border: 2px solid var(--text-1); color: var(--text-1); }
+  .c-text { font-size: 13.5px; }
+  .c-ans { font-size: 12.5px; margin-top: 2px; color: var(--text-2); }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">3 · 任务和判据：「做完」之后分三段看</h1>
+  <p class="m-sub zh">Web · 项目详情页里的「Tasks」「Acceptance criteria」两张卡。左边是现在，右边是改后。</p>
+
+  <div class="m-grid2">
+    <div class="m-stage">
+      <div class="m-stage-l zh"><span class="m-k">现在</span>DONE 之后就看不到它有没有进 main；下游只写 Blocked</div>
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t">Tasks</span><span class="a-btn primary sm" style="margin-left:auto">New task</span></div>
+        <div class="t-group">Running</div>
+        <div class="t-row"><span class="t-mark"><svg width="8" height="8"><circle cx="4" cy="4" r="4" style="fill:var(--brand)"/></svg></span><span class="t-title">有存活 Monitor 的 warm engine 不回收（带硬上限）</span><span class="a-tag gold">IN_PROGRESS</span><span class="a-tag proc">Running</span></div>
+        <div class="t-group">Ready · can start now</div>
+        <div class="t-row"><span class="t-mark"><svg width="9" height="8" viewBox="0 0 9 8"><path d="M4.5 0L9 8H0z" style="fill:var(--warning-solid)"/></svg></span><span class="t-title">runner 托管作业支持「事件发生时叫醒会话」</span><span class="a-tag blue">OPEN</span><span class="a-tag gold">Ready · can start now</span><span class="t-blocks">blocks 1</span></div>
+        <div class="t-group">Blocked · topology level 2</div>
+        <div class="t-row"><span class="t-mark"><svg width="9" height="8" viewBox="0 0 9 8"><path d="M4.5 0L9 8H0z" style="fill:var(--warning-solid)"/></svg></span><span class="t-title">核实 ScheduleWakeup 是否随 warm 回收丢失</span><span class="a-tag blue">OPEN</span><span class="a-tag def">Blocked</span><span class="t-waits">waits 1</span></div>
+        <div class="t-group">Done / Cancelled</div>
+        <div class="t-row t-dim"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">后台作业不再阻塞 merge/commit，merge/commit 前也不驱逐 engine</span><span class="a-tag green">DONE</span></div>
+        <div class="t-row t-dim"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">runner 发版重启杀掉 runner 托管作业：有的记成 drain_cap</span><span class="a-tag green">DONE</span></div>
+        <div class="t-row t-dim"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">warm 回收时 Claude 的 Monitor 随 engine 静默消失</span><span class="a-tag green">DONE</span></div>
+      </div>
+      <div class="a-card" style="margin-top:14px">
+        <div class="a-card-h"><span class="a-card-t">Acceptance criteria</span></div>
+        <div class="c-row"><span class="c-ord met">2</span><div><div class="c-text">merge / commit 在该 session 有存活后台作业时照常执行且不停掉作业，回执点名当时存活的作业。</div><div class="c-ans"><span class="ok">Met by its work</span> · no merge receipt either way</div></div></div>
+        <div class="c-row"><span class="c-ord met">3</span><div><div class="c-text">后台作业在 session 处于 cold 状态下完成时，产生带精确 exit code 的 durable 事件。</div><div class="c-ans"><span class="ok">Met by its work</span> · landed on the default branch</div></div></div>
+      </div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l zh"><span class="m-k new">改后</span></div>
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t">Tasks</span><span class="a-btn primary sm" style="margin-left:auto">New task</span></div>
+        <div class="t-group">Running</div>
+        <div class="t-row"><span class="t-mark"><svg width="8" height="8"><circle cx="4" cy="4" r="4" style="fill:var(--brand)"/></svg></span><span class="t-title">有存活 Monitor 的 warm engine 不回收（带硬上限）</span><span class="a-tag gold">IN_PROGRESS</span><span class="a-tag proc">Running</span></div>
+        <div class="t-group m-mark" style="display:inline-block;padding-right:6px"><span class="m-n">1</span>Integrating · checks run on the combined tree</div>
+        <div class="t-row"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">后台作业不再阻塞 merge/commit，merge/commit 前也不驱逐 engine</span><span class="a-tag green">DONE</span><span class="a-tag proc">Integrating · checks 3m</span><span class="t-blocks">blocks 1</span></div>
+        <div class="t-row"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">核实 ScheduleWakeup 是否随 warm 回收丢失</span><span class="a-tag green">DONE</span><span class="a-tag red">Checks failed · coordinator</span></div>
+        <div class="t-group m-mark" style="display:inline-block;padding-right:6px"><span class="m-n">2</span>Waiting · for a prerequisite to land</div>
+        <div class="t-row"><span class="t-mark"><svg width="8" height="8"><rect x=".75" y=".75" width="6.5" height="6.5" style="fill:none;stroke:var(--text-3);stroke-width:1.5"/></svg></span><span class="t-title">runner 托管作业支持「事件发生时叫醒会话」</span><span class="a-tag blue">OPEN</span><span class="a-tag def">Waits for 1 task to land</span><span class="t-waits">waits 1</span></div>
+        <div class="t-group m-mark" style="display:inline-block;padding-right:6px"><span class="m-n">3</span>Landed</div>
+        <div class="t-row"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">runner 发版重启杀掉 runner 托管作业：有的记成 drain_cap</span><span class="a-tag green">DONE</span><span class="a-tag green">On project/bg-jobs</span></div>
+        <div class="t-row t-dim"><span class="t-mark"><svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4l2.6 2.6L9 1" style="fill:none;stroke:var(--success);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"/></svg></span><span class="t-title">warm 回收时 Claude 的 Monitor 随 engine 静默消失</span><span class="a-tag green">DONE</span><span class="a-tag solidgreen">On main</span></div>
+      </div>
+      <div class="a-card m-mark" style="margin-top:14px"><span class="m-n">4</span>
+        <div class="a-card-h"><span class="a-card-t">Acceptance criteria</span></div>
+        <div class="c-row"><span class="c-ord met">2</span><div><div class="c-text">merge / commit 在该 session 有存活后台作业时照常执行且不停掉作业，回执点名当时存活的作业。</div><div class="c-ans"><span class="ok">Met by its work</span> · on project/bg-jobs · <span class="warn-t">not on main yet</span></div></div></div>
+        <div class="c-row"><span class="c-ord met">3</span><div><div class="c-text">后台作业在 session 处于 cold 状态下完成时，产生带精确 exit code 的 durable 事件。</div><div class="c-ans"><span class="ok">Met by its work</span> · on main</div></div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>DONE 之后多出「Integrating」一段</b>：平台把任务 rebase 到集成线，在合并后的树上跑检查。检查失败或冲突直接显示在任务行上，写明谁在处理（这里是协调会话）。</span></li>
+    <li><span class="m-n">2</span><span><b>下游不再笼统写「Blocked」</b>，而是写明「在等哪个前置落地到 project/bg-jobs」。前置落地后自动开工，不再需要手动开工。</span></li>
+    <li><span class="m-n">3</span><span><b>已落地的任务分两种</b>：「On project/bg-jobs」（在项目分支上，还没进 main）和「On main」（已晋升进 main，淡出显示）。</span></li>
+    <li><span class="m-n">4</span><span><b>判据的落地说明分项目分支和 main</b>。原来只有「landed on the default branch」和「no merge receipt either way」两种，现在能看出「做完了、在项目分支上、还没进 main」。</span></li>
+  </ul>
+</div>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>01 projects list</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  .p-list { max-width: 900px; }
+  .p-sec-h { display: flex; align-items: baseline; gap: 9px; padding: 0 2px 8px; border-bottom: 1px solid var(--border-subtle); margin: 18px 0 0; }
+  .p-sec-h:first-child { margin-top: 0; }
+  .p-sec-h h3 { margin: 0; font-size: 12.5px; font-weight: 650; letter-spacing: .3px; white-space: nowrap; }
+  .p-count { font-size: 11.5px; font-weight: 600; color: var(--text-2); background: var(--fill-muted); padding: 0 6px; border-radius: 999px; }
+  .p-note { font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .p-row { display: flex; gap: 16px; align-items: center; padding: 11px 10px; border-bottom: 1px solid var(--border-subtle); }
+  .p-main { flex: 1; min-width: 0; }
+  .p-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .p-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+  .p-goal { font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .p-meter { width: 196px; flex: none; }
+  .p-bar { display: flex; gap: 2px; height: 6px; }
+  .p-bar i { display: block; height: 6px; }
+  .p-bar i:first-child { border-radius: 4px 0 0 4px; }
+  .p-bar i:last-child { border-radius: 0 4px 4px 0; }
+  .p-buckets { display: flex; gap: 9px; font-size: 11.5px; color: var(--text-2); margin-top: 5px; align-items: center; }
+  .p-buckets span { display: inline-flex; align-items: center; gap: 4px; }
+  .p-buckets b { color: var(--text-1); }
+  .p-when { width: 78px; flex: none; text-align: right; font-size: 12px; color: var(--text-2); line-height: 1.35; }
+  .p-when .sm { font-size: 11px; color: var(--text-4); }
+  .project-row-chip.m-mark { outline-offset: 3px; }
+
+  .phones { display: flex; gap: 36px; align-items: flex-start; }
+  .ph { width: 340px; border-radius: 40px; background: #fff; box-shadow: 0 18px 50px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.08);
+        overflow: hidden; font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif; color: #000; }
+  .ph-status { display: flex; justify-content: space-between; padding: 14px 28px 6px; font-size: 13px; font-weight: 600; }
+  .ph-nav { text-align: center; padding: 2px 14px 9px; border-bottom: .5px solid rgba(60,60,67,.18); font-size: 16px; font-weight: 600; }
+  .ph-banner { display: flex; align-items: center; gap: 9px; padding: 10px 16px; background: rgba(255,149,0,.13); font-size: 14px; }
+  .ph-banner .d { width: 7px; height: 7px; border-radius: 50%; background: #FF9500; flex: none; }
+  .ph-banner .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ph-banner .c { color: rgba(60,60,67,.45); font-size: 16px; }
+  .ph-row { padding: 11px 16px; border-bottom: .5px solid rgba(60,60,67,.12); font-size: 14px; }
+  .ph-row i { display: block; font-style: normal; font-size: 12px; color: rgba(60,60,67,.6); }
+  .ph-pad { height: 40px; }
+  .lock { width: 340px; border-radius: 40px; padding: 70px 14px 40px; background: linear-gradient(160deg, #3b4a6b, #1e2436);
+          box-shadow: 0 18px 50px rgba(0,0,0,.16); font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans CJK SC", sans-serif; }
+  .lock-time { text-align: center; color: #fff; font-size: 58px; font-weight: 300; line-height: 1; margin-bottom: 28px; letter-spacing: -.02em; }
+  .push { border-radius: 18px; background: rgba(245,245,247,.95); padding: 11px 13px; margin-bottom: 8px; }
+  .push-h { display: flex; align-items: center; gap: 7px; font-size: 12px; color: rgba(60,60,67,.6); }
+  .push-h b { color: #000; font-weight: 600; letter-spacing: .02em; }
+  .push-h .ic { width: 18px; height: 18px; border-radius: 5px; background: #3370ff; }
+  .push-h .tm { margin-left: auto; }
+  .push-t { font-size: 14px; font-weight: 600; margin-top: 4px; color: #000; }
+  .push-m { font-size: 13.5px; line-height: 1.35; color: #000; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">1 · 项目列表页：标签写明「要你做什么」</h1>
+  <p class="m-sub zh">Web · /projects。界面文案按产品规范用英文；灰底框是说明。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">现在</span>只有 blocker 计数：看不出要做什么，协调会话停摆了也看不出来</div>
+    <div class="p-list">
+      <div class="p-sec-h"><h3>Needs attention</h3><span class="p-count">2</span><span class="p-note">Owner-only decisions, stale coordination, non-convergence, quiet work, or closure · reason/severity first, then oldest signal</span></div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">后台作业生命周期：从 engine 附属改为 runner 托管</span><span class="project-row-chip project-row-chip-warning">Needs you · Critical · 6d · 1 blocker</span><span class="a-tag blue">OPEN</span></div>
+          <div class="p-goal">Orbit 上 agent 用 Bash(run_in_background) 起的后台进程是 engine 进程的子进程，会随 engine 一起被杀。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:9%;background:var(--brand)"></i><i style="width:3%;background:var(--warning-solid)"></i><i style="width:8%;background:var(--text-4)"></i><i style="width:80%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>● <b>4</b></span><span>▲ <b>1</b></span><span>□ <b>2</b></span><span style="color:var(--success)">✓ <b>27</b></span></div></div>
+        <div class="p-when"><div>12m ago</div><div class="sm">34 tasks</div></div>
+      </div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">Orbit 原生 Watch：跨 Session / Task 持久监控</span><span class="project-row-chip project-row-chip-warning">Needs you · Critical · 1d · 3 blockers</span><span class="a-tag blue">OPEN</span></div>
+          <div class="p-goal">让 agent 能声明「某件事发生时叫醒我」，由服务端持久保存并投递。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:20%;background:var(--brand)"></i><i style="width:10%;background:var(--warning-solid)"></i><i style="width:25%;background:var(--text-4)"></i><i style="width:45%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>● <b>2</b></span><span>▲ <b>1</b></span><span>□ <b>3</b></span><span style="color:var(--success)">✓ <b>5</b></span></div></div>
+        <div class="p-when"><div>3h ago</div><div class="sm">11 tasks</div></div>
+      </div>
+      <div class="p-sec-h"><h3>Running</h3><span class="p-count">1</span><span class="p-note">Fresh work in flight · newest task activity first</span></div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">视图与实体的依赖关系：从隐含约定改成可强制的声明</span><span class="a-tag blue">OPEN</span></div>
+          <div class="p-goal">把「这个视图依赖哪些实体」从注释里的约定，变成服务端能校验的声明。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:30%;background:var(--brand)"></i><i style="width:20%;background:var(--text-4)"></i><i style="width:50%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>● <b>3</b></span><span>□ <b>2</b></span><span style="color:var(--success)">✓ <b>5</b></span></div></div>
+        <div class="p-when"><div>just now</div><div class="sm">10 tasks</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">改后</span>每个标签对应一件具体的事；协调会话自己在处理的，用蓝色标出，不算「Needs you」</div>
+    <div class="p-list">
+      <div class="p-sec-h"><h3>Needs attention</h3><span class="p-count">3</span><span class="p-note">Owner-only decisions, stale coordination, non-convergence, quiet work, or closure · reason/severity first, then oldest signal</span></div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">后台作业生命周期：从 engine 附属改为 runner 托管</span>
+            <span class="project-row-chip project-row-chip-warning m-mark"><span class="m-n">1</span>Needs you · Approve merge to main · 2h</span>
+            <span class="a-branch m-mark" style="margin-left:6px"><span class="m-n">4</span><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg>project/bg-jobs</span></div>
+          <div class="p-goal">Orbit 上 agent 用 Bash(run_in_background) 起的后台进程是 engine 进程的子进程，会随 engine 一起被杀。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:9%;background:var(--brand)"></i><i style="width:3%;background:var(--warning-solid)"></i><i style="width:8%;background:var(--text-4)"></i><i style="width:80%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>● <b>4</b></span><span>▲ <b>1</b></span><span>□ <b>2</b></span><span style="color:var(--success)">✓ <b>27</b></span></div></div>
+        <div class="p-when"><div>12m ago</div><div class="sm">34 tasks</div></div>
+      </div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">Orbit 原生 Watch：跨 Session / Task 持久监控</span>
+            <span class="project-row-chip project-row-chip-warning">Needs you · 1 question from coordinator · 35m</span>
+            <span class="a-branch" style="margin-left:6px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg>project/watch</span></div>
+          <div class="p-goal">让 agent 能声明「某件事发生时叫醒我」，由服务端持久保存并投递。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:20%;background:var(--brand)"></i><i style="width:10%;background:var(--warning-solid)"></i><i style="width:25%;background:var(--text-4)"></i><i style="width:45%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>● <b>2</b></span><span>▲ <b>1</b></span><span>□ <b>3</b></span><span style="color:var(--success)">✓ <b>5</b></span></div></div>
+        <div class="p-when"><div>3h ago</div><div class="sm">11 tasks</div></div>
+      </div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">Orbit：Codex 使用额度 Reset 能力</span>
+            <span class="project-row-chip project-row-chip-warning m-mark"><span class="m-n">3</span>Paused · coordinator stopped itself · 20m</span>
+            <span class="a-branch" style="margin-left:6px">main</span></div>
+          <div class="p-goal">额度用尽时支持一键重试，并在额度恢复后自动重试。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:10%;background:var(--warning-solid)"></i><i style="width:15%;background:var(--text-4)"></i><i style="width:75%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>▲ <b>1</b></span><span>□ <b>2</b></span><span style="color:var(--success)">✓ <b>9</b></span></div></div>
+        <div class="p-when"><div>20m ago</div><div class="sm">12 tasks</div></div>
+      </div>
+      <div class="p-sec-h"><h3>Running</h3><span class="p-count">1</span><span class="p-note">Fresh work in flight · newest task activity first</span></div>
+      <div class="p-row">
+        <div class="p-main">
+          <div class="p-head"><span class="p-title">视图与实体的依赖关系：从隐含约定改成可强制的声明</span>
+            <span class="project-row-chip project-row-chip-brand m-mark"><span class="m-n">2</span>Coordinator · resolving a merge conflict · 18m</span>
+            <span class="a-branch" style="margin-left:6px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg>project/view-deps</span></div>
+          <div class="p-goal">把「这个视图依赖哪些实体」从注释里的约定，变成服务端能校验的声明。</div>
+        </div>
+        <div class="p-meter"><div class="p-bar"><i style="width:30%;background:var(--brand)"></i><i style="width:20%;background:var(--text-4)"></i><i style="width:50%;background:var(--success-solid)"></i></div>
+          <div class="p-buckets"><span>● <b>3</b></span><span>□ <b>2</b></span><span style="color:var(--success)">✓ <b>5</b></span></div></div>
+        <div class="p-when"><div>just now</div><div class="sm">10 tasks</div></div>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>标签直接写要你做的事</b>：确认合入 main、回答协调会话的问题、恢复暂停的项目，后面跟「已经等你多久」。原来的「Critical · 6d · 1 blocker」只是计数，看不出要做什么。</span></li>
+      <li><span class="m-n">2</span><span><b>协调会话在处理的事单独用蓝色标签</b>，比如合并冲突、检查失败。看得出项目在动，但这类不算 Needs you，也不排进这一区，除非超时升级给你。</span></li>
+      <li><span class="m-n">3</span><span><b>保险丝暂停有专门的标签</b>。原来暂停时列表上什么都看不出来，点进项目就能看到恢复入口（见图 6）。</span></li>
+      <li><span class="m-n">4</span><span><b>每个项目标出集成线</b>：多任务、有依赖的项目合进项目分支（⎇ project/…），单任务和紧急修复直接进 main。</span></li>
+    </ul>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">改后 · iOS</span>原生端没有项目页，入口是顶部琥珀横幅和推送，点进去就是协调会话里的同一张卡</div>
+    <div class="phones">
+      <div class="ph">
+        <div class="ph-status"><span>9:41</span><span>▮▮▮ ▰</span></div>
+        <div class="ph-nav">Workspaces</div>
+        <div class="ph-banner m-mark" style="outline-offset:-3px"><span class="d"></span><span class="t">Approve merge to main · 后台作业生命周期</span><span class="c">›</span></div>
+        <div class="ph-row">wikova<i>3 running · 1 needs you</i></div>
+        <div class="ph-row">workstation<i>idle</i></div>
+        <div class="ph-row">longdeMac-mini<i>1 running</i></div>
+        <div class="ph-pad"></div>
+      </div>
+      <div class="lock">
+        <div class="lock-time">9:41</div>
+        <div class="push">
+          <div class="push-h"><span class="ic"></span><b>ORBIT</b><span class="tm">now</span></div>
+          <div class="push-t">Merge project/bg-jobs into main?</div>
+          <div class="push-m">4 tasks passed checks on the combined tree · 后台作业生命周期</div>
+        </div>
+        <div class="push">
+          <div class="push-h"><span class="ic"></span><b>ORBIT</b><span class="tm">35m ago</span></div>
+          <div class="push-t">The coordinator has a question</div>
+          <div class="push-m">Start t4 first, or run t4 and t7 together? · Orbit 原生 Watch</div>
+        </div>
+      </div>
+      <ul class="m-notes zh" style="flex:1;margin-top:0">
+        <li><span class="m-n">·</span><span><b>横幅沿用现有的 Needs-you 条</b>，只是多了几种原因：确认合入 main、协调会话提问、超时升级、项目暂停。</span></li>
+        <li><span class="m-n">·</span><span><b>只在需要你本人处理时推送</b>：合入确认、提问、升级、暂停。协调会话自己能处理的例外不推送。</span></li>
+        <li><span class="m-n">·</span><span>macOS 菜单栏的「2 need you」计数同样包含这几类。</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

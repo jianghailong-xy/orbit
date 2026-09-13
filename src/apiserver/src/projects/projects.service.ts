@@ -58,6 +58,7 @@ import {
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
+import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
   CRITERIA_WEAKENING_EFFECT_CLASS,
   type CriteriaWeakeningAction,
@@ -406,6 +407,11 @@ export interface CriteriaDecisionResult {
   /** The criteria in force at this moment, in `project_get`'s spelling. */
   acceptanceCriteriaItems: ReturnType<typeof acceptanceCriteriaItemsOf>;
   confirmation: StandardSetConfirmationStanding;
+  /**
+   * Where the answer was sent: to the session that proposed the change, to its task when that
+   * session had ended, or nowhere and why. Null when the owner filed the edit with no session.
+   */
+  reply: CriteriaDecisionReply | null;
 }
 
 type ProjectMutationPayload = Prisma.ProjectGetPayload<{
@@ -1641,7 +1647,11 @@ export class ProjectsService {
         });
       }
 
-      return { row, definitions: await ProjectsService.acceptanceDefinitions(tx, projectId) };
+      return {
+        row,
+        definitions: await ProjectsService.acceptanceDefinitions(tx, projectId),
+        proposer: { type: intent.principalType, id: intent.principalId },
+      };
     }, loggedRetry(this.logger, 'projects.decideCriteriaChange'));
 
     // The answered proposal leaves the owner's pending read on every client, not only the one that
@@ -1655,6 +1665,18 @@ export class ProjectsService {
     // that could not be recomputed must not undo a decision that was. Only for an APPROVE — a
     // REJECT moved no criterion, so there is nothing whose projection could have changed.
     if (decided.row.decision === 'APPROVE') await this.reprojectProjectStatus(ownerId, projectId);
+
+    // After the commit too: the session that asked for this change is waiting on the answer, and
+    // what to tell it is settled now (`criteria-decision-reply.ts`). A reply that could not be sent
+    // must not report a recorded decision as a failed one, so a fault is said on the reply instead.
+    const reply = await this.replyToCriteriaProposer(ownerId, projectId, intentId)
+      .catch((e: unknown): CriteriaDecisionReply | null => {
+        this.logger.error(`criteria decision ${intentId}: the reply to its proposer failed: ${
+          (e as { message?: string })?.message ?? String(e)}`);
+        return decided.proposer.type === 'AGENT'
+          ? { channel: 'NOT_SENT', sessionId: decided.proposer.id, reason: 'DELIVERY_FAILED' }
+          : null;
+      });
 
     return {
       intentId,
@@ -1670,7 +1692,25 @@ export class ProjectsService {
       // is STALE and the project has stopped projecting DONE. That is not an extra; it is the half
       // of this decision the caller did not ask for.
       confirmation: await this.acceptance.standardSetConfirmation(ownerId, projectId),
+      reply,
     };
+  }
+
+  /**
+   * Send the answer to one decided criteria proposal back to the session that filed it — once per
+   * proposal however many times it is processed (`criteria-decision-reply.ts` §2). The decision
+   * door calls it after its commit; calling it again reports the reply already sent.
+   *
+   * Null when nobody was waiting: the owner filed the edit, or the proposal is not decided. Also
+   * null from a service constructed by hand without a session service, which has no way to send.
+   */
+  async replyToCriteriaProposer(
+    ownerId: string,
+    projectId: string,
+    intentId: string,
+  ): Promise<CriteriaDecisionReply | null> {
+    if (!this.sessions) return null;
+    return sendCriteriaDecisionReply(this.prisma, this.sessions, ownerId, projectId, intentId);
   }
 
   /**

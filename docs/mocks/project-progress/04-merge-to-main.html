@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>04 merge to main</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  .approval-card { margin: 0; }
+  .approval-body.is-plan { padding: 10px 14px 6px; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--brand-border); border-top-color: var(--brand); border-radius: 50%; vertical-align: -2px; margin-right: 6px; }
+  .state-l { margin: 0 0 8px; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">4 · 合入 main 的确认卡（晋升）：唯一需要你点的合并</h1>
+  <p class="m-sub zh">出现在：项目页的 Open items（点「Review」展开）、项目协调会话的底部卡片区、iOS 横幅和推送。样式沿用现有的「FROM ORBIT」决定卡。</p>
+
+  <div class="m-grid2">
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k state">状态 A</span>可以合：检查已通过，等你确认</div>
+        <div class="approval-card criteria-decision m-mark"><span class="m-n">1</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">Merge project/bg-jobs into main?</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Branch</span><span class="v"><span class="a-mono">project/bg-jobs</span> · 7 commits ahead of main</span>
+              <span class="k">Tasks</span><span class="v">4 landed on the branch
+                <ul>
+                  <li>后台作业不再阻塞 merge/commit，merge/commit 前也不驱逐 engine</li>
+                  <li>runner 发版重启杀掉 runner 托管作业：有的记成 drain_cap</li>
+                  <li>runner 托管作业在 session 结束路径上被杀仍无终态事件</li>
+                  <li>warmEngineTTL 改回 4 小时</li>
+                </ul></span>
+              <span class="k">Checks</span><span class="v"><span class="ok">✓ Passed on the combined tree</span> · <span class="a-mono">cd src/runner-go &amp;&amp; go test -count=1 ./...</span> · 6m 12s</span>
+              <span class="k">main</span><span class="v">synced 12m ago · <span class="ok">no conflicts</span></span>
+              <span class="k">Criteria</span><span class="v">3 of 6 met on this branch — merging does not close the project</span>
+              <span class="k">Lands</span><span class="v">exactly the tested tree <span class="a-mono">58f3a47</span> · as a merge commit</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary">Merge to main</span><span class="a-btn">Not now</span><span class="a-btn link">View changes · 18 files</span><span class="grow"></span><span class="card-foot">asked 2h 10m ago</span></div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k state">状态 C</span>已合入：卡片变成回执</div>
+        <div class="approval-card evidence-decision-receipt" style="border:1px solid var(--success-border);background:var(--success-bg)">
+          <div class="approval-head head-flex" style="background:var(--success-bg);border-bottom-color:var(--success-border)"><span class="ok">✓ Merged into main</span><span class="criteria-provenance prov-neutral">FROM ORBIT</span></div>
+          <div class="approval-body is-plan" style="background:var(--bg-raised)">
+            <div class="kv">
+              <span class="k">Commit</span><span class="v"><span class="a-mono">324cf003</span> · merge of project/bg-jobs · by you · 2m ago</span>
+              <span class="k">Now on main</span><span class="v">4 tasks · criteria 2, 3, 4 show “on main”</span>
+              <span class="k">Next</span><span class="v">project/bg-jobs keeps going — 3 tasks still open</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k state">状态 B</span>你点了确认，但 main 在检查之后又动过</div>
+        <div class="approval-card criteria-decision m-mark"><span class="m-n">3</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">Merging project/bg-jobs into main…</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Status</span><span class="v"><span class="spin"></span>main moved 1 commit since the check — re-checking the combined tree (2m of ~6m)</span>
+              <span class="k">You</span><span class="v">nothing to do — it lands on its own if the re-check passes, and comes back here if it doesn’t</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary dis">Merging…</span><span class="a-btn">Cancel</span></div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l zh"><span class="m-k state">状态 D</span>暂时合不了：有冲突，协调会话在处理</div>
+        <div class="approval-card criteria-decision m-mark"><span class="m-n">4</span>
+          <div class="approval-head head-flex"><span class="criteria-decision-heading">project/bg-jobs can’t merge into main yet</span><span class="criteria-provenance">FROM ORBIT</span></div>
+          <div class="approval-body is-plan">
+            <div class="kv">
+              <span class="k">Why</span><span class="v"><span class="bad">2 files conflict</span> with main after syncing: <span class="a-mono">src/runner-go/session_pool.go</span>, <span class="a-mono">src/apiserver/prisma/schema.prisma</span></span>
+              <span class="k">Who</span><span class="v">The coordinator is resolving it on the project branch · 12m</span>
+              <span class="k">Then</span><span class="v">checks re-run and this card comes back as “Merge … into main?” · goes to you if untouched for 2h</span>
+            </div>
+          </div>
+          <div class="acts"><span class="a-btn primary dis">Merge to main</span><span class="a-btn">Open coordinator</span></div>
+        </div>
+      </div>
+      <ul class="m-notes zh" style="margin-top:0">
+        <li><span class="m-n">1</span><span><b>只有进 main 需要你点</b>，任务进项目分支都是平台自动完成。点之前，平台已经在合并后的树上跑完检查；最终落地的就是测过的那棵树，用普通合并提交。</span></li>
+        <li><span class="m-n">2</span><span><b>卡片写明本次合入的内容</b>：哪些任务、跑了什么检查、花了多久、和 main 有没有冲突、判据满足了几条。<b>合入 main 不等于项目完成</b>，项目完成仍按判据判断。</span></li>
+        <li><span class="m-n">3</span><span><b>检查之后 main 又动过时</b>，平台自动重新检查，通过就落地，不需要你再点一次。</span></li>
+        <li><span class="m-n">4</span><span><b>有冲突时按钮不可点</b>，卡片写明协调会话正在处理、多久后升级给你；解决后卡片自动回到状态 A。</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

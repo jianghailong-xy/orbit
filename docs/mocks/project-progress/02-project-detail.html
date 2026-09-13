@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>02 project detail</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="mock.css">
+<style>
+  .d-wrap { max-width: 1040px; }
+  .d-back { font-size: 13px; color: var(--text-2); margin-bottom: 6px; }
+  .d-title { font-size: 28px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 8px; line-height: 1.25; }
+  .d-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); flex-wrap: wrap; }
+  .d-meta .del { margin-left: auto; color: var(--error); }
+  .d-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); margin-top: 10px; padding: 7px 10px;
+            background: var(--bg-subtle); border: 1px solid var(--border-subtle); border-radius: 8px; }
+  .d-line b { color: var(--text-1); font-weight: 600; }
+  .cc { display: grid; grid-template-columns: minmax(0, 1fr) 352px; gap: 14px; margin-top: 16px; align-items: start; }
+  .wo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; background: var(--border-subtle); border-radius: 8px; overflow: hidden; }
+  .wo-cell { background: var(--bg-raised); padding: 10px 12px; position: relative; }
+  .wo-l { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .wo-n { font-size: 28px; font-weight: 650; line-height: 1.2; }
+  .wo-f { font-size: 11.5px; color: var(--text-4); }
+  .wo-bar { display: flex; gap: 2px; height: 9px; margin-top: 12px; }
+  .wo-bar i { display: block; height: 9px; }
+  .wo-bar i:first-child { border-radius: 5px 0 0 5px; } .wo-bar i:last-child { border-radius: 0 5px 5px 0; }
+  .banner { margin-top: 12px; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .banner.amber { background: var(--warning-bg); border: 1px solid var(--warning-border); }
+  .banner b { display: block; }
+  .co-h { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .co-t { font-size: 16px; font-weight: 600; }
+  .co-s { font-size: 13.5px; font-weight: 600; margin: 2px 0; }
+  .co-m { font-size: 12px; color: var(--text-3); }
+  .co-row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 6px 0; border-top: 1px solid var(--border-subtle); margin-top: 8px; }
+  .co-row span:first-child { color: var(--text-3); }
+  .co-inset { background: var(--fill-inset); border-radius: 8px; padding: 8px 10px; margin-top: 8px; font-size: 12.5px; }
+  .co-inset b { display: block; font-size: 12.5px; }
+  .co-foot { border-top: 1px solid var(--border-subtle); margin-top: 12px; padding-top: 10px; font-size: 12.5px; color: var(--text-2); }
+  .co-foot .sw { display: inline-block; width: 28px; height: 16px; border-radius: 999px; background: var(--brand); vertical-align: middle; margin-left: 6px; position: relative; }
+  .co-foot .sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+  .meter { height: 6px; border-radius: 4px; background: var(--fill-muted); overflow: hidden; margin-top: 4px; }
+  .meter i { display: block; height: 6px; background: var(--brand); border-radius: 4px; }
+  .oi-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) 210px 132px; gap: 12px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--border-subtle); }
+  .oi-row:first-of-type { border-top: 0; }
+  .oi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning-solid); }
+  .oi-row.co .oi-dot { background: var(--brand); }
+  .oi-t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oi-d { font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oi-who { font-size: 12.5px; line-height: 1.4; }
+  .oi-age { font-size: 11.5px; color: var(--text-3); }
+  .oi-act { text-align: right; }
+  .oi-sub { font-size: 11.5px; font-weight: 650; letter-spacing: .3px; color: var(--text-3); margin: 10px 4px 0; text-transform: uppercase; }
+</style>
+<script>addEventListener('load',()=>{const s=document.querySelector('.m-sheet');document.body.setAttribute('data-h',String(Math.ceil(s.getBoundingClientRect().height)))})</script>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1 zh">2 · 项目详情页顶部：一眼看出「在等谁、等什么」</h1>
+  <p class="m-sub zh">Web · /projects/:id。上面是现在，下面是改后（中间的目标、任务图、判据等区块不变，这里省略）。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">现在</span>DONE 就算完成；合没合、谁该动、协调会话是不是停了，页面上都看不出来</div>
+    <div class="d-wrap">
+      <div class="d-back">← Projects</div>
+      <h2 class="d-title">后台作业生命周期：从 engine 附属改为 runner 托管</h2>
+      <div class="d-meta"><span class="a-tag blue">Open</span><span>34 tasks</span><span class="a-btn link sm">Record as done</span><span class="a-btn link sm">Record as cancelled</span><span class="del">🗑 Delete project</span></div>
+      <div class="cc">
+        <div class="a-card">
+          <div class="a-card-h"><span class="a-card-t">Work overview</span><span class="a-hint">34 tasks · 18 dependencies</span></div>
+          <div class="wo-grid">
+            <div class="wo-cell"><div class="wo-l">● Running</div><div class="wo-n">4</div><div class="wo-f">active sessions</div></div>
+            <div class="wo-cell"><div class="wo-l">▲ Ready</div><div class="wo-n">1</div><div class="wo-f">can start now</div></div>
+            <div class="wo-cell"><div class="wo-l">□ Waiting</div><div class="wo-n">2</div><div class="wo-f">waiting on dependencies</div></div>
+            <div class="wo-cell"><div class="wo-l" style="color:var(--success)">✓ Done</div><div class="wo-n">27</div><div class="wo-f">79% complete</div></div>
+            <div class="wo-cell"><div class="wo-l" style="color:var(--error)">✕ Failed</div><div class="wo-n">0</div><div class="wo-f">coordinated continuation</div></div>
+            <div class="wo-cell"><div class="wo-l" style="color:var(--text-4)">⁄ Cancelled</div><div class="wo-n">0</div><div class="wo-f">closed without completion</div></div>
+          </div>
+          <div class="wo-bar"><i style="width:12%;background:var(--brand)"></i><i style="width:3%;background:var(--warning-solid)"></i><i style="width:6%;background:var(--text-4)"></i><i style="width:79%;background:var(--success-solid)"></i></div>
+        </div>
+        <div class="a-card">
+          <div class="co-h"><span class="co-t">Coordinator</span><span class="a-pill neutral"><span class="a-dot"></span>Idle</span></div>
+          <div class="co-s">后台作业生命周期：从 engine 附属改为 runner 托管</div>
+          <div class="co-m">last active 12m ago · 2nd coordinator of this project</div>
+          <div class="co-row"><span>Workspace</span><span>wikova</span></div>
+          <div class="co-inset"><b>Manual dispatch</b>7 open tasks are coordinated from this conversation.</div>
+          <div style="margin-top:10px"><span class="a-btn primary">Reply to coordinator ▾</span></div>
+          <div class="co-foot">Automatic <span class="sw"></span><div style="margin-top:4px">Starts ready tasks on its own, and opens a judgment session when a criterion needs a decision.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">改后</span>新增集成线一行和「Open items」卡；Work overview 和协调会话卡各加几项</div>
+    <div class="d-wrap">
+      <div class="d-back">← Projects</div>
+      <h2 class="d-title">后台作业生命周期：从 engine 附属改为 runner 托管</h2>
+      <div class="d-meta"><span class="a-tag blue">Open</span><span>34 tasks</span><span class="a-btn link sm">Record as done</span><span class="a-btn link sm">Record as cancelled</span><span class="del">🗑 Delete project</span></div>
+      <div class="d-line m-mark"><span class="m-n">1</span>
+        <span class="a-branch"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="3.5" r="1.6"/><circle cx="4" cy="12.5" r="1.6"/><circle cx="12" cy="5.5" r="1.6"/><path d="M4 5.1v5.8M12 7.1c0 3-3 3.2-6.4 4.6"/></svg>project/bg-jobs</span>
+        <span><b>7</b> commits ahead of main</span><span class="a-sep">·</span>
+        <span>synced with main 12m ago</span><span class="a-sep">·</span>
+        <span><b>Integrating</b> 1 · <b>Queued</b> 1</span><span class="a-sep">·</span>
+        <span>Merge check <span class="ok">✓ passing</span> on the branch tip</span>
+        <span class="a-btn link sm" style="margin-left:auto">Integration settings</span>
+      </div>
+
+      <div class="a-card m-mark" style="margin-top:18px"><span class="m-n">2</span>
+        <div class="a-card-h"><span class="a-card-t">Open items</span><span class="a-hint">3 need you · 2 with the coordinator · oldest first</span></div>
+        <div class="oi-sub">Needs you</div>
+        <div class="oi-row"><span class="oi-dot"></span>
+          <div><div class="oi-t">Approve merge to main</div><div class="oi-d">project/bg-jobs → main · 4 tasks · 7 commits · checks passed on the combined tree</div></div>
+          <div class="oi-who">You<div class="oi-age">waiting 2h 10m</div></div>
+          <div class="oi-act"><span class="a-btn primary sm">Review</span></div></div>
+        <div class="oi-row"><span class="oi-dot"></span>
+          <div><div class="oi-t">Coordinator asks: start t4 first, or run t4 and t7 together?</div><div class="oi-d">Blocks 2 tasks · both change src/runner-go/session_pool.go</div></div>
+          <div class="oi-who">You<div class="oi-age">waiting 35m</div></div>
+          <div class="oi-act"><span class="a-btn primary sm">Answer</span></div></div>
+        <div class="oi-row"><span class="oi-dot"></span>
+          <div><div class="oi-t">Escalated: 有存活 Monitor 的 warm engine 不回收（带硬上限） failed twice</div><div class="oi-d">The coordinator did not act for 2h · acceptance exited 1 · retry chain 2 of 3</div></div>
+          <div class="oi-who">You<div class="oi-age">escalated 6m ago</div></div>
+          <div class="oi-act"><span class="a-btn sm">Open</span></div></div>
+        <div class="oi-sub">With the coordinator</div>
+        <div class="oi-row co"><span class="oi-dot"></span>
+          <div><div class="oi-t">Merge conflict: runner 托管作业支持「事件发生时叫醒会话」</div><div class="oi-d">3 files conflict with project/bg-jobs · nothing landed</div></div>
+          <div class="oi-who">Coordinator<div class="oi-age">18m · goes to you in 1h 42m</div></div>
+          <div class="oi-act"><span class="a-btn sm">Open coordinator</span></div></div>
+        <div class="oi-row co"><span class="oi-dot"></span>
+          <div><div class="oi-t">Checks failed on the combined tree: 核实 ScheduleWakeup 是否随 warm 回收丢失</div><div class="oi-d">go test exited 1 after 5m 40s · TestScheduleWakeupSurvivesWarmEviction</div></div>
+          <div class="oi-who">Coordinator<div class="oi-age">5m · goes to you in 1h 55m</div></div>
+          <div class="oi-act"><span class="a-btn sm">View log</span></div></div>
+      </div>
+
+      <div class="cc">
+        <div class="a-card">
+          <div class="a-card-h"><span class="a-card-t">Work overview</span><span class="a-hint">34 tasks · 18 dependencies</span></div>
+          <div class="wo-grid">
+            <div class="wo-cell"><div class="wo-l">● Running</div><div class="wo-n">4</div><div class="wo-f">active sessions</div></div>
+            <div class="wo-cell"><div class="wo-l">▲ Ready</div><div class="wo-n">0</div><div class="wo-f">can start now</div></div>
+            <div class="wo-cell"><div class="wo-l">□ Waiting</div><div class="wo-n">2</div><div class="wo-f">for a prerequisite to land</div></div>
+            <div class="wo-cell m-mark" style="outline-offset:-3px"><span class="m-n" style="top:4px;right:6px">4</span><div class="wo-l" style="color:var(--brand)">⟳ Integrating</div><div class="wo-n">1</div><div class="wo-f">checks running on the combined tree</div></div>
+            <div class="wo-cell m-mark" style="outline-offset:-3px"><div class="wo-l" style="color:var(--success)">⎇ On project branch</div><div class="wo-n">4</div><div class="wo-f">not on main yet</div></div>
+            <div class="wo-cell m-mark" style="outline-offset:-3px"><div class="wo-l" style="color:var(--success)">✓ On main</div><div class="wo-n">23</div><div class="wo-f">landed on main</div></div>
+          </div>
+          <div class="wo-bar"><i style="width:12%;background:var(--brand)"></i><i style="width:6%;background:var(--text-4)"></i><i style="width:3%;background:#7aa7ff"></i><i style="width:12%;background:#8fd19e"></i><i style="width:67%;background:var(--success-solid)"></i></div>
+        </div>
+        <div class="a-card m-mark"><span class="m-n">3</span>
+          <div class="co-h"><span class="co-t">Coordinator</span><span class="a-pill brand"><span class="a-dot"></span>Working</span></div>
+          <div class="co-s">后台作业生命周期：从 engine 附属改为 runner 托管</div>
+          <div class="co-m">last active 1m ago · 2nd coordinator of this project</div>
+          <div class="co-row"><span>Workspace</span><span>wikova</span></div>
+          <div class="co-row"><span>Wake-ups</span><span><span class="ok">delivered</span> · last 4m ago</span></div>
+          <div class="co-row" style="display:block"><div style="display:flex;justify-content:space-between"><span style="color:var(--text-3)">Self-started today</span><span>6 of 30</span></div><div class="meter"><i style="width:20%"></i></div></div>
+          <div style="margin-top:10px"><span class="a-btn primary">Reply to coordinator ▾</span></div>
+          <div class="co-foot">Automatic <span class="sw"></span><div style="margin-top:4px">Tasks land on <b>project/bg-jobs</b> by themselves and start once their prerequisites land. Merging into main always asks you.</div></div>
+        </div>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>集成线一行</b>：合进哪条分支、领先 main 几个提交、上次同步 main 的时间、正在集成和排队的任务数、合并检查当前是否通过（具体命令在设置里，见图 6）。</span></li>
+      <li><span class="m-n">2</span><span><b>新增「Open items」</b>，列出所有未处理的事，分两组：等你的（琥珀色）和协调会话在处理的（蓝色）。每条写明负责人、等了多久、多久后升级给你。「为什么没推进」看这里就知道，不用再去问协调会话。</span></li>
+      <li><span class="m-n">3</span><span><b>协调会话卡新增两行</b>：唤醒是否送达；今天它自己发起的轮次，即保险丝的用量，如「6 of 30」。「Automatic」下面的说明也改成新规则：任务自动落地，合入 main 一律问你。</span></li>
+      <li><span class="m-n">4</span><span><b>「Done」拆成三格</b>：Integrating（平台正在集成）、On project branch（已落地但还没进 main）、On main。「Waiting」写明在等前置落地。</span></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
