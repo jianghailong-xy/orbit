@@ -4062,7 +4062,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   // Attach images to a live/resumable session (scoped to its id) or while composing a new
   // one (uploaded unscoped, then scoped to the session the send creates). Either way the
-  // runner must be online to fetch the bytes; otherwise the picker is disabled.
+  // runner must be online to fetch the bytes — the `+` menu still offers both items, and
+  // picking into a state where this is false reports why instead of dropping the file.
   const canAttach =
     runner.online &&
     !selectedTrashed &&
@@ -4076,7 +4077,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // is a generic file (no preview, 25MB cap) that the runner drops into the worktree.
   const addImage = useCallback(
     async (file: File): Promise<void> => {
-      if (!canAttach) return;
+      if (!canAttach) {
+        message.error('Attachments need a live session and an online runner');
+        return;
+      }
       const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
       const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
       if (file.size <= 0) {
@@ -6051,7 +6055,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ))}
             </div>
           )}
-          {/* Hidden picker the `添加图片` menu item triggers; we upload via addImage
+          {/* Hidden picker the `Image` menu item triggers; we upload via addImage
               ourselves and reset value so re-picking the same file fires onChange again. */}
           <input
             ref={imageInputRef}
@@ -6064,7 +6068,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               e.target.value = '';
             }}
           />
-          {/* Hidden picker for the `Upload file` menu item — any type (the runner routes by
+          {/* Hidden picker for the `File` menu item — any type (the runner routes by
               MIME: images/PDFs inline, everything else into the worktree). Same upload path. */}
           <input
             ref={fileInputRef}
@@ -6118,15 +6122,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 {
                   key: 'image',
                   icon: <PictureOutlined />,
-                  label: canAttach ? 'Attach image' : 'Attach image (needs a started session)',
-                  disabled: !canAttach,
+                  // One word per action, the way the native composer's `+` menu writes them
+                  // (ComposerView.swift `addMenu`). Offered unconditionally too: a state the
+                  // upload can't work in says so on pick, rather than greying the item out.
+                  label: 'Image',
                   onClick: () => imageInputRef.current?.click(),
                 },
                 {
                   key: 'file',
                   icon: <PaperClipOutlined />,
-                  label: canAttach ? 'Upload file' : 'Upload file (needs a started session)',
-                  disabled: !canAttach,
+                  label: 'File',
                   onClick: () => fileInputRef.current?.click(),
                 },
               ],
@@ -6159,7 +6164,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             style={composerHeight == null ? undefined : { height: composerHeight }}
             // Hard-cap input length: an oversized prompt freezes the composer (autoSize
             // remeasures the whole value on every keystroke) and the transcript. Pasting past
-            // the cap truncates; very large content should go through Upload file instead.
+            // the cap truncates; very large content should go through File instead.
             maxLength={MAX_PROMPT_CHARS}
             placeholder={composerPlaceholder}
             value={text}

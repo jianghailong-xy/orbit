@@ -1605,7 +1605,7 @@ final class ConsoleModel {
         composerText = restored
     }
 
-    /// `+` menu → Attach image / Upload file: read a picked file, enforce the size cap (web
+    /// `+` menu → Image / File: read a picked file, enforce the size cap (web
     /// parity), and upload it via the existing attachment path.
     func attachFile(url: URL) async {
         guard let data = try? Data(contentsOf: url) else {
