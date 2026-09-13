@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,25 +15,26 @@ import (
 	"time"
 )
 
-// C2's MCP gap. The worktree fence counts a parked engine as a holder only while a turn
-// runs or one of its shells is alive, because the engine and Orbit's own MCP server write
-// nothing between turns. An MCP server the agent configured itself is a process of that
-// same parked engine, standing in the same checkout, and nothing constrains what it
-// writes. Merge and commit therefore evict such an engine — servers and all — before they
-// touch the checkout, and say so in their receipt.
+// Merge and commit run beside whatever else is running in the session's checkout, and stop none
+// of it (owner, 2026-09-12). What the two operations touch is why that is safe: a merge replays
+// the branch's commits in a scratch worktree of its own (rebaseFastForward) and never touches the
+// checkout, and a commit writes only the index and refs. So a live background job does not hold
+// either of them up, and a parked engine — MCP servers the agent configured itself and all — is
+// not evicted for them.
 //
-// The assertions that carry this are about real processes (signal 0), taken at the one
-// moment the change is about: when the operation itself begins. A test that read only
-// the pool's bookkeeping could not tell an engine that was reaped from one that was
-// merely asked to go.
+// The assertions that carry this are about real processes (signal 0), read as the operation
+// itself begins and again once it is over, and each is paired with the same probe seeing the
+// process go when it really does. A test that read only the pool's bookkeeping could not tell a
+// process that is still running from one the pool merely still counts.
 
-// agentMcpEngine is one parked session whose engine is a real process tree standing in
-// its checkout: the engine and, as its children, one stand-in for each MCP server it was
-// spawned with — Orbit's own, which every engine gets, and each of the agent's.
+// agentMcpEngine is one parked session whose engine is a real process tree standing in its
+// checkout: the engine and, as its children, one stand-in for each MCP server it was spawned
+// with — Orbit's own, which every engine gets, and each of the agent's.
 type agentMcpEngine struct {
 	pool     *sessionPool
 	live     *liveSession
 	bg       *bgTailer
+	events   *bgJobEvents
 	id       string
 	branch   string
 	repo     string         // the repository root, on main
@@ -110,7 +110,7 @@ func newAgentMcpEngine(t *testing.T, id string, mcpConfig map[string]interface{}
 		close(stopped)
 	}()
 	f := &agentMcpEngine{
-		pool: pool, live: live, bg: bg, id: id, branch: branch, repo: repo,
+		pool: pool, live: live, bg: bg, events: events, id: id, branch: branch, repo: repo,
 		checkout: checkout, scratch: scratch, pid: cmd.Process.Pid,
 		servers: map[string]int{}, stopped: stopped,
 	}
@@ -191,25 +191,7 @@ type atOperation struct {
 	liveServers []string
 }
 
-// sightEvicted looks as an evicted engine should look. The engine is this test's own
-// child, reaped by its supervisor before the residency was handed back, so signal 0 has
-// to fail at once. Its servers were the engine's children, which leaves reaping them to
-// init: each gets a bounded moment to go before it is counted alive.
-func (f *agentMcpEngine) sightEvicted() atOperation {
-	at := atOperation{ran: true, engineAlive: processAlive(f.pid), resident: f.pool.engineResident(f.live)}
-	for _, name := range f.serverNames() {
-		gone := !processAlive(f.servers[name])
-		if !gone && !at.engineAlive {
-			gone = processGoneWithin(f.servers[name], 2*time.Second)
-		}
-		if !gone {
-			at.liveServers = append(at.liveServers, name)
-		}
-	}
-	return at
-}
-
-// sightWarm looks as a kept engine should look: every process still there, right now.
+// sightWarm reads the engine and its servers as they are right now.
 func (f *agentMcpEngine) sightWarm() atOperation {
 	at := atOperation{ran: true, engineAlive: processAlive(f.pid), resident: f.pool.engineResident(f.live)}
 	for _, name := range f.serverNames() {
@@ -220,36 +202,25 @@ func (f *agentMcpEngine) sightWarm() atOperation {
 	return at
 }
 
-func (f *agentMcpEngine) assertEvictedBefore(t *testing.T, operation string, at atOperation) {
-	t.Helper()
-	if !at.ran {
-		t.Fatalf("the %s never ran", operation)
-	}
-	if at.engineAlive {
-		t.Fatalf("the %s ran while the engine (pid %d) was still alive", operation, f.pid)
-	}
-	if at.resident {
-		t.Fatalf("the %s ran while the pool still counted the engine resident", operation)
-	}
-	if len(at.liveServers) != 0 {
-		t.Fatalf("the %s ran beside live MCP server processes %v", operation, at.liveServers)
-	}
-}
-
+// assertStillWarm: the engine and every server it runs were alive, and the engine resident, as
+// the operation ran — and all of them still are now that it is over.
 func (f *agentMcpEngine) assertStillWarm(t *testing.T, operation string, at atOperation) {
 	t.Helper()
 	if !at.ran {
 		t.Fatalf("the %s never ran", operation)
 	}
 	if !at.engineAlive || !at.resident {
-		t.Fatalf("the %s ran without the engine, which runs only Orbit's MCP server (alive=%v resident=%v)",
-			operation, at.engineAlive, at.resident)
+		t.Fatalf("the %s ran without the engine (pid %d alive=%v resident=%v)",
+			operation, f.pid, at.engineAlive, at.resident)
 	}
 	if len(at.liveServers) != len(f.servers) {
 		t.Fatalf("MCP servers alive as the %s ran = %v, want all of %v", operation, at.liveServers, f.serverNames())
 	}
 	if !processAlive(f.pid) || !f.pool.engineResident(f.live) {
-		t.Fatalf("the engine did not outlast the %s", operation)
+		t.Fatalf("the engine (pid %d) did not outlast the %s", f.pid, operation)
+	}
+	if now := f.sightWarm(); len(now.liveServers) != len(f.servers) {
+		t.Fatalf("MCP servers alive after the %s = %v, want all of %v", operation, now.liveServers, f.serverNames())
 	}
 	select {
 	case <-f.stopped:
@@ -261,14 +232,98 @@ func (f *agentMcpEngine) assertStillWarm(t *testing.T, operation string, at atOp
 	}
 }
 
-// assertEvictionReceipt: what was done to the session, and the servers that were why.
-func assertEvictionReceipt(t *testing.T, operation, message string, servers ...string) {
+// assertRecyclingStopsIt is the paired positive of assertStillWarm. Recycled the way the warm
+// TTL recycles it, the same engine and servers read as gone once the supervisor has reaped them,
+// so a probe that answered "alive" for a zombie or a stale pid fails here instead of passing there.
+func (f *agentMcpEngine) assertRecyclingStopsIt(t *testing.T) {
 	t.Helper()
-	for _, want := range append([]string{"evicted", "MCP"}, servers...) {
-		if !strings.Contains(message, want) {
-			t.Fatalf("the %s's receipt does not say the engine was evicted for the agent's MCP servers %v"+
-				" (missing %q): %q", operation, servers, want, message)
+	f.pool.mu.Lock()
+	cancel := f.pool.requestEvictLocked(f.live)
+	f.pool.mu.Unlock()
+	if cancel == nil {
+		t.Fatal("the pool declined to recycle the parked engine")
+	}
+	cancel()
+	select {
+	case <-f.stopped:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the recycled engine's supervisor never handed the residency back")
+	}
+	// The engine is this test's own child, reaped before the residency was handed back.
+	if processAlive(f.pid) || f.pool.engineResident(f.live) {
+		t.Fatalf("the recycled engine (pid %d) still reads as running", f.pid)
+	}
+	// Its servers were the engine's children, which leaves reaping them to init.
+	for _, name := range f.serverNames() {
+		if !processGoneWithin(f.servers[name], 5*time.Second) {
+			t.Fatalf("the %s MCP server (pid %d) still reads as running after its engine was recycled",
+				name, f.servers[name])
 		}
+	}
+}
+
+// startLiveJob starts a runner-hosted job in the checkout the way bg_run does, and checks that it
+// is what an operation is meant to run beside: a real process, holding the checkout.
+func (f *agentMcpEngine) startLiveJob(t *testing.T) bgJobStatus {
+	t.Helper()
+	job, err := f.bg.startJob(bgJobSpec{
+		Command: "sleep 120", Kind: bgKindJob, Dir: f.checkout, ScratchDir: f.scratch, Description: "the agent's build",
+	})
+	if err != nil {
+		t.Fatalf("starting the runner-hosted job failed: %v", err)
+	}
+	if !processAlive(job.PID) {
+		t.Fatalf("the job %s reported pid %d, which is not running", job.JobID, job.PID)
+	}
+	// A job that held nothing would have nothing to hold an operation up with, and this would not
+	// exercise running beside a writer at all.
+	if !holdersInclude(f.pool.worktreeHolders(f.id), worktreeHeldByBackgroundJob, job.JobID) {
+		t.Fatalf("the live job %s does not hold the checkout: %v", job.JobID, f.pool.worktreeHolders(f.id))
+	}
+	return job
+}
+
+// jobRunning: the process is there (signal 0), and the runner still has the job running.
+func (f *agentMcpEngine) jobRunning(job bgJobStatus) bool {
+	if !processAlive(job.PID) {
+		return false
+	}
+	for _, listed := range f.bg.listJobs(false) {
+		if listed.JobID == job.JobID {
+			return listed.Status == bgStatusRunning
+		}
+	}
+	return false
+}
+
+// assertJobOutlived: the job was running as the operation ran, and is still running — as a
+// process, to the runner, with no terminal report, still holding the checkout — now that it is
+// over. Then the paired positive: killed for real, the same probe reads it as gone. The terminal
+// report comes after the runner's own Wait has reaped the process, so signal 0 cannot be answered
+// by a zombie.
+func (f *agentMcpEngine) assertJobOutlived(t *testing.T, operation string, job bgJobStatus, runningAsItRan bool) {
+	t.Helper()
+	if !runningAsItRan {
+		t.Fatalf("the job %s was not running as the %s ran: nothing here ran beside a live job", job.JobID, operation)
+	}
+	if !f.jobRunning(job) {
+		t.Fatalf("the runner-hosted job %s (pid %d) did not outlast the %s", job.JobID, job.PID, operation)
+	}
+	if terminal := f.events.terminalsFor(job.JobID); len(terminal) != 0 {
+		t.Fatalf("the job %s was reported ended across the %s: %v", job.JobID, operation, terminal)
+	}
+	if !holdersInclude(f.pool.worktreeHolders(f.id), worktreeHeldByBackgroundJob, job.JobID) {
+		t.Fatalf("the job %s stopped holding the checkout across the %s: %v", job.JobID, operation,
+			f.pool.worktreeHolders(f.id))
+	}
+
+	if _, err := f.bg.killJob(job.JobID, bgKillTeardownGrace); err != nil {
+		t.Fatalf("killing the job failed: %v", err)
+	}
+	f.events.awaitTerminal(t, job.JobID, 30*time.Second)
+	if processAlive(job.PID) || f.jobRunning(job) {
+		t.Fatalf("the killed job %s (pid %d) still reads as running, so the readings above prove nothing",
+			job.JobID, job.PID)
 	}
 }
 
@@ -286,11 +341,65 @@ func (f *agentMcpEngine) withUncommittedWork(t *testing.T) string {
 	return mustGit(t, f.checkout, "rev-parse", "HEAD")
 }
 
-// Criteria 1 and 3. A parked-warm engine running MCP servers the agent configured itself
-// is gone — process tree and all, reaped — before the merge or commit touches the
-// checkout. The operation then completes as it always did, and its receipt says why the
-// engine went.
-func TestMergeEvictsParkedEngineWithAgentMcpServers(t *testing.T) {
+// A merge takes only what the branch has committed, replayed in a scratch worktree, so a
+// runner-hosted job still running in the checkout neither holds it up nor is stopped for it. The
+// merge lands on the target, the job is still running once it is over, and the receipt names the
+// job it ran beside.
+func TestMergeProceedsBesideLiveBackgroundJob(t *testing.T) {
+	f := newAgentMcpEngine(t, "jobmerge", nil)
+	job := f.startLiveJob(t)
+	runningAsItRan := false
+	res := heartbeatMerge(f.pool, MergeCommand{SessionID: f.id, WorkDir: f.repo, Branch: f.branch}, f.advertised(),
+		func(req MergeCommand) mergeOutcome {
+			runningAsItRan = f.jobRunning(job)
+			return mergeToMain(req)
+		})
+	if res.Status != "merged" {
+		t.Fatalf("merge = %q (%s), want merged beside the live job %s", res.Status, res.Message, job.JobID)
+	}
+	if subjects := mustGit(t, f.repo, "log", "--format=%s", "main"); !strings.Contains(subjects, "session work") {
+		t.Fatalf("main does not carry the session's commit after a merge that reported merged:\n%s", subjects)
+	}
+	if _, err := git(f.repo, "cat-file", "-e", "main:work.txt"); err != nil {
+		t.Fatalf("main does not carry the session's work after a merge that reported merged: %v", err)
+	}
+	if !strings.Contains(res.Message, job.JobID) {
+		t.Fatalf("the merge's receipt does not name the job %s it ran beside: %q", job.JobID, res.Message)
+	}
+	f.assertJobOutlived(t, "merge", job, runningAsItRan)
+}
+
+// The same for a commit, which writes only the index and refs: the branch advances with the
+// checkout's work, the job is still running, and the receipt names it.
+func TestCommitProceedsBesideLiveBackgroundJob(t *testing.T) {
+	f := newAgentMcpEngine(t, "jobcommit", nil)
+	before := f.withUncommittedWork(t)
+	job := f.startLiveJob(t)
+	runningAsItRan := false
+	res := heartbeatCommit(f.pool, CommitCommand{SessionID: f.id, Branch: f.branch}, f.advertised(),
+		func(req CommitCommand) commitOutcome {
+			runningAsItRan = f.jobRunning(job)
+			return commitWorktree(req)
+		})
+	if res.Status != "committed" {
+		t.Fatalf("commit = %q (%s), want committed beside the live job %s", res.Status, res.Message, job.JobID)
+	}
+	if after := mustGit(t, f.repo, "rev-parse", "refs/heads/"+f.branch); after == before {
+		t.Fatal("the branch did not advance after a commit that reported committed")
+	}
+	if _, err := git(f.repo, "cat-file", "-e", "refs/heads/"+f.branch+":more.txt"); err != nil {
+		t.Fatalf("the branch does not carry the checkout's work after a commit that reported committed: %v", err)
+	}
+	if !strings.Contains(res.Message, job.JobID) {
+		t.Fatalf("the commit's receipt does not name the job %s it ran beside: %q", job.JobID, res.Message)
+	}
+	f.assertJobOutlived(t, "commit", job, runningAsItRan)
+}
+
+// A parked engine running MCP servers the agent configured itself is not stopped for a merge or a
+// commit either. The engine and every server are alive, and the engine resident, as the operation
+// runs and after it — the zero-startup continuation survives the operation.
+func TestMergeDoesNotEvictEngineWithAgentMcpServers(t *testing.T) {
 	agentServers := func() map[string]interface{} {
 		return map[string]interface{}{
 			"agent-fs":      map[string]interface{}{"command": "agent-fs-mcp", "args": []interface{}{"--root", "."}},
@@ -303,17 +412,20 @@ func TestMergeEvictsParkedEngineWithAgentMcpServers(t *testing.T) {
 		var at atOperation
 		res := heartbeatMerge(f.pool, MergeCommand{SessionID: f.id, WorkDir: f.repo, Branch: f.branch}, f.advertised(),
 			func(req MergeCommand) mergeOutcome {
-				at = f.sightEvicted()
+				at = f.sightWarm()
 				return mergeToMain(req)
 			})
-		f.assertEvictedBefore(t, "merge", at)
+		f.assertStillWarm(t, "merge", at)
 		if res.Status != "merged" {
 			t.Fatalf("merge = %q (%s), want merged", res.Status, res.Message)
 		}
 		if _, err := git(f.repo, "cat-file", "-e", "main:work.txt"); err != nil {
 			t.Fatalf("main does not carry the session's work after a merge that reported merged: %v", err)
 		}
-		assertEvictionReceipt(t, "merge", res.Message, "agent-browser", "agent-fs")
+		if res.Message != "" {
+			t.Fatalf("a merge with no background job beside it carries a receipt note: %q", res.Message)
+		}
+		f.assertRecyclingStopsIt(t)
 	})
 
 	t.Run("commit", func(t *testing.T) {
@@ -322,449 +434,19 @@ func TestMergeEvictsParkedEngineWithAgentMcpServers(t *testing.T) {
 		var at atOperation
 		res := heartbeatCommit(f.pool, CommitCommand{SessionID: f.id, Branch: f.branch}, f.advertised(),
 			func(req CommitCommand) commitOutcome {
-				at = f.sightEvicted()
-				return commitWorktree(req)
-			})
-		f.assertEvictedBefore(t, "commit", at)
-		if res.Status != "committed" {
-			t.Fatalf("commit = %q (%s), want committed", res.Status, res.Message)
-		}
-		if after := mustGit(t, f.checkout, "rev-parse", "HEAD"); after == before {
-			t.Fatal("the branch did not advance after a commit that reported committed")
-		}
-		assertEvictionReceipt(t, "commit", res.Message, "agent-browser", "agent-fs")
-	})
-}
-
-// Criterion 2, the paired positive that keeps criterion 1 from being "evict everything".
-// An engine whose only MCP server is Orbit's own writes nothing between turns, so the
-// merge or commit runs with it still warm and the zero-startup continuation survives.
-func TestMergeKeepsWarmEngineWithOnlyOrbitMcp(t *testing.T) {
-	onlyOrbit := func() map[string]interface{} {
-		// Orbit's name in the agent's own configuration is exactly what every spawn
-		// overwrites with the built-in server, so this engine runs nothing of the agent's.
-		return map[string]interface{}{
-			"orbit": map[string]interface{}{"command": "orbit", "args": []interface{}{"mcp"}},
-		}
-	}
-
-	t.Run("merge", func(t *testing.T) {
-		f := newAgentMcpEngine(t, "orbitmerge", onlyOrbit())
-		var at atOperation
-		res := heartbeatMerge(f.pool, MergeCommand{SessionID: f.id, WorkDir: f.repo, Branch: f.branch}, f.advertised(),
-			func(req MergeCommand) mergeOutcome {
-				at = f.sightWarm()
-				return mergeToMain(req)
-			})
-		if res.Status != "merged" {
-			t.Fatalf("merge = %q (%s), want merged", res.Status, res.Message)
-		}
-		if res.Message != "" {
-			t.Fatalf("a merge that evicted nothing carries a receipt note: %q", res.Message)
-		}
-		f.assertStillWarm(t, "merge", at)
-	})
-
-	t.Run("commit", func(t *testing.T) {
-		f := newAgentMcpEngine(t, "orbitcommit", onlyOrbit())
-		before := f.withUncommittedWork(t)
-		var at atOperation
-		res := heartbeatCommit(f.pool, CommitCommand{SessionID: f.id, Branch: f.branch}, f.advertised(),
-			func(req CommitCommand) commitOutcome {
 				at = f.sightWarm()
 				return commitWorktree(req)
 			})
-		if res.Status != "committed" {
-			t.Fatalf("commit = %q (%s), want committed", res.Status, res.Message)
-		}
-		if after := mustGit(t, f.checkout, "rev-parse", "HEAD"); after == before {
-			t.Fatal("the branch did not advance after a commit that reported committed")
-		}
-		if res.Message != "" {
-			t.Fatalf("a commit that evicted nothing carries a receipt note: %q", res.Message)
-		}
 		f.assertStillWarm(t, "commit", at)
-	})
-}
-
-// Criterion 4. A live runner-hosted job still holds the checkout on its own account: the
-// merge is refused naming it, exactly as before this change, and nothing is evicted for
-// an operation that does not run. The job is not touched.
-func TestMergeStaysFencedByARunnerHostedJobOnAnAgentMcpEngine(t *testing.T) {
-	f := newAgentMcpEngine(t, "mcpjob", map[string]interface{}{
-		"agent-fs": map[string]interface{}{"command": "agent-fs-mcp"},
-	})
-	job, err := f.bg.startJob(bgJobSpec{
-		Command: "sleep 120", Kind: bgKindJob, Dir: f.checkout, ScratchDir: f.scratch, Description: "the agent's build",
-	})
-	if err != nil {
-		t.Fatalf("starting the runner-hosted job failed: %v", err)
-	}
-	merge := MergeCommand{SessionID: f.id, WorkDir: f.repo, Branch: f.branch}
-	ran := false
-	res := heartbeatMerge(f.pool, merge, f.advertised(), func(req MergeCommand) mergeOutcome {
-		ran = true
-		return mergeToMain(req)
-	})
-	if ran {
-		t.Fatal("the merge ran against a checkout a runner-hosted job is still writing")
-	}
-	if res.Status != "error" || !strings.Contains(res.Message, job.JobID) {
-		t.Fatalf("merge = %q (%q), want a refusal naming the job %s that holds the checkout",
-			res.Status, res.Message, job.JobID)
-	}
-	if strings.Contains(res.Message, "superseded") || strings.Contains(res.Message, "evicted") {
-		t.Fatalf("the refusal gives the wrong reason: %q", res.Message)
-	}
-	if !processAlive(f.pid) || !f.pool.engineResident(f.live) {
-		t.Fatal("the engine was evicted for a merge that was refused")
-	}
-	for _, name := range f.serverNames() {
-		if !processAlive(f.servers[name]) {
-			t.Fatalf("the %s MCP server died for a merge that was refused", name)
+		if res.Status != "committed" {
+			t.Fatalf("commit = %q (%s), want committed", res.Status, res.Message)
 		}
-	}
-	if !processAlive(job.PID) {
-		t.Fatalf("the runner-hosted job (pid %d) died", job.PID)
-	}
-
-	// The paired positive: the refusal was the job's. Once it is gone, the same merge
-	// evicts the engine and runs.
-	if _, err := f.bg.killJob(job.JobID, bgKillTeardownGrace); err != nil {
-		t.Fatalf("killing the job failed: %v", err)
-	}
-	var at atOperation
-	res = heartbeatMerge(f.pool, merge, f.advertised(), func(req MergeCommand) mergeOutcome {
-		at = f.sightEvicted()
-		return mergeToMain(req)
-	})
-	f.assertEvictedBefore(t, "merge", at)
-	if res.Status != "merged" {
-		t.Fatalf("merge after the job ended = %q (%s), want merged", res.Status, res.Message)
-	}
-	assertEvictionReceipt(t, "merge", res.Message, "agent-fs")
-}
-
-func agentMcpPoolSession(t *testing.T, p *sessionPool, id string, mcpConfig map[string]interface{}) *liveSession {
-	t.Helper()
-	job := manualWorktreePoolJob(id, "orbit/"+id)
-	job.Agent.McpConfig = mcpConfig
-	live, added := p.register(job, func() {}, true)
-	if !added {
-		t.Fatalf("session %s was not registered", id)
-	}
-	return live
-}
-
-func drainedMerge(p *sessionPool, id string, wait time.Duration) (func(), string, bool) {
-	supervisors, _ := p.heartbeatSnapshot()
-	snapshot := supervisors[id]
-	return p.beginDrainedWorktreeOperation(id, snapshot.supervisor, snapshot.permitGeneration, false, "merge", wait)
-}
-
-// An engine that was asked to go and has not been reaped may still be running the servers
-// it was evicted for. The operation is refused rather than run beside it — and the refusal
-// hands the gate back, so the same merge is admitted once the engine has stopped.
-func TestDrainedMergeRefusedWhileTheEvictedEngineHasNotStopped(t *testing.T) {
-	p := newSessionPool(1)
-	live := agentMcpPoolSession(t, p, "stuck", map[string]interface{}{
-		"agent-fs": map[string]interface{}{"command": "agent-fs-mcp"},
-	})
-	generation, _, ok := p.reserveEngine(live, context.Background(), context.Background())
-	if !ok {
-		t.Fatal("engine was not reserved")
-	}
-	cancels := 0
-	// An engine whose teardown never completes: nothing reports engineStopped.
-	if p.engineStarted(live, generation, func() { cancels++ }) {
-		t.Fatal("the engine was evicted before the merge asked")
-	}
-	parkPoolSession(p, live)
-
-	release, receipt, admitted := drainedMerge(p, "stuck", 50*time.Millisecond)
-	if admitted {
-		release()
-		t.Fatal("the merge was admitted beside an engine that was asked to go and is still resident")
-	}
-	if cancels != 1 {
-		t.Fatalf("engine cancels = %d, want the one eviction", cancels)
-	}
-	if !strings.Contains(receipt, "agent-fs") || !strings.Contains(receipt, "not stopped") {
-		t.Fatalf("the refusal does not say which engine it is still waiting on: %q", receipt)
-	}
-
-	p.engineStopped(live, generation)
-	release, receipt, admitted = drainedMerge(p, "stuck", 50*time.Millisecond)
-	if !admitted {
-		t.Fatalf("the merge stayed refused after the evicted engine stopped: %q", receipt)
-	}
-	release()
-	if receipt != "" {
-		t.Fatalf("nothing was left to evict, yet the receipt says: %q", receipt)
-	}
-	p.finish(live)
-}
-
-// Evicting takes time, and admission has already looked for writers. A runner-hosted job
-// that starts while the engine is going outlives it, so the operation looks again before
-// it runs, and is refused naming that job.
-func TestDrainedMergeRefusedWhenAJobStartsDuringTheEviction(t *testing.T) {
-	p := newSessionPool(1)
-	live := agentMcpPoolSession(t, p, "late", map[string]interface{}{
-		"agent-fs": map[string]interface{}{"command": "agent-fs-mcp"},
-	})
-	generation, _, ok := p.reserveEngine(live, context.Background(), context.Background())
-	if !ok {
-		t.Fatal("engine was not reserved")
-	}
-	p.engineStarted(live, generation, func() {
-		go func() {
-			p.holdWorktreeForRunnerJob("late", "bgj_late", "bgj_late")
-			p.engineStopped(live, generation)
-		}()
-	})
-	parkPoolSession(p, live)
-
-	release, receipt, admitted := drainedMerge(p, "late", 5*time.Second)
-	if admitted {
-		release()
-		t.Fatal("the merge was admitted although a runner-hosted job started while the engine was being evicted")
-	}
-	if !strings.Contains(receipt, "bgj_late") {
-		t.Fatalf("the refusal does not name the job holding the checkout: %q", receipt)
-	}
-	if !strings.Contains(receipt, "evicted") {
-		t.Fatalf("the refusal hides that the engine was evicted for this merge: %q", receipt)
-	}
-
-	// The paired positive: the job leaving opens the same merge.
-	p.releaseWorktreeBackgroundJob("late", "bgj_late")
-	release, receipt, admitted = drainedMerge(p, "late", 5*time.Second)
-	if !admitted {
-		t.Fatalf("the merge stayed refused after the job ended: %q", receipt)
-	}
-	release()
-	p.finish(live)
-}
-
-// An engine running a turn of its own is not recycled for a merge either. The merge waits
-// for that turn to end, and then drains the engine as it would any parked one.
-func TestDrainedMergeWaitsForATurnTheEngineRunsOnItsOwn(t *testing.T) {
-	p := newSessionPool(1)
-	live := agentMcpPoolSession(t, p, "ownturn", map[string]interface{}{
-		"agent-fs": map[string]interface{}{"command": "agent-fs-mcp"},
-	})
-	generation, _, ok := p.reserveEngine(live, context.Background(), context.Background())
-	if !ok {
-		t.Fatal("engine was not reserved")
-	}
-	evicted := make(chan struct{}, 1)
-	p.engineStarted(live, generation, func() {
-		evicted <- struct{}{}
-		go p.engineStopped(live, generation)
-	})
-	parkPoolSession(p, live)
-	p.engineTurnEvent(live, evToolUse, map[string]interface{}{"id": "toolu_own"})
-
-	type drained struct {
-		release func()
-		receipt string
-		ok      bool
-	}
-	merged := make(chan drained, 1)
-	go func() {
-		release, receipt, ok := drainedMerge(p, "ownturn", 10*time.Second)
-		merged <- drained{release, receipt, ok}
-	}()
-	select {
-	case <-evicted:
-		t.Fatal("the engine was recycled for a merge in the middle of a turn it was running on its own")
-	case r := <-merged:
-		if r.ok {
-			r.release()
+		if after := mustGit(t, f.checkout, "rev-parse", "HEAD"); after == before {
+			t.Fatal("the branch did not advance after a commit that reported committed")
 		}
-		t.Fatalf("the merge did not wait for the engine's turn (admitted=%v): %q", r.ok, r.receipt)
-	case <-time.After(200 * time.Millisecond):
-	}
-
-	p.engineTurnEvent(live, evTurnEnd, map[string]interface{}{})
-	select {
-	case r := <-merged:
-		if !r.ok {
-			t.Fatalf("the merge was refused after the engine's turn ended: %q", r.receipt)
+		if res.Message != "" {
+			t.Fatalf("a commit with no background job beside it carries a receipt note: %q", res.Message)
 		}
-		r.release()
-		assertEvictionReceipt(t, "merge", r.receipt, "agent-fs")
-	case <-time.After(10 * time.Second):
-		t.Fatal("the merge never ran after the engine's turn ended")
-	}
-	select {
-	case <-evicted:
-	default:
-		t.Fatal("the merge ran without the engine having been asked to go")
-	}
-	p.finish(live)
-}
-
-// A warm engine runs the MCP servers it was spawned with. A claim that reuses it carries
-// whatever the agent's configuration says by then, which is not what is running — so the
-// decision follows the engine's own spawn, both ways round.
-func TestDrainedMergeFollowsTheServersTheEngineWasSpawnedWith(t *testing.T) {
-	agentFs := map[string]interface{}{"agent-fs": map[string]interface{}{"command": "agent-fs-mcp"}}
-	p := newSessionPool(1)
-	live := agentMcpPoolSession(t, p, "respawn", agentFs)
-	startEngine := func() {
-		t.Helper()
-		generation, _, ok := p.reserveEngine(live, context.Background(), context.Background())
-		if !ok {
-			t.Fatal("engine was not reserved")
-		}
-		p.engineStarted(live, generation, func() { go p.engineStopped(live, generation) })
-		parkPoolSession(p, live)
-	}
-	claim := func(mcpConfig map[string]interface{}) {
-		t.Helper()
-		job := manualWorktreePoolJob("respawn", "orbit/respawn")
-		job.Agent.McpConfig = mcpConfig
-		if _, ok := p.activate(job); !ok {
-			t.Fatal("the claim was not activated")
-		}
-	}
-	merge := func() string {
-		t.Helper()
-		release, receipt, admitted := drainedMerge(p, "respawn", 5*time.Second)
-		if !admitted {
-			t.Fatalf("the merge was refused: %q", receipt)
-		}
-		release()
-		return receipt
-	}
-
-	// Spawned running agent-fs. The agent then drops it, and the next claim reuses the
-	// warm engine — which goes on running agent-fs.
-	startEngine()
-	claim(nil)
-	parkPoolSession(p, live)
-	if receipt := merge(); !strings.Contains(receipt, "agent-fs") {
-		t.Fatalf("the engine still runs agent-fs, which the newest claim no longer names, and was not evicted for it: %q",
-			receipt)
-	}
-	if p.engineResident(live) {
-		t.Fatal("the engine is still resident after the merge evicted it")
-	}
-
-	// Cold-resumed from a claim that names none. The agent then adds agent-fs back, and
-	// the next claim reuses that warm engine — which never started it.
-	claim(nil)
-	startEngine()
-	claim(agentFs)
-	parkPoolSession(p, live)
-	if receipt := merge(); receipt != "" {
-		t.Fatalf("an engine spawned without the agent's MCP servers was evicted because a later claim names one: %q",
-			receipt)
-	}
-	if !p.engineResident(live) {
-		t.Fatal("the merge took down an engine it had no reason to")
-	}
-	p.finish(live)
-}
-
-// One decision serves every engine only if it names what each engine is actually handed.
-// Claude, Kimi and OpenCode merge the agent's McpConfig into their engine's configuration;
-// Codex configures Orbit's server alone. Each case builds that engine's real configuration
-// and reads the servers back out of it.
-func TestAgentMcpServerNamesAreWhatEachEngineIsConfiguredWith(t *testing.T) {
-	t.Setenv("ORBIT_HOME", t.TempDir())
-	const exe = "/usr/local/bin/orbit"
-	mcpConfig := map[string]interface{}{
-		// The agent's own entry under Orbit's name: every spawn overwrites it with the
-		// built-in server.
-		"orbit":     map[string]interface{}{"command": "not-orbit", "args": []interface{}{"serve"}},
-		"agent-fs":  map[string]interface{}{"command": "agent-fs-mcp", "args": []interface{}{"--root", "."}},
-		"agent-web": map[string]interface{}{"type": "http", "url": "https://mcp.example.invalid/"},
-	}
-	keys := func(m map[string]json.RawMessage) []string {
-		out := make([]string, 0, len(m))
-		for k := range m {
-			out = append(out, k)
-		}
-		return out
-	}
-	configured := map[string]func(t *testing.T, job *ClaimedSession) []string{
-		providerClaude: func(t *testing.T, job *ClaimedSession) []string {
-			scratch := t.TempDir()
-			claudeCommandArgs(job, scratch, true)
-			data, err := os.ReadFile(filepath.Join(scratch, "mcp.json"))
-			if err != nil {
-				t.Fatalf("the Claude spawn wrote no mcp.json: %v", err)
-			}
-			var file struct {
-				McpServers map[string]json.RawMessage `json:"mcpServers"`
-			}
-			if err := json.Unmarshal(data, &file); err != nil {
-				t.Fatalf("mcp.json is not JSON: %v", err)
-			}
-			return keys(file.McpServers)
-		},
-		providerKimi: func(t *testing.T, job *ClaimedSession) []string {
-			var names []string
-			for name := range kimiMCPConfigRecord(job.Agent, exe) {
-				names = append(names, name)
-			}
-			for _, server := range kimiMCPServers(job.Agent) {
-				names = append(names, asString(server["name"]))
-			}
-			return names
-		},
-		providerOpenCode: func(t *testing.T, job *ClaimedSession) []string {
-			content, err := openCodeConfigContent(job, t.TempDir(), "orbit", nil)
-			if err != nil {
-				t.Fatalf("openCodeConfigContent: %v", err)
-			}
-			var config struct {
-				MCP map[string]json.RawMessage `json:"mcp"`
-			}
-			if err := json.Unmarshal([]byte(content), &config); err != nil {
-				t.Fatalf("the OpenCode config is not JSON: %v", err)
-			}
-			return keys(config.MCP)
-		},
-		providerCodex: func(t *testing.T, job *ClaimedSession) []string {
-			args := append(codexAppServerCommandArgs(job, t.TempDir(), exe),
-				codexExecCommandArgs(job, t.TempDir(), t.TempDir(), nil, exe)...)
-			var names []string
-			for _, arg := range args {
-				if rest, ok := strings.CutPrefix(arg, "mcp_servers."); ok {
-					names = append(names, strings.SplitN(rest, ".", 2)[0])
-				}
-			}
-			return names
-		},
-	}
-	for _, provider := range []string{providerClaude, providerKimi, providerOpenCode, providerCodex} {
-		t.Run(provider, func(t *testing.T) {
-			job := &ClaimedSession{
-				SessionID: "s-" + provider, SessionUUID: "11111111-1111-4111-8111-111111111111", Provider: provider,
-				Agent: AgentExecConfig{Model: "model", PermissionMode: "dontAsk", McpConfig: mcpConfig},
-			}
-			seen := map[string]bool{}
-			for _, name := range configured[provider](t, job) {
-				seen[name] = true
-			}
-			if !seen["orbit"] {
-				t.Fatalf("no orbit server in the %s engine's configuration: this case is not reading it", provider)
-			}
-			var want []string
-			for name := range seen {
-				if name != "orbit" {
-					want = append(want, name)
-				}
-			}
-			sort.Strings(want)
-			if got := agentMcpServerNames(job); strings.Join(got, ",") != strings.Join(want, ",") {
-				t.Fatalf("agentMcpServerNames = %v, but the %s engine is configured with the agent's %v",
-					got, provider, want)
-			}
-		})
-	}
+		f.assertRecyclingStopsIt(t)
+	})
 }

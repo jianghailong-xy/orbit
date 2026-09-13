@@ -387,20 +387,19 @@ func heartbeatMerge(
 	advertised heartbeatSupervisorSnapshot,
 	merge func(MergeCommand) mergeOutcome,
 ) mergeOutcome {
-	release, receipt, admitted := pool.beginDrainedWorktreeOperation(
+	release, receipt, admitted := pool.beginManualWorktreeOperation(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
 		false,
 		"merge",
-		engineEvictionWaitCap,
 	)
 	if !admitted {
 		// Either the server already claimed this exact epoch before returning the
-		// heartbeat, or something is still writing the checkout. Close it explicitly,
-		// naming which: a silent drop would leave Resume permanently blocked on its
-		// operation owner, and a refusal that names the wrong reason reads as a
-		// control-plane race rather than as "wait for the writer".
+		// heartbeat, or a turn or another operation still holds the checkout. Close it
+		// explicitly, naming which: a silent drop would leave Resume permanently blocked
+		// on its operation owner, and a refusal that names the wrong reason reads as a
+		// control-plane race rather than as "wait for the turn".
 		logln("not merging", req.SessionID+":", receipt)
 		return mergeOutcome{Status: "error", Message: receipt}
 	}
@@ -423,13 +422,12 @@ func heartbeatCommit(
 	advertised heartbeatSupervisorSnapshot,
 	commit func(CommitCommand) commitOutcome,
 ) commitOutcome {
-	release, receipt, admitted := pool.beginDrainedWorktreeOperation(
+	release, receipt, admitted := pool.beginManualWorktreeOperation(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
 		true,
 		"commit",
-		engineEvictionWaitCap,
 	)
 	if !admitted {
 		logln("not committing", req.SessionID+":", receipt)

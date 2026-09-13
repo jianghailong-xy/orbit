@@ -79,10 +79,6 @@ type liveSession struct {
 	// Monitor event, a <task-notification>, a ScheduleWakeup. It holds no permit, and it
 	// is not idle either, so nothing that recycles warm engines takes it (engineTurnEvent).
 	selfDrivenTurn bool
-	// agentMcpServers is agentMcpServerNames of the claim this engine generation was
-	// spawned from, taken when the generation is reserved. A warm engine goes on
-	// running the servers it started with, whatever a later claim says.
-	agentMcpServers []string
 
 	idleGeneration uint64
 	warmTimer      poolTimer
@@ -107,10 +103,10 @@ type worktreeOperationState struct {
 	done    chan struct{}
 }
 
-// worktreeHolder is one reason a session's checkout is not free right now. The
-// set of them is what a destructive operation — merge, commit, GC — is fenced
-// against; the turn permit alone used to stand in for it, which made every
-// writer that outlives its turn invisible.
+// worktreeHolder is one reason a session's checkout is not free right now. A
+// refused merge or commit names the holders that refused it, and one that runs
+// names the live background jobs it ran beside; the turn permit alone used to
+// stand in for the set, which made every writer that outlives its turn invisible.
 type worktreeHolder struct {
 	kind string // one of the worktreeHeldBy* kinds
 	name string // what a refusal calls this holder
@@ -148,7 +144,7 @@ type sessionPool struct {
 	sessions    map[string]*liveSession
 	worktreeOps map[string]*worktreeOperationState
 	// bgJobs is sessionID → live background shell id → what is known about it: the
-	// name a refusal calls it, and whether the runner hosts it. A shell is a writer
+	// name a receipt calls it, and whether the runner hosts it. A shell is a writer
 	// of the checkout for exactly as long as it runs, and it routinely outlives the
 	// turn that launched it.
 	bgJobs  map[string]map[string]bgHold
@@ -183,21 +179,20 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 }
 
 // worktreeHoldersLocked enumerates everything that holds this session's
-// checkout: the resident engine, every live background job, and a manual
-// operation that has already linearized. Each kind is fenced by its own
-// mechanism — the engine by the fence itself, an operation by `running`, a
-// background job by worktreeWritersLocked below — so this set is the whole
-// answer to "may something rewrite this checkout right now".
+// checkout: the engine while a turn runs in it, every live background job, and a
+// manual operation that has already linearized. It says who is there, not who may
+// proceed — the fence and `running` decide that (beginHeartbeatWorktreeOperation).
 //
-// The engine counts only while a turn is running or one of its background shells
-// is still alive. A parked engine with neither still has processes standing in
-// the checkout: itself and its MCP servers. The engine and Orbit's own `orbit` MCP
-// server write nothing to the checkout between turns — waiting for the next turn
-// is their entire job — and counting them anyway would fence every merge on a warm
-// session for the whole of warmEngineTTL. An MCP server the agent configured
-// itself is not bound by that: nothing here knows what it writes, or when. It is
-// not counted either; merge and commit instead evict an engine that runs one,
-// servers and all, before they touch the checkout (beginDrainedWorktreeOperation).
+// The turn's engine and a running operation are what refuse a merge or commit, and
+// the refusal names them (worktreeOperationRefusal). A background job refuses
+// nothing: a merge replays committed work in a scratch worktree and a commit writes
+// only the index and refs, so both run beside a live job and name it in their
+// receipt (beginManualWorktreeOperation). The worktree GC, which deletes the
+// directory, is the one thing a live job holds off (ids).
+//
+// A parked engine is no holder at all, whatever it left running: between turns
+// neither it nor its MCP servers — Orbit's own, or any the agent configured — are
+// waited on or stopped for a merge or commit.
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
 	for _, hold := range p.bgJobs[id] {
@@ -205,7 +200,7 @@ func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	}
 	sort.Strings(names) // a receipt reads the same twice
 	var holders []worktreeHolder
-	if s := p.sessions[id]; s != nil && s.resident && (s.active || len(names) > 0) {
+	if s := p.sessions[id]; s != nil && s.resident && s.active {
 		holders = append(holders, worktreeHolder{kind: worktreeHeldByEngine, name: id})
 	}
 	for _, name := range names {
@@ -279,23 +274,16 @@ func (p *sessionPool) admissionIdleCapacity() int {
 	return idle
 }
 
-// worktreeWritersLocked reports whether a writer that no other mechanism already
-// fences is still working in this checkout. That is exactly the live background
-// jobs: the engine writes through them (see worktreeHoldersLocked), and a
-// linearized manual operation carries its own `running` flag and done barrier.
-func (p *sessionPool) worktreeWritersLocked(id string) bool {
-	return len(p.bgJobs[id]) > 0
-}
-
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
-// the session's checkout, and raises the fence on its account. jobID is the
-// launching tool_use id; name is what a refusal will call it.
+// the session's checkout. The hold raises no fence: a merge or commit runs beside a
+// live writer and names it in its receipt. jobID is the launching tool_use id; name
+// is what that receipt will call it.
 func (p *sessionPool) holdWorktreeForBackgroundJob(sessionID, jobID, name string) {
 	p.holdWorktreeWriter(sessionID, jobID, name, false)
 }
 
 // holdWorktreeForRunnerJob records the same hold for a job the RUNNER spawned and
-// owns. It fences the checkout identically — a writer is a writer — and is
+// owns. It holds the checkout identically — a writer is a writer — and is
 // additionally counted, because this is the work that survives engine eviction
 // and therefore the work a capacity account has to know about.
 func (p *sessionPool) holdWorktreeForRunnerJob(sessionID, jobID, name string) {
@@ -317,14 +305,9 @@ func (p *sessionPool) holdWorktreeWriter(sessionID, jobID, name string, runnerHo
 		p.bgJobs[sessionID] = jobs
 	}
 	jobs[jobID] = bgHold{name: name, runnerHosted: runnerHosted}
-	// A shell launched mid-turn already sits behind that turn's fence. Raising it
-	// here is for the shell that starts, or survives, past the turn: park is about
-	// to hand the permit back, and the fence must not go down with it.
-	p.worktreeOpLocked(sessionID).fenced = true
 }
 
-// releaseWorktreeBackgroundJob retires one background shell's hold. The last
-// writer leaving is what lowers a fence park could not.
+// releaseWorktreeBackgroundJob retires one background shell's hold.
 func (p *sessionPool) releaseWorktreeBackgroundJob(sessionID, jobID string) {
 	if sessionID == "" || jobID == "" {
 		return
@@ -338,10 +321,6 @@ func (p *sessionPool) releaseWorktreeBackgroundJob(sessionID, jobID string) {
 	delete(jobs, jobID)
 	if len(jobs) == 0 {
 		delete(p.bgJobs, sessionID)
-	}
-	// An active turn keeps its own fence; only an idle checkout is handed back.
-	if s := p.sessions[sessionID]; s == nil || !s.active {
-		p.releaseWorktreeFenceLocked(sessionID, s)
 	}
 }
 
@@ -368,23 +347,27 @@ func (h sessionWorktreeHolds) releaseWorktree(jobID string) {
 	h.pool.releaseWorktreeBackgroundJob(h.sessionID, jobID)
 }
 
-// worktreeOperationRefusal is the sentence a refused destructive operation sends
-// back to the control plane in place of doing the work. It is read immediately
-// after the refusal, in the same goroutine: a holder that ended in between only
-// downgrades the message to the supersession wording — it can never turn a
-// refusal into a pass, because beginHeartbeatWorktreeOperation already decided.
+// worktreeOperationRefusal is the sentence a refused merge or commit sends back to
+// the control plane in place of doing the work. It names what refuses one — a
+// turn's engine, an operation already running — and never a background job, which
+// refuses nothing. It is read immediately after the refusal, in the same goroutine:
+// a holder that ended in between only downgrades the message to the supersession
+// wording — it can never turn a refusal into a pass, because
+// beginHeartbeatWorktreeOperation already decided.
 func (p *sessionPool) worktreeOperationRefusal(id, operation string) string {
 	p.mu.Lock()
 	holders := p.worktreeHoldersLocked(id)
 	p.mu.Unlock()
-	if len(holders) == 0 {
-		// Nothing holds it: the server claimed this exact epoch before returning
-		// the heartbeat, which is a different fact and reads differently.
-		return operation + " was superseded before local execution"
-	}
 	names := make([]string, 0, len(holders))
 	for _, h := range holders {
-		names = append(names, h.String())
+		if h.kind != worktreeHeldByBackgroundJob {
+			names = append(names, h.String())
+		}
+	}
+	if len(names) == 0 {
+		// Nothing that refuses holds it: the server claimed this exact epoch before
+		// returning the heartbeat, which is a different fact and reads differently.
+		return operation + " was superseded before local execution"
 	}
 	return operation + " was refused: this checkout is still held by " + strings.Join(names, ", ")
 }
@@ -413,12 +396,6 @@ func (p *sessionPool) releaseWorktreeFenceLocked(id string, expected *liveSessio
 	}
 	state := p.worktreeOps[id]
 	if state == nil {
-		return
-	}
-	// The permit is not the holder. A background shell outlives the turn that
-	// launched it, so the fence comes down when the last writer leaves — not when
-	// the turn ends.
-	if p.worktreeWritersLocked(id) {
 		return
 	}
 	state.fenced = false
@@ -453,12 +430,8 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 		p.mu.Unlock()
 		return nil, false
 	}
-	// Belt to the fence's braces: a writer that appeared without anything having
-	// re-raised the fence still owns the checkout this operation would rewrite.
-	if p.worktreeWritersLocked(id) {
-		p.mu.Unlock()
-		return nil, false
-	}
+	// A live background job is deliberately not asked about: a merge or commit runs
+	// beside it (beginManualWorktreeOperation).
 	state := p.worktreeOpLocked(id)
 	state.running = true
 	state.done = make(chan struct{})
@@ -481,127 +454,51 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 	}, true
 }
 
-// engineEvictionWaitCap bounds how long a merge or commit waits for the engine it
-// evicted to be reaped. Tearing a parked engine down is a process-group kill, so this
-// is reached only when something is wrong — and then the operation is refused rather
-// than run beside a process tree that may still be alive.
-const engineEvictionWaitCap = 30 * time.Second
-
-// agentMcpServerNames names the MCP servers of the agent's own that an engine spawned
-// from this claim runs beside Orbit's: the keys of Agent.McpConfig, which the Claude,
-// Kimi and OpenCode spawns all merge into the engine's configuration, minus `orbit`,
-// which each of them overwrites with the built-in server. Codex's spawn configures the
-// built-in server alone, so a Codex engine runs none of them.
+// beginManualWorktreeOperation is how merge and commit enter a checkout. It admits the
+// operation exactly as beginHeartbeatWorktreeOperation does, and nothing else running in
+// the checkout comes into that: a merge replays the branch's commits in a scratch worktree
+// and never touches the checkout, and a commit writes only the index and refs. So a live
+// background job holds neither up, and a parked engine is not stopped for either, whatever
+// MCP servers it runs.
 //
-// Decided from the configuration the runner builds, never by looking for processes:
-// that is ownership the runner constructed rather than inferred, and it reads the same
-// on every platform a runner runs on.
-func agentMcpServerNames(job *ClaimedSession) []string {
-	if job == nil || runtimeProvider(job) == providerCodex {
-		return nil
-	}
-	var names []string
-	for name := range job.Agent.McpConfig {
-		if name != "orbit" {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names) // a receipt reads the same twice
-	return names
-}
-
-// beginDrainedWorktreeOperation is how merge and commit enter a checkout. It admits the
-// operation exactly as beginHeartbeatWorktreeOperation does, then drains the one kind of
-// process standing in the checkout that the holder set leaves out (worktreeHoldersLocked):
-// a parked engine running MCP servers the agent configured itself. That engine is
-// evicted — the same lossless recycle as the warm TTL, which the next turn cold-resumes —
-// and the operation begins only once its supervisor has reaped it.
-//
-// Admitted, it returns the release func and what the operation's receipt has to say
-// about that eviction ("" when there was none). Refused, it returns a nil release and the
-// refusal itself.
-func (p *sessionPool) beginDrainedWorktreeOperation(
+// Admitted, it returns the release func and the operation's receipt note, which names the
+// live background jobs it runs beside ("" when there are none). Refused, it returns a nil
+// release and the refusal itself.
+func (p *sessionPool) beginManualWorktreeOperation(
 	id string,
 	expected *liveSession,
 	expectedPermit uint64,
 	requireSupervisor bool,
 	operation string,
-	wait time.Duration,
 ) (func(), string, bool) {
 	release, admitted := p.beginHeartbeatWorktreeOperation(id, expected, expectedPermit, requireSupervisor)
 	if !admitted {
 		return nil, p.worktreeOperationRefusal(id, operation), false
 	}
-	servers, stopped := p.evictEngineWithAgentMcpServers(id, expected, wait)
-	if len(servers) == 0 {
+	p.mu.Lock()
+	holders := p.worktreeHoldersLocked(id)
+	p.mu.Unlock()
+	var jobs []string
+	for _, h := range holders {
+		if h.kind == worktreeHeldByBackgroundJob {
+			jobs = append(jobs, h.name)
+		}
+	}
+	if len(jobs) == 0 {
 		return release, "", true
 	}
-	named := strings.Join(servers, ", ")
-	if !stopped {
-		release()
-		return nil, operation + " was refused: the engine evicted for it, which was running MCP servers" +
-			" the agent configured itself (" + named + "), had not stopped after " + wait.String(), false
+	beside := "this " + operation + " ran while background jobs were still running in the checkout (" +
+		strings.Join(jobs, ", ") + ")"
+	if operation == "commit" {
+		// A commit reads the checkout as it stands, so whoever reads this receipt has to be
+		// able to tell that a file those jobs were writing may have gone in half-written.
+		return release, beside + ": a file one of them was still writing is committed as it stood at that moment", true
 	}
-	evicted := "the engine was evicted for this " + operation +
-		": it was running MCP servers the agent configured itself (" + named + ")"
-	// The eviction took time a writer could have used to appear, and only admission has
-	// looked for one. A runner-hosted job outlives the engine that asked for it.
-	p.mu.Lock()
-	writing := p.worktreeWritersLocked(id)
-	p.mu.Unlock()
-	if writing {
-		release()
-		return nil, appendWorktreeReceipt(p.worktreeOperationRefusal(id, operation), evicted), false
-	}
-	return release, evicted, true
+	return release, beside + ": a merge takes only what the branch had already committed", true
 }
 
-// evictEngineWithAgentMcpServers asks this session's parked engine to go if it runs MCP
-// servers of the agent's own, and waits until its supervisor has reaped it: session.go
-// reports engineStopped only after the engine's process group — servers included — is
-// gone. An engine in the middle of a turn of its own is asked again once that turn ends.
-// It returns the servers that engine was running and whether it stopped within
-// wait. The caller holds an admitted operation, whose `running` keeps a claim from
-// starting a replacement engine in the meantime.
-func (p *sessionPool) evictEngineWithAgentMcpServers(id string, expected *liveSession, wait time.Duration) ([]string, bool) {
-	p.mu.Lock()
-	s := p.sessions[id]
-	if s == nil || s != expected || !s.resident || len(s.agentMcpServers) == 0 {
-		p.mu.Unlock()
-		return nil, true
-	}
-	servers := append([]string(nil), s.agentMcpServers...)
-	generation := s.engineGeneration
-	p.mu.Unlock()
-	deadline := time.NewTimer(wait)
-	defer deadline.Stop()
-	for {
-		p.mu.Lock()
-		stopped := p.sessions[id] != s || !s.resident || s.engineGeneration != generation
-		var cancel context.CancelFunc
-		if !stopped {
-			// Every pass, not once: requestEvictLocked declines an engine running a turn of
-			// its own, and the end of that turn is one of the changes this loop wakes for.
-			cancel = p.requestEvictLocked(s)
-		}
-		changed := p.changed
-		p.mu.Unlock()
-		if stopped {
-			return servers, true
-		}
-		if cancel != nil {
-			cancel()
-		}
-		select {
-		case <-changed:
-		case <-deadline.C:
-			return servers, false
-		}
-	}
-}
-
-// appendWorktreeReceipt puts what admitting an operation took after the operation's own
-// message, so git's output stays the first thing a failed merge or commit says.
+// appendWorktreeReceipt puts an operation's receipt note after the operation's own message,
+// so git's output stays the first thing a failed merge or commit says.
 func appendWorktreeReceipt(message, note string) string {
 	switch {
 	case note == "":
@@ -1089,7 +986,6 @@ func (p *sessionPool) reserveEngine(s *liveSession, sessionCtx, shutdown context
 			s.engineGeneration++
 			s.engineCancel = nil
 			s.evictRequested = false
-			s.agentMcpServers = agentMcpServerNames(s.job)
 			gen, job := s.engineGeneration, s.job
 			p.signalLocked(s)
 			p.mu.Unlock()

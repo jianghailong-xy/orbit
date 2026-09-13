@@ -71,7 +71,7 @@ var phantomToolResults = []string{
 
 // An identity nothing ever launched must be falsified before it is registered as
 // a writer of the checkout: it has no process, so nothing will ever release it,
-// and until its engine stops it fences that session's merges and commits shut.
+// and until its engine stops it keeps that checkout from the worktree GC.
 func TestPhantomShellIdIsNotAWorktreeHolder(t *testing.T) {
 	p := newSessionPool(1)
 	sess := registerPoolSession(t, p, "phantom", false)
@@ -110,7 +110,7 @@ func TestPhantomShellIdIsNotAWorktreeHolder(t *testing.T) {
 // simply switching the path off. A shell the engine really launched is really
 // writing in the checkout — including via the native run_in_background the agent
 // falls back to when the hook is unavailable — so it must go on being tailed,
-// go on fencing the checkout, and go on being reported when its engine takes it
+// go on holding the checkout, and go on being reported when its engine takes it
 // down with it.
 func TestRealEngineOwnedShellStillHoldsTheWorktree(t *testing.T) {
 	p := newSessionPool(1)
@@ -138,9 +138,6 @@ func TestRealEngineOwnedShellStillHoldsTheWorktree(t *testing.T) {
 	if holders := p.worktreeHolders("realbg"); !holdersInclude(holders, worktreeHeldByBackgroundJob, "bei75180m") {
 		t.Fatalf("a shell that is really writing in the checkout does not hold it: %v", holders)
 	}
-	if !worktreeFenceRaised(p, "realbg") {
-		t.Fatal("the checkout is unfenced while a background shell writes in it")
-	}
 	awaitTailedOutput(t, events, "toolu_real", "[1/4] compiling")
 
 	// The engine is recycled. The shell is its child, so it is gone — and the
@@ -158,9 +155,6 @@ func TestRealEngineOwnedShellStillHoldsTheWorktree(t *testing.T) {
 	}
 	if holders := p.worktreeHolders("realbg"); len(holders) != 0 {
 		t.Fatalf("the hold outlived the shell it stood for: %v", holders)
-	}
-	if worktreeFenceRaised(p, "realbg") {
-		t.Fatal("the fence stayed up after the last writer left: nothing would ever merge this session again")
 	}
 	p.finish(sess)
 }

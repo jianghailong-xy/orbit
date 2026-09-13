@@ -64,8 +64,9 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" coding-engine process. Use this instead of Bash with run_in_background: a shell started that" +
 				" way is a child of the engine, so recycling the engine (idle TTL, memory pressure) kills it" +
 				" mid-build. A job started here ends only when it exits, when the session ends, or when you" +
-				" kill it. It also registers as a writer of the checkout, so a merge or commit is refused" +
-				" while it runs instead of rewriting files underneath it. Read its output with bg_output.",
+				" kill it. A merge or commit of this session neither waits for it nor stops it: both run" +
+				" beside it and name it in their receipt, and a commit takes any file it is still writing as" +
+				" that file stands. Read its output with bg_output.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -85,7 +86,7 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				},
 				"description": map[string]interface{}{
 					"type":        "string",
-					"description": "Short human label. A merge refused because this job is running names it by this.",
+					"description": "Short human label, shown wherever the job is listed.",
 				},
 				"env": map[string]interface{}{
 					"type":        "object",

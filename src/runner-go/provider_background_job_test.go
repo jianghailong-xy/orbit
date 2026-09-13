@@ -187,7 +187,7 @@ func (f *providerBgFixture) assertSurvivedEviction(t *testing.T, job bgJobStatus
 		t.Fatalf("the runner-hosted job was reported terminal by an engine eviction: %v", terminal)
 	}
 	if !f.holdsWorktree(job.JobID) {
-		t.Fatalf("a job that outlived its engine no longer fences the checkout: %v",
+		t.Fatalf("a job that outlived its engine no longer holds the checkout: %v",
 			f.pool.worktreeHolders(f.id))
 	}
 	// The control, so that none of the above can pass by accident.

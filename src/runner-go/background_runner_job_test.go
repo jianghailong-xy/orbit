@@ -224,7 +224,8 @@ func TestRunnerOwnedJobSurvivesWarmTTLExpiry(t *testing.T) {
 	job := h.startJob("sleep 30", bgKindJob)
 
 	// Registered as a writer of the checkout before anything else happens: a job
-	// that outlives the engine but leaves merge unfenced is worse than the bug.
+	// that outlives the engine but not its hold leaves the worktree GC free to delete
+	// the directory it is writing in.
 	if !h.holdsWorktree(job.JobID) {
 		t.Fatalf("a live runner-hosted job is not in the worktree holder set: %v",
 			h.pool.worktreeHolders(h.id))

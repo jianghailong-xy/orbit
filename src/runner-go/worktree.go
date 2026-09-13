@@ -1760,6 +1760,16 @@ type commitOutcome struct {
 	Message string
 }
 
+// commitIndexLockWait is how long, all told, one commit waits for another process to let go of
+// the checkout's index lock. A commit runs beside the session's background jobs, and git that a
+// job runs in the same checkout holds index.lock for as long as one of its commands takes — a
+// moment, usually, which this outlasts. A lock held for longer is reported rather than waited on:
+// a waiting commit holds the session's operation gate.
+const commitIndexLockWait = 2 * time.Second
+
+// commitIndexLockRetryInterval is the pause between attempts while the index lock is held.
+const commitIndexLockRetryInterval = 100 * time.Millisecond
+
 // commitWorktree commits a live session's uncommitted worktree changes onto its branch, so
 // the user can checkpoint (and then merge) without ending the session. It operates on the
 // session's own checkout (worktreesDir()/SessionID), which is separate from the primary repo
@@ -1771,8 +1781,25 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	if !isGitRepo(wtPath) {
 		return commitOutcome{Status: "error", Message: "no live worktree for this session"}
 	}
-	if _, err := git(wtPath, "add", "-A"); err != nil {
-		return commitOutcome{Status: "error", Message: clip(gitStderr(err), 1000)}
+	// gitIndex runs a git command that takes the index lock, and runs it again while another
+	// process holds that lock — for commitIndexLockWait across the whole commit.
+	var lockWaited time.Duration
+	gitIndex := func(args ...string) error {
+		_, err := git(wtPath, args...)
+		for err != nil && indexLockHeld(err) && lockWaited < commitIndexLockWait {
+			pause := commitIndexLockWait - lockWaited
+			if pause > commitIndexLockRetryInterval {
+				pause = commitIndexLockRetryInterval
+			}
+			retried := time.Now()
+			time.Sleep(pause)
+			_, err = git(wtPath, args...)
+			lockWaited += time.Since(retried)
+		}
+		return err
+	}
+	if err := gitIndex("add", "-A"); err != nil {
+		return commitOutcome{Status: "error", Message: commitFailure(err)}
 	}
 	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
 	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
@@ -1784,13 +1811,31 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	msg := generateCommitMessage(wtPath, diffstatFallbackMessage(wtPath, req.Branch))
 	// Inline identity + --no-verify so the commit never fails on a runner with no git user.*
 	// set or a repo pre-commit hook (mirrors finalizeWorktree).
-	if _, err := git(wtPath,
+	if err := gitIndex(
 		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
 		"commit", "--no-verify", "-m", msg); err != nil {
-		return commitOutcome{Status: "error", Message: clip(gitStderr(err), 1000)}
+		return commitOutcome{Status: "error", Message: commitFailure(err)}
 	}
 	logln(fmt.Sprintf("committed worktree changes for session %s onto %s", req.SessionID, req.Branch))
 	return commitOutcome{Status: "committed"}
+}
+
+// indexLockHeld reports whether git refused because another process holds the index lock. The
+// refusal names the lock file in whatever language git speaks.
+func indexLockHeld(err error) bool {
+	return strings.Contains(gitStderr(err), "index.lock")
+}
+
+// commitFailure is what a failed commit says: git's own words and, when git was still refusing on
+// the index lock once the commit had waited for it, why the commit gave up.
+func commitFailure(err error) string {
+	message := clip(gitStderr(err), 1000)
+	if indexLockHeld(err) {
+		message += "\nthe commit waited " + commitIndexLockWait.String() + " for this checkout's index.lock and" +
+			" it was still held: by git running in a background job here, or left behind by a git process that" +
+			" crashed. Nothing was committed."
+	}
+	return message
 }
 
 // commitMsgModel is the Claude alias used to summarize a commit's diff — a fast, cheap tier is

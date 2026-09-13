@@ -52,7 +52,7 @@ var monitorStarted = regexp.MustCompile(`^Monitor started \(task ([A-Za-z0-9_-]+
 // `${shellId}`, `<id>` and an elided `/…/` are not things an id generator or a
 // filesystem produces. Every real launch passes, which is the point: the native
 // run_in_background the agent falls back to when the hook is unavailable writes
-// in the checkout for real, and has to go on being fenced.
+// in the checkout for real, and has to go on being held.
 var (
 	bgShellIDShape = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 	// Markers of a described path rather than a path: template/shell
@@ -85,7 +85,7 @@ const (
 )
 
 // worktreeHoldRegistry is where something that starts a long-lived writer
-// declares it, so a destructive worktree operation can see it. A background
+// declares it, so the worktree GC and a merge or commit receipt can see it. A background
 // shell holds the checkout for as long as it runs, which is routinely past the
 // end of the turn that launched it.
 //
@@ -179,8 +179,8 @@ func (b *bgTailer) notifyWhenCold(engineResident func() bool, notify func(messag
 	b.notify = notify
 }
 
-// holdFor / releaseHold declare this tailer's shells to whoever fences the
-// checkout. Both are called under b.mu, alongside the b.live edit they describe,
+// holdFor / releaseHold declare this tailer's shells to whoever keeps the
+// checkout's holders. Both are called under b.mu, alongside the b.live edit they describe,
 // so the registry never disagrees with what is actually running.
 //
 // A shell the engine owns dies with it; one the runner owns does not, and is
@@ -258,7 +258,7 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 // when the engine is recycled — and Claude writes a <task-notification> only for a Monitor that
 // ends on its own. Registering it is what lets killEngineShells say so. It writes nothing in the
 // checkout, so it is deliberately not declared to b.holds: a watcher left waiting on CI must neither
-// fence merges nor take an admission slot.
+// hold the checkout nor take an admission slot.
 func (b *bgTailer) noteMonitorStart(toolUseID, content string) bool {
 	m := monitorStarted.FindStringSubmatch(content)
 	if m == nil {

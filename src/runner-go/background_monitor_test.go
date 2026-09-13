@@ -28,7 +28,7 @@ const (
 
 // Both receipt forms register, and what they recorded is read back where it is spent: the engine's
 // stop. A Monitor writes nothing in the checkout, so unlike the Bash shell beside it, it must not
-// fence merges or take an admission slot — and the Bash registration must not change.
+// hold the checkout or take an admission slot — and the Bash registration must not change.
 func TestMonitorStartIsRegisteredFromToolResult(t *testing.T) {
 	h := newEvictionHarness(t, "monitorstart", 1)
 	h.startEngine()
