@@ -1365,6 +1365,8 @@ export function TaskListView() {
           summary={rows.find((r: any) => r.id === selectedTaskId)}
           onOpenTask={setSelectedTaskId}
           onClose={() => setSelectedTaskId(null)}
+          onDelete={() => remove.mutate(selectedTaskId)}
+          deleting={remove.isPending && remove.variables === selectedTaskId}
         />
       )}
 

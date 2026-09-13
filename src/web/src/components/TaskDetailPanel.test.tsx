@@ -86,7 +86,7 @@ function task(over: Record<string, unknown> = {}) {
   };
 }
 
-function renderPanel(data: Record<string, unknown>): string {
+function renderPanel(data: Record<string, unknown>, deleting = false): string {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } },
   });
@@ -94,7 +94,13 @@ function renderPanel(data: Record<string, unknown>): string {
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <TaskDetailPanel taskId={TASK_ID} onOpenTask={() => {}} onClose={() => {}} />
+        <TaskDetailPanel
+          taskId={TASK_ID}
+          onOpenTask={() => {}}
+          onClose={() => {}}
+          onDelete={() => {}}
+          deleting={deleting}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -110,6 +116,24 @@ function primaryAction(html: string): { label: string; disabled: boolean } | nul
     disabled: /\bdisabled(?:=|\s|$)/i.test(m[1]),
   };
 }
+
+describe('the task panel’s delete', () => {
+  /** The header's delete button's opening tag, or null when the header has none. */
+  const deleteButton = (html: string) =>
+    /<button[^>]*aria-label="Delete task"[^>]*>/.exec(
+      /<div class="tdp-head-actions">([\s\S]*?)<\/div><\/div>/.exec(html)?.[1] ?? '',
+    )?.[0] ?? null;
+
+  it('sits in the header, so a task can be deleted without hovering its row', () => {
+    // The row's trash only appears on hover, which a touch screen never produces.
+    expect(deleteButton(renderPanel(task()))).not.toBeNull();
+  });
+
+  it('shows the delete in progress', () => {
+    expect(deleteButton(renderPanel(task()))).not.toMatch(/ant-btn-loading/);
+    expect(deleteButton(renderPanel(task(), true))).toMatch(/ant-btn-loading/);
+  });
+});
 
 describe('the task panel’s header action', () => {
   it('is called Run now, not Run', () => {

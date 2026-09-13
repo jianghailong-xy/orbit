@@ -1,8 +1,8 @@
-import { CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { CloseOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
+import { Avatar, Button, Input, Popconfirm, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
 import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -248,11 +248,16 @@ export function TaskDetailPanel({
   summary,
   onOpenTask,
   onClose,
+  onDelete,
+  deleting,
 }: {
   taskId: string;
   summary?: TaskSummary;
   onOpenTask: (taskId: string) => void;
   onClose: () => void;
+  /** The list owns the delete, so the row selection and the open panel are cleared in one place. */
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   const qc = useQueryClient();
   const message = useToast();
@@ -804,6 +809,17 @@ export function TaskDetailPanel({
               </Button>
             </span>
           </Tooltip>
+          {/* The row's trash is hover-only, so without this a touch screen has no way to delete. */}
+          <Popconfirm
+            title="Delete this task?"
+            description="A run still in flight is stopped. This action cannot be undone."
+            okText="Delete"
+            cancelText="Cancel"
+            okButtonProps={{ danger: true, loading: deleting }}
+            onConfirm={onDelete}
+          >
+            <Button type="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />
+          </Popconfirm>
           <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
       </div>
