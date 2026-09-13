@@ -845,6 +845,10 @@ export interface SessionDetail {
   worktreeDirty?: boolean | null;
   commitStatus?: 'pending' | 'committed' | 'nochange' | 'error' | null;
   commitError?: string | null;
+  /** What the runner said alongside a terminal commit status — which background jobs were live in
+   *  the checkout while it committed, and what it did about them. Null/absent when it said nothing
+   *  (older runners, or nothing worth saying), which reads as "no detail line". */
+  commitResultMessage?: string | null;
   // Public read-only sharing: the unguessable token behind the `/s/<token>` link, or null when
   // not shared. Set/cleared by enable/disableSessionShare; drives the Share dialog's state.
   shareToken?: string | null;

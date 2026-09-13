@@ -1,0 +1,143 @@
+<!doctype html>
+<!-- Mock for task 34Mz2UNrkOU26aqWylsW8: the commit-result toast shows the runner's own
+     `commitResultMessage` (what ran alongside the commit) as its detail line. Rendered with
+     values copied from index.css (.session-lifecycle-toast*) and ToastHost.swift. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg-base: #f2f3f5;
+    --bg-raised: #ffffff;
+    --border-subtle: #eceef1;
+    --text-1: #1f2329;
+    --text-2: #646a73;
+    --text-3: #8f959e;
+    --success-solid: #2ea121;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 44px 56px;
+    background: var(--bg-base);
+    color: var(--text-1);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 34px; color: var(--text-2); font-size: 14px; line-height: 21px; max-width: 900px; }
+  .row { display: flex; gap: 56px; align-items: flex-start; margin-bottom: 40px; }
+  .col { display: flex; flex-direction: column; gap: 18px; }
+  .chip {
+    align-self: flex-start; padding: 3px 10px; border-radius: 999px; font-size: 12px;
+    font-weight: 600; letter-spacing: 0.02em;
+  }
+  .chip.before { background: #e8e9ec; color: #5c626b; }
+  .chip.after { background: #e6f4e4; color: #1f7a17; }
+  .caption { color: var(--text-3); font-size: 12px; margin-top: -6px; }
+
+  /* ---- web: AntD notification notice, .session-lifecycle-toast ---- */
+  .web-card {
+    width: 360px; min-height: 64px; padding: 12px 16px;
+    display: flex; gap: 16px; align-items: center;
+    border: 1px solid var(--border-subtle); border-radius: 10px;
+    background: var(--bg-raised); box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
+  }
+  .web-card.wide { align-items: flex-start; }  /* :has(detail) rule */
+  .web-icon { width: 20px; font-size: 20px; line-height: 1; text-align: center; color: var(--success-solid); }
+  .web-copy { flex: 1; min-width: 0; }
+  .web-status { font-size: 14px; font-weight: 600; line-height: 20px; }
+  .web-title { color: var(--text-3); font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .web-detail { margin-top: 4px; color: var(--text-2); font-size: 13px; line-height: 18px; overflow-wrap: anywhere; }
+
+  /* ---- macOS: ToastHost card, radius 18 + regularMaterial ---- */
+  .mac-card {
+    width: 460px; padding: 12px 18px;
+    display: flex; gap: 12px; align-items: center;
+    border-radius: 18px; background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(18px) saturate(160%);
+    border: 0.7px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 12px rgba(0, 0, 0, 0.18);
+  }
+  .mac-icon { font-size: 20px; line-height: 1; color: #34c759; }
+  .mac-copy { flex: 1; min-width: 0; }
+  .mac-message { font-size: 15px; line-height: 20px; }
+  .mac-title, .mac-detail { font-size: 13px; line-height: 17px; color: #6b7280; }
+  .mac-title { margin-top: 2px; }
+  .mac-detail { margin-top: 2px; }
+
+  .new { position: relative; outline: 1.5px dashed #2ea121; outline-offset: 5px; border-radius: 12px; }
+  .new::after {
+    content: '新增：runner 的说明原文'; position: absolute; top: -13px; left: 10px;
+    background: var(--bg-base); padding: 0 6px; font-size: 11px; color: #1f7a17; font-weight: 600;
+  }
+  .note { margin-top: -18px; color: var(--text-2); font-size: 13px; line-height: 20px; max-width: 980px; }
+  code { background: #e8e9ec; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>commit 完成通知：把 runner 的 <code style="font-size:15px">commitResultMessage</code> 显示出来</h1>
+  <p class="sub">
+    服务端已经保存了 runner 随 commit-result 发来的原文（<code>committed</code> / <code>nochange</code> 时）；
+    「Changes committed」「No changes to commit」两张卡片今天都没有 detail，这句话就丢在服务端没人看。
+    改动只加这一行 detail，headline / 颜色 / 失败分支（<code>commitError</code>）都不动。
+  </p>
+
+  <div class="row">
+    <div class="col">
+      <span class="chip before">改动前</span>
+      <div class="web-card">
+        <span class="web-icon">✓</span>
+        <div class="web-copy">
+          <div class="web-status">Changes committed</div>
+          <div class="web-title">Fix the settlement pointer</div>
+        </div>
+      </div>
+      <div class="caption">web · 卡片到这里就结束了</div>
+    </div>
+    <div class="col">
+      <span class="chip after">改动后</span>
+      <div class="new web-card wide" style="padding-top: 14px;">
+        <span class="web-icon" style="margin-top: 2px;">✓</span>
+        <div class="web-copy">
+          <div class="web-status">Changes committed</div>
+          <div class="web-title">Fix the settlement pointer</div>
+          <div class="web-detail">this commit ran while background jobs were still running in the checkout (bgj_01a02fe3): a file one of them was still writing is committed as it stood at that moment</div>
+        </div>
+      </div>
+      <div class="caption">web · 原文照显示，长了就换行（360px 卡片）</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <span class="chip before">改动前</span>
+      <div class="mac-card">
+        <span class="mac-icon">✓</span>
+        <div class="mac-copy">
+          <div class="mac-message">Changes committed</div>
+          <div class="mac-title">Fix the settlement pointer</div>
+        </div>
+      </div>
+      <div class="caption">macOS</div>
+    </div>
+    <div class="col">
+      <span class="chip after">改动后</span>
+      <div class="new mac-card" style="padding-top: 14px; outline-offset: 6px;">
+        <span class="mac-icon" style="margin-top: 2px;">✓</span>
+        <div class="mac-copy">
+          <div class="mac-message">Changes committed</div>
+          <div class="mac-title">Fix the settlement pointer</div>
+          <div class="mac-detail">this commit ran while background jobs were still running in the checkout (bgj_01a02fe3): a file one of them was still writing is committed as it stood at that moment</div>
+        </div>
+      </div>
+      <div class="caption">macOS · 同一句话，同样在标题下面（4 行截断）</div>
+    </div>
+  </div>
+
+  <p class="note">
+    <strong>空的时候与今天完全一致</strong>：<code>commitResultMessage</code> 为 null / 缺键 / 只有空白时，卡片不出现 detail 行 —— 没有空行、没有占位。
+    macOS 侧老服务端没有这个键，解码走 <code>decodeIfPresent</code>，不会因此解码失败。
+  </p>
+</body>
+</html>

@@ -232,9 +232,12 @@ final class WorktreeModel {
             onOutcome(ToastRequest(message: "Commit failed",
                                    detail: Self.trimmed(new.commitError), tone: .error))
         } else if old.commitStatus == "pending", new.commitStatus == "committed" {
-            onOutcome(ToastRequest(message: "Changes committed"))
+            onOutcome(ToastRequest(message: "Changes committed",
+                                   detail: Self.trimmed(new.commitResultMessage)))
         } else if old.commitStatus == "pending", new.commitStatus == "nochange" {
-            onOutcome(ToastRequest(message: "No changes to commit", tone: .neutral))
+            onOutcome(ToastRequest(message: "No changes to commit",
+                                   detail: Self.trimmed(new.commitResultMessage),
+                                   tone: .neutral))
         }
     }
 

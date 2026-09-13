@@ -629,6 +629,12 @@ const plainPreview = (md: string): string =>
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
 
+// The runner's own sentence about a finished commit — which background jobs were live in the
+// checkout while it committed, and what it did about them (commitResultMessage). Trimmed because a
+// whitespace-only value would otherwise draw an empty detail row; null and blank both mean "the
+// runner said nothing", which is not a line to draw.
+const runnerCommitLine = (value?: string | null): string | undefined => value?.trim() || undefined;
+
 // "Background process running" / "N background processes running" — shown when a session is
 // parked at AWAITING_INPUT but still has live background shells (server-tracked
 // runningBgCount, from Session.runningBgShells), so it doesn't read as idle.
@@ -1718,6 +1724,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           sessionTitle: operation.title,
           event: 'commit-result',
           headline: 'Changes committed',
+          detail: runnerCommitLine(d.commitResultMessage),
           tone: 'success',
           icon: 'check',
         });
@@ -1727,6 +1734,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           sessionTitle: operation.title,
           event: 'commit-result',
           headline: 'No changes to commit',
+          detail: runnerCommitLine(d.commitResultMessage),
           tone: 'neutral',
           icon: 'info',
         });

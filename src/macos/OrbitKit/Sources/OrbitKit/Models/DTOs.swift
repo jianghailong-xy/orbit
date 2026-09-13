@@ -736,6 +736,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// Commit outcome: pending | committed | nochange | error. Nil until the user commits.
     public let commitStatus: String?
     public let commitError: String?
+    /// What the runner said alongside a terminal commit status — which background jobs were live in
+    /// the checkout while it committed, and what it did about them. Nil (or absent entirely, on an
+    /// older control plane) means it said nothing, which is not a line to draw.
+    public let commitResultMessage: String?
     public let agent: SessionDetailAgent?
     /// The public read-only share token, or nil when the session isn't shared. The owner GET
     /// returns it (Prisma `include`, no `select`), so the Share sheet reads it to seed its
@@ -781,6 +785,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         worktreeBranch = try values.decodeIfPresent(String.self, forKey: .worktreeBranch)
         commitStatus = try values.decodeIfPresent(String.self, forKey: .commitStatus)
         commitError = try values.decodeIfPresent(String.self, forKey: .commitError)
+        commitResultMessage = try values.decodeIfPresent(String.self, forKey: .commitResultMessage)
         agent = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .agent)
         shareToken = try values.decodeIfPresent(String.self, forKey: .shareToken)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
@@ -796,6 +801,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
+                commitResultMessage: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
                 retryAt: String? = nil, retryAttempts: Int? = nil) {
         self.id = id
@@ -817,6 +823,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.worktreeBranch = worktreeBranch
         self.commitStatus = commitStatus
         self.commitError = commitError
+        self.commitResultMessage = commitResultMessage
         self.agent = agent
         self.shareToken = shareToken
         self.retryAt = retryAt
