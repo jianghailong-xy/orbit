@@ -38,11 +38,22 @@ test('the evidence service is state-orthogonal and only the explicit legacy door
   assert.doesNotMatch(liveSubmit, /taskComment|lastAssistant|finalReply/,
     'ordinary evidence submission must never infer a fact from prose');
   assert.doesNotMatch(source, /lastAssistant|finalReply|notify/);
-  // One signal leaves this file, and it delivers nothing: the owner-scoped nudge that tells an open
-  // page to re-read its pending decisions, sent once by submit and once by decide after each has
-  // committed. `pending-decision-realtime.pg.spec.ts` pins what it carries and when it is sent.
-  assert.deepEqual(source.match(/publish\w*/g), ['publishForUser', 'publishForUser'],
-    'the evidence service publishes nothing but the two pending-decision nudges');
+  // Two signals leave this file, and neither delivers anything: each is only a hint to re-read what
+  // has already been committed. The owner-scoped nudge that tells an open page to re-read its
+  // pending decisions, sent once by submit and once by decide after each has committed —
+  // `pending-decision-realtime.pg.spec.ts` pins what it carries and when it is sent. And the
+  // re-draw of the one session row that counts those decisions, the coordinator's, which
+  // `task.changed` does not refresh: asked for by the same two writes after the same commits,
+  // through one helper — `needs-you-owner-decision.pg.spec.ts` (6) pins whom it names, when it is
+  // asked for, and that a send that throws takes nothing back from the write.
+  assert.deepEqual(source.match(/publish\w*/g),
+    ['publishForUser', 'publishForUser', 'publishSessionUpdated'],
+    'nothing leaves the evidence service but the two nudges and the coordinator-row re-draw');
+  const redraws = (text: string) => (text.match(/this\.nudgeCoordinatorRow\(/g) ?? []).length;
+  assert.deepEqual(
+    [redraws(source), redraws(liveSubmit), redraws(source.slice(source.indexOf('  async decide(')))],
+    [2, 1, 1],
+    'the coordinator row is re-drawn by submit and by decide, once each, and by no other door');
   assert.equal((source.match(/taskComment\.findFirst/g) ?? []).length, 1,
     'exactly the explicit one-comment import may read a historical comment');
   assert.doesNotMatch(source, /taskComment\.(?:findMany|aggregate|count)/,

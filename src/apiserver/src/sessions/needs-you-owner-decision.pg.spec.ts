@@ -42,6 +42,11 @@
  *       CONFIRM puts it back. Each write also asks for the coordinator's row to be re-drawn,
  *       because `task.changed` refreshes no session row.
  *
+ *       That re-draw is the one signal the evidence service addresses to a session, and its census
+ *       (`task-completion-evidence.spec.ts`) lets it out on what (6d) and (6e) pin: it names the
+ *       coordinator whichever run submitted or answered, it is asked for once a write has
+ *       committed and never for a refused one, and a send that throws takes nothing back.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/needs-you-owner-decision.pg.spec.ts
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to this owner.
@@ -497,9 +502,13 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     return { taskId, sourceSessionId, cited };
   }
 
-  /** Submit revision 1 for a task, quoting the criterion's text as `quote`. */
-  function submit(task: { taskId: string; sourceSessionId: string; cited: string }, quote: string) {
-    return evidence.submit(f.ownerId, task.taskId, { type: CreatorType.AGENT, id: f.workspaceId }, {
+  /** Submit revision 1 for a task, quoting the criterion's text as `quote`, through `service`. */
+  function submit(
+    task: { taskId: string; sourceSessionId: string; cited: string },
+    quote: string,
+    service = evidence,
+  ) {
+    return service.submit(f.ownerId, task.taskId, { type: CreatorType.AGENT, id: f.workspaceId }, {
       sourceSessionId: task.sourceSessionId,
       idempotencyKey: `needs-you-${task.taskId}`,
       evidence: {
@@ -583,5 +592,112 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the badge falls with it');
     assert.equal(await needsYou(), 0, 'and so does the workspace tally');
     assert.deepEqual(nudged, [f.coordinatorSessionId], 'the decision re-drew the row it darkened');
+  });
+
+  // ── the re-draw itself: whom it names, when it is asked for, and what a failed send costs ──────
+  // `nudged` says a row was asked for. It cannot say that the ask came after the write it describes
+  // had COMMITTED — before that, the re-read it prompts draws the old count and nothing draws the
+  // row again — nor that an ask which throws takes nothing back. So a second service over the same
+  // database, whose client logs each commit as it lands and whose re-draw throws on demand, writes
+  // both into one ordered log.
+  const log: string[] = [];
+  let sendThrows = false;
+  const committing = new Proxy(db, {
+    get: (target, name) => {
+      if (name === '$transaction') {
+        const run = target.$transaction.bind(target) as unknown as
+          (...args: unknown[]) => Promise<unknown>;
+        return async (...args: unknown[]) => {
+          const result = await run(...args);
+          log.push('commit');
+          return result;
+        };
+      }
+      const value = Reflect.get(target, name, target) as unknown;
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const observed = new TaskCompletionEvidenceService(
+    committing as unknown as PrismaService,
+    undefined,
+    undefined,
+    new Proxy({}, {
+      get: (_target, name) => (name === 'publishSessionUpdated'
+        ? (sessionId: string) => {
+          log.push(`re-draw ${sessionId}`);
+          if (sendThrows) throw new Error('the realtime hub refused the frame');
+        }
+        : () => undefined),
+    }) as unknown as RealtimeService,
+  );
+  const redrawn = ['commit', `re-draw ${f.coordinatorSessionId}`];
+
+  await t.test('(6d) the re-draw names the coordinator, once a write has committed, never for a refused one',
+    async () => {
+      const later = await judgedTask('later');
+      log.length = 0;
+      await submit(later, JUDGED, observed);
+      assert.deepEqual(log, redrawn,
+        'the submission asked for the coordinator’s row after its revision committed');
+
+      log.length = 0;
+      await assert.rejects(
+        () => observed.decide(f.ownerId, later.taskId, { type: CreatorType.USER, id: f.ownerId }, {
+          decidingSessionId: later.sourceSessionId,
+          evidenceRevision: '1',
+          decision: 'CONFIRM',
+        }),
+        (error: unknown) => {
+          const body = (error as { response?: { code?: string } })?.response;
+          assert.equal(body?.code, 'EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION',
+            'the run that did the work may not answer for it');
+          return true;
+        },
+      );
+      assert.deepEqual(log, [],
+        'refused inside its transaction: nothing committed, and no row was asked to re-draw');
+
+      // Answered from a third run, neither the coordinator nor the one that submitted: the row asked
+      // for is still the coordinator's, because that is the row counting the question.
+      await observed.decide(f.ownerId, later.taskId, { type: CreatorType.USER, id: f.ownerId }, {
+        decidingSessionId: moved.sourceSessionId,
+        evidenceRevision: '1',
+        decision: 'SEND_BACK',
+        note: 'cite the run that produced dist/server.js',
+      });
+      assert.deepEqual(log, redrawn,
+        'the accepted answer asks once, after it committed, for the coordinator and not the run that gave it');
+    });
+
+  await t.test('(6e) a re-draw that fails to send takes nothing back from the write it follows', async () => {
+    const unsent = await judgedTask('unsent');
+    sendThrows = true;
+    try {
+      log.length = 0;
+      const receipt = await submit(unsent, JUDGED, observed);
+      assert.equal(receipt.revision, '1', 'the submission still answers with the revision it recorded');
+      assert.deepEqual(log, redrawn, 'and the send that threw really was attempted, after the commit');
+      assert.deepEqual(await cardRows(), [unsent.taskId], 'the revision is a question on the card');
+      assert.equal(await countOn(f.coordinatorSessionId), 1, 'and the row a reload draws counts it');
+
+      log.length = 0;
+      const decided = await observed.decide(
+        f.ownerId, unsent.taskId, { type: CreatorType.USER, id: f.ownerId }, {
+          decidingSessionId: f.coordinatorSessionId,
+          evidenceRevision: '1',
+          decision: 'CONFIRM',
+        },
+      );
+      assert.equal(decided.decision, 'CONFIRM', 'the decision still answers with the row it recorded');
+      assert.deepEqual(log, redrawn, 'after its own commit, and through its own failed send');
+      const settled = await db.task.findUniqueOrThrow({
+        where: { id: unsent.taskId },
+        select: { status: true },
+      });
+      assert.equal(settled.status, TaskStatus.DONE, 'the CONFIRM it recorded still settled the task');
+      assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the row a reload draws is dark again');
+    } finally {
+      sendThrows = false;
+    }
   });
 });
