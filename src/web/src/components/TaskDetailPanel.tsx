@@ -18,6 +18,7 @@ import {
 import { encodeId } from '../lib/idCodec';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration } from '../lib/taskFilters';
+import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
 import { providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
@@ -133,6 +134,53 @@ const rehypeMentions = (names: string[]) => () => (tree: any) => {
 };
 
 /**
+ * What a verification subject's header button says instead of Run now, and the hover hint behind
+ * it, keyed on the server's `verificationState` and worded the way the project page and its graph
+ * word the same states. The button stays disabled whichever it is: a subject has no work of its own.
+ */
+const VERIFICATION_SUBJECT_ACTION: Record<ProjectTaskVerificationState, { label: string; hint: string }> = {
+  MISSING: {
+    label: 'Missing verifier',
+    hint: 'Missing verifier — create a verification task with verifiesTaskId set to this task',
+  },
+  PENDING: {
+    label: 'Awaiting verification',
+    hint: 'Awaiting verification — subject work cannot be started',
+  },
+  RUNNING: {
+    label: 'Verifier running',
+    hint: 'Verifier running — its verdict decides this task',
+  },
+  BLOCKED: {
+    label: 'Verifier blocked',
+    hint: 'Verifier blocked — resolve what stops the verification task first',
+  },
+  FAILED: {
+    label: 'Verification failed',
+    hint: 'Verification failed or inconclusive — file a new verification task',
+  },
+  PASSED: {
+    label: 'Verification passed',
+    hint: 'Verification passed — applying the result',
+  },
+};
+
+/**
+ * A DONE subject never reads Awaiting verification: its passed verifier, a newer one that has not
+ * reported yet, or an API too old to send the state all read as passed. A missing, failed, blocked
+ * or running verifier still says so. A state this bundle does not know gets the generic wording.
+ */
+function verificationSubjectAction(
+  status?: string | null,
+  verificationState?: ProjectTaskVerificationState | null,
+): { label: string; hint: string } {
+  const passedAndDone = status === 'DONE'
+    && (verificationState == null || verificationState === 'PASSED' || verificationState === 'PENDING');
+  if (passedAndDone) return { label: 'Verification passed', hint: 'Verification passed — this task is done' };
+  return VERIFICATION_SUBJECT_ACTION[verificationState ?? 'PENDING'] ?? VERIFICATION_SUBJECT_ACTION.PENDING;
+}
+
+/**
  * What the header's Run now button says on hover, in the order the reasons matter.
  *
  * The first three are the existing gates and are unchanged: each one is a reason the button is
@@ -153,6 +201,8 @@ const rehypeMentions = (names: string[]) => () => (tree: any) => {
  */
 export function runNowHint({
   completionOwned,
+  status,
+  verificationState,
   blocked,
   dependencyState,
   canExecute,
@@ -161,6 +211,9 @@ export function runNowHint({
 }: {
   /** This row is completed by a verifier/aggregate and has no task_start work of its own. */
   completionOwned?: boolean;
+  /** On such a row, which sentence it gets — see `verificationSubjectAction`. */
+  status?: string | null;
+  verificationState?: ProjectTaskVerificationState | null;
   blocked: boolean;
   dependencyState?: string | null;
   canExecute: boolean;
@@ -168,7 +221,7 @@ export function runNowHint({
   /** The scheduled start in the viewer's own wall clock, absent on an unscheduled task. */
   scheduledLocal?: string | null;
 }): string {
-  if (completionOwned) return 'Awaiting verification — subject work cannot be started';
+  if (completionOwned) return verificationSubjectAction(status, verificationState).hint;
   if (blocked) {
     return dependencyState === 'BLOCKED_FAILED'
       ? 'Prerequisite cancelled — resolve it first'
@@ -734,6 +787,8 @@ export function TaskDetailPanel({
   const scheduled = scheduledStart(q.data?.runAt);
   const executeHint = runNowHint({
     completionOwned,
+    status: q.data?.status,
+    verificationState: q.data?.verificationState,
     blocked,
     dependencyState,
     canExecute,
@@ -805,7 +860,11 @@ export function TaskDetailPanel({
                 onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
                 style={executeDisabled ? { pointerEvents: 'none' } : undefined}
               >
-                {running ? 'Running' : completionOwned ? 'Awaiting verification' : 'Run now'}
+                {running
+                  ? 'Running'
+                  : completionOwned
+                    ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
+                    : 'Run now'}
               </Button>
             </span>
           </Tooltip>

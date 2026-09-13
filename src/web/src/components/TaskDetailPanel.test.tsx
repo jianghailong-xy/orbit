@@ -178,6 +178,52 @@ describe('the task panel’s header action', () => {
     expect(out).not.toContain('>Run now</span>');
   });
 
+  /** The declaration that makes a task a verification subject, as the detail read carries it. */
+  const subject = (over: Record<string, unknown> = {}) =>
+    task({
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      verifiesTaskId: null,
+      ...over,
+    });
+
+  it.each([
+    ['MISSING', 'Missing verifier'],
+    ['PENDING', 'Awaiting verification'],
+    ['RUNNING', 'Verifier running'],
+    ['BLOCKED', 'Verifier blocked'],
+    ['FAILED', 'Verification failed'],
+    ['PASSED', 'Verification passed'],
+  ])('names a %s verifier on an open subject, and still cannot be pressed', (verificationState, label) => {
+    // The subject has no work of its own to start, whatever its verifier is doing.
+    expect(primaryAction(renderPanel(subject({ verificationState })))).toEqual({ label, disabled: true });
+  });
+
+  it('never says Awaiting verification once the subject is DONE', () => {
+    // A passed verifier, a newer one that has not reported yet, or an API too old to say.
+    for (const verificationState of ['PASSED', 'PENDING', undefined]) {
+      const out = renderPanel(subject({ status: 'DONE', verificationState }));
+      expect(primaryAction(out)).toEqual({ label: 'Verification passed', disabled: true });
+      expect(out).not.toContain('Awaiting verification');
+    }
+    // A verifier that is missing or failed is still worth saying on a DONE row.
+    expect(primaryAction(renderPanel(subject({ status: 'DONE', verificationState: 'MISSING' })))).toEqual({
+      label: 'Missing verifier',
+      disabled: true,
+    });
+    expect(primaryAction(renderPanel(subject({ status: 'DONE', verificationState: 'FAILED' })))).toEqual({
+      label: 'Verification failed',
+      disabled: true,
+    });
+  });
+
+  it('leaves an ordinary task at Run now when the detail reports no verifier state', () => {
+    expect(primaryAction(renderPanel(task({ verificationState: null })))).toEqual({
+      label: 'Run now',
+      disabled: false,
+    });
+  });
+
   it('mounts the Start at editor on the server’s own schedule and project', () => {
     const out = inTimeZone(SHANGHAI, () =>
       renderPanel(task({ runAt: '2026-09-01T01:00:00.000Z', projectId: PROJECT_ID })),
@@ -239,6 +285,37 @@ describe('runNowHint — what the header button says on hover', () => {
       'Assign a workspace first',
     );
     expect(runNowHint({ blocked: false, canExecute: true, running: true })).toBe('Task running…');
+  });
+
+  it('tells a verification subject what its verifier state asks of the reader', () => {
+    const subject = { ...runnable, completionOwned: true };
+    // Nothing verifies this task yet, and only somebody filing a check can change that.
+    expect(runNowHint({ ...subject, verificationState: 'MISSING' })).toBe(
+      'Missing verifier — create a verification task with verifiesTaskId set to this task',
+    );
+    expect(runNowHint({ ...subject, verificationState: 'PENDING' })).toBe(
+      'Awaiting verification — subject work cannot be started',
+    );
+    expect(runNowHint({ ...subject, verificationState: 'RUNNING' })).toBe(
+      'Verifier running — its verdict decides this task',
+    );
+    expect(runNowHint({ ...subject, verificationState: 'BLOCKED' })).toBe(
+      'Verifier blocked — resolve what stops the verification task first',
+    );
+    // FAIL and INCONCLUSIVE both arrive as FAILED, and neither is answered by running it again.
+    expect(runNowHint({ ...subject, verificationState: 'FAILED' })).toBe(
+      'Verification failed or inconclusive — file a new verification task',
+    );
+    expect(runNowHint({ ...subject, verificationState: 'PASSED' })).toBe(
+      'Verification passed — applying the result',
+    );
+    expect(runNowHint({ ...subject, status: 'DONE', verificationState: 'PASSED' })).toBe(
+      'Verification passed — this task is done',
+    );
+    // The verifier's sentence still outranks every other gate, as the generic one did.
+    expect(
+      runNowHint({ ...subject, blocked: true, canExecute: false, verificationState: 'MISSING' }),
+    ).toBe('Missing verifier — create a verification task with verifiesTaskId set to this task');
   });
 });
 

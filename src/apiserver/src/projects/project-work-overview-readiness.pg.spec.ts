@@ -16,6 +16,7 @@ import { Client } from 'pg';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
+import { TasksService } from '../tasks/tasks.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -229,6 +230,11 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
     const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
     const projects = new ProjectsService(prisma);
+    // Only its detail read is used, which neither starts a session nor publishes.
+    const tasks = new TasksService(prisma, {} as never, {
+      publishTaskChanged() {},
+      publishForUser() {},
+    } as never);
 
     try {
       const world = await makeWorld(db);
@@ -293,6 +299,19 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
           workState: 'DONE',
           verificationState: 'PASSED',
         });
+      });
+
+      await t.test('the task detail reports the verifier state of every task from this same read', async () => {
+        // The detail panel's button reads `verificationState` off GET /tasks/:id; the project page
+        // and its graph read `states`. Every state above is in this world, and so are non-subjects.
+        const detail = (name: string) => tasks.get(world.ownerId, world.ids[name]);
+        for (const name of Object.keys(world.ids)) {
+          assert.equal((await detail(name)).verificationState, state(name)?.verificationState, name);
+        }
+        // Not a comparison that could pass on nulls alone.
+        assert.equal((await detail('subject-missing')).verificationState, 'MISSING');
+        assert.equal((await detail('subject-passed')).verificationState, 'PASSED');
+        assert.equal((await detail('manual-ready')).verificationState, null);
       });
 
       await t.test('FAILED to SUPERSEDED history remains an explicit failed denominator item', () => {

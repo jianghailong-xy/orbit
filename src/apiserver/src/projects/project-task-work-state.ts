@@ -114,6 +114,33 @@ export async function readProjectTaskWorkStates(
   const narrowed = taskIds
     ? Prisma.sql`AND t."id" IN (${Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`))})`
     : Prisma.empty;
+  return readTaskWorkStates(prisma, Prisma.sql`t."owner_id" = ${ownerId}::uuid
+       AND t."project_id" = ${projectId}::uuid
+       ${narrowed}`);
+}
+
+/**
+ * The same fields for one task, found by id rather than through a project: the task detail reads a
+ * subject's verifier wherever the subject is filed, and the verifier selector's scope predicate
+ * already pairs a project-less check with a project-less subject. Null for an id the owner lacks.
+ */
+export async function readTaskWorkState(
+  prisma: PrismaService,
+  ownerId: string,
+  taskId: string,
+): Promise<ProjectTaskWorkStateFields | null> {
+  const states = await readTaskWorkStates(
+    prisma,
+    Prisma.sql`t."owner_id" = ${ownerId}::uuid AND t."id" = ${taskId}::uuid`,
+  );
+  return states.get(taskId) ?? null;
+}
+
+/** One query shape for every reader above, so a project page and a task detail cannot disagree. */
+async function readTaskWorkStates(
+  prisma: PrismaService,
+  where: Prisma.Sql,
+): Promise<Map<string, ProjectTaskWorkStateFields>> {
   const state = Prisma.raw(projectTaskWorkStateSql('t'));
   const verificationState = Prisma.raw(projectTaskVerificationStateSql());
   const latestVerifier = Prisma.raw(latestLiveVerificationCheckIdSql('t'));
@@ -136,9 +163,7 @@ export async function readProjectTaskWorkStates(
           FROM "task" verifier_task
          WHERE verifier_task."id" = (${latestVerifier})
       ) current_verifier ON true
-     WHERE t."owner_id" = ${ownerId}::uuid
-       AND t."project_id" = ${projectId}::uuid
-       ${narrowed}`);
+     WHERE ${where}`);
 
   return new Map(rows.map((row) => [row.taskId, {
     workState: row.workState,

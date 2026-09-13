@@ -118,6 +118,7 @@ import {
   touchesAcceptanceFact,
 } from './task-lock-order';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
+import { readTaskWorkState } from '../projects/project-task-work-state';
 import {
   admitProjectScopeWrite,
   type ScopeAdmission,
@@ -7006,10 +7007,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Read the same successor-tail facts as task_list, Run Now, both automatic starters and the
     // commit gate. The relation above intentionally remains the stored audit edge (W); readiness
     // is answered by the current work holder at the trusted chain tail (S).
-    const [dependencyFacts, supersession, autoRunSkipped] = await Promise.all([
+    //
+    // A verification subject's current verifier comes from the read behind the project page and its
+    // graph, so the three cannot describe it differently. Only a declared subject (the fields
+    // `verificationSubjectSql` reads) is asked: that read answers NULL for every other task, and
+    // this detail is polled while a run is live.
+    const [dependencyFacts, supersession, autoRunSkipped, workState] = await Promise.all([
       this.dependencyFactsFor(ownerId, [id]),
       this.supersession(ownerId, task),
       this.autoRunSkipped(ownerId, task),
+      task.completionCriterion === 'VERIFICATION'
+        && task.completionPolicy === 'VERIFICATION_PASSED'
+        && task.verifiesTaskId == null
+        ? readTaskWorkState(this.prisma, ownerId, task.id)
+        : null,
     ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -7026,6 +7037,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // a reader should not have to parse prose to learn that "what counts as done" was rewritten.
       // Null on every task whose criterion is still the one it was declared with.
       completionCriterionChange: readTaskCriterionChange(task.completionCriterionOverrideReason),
+      // PENDING/BLOCKED/RUNNING/PASSED/FAILED/MISSING on a verification subject, null on every
+      // other task.
+      verificationState: workState?.verificationState ?? null,
       ...supersession,
     };
   }
