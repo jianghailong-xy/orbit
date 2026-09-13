@@ -55,6 +55,18 @@ import {
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import {
+  dragOffset,
+  isFullSwipe,
+  restingOffset,
+  sessionSwipeActions,
+  settleSwipe,
+  swipeGeometry,
+  swipeWidths,
+  type SwipeAction,
+  type SwipeGeometry,
+  type SwipeSide,
+} from '../lib/sessionSwipe';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
   workspacesQuery,
@@ -1190,20 +1202,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [groupByTag, setGroupByTag] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
-  // Touch swipe-to-reveal for session rows: hover has no touch equivalent, so on mobile the
-  // row's actions (pin/complete, or the ⋯ menu) hide behind a leftward swipe instead.
-  const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null); // row held open by a swipe
-  const [swipeDragId, setSwipeDragId] = useState<string | null>(null); // row currently under a finger drag
-  const [swipeDx, setSwipeDx] = useState(0); // live drag offset (px; negative = leftward)
-  // mx (live horizontal delta) and wasOpen live on the ref so touchend reads them synchronously:
-  // React defers continuous touchmove state, so swipeDx state can be stale when discrete touchend fires.
+  // Touch swipe actions for session rows: hover has no touch equivalent, so on mobile the row's
+  // actions sit behind a swipe instead, laid out like the iOS list (lib/sessionSwipe) — swipe right
+  // for Complete / Move to Open + Pin, swipe left for Delete.
+  const [swipeOpen, setSwipeOpen] = useState<{ id: string; side: SwipeSide } | null>(null); // row held open by a swipe
+  // The row under a finger drag: its live offset (px; negative = leftward), and whether releasing
+  // now would be a full swipe.
+  const [swipeDrag, setSwipeDrag] = useState<{ id: string; dx: number; armed: boolean } | null>(null);
+  // offset (the live position) lives on the ref so touchend reads it synchronously: React defers
+  // continuous touchmove state, so swipeDrag state can be stale when discrete touchend fires.
   const swipeRef = useRef<{
-    id: string;
+    session: any;
     x: number;
     y: number;
     axis: '' | 'h' | 'v';
-    mx: number;
-    wasOpen: boolean;
+    offset: number;
+    from: SwipeSide | null;
+    geometry: SwipeGeometry;
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
@@ -1293,16 +1308,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
-  // How far a row slides to expose its actions. Open shows two chips (pin + ✓),
-  // every other tab a single ⋯, so it needs less room.
-  const swipeReveal = view === 'open' ? 72 : 44;
-  const onRowTouchStart = (e: ReactTouchEvent, id: string): void => {
+  // Every row in a list shares one swipe layout, so the edges' actions and widths are per view.
+  const swipeActions = sessionSwipeActions(view);
+  const swipeSizes = swipeWidths(view);
+  const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean): void => {
     if (!isMobile) return;
     const t = e.touches[0];
     // Clear any guard left set by a prior swipe that fired no trailing click, so the next
     // genuine tap isn't swallowed.
     swipeClickGuard.current = false;
-    swipeRef.current = { id, x: t.clientX, y: t.clientY, axis: '', mx: 0, wasOpen: swipeOpenId === id };
+    const from = swipeOpen && swipeOpen.id === session.id ? swipeOpen.side : null;
+    const geometry = swipeGeometry(view, e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+    swipeRef.current = {
+      session,
+      x: t.clientX,
+      y: t.clientY,
+      axis: '',
+      offset: restingOffset(from, geometry),
+      from,
+      geometry,
+    };
   };
   const onRowTouchMove = (e: ReactTouchEvent): void => {
     const st = swipeRef.current;
@@ -1316,37 +1341,33 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
       st.axis = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
       if (st.axis === 'h') {
-        setSwipeDragId(st.id);
-        setSwipeOpenId((cur) => (cur && cur !== st.id ? null : cur)); // starting a swipe shuts any other open row
+        setSwipeOpen((cur) => (cur && cur.id !== st.session.id ? null : cur)); // starting a swipe shuts any other open row
       }
     }
     if (st.axis !== 'h') return;
-    st.mx = mx; // synchronous truth for the touchend decision
-    const base = st.wasOpen ? -swipeReveal : 0;
-    setSwipeDx(Math.max(-swipeReveal - 20, Math.min(0, base + mx))); // clamp with a little left-side rubber-band
+    st.offset = dragOffset(st.from, mx, st.geometry); // synchronous truth for the touchend decision
+    setSwipeDrag({ id: st.session.id, dx: st.offset, armed: isFullSwipe(st.offset, st.geometry) });
   };
   const onRowTouchEnd = (): void => {
     const st = swipeRef.current;
     swipeRef.current = null;
     if (!st || st.axis !== 'h') {
-      setSwipeDragId(null);
+      setSwipeDrag(null);
       return;
     }
     swipeClickGuard.current = true; // the trailing click (if any) must not navigate
-    // Decide by gesture direction, not absolute position: a deliberate left drag opens a closed
-    // row; any clear right drag dismisses an open one. Reading st.mx (a ref) avoids the stale
-    // swipeDx state that React's deferred touchmove updates would otherwise leave at touchend.
-    const open = st.wasOpen ? st.mx <= 16 : st.mx < -swipeReveal / 2;
-    setSwipeOpenId(open ? st.id : null);
-    setSwipeDragId(null);
-    setSwipeDx(0);
+    // Reading st.offset (a ref) avoids the stale swipeDrag state that React's deferred touchmove
+    // updates would otherwise leave at touchend.
+    const { open, fullSwipe } = settleSwipe(st.from, st.offset, st.geometry);
+    setSwipeOpen(open ? { id: st.session.id, side: open } : null);
+    setSwipeDrag(null);
+    if (fullSwipe) runSwipeAction(swipeActions.leading[0], st.session);
   };
   // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
   // drop the drag and let the row settle back to its committed open/closed state.
   const onRowTouchCancel = (): void => {
     swipeRef.current = null;
-    setSwipeDragId(null);
-    setSwipeDx(0);
+    setSwipeDrag(null);
   };
   // The user's prompt for the turn currently in view, surfaced as a sticky bar when a long
   // answer has pushed that bubble off the top — so what was asked stays findable. null hides it.
@@ -3789,6 +3810,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
+  // A tapped swipe button (or a full swipe) runs the same request as the row's hover or menu
+  // action; the row settles closed either way.
+  const runSwipeAction = (action: SwipeAction, s: any): void => {
+    setSwipeOpen(null);
+    if (action === 'complete') requestComplete(s);
+    else if (action === 'restore') requestRestore(s);
+    else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
+    else if (action === 'delete') deleteMut.mutate({ id: s.id, title: s.title });
+    else confirmPurge({ id: s.id, title: s.title });
+  };
   // Apply the menu's complete selection in one write. Optimistically patch every list scope so the
   // checkmarks, row dots and tag grouping move immediately; the server response restores its order.
   const setTagsMut = useMutation({
@@ -5116,31 +5147,68 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
                 const line = sessionLine(actionSession, openable);
-                const swiped = swipeOpenId === s.id;
-                const dragging = swipeDragId === s.id;
-                const swipeTx = dragging ? swipeDx : swiped ? -swipeReveal : 0;
+                const drag = swipeDrag?.id === s.id ? swipeDrag : null;
+                const swipeTx = drag
+                  ? drag.dx
+                  : restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null, swipeSizes);
+                // As on iOS, a full swipe runs the leading edge's first action only when it can run.
+                const canFullSwipe = view === 'open' ? canCompleteRow : canRestoreRow;
+                const swipeButtons = {
+                  complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
+                  restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
+                  pin: s.pinnedAt
+                    ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
+                    : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
+                  delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
+                  purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
+                };
                 return (
                   <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'open' && s.pinnedAt ? ' pinned' : ''}${swiped ? ' swipe-open' : ''}`}
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'open' && s.pinnedAt ? ' pinned' : ''}`}
                     key={s.id}
                     onClick={() => {
                       if (swipeClickGuard.current) {
                         swipeClickGuard.current = false;
                         return; // this click merely ends a swipe
                       }
-                      if (swipeOpenId) {
-                        setSwipeOpenId(null); // a tap anywhere on an open row just closes it
+                      if (swipeOpen) {
+                        setSwipeOpen(null); // a tap anywhere on an open row just closes it
                         return;
                       }
                       if (openable) navigate(`/sessions/${encodeId(s.id)}`);
                     }}
-                    onTouchStart={(e) => onRowTouchStart(e, s.id)}
+                    onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
                   >
+                    {isMobile &&
+                      (['leading', 'trailing'] as const).map((side) => (
+                        <div
+                          key={side}
+                          className={`session-swipe-actions ${side}${drag ? ' dragging' : ''}${side === 'leading' && drag?.armed ? ' armed' : ''}`}
+                          style={{ width: Math.max(0, side === 'leading' ? swipeTx : -swipeTx) }}
+                        >
+                          {swipeActions[side].map((action) => (
+                            <button
+                              key={action}
+                              type="button"
+                              className={`session-swipe-action ${action}`}
+                              aria-label={swipeButtons[action].label}
+                              aria-disabled={swipeButtons[action].disabled}
+                              tabIndex={-1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                runSwipeAction(action, s);
+                              }}
+                            >
+                              {swipeButtons[action].icon}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
                     <div
-                      className={`session-swipe${dragging ? ' dragging' : ''}`}
+                      className={`session-swipe${drag ? ' dragging' : ''}`}
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
@@ -5177,7 +5245,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
-                                  setSwipeOpenId(null);
+                                  setSwipeOpen(null);
                                 }}
                               >
                                 {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
@@ -5197,14 +5265,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   requestComplete(s);
-                                  setSwipeOpenId(null);
+                                  setSwipeOpen(null);
                                 }}
                                 onKeyDown={(e) => {
                                   if (e.key !== 'Enter' && e.key !== ' ') return;
                                   e.preventDefault();
                                   e.stopPropagation();
                                   requestComplete(s);
-                                  setSwipeOpenId(null);
+                                  setSwipeOpen(null);
                                 }}
                               >
                                 <CheckOutlined />

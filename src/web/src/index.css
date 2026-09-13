@@ -3841,8 +3841,8 @@ html[data-theme='dark'] .session-tag-chip {
   overflow: hidden;
   --row-bg: var(--bg-raised);
 }
-/* Wraps the row's icon + text so a touch swipe can slide it left, exposing the actions
-   pinned to the right edge. On desktop it never translates (transform stays 0). */
+/* Wraps the row's icon + text so a touch swipe can slide it either way, exposing the swipe
+   actions behind it. On desktop it never translates (transform stays 0). */
 .session-swipe {
   display: flex;
   align-items: center;
@@ -3851,13 +3851,78 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
   transition: transform 0.18s ease;
 }
-.session-swipe.dragging {
+.session-swipe.dragging,
+.session-swipe-actions.dragging {
   transition: none; /* track the finger 1:1 mid-drag; only snaps animate */
 }
-/* A swiped-open row reveals its actions exactly like hover does. */
-.session-row.swipe-open .session-right {
-  opacity: 1;
-  pointer-events: auto;
+/* Touch swipe actions, laid out like the iOS list: swipe right exposes the leading edge
+   (Complete or Move to Open, then Pin), swipe left the trailing one (Delete). Each edge is
+   exactly as wide as the gap the sliding content opens, so the two animate as one. */
+.session-swipe-actions {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  overflow: hidden;
+  transition: width 0.18s ease;
+}
+.session-swipe-actions.leading {
+  left: 0;
+}
+.session-swipe-actions.trailing {
+  right: 0;
+}
+.session-swipe-action {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  transition: flex-grow 0.15s ease;
+}
+.session-swipe-action[aria-disabled='true'] {
+  opacity: 0.45;
+}
+/* Past the full-swipe mark the first action fills the gap, its icon riding beside the row. */
+.session-swipe-actions.armed .session-swipe-action:first-child {
+  justify-content: flex-end;
+  padding-right: 26px;
+}
+.session-swipe-actions.armed .session-swipe-action:not(:first-child) {
+  flex-grow: 0;
+}
+/* The iOS system colours the native swipe buttons use. */
+.session-swipe-action.complete {
+  background: #34c759;
+}
+.session-swipe-action.restore {
+  background: #007aff;
+}
+.session-swipe-action.pin {
+  background: #5856d6;
+}
+.session-swipe-action.delete,
+.session-swipe-action.purge {
+  background: #ff3b30;
+}
+:root[data-theme='dark'] .session-swipe-action.complete {
+  background: #30d158;
+}
+:root[data-theme='dark'] .session-swipe-action.restore {
+  background: #0a84ff;
+}
+:root[data-theme='dark'] .session-swipe-action.pin {
+  background: #5e5ce6;
+}
+:root[data-theme='dark'] .session-swipe-action.delete,
+:root[data-theme='dark'] .session-swipe-action.purge {
+  background: #ff453a;
 }
 @media (hover: hover) {
   .session-row:hover {
@@ -3951,8 +4016,8 @@ html[data-theme='dark'] .session-tag-chip {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-/* Reveal-on-hover only for real pointers. On touch, actions come from a swipe (or the ⋯
-   menu once swiped open); keeping :hover off touch also stops iOS Safari's "first tap shows
+/* Reveal-on-hover only for real pointers. On touch, actions come from a swipe
+   (.session-swipe-actions); keeping :hover off touch also stops iOS Safari's "first tap shows
    hover, second tap clicks" — which was swallowing the tap that should open the session. */
 @media (hover: hover) {
   .session-row:hover .session-right {
