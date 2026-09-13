@@ -178,10 +178,30 @@ async function quiesce(): Promise<void> {
   for (const loop of loops.splice(0)) await loop.stop();
 }
 
-function pool(): PrismaClient {
+/**
+ * A pool that has connected, as a running replica's has. A client made moments before a case uses it
+ * starts Prisma's engine and opens its first connection inside that first call, and on a starved host the
+ * two together outlast the two seconds Prisma waits before a transaction fails to start (P2028).
+ */
+async function pool(): Promise<PrismaClient> {
   const prisma = prismaClientFor(URL!);
   clients.push(prisma);
+  await warm([prisma], 1);
   return prisma;
+}
+
+/** pg.Pool's default size, which a PrismaPg built from a URL keeps. */
+const POOL_MAX = 10;
+
+/**
+ * Opens `connections` connections in each pool before a case bursts work onto it. A replica that has
+ * been serving has its pool open when events arrive; a pool made moments before a burst opens them in
+ * the middle of it, and on a starved host each new PostgreSQL connection takes seconds — longer than
+ * the two seconds Prisma waits for one before a transaction fails to start (P2028). The race would be
+ * the connection handshakes, not the hints, landings and inserts the case is about.
+ */
+async function warm(pools: PrismaClient[], connections = POOL_MAX): Promise<void> {
+  await Promise.all(pools.flatMap((prisma) => Array.from({ length: connections }, () => prisma.$executeRaw`SELECT pg_sleep(0.1)`)));
 }
 
 interface Replica {
@@ -192,8 +212,8 @@ interface Replica {
 }
 
 /** One apiserver replica as far as Watch evaluation can tell: its own pool, hub and evaluator. */
-function replica(options: WatchEvaluatorOptions = {}): Replica {
-  const prisma = pool();
+async function replica(options: WatchEvaluatorOptions = {}): Promise<Replica> {
+  const prisma = await pool();
   const hub = new Hub(prisma);
   const evaluator = new WatchEvaluatorService(prisma as unknown as PrismaService, hub, {
     reconcileIntervalMs: HOUR,
@@ -211,8 +231,8 @@ interface Worker {
 }
 
 /** One replica's delivery worker: its own pool, the real sessions service and the recording push. */
-function worker(options: WatchDeliveryOptions = {}, hub?: Hub): Worker {
-  const prisma = pool();
+async function worker(options: WatchDeliveryOptions = {}, hub?: Hub): Promise<Worker> {
+  const prisma = await pool();
   const queue = { notifySessionQueued: () => { queueSignals += 1; } };
   const sessions = new SessionsService(prisma as unknown as PrismaService, queue as never, (hub ?? new Hub(prisma)) as never);
   const delivery = new WatchDeliveryService(prisma as unknown as PrismaService, sessions, recordingPush(prisma), {
@@ -283,25 +303,26 @@ async function lockWaiters(fragment: string): Promise<number> {
 
 /** Samples a predicate over committed rows until finished; a violation is any non-null answer. */
 function invariant(check: () => Promise<string | null>): { finish(): Promise<string[]> } {
-  const reader = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
   const violations: string[] = [];
   let running = true;
   const loop = (async () => {
-    await reader.connect();
     while (running) {
       const violation = await check().catch((error: unknown) => `probe failed: ${String(error)}`);
       if (violation) violations.push(violation);
       await sleep(20, undefined, { ref: false });
     }
-    await reader.end().catch(() => undefined);
   })();
-  return {
-    async finish() {
-      running = false;
-      await loop;
-      return violations;
-    },
+  const finish = async () => {
+    running = false;
+    await loop;
+    return violations;
   };
+  // A case that fails before it finishes has quiesce() stop the probe. Every check reads through `sql`:
+  // the probe no longer opens a connection of its own that nothing read, which a failed case left open —
+  // keeping this process alive until run-pg-spec killed it — and which a starved host could fail to open
+  // within its five seconds by itself.
+  loops.push({ stop: finish });
+  return { finish };
 }
 
 async function eventually<T>(what: string, read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 30_000): Promise<T> {
@@ -503,8 +524,8 @@ qa('QA-01', 'normal path, NOTIFY_USER: the running loops match a hinted change o
   await insertDevice(owner);
   const [first, second, third] = [await insertTask(owner, 'OPEN'), await insertTask(owner, 'OPEN'), await insertTask(owner, 'OPEN')];
   // The sweep is an hour out, so anything that matches within seconds was moved by the hint.
-  const server = replica({ pollIntervalMs: 200 });
-  const deliveries = worker({ pollIntervalMs: 100 });
+  const server = await replica({ pollIntervalMs: 200 });
+  const deliveries = await worker({ pollIntervalMs: 100 });
   server.evaluator.start();
   deliveries.delivery.start();
 
@@ -561,8 +582,8 @@ qa('QA-02', 'normal path, RESUME_SESSION: a settled target wakes a parked observ
   const targetTurn = await insertRunningTurn(target, 2);
   // Correctness only. How soon the runner door's completion reaches the evaluator is D3's question
   // (watch-core-qa-defects.pg.spec.ts), so a short sweep keeps this case from waiting on it.
-  const server = replica({ reconcileIntervalMs: 5_000, pollIntervalMs: 200 });
-  const deliveries = worker({ pollIntervalMs: 100 }, server.hub);
+  const server = await replica({ reconcileIntervalMs: 5_000, pollIntervalMs: 200 });
+  const deliveries = await worker({ pollIntervalMs: 100 }, server.hub);
   const door = runnerDoor(server.prisma, server.hub);
   server.evaluator.start();
   deliveries.delivery.start();
@@ -657,8 +678,21 @@ qa('QA-03', 'duplicate, irrelevant and out-of-order hints over four replicas, an
   const owner = await insertUser();
   await insertDevice(owner);
   const [first, second, third] = [await insertTask(owner, 'OPEN'), await insertTask(owner, 'OPEN'), await insertTask(owner, 'OPEN')];
-  const replicas = [0, 1, 2, 3].map(() => replica({ pollIntervalMs: 50, reconcileIntervalMs: 3_000 }));
-  const workers = [0, 1, 2].map(() => worker({ pollIntervalMs: 50 }));
+  const replicas = await Promise.all([0, 1, 2, 3].map(() => replica({ pollIntervalMs: 50, reconcileIntervalMs: 3_000 })));
+  const workers = await Promise.all([0, 1, 2].map(() => worker({ pollIntervalMs: 50 })));
+  const pools = [...replicas, ...workers].map(({ prisma }) => prisma);
+  await warm(pools); // for step 1's storm; step 3's flood comes after their idle connections have closed
+  // Every hint a replica is handed, published or direct, until it has reached the database.
+  const hinting = new Set<Promise<number>>();
+  for (const { evaluator } of replicas) {
+    const hint = evaluator.hint.bind(evaluator);
+    evaluator.hint = (kind, ids) => {
+      const applying = hint(kind, ids);
+      hinting.add(applying);
+      void applying.finally(() => hinting.delete(applying));
+      return applying;
+    };
+  }
   const watch = await replicas[0].watches.create(owner, watchBody({
     predicate: ALL('TASK_TERMINAL'),
     targets: tasks(first, second, third),
@@ -696,16 +730,24 @@ qa('QA-03', 'duplicate, irrelevant and out-of-order hints over four replicas, an
 
   // 2. The other two end in one transaction whose events are published before it commits.
   const writer = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
+  heldLocks.push(() => writer.end().catch(() => undefined)); // a failure below leaves its transaction open
   await writer.connect();
   await writer.query('BEGIN');
   await writer.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [second]);
   await writer.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [third]);
   const beforeHints = await watchRow(watch.id);
   for (const { hub } of replicas) hub.publishForUser(owner, RunEventType.TASK_CHANGED, { taskIds: [second, third], resync: false });
+  // Nothing hinted may still be on its way at the commit. A hint that reaches the database after it, or
+  // an evaluation such a hint made due that reads the rows after it, arrived after the commit, and the
+  // Match it causes rightly comes before the sweep. So every hint is applied first, and then the last
+  // evaluation they caused has landed: its schedule is what is read, not a claim's lease.
+  while (hinting.size > 0) await Promise.all(hinting);
+  // A claim moves next_evaluate_at a lease (a minute) past now; a landing, the 3s reconciliation past itself.
+  const leased = (row: WatchRead) => Date.parse(`${row.nextEvaluateAt}Z`) - Date.parse(`${row.evaluatedAt}Z`) > 30_000;
   const stale = await eventually(
     'an evaluation hinted before the commit to land',
     () => watchRow(watch.id),
-    (row) => row.evaluatedAt! > beforeHints.evaluatedAt! && row.due === false,
+    (row) => row.evaluatedAt! > beforeHints.evaluatedAt! && row.due === false && !leased(row),
   );
   assert.equal(stale.state, 'ACTIVE', 'an evaluation read a write that had not committed');
   await writer.query('COMMIT');
@@ -716,6 +758,7 @@ qa('QA-03', 'duplicate, irrelevant and out-of-order hints over four replicas, an
   note('QA-03', { staleScheduleAt: stale.nextEvaluateAt, matchedAt: match.matchedAt, commitToMatchMs: Date.now() - committedAt });
 
   // 3. After the Match: hints, evaluations and drains keep arriving on every replica.
+  await warm(pools);
   const flood: Array<Promise<unknown>> = [];
   const lateEvaluations: Array<Promise<{ outcome: string }>> = [];
   for (let i = 0; i < 200; i += 1) {
@@ -740,8 +783,8 @@ qa('QA-03', 'duplicate, irrelevant and out-of-order hints over four replicas, an
 qa('QA-04', 'notifications lost on purpose: events published on a replica whose evaluator is gone never reach the survivor, whose reconciliation still matches every leaf class no earlier than its sweep', 180_000, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const writer = replica(); // handles the writes and publishes the events; its evaluator is never started
-  const survivor = replica({ reconcileIntervalMs: 2_500, pollIntervalMs: 100 });
+  const writer = await replica(); // handles the writes and publishes the events; its evaluator is never started
+  const survivor = await replica({ reconcileIntervalMs: 2_500, pollIntervalMs: 100 });
   let hintsReachingSurvivor = 0;
   const hint = survivor.evaluator.hint.bind(survivor.evaluator);
   survivor.evaluator.hint = async (kind, ids) => {
@@ -799,7 +842,7 @@ qa('QA-04', 'notifications lost on purpose: events published on a replica whose 
 
   // The paired control: on the replica that published, a running evaluator is hinted long before an hour-long sweep.
   await survivor.evaluator.stop();
-  const control = replica({ pollIntervalMs: 200 });
+  const control = await replica({ pollIntervalMs: 200 });
   control.evaluator.start();
   const other = await insertTask(owner, 'OPEN');
   const hinted = await control.watches.create(owner, watchBody({ predicate: ANY('TASK_FAILED'), targets: tasks(other), action: 'NOTIFY_USER' }));
@@ -817,7 +860,8 @@ qa('QA-05', 'creation races: eight creates forced to collide on one key, a targe
   const ended = await insertTask(owner, 'CANCELLED');
   const key = `watch-qa-${randomUUID()}`;
   const body = () => watchBody({ predicate: ALL('TASK_TERMINAL'), targets: tasks(ended), action: 'NOTIFY_USER', idempotencyKey: key });
-  const services = Array.from({ length: 8 }, () => new WatchesService(pool() as unknown as PrismaService));
+  const pools = await Promise.all(Array.from({ length: 8 }, () => pool()));
+  const services = pools.map((prisma) => new WatchesService(prisma as unknown as PrismaService));
   const gate = await holdLock(`LOCK TABLE "watch" IN SHARE ROW EXCLUSIVE MODE`);
   const racing = services.map((service) => service.create(owner, body()));
   const overlap = await eventually('the creates to reach the insert', () => lockWaiters('INSERT INTO "public"."watch" '), (n) => n >= 8, 3_500)
@@ -843,7 +887,7 @@ qa('QA-05', 'creation races: eight creates forced to collide on one key, a targe
 
   // 2. The target changes after creation read it and before the watch commits; the hint that change
   //    publishes finds no watch. Being created due is what must still catch it.
-  const server = replica({ pollIntervalMs: 100 });
+  const server = await replica({ pollIntervalMs: 100 });
   server.evaluator.start();
   const racingTask = await insertTask(owner, 'OPEN');
   const seam = server.watches as unknown as { readTargets: (...args: unknown[]) => Promise<unknown> };
@@ -872,7 +916,7 @@ qa('QA-05', 'creation races: eight creates forced to collide on one key, a targe
   note('QA-05', { createRaceMatchedAt: caught.matchedAt });
 
   // 3. Cancel or pause against a landing of the same crossing, twelve rounds.
-  const judge = replica();
+  const judge = await replica();
   const tally: Record<string, number> = {};
   for (let round = 0; round < 12; round += 1) {
     const work = await insertTask(owner, 'OPEN');
@@ -913,8 +957,8 @@ qa('QA-06', 'a worker stalled inside its own transaction past its lease: the eva
   const runner = await insertRunner(owner);
 
   // 1. The evaluator: parked at the Match insert, past the lease and past the transaction's time limit.
-  const holder = replica({ leaseMs: 1_500 });
-  const taker = replica({ leaseMs: 1_500 });
+  const holder = await replica({ leaseMs: 1_500 });
+  const taker = await replica({ leaseMs: 1_500 });
   const work = await insertTask(owner, 'OPEN');
   const watch = await holder.watches.create(owner, watchBody({ predicate: ALL('TASK_TERMINAL'), targets: tasks(work), action: 'NOTIFY_USER' }));
   await sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
@@ -954,8 +998,8 @@ qa('QA-06', 'a worker stalled inside its own transaction past its lease: the eva
     observerSessionId: observer,
   }));
   assert.equal(resume.state, 'MATCHED');
-  const slow = worker({ leaseMs: 1_500 });
-  const takeover = worker();
+  const slow = await worker({ leaseMs: 1_500 });
+  const takeover = await worker();
   const honest = invariant(async () => {
     const [delivery] = await deliveriesOf(resume.id);
     const wakes = await wakesOf(resume.id);
@@ -999,7 +1043,7 @@ qa('QA-07', 'a delivery whose workers keep dying is taken back eight times, then
   const owner = await insertUser();
   const runner = await insertRunner(owner);
   const observer = await insertSession(owner, 'AWAITING_INPUT', runner);
-  const watches = new WatchesService(pool() as unknown as PrismaService);
+  const watches = new WatchesService((await pool()) as unknown as PrismaService);
   const watch = await watches.create(owner, watchBody({
     predicate: ALL('TASK_TERMINAL'),
     targets: tasks(await insertTask(owner, 'FAILED')),
@@ -1007,9 +1051,9 @@ qa('QA-07', 'a delivery whose workers keep dying is taken back eight times, then
     observerSessionId: observer,
   }));
   const [{ id: deliveryId }] = await deliveriesOf(watch.id);
-  const sweeper = worker();
+  const sweeper = await worker();
   for (let attempt = 1; attempt <= 8; attempt += 1) {
-    const doomed = worker({ leaseMs: 150 });
+    const doomed = await worker({ leaseMs: 150 });
     const claims = await doomed.delivery.claimDue();
     assert.ok(claims.some((claim) => claim.id === deliveryId), `attempt ${attempt}: the delivery was not claimable`);
     // The process is gone: its pool closes and nothing settles the claim.
@@ -1042,7 +1086,7 @@ qa('QA-07', 'a delivery whose workers keep dying is taken back eight times, then
     action: 'RESUME_SESSION',
     observerSessionId: recovering,
   }));
-  const doomed = worker({ leaseMs: 150 });
+  const doomed = await worker({ leaseMs: 150 });
   assert.equal((await doomed.delivery.claimDue()).length, 1);
   await doomed.delivery.stop();
   await doomed.prisma.$disconnect();
@@ -1058,7 +1102,7 @@ qa('QA-08', 'a RUNNING observer: two wakes and a person\'s message queue behind 
   const runner = await insertRunner(owner);
   const observer = await insertSession(owner, 'RUNNING', runner);
   const current = await insertRunningTurn(observer, 2);
-  const prisma = pool();
+  const prisma = await pool();
   const hub = new Hub(prisma);
   const door = runnerDoor(prisma, hub);
   const watches = new WatchesService(prisma as unknown as PrismaService);
@@ -1070,7 +1114,7 @@ qa('QA-08', 'a RUNNING observer: two wakes and a person\'s message queue behind 
       observerSessionId: observer,
     }))).id;
   const [firstWatch, secondWatch] = [await wakeOn(), await wakeOn()];
-  const workers = [worker({}, hub), worker({}, hub), worker({}, hub)];
+  const workers = await Promise.all([worker({}, hub), worker({}, hub), worker({}, hub)]);
   const person = new SessionsService(prisma as unknown as PrismaService, { notifySessionQueued: () => undefined } as never, hub as never);
   const oneRun = invariant(async () => {
     const { rows: [row] } = await sql.query<{ status: string; inFlight: number }>(

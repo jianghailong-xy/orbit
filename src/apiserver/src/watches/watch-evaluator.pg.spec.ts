@@ -227,7 +227,11 @@ async function insertApproval(sessionId: string, status: string): Promise<void> 
   );
 }
 
-/** A watch as creation leaves it: ACTIVE, generation 0, due now, its target set frozen. */
+/**
+ * A watch as creation leaves it: ACTIVE, generation 0, due now, its target set frozen. One statement,
+ * as creation writes both in one transaction: a loop already running never claims a due watch
+ * before its targets exist and settles it UNRESOLVABLE for having none.
+ */
 async function insertWatch(
   targets: Target[],
   predicate: unknown,
@@ -235,16 +239,25 @@ async function insertWatch(
 ): Promise<string> {
   const id = randomUUID();
   await sql.query(
-    `INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at","next_evaluate_at")
-     VALUES ($1,$2,'USER',$3::jsonb,'ONE_SHOT','NOTIFY_USER',$4,now() + $5::int * interval '1 millisecond',now())`,
-    [id, ownerId, JSON.stringify(predicate), over.state ?? 'ACTIVE', over.ttlMs ?? HOUR],
+    `WITH "created" AS (
+       INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at","next_evaluate_at")
+       VALUES ($1,$2,'USER',$3::jsonb,'ONE_SHOT','NOTIFY_USER',$4,now() + $5::int * interval '1 millisecond',now())
+       RETURNING "id"
+     )
+     INSERT INTO "watch_target"("id","watch_id","target_kind","target_resource_id")
+     SELECT "target"."id", "created"."id", "target"."kind", "target"."resource_id"
+       FROM "created", unnest($6::uuid[], $7::text[], $8::uuid[]) AS "target"("id", "kind", "resource_id")`,
+    [
+      id,
+      ownerId,
+      JSON.stringify(predicate),
+      over.state ?? 'ACTIVE',
+      over.ttlMs ?? HOUR,
+      targets.map(() => randomUUID()),
+      targets.map((target) => target.kind),
+      targets.map((target) => target.id),
+    ],
   );
-  for (const target of targets) {
-    await sql.query(
-      `INSERT INTO "watch_target"("id","watch_id","target_kind","target_resource_id") VALUES ($1,$2,$3,$4)`,
-      [randomUUID(), id, target.kind, target.id],
-    );
-  }
   return id;
 }
 
