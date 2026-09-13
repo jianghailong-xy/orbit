@@ -7,8 +7,17 @@ import type { Prisma } from '@prisma/client';
  */
 const WAKE_TURN_KEY = /^watch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(\d+|expired)$/;
 
+/** What took a queued wake off its observer's queue before any runner took it. The code heads its dead letter. */
+export type UnrunWake =
+  /** The observer's run ended, and the drain that ended its queue answered the wake. */
+  | { code: 'OBSERVER_SESSION_ENDED'; ending: string }
+  /** The observer was interrupted, and the interrupt deleted everything queued behind the turn it stopped. */
+  | { code: 'OBSERVER_TURN_INTERRUPTED' }
+  /** The owner withdrew this one queued turn. */
+  | { code: 'WAKE_WITHDRAWN'; turnId: string };
+
 /**
- * A Watch wake whose observer's run ended before any runner took it (docs/watch-contract.md §3, §5, §6).
+ * A Watch wake taken off its observer's queue before any runner took it (docs/watch-contract.md §3, §5, §6).
  *
  * The delivery worker queues a RESUME_SESSION wake as one turn, keyed `watch:<watchId>:<generation>` for
  * a Match and `watch:<watchId>:expired` for a watch that expired unmatched, and acknowledges the delivery
@@ -25,20 +34,34 @@ const WAKE_TURN_KEY = /^watch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[
  * ended before it was queued, reached later. Nothing is revived, and a session that is revived does not
  * get the wake back: the watch's read says it was not delivered.
  *
+ * An observer that lives on can lose a queued wake as well, and there the turn is deleted rather than
+ * answered. Interrupting means stop: `SessionsService.interrupt` deletes every follow-up queued behind
+ * the turn it stops, a wake among them — `OBSERVER_TURN_INTERRUPTED` — because a wake kept queued, or
+ * queued again, would start the session its owner just stopped. `SessionsService.cancelQueuedTurn`
+ * withdraws a wake like any queued message, and only the one it names — `WAKE_WITHDRAWN`. Each calls
+ * this first in the same way. The deleted turn frees its key, but nothing queues the wake under it
+ * again: no worker claims a dead letter.
+ *
  * A wake a runner already took — IN_FLIGHT, or ANSWERED by its own completion — stays DELIVERED. It
  * reached the observer's engine; what that run came to is the session's to say.
  *
- * The read is the same shape as the drain's own statement, and a session with no wake queued writes
- * nothing. Lock order: the caller holds the Session row (rank 30); the write takes only the delivery
- * rows of that session's own wakes, and nothing holding a delivery row waits on a session.
+ * The read is the same shape as the statement that takes the turns off the queue, and a session with no
+ * wake queued writes nothing. Lock order: the caller holds the Session row (rank 30); the write takes
+ * only the delivery rows of that session's own wakes, and nothing holding a delivery row waits on a
+ * session.
  */
 export async function deadLetterQueuedWatchWakes(
   tx: Prisma.TransactionClient,
   sessionId: string,
-  ending: string,
+  unrun: UnrunWake,
 ): Promise<void> {
   const queued = await tx.conversationTurn.findMany({
-    where: { sessionId, status: 'PENDING', clientTurnId: { startsWith: 'watch:' } },
+    where: {
+      sessionId,
+      ...('turnId' in unrun ? { id: unrun.turnId } : {}),
+      status: 'PENDING',
+      clientTurnId: { startsWith: 'watch:' },
+    },
     select: { clientTurnId: true },
   });
   const wakes = queued.flatMap(({ clientTurnId }): Prisma.WatchDeliveryWhereInput[] => {
@@ -56,9 +79,20 @@ export async function deadLetterQueuedWatchWakes(
       state: 'DEAD_LETTER',
       deliveredAt: null,
       deadLetteredAt: new Date(),
-      lastError:
-        `OBSERVER_SESSION_ENDED: the observer session's run ended (${ending}) before a runner took its queued wake, `
-        + 'and a watch does not revive it',
+      lastError: lastErrorOf(unrun),
     },
   });
+}
+
+function lastErrorOf(unrun: UnrunWake): string {
+  switch (unrun.code) {
+    case 'OBSERVER_SESSION_ENDED':
+      return `OBSERVER_SESSION_ENDED: the observer session's run ended (${unrun.ending}) before a runner took its queued wake, `
+        + 'and a watch does not revive it';
+    case 'OBSERVER_TURN_INTERRUPTED':
+      return 'OBSERVER_TURN_INTERRUPTED: the observer session was interrupted before a runner took its queued wake, '
+        + 'and an interrupt drops what is queued behind the turn it stops';
+    case 'WAKE_WITHDRAWN':
+      return "WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it";
+  }
 }

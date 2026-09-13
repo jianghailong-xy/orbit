@@ -3565,7 +3565,10 @@ export class RunnerApiController {
         currentWorkTerminalized += terminalized.terminalizedTurnIds.length;
         // A Watch wake queued behind the failed turn goes with the drain below, unrun: its delivery
         // stops reading DELIVERED first (watches/watch-wake-drain.ts).
-        await deadLetterQueuedWatchWakes(tx, sessionId, 'its running turn failed');
+        await deadLetterQueuedWatchWakes(tx, sessionId, {
+          code: 'OBSERVER_SESSION_ENDED',
+          ending: 'its running turn failed',
+        });
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4306,7 +4309,10 @@ export class RunnerApiController {
       const currentWorkTerminalized = currentWork.terminalizedTurnIds.length;
       // A Watch wake still queued goes with the drain below, unrun: its delivery stops reading
       // DELIVERED first (watches/watch-wake-drain.ts).
-      await deadLetterQueuedWatchWakes(tx, sessionId, `the runner finalized it as ${effectiveStatus}`);
+      await deadLetterQueuedWatchWakes(tx, sessionId, {
+        code: 'OBSERVER_SESSION_ENDED',
+        ending: `the runner finalized it as ${effectiveStatus}`,
+      });
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },

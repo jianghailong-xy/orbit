@@ -326,7 +326,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       const currentWorkTerminalized = currentWork.terminalizedTurnIds.length;
       // A Watch wake still queued goes with the drain below, unrun: its delivery stops reading
       // DELIVERED first (watches/watch-wake-drain.ts).
-      await deadLetterQueuedWatchWakes(tx, sessionId, `reaped as ${status}: ${reason}`);
+      await deadLetterQueuedWatchWakes(tx, sessionId, {
+        code: 'OBSERVER_SESSION_ENDED',
+        ending: `reaped as ${status}: ${reason}`,
+      });
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },

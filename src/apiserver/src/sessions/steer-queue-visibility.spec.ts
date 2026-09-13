@@ -46,6 +46,8 @@ function makeService(
       update: async () => ({ ...session }),
     },
     conversationTurn: {
+      // No Watch wake is queued here, so a withdrawal has no delivery to dead-letter.
+      findMany: async () => [],
       deleteMany: async ({ where }: { where: Record<string, unknown> }) => {
         deleteFilters.push(where);
         return { count: deleteCounts[deletes++] ?? 0 };

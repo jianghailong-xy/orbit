@@ -10,7 +10,8 @@
  * of sent. Faults are injected in the database, by a trigger that refuses one session's turns or one
  * watch's delivery, so a failure travels the path a real one takes. The endings that drain a queued
  * wake unrun — a failed turn, a lost runner, a runner finalize, an owner's end — are driven through the
- * production turn completion, reaper sweep, finalize and end.
+ * production turn completion, reaper sweep, finalize and end; an interrupt and a withdrawal that delete
+ * one from a live observer's queue, through the production interrupt and cancelQueuedTurn.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-delivery.pg.spec.ts
  *
@@ -861,15 +862,24 @@ async function wakeQueuedBehindRunningTurn(owner: string, runner: string, pool: 
   return { observer, current, watchId, deliveryId, wakeId: wake.id };
 }
 
-/** The ending answered the wake away unrun, its delivery says so on the watch's own read, and nothing else about the watch moved. */
-async function assertDeadLettered(owner: string, queued: QueuedWake, ending: string): Promise<void> {
+/**
+ * The wake was taken off the queue unrun — answered by an ending's drain, or deleted by an interrupt or a
+ * withdrawal — its delivery says so on the watch's own read, and nothing else about the watch moved.
+ */
+async function assertDeadLettered(
+  owner: string,
+  queued: QueuedWake,
+  ending: string,
+  { code = 'OBSERVER_SESSION_ENDED', deleted = false }: { code?: string; deleted?: boolean } = {},
+): Promise<void> {
   const [wake] = (await turnsOn(queued.observer)).filter((turn) => turn.id === queued.wakeId);
-  assert.equal(wake.status, 'ANSWERED', `${ending}: the queue is drained as it always was`);
+  if (deleted) assert.equal(wake, undefined, `${ending}: the wake is deleted as a queued message always was`);
+  else assert.equal(wake?.status, 'ANSWERED', `${ending}: the queue is drained as it always was`);
   const settled = await onlyDelivery(queued.watchId);
   assert.equal(settled.state, 'DEAD_LETTER', `${ending}: a wake no runner took still reads ${settled.state}`);
   assert.equal(settled.deadLettered, true, ending);
   assert.equal(settled.delivered, false, ending);
-  assert.match(settled.lastError ?? '', /^OBSERVER_SESSION_ENDED: /, ending);
+  assert.match(settled.lastError ?? '', new RegExp(`^${code}: `), ending);
   const view = await watches.get(owner, queued.watchId);
   assert.equal(view.state, 'MATCHED', `${ending}: the watch is the terminal fact it was`);
   assert.deepEqual(
@@ -983,4 +993,117 @@ test('a wake still queued when its observer is ended is a dead letter, whether t
     { observer: parked, watchId: parkedWatch, deliveryId: parkedDelivery, wakeId: parkedWake.id },
     'an end was requested while the observer waited for a slot',
   );
+});
+
+// ── a wake an observer that lives on takes off its queue ───────────────────────────────────────
+
+/** An observer whose runner took its wake: the turn in front of it finished, and the wake is the turn running now. */
+async function wakeTakenByRunner(owner: string, runner: string, pool: Worker): Promise<QueuedWake> {
+  const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
+  await runnerApi.turnComplete({ id: runner }, queued.observer, {
+    turnId: queued.current,
+    status: 'SUCCEEDED',
+    subtype: 'completed',
+    numTurns: 2,
+    costUsd: 0,
+  } as never);
+  const inbox = runnerApi as unknown as {
+    dequeueTurn(
+      sessionId: string,
+      runnerId: string,
+      leaseGeneration: null,
+      acceptsSteer: boolean,
+      declaredCapabilities: readonly string[],
+    ): Promise<{ turnId: string } | null>;
+  };
+  assert.equal((await inbox.dequeueTurn(queued.observer, runner, null, false, []))?.turnId, queued.wakeId, 'the runner took the wake');
+  return queued;
+}
+
+/** A message the observer's owner sent, queued behind whatever the observer has queued already. */
+async function queuedMessage(pool: Worker, owner: string, observer: string): Promise<TurnRow> {
+  const clientTurnId = randomUUID();
+  await pool.sessions.createTurn(owner, observer, { clientTurnId, content: 'and then this', intent: 'NEXT_TURN' });
+  const [message] = (await turnsOn(observer)).filter((turn) => turn.clientTurnId === clientTurnId);
+  assert.equal(message?.status, 'PENDING', 'the message waits in the queue');
+  return message;
+}
+
+test('a wake still queued when its observer is interrupted is a dead letter: the interrupt deletes it with the rest of the queue, and nothing queues it again', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  // Another observer of the same owner on the same runner, which nobody interrupts.
+  const bystander = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+
+  const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  const message = await queuedMessage(pool, owner, queued.observer);
+  await pool.sessions.interrupt(owner, queued.observer);
+  assert.equal((await sessionOf(queued.observer)).status, 'RUNNING', 'an interrupt stops a turn, and the observer lives on');
+  assert.deepEqual(
+    (await turnsOn(queued.observer)).filter((turn) => turn.id === message.id),
+    [],
+    'the message queued behind the wake is deleted as it always was',
+  );
+  await assertDeadLettered(owner, queued, 'the observer was interrupted', { code: 'OBSERVER_TURN_INTERRUPTED', deleted: true });
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), queued.deliveryId), [], 'a dead letter is never claimed again');
+
+  // The control: the runner took the wake, and it is the wake's own turn the interrupt stops. The engine
+  // received it, so it was delivered, whatever the interrupt makes of its run.
+  const taken = await wakeTakenByRunner(owner, runner, pool);
+  await pool.sessions.interrupt(owner, taken.observer);
+  const [stopping] = (await turnsOn(taken.observer)).filter((turn) => turn.id === taken.wakeId);
+  assert.equal(stopping?.status, 'IN_FLIGHT', 'the interrupt deleted a wake the runner had taken');
+  assert.equal((await onlyDelivery(taken.watchId)).state, 'DELIVERED', 'a wake the runner took was dead-lettered by an interrupt');
+
+  const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+  assert.equal(waiting?.status, 'PENDING', 'another observer lost its queued wake');
+  assert.equal((await onlyDelivery(bystander.watchId)).state, 'DELIVERED', 'other observers\' interrupts dead-lettered this one\'s wake');
+});
+
+test('a wake its owner withdraws from the observer\'s queue is a dead letter; the observer\'s other queued wake and message keep theirs', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  // Another observer of the same owner on the same runner, whose queue nobody touches.
+  const bystander = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+
+  const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
+  // Behind the wake: a second watch's wake on the same observer, and a message its owner sent.
+  const otherWatch = await matchedWatch(owner, 'RESUME_SESSION', queued.observer);
+  const { id: otherDelivery } = await onlyDelivery(otherWatch);
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), otherDelivery), ['DELIVERED']);
+  const [otherWake] = (await turnsOn(queued.observer)).filter((turn) => turn.clientTurnId === `watch:${otherWatch}:1`);
+  assert.equal(otherWake?.status, 'PENDING', 'the second wake waits behind the first');
+  const message = await queuedMessage(pool, owner, queued.observer);
+
+  await pool.sessions.cancelQueuedTurn(owner, queued.observer, queued.wakeId);
+  assert.equal((await sessionOf(queued.observer)).status, 'RUNNING', 'the observer keeps the run it has');
+  await assertDeadLettered(owner, queued, 'the wake was withdrawn', { code: 'WAKE_WITHDRAWN', deleted: true });
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), queued.deliveryId), [], 'a dead letter is never claimed again');
+  assert.deepEqual(
+    (await turnsOn(queued.observer)).map(({ id, status }) => ({ id, status })),
+    [
+      { id: queued.current, status: 'IN_FLIGHT' },
+      { id: otherWake.id, status: 'PENDING' },
+      { id: message.id, status: 'PENDING' },
+    ],
+    'withdrawing the wake took more than its own turn off the queue',
+  );
+  assert.equal((await onlyDelivery(otherWatch)).state, 'DELIVERED', 'withdrawing one wake dead-lettered another');
+
+  // A queued message that is not a wake is withdrawn as it always was, and no delivery moves.
+  await pool.sessions.cancelQueuedTurn(owner, queued.observer, message.id);
+  assert.deepEqual((await turnsOn(queued.observer)).filter((turn) => turn.id === message.id), [], 'the message was not withdrawn');
+  assert.equal((await onlyDelivery(otherWatch)).state, 'DELIVERED', 'withdrawing a message dead-lettered a wake');
+
+  // The control: a wake the runner took can no longer be withdrawn, and stays delivered.
+  const taken = await wakeTakenByRunner(owner, runner, pool);
+  await assert.rejects(pool.sessions.cancelQueuedTurn(owner, taken.observer, taken.wakeId), /already started or not found/);
+  assert.equal((await onlyDelivery(taken.watchId)).state, 'DELIVERED', 'a wake the runner took was dead-lettered by a refused withdrawal');
+
+  const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+  assert.equal(waiting?.status, 'PENDING', 'another observer lost its queued wake');
+  assert.equal((await onlyDelivery(bystander.watchId)).state, 'DELIVERED', 'other observers\' withdrawals dead-lettered this one\'s wake');
 });

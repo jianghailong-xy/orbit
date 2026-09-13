@@ -3972,6 +3972,10 @@ export class SessionsService {
         reason: 'CURRENT_WORK was not delivered because the session was interrupted.',
       });
       const protectedTargetIds = terminalized.targetTurnIds;
+      // Every follow-up still queued goes below, retired in place or deleted, a Watch wake among them:
+      // its delivery stops reading DELIVERED first, and nothing queues the wake again
+      // (watches/watch-wake-drain.ts).
+      await deadLetterQueuedWatchWakes(tx, id, { code: 'OBSERVER_TURN_INTERRUPTED' });
       if (protectedTargetIds.length > 0) {
         // Target FKs intentionally prevent individual deletion. Retire an undelivered seed in
         // place so its attachments and clientTurnId receipt remain auditable.
@@ -4251,6 +4255,10 @@ export class SessionsService {
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new ConflictException('the session has ended');
       }
+      // A Watch wake is withdrawn like any queued message, and then no runner will take it: its delivery
+      // stops reading DELIVERED first (watches/watch-wake-drain.ts). A withdrawal refused below rolls
+      // that back with it.
+      await deadLetterQueuedWatchWakes(tx, id, { code: 'WAKE_WITHDRAWN', turnId });
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {
@@ -4915,7 +4923,10 @@ export class SessionsService {
       });
       // Both branches below retire every queued message, a Watch wake among them: its delivery
       // stops reading DELIVERED first (watches/watch-wake-drain.ts).
-      await deadLetterQueuedWatchWakes(tx, sessionId, `an end was requested: ${reason}`);
+      await deadLetterQueuedWatchWakes(tx, sessionId, {
+        code: 'OBSERVER_SESSION_ENDED',
+        ending: `an end was requested: ${reason}`,
+      });
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },

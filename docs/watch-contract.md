@@ -170,11 +170,19 @@ Agent 最常要的那句话——「等这 7 个 Task 全部终态，或任一�
 `maxDeliveryAttempts = 8` 之后进 `DEAD_LETTER`，**死信必须在界面上可见**。
 
 `RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队，Match 的唤醒（`watch:<watchId>:<generation>`）和到期的
-唤醒（`watch:<watchId>:expired`，§5）都是如此。runner 取走它之前观察者的 run 若已结束——当前 turn
-失败、runner 掉线被 reaper 终结、runner finalize、被请求结束——结束时的排空会把这个 turn 连同队列一起收掉，
-交付随之 `DELIVERED → DEAD_LETTER`（`OBSERVER_SESSION_ENDED`），不再报已送达：唤醒不复活会话，同一个
-`clientTurnId` 也无法再投一次。所以交付的终态只有 `DEAD_LETTER`；`DELIVERED` 只对 `NOTIFY_USER` 和已被
-runner 取走的唤醒是最终的。
+唤醒（`watch:<watchId>:expired`，§5）都是如此。runner 取走它之前，下面三种情况会把这个 turn 从队列里
+收掉，交付随之 `DELIVERED → DEAD_LETTER`，不再报已送达，也不重投：
+
+| 情况 | 唤醒 turn | `last_error` 开头 |
+| --- | --- | --- |
+| 观察者的 run 结束：当前 turn 失败、runner 掉线被 reaper 终结、runner finalize、被请求结束 | 随队列一起排空，置 `ANSWERED` | `OBSERVER_SESSION_ENDED:` |
+| 观察者被打断（`SessionsService.interrupt`），会话本身还活着 | 与排在被停下的 turn 后面的全部后续消息一起删除 | `OBSERVER_TURN_INTERRUPTED:` |
+| owner 撤回这条排队的唤醒（`SessionsService.cancelQueuedTurn`） | 只删这一个 turn，同一观察者的其他唤醒照旧 | `WAKE_WITHDRAWN:` |
+
+不重投的理由：唤醒不复活已结束的会话，被排空的 turn 也无法用同一个 `clientTurnId` 再投一次；打断的语义是
+stop，唤醒若留在队列里或被重投，刚被叫停的观察者马上又会被唤醒；撤回是 owner 亲手收回这条唤醒。打断和撤回删掉
+turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，不会有第二个唤醒。所以交付的终态只有 `DEAD_LETTER`；
+`DELIVERED` 只对 `NOTIFY_USER` 和已被 runner 取走的唤醒是最终的——runner 取走的唤醒不会被打断删掉，也撤回不了。
 
 ---
 
@@ -234,6 +242,10 @@ runner 取走的唤醒是最终的。
   绕过队列，所以**结构上不可能并发恢复一个运行中的会话**。
 - 载荷是结构化的：`watchId`、`generation`、`reason`、`changedTargets`、`latestSnapshot`。
   **不许把轮询日志或 shell 文本塞回上下文。**
+- **入队不等于送达，被收掉的唤醒不重投**：runner 取走唤醒 turn 之前，观察者的 run 结束、观察者被打断、owner
+  撤回这条唤醒，都会把它从队列里收掉；交付在收掉 turn 的同一个事务里改记 `DEAD_LETTER`，`last_error` 分别以
+  `OBSERVER_SESSION_ENDED:`、`OBSERVER_TURN_INTERRUPTED:`、`WAKE_WITHDRAWN:` 开头（§3）。打断的语义是 stop，
+  唤醒不是例外：它不留在队列里等下次调度，也不会被再投一次。
 
 ---
 

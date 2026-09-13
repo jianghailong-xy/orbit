@@ -23,6 +23,8 @@ function makeService(status: RunStatus, executableAfterDelete: number) {
       },
     },
     conversationTurn: {
+      // The withdrawn turn is not a Watch wake: nothing queued here is keyed `watch:`.
+      findMany: async () => [],
       deleteMany: async () => ({ count: 1 }),
       count: async () => executableAfterDelete,
       findFirst: async () => null,
