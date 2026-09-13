@@ -261,6 +261,218 @@ test('the keyword table is readable, injectable, and unknown or mixed wording st
   }), null, 'mixed shapes are deliberately left for the caller');
 });
 
+// Outside a project a VERIFICATION subject is refused (VERIFICATION_SUBJECT_REQUIRES_PROJECT): no
+// coordinator is there to file the verification it waits for. Advice pointing at it would send the
+// caller straight into that refusal, so it is withheld there — and only there.
+test('outside a project the table withholds VERIFICATION and changes nothing else', () => {
+  const reviewShaped = {
+    acceptanceCriteria: '独立复核：改动符合意图。',
+    completionCriterion: 'EXECUTABLE',
+  } as const;
+  for (const inProject of [true, undefined]) {
+    assert.equal(taskCriterionShapeAdvice({ ...reviewShaped, inProject })?.suggestedCriterion,
+      'VERIFICATION', `inProject: ${inProject} keeps the advice it always gave`);
+  }
+  assert.equal(taskCriterionShapeAdvice({ ...reviewShaped, inProject: false }), null);
+  assert.equal(taskCriterionShapeAdvice({
+    acceptanceCriteria: '目标 spec 通过，且全量测试不新增失败。',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
+    inProject: false,
+  })?.suggestedCriterion, 'EXECUTABLE', 'the EXECUTABLE row still advises outside a project');
+  assert.equal(taskCriterionShapeAdvice({
+    acceptanceCriteria: '这次改对了吗，spec 通过了吗',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
+    inProject: false,
+  }), null, 'mixed wording stays silent rather than turning into EXECUTABLE advice');
+});
+
+/** The refused write's body, with a real assertion that it WAS refused, and how. */
+async function refusalOf(
+  kind: typeof BadRequestException | typeof ConflictException,
+  run: () => Promise<unknown>,
+): Promise<Record<string, unknown>> {
+  try {
+    await run();
+  } catch (error) {
+    assert.ok(error instanceof kind, `expected ${kind.name}, got ${error}`);
+    return error.getResponse() as Record<string, unknown>;
+  }
+  assert.fail(`expected ${kind.name}; the write was accepted`);
+}
+
+const SUBJECT = {
+  completionCriterion: 'VERIFICATION',
+  completionPolicy: 'VERIFICATION_PASSED',
+} as const;
+
+function assertSubjectRefusal(body: Record<string, unknown>): void {
+  assert.equal(body.code, 'VERIFICATION_SUBJECT_REQUIRES_PROJECT');
+  assert.equal(body.kind, 'REFUSAL');
+  assert.equal(body.requiredAction, 'FILE_UNDER_A_PROJECT_OR_DECLARE_EXECUTABLE');
+  assert.match(String(body.message), /projectId/, 'one way out is filing the work under a project');
+  assert.match(String(body.message), /EXECUTABLE/, 'the other is a criterion it settles on its own');
+}
+
+/** A row already stored, read back by the fixture's `loadDetail` as `update` begins. */
+function stored(
+  fixture: ReturnType<typeof serviceFixture>,
+  id: string,
+  row: Record<string, unknown>,
+): string {
+  fixture.rows.push({
+    id,
+    title: id,
+    status: 'OPEN',
+    projectId: null,
+    parentTaskId: null,
+    verifiesTaskId: null,
+    acceptanceCommand: null,
+    acceptanceExpectedExitCode: null,
+    acceptanceTimeoutSeconds: null,
+    completionCriterionOverrideReason: null,
+    ...row,
+  });
+  return id;
+}
+
+test('create refuses a VERIFICATION subject that lands in no project', async () => {
+  const fixture = serviceFixture();
+  assertSubjectRefusal(await refusalOf(BadRequestException, () => fixture.service.create('owner', {
+    title: 'a subject filed under nothing',
+    ...SUBJECT,
+  })));
+  assert.equal(fixture.rows.length, 0, 'a refused create writes nothing');
+});
+
+test('a batch and its preview refuse the item that lands in no project', async () => {
+  const fixture = serviceFixture();
+  const plan = {
+    tasks: [
+      { title: 'a subject filed under the project', projectId: PROJECT, ...SUBJECT },
+      { title: 'a subject filed under nothing', ...SUBJECT },
+    ],
+  };
+  const batch = await refusalOf(BadRequestException, () => fixture.service.createMany('owner', plan));
+  assertSubjectRefusal(batch);
+  assert.equal(batch.itemIndex, 1, 'the refusal names the item that lands in no project');
+  assertSubjectRefusal(await refusalOf(BadRequestException,
+    () => fixture.service.previewPlan('owner', plan)));
+  assert.equal(fixture.rows.length, 0, 'no item of a refused plan is written');
+});
+
+// The edit door judges what the write leaves behind, in both ways a subject can end up there.
+test('update refuses re-declaring project-less work a VERIFICATION subject', async () => {
+  const fixture = serviceFixture();
+  const executable = stored(fixture, '00000000-0000-7000-8000-0000000000e1', {
+    completionCriterion: 'EXECUTABLE',
+    completionPolicy: 'MANUAL',
+    acceptanceCommand: 'npm test',
+    acceptanceExpectedExitCode: 0,
+  });
+  assertSubjectRefusal(await refusalOf(BadRequestException, () => fixture.service.update(
+    'owner', executable, {
+      ...SUBJECT,
+      acceptanceCommand: null,
+      acceptanceExpectedExitCode: null,
+      completionCriterionOverrideReason: 'an independent check decides this one',
+    },
+  )));
+});
+
+test('update refuses taking a VERIFICATION subject out of its project', async () => {
+  const fixture = serviceFixture();
+  // Unfiling touches no declaration at all, which is exactly why it has to be asked on its own.
+  const filed = stored(fixture, '00000000-0000-7000-8000-0000000000e2', {
+    projectId: PROJECT,
+    ...SUBJECT,
+  });
+  assertSubjectRefusal(await refusalOf(BadRequestException,
+    () => fixture.service.update('owner', filed, { projectId: null })));
+});
+
+test('update lets a verifier, an unfiled EVIDENCE_JUDGMENT task and a moved subject past the gates',
+  async () => {
+    const fixture = serviceFixture();
+    const verifier = stored(fixture, '00000000-0000-7000-8000-0000000000e3', {
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'MANUAL',
+      verifiesTaskId: '00000000-0000-7000-8000-0000000000e9',
+    });
+    const judged = stored(fixture, '00000000-0000-7000-8000-0000000000e4', {
+      projectId: PROJECT,
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      completionPolicy: 'MANUAL',
+    });
+    const subject = stored(fixture, '00000000-0000-7000-8000-0000000000e5', {
+      projectId: PROJECT,
+      ...SUBJECT,
+    });
+    const edits: Array<[string, () => Promise<unknown>]> = [
+      ['a verifier restating its declaration in no project',
+        () => fixture.service.update('owner', verifier, { completionPolicy: 'MANUAL' })],
+      ['an EVIDENCE_JUDGMENT task taken out of its project',
+        () => fixture.service.update('owner', judged, { projectId: null })],
+      ['a subject moved to another project',
+        () => fixture.service.update('owner', subject, {
+          projectId: '00000000-0000-7000-8000-0000000000f2',
+        })],
+    ];
+    for (const [label, edit] of edits) {
+      // This fixture cannot carry an edit through its transaction, so what is asserted is the part
+      // this change could get wrong: whatever stops the edit later, neither project gate does.
+      let code: unknown = null;
+      try {
+        await edit();
+      } catch (error) {
+        code = (error as { getResponse?: () => { code?: unknown } }).getResponse?.()?.code;
+      }
+      assert.doesNotMatch(String(code), /REQUIRES_PROJECT/, label);
+    }
+  });
+
+test('a subject in a project, and a verifier in none, pass the doors as before', async () => {
+  const fixture = serviceFixture();
+  await fixture.service.create('owner', { title: 'a subject filed', projectId: PROJECT, ...SUBJECT });
+  await fixture.service.createMany('owner', {
+    tasks: [
+      { ref: 'work', title: 'project-less work', completionCriterion: 'EXECUTABLE',
+        acceptanceCommand: 'npm test', acceptanceExpectedExitCode: 0 },
+      // The shape `fileVerification` files outside a project: a verifier settles on its own verdict.
+      { title: '[VERIFY] project-less work', verifiesRef: 'work',
+        completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL' },
+    ],
+  });
+  assert.equal(fixture.rows.length, 3);
+});
+
+test('a create is asked about VERIFICATION wording by the project it lands in', async () => {
+  const reviewShaped = {
+    acceptanceCriteria: '独立复核：改动符合意图。',
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'npm test',
+    acceptanceExpectedExitCode: 0,
+  } as const;
+  const fixture = serviceFixture();
+
+  for (const ask of [
+    () => fixture.service.create('owner', { title: 'filed', projectId: PROJECT, ...reviewShaped }),
+    () => fixture.service.createMany('owner', {
+      tasks: [{ title: 'filed', projectId: PROJECT, ...reviewShaped }],
+    }),
+  ]) {
+    const advice = await refusalOf(ConflictException, ask);
+    assert.equal(advice.code, TASK_CRITERION_SHAPE_ADVICE_CODE);
+    assert.equal(advice.suggestedCriterion, 'VERIFICATION', 'in a project the question is unchanged');
+  }
+  assert.equal(fixture.rows.length, 0);
+
+  // In no project that advice would lead into VERIFICATION_SUBJECT_REQUIRES_PROJECT, so it is not
+  // given and the declared EXECUTABLE task is written.
+  await fixture.service.create('owner', { title: 'unfiled', ...reviewShaped });
+  await fixture.service.createMany('owner', { tasks: [{ title: 'unfiled', ...reviewShaped }] });
+  assert.equal(fixture.rows.length, 2);
+});
+
 function repoRoot(): string {
   // build/tasks -> build -> apiserver -> src -> repository root
   return path.resolve(__dirname, '../../../..');

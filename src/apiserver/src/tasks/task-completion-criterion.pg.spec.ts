@@ -80,9 +80,10 @@ suite('stored tasks expose one of the three criteria, and the database supplies 
   await db.user.create({
     data: { id: ownerId, email: `${ownerId}@n1.invalid`, name: 'n1', passwordHash: 'x' },
   });
-  // EVIDENCE_JUDGMENT is declared against a project's stated criterion, so the task below that
-  // uses it is filed under one. This file is about which criterion a row can carry, not about
-  // where the work lives, and the two rows that declare the other peers stay in no project.
+  // EVIDENCE_JUDGMENT is declared against a project's stated criterion, and a VERIFICATION subject
+  // waits for a verification only a project's coordinator would file, so the tasks below that use
+  // them are filed under one. This file is about which criterion a row can carry, not about where
+  // the work lives, and the row that declares EXECUTABLE stays in no project.
   const projectId = randomUUID();
   await db.project.create({
     data: { id: projectId, ownerId, title: 'the goal the human-judged task serves' },
@@ -105,7 +106,7 @@ suite('stored tasks expose one of the three criteria, and the database supplies 
     acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
   });
   const verification = await service.create(ownerId, {
-    title: 'verification', completionCriterion: 'VERIFICATION',
+    title: 'verification', projectId, completionCriterion: 'VERIFICATION',
     completionPolicy: 'VERIFICATION_PASSED',
   });
   const human = await service.create(ownerId, {

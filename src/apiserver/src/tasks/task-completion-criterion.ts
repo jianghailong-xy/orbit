@@ -168,8 +168,53 @@ export function criterionNeedsProjectRefusal(declaration: {
       + 'happens to have written in its own acceptanceCriteria — which nothing here requires it to '
       + 'have, and which its evidence would then have to quote word for word. Give this work a '
       + 'projectId, so the criterion it serves is one the project states and a decider can read; '
-      + 'or declare a criterion it can settle without one — EXECUTABLE with acceptanceCommand and '
-      + 'acceptanceExpectedExitCode, or VERIFICATION with an independent verification task.',
+      + 'or declare EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode, which it can '
+      + 'settle without one.',
+  };
+}
+
+/** The stored code and remedy for a verification subject that is in no project. */
+export const VERIFICATION_SUBJECT_REQUIRES_PROJECT_CODE = 'VERIFICATION_SUBJECT_REQUIRES_PROJECT';
+export const VERIFICATION_SUBJECT_REQUIRES_PROJECT_ACTION =
+  'FILE_UNDER_A_PROJECT_OR_DECLARE_EXECUTABLE';
+
+/**
+ * Why a verification SUBJECT cannot be written into no project, or null.
+ *
+ * A subject declares VERIFICATION and verifies nothing itself. It cannot run — a manual start is
+ * refused and auto-dispatch passes it by — and it is settled only by a PASS that a separate task
+ * pointing at it records. Nothing on the server files that task for it: `fileVerification` checks
+ * work that is already DONE, which a subject never becomes on its own. Inside a project the
+ * coordinator files and starts the verification; outside one there is no coordinator and no screen
+ * that writes `verifiesTaskId`, so the subject would wait for a check nobody is going to file.
+ *
+ * A rule about what may be written, like `criterionNeedsProjectRefusal` above, but asked of one
+ * more write: a project-less EVIDENCE_JUDGMENT row still settles against its own acceptanceCriteria,
+ * while a subject taken out of its project is stranded exactly as one declared outside it.
+ *
+ * A verifier is never refused here. Its own verdict settles it, and `fileVerification` files its
+ * `[VERIFY]` tasks in whatever project their subject is in, including none.
+ */
+export function verificationSubjectNeedsProjectRefusal(declaration: {
+  completionCriterion?: TaskCompletionCriterionValue | null;
+  verifiesTaskId?: string | null;
+  projectId?: string | null;
+}): { code: string; kind: 'REFUSAL'; requiredAction: string; message: string } | null {
+  if (declaration.completionCriterion !== 'VERIFICATION') return null;
+  if (declaration.verifiesTaskId != null) return null;
+  if (declaration.projectId) return null;
+  return {
+    code: VERIFICATION_SUBJECT_REQUIRES_PROJECT_CODE,
+    kind: 'REFUSAL',
+    requiredAction: VERIFICATION_SUBJECT_REQUIRES_PROJECT_ACTION,
+    message:
+      'VERIFICATION with no verifiesTaskId makes this task a subject: it cannot run, and only a PASS '
+      + 'recorded by a separate verification task pointing at it can settle it. Nothing files that '
+      + 'verification task automatically, and this task is in no project, so there is no coordinator '
+      + 'to create and start one — it would wait for a check nobody is going to file. Give this work '
+      + 'a projectId, so its project\'s coordinator can file and start the verification; or declare '
+      + 'EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode, which it can settle on '
+      + 'its own.',
   };
 }
 

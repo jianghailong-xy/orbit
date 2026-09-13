@@ -279,8 +279,11 @@ suite(
     // ---------------------------------------------------------------------------------------
     // VERIFICATION, the one criterion with an implementation.
     // ---------------------------------------------------------------------------------------
+    // Both subjects are filed under the project, as a subject has to be: in none, nobody would file
+    // the verification it waits for, so the doors refuse it. Its verifier follows it there.
     const subject = await tasks.create(ownerId, {
       title: 'settled by an independent check',
+      projectId: project.id,
       assigneeId: workspaceId,
       completionCriterion: 'VERIFICATION',
       completionPolicy: 'VERIFICATION_PASSED',
@@ -288,6 +291,7 @@ suite(
     });
     const downstream = await tasks.create(ownerId, {
       title: 'waits on the verified subject',
+      projectId: project.id,
       dependsOnTaskIds: [subject.id],
       autoRunWhenReady: false,
       completionCriterion: 'VERIFICATION',
@@ -297,6 +301,7 @@ suite(
 
     const verifier = await tasks.create(ownerId, {
       title: '[VERIFY] settled by an independent check',
+      projectId: project.id,
       assigneeId: workspaceId,
       verifiesTaskId: subject.id,
       completionCriterion: 'VERIFICATION',

@@ -48,6 +48,12 @@ export const TASK_CRITERION_SHAPE_RULES: readonly TaskCriterionShapeRule[] = [
 export interface TaskCriterionShapeAdviceInput {
   acceptanceCriteria?: string | null;
   completionCriterion?: TaskCompletionCriterionValue | null;
+  /**
+   * Whether the task lands in a project. Only `false` changes the answer: outside a project a
+   * VERIFICATION subject is refused (`verificationSubjectNeedsProjectRefusal`), so suggesting it
+   * there would send the caller straight into that refusal.
+   */
+  inProject?: boolean;
 }
 
 export interface TaskCriterionShapeAdvice {
@@ -73,7 +79,8 @@ function matchesFor(text: string, rule: TaskCriterionShapeRule): string[] {
  * Declaration consistency remains the hard boundary in `taskCompletionDeclarationError`. This
  * function deliberately knows nothing about commands, policies, or verifier links: it compares
  * only the prose shape with an already-declared peer criterion. Unknown and mixed language returns
- * null, as does a matching choice.
+ * null, as does a matching choice, and so does VERIFICATION advice for a task in no project: the
+ * write doors refuse a subject there, so the question could only lead the caller into that refusal.
  */
 export function taskCriterionShapeAdvice(
   input: TaskCriterionShapeAdviceInput,
@@ -91,6 +98,9 @@ export function taskCriterionShapeAdvice(
 
   const [{ rule, matchedKeywords }] = matches;
   if (rule.criterion === declaredCriterion) return null;
+  // Withheld after matching rather than by dropping the row first, so mixed wording stays silent
+  // instead of reading as EXECUTABLE advice once the VERIFICATION reading is set aside.
+  if (rule.criterion === 'VERIFICATION' && input.inProject === false) return null;
   const quoted = matchedKeywords.map((keyword) => `“${keyword}”`).join(', ');
   return {
     code: TASK_CRITERION_SHAPE_ADVICE_CODE,

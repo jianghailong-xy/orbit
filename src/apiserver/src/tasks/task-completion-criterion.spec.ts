@@ -4,12 +4,14 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   TASK_COMPLETION_CRITERIA,
+  criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
   evaluateTaskCompletion,
   projectVerifierCarrierStatus,
   resolveTaskCompletionCriterion,
   taskCompletionDeclarationError,
   taskCompletionRequiredAction,
+  verificationSubjectNeedsProjectRefusal,
 } from './task-completion-criterion';
 
 const ACTIVE_VERIFIER_RETIREMENT = {
@@ -371,4 +373,52 @@ test('legacy create declarations retain their explicit meaning without a fallbac
     completionPolicy: 'VERIFICATION_PASSED',
   }), 'VERIFICATION');
   assert.equal(resolveTaskCompletionCriterion({ verifiesTaskId: 'subject' }), 'VERIFICATION');
+});
+
+// A subject — VERIFICATION with no verifiesTaskId — is settled only by a PASS another task records,
+// and outside a project nothing files that task. The three write doors ask this through the service
+// (`task-criterion-shape-advice.spec.ts` drives them); the rule and its words are pinned here.
+test('a verification subject in no project is refused, and the refusal names both ways out', () => {
+  const refusal = verificationSubjectNeedsProjectRefusal({
+    completionCriterion: 'VERIFICATION', verifiesTaskId: null, projectId: null,
+  });
+  assert.ok(refusal, 'a subject nobody can file a verification for must be refused');
+  assert.equal(refusal.code, 'VERIFICATION_SUBJECT_REQUIRES_PROJECT');
+  assert.equal(refusal.kind, 'REFUSAL');
+  assert.equal(refusal.requiredAction, 'FILE_UNDER_A_PROJECT_OR_DECLARE_EXECUTABLE');
+  assert.match(refusal.message, /in no project, so there is no coordinator/u,
+    'the refusal says why nothing would ever settle it');
+  assert.match(refusal.message, /projectId/u, 'one way out is filing the work under a project');
+  assert.match(refusal.message, /EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode/u,
+    'the other is a criterion the task settles on its own');
+  assert.deepEqual(
+    verificationSubjectNeedsProjectRefusal({ completionCriterion: 'VERIFICATION' }), refusal,
+    'an omitted projectId and verifiesTaskId are the same facts as null ones',
+  );
+});
+
+test('a subject in a project, a verifier in none and the other criteria are not refused', () => {
+  assert.equal(verificationSubjectNeedsProjectRefusal({
+    completionCriterion: 'VERIFICATION', projectId: 'project',
+  }), null);
+  // A verifier settles on its own verdict, and `fileVerification` files those in no project too.
+  assert.equal(verificationSubjectNeedsProjectRefusal({
+    completionCriterion: 'VERIFICATION', verifiesTaskId: 'subject', projectId: null,
+  }), null);
+  assert.equal(verificationSubjectNeedsProjectRefusal({ completionCriterion: 'EXECUTABLE' }), null);
+  // EVIDENCE_JUDGMENT keeps its own rule and code, and neither rule answers for the other.
+  assert.equal(
+    verificationSubjectNeedsProjectRefusal({ completionCriterion: 'EVIDENCE_JUDGMENT' }), null,
+  );
+  assert.equal(criterionNeedsProjectRefusal({ completionCriterion: 'VERIFICATION' }), null);
+});
+
+test('the EVIDENCE_JUDGMENT refusal no longer sends a project-less task to VERIFICATION', () => {
+  const refusal = criterionNeedsProjectRefusal({ completionCriterion: 'EVIDENCE_JUDGMENT' });
+  assert.ok(refusal);
+  assert.equal(refusal.code, 'EVIDENCE_JUDGMENT_REQUIRES_PROJECT');
+  assert.match(refusal.message, /projectId/u);
+  assert.match(refusal.message, /EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode/u);
+  assert.doesNotMatch(refusal.message, /VERIFICATION/u,
+    'that way out would only lead to VERIFICATION_SUBJECT_REQUIRES_PROJECT');
 });

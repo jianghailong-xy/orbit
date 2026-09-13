@@ -205,6 +205,7 @@ import {
   TASK_COMPLETION_FENCE_REVISION,
   taskCompletionRequiredAction,
   taskCompletionDeclarationError,
+  verificationSubjectNeedsProjectRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import {
@@ -2751,17 +2752,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * The one place all three write doors ask whether this declaration has a project to stand on.
    *
-   * `criterionNeedsProjectRefusal` owns the rule and the words; this only says WHICH project each
-   * door is asking about, and the answer differs by door in a way that matters:
+   * `criterionNeedsProjectRefusal` and `verificationSubjectNeedsProjectRefusal` own the rules and
+   * the words; this only says WHICH project each door is asking about, and the answer differs by
+   * door in a way that matters:
    *
    *  - `create` and the batch ask about the project the write was ADMITTED into, not the one the
    *    caller spelled. A session holding a project scope may leave `projectId` out entirely and
    *    have the server file the task under the project it coordinates, so a gate reading the DTO
    *    would refuse a request that lands in a project after all;
    *  - `update` asks about the filing the write LEAVES BEHIND, and only when the write touches the
-   *    completion declaration at all. That is what keeps the two ways out open on a row already in
-   *    this state: re-declaring EXECUTABLE lands on another criterion, and filing the work under a
-   *    project touches no declaration and is not asked.
+   *    completion declaration at all — or takes a verification subject out of its project. That is
+   *    what keeps the two ways out open on a row already in this state: re-declaring EXECUTABLE
+   *    lands on another criterion, and filing the work under a project touches no declaration and
+   *    is not asked.
    *
    * Deliberately about the criterion this write DECLARES rather than the one
    * `resolveTaskCompletionCriterion` falls back to. Nothing can reach the service without naming
@@ -2771,10 +2774,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private assertCriterionHasAProject(
     completionCriterion: TaskCompletionCriterionValue | null | undefined,
+    verifiesTaskId: string | null | undefined,
     projectId: string | null | undefined,
     itemIndex?: number,
   ): void {
-    const refusal = criterionNeedsProjectRefusal({ completionCriterion, projectId });
+    const declaration = { completionCriterion, verifiesTaskId, projectId };
+    const refusal = criterionNeedsProjectRefusal(declaration)
+      ?? verificationSubjectNeedsProjectRefusal(declaration);
     if (refusal) throw new BadRequestException({ ...refusal, itemIndex: itemIndex ?? null });
   }
 
@@ -2784,11 +2790,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * This runs only after the deterministic declaration boundary above. A mismatch is a 409
    * ADVISORY that names both choices and can be answered either by changing the criterion or by
    * recording why this task is an exception. The reason is not interpreted; it is audit material.
+   *
+   * `inProject` is whether the task lands in a project: outside one the advice withholds
+   * VERIFICATION, which `assertCriterionHasAProject` would refuse there. The write doors answer it
+   * from the project they ADMITTED the task into, for the same reason that gate does.
    */
   private assertCriterionShape(
     declaration: Pick<CreateTaskDto,
       'acceptanceCriteria' | 'completionCriterion' | 'completionCriterionOverrideReason'>,
     completionCriterion: TaskCompletionCriterionValue,
+    inProject: boolean,
   ): void {
     const overrideReason = normaliseTaskCriterionOverrideReason(
       declaration.completionCriterionOverrideReason,
@@ -2802,6 +2813,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const advice = taskCriterionShapeAdvice({
       acceptanceCriteria: declaration.acceptanceCriteria,
       completionCriterion,
+      inProject,
     });
     if (advice && overrideReason == null) {
       throw new ConflictException(taskCriterionShapeAdviceBody(advice));
@@ -2811,7 +2823,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
     const completionCriterion = this.assertCompletionDeclaration(dto);
-    this.assertCriterionShape(dto, completionCriterion);
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
@@ -2908,7 +2919,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
-    this.assertCriterionHasAProject(dto.completionCriterion, scopedProjectId);
+    // The shape advice reads the same project, so it is asked here too, still ahead of the gate.
+    this.assertCriterionShape(dto, completionCriterion, scopedProjectId != null);
+    this.assertCriterionHasAProject(dto.completionCriterion, dto.verifiesTaskId, scopedProjectId);
     // Unit T6: a single create is one item of a plan, judged by the same bound a fifty-item one is.
     await this.assertTaskOpeningAuthorized(
       ownerId,
@@ -3290,11 +3303,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
     for (const item of items) {
-      const completionCriterion = this.assertCompletionDeclaration({
+      this.assertCompletionDeclaration({
         ...item,
         verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,
       });
-      this.assertCriterionShape(item, completionCriterion);
     }
 
     const positionByRef = new Map<string, number>();
@@ -3392,6 +3404,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The shape advice for each batch item, against the project that item lands in.
+   *
+   * Kept out of `assertBatchValid` for the reason `assertBatchHierarchy` is: the two callers know
+   * that project at different moments. The write asks after admission; the preview admits nothing
+   * and can only pass the items as the caller spelled them. A replayed item is not asked again.
+   */
+  private assertBatchCriterionShapes(
+    items: readonly CreateTaskBatchItemDto[],
+    frozen: ReadonlySet<number> = new Set(),
+  ): void {
+    items.forEach((item, index) => {
+      if (frozen.has(index)) return;
+      const completionCriterion = resolveTaskCompletionCriterion({
+        ...item,
+        verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,
+      });
+      this.assertCriterionShape(item, completionCriterion, item.projectId != null);
+    });
+  }
+
+  /**
    * Every item's parent, judged against the project that item will be in.
    *
    * Per item rather than per distinct value: eligibility is a fact about the pair (parent,
@@ -3441,6 +3474,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
     const items = await this.assertBatchValid(ownerId, dto);
+    // By the project each item NAMES: this preview cannot see the project a coordinator's unnamed
+    // item would be filed under. That can only make it quieter than the write, never louder — a
+    // card is not refused over VERIFICATION advice the write would withhold.
+    this.assertBatchCriterionShapes(items);
     // Unlocked: a preview writes nothing, so there is nothing for a lock to protect. It is asked
     // at all so the card cannot promise a batch the write would then refuse.
     await this.assertBatchHierarchy(this.prisma, ownerId, items);
@@ -3729,9 +3766,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
     // re-judging it could only refuse a write that already happened.
+    this.assertBatchCriterionShapes(items, frozen);
     items.forEach((item, index) => {
       if (frozen.has(index)) return;
-      this.assertCriterionHasAProject(item.completionCriterion, item.projectId, index);
+      this.assertCriterionHasAProject(
+        item.completionCriterion, item.verifiesTaskId ?? item.verifiesRef ?? null, item.projectId,
+        index,
+      );
     });
     // Unit T6, over the items this call would WRITE: a replay is frozen and is not re-charged to
     // today's allowance, since the attempt that wrote it already paid for it.
@@ -7239,8 +7280,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // rather than being asked to explain a change that is going to be refused anyway.
       this.assertCriterionHasAProject(
         completionCriterion,
+        verifiesTaskIdAfter,
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
       );
+    } else if (dto.projectId === null && completionCriterion === 'VERIFICATION') {
+      // Taking the task out of its project touches no declaration, which is why EVIDENCE_JUDGMENT
+      // is not asked about it: a row of that kind in no project still settles against its own
+      // acceptanceCriteria. A verification subject settles nowhere outside a project — nobody there
+      // files the verification it waits for — so unfiling one is refused as declaring one there is.
+      this.assertCriterionHasAProject(completionCriterion, verifiesTaskIdAfter, null);
     }
     // The independence door, and the third question on this path that turns on WHO is writing.
     //
