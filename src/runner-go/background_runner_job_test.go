@@ -347,7 +347,10 @@ func TestEngineOwnedBackgroundShellStillDiesWithItsEngine(t *testing.T) {
 	h.clock.Advance(warmEngineTTL + time.Second)
 	h.afterEngineStopped()
 
-	waitProcessGone(t, pid, 5*time.Second)
+	// The budget is the kill path's, not the dying's: the cancel stops the group and
+	// sends SIGKILL only after walking it with `ps -A` until a walk finds nothing new
+	// (twice for this shell and its sleep), and on a loaded host one walk takes seconds.
+	waitProcessGone(t, pid, 30*time.Second)
 	if killed := h.events.withStatus("killed"); len(killed) != 1 {
 		t.Fatalf("engine-owned shell killed events = %v, want exactly one", killed)
 	}
@@ -369,6 +372,12 @@ func TestDrainKillsServicesAndWaitsForJobs(t *testing.T) {
 
 	h.bg.drainJobs(10 * time.Second)
 
+	// The drain gives a killed service bgKillTeardownGrace, but its report is written
+	// only once the waiter is done: after the kill path has walked the stopped group
+	// with `ps -A`, and after the sweep that follows Wait. On a loaded host that
+	// outlasts the grace and the pid is gone before the report exists, so wait for the
+	// report rather than reading it the moment the pid goes.
+	h.events.awaitTerminal(t, service.JobID, 30*time.Second)
 	waitProcessGone(t, service.PID, 5*time.Second)
 	serviceEvents := h.events.terminalsFor(service.JobID)
 	if len(serviceEvents) != 1 || asString(serviceEvents[0]["status"]) != "killed" {
@@ -397,6 +406,9 @@ func TestDrainKillsAJobThatOutlastsItsBudget(t *testing.T) {
 
 	h.bg.drainJobs(200 * time.Millisecond)
 
+	// As for a drained service: the report follows the kill path's `ps -A` walk and the
+	// sweep after Wait, which on a loaded host outlast the drain's grace.
+	h.events.awaitTerminal(t, job.JobID, 30*time.Second)
 	waitProcessGone(t, job.PID, 5*time.Second)
 	events := h.events.terminalsFor(job.JobID)
 	if len(events) != 1 || asString(events[0]["status"]) != "killed" {
@@ -414,7 +426,11 @@ func TestKillJobEndsItAndReleasesTheCheckout(t *testing.T) {
 	h.startEngine()
 	job := h.startJob("sleep 30", bgKindJob)
 
-	status, err := h.bg.killJob(job.JobID, 5*time.Second)
+	// killJob answers once the job's waiter is done or the grace is up. The waiter is
+	// done only after the kill path has walked the stopped group with `ps -A` and the
+	// sweep after Wait has run, which on a loaded host outlasts 5s and leaves the job
+	// reported running. The grace costs nothing when the job ends sooner.
+	status, err := h.bg.killJob(job.JobID, 30*time.Second)
 	if err != nil {
 		t.Fatalf("killJob failed: %v", err)
 	}
