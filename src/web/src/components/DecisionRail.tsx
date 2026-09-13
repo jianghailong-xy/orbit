@@ -166,6 +166,22 @@ export interface PendingDecisionQueue {
   pending: PendingDecisionRow[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou?: PendingDecisionRow[];
+  /** What THIS session has already decided, oldest first — the receipts its conversation keeps.
+   *  Absent from a server older than the receipts. */
+  decided?: RecordedDecisionRow[];
+}
+
+/** One decision recorded from the reading session, as `readPendingEvidenceJudgments` returns it. */
+export interface RecordedDecisionRow {
+  taskId: string;
+  title: string;
+  projectId: string | null;
+  evidenceRevision: string;
+  decision: 'CONFIRM' | 'SEND_BACK';
+  note: string | null;
+  decidedAt: string;
+  /** USER when the owner pressed the card; AGENT when a run of this session called the door. */
+  decidedByType: string;
 }
 
 /** The strip's own name, for the reader of a screen reader and for a test asking "is it there". */

@@ -29,7 +29,7 @@ import {
 import { Image } from 'antd';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
-import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   apiErrorRetryAt,
@@ -654,6 +654,7 @@ export const Transcript = memo(function Transcript({
   turnImages,
   artifactSessionId,
   streamingAfterSeq,
+  inserts,
 }: {
   events: RunEvent[];
   live?: boolean;
@@ -670,6 +671,9 @@ export const Transcript = memo(function Transcript({
    * end, exactly where they used to render.
    */
   streamingAfterSeq?: number | null;
+  /** Drawn among the events instead of after them — see `TranscriptInsert`. Pass a stable array:
+   *  this component is memo'd, and a new one on every render rebuilds the whole conversation. */
+  inserts?: readonly TranscriptInsert[];
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
   const artifactResolve = useMemo(
@@ -691,11 +695,25 @@ export const Transcript = memo(function Transcript({
     }
     return at < 0 || at >= nodes.length ? [nodes, [] as Node[]] : [nodes.slice(0, at), nodes.slice(at)];
   }, [nodes, streamingAfterSeq]);
+  // Where each insert goes: after the last top-level card at or before its seq, keyed by that
+  // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
+  // and an insert older than every loaded card is not drawn at all.
+  const placed = useMemo(() => {
+    const at = new Map<number, TranscriptInsert[]>();
+    for (const insert of inserts ?? []) {
+      let anchor: number | null = null;
+      for (const node of nodes) {
+        if (Number.isFinite(node.seq) && node.seq <= insert.afterSeq) anchor = node.seq;
+      }
+      if (anchor !== null) at.set(anchor, [...(at.get(anchor) ?? []), insert]);
+    }
+    return at;
+  }, [nodes, inserts]);
   const body = (
     <ImagePreviewProvider>
-      <NodeList nodes={before} live={live} />
+      <NodeList nodes={before} live={live} placed={placed} />
       <StreamingDrafts />
-      {after.length > 0 && <NodeList nodes={after} live={live} />}
+      {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
     </ImagePreviewProvider>
   );
   return artifactResolve ? (
@@ -705,21 +723,47 @@ export const Transcript = memo(function Transcript({
   );
 });
 
+/**
+ * Something drawn into the conversation that is not an event: it has a moment but no seq of its
+ * own, like a decision recorded from this session. It renders straight after the card holding
+ * `afterSeq`, which the caller works out from the events' clocks.
+ */
+export interface TranscriptInsert {
+  afterSeq: number;
+  key: string;
+  element: ReactNode;
+}
+
 const TOOL_GROUP_MIN = 3;
 
 type NodeListItem = { kind: 'node'; node: Node } | { kind: 'toolGroup'; key: string; nodes: ToolNode[] };
 
-function NodeList({ nodes, live }: { nodes: Node[]; live?: boolean }) {
+function NodeList({
+  nodes,
+  live,
+  placed,
+}: {
+  nodes: Node[];
+  live?: boolean;
+  /** Only the conversation's own lists carry inserts; a sub-workspace's nested list has none. */
+  placed?: ReadonlyMap<number, TranscriptInsert[]>;
+}) {
   const items = useMemo(() => groupToolRuns(nodes), [nodes]);
   return (
     <>
-      {items.map((item) =>
-        item.kind === 'toolGroup' ? (
-          <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
-        ) : (
-          <NodeView key={item.node.seq} node={item.node} live={live} />
-        ),
-      )}
+      {items.flatMap((item) => {
+        const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+        return [
+          item.kind === 'toolGroup' ? (
+            <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
+          ) : (
+            <NodeView key={item.node.seq} node={item.node} live={live} />
+          ),
+          ...seqs
+            .flatMap((seq) => placed?.get(seq) ?? [])
+            .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
+        ];
+      })}
     </>
   );
 }

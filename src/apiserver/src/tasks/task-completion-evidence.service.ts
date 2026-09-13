@@ -384,6 +384,7 @@ export class TaskCompletionEvidenceService {
       taskIds: [taskId],
       resync: false,
     });
+    await this.nudgeCoordinatorRow(ownerId, taskId);
 
     // The revision itself is the trigger. A source Session may still be RUNNING or
     // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
@@ -767,6 +768,7 @@ export class TaskCompletionEvidenceService {
       taskIds: [taskId],
       resync: false,
     });
+    await this.nudgeCoordinatorRow(ownerId, taskId);
 
     // The immediate successor edge for the task this decision settled, after commit and outside
     // the retried closure, exactly where the EXECUTABLE comparison puts its own. Losing it costs
@@ -778,6 +780,27 @@ export class TaskCompletionEvidenceService {
       });
     }
     return committed.decision;
+  }
+
+  /**
+   * Re-draw the list row of the conversation this task's evidence is decided in. That row counts
+   * the revisions waiting on its evidence card (`owner-decision-signal.ts`), and `task.changed`
+   * refreshes no session row, so without this a coordinator lit, or went dark, only on its next
+   * unrelated update. After the commit, and never a reason to report a recorded write as failed.
+   */
+  private async nudgeCoordinatorRow(ownerId: string, taskId: string): Promise<void> {
+    if (!this.realtime) return;
+    try {
+      const task = await this.prisma.task.findFirst({
+        where: { id: taskId, ownerId },
+        select: { project: { select: { coordinatorSessionId: true } } },
+      });
+      const coordinatorSessionId = task?.project?.coordinatorSessionId;
+      if (coordinatorSessionId) this.realtime.publishSessionUpdated(coordinatorSessionId);
+    } catch (error) {
+      this.logger.warn(`coordinator row refresh after evidence on ${taskId} failed: `
+        + `${error instanceof Error ? error.message : error}`);
+    }
   }
 
   /**

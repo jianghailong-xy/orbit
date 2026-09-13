@@ -53,6 +53,8 @@ test('workspace counts separate queued activity from Session-list spinner work',
     // This proposal has neither, so it is still a question — which is why `w-decision` needs you.
     projectRatifiedActionCommit: { findMany: async () => [] },
     projectCriteriaDecision: { findMany: async () => [] },
+    // The other kind of owner decision, evidence waiting on the coordinator's card: none here.
+    task: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

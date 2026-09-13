@@ -35,6 +35,13 @@
  *       and the question is not lost with it, which the project's own read is asserted to still
  *       answer in the same breath.
  *
+ *   (6) Its own fixture: evidence waiting on a CONFIRM or SEND_BACK is the second kind of owner
+ *       decision, and it lights the coordinator row for exactly the rows that conversation's
+ *       evidence card draws. A revision the door would refuse from anyone comes FIRST and lights
+ *       nothing; the answerable one lights the coordinator and not the run that submitted it; a
+ *       CONFIRM puts it back. Each write also asks for the coordinator's row to be re-drawn,
+ *       because `task.changed` refreshes no session row.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/needs-you-owner-decision.pg.spec.ts
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to this owner.
@@ -43,7 +50,14 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import {
+  CreatorType,
+  PrismaClient,
+  RunStatus,
+  RunnerStatus,
+  SessionDispatchOrigin,
+  TaskStatus,
+} from '@prisma/client';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -56,8 +70,11 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { readOwnerDecisionSignals } from '../projects/owner-decision-signal';
+import { criterionKeyOf } from '../projects/project-acceptance';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectsService } from '../projects/projects.service';
+import { readPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
+import { TaskCompletionEvidenceService } from '../tasks/task-completion-evidence.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -384,4 +401,187 @@ test('the badge counts an owner decision, points at it, and hands out no key', {
       assert.equal((await readOwnerDecisionSignals(db as never, f.ownerId)).length, 1,
         'and reopening the conversation makes it a destination again');
     });
+});
+
+/** The criterion the evidence case's revisions are measured against. */
+const JUDGED = 'the submitted evidence names the artifact its command produced';
+
+test('the badge counts evidence waiting on the coordinator’s card, and only what that card draws', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'evidence');
+
+  // Which session rows the evidence door asked clients to re-draw. Everything else here reads the
+  // counts directly, so without this a count that is right but never pushed would pass.
+  const nudged: string[] = [];
+  const realtime = new Proxy({}, {
+    get: (_target, name) => (name === 'publishSessionUpdated'
+      ? (sessionId: string) => { nudged.push(sessionId); }
+      : () => undefined),
+  }) as unknown as RealtimeService;
+  const evidence = new TaskCompletionEvidenceService(
+    db as unknown as PrismaService, undefined, undefined, realtime,
+  );
+
+  const stated = await stack.projects.update(f.ownerId, f.projectId, {
+    acceptanceCriteriaItems: [{ text: JUDGED, verificationMethod: METHOD }],
+  } as never) as unknown as { acceptanceCriteriaHold?: unknown };
+  assert.equal(stated.acceptanceCriteriaHold, undefined,
+    'stating a project’s first criteria is ADDITIVE and is never held');
+  const judged = await db.projectAcceptanceCriterionDefinition.findFirstOrThrow({
+    where: { projectId: f.projectId },
+    select: { id: true, revision: true },
+  });
+  const { runnerId } = await db.workspace.findUniqueOrThrow({
+    where: { id: f.workspaceId },
+    select: { runnerId: true },
+  });
+
+  /** An EVIDENCE_JUDGMENT task in this project, the run that works it, and a check it can cite. */
+  async function judgedTask(label: string) {
+    const taskId = randomUUID();
+    const sourceSessionId = randomUUID();
+    const cited = `toolu_needs_you_${label}`;
+    await db.task.create({
+      data: {
+        id: taskId,
+        ownerId: f.ownerId,
+        projectId: f.projectId,
+        title: `${label} 要交证据的活`,
+        creatorType: CreatorType.USER,
+        creatorId: f.ownerId,
+        assigneeId: f.workspaceId,
+        status: TaskStatus.IN_PROGRESS,
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+        acceptanceCriteria: JUDGED,
+        criterionDefinitionId: judged.id,
+        criterionRevision: judged.revision,
+      },
+    });
+    await db.session.create({
+      data: {
+        id: sourceSessionId,
+        ownerId: f.ownerId,
+        creatorId: f.ownerId,
+        taskId,
+        workspaceId: f.workspaceId,
+        assignedRunnerId: runnerId,
+        title: `${label} 执行会话`,
+        prompt: `${label} 执行会话`,
+        provider: 'claude',
+        status: RunStatus.AWAITING_INPUT,
+        dispatchOrigin: SessionDispatchOrigin.USER,
+        startsTaskWork: true,
+      },
+    });
+    await db.toolCall.create({
+      data: {
+        sessionId: sourceSessionId,
+        name: 'Bash',
+        toolUseId: cited,
+        input: { command: 'npm test', description: 'the command this evidence is about' },
+        isError: false,
+      },
+    });
+    return { taskId, sourceSessionId, cited };
+  }
+
+  /** Submit revision 1 for a task, quoting the criterion's text as `quote`. */
+  function submit(task: { taskId: string; sourceSessionId: string; cited: string }, quote: string) {
+    return evidence.submit(f.ownerId, task.taskId, { type: CreatorType.AGENT, id: f.workspaceId }, {
+      sourceSessionId: task.sourceSessionId,
+      idempotencyKey: `needs-you-${task.taskId}`,
+      evidence: {
+        claim: 'the declared command ran and its output names dist/server.js',
+        criterion: { key: criterionKeyOf(judged.id), text: quote },
+        checks: [{ kind: 'TOOL_CALL', ref: task.cited, command: 'npm test', succeeded: true }],
+        gaps: [],
+      },
+    });
+  }
+
+  /** A row's count as the session list serves it. */
+  async function countOn(sessionId: string): Promise<number> {
+    const rows = await stack.sessions.list(f.ownerId, {}) as unknown as Array<{
+      id: string;
+      pendingApprovals: number;
+    }>;
+    const row = rows.find((s) => s.id === sessionId);
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    return row.pendingApprovals;
+  }
+
+  /** The per-workspace tally for the workspace this project is coordinated in. */
+  async function needsYou(): Promise<number> {
+    const rows = await stack.sessions.workspaceSessionCounts(f.ownerId);
+    return rows.find((r) => r.workspaceId === f.workspaceId)?.needsYou ?? 0;
+  }
+
+  /** The tasks the coordinator's evidence card is drawn for: its own pending read, this project. */
+  async function cardRows(): Promise<string[]> {
+    const queue = await readPendingEvidenceJudgments(db as never, f.ownerId, {
+      id: f.coordinatorSessionId,
+      taskId: null,
+    });
+    return queue.pending.filter((row) => row.projectId === f.projectId).map((row) => row.taskId);
+  }
+
+  const moved = await judgedTask('moved');
+  const answerable = await judgedTask('answerable');
+
+  // ── the paired negative, first: both tasks exist and neither has submitted anything ────────────
+  assert.equal(await countOn(f.coordinatorSessionId), 0, 'nothing is waiting, so the row is dark');
+  assert.equal(await needsYou(), 0, 'and so is the workspace tally');
+
+  await t.test('(6a) a revision the door would refuse from anyone lights nothing', async () => {
+    nudged.length = 0;
+    await submit(moved, `${JUDGED}, as it read before somebody reworded it`);
+    assert.deepEqual(await cardRows(), [],
+      'the quote is not the live criterion, so the coordinator is drawn no card for it');
+    assert.equal(await countOn(f.coordinatorSessionId), 0,
+      'and the badge agrees with the card: a lit row that opens onto nothing is worse than a dark one');
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
+    assert.deepEqual(nudged, [f.coordinatorSessionId],
+      'the row is still re-drawn: whether it lights is the count’s call, not the nudge’s');
+  });
+
+  await t.test('(6b) an answerable revision lights the coordinator, and only the coordinator',
+    async () => {
+      nudged.length = 0;
+      await submit(answerable, JUDGED);
+      assert.deepEqual(await cardRows(), [answerable.taskId], 'the card has one question to draw');
+      assert.equal(await countOn(f.coordinatorSessionId), 1,
+        'the PARKED coordinator row says somebody is waiting on it — the state the badge was dark in');
+      assert.equal(await countOn(answerable.sourceSessionId), 0,
+        'the run that submitted is not where the question is asked, so its row stays dark');
+      assert.equal(await needsYou(), 1, 'one conversation needs you, in this workspace');
+      assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId),
+        [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1 }]);
+      assert.deepEqual(nudged, [f.coordinatorSessionId],
+        'and the submission asked for that row to be re-drawn, so it lights without a reload');
+    });
+
+  await t.test('(6c) confirming it puts the count back, and re-draws the row again', async () => {
+    nudged.length = 0;
+    await evidence.decide(f.ownerId, answerable.taskId, { type: CreatorType.USER, id: f.ownerId }, {
+      decidingSessionId: f.coordinatorSessionId,
+      evidenceRevision: '1',
+      decision: 'CONFIRM',
+    });
+    assert.deepEqual(await cardRows(), [], 'an answered revision leaves the card’s read');
+    assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the badge falls with it');
+    assert.equal(await needsYou(), 0, 'and so does the workspace tally');
+    assert.deepEqual(nudged, [f.coordinatorSessionId], 'the decision re-drew the row it darkened');
+  });
 });

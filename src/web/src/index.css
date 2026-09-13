@@ -6973,6 +6973,20 @@ button.composer-usage:focus-visible {
 .evidence-decision-error {
   margin-top: 12px;
 }
+/* A decision recorded from the conversation, kept where it was made (`EvidenceDecisionReceipt`):
+   the card's frame at rest, without the brand tone of a question that is waiting for somebody.
+   Two classes, because `.approval-card` is written further down and would win at one. */
+.approval-card.evidence-decision-receipt {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+.evidence-decision-receipt .approval-head {
+  background: var(--bg-raised);
+  border-bottom-color: var(--border-subtle);
+}
+.evidence-decision-receipt-mark {
+  color: var(--success-solid);
+}
 /* ── The settlement confirmation card ─────────────────────────────────────────────────────
    `AcceptanceConfirmationCard.tsx`: whether the stated criteria, together, are what "done" means.
    The approval card's own tone rather than the warning one — it is a question about meaning, like

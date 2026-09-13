@@ -253,6 +253,16 @@ interface QueueView {
   /** Optional for the same reason the rest of this view is: this spec has to be able to FAIL
    *  against a build whose read has one group, rather than not compile against it. */
   waitingOnYou?: RowView[];
+  /** The decisions recorded FROM the reading session: receipts, not questions. */
+  decided?: DecidedView[];
+}
+
+interface DecidedView {
+  taskId?: string;
+  evidenceRevision?: string;
+  decision?: string;
+  note?: string | null;
+  decidedByType?: string;
 }
 
 /** The fields the read is allowed to come back with. Written out because the claim of this round
@@ -265,15 +275,18 @@ const QUEUE_FIELDS = [
   'oldestAgeSeconds',
   'pending',
   'waitingOnYou',
+  'decided',
 ] as const;
 
 /** Every group the read returns, whatever it is called — read off the object rather than from a
  *  list of the two names this spec knows. A third group added back under a third name is then
- *  caught by the assertions below instead of quietly becoming the next place to broadcast from. */
+ *  caught by the assertions below instead of quietly becoming the next place to broadcast from.
+ *  `decided` is the one array that is not a group: it asks this reader nothing, being what the
+ *  reader has already answered, so it is named out here and pinned by assertions of its own. */
 function groupsOf(view: QueueView): Array<[string, RowView[]]> {
   const groups: Array<[string, RowView[]]> = [];
   for (const [name, value] of Object.entries(view)) {
-    if (Array.isArray(value)) groups.push([name, value as RowView[]]);
+    if (name !== 'decided' && Array.isArray(value)) groups.push([name, value as RowView[]]);
   }
   return groups;
 }
@@ -396,7 +409,8 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     const read = await readPendingEvidenceJudgments(db, f.ownerId, session);
 
     assert.deepEqual(Object.keys(read).sort(), [...QUEUE_FIELDS].sort());
-    // Two of those six are groups, and the other four describe the read itself.
+    // Two of those seven are groups, `decided` is this reader's receipts, and the other four
+    // describe the read itself.
     assert.deepEqual(groupsOf(read as QueueView).map(([name]) => name).sort(),
       ['pending', 'waitingOnYou']);
   });
@@ -501,6 +515,20 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     assert.equal(afterSendBack.count, 1);
     assert.deepEqual(afterSendBack.pending?.map((row) => row.taskId), [f.work[0].taskId]);
 
+    // Both answers leave a receipt on the reader that gave them, oldest first, saying which answer
+    // to which version and why — and none on a reader that answered nothing.
+    assert.deepEqual(
+      afterSendBack.decided?.map((row) => [
+        row.taskId, row.evidenceRevision, row.decision, row.note, row.decidedByType,
+      ]),
+      [
+        [f.work[1].taskId, '1', 'CONFIRM', null, CreatorType.USER],
+        [f.work[2].taskId, '1', 'SEND_BACK', 'cite the run that produced it, not the summary of it',
+          CreatorType.USER],
+      ],
+    );
+    assert.deepEqual((await queue(f.work[0].sessionId)).decided, []);
+
     // ...and a new revision is a new question, at the version nobody has answered.
     await submit(2, 'the rail renders three rows, and the empty state', ['nothing was checked on a phone']);
     const afterRevision = await queue(f.coordinatorSessionId);
@@ -509,6 +537,8 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
       afterRevision.pending?.find((row) => row.taskId === f.work[2].taskId)?.evidenceRevision,
       '2',
     );
+    assert.equal(afterRevision.decided?.length, 2,
+      'the new question does not take away the receipt for the version already answered');
   });
 
   // (iv) -----------------------------------------------------------------------------------------
@@ -548,6 +578,10 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
       before.pending?.map((row) => [row.taskId, row.evidenceRevision]),
     );
     assert.equal(after.decidingSessionId, reopenedId);
+    // Receipts are the one part that IS addressed to a session: the answers the old conversation
+    // gave stay its own, and the reopened one has given none.
+    assert.equal(before.decided?.length, 2);
+    assert.deepEqual(after.decided, []);
     f.coordinatorSessionId = reopenedId;
   });
 

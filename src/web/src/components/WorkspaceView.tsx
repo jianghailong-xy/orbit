@@ -162,7 +162,12 @@ import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type A
 import { ApprovalPanel } from './ApprovalPanel';
 import { SessionDecisionStrip, decisionRowKey, revealCriteriaCard } from './DecisionRail';
 import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
-import { SessionEvidenceDecisionCard, evidenceDecisionCardRows } from './EvidenceDecisionCard';
+import {
+  EvidenceDecisionReceipt,
+  SessionEvidenceDecisionCard,
+  decisionReceiptAnchor,
+  evidenceDecisionCardRows,
+} from './EvidenceDecisionCard';
 import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
@@ -3125,6 +3130,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       .map(decisionRowKey),
   );
 
+  // The decisions this conversation has recorded, drawn into the transcript at the moment each was
+  // made (`EvidenceDecisionReceipt`). Memoized because `Transcript` is: a fresh array on every
+  // render would rebuild the whole conversation with it.
+  const decisionReceipts = useMemo(
+    () =>
+      (pendingDecisions.data?.decided ?? []).flatMap((decided) => {
+        const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        return afterSeq === null
+          ? []
+          : [{
+              afterSeq,
+              key: `evidence-receipt:${decisionRowKey(decided)}`,
+              element: <EvidenceDecisionReceipt decided={decided} />,
+            }];
+      }),
+    [pendingDecisions.data, transcriptEvents],
+  );
+
   // Whether the settlement card below is on screen and still a question, as the card reports it:
   // delivered and put down are the card's own state, so the strip is told rather than left to work
   // out a second answer. Kept with the conversation it was reported in, because this view outlives
@@ -5571,6 +5594,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                               turnImages={turnImages}
                               artifactSessionId={selectedId}
                               streamingAfterSeq={streamingDrafts ? streamAnchorRef.current : null}
+                              inserts={decisionReceipts}
                             />
                           </StreamingDraftsCtx.Provider>
                         </LiveToolOutputsCtx.Provider>

@@ -1,5 +1,5 @@
 import { TaskStatus } from '@prisma/client';
-import type { Prisma as PrismaTypes } from '@prisma/client';
+import type { CreatorType, Prisma as PrismaTypes, TaskEvidenceDecisionValue } from '@prisma/client';
 import {
   CRITERION_MOVED_ACTION,
   REQUIRES_INDEPENDENT_SESSION_ACTION,
@@ -165,6 +165,26 @@ export interface PendingEvidenceJudgmentQueue {
   pending: PendingEvidenceJudgment[];
   /** Rows waiting on a revision THIS session is the one to file. */
   waitingOnYou: PendingEvidenceJudgment[];
+  /** What THIS session has already decided, oldest first: the receipts its conversation keeps
+   *  after a card's question is gone. Read off the decision rows, so a reload or another device
+   *  shows the same ones. */
+  decided: RecordedEvidenceDecision[];
+}
+
+/** One decision recorded FROM the reading session. Small on purpose — this rides every poll of
+ *  the pending read — so the evidence it answered is fetched when a reader opens it, not here. */
+export interface RecordedEvidenceDecision {
+  taskId: string;
+  title: string;
+  projectId: string | null;
+  /** The revision that was answered, in the decimal spelling a pending row uses. */
+  evidenceRevision: string;
+  decision: TaskEvidenceDecisionValue;
+  /** The reason a SEND_BACK carries; null for a CONFIRM. */
+  note: string | null;
+  decidedAt: Date;
+  /** USER when the owner pressed the card; AGENT when a run of this session called the door. */
+  decidedByType: CreatorType;
 }
 
 /**
@@ -184,6 +204,51 @@ function storedEnvelope(evidence: unknown): EvidenceEnvelope | null {
 
 function ageSeconds(readAt: Date, submittedAt: Date): number {
   return Math.max(0, Math.floor((readAt.getTime() - submittedAt.getTime()) / 1000));
+}
+
+/**
+ * The tasks whose LATEST evidence revision carries no decision yet, each with that revision — the
+ * population both the queue and the badge's count (`countPendingEvidenceJudgments`) place, read by
+ * one query so the two cannot come to disagree about it. `projectIds` narrows it to those projects.
+ */
+async function unansweredLatestEvidence(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  projectIds?: readonly string[],
+) {
+  const tasks = await tx.task.findMany({
+    where: {
+      ownerId,
+      ...(projectIds ? { projectId: { in: [...projectIds] } } : {}),
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      status: { in: [...UNSETTLED] },
+      completionEvidence: { some: {} },
+    },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      projectId: true,
+      // Read for the standing check below and for nothing else: a task in no project is held to
+      // its own acceptance criteria, so a queue that did not select them would ask the door a
+      // narrower question than the door asks itself.
+      acceptanceCriteria: true,
+      completionEvidence: {
+        orderBy: { revision: 'desc' },
+        take: 1,
+        select: {
+          revision: true,
+          submittedAt: true,
+          evidence: true,
+          decisions: { select: { id: true }, take: 1 },
+        },
+      },
+    },
+  });
+  return tasks.flatMap((task) => {
+    const [latest] = task.completionEvidence;
+    return latest && latest.decisions.length === 0 ? [{ task, latest }] : [];
+  });
 }
 
 /**
@@ -223,40 +288,9 @@ export async function readPendingEvidenceJudgments(
   decidingSession: { id: string; taskId: string | null },
   readAt: Date = new Date(),
 ): Promise<PendingEvidenceJudgmentQueue> {
-  const tasks = await tx.task.findMany({
-    where: {
-      ownerId,
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-      status: { in: [...UNSETTLED] },
-      completionEvidence: { some: {} },
-    },
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      projectId: true,
-      // Read for the standing check below and for nothing else: a task in no project is held to
-      // its own acceptance criteria, so a queue that did not select them would ask the door a
-      // narrower question than the door asks itself.
-      acceptanceCriteria: true,
-      completionEvidence: {
-        orderBy: { revision: 'desc' },
-        take: 1,
-        select: {
-          revision: true,
-          submittedAt: true,
-          evidence: true,
-          decisions: { select: { id: true }, take: 1 },
-        },
-      },
-    },
-  });
-
   const pending: PendingEvidenceJudgment[] = [];
   const waitingOnYou: PendingEvidenceJudgment[] = [];
-  for (const task of tasks) {
-    const [latest] = task.completionEvidence;
-    if (!latest || latest.decisions.length > 0) continue;
+  for (const { task, latest } of await unansweredLatestEvidence(tx, ownerId)) {
     const envelope = storedEnvelope(latest.evidence);
     const disqualification = await decidingSessionDisqualification(
       tx,
@@ -315,6 +349,21 @@ export async function readPendingEvidenceJudgments(
   pending.sort(oldestFirst);
   waitingOnYou.sort(oldestFirst);
 
+  // Found by the session that recorded them and nothing else: a decision's receipt belongs to the
+  // conversation it was given in, however many other sessions could have given it.
+  const recorded = await tx.taskEvidenceDecision.findMany({
+    where: { ownerId, decidingSessionId: decidingSession.id },
+    orderBy: [{ decidedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      decision: true,
+      note: true,
+      decidedAt: true,
+      decidedByType: true,
+      task: { select: { id: true, title: true, projectId: true } },
+      evidence: { select: { revision: true } },
+    },
+  });
+
   return {
     readAt,
     decidingSessionId: decidingSession.id,
@@ -322,5 +371,45 @@ export async function readPendingEvidenceJudgments(
     oldestAgeSeconds: pending.length === 0 ? null : pending[0].ageSeconds,
     pending,
     waitingOnYou,
+    decided: recorded.map((row) => ({
+      taskId: row.task.id,
+      title: row.task.title,
+      projectId: row.task.projectId,
+      evidenceRevision: row.evidence.revision.toString(),
+      decision: row.decision,
+      note: row.note,
+      decidedAt: row.decidedAt,
+      decidedByType: row.decidedByType,
+    })),
   };
+}
+
+/**
+ * How many rows `readPendingEvidenceJudgments` would put in `pending` for each project's
+ * coordinator, counting that project's tasks only — exactly the rows the coordinator conversation
+ * draws an evidence card for (`evidenceDecisionCardRows` on the web). This is the "Needs you"
+ * badge's evidence source (`owner-decision-signal.ts`), keyed by project; the envelope and the
+ * citations a card renders are not paid for.
+ */
+export async function countPendingEvidenceJudgments(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  coordinators: ReadonlyArray<{ projectId: string; session: { id: string; taskId: string | null } }>,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (coordinators.length === 0) return counts;
+  const coordinatorOf = new Map(coordinators.map((c) => [c.projectId, c.session]));
+  const unanswered = await unansweredLatestEvidence(tx, ownerId, [...coordinatorOf.keys()]);
+  for (const { task, latest } of unanswered) {
+    const projectId = task.projectId;
+    const session = projectId == null ? undefined : coordinatorOf.get(projectId);
+    if (projectId == null || session === undefined) continue;
+    // The placement above, asked in the same order: a live standard to decide against, then a
+    // reader the door would take the decision from.
+    if ((await criterionStandingRefusal(tx, task, latest.evidence)) !== null) continue;
+    const scope = { ownerId, taskId: task.id };
+    if ((await decidingSessionDisqualification(tx, scope, session)) !== null) continue;
+    counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
+  }
+  return counts;
 }

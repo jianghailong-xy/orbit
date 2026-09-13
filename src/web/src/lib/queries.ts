@@ -519,6 +519,25 @@ export const pendingDecisionsQuery = (decidingSessionId: string) =>
       ),
   });
 
+/** One stored revision of a task's completion evidence, as `GET /tasks/:taskId/evidence` returns it. */
+export interface TaskEvidenceRevision {
+  revision: string;
+  /** The envelope as it was submitted: `claim`, `gaps` and the rest. */
+  evidence?: Record<string, unknown>;
+}
+
+/**
+ * Every evidence revision a task has, oldest first — read when a decision receipt is opened, which
+ * is where the web needs the evidence a decision answered after its card has gone. Its own key root,
+ * not under `['task']`: a revision that was answered never changes, and every `task.*` event
+ * refetches that prefix.
+ */
+export const taskEvidenceQuery = (taskId: string) =>
+  queryOptions({
+    queryKey: ['task-evidence', taskId] as const,
+    queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${encodeURIComponent(taskId)}/evidence`),
+  });
+
 /**
  * Which loosening proposals this project's owner is being asked to decide, re-derived on every read.
  *

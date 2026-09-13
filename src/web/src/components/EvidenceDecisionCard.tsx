@@ -2,13 +2,14 @@ import { useEffect, useId, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
-import { pendingDecisionsQuery } from '../lib/queries';
+import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import {
   decisionRowKey,
   type PendingDecisionQueue,
   type PendingDecisionRow,
+  type RecordedDecisionRow,
 } from './DecisionRail';
 
 /**
@@ -666,12 +667,16 @@ export function SessionEvidenceDecisionCard({
 
   if (!projectId) return null;
   const known = new Set(seen.map(decisionRowKey));
+  // A version this conversation has decided is drawn in the transcript as its receipt, at the
+  // moment it was decided (`EvidenceDecisionReceipt`), so its card goes — the one just pressed
+  // included, which would otherwise sit under that receipt saying the same thing.
+  const receipted = new Set((queue?.decided ?? []).map(decisionRowKey));
   const addresses = [
     ...seen,
     ...evidenceDecisionCardRows(queue, projectId)
       .filter((row) => !known.has(decisionRowKey(row)))
       .map((row) => ({ taskId: row.taskId, evidenceRevision: row.evidenceRevision })),
-  ];
+  ].filter((address) => !receipted.has(decisionRowKey(address)));
   if (addresses.length === 0) return null;
   // A read that failed is not an empty queue: every card derives UNREAD from it rather than
   // concluding its version was answered.
@@ -686,5 +691,141 @@ export function SessionEvidenceDecisionCard({
         />
       ))}
     </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+   THE RECEIPT
+   ───────────────────────────────────────────────────────────────────────────────────────────── */
+
+/** A receipt's heading when a run of this session, rather than the owner, recorded the decision. */
+export const EVIDENCE_DECISION_AGENT_RECORDED_HEADING = 'agent 的裁决已记下';
+/** The fold over the evidence a receipt answered, and what it says while that is read. */
+export const DECISION_RECEIPT_OPEN = '展开主张与缺口';
+export const DECISION_RECEIPT_LOADING = '读取中…';
+export const DECISION_RECEIPT_UNREAD = '这一版证据刚才没能读回来。';
+export const DECISION_RECEIPT_REASON = '退回理由';
+
+/** When a receipt says it was decided: the clock on the day it happened, the date as well after. */
+export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): string {
+  const at = new Date(decidedAt);
+  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (at.toDateString() === now.toDateString()) return time;
+  return `${at.toLocaleDateString([], { month: 'numeric', day: 'numeric' })} ${time}`;
+}
+
+/** The receipt's line: which answer, to which version, and when. */
+export function decisionReceiptLine(decided: RecordedDecisionRow, now?: Date): string {
+  const action = decided.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION;
+  return `${action} · rev ${decided.evidenceRevision} · ${decisionReceiptTime(decided.decidedAt, now)}`;
+}
+
+/**
+ * The seq a receipt is drawn after: the last event recorded at or before the decision.
+ *
+ * Null when every event loaded so far is later. The moment is then on a page that is not loaded
+ * yet, and drawing the receipt at the top would put a decision above things that happened first.
+ */
+export function decisionReceiptAnchor(
+  events: ReadonlyArray<{ seq: number; ts?: string }>,
+  decidedAt: string,
+): number | null {
+  const at = Date.parse(decidedAt);
+  let anchor: number | null = null;
+  for (const event of events) {
+    const ts = event.ts === undefined ? Number.NaN : Date.parse(event.ts);
+    if (ts <= at && (anchor === null || event.seq > anchor)) anchor = event.seq;
+  }
+  return anchor;
+}
+
+/** The claim and gaps of the revision a receipt answered, read out of its stored envelope. */
+function receiptFacts(evidence: Record<string, unknown> | undefined): { claim: string; gaps: string[] } {
+  const claim = evidence?.claim;
+  const gaps = evidence?.gaps;
+  return {
+    claim: typeof claim === 'string' ? claim.trim() : '',
+    gaps: Array.isArray(gaps) ? gaps.filter((gap): gap is string => typeof gap === 'string') : [],
+  };
+}
+
+/**
+ * What a decision recorded from this conversation leaves in it, drawn where the decision was made.
+ *
+ * WHY THIS IS NOT THE CARD
+ * ------------------------
+ * A card's question leaves the pending read the moment it is answered, and the card remembered it
+ * only for as long as the page did — so a reload took the decision out of the conversation
+ * altogether. A receipt is drawn from the decision row (`decided` on the same read), which every
+ * reload and every device reads back, and it is folded to one line because it is a record now, not
+ * a question. The evidence it answered is fetched only when it is opened: receipts ride every poll
+ * of the pending read, and the claim and gaps do not need to.
+ */
+export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecisionRow }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const revisions = useQuery({ ...taskEvidenceQuery(decided.taskId), enabled: open });
+  const answered = revisions.data?.find((each) => each.revision === decided.evidenceRevision);
+  const facts = answered ? receiptFacts(answered.evidence) : null;
+  return (
+    <div
+      className="approval-card decision-ask evidence-decision evidence-decision-receipt"
+      data-decision-receipt={decisionRowKey(decided)}
+    >
+      <div className="approval-head decision-ask-head">
+        <span className="evidence-decision-receipt-mark" aria-hidden="true">✓</span>
+        <span className="evidence-decision-heading">
+          {decided.decidedByType === 'AGENT'
+            ? EVIDENCE_DECISION_AGENT_RECORDED_HEADING
+            : EVIDENCE_DECISION_RECORDED_HEADING}
+        </span>
+        <span className="criteria-provenance" title={EVIDENCE_PROVENANCE_TITLE}>
+          {PROVENANCE_LABEL}
+        </span>
+      </div>
+      <div className="approval-body is-questions decision-ask-body">
+        <section className="decision-ask-q">
+          <div className="decision-ask-chip">{decided.title}</div>
+          <div className="decision-ask-picked">{decisionReceiptLine(decided)}</div>
+          {decided.note ? (
+            <div className="decision-ask-picked">{`${DECISION_RECEIPT_REASON}：${decided.note}`}</div>
+          ) : null}
+          <button
+            type="button"
+            className="decision-ask-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? '收起' : `${DECISION_RECEIPT_OPEN} ▾`}
+          </button>
+          {!open ? null : revisions.isPending ? (
+            <div className="decision-ask-quiet">{DECISION_RECEIPT_LOADING}</div>
+          ) : facts === null ? (
+            <p className="evidence-decision-stale">{DECISION_RECEIPT_UNREAD}</p>
+          ) : (
+            <>
+              <div className="decision-ask-claim">
+                {facts.claim === '' ? (
+                  <span className="decision-ask-quiet">{DECISION_NO_CLAIM}</span>
+                ) : (
+                  facts.claim
+                )}
+              </div>
+              <div className="decision-ask-gaps">
+                <div className="decision-ask-gaps-head">
+                  {facts.gaps.length === 0 ? DECISION_NO_GAPS : `提交者声明的缺口 · ${facts.gaps.length} 条`}
+                </div>
+                {facts.gaps.length > 0 && (
+                  <ul className="decision-ask-gaps-list">
+                    {facts.gaps.map((gap, k) => (
+                      <li key={k}>{gap}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }

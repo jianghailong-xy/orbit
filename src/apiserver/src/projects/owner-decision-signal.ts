@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 
+import { countPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
 
@@ -37,22 +38,26 @@ import { stillUnanswered } from './criteria-pending-decisions';
  * WHERE THE COUNT LANDS
  * ---------------------
  * On the project's coordinator conversation, because that conversation's page is where the decision
- * card is drawn (`CriteriaDecisionCard.tsx`, from the owner's own pending read) and therefore the
- * place a person who follows the badge arrives at an answerable card. A project with no
- * coordinator bound has nowhere to send them and is not counted: a lit badge that opens nothing is
- * worse than a dark one. Same reason the conversation has to be an OPEN one — a badge is a "go here
- * now", and here cannot be a conversation the owner filed away or threw out. The question itself is
- * not lost by that: it is a derived read of the ledger (`criteria-pending-decisions.ts`), still
- * returned by the project's own page, and this only decides where the badge points.
+ * cards are drawn (`CriteriaDecisionCard.tsx` and `EvidenceDecisionCard.tsx`, each from its own
+ * pending read) and therefore the place a person who follows the badge arrives at an answerable
+ * card. A project with no coordinator bound has nowhere to send them and is not counted: a lit badge
+ * that opens nothing is worse than a dark one. Same reason the conversation has to be an OPEN one — a
+ * badge is a "go here now", and here cannot be a conversation the owner filed away or threw out. The
+ * question itself is not lost by that: it is a derived read of the ledger
+ * (`criteria-pending-decisions.ts`, `pending-evidence-judgments.ts`), still returned by its own
+ * read, and this only decides where the badge points.
  *
- * `criteria decision` is today's only kind. The shape is a list of counts per conversation rather
- * than one number so the next kind of owner-only decision adds a source here and changes nothing at
- * either call site.
+ * Two kinds today: a held criteria proposal, and a task's evidence revision waiting on a CONFIRM or
+ * a SEND_BACK. The second counts exactly the rows the evidence card draws — decidable, decidable
+ * FROM the coordinator, and in the coordinator's own project (`countPendingEvidenceJudgments`) —
+ * because a revision the door would refuse from anyone is the submitter's to refile and puts no card
+ * here. The shape is a list of counts per conversation rather than one number so each kind adds a
+ * source here and changes nothing at either call site.
  */
 export interface OwnerDecisionSignal {
   /** The conversation to open — the project's bound coordinator. This is the whole "where". */
   sessionId: string;
-  /** The project whose ruler is being decided; the coordinator's own payload names it too. */
+  /** The project whose ruler or task is being decided; the coordinator's own payload names it too. */
   projectId: string;
   /** How many owner decisions are waiting there. Always ≥ 1; a zero is simply not a row. */
   count: number;
@@ -65,11 +70,12 @@ export interface OwnerDecisionSignal {
  * owner has a coordinator for, which is what the per-workspace tallies need. An empty array is a
  * question with an empty answer, and is answered without touching the database.
  *
- * Three queries whatever the number of projects: the coordinators, their filed proposals, and the
- * one that says which of those were answered. The per-project read next door additionally computes
- * a seal per project in order to say whether each proposal can be DECIDED today; a count has no use
- * for that — an undecidable proposal is still a question waiting on the owner — so it is not paid
- * for here.
+ * Three queries for proposals whatever the number of projects: the coordinators, their filed
+ * proposals, and the one that says which of those were answered. The per-project read next door
+ * additionally computes a seal per project in order to say whether each proposal can be DECIDED
+ * today; a count has no use for that — an undecidable proposal is still a question waiting on the
+ * owner — so it is not paid for here. Evidence is the opposite case, as the header says, so its
+ * count does ask the door's two checks of each unanswered revision; those are a handful at most.
  */
 export async function readOwnerDecisionSignals(
   tx: Prisma.TransactionClient,
@@ -87,7 +93,7 @@ export async function readOwnerDecisionSignals(
       // is named beside it for the same reason it is named there.
       coordinatorSession: { completedAt: null, archivedAt: null, deletedAt: null },
     },
-    select: { id: true, coordinatorSessionId: true },
+    select: { id: true, coordinatorSessionId: true, coordinatorSession: { select: { taskId: true } } },
   });
   if (coordinated.length === 0) return [];
 
@@ -100,13 +106,24 @@ export async function readOwnerDecisionSignals(
     select: { id: true, projectId: true, action: true },
   });
   const waiting = await stillUnanswered(tx, filed);
-  if (waiting.length === 0) return [];
 
   const byProject = new Map<string, number>();
   for (const row of waiting) {
     if (row.projectId == null) continue;
     byProject.set(row.projectId, (byProject.get(row.projectId) ?? 0) + 1);
   }
+  const evidence = await countPendingEvidenceJudgments(
+    tx,
+    ownerId,
+    coordinated.flatMap((project) => (project.coordinatorSessionId == null ? [] : [{
+      projectId: project.id,
+      session: { id: project.coordinatorSessionId, taskId: project.coordinatorSession?.taskId ?? null },
+    }])),
+  );
+  for (const [projectId, count] of evidence) {
+    byProject.set(projectId, (byProject.get(projectId) ?? 0) + count);
+  }
+
   const signals: OwnerDecisionSignal[] = [];
   for (const project of coordinated) {
     const count = byProject.get(project.id) ?? 0;
