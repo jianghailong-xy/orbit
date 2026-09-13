@@ -39,6 +39,12 @@ const (
 	// dangerous direction kills the six-hour build this project exists to save.
 	bgKindService = "service"
 	bgKindJob     = "job"
+	// bgKindWatch is a job whose value is what it waits for — CI, a deploy, a review — rather than
+	// anything it computes or writes. It is drained and held exactly as a job is (a drain waits for
+	// it, the worktree GC passes its checkout by), but it takes no admission slot: a session parked
+	// on a forty-minute CI run costs this machine nothing, and counting it would keep new work off
+	// a runner that is idle.
+	bgKindWatch = "watch"
 
 	bgStatusRunning   = "running"
 	bgStatusCompleted = "completed"
@@ -78,6 +84,29 @@ const (
 
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
+
+	// A job can ask to wake its session — when it exits, or when it writes something new. These are
+	// the two triggers a wake names.
+	bgWakeOnExit   = "exit"
+	bgWakeOnOutput = "output"
+
+	// bgWakeOutputWindow is how long new output gathers before it wakes the session. A CI log lands a
+	// hundred lines at a time, and the wake should carry the burst rather than its first line.
+	bgWakeOutputWindow = 10 * time.Second
+
+	// bgWakeOutputInterval is the least time between two output wakes of one job: output that lands
+	// inside it goes out as one wake once it has passed. Every wake is a turn somebody pays for.
+	bgWakeOutputInterval = time.Minute
+
+	// bgWakeExcerptCap bounds how much of the end of the output a wake quotes. The rest is one
+	// bg_output away, and the wake names the file.
+	bgWakeExcerptCap = 2000
+
+	// bgWakeAttempts bounds how often one wake is tried against a control plane that does not
+	// answer, bgWakeRetryDelay apart and growing: long enough for a blip, short enough that a session
+	// ending behind it is not held up.
+	bgWakeAttempts   = 3
+	bgWakeRetryDelay = 2 * time.Second
 )
 
 // errRunnerShuttingDown refuses a job once the runner has begun to stop. The runner is the job's
@@ -94,6 +123,10 @@ type bgJobSpec struct {
 	ScratchDir  string // where its output file lives — runner-owned, outside the checkout
 	Description string
 	Env         map[string]string
+	// WakeOnExit and WakeOnOutput ask the control plane to wake the session when the job exits, or
+	// when it has written something new (bgWakeOutputWindow, bgWakeOutputInterval).
+	WakeOnExit   bool
+	WakeOnOutput bool
 }
 
 // bgJobStatus is one job as the agent sees it. Field names are the wire names of
@@ -114,6 +147,8 @@ type bgJobStatus struct {
 	StartedAt     string `json:"startedAt"`
 	EndedAt       string `json:"endedAt,omitempty"`
 	HoldsWorktree bool   `json:"holdsWorktree"`
+	WakeOnExit    bool   `json:"wakeOnExit,omitempty"`
+	WakeOnOutput  bool   `json:"wakeOnOutput,omitempty"`
 }
 
 // bgJobOutput is one incremental read of a job's output file.
@@ -141,6 +176,9 @@ type bgJob struct {
 	cancel      context.CancelFunc // kills this job's process group, and only this one
 	done        chan struct{}      // closed after the terminal event has been emitted
 
+	wakeOnExit   bool
+	wakeOnOutput bool
+
 	status   string
 	exitCode *int
 	endedAt  time.Time
@@ -148,6 +186,11 @@ type bgJob struct {
 	// waiter reports "killed" rather than inventing a completion out of the exit
 	// status a SIGKILL leaves behind.
 	killReason string
+	// wokenThrough is how many bytes of output the session has already been woken for: the next
+	// wake reports from there. outputWakes numbers this job's output wakes, so each has an id of its
+	// own that a retry of it is recognised by.
+	wokenThrough int64
+	outputWakes  int
 }
 
 // statusLocked snapshots the job. Caller holds b.mu.
@@ -164,6 +207,8 @@ func (j *bgJob) statusLocked() bgJobStatus {
 		OutputPath:    j.outputPath,
 		StartedAt:     j.startedAt.UTC().Format(time.RFC3339),
 		HoldsWorktree: j.status == bgStatusRunning,
+		WakeOnExit:    j.wakeOnExit,
+		WakeOnOutput:  j.wakeOnOutput,
 	}
 	if !j.endedAt.IsZero() {
 		st.EndedAt = j.endedAt.UTC().Format(time.RFC3339)
@@ -185,8 +230,8 @@ func newBgJobID() (string, error) {
 // startJob spawns one runner-hosted background job and returns as soon as it is
 // running.
 func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
-	if spec.Kind != bgKindService && spec.Kind != bgKindJob {
-		return bgJobStatus{}, fmt.Errorf("kind must be %q or %q, got %q", bgKindService, bgKindJob, spec.Kind)
+	if spec.Kind != bgKindService && spec.Kind != bgKindJob && spec.Kind != bgKindWatch {
+		return bgJobStatus{}, fmt.Errorf("kind must be %q, %q or %q, got %q", bgKindService, bgKindJob, bgKindWatch, spec.Kind)
 	}
 	if strings.TrimSpace(spec.Command) == "" {
 		return bgJobStatus{}, errors.New("command is required")
@@ -239,16 +284,18 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		return bgJobStatus{}, err
 	}
 	job := &bgJob{
-		id:          jobID,
-		kind:        spec.Kind,
-		command:     spec.Command,
-		description: spec.Description,
-		outputPath:  outputPath,
-		pid:         cmd.Process.Pid,
-		startedAt:   time.Now(),
-		cancel:      cancel,
-		done:        make(chan struct{}),
-		status:      bgStatusRunning,
+		id:           jobID,
+		kind:         spec.Kind,
+		command:      spec.Command,
+		description:  spec.Description,
+		outputPath:   outputPath,
+		pid:          cmd.Process.Pid,
+		startedAt:    time.Now(),
+		cancel:       cancel,
+		done:         make(chan struct{}),
+		wakeOnExit:   spec.WakeOnExit,
+		wakeOnOutput: spec.WakeOnOutput,
+		status:       bgStatusRunning,
 	}
 
 	b.mu.Lock()
@@ -299,6 +346,9 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	// Tails the output for live UI, registers the worktree hold, and — with
 	// engineOwned false — puts this job outside killEngineShells' reach.
 	b.startTail(jobID, jobID, outputPath, false)
+	if spec.WakeOnOutput {
+		b.startOutputWakes(job)
+	}
 
 	waiterStarted = true
 	go func() {
@@ -380,6 +430,7 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 			}
 			b.emit(evBackgroundTask, payload)
 			b.alertIfNobodyIsWatching(job, status, exit)
+			b.wakeOnEnd(job, reason)
 		}
 	}
 	close(job.done)
@@ -410,6 +461,186 @@ func (b *bgTailer) alertIfNobodyIsWatching(job *bgJob, status string, exit int) 
 	if err := b.notify(message); err != nil {
 		logln("could not alert the owner about background job", job.id+":", err)
 	}
+}
+
+// bgWake is what a job tells the control plane when it wakes its session. Field names are the wire
+// names of POST /runner/sessions/:id/background-wake; the control plane files the wake as a turn
+// of the session and writes these facts into it (apiserver runner-api/background-job-wake.ts).
+type bgWake struct {
+	// WakeID names this wake, so a retry of it is recognised: `<jobId>:exit`, or
+	// `<jobId>:output:<n>` for the job's n-th output wake.
+	WakeID      string `json:"wakeId"`
+	JobID       string `json:"jobId"`
+	Trigger     string `json:"trigger"`
+	Kind        string `json:"kind"`
+	Command     string `json:"command"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"`
+	ExitCode    *int   `json:"exitCode,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	OutputPath  string `json:"outputPath"`
+	// OutputOffset is where the output this wake is about begins — where the last wake's ended — and
+	// OutputSize how long the file was when it was sent: bg_output with sinceOffset reads the rest.
+	OutputOffset  int64  `json:"outputOffset"`
+	OutputSize    int64  `json:"outputSize"`
+	OutputExcerpt string `json:"outputExcerpt"`
+}
+
+// wakeLocked is one wake about this job, and marks the output it reports as reported. Caller holds
+// b.mu.
+func (j *bgJob) wakeLocked(trigger string, size int64) bgWake {
+	wake := bgWake{
+		JobID:        j.id,
+		Trigger:      trigger,
+		Kind:         j.kind,
+		Command:      j.command,
+		Description:  j.description,
+		Status:       j.status,
+		ExitCode:     j.exitCode,
+		Reason:       j.killReason,
+		OutputPath:   j.outputPath,
+		OutputOffset: j.wokenThrough,
+		OutputSize:   size,
+	}
+	if trigger == bgWakeOnOutput {
+		j.outputWakes++
+		wake.WakeID = fmt.Sprintf("%s:%s:%d", j.id, bgWakeOnOutput, j.outputWakes)
+	} else {
+		wake.WakeID = j.id + ":" + bgWakeOnExit
+	}
+	if size > j.wokenThrough {
+		j.wokenThrough = size
+	}
+	return wake
+}
+
+// wakeOnEnd sends the wake a job's end owes its session: the exit it asked to be woken for, or —
+// for a job that asked only about its output — what it wrote after its last wake. Not for a kill
+// somebody asked for, who is reading the answer already, and not for one the session's own end
+// made: that session is waiting for nothing. A kill made by the runner's stop or by the session's
+// cancellation does wake it, since the session may go on without the job; whether it has ended is
+// the control plane's to say.
+func (b *bgTailer) wakeOnEnd(job *bgJob, reason string) {
+	switch reason {
+	case "requested", "drain", bgDrainCapReason:
+		return
+	}
+	size := outputSizeOf(job.outputPath)
+	b.mu.Lock()
+	var wake bgWake
+	switch {
+	case job.wakeOnExit:
+		wake = job.wakeLocked(bgWakeOnExit, size)
+	case job.wakeOnOutput && size > job.wokenThrough:
+		wake = job.wakeLocked(bgWakeOnOutput, size)
+	default:
+		b.mu.Unlock()
+		return
+	}
+	b.mu.Unlock()
+	b.sendWake(wake)
+}
+
+// startOutputWakes watches a job that asked to be woken for new output, for as long as it runs.
+func (b *bgTailer) startOutputWakes(job *bgJob) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.stopping {
+		return
+	}
+	b.wg.Add(1)
+	go b.watchOutputForWakes(job)
+}
+
+// watchOutputForWakes wakes the session when the job writes something new. New output gathers for
+// bgWakeOutputWindow before it wakes anybody, and the job wakes the session at most once per
+// bgWakeOutputInterval, so a log that arrives a hundred lines at a time is one wake rather than a
+// hundred. What was written after the last wake goes with the job's end (wakeOnEnd).
+func (b *bgTailer) watchOutputForWakes(job *bgJob) {
+	defer b.wg.Done()
+	tick := time.NewTicker(bgPollInterval)
+	defer tick.Stop()
+	var gathering, lastWake time.Time
+	for {
+		var now time.Time
+		select {
+		case <-job.done:
+			return
+		case <-b.ctx.Done():
+			return
+		case now = <-tick.C:
+		}
+		size := outputSizeOf(job.outputPath)
+		b.mu.Lock()
+		if job.status != bgStatusRunning || size <= job.wokenThrough {
+			b.mu.Unlock()
+			continue
+		}
+		if gathering.IsZero() {
+			gathering = now
+		}
+		if now.Sub(gathering) < bgWakeOutputWindow || (!lastWake.IsZero() && now.Sub(lastWake) < bgWakeOutputInterval) {
+			b.mu.Unlock()
+			continue
+		}
+		wake := job.wakeLocked(bgWakeOnOutput, size)
+		b.mu.Unlock()
+		gathering, lastWake = time.Time{}, now
+		b.sendWake(wake)
+	}
+}
+
+// sendWake hands one wake to the control plane without holding up whoever found it, and retries a
+// control plane that does not answer for a little while. One that cannot be delivered is logged
+// and dropped: the job's end is still in its durable event, which the session's next turn is told.
+func (b *bgTailer) sendWake(wake bgWake) {
+	if b.wake == nil {
+		return
+	}
+	b.mu.Lock()
+	if b.stopping {
+		b.mu.Unlock()
+		return
+	}
+	b.wg.Add(1)
+	b.mu.Unlock()
+	go func() {
+		defer b.wg.Done()
+		wake.OutputExcerpt = wakeExcerpt(wake.OutputPath)
+		for attempt := 1; ; attempt++ {
+			err := b.wake(wake)
+			if err == nil {
+				return
+			}
+			if attempt == bgWakeAttempts || !isRetryableTransportError(err) {
+				logln("could not wake the session for background job", wake.JobID+":", err)
+				return
+			}
+			time.Sleep(time.Duration(attempt) * bgWakeRetryDelay)
+		}
+	}()
+}
+
+func outputSizeOf(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+// wakeExcerpt is the end of a job's output as a wake quotes it: at most bgWakeExcerptCap bytes,
+// starting on a whole line where there is one, without terminal colour codes or the NUL bytes a
+// database text column refuses.
+func wakeExcerpt(path string) string {
+	text := strings.ReplaceAll(stripANSI(readCapped(path)), "\x00", "")
+	if len(text) > bgWakeExcerptCap {
+		text = text[len(text)-bgWakeExcerptCap:]
+		if newline := strings.IndexByte(text, '\n'); newline >= 0 && newline < len(text)-1 {
+			text = text[newline+1:]
+		}
+	}
+	return strings.ToValidUTF8(text, "")
 }
 
 // jobStatus reports one job, running or finished.

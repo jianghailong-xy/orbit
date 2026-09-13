@@ -15,6 +15,7 @@ import {
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
+import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import {
   classifyTransactionError,
   loggedRetry,
@@ -560,6 +561,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           where: { sessionId, id: { in: turnIds } },
           select: {
             id: true,
+            clientTurnId: true,
             kind: true,
             sendIntent: true,
             targetTurnId: true,
@@ -622,6 +624,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       if (event.turnId && durableTurns.has(event.turnId)) {
+        // A background job's wake (runner-api/background-job-wake.ts) carries nobody's words, and
+        // stepping past it would re-send what the person said before it — a message already
+        // answered. There is nothing to re-send; the job's end stays in its durable event.
+        if (isBackgroundWakeTurn(turns.find((turn) => turn.id === event.turnId)?.clientTurnId)) break;
         const original = executableFor(event.turnId);
         if (original?.content.trim()) {
           chosen = event;

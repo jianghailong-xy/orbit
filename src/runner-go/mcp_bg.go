@@ -66,7 +66,10 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" mid-build. A job started here ends only when it exits, when the session ends, or when you" +
 				" kill it. A merge or commit of this session neither waits for it nor stops it: both run" +
 				" beside it and name it in their receipt, and a commit takes any file it is still writing as" +
-				" that file stands. Read its output with bg_output.",
+				" that file stands. Read its output with bg_output. To be woken when it ends or has news, set" +
+				" wakeOnExit or wakeOnOutput: Orbit then gives this session a new turn saying what happened," +
+				" even if this coding-engine process has been recycled in the meantime — so a wait for CI or a" +
+				" deploy can end your turn instead of holding it open.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -74,11 +77,25 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				},
 				"kind": map[string]interface{}{
 					"type": "string",
-					"enum": []string{bgKindService, bgKindJob},
+					"enum": []string{bgKindService, bgKindJob, bgKindWatch},
 					"description": "What this process is FOR, which decides what happens to it when the checkout has to be" +
 						" drained. \"service\" is valuable while it runs and cheap to restart (dev server, watcher): it is" +
 						" killed at once. \"job\" is valuable when it finishes and expensive to restart (build, test suite," +
-						" migration): it is waited for. Nothing in a command line tells these apart, so say which.",
+						" migration): it is waited for. \"watch\" only waits for something else to happen (CI, a deploy, a" +
+						" review) — drained like a job, but it does not count against this machine's capacity, so use it" +
+						" with wakeOnExit for a long wait. Nothing in a command line tells these apart, so say which.",
+				},
+				"wakeOnExit": map[string]interface{}{
+					"type": "boolean",
+					"description": "Wake this session when the command exits: a new turn names the job, how it ended (exit" +
+						" code, or why it was killed), the end of its output and the output file. Not sent when you kill" +
+						" it yourself or when the session ends.",
+				},
+				"wakeOnOutput": map[string]interface{}{
+					"type": "boolean",
+					"description": "Wake this session when the command writes new output. Output gathers for 10 seconds" +
+						" before it wakes you, and one job wakes you at most once a minute, so a burst of log lines is" +
+						" one turn. For a command that prints only when something happens.",
 				},
 				"cwd": map[string]interface{}{
 					"type":        "string",

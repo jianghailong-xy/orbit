@@ -521,7 +521,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/sessions.service.ts#createTurn',
     shape: 'TX_RETRIED',
-    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge and conversation_turn/startup receipt children (rank 60); for a Watch wake, the delivery row its acknowledgement writes through `participateSendTransaction`, which no transaction holding a delivery row waits on a session for.',
+    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then the optional orchestration task_attempt charge, the background_job_wake a coalescing wake files, and conversation_turn/startup receipt children (rank 60); for a Watch wake, the delivery row its acknowledgement writes through `participateSendTransaction`, which no transaction holding a delivery row waits on a session for.',
     identity: "The caller's `clientTurnId` and message, both above the closure.",
     isolation: '',
     attempts: 4,
@@ -885,6 +885,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/projects.service.ts#writeCoordinatorAgent', under: 'projects.update' },
   { at: 'projects/task-aggregation-writer.ts#applyTaskAggregations', under: 'projectReconcile.repeatableRead' },
   { at: 'runner-api/runner-api.controller.ts#lockSessionLeaseOwner', under: 'runnerApi.events, .turnComplete, .finalize' },
+  { at: 'runner-api/background-job-wake.ts#fileBackgroundJobWake', under: "sessions.createTurn's coalesce hook, for runnerApi.backgroundWake — under the rank-30 Session lock createTurn already holds. It writes one background_job_wake child row of that session, keyed by session, wake turn and job (a read, then one INSERT or one UPDATE of that row), so it adds no lock outside the one its caller holds, and a retried createTurn re-runs it from the same read" },
   { at: 'runners/codex-rate-limit-reset.repository.ts#insertIfAbsent', under: 'codexRateLimitReset.create — one INSERT ... ON CONFLICT DO NOTHING of the operation that transaction just decided to create. Losing to a concurrent confirmation writes nothing and aborts nothing, and the caller reads what won in the same transaction.' },
   { at: 'sessions/merge-receipt.service.ts#fromRunnerMergeResult', under: 'runnerApi.mergeResult' },
   { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, queue.buildSession' },

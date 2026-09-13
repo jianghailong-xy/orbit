@@ -678,6 +678,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			return err
 		},
 	)
+	// A job that asked to wake this session does it through the control plane, which files the wake
+	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that
+	// started the wait is gone. The receipt says which, for this runner's log.
+	bg.wakeSessionVia(func(wake bgWake) error {
+		receipt, err := t.backgroundWake(job.SessionID, wake)
+		if err == nil {
+			logln(fmt.Sprintf("⏰ background %s %s asked to wake session %s (%s): %s %s",
+				wake.Kind, wake.JobID, job.SessionID, wake.Trigger, receipt.Outcome, receipt.TurnID))
+		}
+		return err
+	})
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude

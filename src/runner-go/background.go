@@ -89,12 +89,14 @@ const (
 // shell holds the checkout for as long as it runs, which is routinely past the
 // end of the turn that launched it.
 //
-// The two doors record the same hold and differ in one fact the pool keeps
-// beside it: whether the runner spawned this writer itself. A runner-hosted one
-// outlives engine eviction, so it is also the one a capacity ledger has to count.
+// The doors record the same hold and differ in what the pool keeps beside it:
+// whether the runner spawned this writer itself. A runner-hosted one outlives
+// engine eviction, so it is also the one a capacity ledger has to count — unless
+// it is a watch, which only waits and costs the machine nothing (bgKindWatch).
 type worktreeHoldRegistry interface {
 	holdWorktree(jobID, name string)
 	holdRunnerJob(jobID, name string)
+	holdRunnerWatch(jobID, name string)
 	releaseWorktree(jobID string)
 }
 
@@ -135,6 +137,10 @@ type bgTailer struct {
 	// MCP tool), reached here for the one thing this project exists to deliver: the
 	// job you left running finished, and nobody was here to see it. nil disables it.
 	notify func(message string) error
+	// wake asks the control plane to wake this session for one of its jobs (sendWake). Installed
+	// once by wakeSessionVia, before any job can start, so it stays immutable for the tailer's
+	// life; nil where no control plane is at stake, and then no job wakes anybody.
+	wake func(wake bgWake) error
 }
 
 // liveShell is a background shell with a tail running. engineOwned separates the agent's
@@ -179,6 +185,12 @@ func (b *bgTailer) notifyWhenCold(engineResident func() bool, notify func(messag
 	b.notify = notify
 }
 
+// wakeSessionVia installs how a job that asked to wake its session reaches the control plane.
+// Called once, before any job can be started, so the field stays immutable for the tailer's life.
+func (b *bgTailer) wakeSessionVia(wake func(bgWake) error) {
+	b.wake = wake
+}
+
 // holdFor / releaseHold declare this tailer's shells to whoever keeps the
 // checkout's holders. Both are called under b.mu, alongside the b.live edit they describe,
 // so the registry never disagrees with what is actually running.
@@ -191,6 +203,12 @@ func (b *bgTailer) holdFor(toolUseID, shellID string, engineOwned bool) {
 	}
 	if engineOwned {
 		b.holds.holdWorktree(toolUseID, shellID)
+		return
+	}
+	// A job the runner hosts is in b.jobs before its tail starts. One that only waits holds the
+	// checkout through the door that costs no capacity.
+	if job := b.jobs[toolUseID]; job != nil && job.kind == bgKindWatch {
+		b.holds.holdRunnerWatch(toolUseID, shellID)
 		return
 	}
 	b.holds.holdRunnerJob(toolUseID, shellID)

@@ -25,8 +25,10 @@ const bgGuardDenyReason = "Orbit hosts background work for this session. Bash's 
 	" unavailable here: a shell started that way is a child of this coding-engine process, so" +
 	" recycling the engine (idle TTL, memory pressure) kills your build with it. Use" +
 	" mcp__orbit__bg_run instead — it takes the same command string, and requires kind:" +
-	" \"service\" for something valuable while it runs (dev server, watcher) or \"job\" for" +
-	" something valuable when it finishes (build, test suite). Read its output with" +
+	" \"service\" for something valuable while it runs (dev server, watcher), \"job\" for" +
+	" something valuable when it finishes (build, test suite), or \"watch\" for a wait on" +
+	" something else (CI, a deploy); with wakeOnExit: true you are woken when it ends, even after" +
+	" this engine is recycled. Read its output with" +
 	" mcp__orbit__bg_output, stop it with mcp__orbit__bg_kill."
 
 const bgGuardForeignJobReason = "That id belongs to an Orbit runner-hosted background job, which is not in" +

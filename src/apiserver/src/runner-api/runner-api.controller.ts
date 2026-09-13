@@ -10,6 +10,7 @@ import {
   HttpException,
   Logger,
   NotFoundException,
+  Optional,
   Param,
   Post,
   Query,
@@ -151,6 +152,17 @@ import {
   buildResumeContinuation,
 } from './resume-continuation';
 import { appendBackgroundJobsContext } from './background-jobs-context';
+import {
+  appendBackgroundWakeContext,
+  BACKGROUND_WAKE_TURN_PREFIX,
+  BackgroundWakeDto,
+  type BackgroundWakeReceipt,
+  fileBackgroundJobWake,
+  isBackgroundWakeTurn,
+  sessionHasEnded,
+  undeliveredWakeTurn,
+} from './background-job-wake';
+import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { withControlPlaneNote } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
@@ -478,6 +490,12 @@ export class RunnerApiController {
      * construct this controller directly, exactly as `tasks` above is.
      */
     private readonly mergeReceipts?: MergeReceiptService,
+    /**
+     * Files a background job's wake as a turn of its session (`backgroundWake`), through the same
+     * createTurn every other turn takes. `@Optional()` for the specs that build this controller
+     * through Nest without one; RunnerApiModule imports SessionsModule, so production always has it.
+     */
+    @Optional() private readonly sessions?: SessionsService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -2525,6 +2543,15 @@ export class RunnerApiController {
             content = (await this.listEvents?.appendFor(tx, sessionId, content)) ?? content;
           }
         }
+        // A turn filed to wake the session for its background jobs carries nobody's words: what it
+        // says is those wakes, written in here at delivery so that all of it is recorded as the
+        // control plane's note (control-plane-note.ts). Outside the branch above for the reason the
+        // block below gives — a wake handed out again after its runner died still has to say why.
+        // Not best-effort: this block is the turn, and one delivered without it wakes the agent for
+        // nothing, so a failure rolls the claim back and leaves the turn queued for the next poll.
+        if (t.kind === 'message' && isBackgroundWakeTurn(t.clientTurnId)) {
+          content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        }
         // The background work this session left running, said to the engine that comes back to it.
         // Outside the branch above on purpose: a re-delivery replaced the person's text with a
         // continuation nudge, and an engine that had to be restarted is the most literal case of
@@ -2825,6 +2852,55 @@ export class RunnerApiController {
       }
       if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
       await new Promise((r) => setTimeout(r, APPROVAL_POLL_INTERVAL_MS));
+    }
+  }
+
+  /**
+   * A runner-hosted background job asks to wake its session: it exited, or it wrote something new,
+   * and it was started with bg_run's wakeOnExit / wakeOnOutput (runner-go background_job.go).
+   *
+   * The wake becomes a turn of the session through createTurn, so it is queued, claimed and delivered
+   * the way any turn is — into the engine that is resident, or into one resumed for it, which is the
+   * point: the engine that started the wait may have been recycled long before the wait ended. The
+   * turn's content stays empty and the wake is kept beside it, written into what the runner is handed
+   * at delivery (background-job-wake.ts), so none of it is recorded as the person's words.
+   *
+   * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
+   * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
+   * 200 because there is nothing for the runner to try again.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/background-wake')
+  @HttpCode(200)
+  async backgroundWake(
+    @CurrentRunner() runner: { id: string; ownerId: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: BackgroundWakeDto,
+  ): Promise<BackgroundWakeReceipt> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
+    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
+    let merged = false;
+    try {
+      const turn = await this.sessions.createTurn(
+        runner.ownerId,
+        sessionId,
+        { clientTurnId, content: '', intent: 'NEXT_TURN' },
+        {
+          coalesce: async (tx, session) => {
+            if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+            const queued = await undeliveredWakeTurn(tx, sessionId);
+            merged = queued !== null;
+            await fileBackgroundJobWake(tx, sessionId, queued?.clientTurnId ?? clientTurnId, dto);
+            return queued;
+          },
+        },
+      );
+      return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
+    } catch (e) {
+      // Ended (SessionNotSendable), or no longer there to wake (NotFoundException).
+      if (e instanceof SessionNotSendable || e instanceof NotFoundException) return { outcome: 'DROPPED' };
+      throw e;
     }
   }
 

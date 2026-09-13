@@ -1261,6 +1261,7 @@ model Session {
 
   events                RunEvent[]
   turns                 ConversationTurn[]
+  backgroundJobWakes    BackgroundJobWake[]
   toolCalls             ToolCall[]
   llmUsage              LlmUsage[]
   approvals             Approval[]
@@ -1644,6 +1645,38 @@ model ConversationTurn {
   @@index([sessionId, status])
   @@index([targetTurnId], map: "conversation_turn_target_turn_id_idx")
   @@map("conversation_turn")
+}
+
+/// One wake a runner-hosted background job sent its session (runner-go background_job.go), kept
+/// beside the `bg-wake:` turn that will deliver it (`clientTurnId`) until delivery writes it into
+/// what the runner is handed (runner-api/background-job-wake.ts). The turn's own content stays
+/// empty, so none of this is recorded as the person's words. One row per (turn, job): a job's later
+/// wake replaces its earlier one while the turn is still queued.
+model BackgroundJobWake {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  clientTurnId  String   @map("client_turn_id")
+  jobId         String   @map("job_id")
+  /// exit | output
+  trigger       String
+  kind          String
+  command       String
+  description   String?
+  /// running | completed | failed | killed
+  status        String
+  exitCode      Int?     @map("exit_code")
+  reason        String?
+  outputPath    String   @map("output_path")
+  /// Where the output this wake is about begins, and how long the file was when it was sent.
+  outputOffset  BigInt   @map("output_offset")
+  outputSize    BigInt   @map("output_size")
+  outputExcerpt String   @map("output_excerpt")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([sessionId, clientTurnId, jobId])
+  @@map("background_job_wake")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.

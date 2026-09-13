@@ -912,6 +912,21 @@ func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
 	return out, err
 }
 
+// backgroundWakeReceipt is what the control plane did with a wake: filed it as a new turn of the
+// session (ENQUEUED), onto a wake turn nobody has been handed yet (MERGED), or nowhere, because the
+// session has ended (DROPPED).
+type backgroundWakeReceipt struct {
+	Outcome string `json:"outcome"`
+	TurnID  string `json:"turnId,omitempty"`
+}
+
+// backgroundWake asks the control plane to wake a session for one of its runner-hosted jobs.
+func (t *Transport) backgroundWake(sessionID string, wake bgWake) (backgroundWakeReceipt, error) {
+	var receipt backgroundWakeReceipt
+	err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/background-wake", wake, &receipt, 15*time.Second)
+	return receipt, err
+}
+
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.

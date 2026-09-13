@@ -173,13 +173,23 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
 		}
+		wakeOnExit, err := bgOptionalBool(args, "wakeOnExit")
+		if err != nil {
+			return bgSocketResponse{Error: err.Error()}
+		}
+		wakeOnOutput, err := bgOptionalBool(args, "wakeOnOutput")
+		if err != nil {
+			return bgSocketResponse{Error: err.Error()}
+		}
 		status, err := s.bg.startJob(bgJobSpec{
-			Command:     getString(args, "command"),
-			Kind:        getString(args, "kind"),
-			Dir:         dir,
-			ScratchDir:  s.scratchDir,
-			Description: getString(args, "description"),
-			Env:         mergedBgEnv(s.env, args["env"]),
+			Command:      getString(args, "command"),
+			Kind:         getString(args, "kind"),
+			Dir:          dir,
+			ScratchDir:   s.scratchDir,
+			Description:  getString(args, "description"),
+			Env:          mergedBgEnv(s.env, args["env"]),
+			WakeOnExit:   wakeOnExit,
+			WakeOnOutput: wakeOnOutput,
 		})
 		if err != nil {
 			return bgSocketResponse{Error: err.Error()}
@@ -269,6 +279,17 @@ func bgOptionalInt(args map[string]interface{}, key string) (int, error) {
 		return int(v), nil
 	default:
 		return 0, fmt.Errorf("%s must be a non-negative integer", key)
+	}
+}
+
+func bgOptionalBool(args map[string]interface{}, key string) (bool, error) {
+	switch v := args[key].(type) {
+	case nil:
+		return false, nil
+	case bool:
+		return v, nil
+	default:
+		return false, fmt.Errorf("%s must be true or false", key)
 	}
 }
 

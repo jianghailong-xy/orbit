@@ -56,6 +56,8 @@ function makeService(
     turnContents?: Record<string, string | null>;
     /** Routing/receipt metadata for durable turns; omitted rows are ordinary messages. */
     turnMetadata?: Record<string, {
+      /** Defaults to the turn's own id, which is no producer's prefix. */
+      clientTurnId?: string;
       kind?: string;
       sendIntent?: string | null;
       targetTurnId?: string | null;
@@ -216,6 +218,7 @@ function makeService(
             const targetMetadata = targetTurnId ? opts.turnMetadata?.[targetTurnId] ?? {} : {};
             return {
               id,
+              clientTurnId: metadata.clientTurnId ?? id,
               kind: metadata.kind ?? 'message',
               sendIntent: metadata.sendIntent ?? null,
               targetTurnId,
@@ -556,6 +559,29 @@ test('an armed failed retry follows the latest CURRENT_WORK USER back to its tar
   await service.sweep(NOW);
 
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original executable request' }]);
+});
+
+test('a failed background job wake re-sends nothing, least of all the message before it', async () => {
+  // The wake turn carries no words (runner-api/background-job-wake.ts); its echo is the control
+  // plane's note. The only thing that tells it from a turn the person sent with no words is its id.
+  const block = '<background-job-wake>\n  bgj_0123456789ab｜watch｜gh run watch 42｜已结束｜failed｜退出码 1\n</background-job-wake>';
+  const failedAfter = (newestClientTurnId: string) => makeService([row({ status: RunStatus.FAILED })], {
+    events: [
+      { type: 'user', payload: { text: 'run the deploy' }, turnId: 'message-4' },
+      { type: 'user', payload: { text: block, controlPlaneNote: block }, turnId: 'turn-5' },
+    ],
+    turnContents: { 'message-4': 'run the deploy', 'turn-5': '' },
+    turnMetadata: { 'turn-5': { clientTurnId: newestClientTurnId } },
+  });
+
+  const wake = failedAfter('bg-wake:bgj_0123456789ab:exit');
+  await wake.service.sweep(NOW);
+  assert.deepEqual(wake.resumed, [], 'the retry of a failed wake re-sent the message the person sent before it');
+
+  // The paired positive: the same wordless turn, when it is no wake, steps back to that message.
+  const wordless = failedAfter('0f6a9d4e-5b1c-4e2a-9d3f-7c8b6a5e4d21');
+  await wordless.service.sweep(NOW);
+  assert.deepEqual(wordless.resumed, [{ id: 'session-1', content: 'run the deploy' }]);
 });
 
 test('falls back to the opening prompt when the very first turn hit the limit', async () => {

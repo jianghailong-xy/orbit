@@ -9,12 +9,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  type ConversationTurn,
   Prisma,
   RunStatus,
+  type Session,
   SessionDispatchOrigin,
   SessionRunSource,
   WorkspaceProvisionState,
 } from '@prisma/client';
+import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -3532,6 +3535,13 @@ export class SessionsService {
       participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
+      /**
+       * A turn that joins one already queued rather than adding another. Called for a NEW operation
+       * only, under the Session lock and after the lifecycle refusals: a turn it returns is this
+       * request's receipt, and nothing more is written or woken; null lets the turn be written as
+       * usual. Whatever it wrote rolls back with a refusal it throws.
+       */
+      coalesce?: (tx: Prisma.TransactionClient, session: Session) => Promise<ConversationTurn | null>;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -3627,6 +3637,16 @@ export class SessionsService {
       }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new SessionNotSendable('the session has ended');
+      }
+      const joined = await opts?.coalesce?.(tx, session);
+      if (joined) {
+        return {
+          turn: joined,
+          placement: await this.turnPlacement(tx, id, joined),
+          wakeQueue: false,
+          wakeInbox: false,
+          idempotent: true,
+        };
       }
       // §13.6 SU6: a turn that carries the TASK's prompt is the task's work, whatever this row was
       // opened for. Written only for a new operation, in the same transaction as the turn.
@@ -4113,7 +4133,9 @@ export class SessionsService {
     const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
     const classified = turns
-      .filter((turn) => turn.clientTurnId !== initialClientTurnId)
+      // A background job's wake turn carries nobody's words (runner-api/background-job-wake.ts): it
+      // is not a message anyone queued, and the transcript shows what it said once it is delivered.
+      .filter((turn) => turn.clientTurnId !== initialClientTurnId && !isBackgroundWakeTurn(turn.clientTurnId))
       .map((turn) => ({
         turn,
         placement: (turn.kind === 'steer'

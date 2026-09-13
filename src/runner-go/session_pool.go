@@ -126,6 +126,9 @@ func (h worktreeHolder) String() string { return h.kind + " " + h.name }
 type bgHold struct {
 	name         string
 	runnerHosted bool
+	// watch marks a runner-hosted job that only waits (bgKindWatch): it holds the checkout like
+	// any other, and is no capacity.
+	watch bool
 }
 
 // sessionPool owns both concurrency resources:
@@ -238,7 +241,7 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 	for sessionID, jobs := range p.bgJobs {
 		n := 0
 		for _, hold := range jobs {
-			if hold.runnerHosted {
+			if hold.runnerHosted && !hold.watch {
 				n++
 			}
 		}
@@ -253,7 +256,7 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // this runner may be given, counting a session as occupying a slot while it holds a
 // turn permit OR while runner-hosted jobs of its own are still running. Per session
 // and not per job — several jobs of one session share one checkout, and a session is
-// the unit that new work displaces.
+// the unit that new work displaces. A watch is not among those jobs: it only waits.
 func (p *sessionPool) admissionIdleCapacity() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -278,7 +281,7 @@ func (p *sessionPool) admissionIdleCapacity() int {
 // live writer and names it in its receipt. jobID is the launching tool_use id; name
 // is what that receipt will call it.
 func (p *sessionPool) holdWorktreeForBackgroundJob(sessionID, jobID, name string) {
-	p.holdWorktreeWriter(sessionID, jobID, name, false)
+	p.holdWorktreeWriter(sessionID, jobID, bgHold{name: name})
 }
 
 // holdWorktreeForRunnerJob records the same hold for a job the RUNNER spawned and
@@ -286,15 +289,22 @@ func (p *sessionPool) holdWorktreeForBackgroundJob(sessionID, jobID, name string
 // additionally counted, because this is the work that survives engine eviction
 // and therefore the work a capacity account has to know about.
 func (p *sessionPool) holdWorktreeForRunnerJob(sessionID, jobID, name string) {
-	p.holdWorktreeWriter(sessionID, jobID, name, true)
+	p.holdWorktreeWriter(sessionID, jobID, bgHold{name: name, runnerHosted: true})
 }
 
-func (p *sessionPool) holdWorktreeWriter(sessionID, jobID, name string, runnerHosted bool) {
+// holdWorktreeForRunnerWatch records the hold of a watch the runner hosts: the checkout
+// is held as for any runner-hosted job, and the watch is not counted, because a job
+// that only waits costs this machine nothing.
+func (p *sessionPool) holdWorktreeForRunnerWatch(sessionID, jobID, name string) {
+	p.holdWorktreeWriter(sessionID, jobID, bgHold{name: name, runnerHosted: true, watch: true})
+}
+
+func (p *sessionPool) holdWorktreeWriter(sessionID, jobID string, hold bgHold) {
 	if sessionID == "" || jobID == "" {
 		return
 	}
-	if name == "" {
-		name = jobID
+	if hold.name == "" {
+		hold.name = jobID
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -303,7 +313,7 @@ func (p *sessionPool) holdWorktreeWriter(sessionID, jobID, name string, runnerHo
 		jobs = map[string]bgHold{}
 		p.bgJobs[sessionID] = jobs
 	}
-	jobs[jobID] = bgHold{name: name, runnerHosted: runnerHosted}
+	jobs[jobID] = hold
 }
 
 // releaseWorktreeBackgroundJob retires one background shell's hold.
@@ -340,6 +350,10 @@ func (h sessionWorktreeHolds) holdWorktree(jobID, name string) {
 
 func (h sessionWorktreeHolds) holdRunnerJob(jobID, name string) {
 	h.pool.holdWorktreeForRunnerJob(h.sessionID, jobID, name)
+}
+
+func (h sessionWorktreeHolds) holdRunnerWatch(jobID, name string) {
+	h.pool.holdWorktreeForRunnerWatch(h.sessionID, jobID, name)
 }
 
 func (h sessionWorktreeHolds) releaseWorktree(jobID string) {
