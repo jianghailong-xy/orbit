@@ -414,3 +414,73 @@ bash scripts/test-codex-reset-fault-injection.sh
   - 情形：所有结论建立在 codex-cli 0.154.0 schema 的描述上（"reuse the same value when retrying that attempt"），
     自动化从不接触真实账户（契约 §11）。
   - 后续：发布前可由账号所有者在测试账户上做一次人工只读观察，但本任务不这样做。
+
+---
+
+## 9. 发布、上线顺序与回滚
+
+发布任务在 main 上审查后的结论。依据：契约 §9.1 的兼容矩阵、`0255/down.sql`、`src/apiserver/Dockerfile`
+（容器启动先 `prisma migrate deploy`，再起 `main.js`）、`src/runner-go/runloop.go` 与 `selfupdate.go`（自更新）。
+
+### 9.1 没有 feature flag，开关是 runner 的版本
+
+- **没有运行时开关。** 一台 runner 能不能用 reset，只看它跑的二进制。
+  - 旧 runner 不上报 `rateLimitReset` 块，也不声明 `codex-rate-limit-reset-v1`。
+  - Web 的 `codexResetCard` 在没有块时返回 null，Plan usage 上不画任何 reset 内容。
+  - 直接调用创建接口会得到 409 `CAPABILITY_MISSING`，不会建 operation。
+- **runner 这一半只随版本号下发。**
+  - runner 每 10 分钟读一次 `/dl/version.json`，远端版本号更大（`isNewer`）才自更新。
+  - 镜像里的版本号等于某台 runner 正在跑的版本时，那台 runner 一直跑旧二进制。
+  - 版本号更低的 runner 会更新到镜像里这份带 reset 的二进制。
+- **所以不 bump 就发布，机群是混合状态**：只有原本落后的 runner 拿到功能。
+  要让整个机群一起拿到，就 bump 根 `package.json` 的版本，连同 `package-lock.json` 里的两处（参照 `351d902c`）。
+
+### 9.2 推荐的上线顺序
+
+兼容矩阵里的每种组合都安全。推荐分两步：
+
+1. **升级 apiserver 与 web。**
+   - apiserver 启动时补上 0255。线上先应用了编号更大的 0256、0258，`prisma migrate deploy` 照样会应用 0255。
+   - 确认迁移已应用：
+     ```sql
+     SELECT finished_at FROM _prisma_migrations WHERE migration_name = '0255_codex_rate_limit_reset_operation';
+     SELECT to_regclass('public.codex_rate_limit_reset_operation');
+     ```
+   - `GET /api/metrics` 应出现 `orbit_codex_reset_*` 的 HELP/TYPE 行。
+   - 已经是镜像版本号的 runner 在这一步没有变化；版本号更低的 runner 会随自更新拿到功能（§9.1）。
+2. **bump 版本，再发一次 web。**
+   - runner 自更新前先 drain，最多 100 秒。
+   - 非 root 用户跑的 runner 自己装不上新二进制，会记 `cannot be installed`。要先 `sudo orbit upgrade`，再重启它的服务。
+   - 检查每台 runner 是否已声明 capability：
+     ```sql
+     SELECT name, version, 'codex-rate-limit-reset-v1' = ANY (capabilities) AS reset
+       FROM runner ORDER BY last_heartbeat_at DESC NULLS LAST;
+     ```
+   - ChatGPT 登录的 runner，下一次 usage 读取后出现 reset credit（读取周期见 §2.4）。
+
+上线后的第一次真实确认，由账号所有者在自己的账户上手动完成。确认后按 §1.4 用 operationId 核对两侧日志，
+`consume/called` 应恰好一行（R6）。自动化从不做这一步。
+
+### 9.3 关掉功能，从代价最小的做起
+
+1. **回滚 apiserver 与 web 镜像，数据库保留。这是首选。**
+   - 旧镜像启动时的 `prisma migrate deploy` 不会因为库里多出 0255 而失败。
+   - 旧代码不读新表，也不读 runner 的两列；0255 没有在已有的表上加触发器。旧 web 不画 reset 卡片。
+   - 回滚期间，在途 operation 冻结，不再下发 command。runner 已经送出的结果得不到回执，重发到回执窗口结束后记 `receipt/undelivered`。
+   - 重新上线后，heartbeat 按契约 §7.5 的期限结算这些 operation。可能调用过 consume 的结算为 UNRESOLVED，不会显示 "No credit was used"。
+2. **只关 runner 这一半。**
+   - 自更新只升不降，所以要发一个更高的版本，并从 `runnerCapabilitiesV1` 里去掉这个 capability。
+   - apiserver 看不到 capability 就停止派发，在途 operation 按 §7.5 到期结算。
+3. **回滚数据库（`down.sql`）。** 会删掉全部 operation 和它们的 provider key，只在必须删表时做。严格按顺序：
+   1. 新版 apiserver 仍在运行时，等下面这条查询变成 0。期限过后，最多 60 秒就会结算（§0 第 5 条）。
+      ```sql
+      SELECT count(*) FROM codex_rate_limit_reset_operation
+       WHERE consume_state IN ('PENDING', 'CLAIMED') OR (consume_state = 'CONFIRMED' AND refresh_state = 'PENDING');
+      ```
+   2. 按第 1 条回滚 apiserver 与 web，确认线上已经没有新版 apiserver 进程。
+      新代码的每次 heartbeat 都写 `heartbeat_lease_owner` 和 `heartbeat_draining`。新版 apiserver 还在跑时删掉这两列，
+      所有 runner 的 heartbeat 都会失败，runner 会全部掉线。
+   3. 再查一次在途数，仍须为 0。回滚前的空档里可能又建了一条；不为 0 就重新上线，等它结算后从第 1 步重来。
+   4. 执行 `down.sql`，可以重复执行。
+   5. 以后重新上线前，先删掉 ledger 里 0255 那一行，语句在 `down.sql` 头部。不删的话，`prisma migrate deploy`
+      报 "No pending migrations"，不会重建表。
