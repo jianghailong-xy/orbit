@@ -120,8 +120,7 @@ export class WakeDispositionService {
    *
    * `null` is the caller's instruction to record the fact and stop — NOT a refusal, and not a
    * failure. The authorizer is handed straight through rather than consulted here, so a wake the
-   * coordinator's switch or the convergence ledger would refuse is refused on the same terms in
-   * every branch: this unit decides what an allowed wake is spent on and never whether it is
+   * coordinator's switch would refuse is refused on the same terms in every branch: this unit decides what an allowed wake is spent on and never whether it is
    * allowed.
    *
    * The name is older than the second decisive answer and is kept: what the caller asks is still

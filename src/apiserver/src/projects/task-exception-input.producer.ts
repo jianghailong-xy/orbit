@@ -27,7 +27,7 @@ export const EXCEPTION_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
  * `wake-disposition.ts` answers it from the coverage of the criterion the task serves, so the same
  * exception ends CONSUMED here when other work is still expected to deliver that criterion, and
  * ends in a judgment session when nothing is. This consumer is the first of those two terminals:
- * durable, idempotent, convergence-bounded, and visible on the surface a person reads.
+ * durable, idempotent, and visible on the surface a person reads.
  */
 export const TASK_EXCEPTION_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 
@@ -59,12 +59,12 @@ interface EndedAttemptRow {
  * WHY THE AUTHORIZER IS THIS UNIT'S AND NOT THE ROUTER'S DEFAULT
  * =============================================================
  * `CompletionInputRouter.route`'s default authorizer allows every committed input. That is right
- * for a revision an agent chose to submit — the agent is the bound thing, and the fact cannot
- * arrive faster than it is written. It is wrong here, and this is precisely where "failed → open a
- * successor → fail again → open another" lives: nothing about an exception bounds how often it can
- * happen, so the only thing that can bound the WAKING is the convergence ledger. Hence
- * `authorize` below, composed cheapest refusal first with `convergence.authorizeWake` LAST — a
- * convergence pass is charged when it runs, so no cheaper refusal may follow it.
+ * for a revision an agent chose to submit — no switch governs it. It is wrong here: an exception is
+ * derived from the project's rows and answers to the project's coordinator switch. What bounds
+ * "failed → open a successor → fail again → open another" is the coordinator fuse on the
+ * successors themselves, not a refusal of the facts that report each failure. Hence `authorize`
+ * below, composed cheapest refusal first with `convergence.authorizeWake` LAST — that records a
+ * judgment, so no refusal may follow it and leave a record of a wake that never happened.
  *
  * WHY IT IS POST-COMMIT AND RE-READS
  * ==================================

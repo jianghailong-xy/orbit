@@ -96,9 +96,8 @@ export function meterAttempt(
  * Why a budget-spent wake was refused: the project has no coordinator to wake.
  *
  * The cheap refusal, composed BEFORE `CoordinatorConvergenceService.authorizeWake`, because a
- * judgment recorded there charges the project's convergence budget — and charging a project that
- * never asked for a coordinator would raise `COORDINATOR_NO_PROGRESS` blockers against projects
- * that are not being coordinated at all.
+ * judgment recorded there is a record that the coordinator was woken — and a project that never
+ * asked for a coordinator was not.
  *
  * A refusal releases the key rather than burning it (migration 0172's PARTIAL unique index), so a
  * project whose coordinator is switched on later is still woken by the same attempt's fact the next
@@ -111,7 +110,6 @@ export function meterAttempt(
  * coordinator, because a coordinator that does not exist charges no steers.
  *
  * Declared here rather than imported because unit T6 owns the closed set of refusal codes and has
- * not landed; `coordinator-convergence.ts` declares `PROJECT_NOT_CONVERGING` its own way for the
- * same reason.
+ * not landed.
  */
 export const COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';

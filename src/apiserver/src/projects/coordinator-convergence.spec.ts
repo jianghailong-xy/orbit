@@ -3,30 +3,28 @@ import { test } from 'node:test';
 
 import {
   DEFAULT_CONVERGENCE_THRESHOLDS,
+  DEFAULT_COORDINATOR_SPEND_LIMITS,
   ZERO_COUNTERS,
 } from './convergence-contract';
 import { DerivedProgress, deriveProgressVector } from './convergence-evidence';
 import { ProgressVector, progressVectorDigest } from './convergence-progress';
 import {
-  COORDINATOR_NO_PROGRESS_KIND,
-  COORDINATOR_NO_PROGRESS_OWNER,
+  ChainedTask,
   EMPTY_WAKE_CONVERGENCE_STATE,
   PlannedWakeConvergence,
   WakeConvergenceState,
-  noProgressBlocker,
-  noProgressDedupeKey,
+  coordinatorSpendVerdict,
   planWakeConvergence,
+  successorRetries,
   wakeConvergenceKey,
 } from './coordinator-convergence';
 
 /**
  * Unit T4's decision procedure, without a database.
  *
- * The point every test below is making is the same one: this module has NO opinion about progress.
- * It asks `strictlyImproves`, `advanceCounters` and `detectNonConvergence` — the frozen contract's
- * own functions — and what it adds is the order they are asked in and the answer "may the
- * coordinator go on being woken". The tests are therefore mostly about what a WAKE costs and when
- * the raise happens, because those are the two things the incident got wrong.
+ * Two halves. The wake half has NO opinion about progress: it asks `strictlyImproves` and records
+ * the answer, and what these tests hold is that a wake is recorded and never charged or stopped.
+ * The fuse half is the only thing that pauses a coordinator, and these tests hold its lines.
  */
 
 const PROJECT = 'e2f1c3d4-0000-4000-8000-00000000beef';
@@ -34,7 +32,7 @@ const SCOPE = 'a'.repeat(64);
 const OTHER_SCOPE = 'b'.repeat(64);
 const AT = new Date('2026-08-25T00:00:00.000Z');
 
-/** N: the documented default, read from the frozen table rather than restated as a literal here. */
+/** N: the limit the retired breaker counted to, read from the frozen table. */
 const N = DEFAULT_CONVERGENCE_THRESHOLDS.maxDecisionsWithoutProgress as number;
 
 /** A believable measurement of a world with `total` stated criteria and `closed` of the project's
@@ -105,18 +103,18 @@ function committed(planned: PlannedWakeConvergence): WakeConvergenceState {
   };
 }
 
-test('a wake that changed nothing is charged, and one that closed a blocker is not', () => {
+test('a wake records whether it improved, and is charged nothing either way', () => {
   const first = plan(EMPTY_WAKE_CONVERGENCE_STATE, measured(0, 4));
   assert.equal(first.progressed, false);
-  assert.equal(first.counters.decisionsWithoutProgress, 1);
+  assert.deepEqual(first.counters, ZERO_COUNTERS);
 
   const stalled = plan(committed(first), measured(0, 4));
   assert.equal(stalled.progressed, false);
-  assert.equal(stalled.counters.decisionsWithoutProgress, 2);
+  assert.deepEqual(stalled.counters, ZERO_COUNTERS);
 
   const moved = plan(committed(stalled), measured(1, 4));
   assert.equal(moved.progressed, true);
-  assert.equal(moved.counters.decisionsWithoutProgress, 0);
+  assert.deepEqual(moved.counters, ZERO_COUNTERS);
 });
 
 test("a project's first wake is measured against an empty baseline, and says so", () => {
@@ -136,7 +134,7 @@ test("a project's first wake is measured against an empty baseline, and says so"
   assert.equal(plan(committed(second), measured(2, 4)).progressed, true);
 });
 
-test('activity is not progress: a different wake event on an unchanged world still costs a pass', () => {
+test('activity is not progress: a different wake event on an unchanged world is not an improvement', () => {
   let state = EMPTY_WAKE_CONVERGENCE_STATE;
   const events = ['ATTEMPT_ENDED_UNSETTLED', 'ATTEMPT_BUDGET_SPENT', 'CRITERION_READY'] as const;
   events.forEach((event, i) => {
@@ -149,121 +147,55 @@ test('activity is not progress: a different wake event on an unchanged world sti
     assert.equal(planned.progressed, false, `${event} moved nothing but claimed progress`);
     state = committed(planned);
   });
-  assert.equal(state.counters.decisionsWithoutProgress, 3);
 });
 
 test('trading one dimension for another is not progress', () => {
   // Even against the empty baseline this is not progress: one criterion closed, but a P0 opened.
   const first = plan(EMPTY_WAKE_CONVERGENCE_STATE, measured(1, 4, { openP0: 1 }));
   assert.equal(first.progressed, false);
-  // One criterion closed AND one more P0 open: `strictlyImproves` disqualifies the whole step, so
-  // an agent cannot buy budget by moving one axis at the cost of another.
+  // One criterion closed AND one more P0 open: `strictlyImproves` disqualifies the whole step.
   const traded = plan(committed(first), measured(2, 4, { openP0: 2 }));
   assert.equal(traded.progressed, false);
-  assert.equal(traded.counters.decisionsWithoutProgress, 2);
 });
 
-test('N consecutive wakes without strict improvement stop the N+1th, and only it raises', () => {
+test('however many wakes improve nothing, every one proceeds and none is charged', () => {
   let state: WakeConvergenceState = EMPTY_WAKE_CONVERGENCE_STATE;
-  const outcomes: string[] = [];
-  const raises: boolean[] = [];
-  // N + 2 wakes: the first N are the budget, N+1 is the one that crosses it, N+2 is the proof that
-  // being stopped raises nothing more.
-  for (let i = 0; i < N + 2; i += 1) {
+  // Well past the line the retired breaker stopped at: the (N + 1)th wake is the one it refused.
+  for (let i = 0; i < N + 20; i += 1) {
     const planned = plan(state, measured(0, 4), `k${i}`);
-    outcomes.push(planned.outcome);
-    raises.push(planned.raisesBlocker);
-    state = committed(planned);
-  }
-  assert.deepEqual(
-    outcomes,
-    [...Array.from({ length: N }, () => 'PROCEED'), 'STOP', 'STOP'],
-    'the stop must land on the wake AFTER N unimproved ones, not before and not later',
-  );
-  assert.deepEqual(
-    raises,
-    [...Array.from({ length: N }, () => false), true, false],
-    'exactly one raise, on the transition into the stop',
-  );
-  assert.equal(state.counters.decisionsWithoutProgress, N + 2);
-});
-
-test('a stop names the line it crossed and the two numbers that crossed it', () => {
-  let state: WakeConvergenceState = EMPTY_WAKE_CONVERGENCE_STATE;
-  let stop: PlannedWakeConvergence | null = null;
-  for (let i = 0; i < N + 1; i += 1) {
-    const planned = plan(state, measured(0, 4), `k${i}`);
-    if (planned.outcome === 'STOP') stop = planned;
-    state = committed(planned);
-  }
-  assert.ok(stop);
-  assert.equal(stop.nonConvergenceReason, 'NO_PROGRESS');
-  assert.equal(stop.limit, N);
-  assert.equal(stop.observed, N + 1);
-
-  const blocker = noProgressBlocker(PROJECT, stop, {
-    wakeId: 'w',
-    event: 'ATTEMPT_ENDED_UNSETTLED',
-    idempotencyKey: 'cw:v1:x',
-  });
-  assert.equal(blocker.kind, COORDINATOR_NO_PROGRESS_KIND);
-  assert.equal(blocker.owner, COORDINATOR_NO_PROGRESS_OWNER);
-  assert.equal(blocker.owner, 'USER');
-  assert.equal(blocker.recovery, 'HUMAN');
-  assert.equal(blocker.subjectType, 'PROJECT');
-  assert.equal(blocker.subjectId, PROJECT);
-  assert.equal(blocker.dedupeKey, noProgressDedupeKey(PROJECT));
-  assert.match(blocker.requiredAction, new RegExp(`${N + 1} consecutive`));
-});
-
-test('strict progress after a stop re-arms the raise; without it nothing raises again', () => {
-  let state: WakeConvergenceState = EMPTY_WAKE_CONVERGENCE_STATE;
-  for (let i = 0; i < N + 1; i += 1) state = committed(plan(state, measured(0, 4), `k${i}`));
-  assert.equal(state.lastOutcome, 'STOP');
-
-  // The work actually moves. `strictlyImproves` says so, `advanceCounters` zeroes the window, and
-  // the breaker has nothing left to trip on — so the coordinator is woken again.
-  const recovered = plan(state, measured(1, 4), 'recovered');
-  assert.equal(recovered.progressed, true);
-  assert.equal(recovered.outcome, 'PROCEED');
-  assert.equal(recovered.raisesBlocker, false);
-  state = committed(recovered);
-
-  // Stalling again is a NEW episode, and it gets its own row.
-  for (let i = 0; i < N; i += 1) state = committed(plan(state, measured(1, 4), `m${i}`));
-  const second = plan(state, measured(1, 4), 'second-stop');
-  assert.equal(second.outcome, 'STOP');
-  assert.equal(second.raisesBlocker, true);
-});
-
-test('a stop that is already committed never raises again, however many facts arrive', () => {
-  let state: WakeConvergenceState = EMPTY_WAKE_CONVERGENCE_STATE;
-  for (let i = 0; i < N + 1; i += 1) state = committed(plan(state, measured(0, 4), `k${i}`));
-
-  // This is the regression test for `COORDINATOR_NO_PROGRESS`'s self-referential rebirth: the old
-  // detector re-derived the condition from a snapshot on every pass and re-raised the row with an
-  // unchanged reasonDigest, so clearing it bought a few seconds. Here the condition still holds —
-  // and holds harder, twenty facts later — and not one of them raises anything.
-  for (let i = 0; i < 20; i += 1) {
-    const planned = plan(state, measured(0, 4), `after-${i}`);
-    assert.equal(planned.outcome, 'STOP');
-    assert.equal(planned.raisesBlocker, false, `wake ${i} after the stop raised a second blocker`);
+    assert.equal(planned.outcome, 'PROCEED', `wake ${i + 1} was not allowed`);
+    assert.deepEqual(planned.counters, ZERO_COUNTERS, `wake ${i + 1} charged a counter`);
     state = committed(planned);
   }
 });
 
-test('a new scope is a new question and a new budget', () => {
-  let state: WakeConvergenceState = EMPTY_WAKE_CONVERGENCE_STATE;
-  for (let i = 0; i < N + 1; i += 1) state = committed(plan(state, measured(0, 4), `k${i}`));
-  assert.equal(state.lastOutcome, 'STOP');
+test('a project the retired breaker stopped proceeds from its next wake, its old counters carried as they were', () => {
+  const stopped: WakeConvergenceState = {
+    scopeHash: SCOPE,
+    counters: { ...ZERO_COUNTERS, decisionsWithoutProgress: N + 1 },
+    progressVector: measured(0, 4).vector,
+    lastOutcome: 'STOP',
+  };
+  const next = plan(stopped, measured(0, 4), 'after-the-stop');
+  assert.equal(next.outcome, 'PROCEED');
+  assert.equal(next.input.lastOutcome, 'STOP', 'the row records what the previous one concluded');
+  assert.deepEqual(next.counters, stopped.counters, 'a wake neither charges nor clears the old count');
+});
 
-  // A person rewrote what the project is asking for. §4 PV4's second licence: the old counters were
-  // spent answering a different question, so they do not carry — and the old vector does not
-  // either, because a measurement against a different target says nothing about this one.
-  const rescoped = plan(state, measured(0, 9, { scope: OTHER_SCOPE }), 'rescoped');
+test('a new scope is a new question: neither the counters nor the vector carry', () => {
+  const stopped: WakeConvergenceState = {
+    scopeHash: SCOPE,
+    counters: { ...ZERO_COUNTERS, decisionsWithoutProgress: N + 1 },
+    progressVector: measured(0, 4).vector,
+    lastOutcome: 'STOP',
+  };
+  // A person rewrote what the project is asking for. §4 PV4's second licence: the old counters
+  // were about a different question, and a measurement against a different target says nothing
+  // about this one.
+  const rescoped = plan(stopped, measured(0, 9, { scope: OTHER_SCOPE }), 'rescoped');
   assert.equal(rescoped.input.scopeChanged, true);
   assert.equal(rescoped.input.previousProgressVector, null);
-  assert.equal(rescoped.counters.decisionsWithoutProgress, 1);
+  assert.deepEqual(rescoped.counters, ZERO_COUNTERS);
   assert.equal(rescoped.outcome, 'PROCEED');
 });
 
@@ -316,4 +248,61 @@ test('the planner reads a clock from nowhere: the same world plans the same deci
   const b = plan(state, measured(0, 4), 'replayed');
   assert.equal(a.inputHash, b.inputHash);
   assert.deepEqual(a.counters, b.counters);
+});
+
+test('the fuse pauses on a kind of spend that exceeds its limit, never on one that reaches it', () => {
+  const limits = DEFAULT_COORDINATOR_SPEND_LIMITS;
+  const turns = limits.maxSelfStartedTurnsPerDay as number;
+  const sessions = limits.maxSessionsOpenedPerDay as number;
+  const retries = limits.maxRetriesPerSuccessorChain as number;
+
+  assert.deepEqual(
+    coordinatorSpendVerdict({ selfStartedTurns: turns, sessionsOpened: sessions, successorRetries: retries }, limits),
+    { paused: false, reason: null, observed: null, limit: null },
+  );
+  assert.deepEqual(
+    coordinatorSpendVerdict({ selfStartedTurns: 0, sessionsOpened: 0, successorRetries: retries + 1 }, limits),
+    { paused: true, reason: 'SUCCESSOR_RETRIES', observed: retries + 1, limit: retries },
+  );
+  // Two lines crossed at once report one of them, and always the same one.
+  assert.deepEqual(
+    coordinatorSpendVerdict({ selfStartedTurns: turns + 1, sessionsOpened: sessions + 1, successorRetries: 0 }, limits),
+    { paused: true, reason: 'SELF_STARTED_TURNS', observed: turns + 1, limit: turns },
+  );
+  // An unbounded line is not a line.
+  assert.equal(
+    coordinatorSpendVerdict(
+      { selfStartedTurns: turns * 10, sessionsOpened: 0, successorRetries: 0 },
+      { ...limits, maxSelfStartedTurnsPerDay: null },
+    ).paused,
+    false,
+  );
+});
+
+test('retries count what an agent filed in the longest chain extended inside the window', () => {
+  const since = new Date(AT.getTime() - 24 * 60 * 60_000);
+  const recent = AT;
+  const stale = new Date(since.getTime() - 1);
+  /** A chain from its first attempt: `filedBy[i]` filed attempt i + 1, `at` dates every link. */
+  const chain = (name: string, filedBy: boolean[], at: Date): ChainedTask[] => {
+    const ids = Array.from({ length: filedBy.length + 1 }, (_, i) => `${name}${i}`);
+    return ids.map((id, i) => ({
+      id,
+      supersededByTaskId: ids[i + 1] ?? null,
+      supersededAt: i < filedBy.length ? at : null,
+      // The first attempt is an agent's too, and is still not a retry.
+      filedByAgent: i === 0 ? true : filedBy[i - 1]!,
+    }));
+  };
+
+  const tasks = [
+    ...chain('agent', [true, true, true], recent),
+    ...chain('person', [false, false, false, false, false], recent),
+    ...chain('mixed', [true, false, true, true], recent),
+    ...chain('stopped', [true, true, true, true, true, true], stale),
+  ];
+  assert.equal(successorRetries(tasks, since), 3);
+  assert.equal(successorRetries(chain('person', [false, false], recent), since), 0);
+  assert.equal(successorRetries(chain('stopped', [true, true, true], stale), since), 0);
+  assert.equal(successorRetries([], since), 0);
 });

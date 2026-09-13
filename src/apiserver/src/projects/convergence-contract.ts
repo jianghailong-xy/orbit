@@ -398,6 +398,48 @@ export const DEFAULT_ATTEMPT_BUDGET: Readonly<AttemptBudget> = {
   maxCoordinatorSteers: 3,
 };
 
+/**
+ * The coordinator fuse's limits: how much a project's coordinator may spend ON ITS OWN before it is
+ * paused. `coordinator-convergence.ts` §3 defines each kind of spend; what happens TO the
+ * coordinator — a fact delivered or recorded, a merge receipt, an evidence revision, the owner's
+ * reply — is not spend and has no limit here. `null` is "unbounded" under OW4, as above.
+ */
+export interface CoordinatorSpendLimits {
+  /** Self-started turns of the standing coordinator conversation in the last 24 hours. */
+  maxSelfStartedTurnsPerDay: number | null;
+  /** Sessions that conversation opened in the last 24 hours. */
+  maxSessionsOpenedPerDay: number | null;
+  /** Agent-filed replacements in one successor chain whose newest link is in the last 24 hours. */
+  maxRetriesPerSuccessorChain: number | null;
+}
+
+/**
+ * Calibrated on 2026-09-13 against the 60 sessions that are or were a coordinator in this
+ * deployment, each dimension read the way the fuse reads it — the busiest rolling 24 hours of each
+ * conversation:
+ *
+ *   dimension            conversations   p50   p90   highest   second   default
+ *   -----------------    -------------   ---   ---   -------   ------   -------
+ *   self-started turns              22     7    27       152       38        40
+ *   sessions opened                 38     6    18        27       24        40
+ *
+ * `maxSelfStartedTurnsPerDay` sits above every conversation's busiest day but one, and that one is
+ * the case the line exists for: 152 turns nobody delivered against 51 that somebody did, a
+ * coordinator driving itself. At 40 it pauses a few hours into that day and on no other.
+ *
+ * `maxSessionsOpenedPerDay` has no runaway in the population to aim at, so it sits half as high
+ * again above the busiest day observed: a backstop, not a working limit.
+ *
+ * `maxRetriesPerSuccessorChain` is not a percentile. The owner's rule for a retry chain is three
+ * attempts, the third failure going to the owner, so a third retry is the first that nothing
+ * licenses. Of the 26 chains ever filed, 23 have one retry, 2 have two, and 1 went to eight.
+ */
+export const DEFAULT_COORDINATOR_SPEND_LIMITS: Readonly<CoordinatorSpendLimits> = {
+  maxSelfStartedTurnsPerDay: 40,
+  maxSessionsOpenedPerDay: 40,
+  maxRetriesPerSuccessorChain: 2,
+};
+
 /** §8's reasons, in TH1's fixed evaluation order. Exported as an array because the ORDER is the
  *  contract — two lines crossed at once must report one determinate answer or a replay forks. */
 export type NonConvergenceReason =
@@ -644,6 +686,29 @@ export function resolveAttemptBudget(
       continue;
     }
     if (!Number.isInteger(value) || value <= 0) continue;
+    resolved[key] = value;
+  }
+  return resolved;
+}
+
+/**
+ * The same rule for the coordinator fuse. Its limits are read from `project.convergence_thresholds`
+ * beside the §8 thresholds, each resolver taking only its own keys.
+ */
+export function resolveCoordinatorSpendLimits(
+  overrides: Partial<CoordinatorSpendLimits> | null | undefined,
+  unboundedAuthorizedBy: ScopeAuthorization | null | undefined,
+): CoordinatorSpendLimits {
+  const resolved: CoordinatorSpendLimits = { ...DEFAULT_COORDINATOR_SPEND_LIMITS };
+  if (!overrides) return resolved;
+  for (const key of Object.keys(DEFAULT_COORDINATOR_SPEND_LIMITS) as Array<keyof CoordinatorSpendLimits>) {
+    const value = overrides[key];
+    if (value === undefined) continue;
+    if (value === null) {
+      if (unboundedIsAuthorized(unboundedAuthorizedBy)) resolved[key] = null;
+      continue;
+    }
+    if (!Number.isInteger(value) || value < 0) continue;
     resolved[key] = value;
   }
   return resolved;

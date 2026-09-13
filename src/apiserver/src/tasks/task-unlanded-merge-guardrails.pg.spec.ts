@@ -18,15 +18,10 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import {
-  ConvergenceCounters,
   DEFAULT_CONVERGENCE_THRESHOLDS,
   ZERO_COUNTERS,
 } from '../projects/convergence-contract';
-import {
-  COORDINATOR_NO_PROGRESS_KIND,
-  PROJECT_NOT_CONVERGING,
-  noProgressDedupeKey,
-} from '../projects/coordinator-convergence';
+import { COORDINATOR_NO_PROGRESS_KIND } from '../projects/coordinator-convergence';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
 import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
@@ -72,18 +67,17 @@ import { TasksService } from './tasks.service';
  *
  * That is the reading every case below is written against, and it is stated here because it is a
  * reading rather than a deduction: a retry is a SECOND observation that the work has not landed,
- * consecutive such observations are what the convergence budget counts, and crossing the budget is
- * what raises one blocker and stops the waking. Nothing waits for a merge to "come back", because
+ * and it is told and recorded like the first. Nothing waits for a merge to "come back", because
  * nothing here ever gets a merge back.
  *
  * §1 — THE THREE GUARDRAILS, AND WHY EACH ONE IS A DIFFERENT CASE
  * ===============================================================
- *   1. **The retry is charged.** `criterion-unlanded.producer.ts` composes its authorizer cheapest
- *      refusal first with `convergence.authorizeWake` LAST, so every observation that reaches the
- *      ledger has spent a convergence pass by the time it is allowed. Case (a) drives N + 3 of them
- *      and reads the `blocker_id` column, which is the only place the difference between "raised
- *      once, on the transition" and "re-derived on every later fact" is visible: the partial unique
- *      index over open blockers would absorb the second raise and leave the ROW count at one.
+ *   1. **The retry is told and recorded, and never refused.** `criterion-unlanded.producer.ts`
+ *      composes its authorizer cheapest refusal first with `convergence.authorizeWake` LAST, which
+ *      records every observation it allows. Case (a) drives N + 3 of them, past the limit the
+ *      retired breaker counted to, and every one reaches the standing conversation with no charge,
+ *      no refusal and no blocker. What the coordinator spends retrying is bounded by its fuse
+ *      (`projects/coordinator-spend-fuse.pg.spec.ts`), not by refusing the facts that report it.
  *   2. **The same result is ordered merged once.** Case (c). The fact's identity is
  *      `settlementVersion(serving)` and deliberately carries no receipt, so re-observing one
  *      criterion's unchanged finished work is the same fact and stops at 0174's index. That claim
@@ -99,10 +93,10 @@ import { TasksService } from './tasks.service';
  * silenced, and then call `routeUnlandedCriteria` themselves. Two reasons, both about being able
  * to say what the ledger rows mean:
  *
- *   * the write path delivers FOUR kinds of fact, and three of them charge the same budget. A run
- *     that let it deliver would produce a ledger this file cannot make an exact statement about,
- *     and "the unlanded fact is what spent the budget" would be an inference rather than an
- *     assertion (every case below asserts the ledger's `event` set is exactly one value);
+ *   * the write path delivers FOUR kinds of fact, and three of them are recorded in the same ledger.
+ *     A run that let it deliver would produce a ledger this file cannot make an exact statement
+ *     about, and "the unlanded fact is what the ledger recorded" would be an inference rather than
+ *     an assertion (every case below asserts the ledger's `event` set is exactly one value);
  *   * an observation is the unit under test. Making it explicitly is what lets a case put a merge
  *     receipt — or nothing at all — between two of them.
  *
@@ -125,11 +119,8 @@ import { TasksService } from './tasks.service';
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
-/** N: the documented default, read from the frozen table rather than restated as a literal. */
+/** N: the limit the retired breaker counted to, read from the frozen table. */
 const N = DEFAULT_CONVERGENCE_THRESHOLDS.maxDecisionsWithoutProgress as number;
-
-/** Every counter name, from the contract's own zero, so a new one cannot skip the monotonicity. */
-const COUNTER_NAMES = Object.keys(ZERO_COUNTERS) as Array<keyof ConvergenceCounters>;
 
 /** The verification method every criterion here declares; never the thing under test. */
 const METHOD = 'Read it and say whether it holds';
@@ -618,42 +609,25 @@ function judgmentSessions(db: PrismaClient, ownerId: string) {
   });
 }
 
-function decisionsWithoutProgress(rows: Array<{ counters: unknown }>): number[] {
-  return rows.map((row) => (row.counters as ConvergenceCounters).decisionsWithoutProgress);
-}
-
-/**
- * Nothing the ledger counts ever walks backwards while nothing improves.
- *
- * Asserted over EVERY counter rather than the one these runs move: a counter that went down
- * without progress is the shape every escape from this breaker has — a restart re-initialising
- * from zero, a redelivery processed as a fresh charge, a second writer starting its own count —
- * and which counter it happened to be is not the interesting part.
- */
-function assertCountersNeverRetreat(rows: Array<{ counters: unknown }>, where: string): void {
-  for (let i = 1; i < rows.length; i += 1) {
-    const before = rows[i - 1]!.counters as ConvergenceCounters;
-    const after = rows[i]!.counters as ConvergenceCounters;
-    for (const name of COUNTER_NAMES) {
-      assert.ok(
-        after[name] >= before[name],
-        `${where}: counter ${name} fell from ${before[name]} to ${after[name]} between decisions `
-        + `${i} and ${i + 1}, and nothing in this run improved`,
-      );
-    }
-  }
+/** A fact is recorded and charges nothing (`coordinator-convergence.ts` §1), so every row reads zero. */
+function assertNothingCharged(rows: Array<{ counters: unknown }>, where: string): void {
+  assert.deepEqual(
+    rows.map((row) => row.counters),
+    rows.map(() => ZERO_COUNTERS),
+    `${where}: an observation charged the convergence budget`,
+  );
 }
 
 // (a) ---------------------------------------------------------------------------------------------
 /**
- * The whole of the stop-loss, over the fact a merge is ordered from.
+ * Every retry is told, past the limit the retired breaker counted to.
  *
  * N + 3 observations that the same criterion's finished work is still off `main`, each of them a
  * genuinely new fact because the criterion gained one more finished piece of work between them.
- * Nothing improves, so every one of them is a decision without progress; the N + 1th crosses the
- * line and is the only one that raises anything.
+ * Nothing improves. Every one is still delivered to the standing conversation and recorded, and
+ * none is charged, refused or turned into a blocker.
  */
-test('a criterion observed unlanded past the budget raises one blocker, at the crossing',
+test('a criterion observed unlanded past the old limit is told every time, and nothing is charged or raised',
   { skip, timeout: 900_000 }, async () => {
     const stack = await connect({ silent: true });
     try {
@@ -675,8 +649,7 @@ test('a criterion observed unlanded past the budget raises one blocker, at the c
         await coordinatorReadsIt(stack.db, f);
       }
 
-      // 1. Each observation is one more judgment. A door that stopped charging once the project was
-      //    stopped — or one that never charged at all — reads flat here.
+      // 1. Each observation is one more recorded judgment, about the unlanded fact.
       const ledger = await decisions(stack.db, f.projectId);
       assert.deepEqual(
         ledgerRows,
@@ -686,73 +659,30 @@ test('a criterion observed unlanded past the budget raises one blocker, at the c
       assert.deepEqual(
         [...new Set(ledger.map((row) => row.event))],
         ['CRITERION_UNLANDED'],
-        'every decision in this run was charged to the unlanded fact, not to a sibling door',
+        'every decision in this run was recorded for the unlanded fact, not for a sibling door',
       );
-
-      // 2. The counters, monotone. The exact sequence is asserted as well as the property, because
-      //    a budget that charged the same fact twice would also be monotone.
-      assert.deepEqual(
-        decisionsWithoutProgress(ledger),
-        Array.from({ length: N + 3 }, (_, index) => index + 1),
-        'a merge that has not happened improves nothing, so every observation is progress-free',
-      );
-      assertCountersNeverRetreat(ledger, 'stalled');
       assert.deepEqual(
         ledger.map((row) => row.progressed),
         Array.from({ length: N + 3 }, () => false),
+        'a merge that has not happened improves nothing',
       );
 
-      // 3. The transition, and only the transition. `blocker_id` is the column that says which
-      //    DECISION raised the row: a stop re-derived on every later observation would show a
-      //    second id here while the open-row count below stayed at one.
+      // 2. Nothing charged, nothing stopped, nothing raised — including from the (N + 1)th, where
+      //    the retired breaker stopped.
+      assertNothingCharged(ledger, 'stalled');
+      assert.deepEqual([...new Set(ledger.map((row) => row.outcome))], ['PROCEED']);
       assert.deepEqual(
-        ledger.map((row) => row.raisedBlockerId !== null),
-        [...Array.from({ length: N }, () => false), true, false, false],
-        'the blocker belongs to the observation that CROSSED the limit and to no other',
+        ledger.map((row) => row.raisedBlockerId),
+        Array.from({ length: N + 3 }, () => null),
       );
-      assert.deepEqual(
-        openRows,
-        [...Array.from({ length: N }, () => 0), 1, 1, 1],
-        'before the crossing there is no row to act on, and after it there is exactly one',
-      );
-      assert.deepEqual(
-        ledger.map((row) => row.outcome),
-        [...Array.from({ length: N }, () => 'PROCEED'), 'STOP', 'STOP', 'STOP'],
-        'the limit is crossed once and stays crossed',
-      );
-      assert.equal(ledger[N]!.nonConvergenceReason, 'NO_PROGRESS');
-      assert.equal(ledger[N]!.crossedLimit, N);
-      assert.equal(ledger[N]!.observed, N + 1);
+      assert.deepEqual(openRows, Array.from({ length: N + 3 }, () => 0));
 
-      const raised = await noProgressBlockers(stack.db, f.projectId);
-      assert.equal(raised.length, 1);
-      assert.equal(raised[0]!.id, ledger[N]!.raisedBlockerId);
-      assert.equal(raised[0]!.subjectType, 'PROJECT');
-      assert.equal(raised[0]!.subjectId, f.projectId);
-      assert.equal(raised[0]!.dedupeKey, noProgressDedupeKey(f.projectId));
-      assert.equal(
-        raised[0]!.lifecycleGeneration, 1n,
-        'one episode, not one per observation — a second generation is a project that stalled twice',
-      );
-      assert.equal(raised[0]!.resolvedAt, null);
-
-      // 4. What the budget is FOR: past the crossing the observations stop ordering anything. The
-      //    refusal is the ledger's own rather than a delivery that quietly failed, and the standing
-      //    conversation is told nothing further — which is the merge loop actually stopping.
-      assert.deepEqual(
-        outcomes,
-        [...Array.from({ length: N }, () => 'DELIVERED'), 'REFUSED', 'REFUSED', 'REFUSED'],
-      );
+      // 3. And every observation reached the coordinator.
+      assert.deepEqual(outcomes, Array.from({ length: N + 3 }, () => 'DELIVERED'));
       const wakes = await unlandedWakes(stack.db, f.projectId);
       assert.equal(wakes.length, N + 3);
-      assert.equal(wakes.filter((wake) => wake.status === 'DELIVERED').length, N);
-      const stopped = wakes.filter((wake) => wake.status === 'REFUSED');
-      assert.equal(stopped.length, 3);
-      assert.deepEqual([...new Set(stopped.map((w) => w.refusalCode))], [PROJECT_NOT_CONVERGING]);
-      assert.equal(
-        (await coordinatorMessages(stack.db, f)).length, N,
-        'the standing conversation was told to merge after the budget said to stop',
-      );
+      assert.deepEqual(wakes.filter((wake) => wake.status !== 'DELIVERED'), []);
+      assert.equal((await coordinatorMessages(stack.db, f)).length, N + 3);
       assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
     } finally {
       await stack.db.$disconnect();
@@ -768,14 +698,14 @@ test('a criterion observed unlanded past the budget raises one blocker, at the c
  * `LANDS_FROM_ROUND` the second project's serving work carries a `MERGED` receipt into `main` —
  * and everything asserted below follows from that one row.
  *
- * What the difference IS, stated precisely, because it is not the sibling exception ledger's
- * shape: landing is not a dimension of the progress vector (`convergence-progress.ts` §4 freezes
- * that list, and a merge receipt moves none of its counts), so a landing does not RESET the
- * counters. What it does is end the fact: `criterionUnlandedFact` returns null for a criterion
- * whose every serving task has landing evidence, so from that round on there is nothing to charge.
- * A budget that went on being spent on work that had landed is the failure this pair rules out.
+ * What the difference IS, stated precisely: landing is not a dimension of the progress vector
+ * (`convergence-progress.ts` §4 freezes that list, and a merge receipt moves none of its counts),
+ * so a landing is not recorded as progress. What it does is end the fact: `criterionUnlandedFact`
+ * returns null for a criterion whose every serving task has landing evidence, so from that round on
+ * there is nothing to tell the coordinator and nothing to record. A coordinator told to merge work
+ * that had already landed is the failure this pair rules out.
  */
-test('work that lands stops the budget being spent; the identical run without it does not',
+test('work that lands stops the facts; the identical run without it goes on being told',
   { skip, timeout: 900_000 }, async () => {
     const stack = await connect({ silent: true });
     try {
@@ -814,44 +744,27 @@ test('work that lands stops the budget being spent; the identical run without it
         );
       }
 
-      // The stalled half, restated here because it is this case's baseline: without it "the
-      // counters behaved differently" has nothing to differ from.
-      assert.deepEqual(
-        decisionsWithoutProgress(stalledLedger),
-        Array.from({ length: N + 1 }, (_, index) => index + 1),
-      );
-      assertCountersNeverRetreat(stalledLedger, 'never-lands');
+      // The stalled half, restated here because it is this case's baseline: every round was told
+      // and recorded.
+      assert.equal(stalledLedger.length, N + 1);
+      assert.equal((await coordinatorMessages(stack.db, stalled)).length, N + 1);
 
-      // The landing half: charged for exactly the observations made BEFORE the work landed, and
-      // for none afterwards.
-      assert.deepEqual(
-        decisionsWithoutProgress(landedLedger),
-        Array.from({ length: LANDS_FROM_ROUND - 1 }, (_, index) => index + 1),
-        'the budget went on being spent on work that was already on main',
-      );
-      assert.notDeepEqual(
-        decisionsWithoutProgress(landedLedger),
-        decisionsWithoutProgress(stalledLedger),
-        'a run in which the work landed must not spend its budget like one in which it did not',
-      );
-      assertCountersNeverRetreat(landedLedger, 'lands-partway');
-
-      // And the consequence a person sees: the same N + 1 rounds stop one project and not the
-      // other. Nothing was raised on the landing project at all — not raised and cleared.
-      assert.equal((await noProgressBlockers(stack.db, stalled.projectId)).length, 1);
+      // The landing half: told and recorded for exactly the observations made BEFORE the work
+      // landed, and for none afterwards.
       assert.equal(
-        stalledLedger[N]!.raisedBlockerId,
-        (await noProgressBlockers(stack.db, stalled.projectId))[0]!.id,
+        landedLedger.length, LANDS_FROM_ROUND - 1,
+        'the coordinator went on being told about work that was already on main',
       );
+      assert.equal((await coordinatorMessages(stack.db, landing)).length, LANDS_FROM_ROUND - 1);
+
+      // Neither half was charged, stopped or raised against, whichever way its work went.
+      assertNothingCharged(stalledLedger, 'never-lands');
+      assertNothingCharged(landedLedger, 'lands-partway');
       assert.deepEqual(
-        landedLedger.map((row) => row.raisedBlockerId),
-        Array.from({ length: LANDS_FROM_ROUND - 1 }, () => null),
+        [...new Set([...stalledLedger, ...landedLedger].map((row) => row.outcome))], ['PROCEED'],
       );
+      assert.deepEqual(await noProgressBlockers(stack.db, stalled.projectId), []);
       assert.deepEqual(await noProgressBlockers(stack.db, landing.projectId), []);
-      assert.deepEqual(
-        [...new Set(landedLedger.map((row) => row.outcome))], ['PROCEED'],
-        'a project whose work reached main was stopped anyway',
-      );
 
       // The one row the whole difference rests on, read back rather than assumed.
       assert.equal(
@@ -966,7 +879,7 @@ test('the same unlanded result is ordered merged once; a different result is ord
         'both rows are about one criterion, so the pair proves nothing about a different result',
       );
       assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
-      // Three observations, two of which reached the budget: the repeat did not charge one either.
+      // Three observations, two of which reached the ledger: the repeat did not record one either.
       assert.equal((await decisions(stack.db, f.projectId)).length, 2);
     } finally {
       await stack.db.$disconnect();
@@ -982,12 +895,12 @@ test('the same unlanded result is ordered merged once; a different result is ord
  * therefore the SAME project driven through the SAME production write path, and the only thing
  * that changes between them is the switch. This case is the one that does NOT silence the router:
  * what it has to show is that a fact travelling the real route from a task's settlement is stopped
- * on the column before anything is charged.
+ * on the column before anything is recorded.
  *
  * The ledger claims before it authorizes, so the switched-off half leaves exactly ONE row saying
  * so — never an empty table.
  */
-test('a switched-off coordinator charges no budget, raises no blocker, and leaves one refusal',
+test('a switched-off coordinator records no judgment, raises no blocker, and leaves one refusal',
   { skip, timeout: 600_000 }, async () => {
     const stack = await connect();
     try {
@@ -1008,11 +921,11 @@ test('a switched-off coordinator charges no budget, raises no blocker, and leave
       assert.notEqual(refused[0]!.status, 'DELIVERED');
 
       // The three things this case adds to its siblings: the switch refuses BEFORE the convergence
-      // ledger is reached, so no pass is charged; nothing is raised for a person; and the standing
-      // conversation is told nothing.
+      // ledger is reached, so no judgment is recorded; nothing is raised for a person; and the
+      // standing conversation is told nothing.
       assert.deepEqual(
         await decisions(stack.db, f.projectId), [],
-        'a refusal cheaper than convergence must not have charged a convergence pass',
+        'a refusal cheaper than convergence must not have been recorded as a judgment',
       );
       assert.deepEqual(await allBlockers(stack.db, f.projectId), []);
       assert.deepEqual(await coordinatorMessages(stack.db, f), []);
@@ -1036,14 +949,14 @@ test('a switched-off coordinator charges no budget, raises no blocker, and leave
 
       // Two, and naming both is the point: the write path derives the readiness fact and the
       // landing fact from the same committed rows, and BOTH carry a producer-owned authorizer that
-      // ends at the convergence ledger. The switched-off half charged neither.
-      const charged = await decisions(stack.db, f.projectId);
+      // ends at the convergence ledger. The switched-off half recorded neither.
+      const judged = await decisions(stack.db, f.projectId);
       assert.deepEqual(
-        charged.map((row) => row.event),
+        judged.map((row) => row.event),
         ['CRITERION_READY', 'CRITERION_UNLANDED'],
         'with the switch on, the same kind of write is judged',
       );
-      assert.deepEqual(decisionsWithoutProgress(charged), [1, 2]);
+      assertNothingCharged(judged, 'switched-on');
       const both = await unlandedWakes(stack.db, f.projectId);
       assert.equal(both.length, 2);
       assert.deepEqual(

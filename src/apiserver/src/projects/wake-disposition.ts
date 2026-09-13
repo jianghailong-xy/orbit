@@ -13,8 +13,8 @@ import type { CriterionLanding } from './project-criterion-landing';
  * which made "was this worth thinking about" a question nothing asked.
  *
  * NOT OPENING IS NOT A REFUSAL. `REFUSED` means the wake was not allowed — the switch is off, the
- * project is gone, the convergence ledger says this project is no longer converging — and it
- * releases the fact's idempotency key so the same fact may be delivered again. What this unit
+ * project is gone, there is no conversation to deliver to — and it releases the fact's idempotency
+ * key so the same fact may be delivered again. What this unit
  * decides is what an ALLOWED wake is spent on, and every one of its answers is a terminal state
  * inside 0174's partial unique index: the fact goes on holding its key whichever it takes. A
  * reader of the ledger can therefore tell them apart — `REFUSED` was not permitted, `CONSUMED` was

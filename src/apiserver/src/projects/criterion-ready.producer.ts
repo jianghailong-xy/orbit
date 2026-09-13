@@ -29,7 +29,7 @@ export const CRITERION_READY_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABLED';
  * the claim HOLDS is not a question anything in Orbit answers). Such a criterion may still owe a
  * merge; §2.1 there says why that is answered on the fact that reports its landing rather than a
  * second time here, and this consumer is where the readiness fact ends either way: durable,
- * idempotent, convergence-bounded, on the surface a person reads.
+ * idempotent, on the surface a person reads.
  */
 export const CRITERION_READY_CONSUMER: CompletionInputConsumer = 'HUMAN_INBOX';
 
@@ -79,10 +79,10 @@ export interface CriterionReadyDelivery {
  * WHY THE AUTHORIZER IS THIS UNIT'S AND NOT THE ROUTER'S DEFAULT
  * =============================================================
  * `CompletionInputRouter.route`'s default allows every committed input, which is right for a
- * revision an agent chose to submit and wrong here: work reopens, finishes again and re-derives
- * readiness, and nothing about that cycle bounds itself. The convergence ledger is what bounds it,
- * so `authorize` below is composed cheapest refusal first with `convergence.authorizeWake` LAST —
- * a convergence pass is charged when it runs, so no cheaper refusal may follow it.
+ * revision an agent chose to submit and wrong here: readiness is derived from the project's rows,
+ * so it answers to the project's coordinator switch. `authorize` below is composed cheapest refusal
+ * first with `convergence.authorizeWake` LAST — that records a judgment, so no refusal may follow
+ * it and leave a record of a wake that never happened.
  *
  * WHY IT IS POST-COMMIT AND RE-READS
  * ==================================

@@ -22,7 +22,6 @@ import { COORDINATOR_DISABLED } from '../projects/attempt-budget-meter';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { ConvergenceLedgerService } from '../projects/convergence-ledger.service';
 import { EMPTY_PROGRESS_VECTOR, scopeHash } from '../projects/convergence-progress';
-import { PROJECT_NOT_CONVERGING } from '../projects/coordinator-convergence';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
 import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
@@ -65,11 +64,10 @@ import { TasksService } from './tasks.service';
  * Two things are asserted about every case, and the second is the point:
  *
  *   1. the fact reaches `project_coordinator_wake` at all, keyed on the attempt that ended; and
- *   2. it got there through `convergence.authorizeWake` and NOT through
- *      `CompletionInputRouter`'s always-allow default. An exception is exactly the input with no
- *      natural bound — "it failed, so open a successor, which failed, so open another" — so a
- *      wake authorized by a function that says yes to everything is the perpetual motion machine
- *      with a ledger row per revolution.
+ *   2. it got there through the producer's own authorizer — the coordinator switch, then
+ *      `convergence.authorizeWake`, which records the judgment — and NOT through
+ *      `CompletionInputRouter`'s always-allow default, which ignores the switch and records
+ *      nothing.
  *
  * Nothing below constructs a producer and calls it. Every case goes through a product door: the
  * runner's `turnComplete`, or `TasksService.update`.
@@ -95,13 +93,6 @@ function verifyDisposableDatabase(): Promise<void> {
   return safety;
 }
 
-/** A convergence service that refuses every wake, with the real unit's own refusal code. */
-function refusingConvergence(): CoordinatorConvergenceService {
-  return {
-    authorizeWake: async () => ({ allowed: false as const, refusalCode: PROJECT_NOT_CONVERGING }),
-  } as unknown as CoordinatorConvergenceService;
-}
-
 interface Stack {
   db: PrismaClient;
   api: RunnerApiController;
@@ -113,15 +104,10 @@ interface Stack {
 /**
  * The production wiring, over one client.
  *
- * `convergence` is the only seam: passing a refusing double is how a case asks "was this fact
- * authorized HERE", because a delivery that ate the router's default would never consult it and
- * would land CONSUMED instead of REFUSED.
- *
- * `wrapRouter` is the other: the case about the default authorizer substitutes a throwing sentinel
- * for an omitted fourth argument, so a call site that relies on the default fails loudly.
+ * `wrapRouter` is the one seam: the case about the default authorizer substitutes a throwing
+ * sentinel for an omitted fourth argument, so a call site that relies on the default fails loudly.
  */
 async function connect(options: {
-  convergence?: CoordinatorConvergenceService;
   wrapRouter?: (router: CompletionInputRouter) => CompletionInputRouter;
 } = {}): Promise<Stack> {
   await verifyDisposableDatabase();
@@ -130,7 +116,7 @@ async function connect(options: {
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
-  const convergence = options.convergence ?? new CoordinatorConvergenceService(prisma);
+  const convergence = new CoordinatorConvergenceService(prisma);
   const real = new CompletionInputRouter(
     new CoordinatorWakeService(prisma),
     new ProjectTasksSettledProducer(
@@ -395,6 +381,14 @@ function judgmentSessions(db: PrismaClient, ownerId: string) {
   });
 }
 
+/** The judgments the convergence ledger recorded for one wake. */
+function judgedFor(db: PrismaClient, wakeId: string) {
+  return db.projectConvergenceDecision.findMany({
+    where: { wakeId },
+    select: { event: true, outcome: true },
+  });
+}
+
 /** Push this attempt's CONTEXT over its frozen limit, using the session's own reported columns. */
 async function spendContext(stack: Stack, f: Fixture): Promise<void> {
   const task = await stack.db.task.findUniqueOrThrow({
@@ -544,52 +538,55 @@ test('the exception delivery is handed rows the transaction has already committe
     }
   });
 
-test('a failed task is refused by convergence, not waved through by a default',
+test('a failed task is recorded by convergence, not waved through by a default',
   { skip, timeout: 180_000 }, async () => {
-    const stack = await connect({ convergence: refusingConvergence() });
+    const stack = await connect();
     try {
-      const f = await fixture(stack, 'exception-not-converging', {
+      const f = await fixture(stack, 'exception-recorded', {
         acceptance: { command: 'exit 7', expectedExitCode: 0 },
       });
       await deriveFailedByExitCode(stack, f);
 
       const wakes = await exceptionWakes(stack.db, f.projectId);
-      assert.equal(wakes.length, 1, 'the fact did not travel far enough to be refused');
-      assert.equal(
-        wakes[0]!.status, 'REFUSED',
-        'a project that is not converging still consumed the exception — the default was eaten',
+      assert.equal(wakes.length, 1, 'the fact did not travel far enough to be recorded');
+      assert.equal(wakes[0]!.status, 'CONSUMED');
+      assert.deepEqual(
+        await judgedFor(stack.db, wakes[0]!.id),
+        [{ event: 'ATTEMPT_ENDED_UNSETTLED', outcome: 'PROCEED' }],
+        'the exception was consumed with no judgment behind it — the default was eaten',
       );
-      assert.equal(wakes[0]!.refusalCode, PROJECT_NOT_CONVERGING);
-      assert.equal(wakes[0]!.sessionId, null);
       assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
     } finally {
       await stack.db.$disconnect();
     }
   });
 
-test('an attempt that ended over an open task is refused by convergence the same way',
+test('an attempt that ended over an open task is recorded by convergence the same way',
   { skip, timeout: 180_000 }, async () => {
-    const stack = await connect({ convergence: refusingConvergence() });
+    const stack = await connect();
     try {
-      const f = await fixture(stack, 'exception-unsettled-not-converging', {
+      const f = await fixture(stack, 'exception-unsettled-recorded', {
         acceptance: { command: 'true', expectedExitCode: 0 },
       });
       await endAttemptWithoutSettling(stack, f);
 
       const wakes = await exceptionWakes(stack.db, f.projectId);
       assert.equal(wakes.length, 1);
-      assert.equal(wakes[0]!.status, 'REFUSED');
-      assert.equal(wakes[0]!.refusalCode, PROJECT_NOT_CONVERGING);
+      assert.equal(wakes[0]!.status, 'CONSUMED');
+      assert.deepEqual(
+        await judgedFor(stack.db, wakes[0]!.id),
+        [{ event: 'ATTEMPT_ENDED_UNSETTLED', outcome: 'PROCEED' }],
+      );
     } finally {
       await stack.db.$disconnect();
     }
   });
 
-test('a spent attempt budget is refused by convergence too',
+test('a spent attempt budget is recorded by convergence too',
   { skip, timeout: 180_000 }, async () => {
-    const stack = await connect({ convergence: refusingConvergence() });
+    const stack = await connect();
     try {
-      const f = await fixture(stack, 'budget-not-converging');
+      const f = await fixture(stack, 'budget-recorded');
       await spendContext(stack, f);
       // An ordinary turn ending. T5 charges the budget where the spend is COMMITTED, which is
       // this callback — nothing here calls the meter directly.
@@ -601,8 +598,11 @@ test('a spent attempt budget is refused by convergence too',
       const wakes = await budgetWakes(stack.db, f.projectId);
       assert.equal(wakes.length, 1, 'the spent budget never reached the wake ledger');
       assert.equal(wakes[0]!.subjectVersion, f.sessionId);
-      assert.equal(wakes[0]!.status, 'REFUSED');
-      assert.equal(wakes[0]!.refusalCode, PROJECT_NOT_CONVERGING);
+      assert.notEqual(wakes[0]!.status, 'REFUSED');
+      assert.deepEqual(
+        await judgedFor(stack.db, wakes[0]!.id),
+        [{ event: 'ATTEMPT_BUDGET_SPENT', outcome: 'PROCEED' }],
+      );
     } finally {
       await stack.db.$disconnect();
     }

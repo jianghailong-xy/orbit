@@ -134,7 +134,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'COORDINATOR_NO_PROGRESS',
     resolveWhen:
-      'Strict acceptance progress or a changed project scope creates a new convergence question, or a person deliberately changes the convergence threshold and acknowledges the stopped episode.',
+      'Nothing raises this kind any more: the coordinator fuse counts agent spend, not wakes. A row raised before that change is resolved by the person it was addressed to.',
   },
   {
     family: 'PROJECT_BLOCKER',

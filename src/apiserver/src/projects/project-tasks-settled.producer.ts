@@ -160,8 +160,8 @@ export class ProjectTasksSettledProducer {
         if (!project.coordinatorEnabled) {
           return { allowed: false as const, refusalCode: SETTLED_WAKE_COORDINATOR_DISABLED };
         }
-        // T4 is deliberately last: this decision spends a convergence pass, so no cheaper refusal
-        // may run after it and charge a wake whose terminal will never be reached.
+        // T4 is deliberately last: it records a judgment, so no refusal may run after it and
+        // leave a record of a wake whose terminal will never be reached.
         return this.convergence.authorizeWake(claimedFact, claim);
       };
 

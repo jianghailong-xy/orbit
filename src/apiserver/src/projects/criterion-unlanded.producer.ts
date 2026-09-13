@@ -90,12 +90,12 @@ export interface CriterionUnlandedDelivery {
  * WHY THE AUTHORIZER IS THIS UNIT'S AND NOT THE ROUTER'S DEFAULT
  * =============================================================
  * `CompletionInputRouter.route`'s default allows every committed input, which is right for a
- * revision an agent chose to submit and wrong here, more sharply than for any sibling: what a
- * coordinator does about unlanded work is merge it, merging can fail, and failing leaves the fact
- * exactly as true as it was. "Not landed → wake → could not land → wake" is a perpetual motion
- * machine unless something bounds it, so `authorize` below is composed cheapest refusal first with
- * `convergence.authorizeWake` LAST — a convergence pass is charged when it runs, so no cheaper
- * refusal may follow it.
+ * revision an agent chose to submit and wrong here: the fact is derived from the project's rows, so
+ * it answers to the project's coordinator switch. "Not landed → wake → could not land → wake" is
+ * bounded by the fact's own identity — the same unlanded work is one key, held once delivered — and
+ * what the coordinator spends trying to land it is bounded by its fuse. `authorize` below is
+ * composed cheapest refusal first with `convergence.authorizeWake` LAST — that records a judgment,
+ * so no refusal may follow it and leave a record of a wake that never happened.
  *
  * WHY IT IS POST-COMMIT AND RE-READS
  * ==================================

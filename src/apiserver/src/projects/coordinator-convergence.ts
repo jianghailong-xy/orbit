@@ -1,94 +1,99 @@
 import { createHash } from 'node:crypto';
 
+import { successorChain } from '../tasks/task-supersession';
 import { canonicalJson } from './canonical-json';
 import {
   ConvergenceCounters,
   ConvergenceThresholds,
-  NonConvergenceReason,
+  CoordinatorSpendLimits,
   ZERO_COUNTERS,
 } from './convergence-contract';
-import { DerivedProgress, EvidenceFreshness, evidenceSupportsProgress, severityTrend } from './convergence-evidence';
+import { DerivedProgress, EvidenceFreshness, evidenceSupportsProgress } from './convergence-evidence';
 import {
   EMPTY_PROGRESS_VECTOR,
   ProgressVector,
-  advanceCounters,
-  detectNonConvergence,
   progressVectorDigest,
   strictlyImproves,
 } from './convergence-progress';
 import { CoordinatorWakeEvent } from './coordinator-wake';
 
 /**
- * `[T4]`: the progress ledger a coordinator wake is charged against, and where the waking stops.
+ * `[T4]`: the ledger a coordinator wake is recorded in, and the fuse on what the coordinator spends
+ * on its own.
  *
  * §0 — THERE IS ONE DEFINITION OF PROGRESS AND IT IS NOT HERE
  * ===========================================================
  * `convergence-contract.ts` §0 froze it: **progress is strict improvement toward acceptance, not
- * activity**. Nothing in this module re-decides that. `strictlyImproves` answers "did this move",
- * `advanceCounters` answers "what does that cost", `detectNonConvergence` answers "is this still
- * bounded", and `deriveProgressVector` answers "what was measured" — all four are imported, none
- * of them is reimplemented, and a second opinion about any of them would be the exact defect this
- * unit exists to prevent. A control loop that counted "did something happen" is green while one
- * task retries the same failure three hundred times, which is the incident that froze the
- * contract in the first place.
+ * activity**. Nothing in this module re-decides that. `strictlyImproves` answers "did this move" and
+ * `deriveProgressVector` answers "what was measured" — both are imported, neither is reimplemented,
+ * and a second opinion about either would be the exact defect this unit exists to prevent.
  *
- * What this module DOES own is one question the contract states but does not answer for a project:
- * given a wake, may the coordinator go on waking? That is `planWakeConvergence`, and its whole
- * body is the frozen order — measure, compare, charge, THEN ask the breaker. Asking the breaker
- * first is how a loop takes one more free attempt every time round.
+ * §1 — A WAKE IS RECORDED, AND NOTHING IS CHARGED FOR IT
+ * ======================================================
+ * This ledger used to be a breaker. Every wake charged `decisionsWithoutProgress`, past
+ * `maxDecisionsWithoutProgress` the project was stopped, and every later fact was refused with
+ * `PROJECT_NOT_CONVERGING`. It counted the wrong thing. A wake is a fact that happened TO the
+ * coordinator — an attempt ended, a criterion's work finished, a merge is owed — and the vector it
+ * was compared against moves only when a blocker closes, so a project with nothing to fix spent its
+ * budget on its own progress reports and had its seventh fact refused, recorded-only facts
+ * included. This deployment made 155 judgments that way, and one of them was progress.
  *
- * §1 — WHY THE BLOCKER IS RAISED ON AN EDGE AND NOT WHILE THE CONDITION HOLDS
- * ==========================================================================
- * The blocker this raises has a name with history. `COORDINATOR_NO_PROGRESS` used to be a
- * CONDITION DETECTOR: every reconcile pass re-derived "the last coordination run changed nothing"
- * from the snapshot and re-raised the row, with an unchanged `reasonDigest`, off a session id that
- * had been dead for hours. `assertDoneAllowed` refuses a project with any open blocker, so a
- * project whose 7 acceptance criteria had all PASSED sat at OPEN for ever, and the gap between
- * somebody clearing the row and the next tick re-opening it was a few seconds.
- *
- * The fix is not a better digest. It is that a row is raised by a TRANSITION and never by a state:
- *
- *   - a wake is a committed fact (T2), and each fact is judged exactly once — the ledger row is
- *     keyed on the fact's own identity, so a redelivery reads the committed judgment instead of
- *     charging a second one;
- *   - the row is raised only where the previous committed decision was NOT already a stop
- *     (`raisesBlocker` below). While the project is stopped, further facts are refused and raise
- *     nothing, so there is no pass that can re-open what a person closed;
- *   - and nothing here is reachable from a timer, so a project about which nothing has happened
- *     produces no judgments at all.
- *
- * Coming back needs a reset, and there are exactly two, both of them the frozen contract's own:
- * strict improvement of the progress vector (§4 PV4), or a new question — a person editing what
- * the project is asking for, which moves `scopeHash` and gives the new scope its own budget. Both
- * are facts about the world. Neither is a clock.
+ * So a wake is still judged, for the record, and always allowed. Its row keeps the pair of vectors
+ * and whether the step strictly improved on the last one; it charges no counter, stops nothing and
+ * raises no blocker. `COORDINATOR_NO_PROGRESS` rows raised before stay what they were, and the
+ * measurement still leaves them out of the vector (`noProgressDedupeKey`).
  *
  * §2 — PURE
  * =========
  * No clock, no database, no session, for the reason every other `convergence-*` module is pure:
- * these decisions are replayed from the ledger, and one that read `Date.now()` would make two
- * replays of one world disagree about whether a project was stopped.
+ * these decisions are replayed from committed rows, and one that read `Date.now()` would make two
+ * replays of one world disagree. The fuse below takes the start of its window as an argument for
+ * the same reason.
+ *
+ * §3 — THE FUSE COUNTS WHAT THE AGENT SPENDS ON ITS OWN
+ * =====================================================
+ * What bounds a coordinator is its autonomous spend, in three kinds, each counted from committed
+ * rows over the 24 hours before the reading (`COORDINATOR_SPEND_WINDOW_MS`):
+ *
+ *   - SELF-STARTED TURNS — turns of the project's standing coordinator conversation that nobody
+ *     delivered. A turn Orbit delivers (the owner's message, another session's, a fact handed to the
+ *     conversation) is a `conversation_turn`, and the runner files its events under that turn; a
+ *     turn the engine starts by itself (a scheduled wake-up, a Monitor or background-task
+ *     notification) has no such row, so its `turn_end` is filed under none.
+ *   - SESSIONS OPENED — `task_start` and `session_create` calls that conversation made through
+ *     Orbit's tools and got an answer to that was not an error. The call is counted rather than the
+ *     session because only the call records who asked: a run `task_start` opens carries no link back
+ *     to the session that started it.
+ *   - RETRIES ON ONE SUCCESSOR CHAIN — in a chain of the project's tasks linked by
+ *     `superseded_by_task_id`, the replacements an agent filed; the fuse reads the longest chain
+ *     whose newest link was made in the window. A replacement a person filed is theirs, not the
+ *     agent's, and a chain nobody has extended within the window is a loop that has stopped.
+ *
+ * The coordinator is paused when any one kind EXCEEDS its limit (`CoordinatorSpendLimits`, defaults
+ * in `convergence-contract.ts`); reaching a limit is not exceeding it. Facts delivered to it or
+ * recorded about its project are not spend. This module decides the pause and nothing else: what a
+ * paused coordinator may still do is not decided here.
  */
 
-/** The wake refusal T2's authorizer reports when the breaker has stopped this project. */
-export const PROJECT_NOT_CONVERGING = 'PROJECT_NOT_CONVERGING';
-
-/** Whether the coordinator may act on this wake. `STOP` is terminal until a reset (§1). */
+/**
+ * What a judgment concluded. `STOP` is what the retired breaker wrote (§1): a wake judged now is
+ * always `PROCEED`, and `STOP` remains only so a row written before can be read back.
+ */
 export type WakeConvergenceOutcome = 'PROCEED' | 'STOP';
 
 /**
  * The project's committed convergence state, as read from the ledger.
  *
- * Every field is the last committed row's, never a value held in a process. That is the whole of
- * the red line this unit was written under — 「重启把计数清零，于是预算永远用不完」 — and it is a
- * property of WHERE the numbers come from, not of what is done to them afterwards.
+ * Every field is the last committed row's, never a value held in a process, so the pair of vectors a
+ * wake records is the same after a restart as before it.
  */
 export interface WakeConvergenceState {
-  /** The scope the committed counters were spent on. `null` before this project's first decision. */
+  /** The scope the previous decision measured. `null` before this project's first decision. */
   scopeHash: string | null;
   counters: ConvergenceCounters;
   /** The vector the previous decision measured: the "before" half of this wake's pair. */
   progressVector: ProgressVector | null;
-  /** What the previous decision concluded. `STOP` is what disarms the blocker raise (§1). */
+  /** What the previous decision concluded. */
   lastOutcome: WakeConvergenceOutcome | null;
 }
 
@@ -125,7 +130,8 @@ export interface WakeConvergenceInput {
   lastOutcome: WakeConvergenceOutcome | null;
 }
 
-export const WAKE_CONVERGENCE_INPUT_VERSION = 1 as const;
+/** 2: planned under §1 — recorded, never charged. A row at 1 was planned by the breaker. */
+export const WAKE_CONVERGENCE_INPUT_VERSION = 2 as const;
 
 export interface PlannedWakeConvergence {
   idempotencyKey: string;
@@ -139,13 +145,10 @@ export interface PlannedWakeConvergence {
   progressed: boolean;
   evidenceFreshness: EvidenceFreshness;
   evidenceAsOf: Date | null;
+  /** The committed counters, carried unchanged: a wake charges none of them (§1). */
   counters: ConvergenceCounters;
-  nonConvergenceReason: NonConvergenceReason | null;
-  observed: number | null;
-  limit: number | null;
-  outcome: WakeConvergenceOutcome;
-  /** §1: raise on the transition into a stop, never while one holds. */
-  raisesBlocker: boolean;
+  /** A wake is recorded and never refused (§1). */
+  outcome: 'PROCEED';
 }
 
 /**
@@ -167,16 +170,16 @@ export function wakeConvergenceKey(
 /**
  * One wake → one ledger row, in the contract's order.
  *
- * The order is not free to vary, and each step reads what the one before it settled:
+ * Each step reads what the one before it settled:
  *
- *  1. a scope the counters were not spent on is a new question, so it gets a new budget (§4 PV4's
- *     second licence) — and the previous vector goes with it, because a measurement against a
- *     different target says nothing about this one (PV3);
+ *  1. a scope the previous decision was not about is a new question (§4 PV4's second licence), so
+ *     neither its counters nor its vector carry — a measurement against a different target says
+ *     nothing about this one (PV3);
  *  2. PV6 before PV2: a reading the evidence cannot support is not a smaller improvement, it is
  *     not a measurement of now at all;
- *  3. §4 PV2's comparison — `strictlyImproves`, imported, never re-stated;
- *  4. §3's counters move;
- *  5. and only THEN §8's breaker, so it reads the counters this step just charged.
+ *  3. §4 PV2's comparison — `strictlyImproves`, imported, never re-stated.
+ *
+ * And then nothing is charged and nothing is stopped (§1).
  */
 export function planWakeConvergence(
   projectId: string,
@@ -186,31 +189,12 @@ export function planWakeConvergence(
 ): PlannedWakeConvergence {
   const observed = observation.derived.vector;
   const scopeChanged = state.scopeHash !== null && state.scopeHash !== observed.scopeHash;
-  const committed = scopeChanged ? { ...ZERO_COUNTERS } : state.counters;
+  const counters = scopeChanged ? { ...ZERO_COUNTERS } : state.counters;
   const carried = scopeChanged ? null : state.progressVector;
 
-  const believable = evidenceSupportsProgress(observation.derived);
   const previous = carried ?? { ...EMPTY_PROGRESS_VECTOR, scopeHash: observed.scopeHash };
-  const progressed = believable && strictlyImproves(previous, observed);
-  // A reading that may not be believed says nothing about the defect load either — `HELD` rather
-  // than `NONE`, because "we could not measure" must not read as "there was nothing to fix".
-  const severity = believable ? severityTrend(previous, observed) : 'HELD';
-
-  // A wake carries no classification and no failure of its own: it is the fact that SOMETHING
-  // committed, not a claim about why. Both are passed as null rather than invented, which is why
-  // the only counter a wake can move is `decisionsWithoutProgress` — §8's `NO_PROGRESS` line, and
-  // the one this unit's stop-loss is stated in.
-  const counters = advanceCounters(committed, {
-    classification: null,
-    progressed,
-    fingerprint: null,
-    previousFingerprint: null,
-    sameActionPriorCount: 0,
-    severity,
-  });
-
-  const verdict = detectNonConvergence(counters, thresholds);
-  const outcome: WakeConvergenceOutcome = verdict.tripped ? 'STOP' : 'PROCEED';
+  const progressed = evidenceSupportsProgress(observation.derived)
+    && strictlyImproves(previous, observed);
 
   const input: WakeConvergenceInput = {
     v: WAKE_CONVERGENCE_INPUT_VERSION,
@@ -219,7 +203,7 @@ export function planWakeConvergence(
     event: observation.event,
     scopeHash: observed.scopeHash,
     scopeChanged,
-    counters: committed,
+    counters,
     thresholds,
     previousProgressVector: carried,
     observedProgressVector: observed,
@@ -239,113 +223,100 @@ export function planWakeConvergence(
     evidenceFreshness: observation.derived.freshness,
     evidenceAsOf: observation.derived.evidenceAsOf,
     counters,
-    nonConvergenceReason: verdict.reason,
-    observed: verdict.observed,
-    limit: verdict.limit,
-    outcome,
-    // §1. The transition, not the state: a stop that is already committed raises nothing, so
-    // nothing this unit does can re-open a row a person has closed.
-    raisesBlocker: verdict.tripped && state.lastOutcome !== 'STOP',
+    outcome: 'PROCEED',
   };
 }
 
 /**
- * The one `project_blocker` row this unit writes, per §11.2's table as it stood before the control
- * loop was removed (`project-blocker.ts`, deleted in 6418a1e5).
- *
- * `USER` / `HUMAN` and not a poll: the coordinator has spent its budget on this project without
- * moving it, so the next move is a person's — re-scope the work, file what is missing, or raise
- * the budget deliberately. A `recovery` of `TIME` or `EVENT` here would be a wait for something
- * the current rows cannot produce, which is the shape that idles for ever with a status on it.
+ * The blocker kind the retired breaker raised (§1). Nothing raises it now. It is named so the
+ * measurement can leave the rows raised before out of the vector: they record that this ledger once
+ * stopped the project, not something standing between the project and its acceptance.
  */
 export const COORDINATOR_NO_PROGRESS_KIND = 'COORDINATOR_NO_PROGRESS';
-export const COORDINATOR_NO_PROGRESS_OWNER = 'USER';
-export const COORDINATOR_NO_PROGRESS_RECOVERY = 'HUMAN';
-export const COORDINATOR_NO_PROGRESS_SEVERITY = 'CRITICAL';
-
-/**
- * ES4: `next_check_at` for a `HUMAN` recovery is the escalation alarm, not a recovery poll — the
- * same hour the deleted table gave this kind. It is NOT a re-raise: nothing in this module reads
- * it, and the row it belongs to is already open and already addressed to somebody.
- */
-export const COORDINATOR_NO_PROGRESS_ESCALATE_MS = 60 * 60_000;
 
 /** §11.3's default: one open episode per `<kind>:<subjectType>:<subjectId>`. */
 export function noProgressDedupeKey(projectId: string): string {
   return `${COORDINATOR_NO_PROGRESS_KIND}:PROJECT:${projectId}`;
 }
 
-export interface NoProgressBlocker {
-  kind: typeof COORDINATOR_NO_PROGRESS_KIND;
-  owner: typeof COORDINATOR_NO_PROGRESS_OWNER;
-  recovery: typeof COORDINATOR_NO_PROGRESS_RECOVERY;
-  severity: typeof COORDINATOR_NO_PROGRESS_SEVERITY;
-  subjectType: 'PROJECT';
-  subjectId: string;
-  dedupeKey: string;
-  /** §7.2 TF2: a digest of the FACTS that produced the row, so "the world moved" is comparable. */
-  conditionVersion: string;
-  requiredAction: string;
-  nextCheckAt: Date;
-  detail: Record<string, unknown>;
+/** §3: how far back the fuse counts. */
+export const COORDINATOR_SPEND_WINDOW_MS = 24 * 60 * 60_000;
+
+/** §3's three kinds of autonomous spend, each counted over the window. */
+export interface CoordinatorSpend {
+  selfStartedTurns: number;
+  sessionsOpened: number;
+  successorRetries: number;
+}
+
+/** Which kind of spend crossed its limit. */
+export type CoordinatorSpendReason = 'SELF_STARTED_TURNS' | 'SESSIONS_OPENED' | 'SUCCESSOR_RETRIES';
+
+/** Each kind against its limit, in a fixed order: two crossed at once must report one answer. */
+const SPEND_LINES: ReadonlyArray<{
+  reason: CoordinatorSpendReason;
+  spend: keyof CoordinatorSpend;
+  limit: keyof CoordinatorSpendLimits;
+}> = [
+  { reason: 'SELF_STARTED_TURNS', spend: 'selfStartedTurns', limit: 'maxSelfStartedTurnsPerDay' },
+  { reason: 'SESSIONS_OPENED', spend: 'sessionsOpened', limit: 'maxSessionsOpenedPerDay' },
+  { reason: 'SUCCESSOR_RETRIES', spend: 'successorRetries', limit: 'maxRetriesPerSuccessorChain' },
+];
+
+export interface CoordinatorSpendVerdict {
+  paused: boolean;
+  /** The first line crossed and the two numbers that crossed it, or all three null. */
+  reason: CoordinatorSpendReason | null;
+  observed: number | null;
+  limit: number | null;
+}
+
+/** §3: paused exactly when one kind of spend EXCEEDS its limit. */
+export function coordinatorSpendVerdict(
+  spend: CoordinatorSpend,
+  limits: CoordinatorSpendLimits,
+): CoordinatorSpendVerdict {
+  for (const line of SPEND_LINES) {
+    const limit = limits[line.limit];
+    if (limit === null || spend[line.spend] <= limit) continue;
+    return { paused: true, reason: line.reason, observed: spend[line.spend], limit };
+  }
+  return { paused: false, reason: null, observed: null, limit: null };
+}
+
+/** One of the project's tasks, as far as its place in a successor chain goes. */
+export interface ChainedTask {
+  id: string;
+  supersededByTaskId: string | null;
+  supersededAt: Date | null;
+  filedByAgent: boolean;
 }
 
 /**
- * The row a stopped project gets, stated so that the person who opens it can act without going and
- * deriving the numbers again: which line was crossed, what the counter and the limit were, what the
- * progress vector has been, and — because it is the part people get wrong — what makes it resume.
+ * §3's third kind: the agent-filed replacements in the longest successor chain whose newest link
+ * was made after `since`.
+ *
+ * Each chain is walked with `successorChain`, the walk every reader of `superseded_by_task_id`
+ * uses, from its first attempt — a task that was replaced and replaces nothing. The first attempt
+ * is not a retry, whoever filed it.
  */
-export function noProgressBlocker(
-  projectId: string,
-  planned: PlannedWakeConvergence,
-  wake: { wakeId: string; event: CoordinatorWakeEvent; idempotencyKey: string },
-): NoProgressBlocker {
-  const reason = planned.nonConvergenceReason;
-  return {
-    kind: COORDINATOR_NO_PROGRESS_KIND,
-    owner: COORDINATOR_NO_PROGRESS_OWNER,
-    recovery: COORDINATOR_NO_PROGRESS_RECOVERY,
-    severity: COORDINATOR_NO_PROGRESS_SEVERITY,
-    subjectType: 'PROJECT',
-    subjectId: projectId,
-    dedupeKey: noProgressDedupeKey(projectId),
-    conditionVersion: sha256(canonicalJson({
-      reason,
-      observed: planned.observed,
-      limit: planned.limit,
-      progressVectorDigest: planned.progressVectorDigest,
-      counters: planned.counters,
-    })),
-    requiredAction:
-      `${planned.observed} consecutive coordinator wakes on this project produced no strict `
-      + `improvement toward acceptance (the limit is ${planned.limit}), so the coordinator has `
-      + 'stopped being woken. Its tasks have not stopped — dispatch does not go through it — so '
-      + 'the coordinator comes back on its own the moment the work actually moves: an acceptance '
-      + 'criterion closing, an open P0 closing, another blocker clearing. To move it yourself, '
-      + 'either re-state what this project is asking for (editing its goal or acceptance criteria '
-      + 'is a new question, and gets a new budget) or raise maxDecisionsWithoutProgress in '
-      + 'convergenceThresholds deliberately. Closing THIS row changes none of those and does not '
-      + 'restart anything: it is the record that the coordinator was stopped, not the thing '
-      + 'stopping it.',
-    // ES4/BL5: for a HUMAN recovery this is the escalation alarm, not a recovery poll. It is read
-    // by nothing in this unit — no pass comes back to it, and it is not a re-raise — but the column
-    // is NOT NULL because §11.1 requires an answer to "when does somebody hear about this" even
-    // where the owner is a person.
-    nextCheckAt: new Date(
-      new Date(planned.input.observedAt).getTime() + COORDINATOR_NO_PROGRESS_ESCALATE_MS,
-    ),
-    detail: {
-      reason,
-      observed: planned.observed,
-      limit: planned.limit,
-      counters: planned.counters,
-      progressVector: planned.progressVector,
-      previousProgressVector: planned.previousProgressVector,
-      evidenceFreshness: planned.evidenceFreshness,
-      wakeEvent: wake.event,
-      wakeIdempotencyKey: wake.idempotencyKey,
-    },
-  };
+export function successorRetries(tasks: readonly ChainedTask[], since: Date): number {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const edges = new Map(tasks.map((task) => [task.id, task.supersededByTaskId]));
+  const replacements = new Set(tasks.flatMap((task) => task.supersededByTaskId ?? []));
+  let longest = 0;
+  for (const first of tasks) {
+    if (first.supersededByTaskId === null || replacements.has(first.id)) continue;
+    const successors = successorChain(first.id, edges).chain
+      .map((id) => byId.get(id))
+      .filter((task): task is ChainedTask => task !== undefined);
+    const newest = Math.max(...[first, ...successors]
+      .filter((task) => task.supersededByTaskId !== null)
+      .map((task) => task.supersededAt?.getTime() ?? 0));
+    if (newest <= since.getTime()) continue;
+    longest = Math.max(longest, successors.filter((task) => task.filedByAgent).length);
+  }
+  return longest;
 }
 
 function sha256(value: string): string {

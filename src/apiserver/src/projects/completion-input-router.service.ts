@@ -52,10 +52,11 @@ export type CompletionInputRouteOutcome =
 /**
  * `route`'s default: a committed input may wake its coordinator.
  *
- * Right for the one fact that eats it — an evidence revision an agent chose to submit is bounded by
- * the agent that submitted it. Wrong for every fact DERIVED from a world that can go round again,
- * which is why `routeTaskExceptions`, `routeReadyCriteria` and `routeUnlandedCriteria` below all
- * pass their producer's authorizer rather than letting this stand in for one.
+ * Right for the one fact that eats it — an evidence revision an agent chose to submit, which no
+ * switch governs. Wrong for every fact DERIVED from the project's rows: those answer to the
+ * project's coordinator switch and are recorded in its convergence ledger, which is why
+ * `routeTaskExceptions`, `routeReadyCriteria` and `routeUnlandedCriteria` below all pass their
+ * producer's authorizer rather than letting this stand in for one.
  */
 const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
 
@@ -90,8 +91,8 @@ export class CompletionInputRouter {
    * authorizer, which is handed to all of them unchanged.
    *
    * The action comes LAST and only for a fact that was allowed. A refusal — the coordinator's
-   * switch, a deleted project, a convergence ledger that has stopped, no conversation to deliver
-   * to — means nobody may act on this fact at all, and choosing an action anyway would compute a
+   * switch, a deleted project, no conversation to deliver to — means nobody may act on this fact
+   * at all, and choosing an action anyway would compute a
    * decision the refusal exists to prevent (and, for the reds, spend a real check finding out). So
    * `REFUSED` and `ALREADY_AWAKE` carry no action: the first was not permitted, and the second
    * belongs to whoever won the key.
@@ -203,9 +204,10 @@ export class CompletionInputRouter {
    * re-reads the committed rows and decides what they justify — and one difference that is the
    * whole reason this door exists rather than a fourth `route` call site somewhere else: the
    * fourth argument is passed. `ALLOW_COMMITTED_INPUT` is a defensible default for an input an
-   * agent submitted on purpose; for a failure it is the hole "failed → open a successor → fail
-   * again" lives in, so the convergence ledger — not this file's default — decides whether the
-   * coordinator may be woken again.
+   * agent submitted on purpose; a failure answers to the project's coordinator switch and is
+   * recorded in its convergence ledger, so the producer's authorizer — not this file's default —
+   * decides whether the coordinator may be woken. What bounds "failed → open a successor → fail
+   * again" is the coordinator fuse on the retries themselves, not a refusal of the facts about them.
    *
    * What an authorized exception is then SPENT on is `spend`'s question rather than this door's: a
    * failure whose criterion still has other work outstanding changes nothing and is recorded, and
@@ -241,8 +243,7 @@ export class CompletionInputRouter {
    * still be nowhere near done.
    *
    * The fourth argument is passed here too. Readiness is not an exception, but it is not an input
-   * an agent submitted either: work reopens and finishes again, and only the convergence ledger
-   * bounds how often that may wake anybody.
+   * an agent submitted either: it answers to the same switch, and is recorded in the same ledger.
    *
    * And `spend` decides the terminal here on the same terms as the door above. It answers
    * RECORD_ONLY for every criterion this producer derives a fact for — a criterion whose serving

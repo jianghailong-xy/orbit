@@ -8,8 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   ConvergenceCounters,
   ConvergenceThresholds,
+  CoordinatorSpendLimits,
   ScopeAuthorization,
   ZERO_COUNTERS,
+  resolveCoordinatorSpendLimits,
   resolveThresholds,
 } from './convergence-contract';
 import {
@@ -23,41 +25,50 @@ import {
 } from './convergence-evidence';
 import { ProgressVector, scopeHash } from './convergence-progress';
 import {
-  PROJECT_NOT_CONVERGING,
-  PlannedWakeConvergence,
+  COORDINATOR_SPEND_WINDOW_MS,
+  ChainedTask,
+  CoordinatorSpend,
+  CoordinatorSpendVerdict,
   WakeConvergenceOutcome,
   WakeConvergenceState,
-  noProgressBlocker,
+  coordinatorSpendVerdict,
   noProgressDedupeKey,
   planWakeConvergence,
+  successorRetries,
   wakeConvergenceKey,
 } from './coordinator-convergence';
 import { WakeFact } from './coordinator-wake';
 import { WakeAuthorization, WakeAuthorizer, WakeClaim } from './coordinator-wake.service';
 
 /**
- * `[T4]`: the durable half — the progress ledger, and the stop.
+ * §3's "sessions opened": Orbit's two tools that open a session, under both names runners file
+ * them as — `mcp__orbit__task_start` from Claude's MCP client, `orbit__task_start` from Codex's.
+ */
+const SESSION_OPENING_TOOL = '^(mcp__)?orbit__(task_start|session_create)$';
+
+/**
+ * `[T4]`: the durable half — the wake ledger, and the reading the coordinator fuse decides on.
  *
  * WHAT THIS UNIT DOES
  * ===================
- * It answers one question about one committed wake: given everything the database says about this
- * project, is the coordinator still getting closer to acceptance, and may it go on being woken? It
- * writes the answer down (`project_convergence_decision`), and where the answer is no it raises the
- * one `project_blocker` a person can act on.
+ * Two things about one project, both read off committed rows.
+ *
+ * It records every committed wake in `project_convergence_decision`: the progress vector before the
+ * wake, the vector at it, and whether that step strictly improved. A record and nothing more —
+ * `coordinator-convergence.ts` §1 says why a wake no longer charges a budget or refuses anything.
+ *
+ * And it measures what the coordinator spent on its own, and whether that pauses it
+ * (`assessSpend`, §3 there).
  *
  * It does NOT open sessions, choose tasks, judge failures or hold a timer. Those belong to T3 and
- * to the coordinator itself. What is here is the accounting and the brake.
+ * to the coordinator itself.
  *
- * WHERE IT ATTACHES
- * =================
- * To T2's `WakeAuthorizer` seam, which is the reason that seam has the shape it has: the authorizer
- * is handed the CLAIM, so it cannot run before the database has picked a winner, and a refusal
- * releases the key rather than burning it. So a stopped project refuses every wake it is given and
- * the facts behind them stay deliverable — the moment the project starts converging again (or a
- * person restates what it is asking for), the same facts wake it.
- *
- * Compose it LAST, after the cheaper refusals. A judgment recorded here charges the budget, and a
- * wake refused afterwards by somebody else would have spent a pass the coordinator never got.
+ * WHERE THE RECORD ATTACHES
+ * =========================
+ * To T2's `WakeAuthorizer` seam: the authorizer is handed the CLAIM, so a judgment is recorded only
+ * for a fact the database has picked a winner for, and once per fact. Compose it LAST, after the
+ * cheaper refusals: a judgment recorded for a wake somebody else then refused would be a record of a
+ * wake that never happened.
  *
  * WHY THE MEASUREMENT IS A READ AND NOT AN ARGUMENT
  * =================================================
@@ -80,7 +91,7 @@ export class CoordinatorConvergenceService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * T2's authorizer, made of this unit's answer.
+   * T2's authorizer: record the wake, and allow it.
    *
    * A property field rather than a method so that `wakes.claim(fact, convergence.authorizeWake)`
    * carries its own `this` — a producer handing the bare method across would get an authorizer that
@@ -91,25 +102,22 @@ export class CoordinatorConvergenceService {
     fact: WakeFact,
     claim: WakeClaim,
   ): Promise<WakeAuthorization> => {
-    const decision = await this.judge(fact, claim);
-    return decision.outcome === 'PROCEED'
-      ? { allowed: true }
-      : { allowed: false, refusalCode: PROJECT_NOT_CONVERGING };
+    await this.judge(fact, claim);
+    return { allowed: true };
   };
 
   /**
-   * Judge one wake and commit the judgment.
+   * Record one wake's judgment.
    *
    * The order inside the transaction is load-bearing:
    *
-   *  1. lock the project row, which serialises every writer on this project and makes steps 2 and 5
-   *     decisions rather than guesses;
-   *  2. look the idempotency key up FIRST. A redelivered fact returns the committed judgment having
-   *     written nothing — not a second counter charge, and not a second blocker;
+   *  1. lock the project row, which serialises every judgment of this project and makes the `seq`
+   *     allocation and step 2 decisions rather than guesses;
+   *  2. look the idempotency key up FIRST, so a redelivered fact returns the committed judgment
+   *     having written nothing;
    *  3. measure the world, from committed rows only;
-   *  4. plan, in `convergence-progress`'s frozen order;
-   *  5. raise the blocker if this is the TRANSITION into a stop, and only then;
-   *  6. insert the ledger row, which is what makes the counters survive the process.
+   *  4. plan, in `coordinator-convergence.ts`'s order;
+   *  5. insert the ledger row.
    */
   async judge(fact: WakeFact, wake: WakeClaim): Promise<RecordedWakeConvergence> {
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -132,18 +140,13 @@ export class CoordinatorConvergenceService {
         project.thresholds,
       );
 
-      const blockerId = planned.raisesBlocker
-        ? await this.raiseBlocker(tx, fact, wake, planned, observedAt)
-        : null;
-
       const id = randomUUID();
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "project_convergence_decision" (
           "id", "project_id", "wake_id", "seq", "idempotency_key", "input_hash", "input",
           "event", "scope_hash", "previous_progress_vector", "progress_vector",
           "progress_vector_digest", "progressed", "evidence_freshness", "evidence_as_of",
-          "counters", "thresholds", "non_convergence_reason", "observed", "crossed_limit",
-          "outcome", "blocker_id", "observed_at"
+          "counters", "thresholds", "outcome", "observed_at"
         ) VALUES (
           ${id}::uuid, ${fact.projectId}::uuid, ${wake.wakeId}::uuid, ${BigInt(state.nextSeq)},
           ${planned.idempotencyKey}, ${planned.inputHash}, ${JSON.stringify(planned.input)}::jsonb,
@@ -155,8 +158,7 @@ export class CoordinatorConvergenceService {
           ${planned.progressed}, ${planned.evidenceFreshness}, ${planned.evidenceAsOf},
           ${JSON.stringify(planned.counters)}::jsonb,
           ${JSON.stringify(project.thresholds)}::jsonb,
-          ${planned.nonConvergenceReason}, ${planned.observed}, ${planned.limit},
-          ${planned.outcome}, ${blockerId}::uuid, ${observedAt}
+          ${planned.outcome}, ${observedAt}
         )
       `);
 
@@ -168,19 +170,84 @@ export class CoordinatorConvergenceService {
         counters: planned.counters,
         progressVector: planned.progressVector,
         previousProgressVector: planned.previousProgressVector,
-        nonConvergenceReason: planned.nonConvergenceReason,
-        raisedBlockerId: blockerId,
         duplicate: false,
       };
     }, loggedRetry(this.logger, 'coordinatorConvergence.judge'));
   }
 
   /**
+   * §3 of `coordinator-convergence.ts`, measured: what this project's coordinator spent on its own
+   * in the 24 hours up to `asOf`, the limits in force, and whether that pauses it.
+   *
+   * A read and nothing else — no lock and no row. A pause is a conclusion anybody can recompute from
+   * the same committed rows, so whoever acts on it can act on it again after a restart.
+   *
+   * Each kind is counted on the clock of the row that records it: `run_event.ingested_at`, which the
+   * database writes; `tool_call.started_at`, the only time a tool call has; `task.superseded_at`,
+   * written with the link it dates.
+   */
+  async assessSpend(projectId: string, asOf: Date = new Date()): Promise<CoordinatorSpendAssessment> {
+    const since = new Date(asOf.getTime() - COORDINATOR_SPEND_WINDOW_MS);
+    const [project] = await this.prisma.$queryRaw<Array<{
+      coordinatorSessionId: string | null;
+      limitOverrides: unknown;
+      unboundedAuthorizedBy: unknown;
+      selfStartedTurns: number;
+      sessionsOpened: number;
+    }>>(Prisma.sql`
+      SELECT p."coordinator_session_id" AS "coordinatorSessionId",
+             p."convergence_thresholds" AS "limitOverrides",
+             p."unbounded_authorized_by" AS "unboundedAuthorizedBy",
+             (SELECT count(*)::int FROM "run_event" e
+               WHERE e."session_id" = p."coordinator_session_id"
+                 AND e."type" = 'turn_end' AND e."turn_id" IS NULL
+                 AND e."ingested_at" > ${since} AND e."ingested_at" <= ${asOf}) AS "selfStartedTurns",
+             (SELECT count(*)::int FROM "tool_call" c
+               WHERE c."session_id" = p."coordinator_session_id"
+                 AND c."name" ~ ${SESSION_OPENING_TOOL}
+                 AND c."is_error" = false AND c."finished_at" IS NOT NULL
+                 AND c."started_at" > ${since} AND c."started_at" <= ${asOf}) AS "sessionsOpened"
+        FROM "project" p
+       WHERE p."id" = ${projectId}::uuid
+    `);
+    if (!project) throw new Error(`project ${projectId} not found`);
+
+    const chained = await this.prisma.$queryRaw<ChainedTask[]>(Prisma.sql`
+      SELECT t."id", t."superseded_by_task_id" AS "supersededByTaskId",
+             t."superseded_at" AS "supersededAt", (t."creator_type" = 'AGENT') AS "filedByAgent"
+        FROM "task" t
+       WHERE t."project_id" = ${projectId}::uuid
+         AND (t."superseded_by_task_id" IS NOT NULL
+              OR t."id" IN (SELECT r."superseded_by_task_id" FROM "task" r
+                             WHERE r."project_id" = ${projectId}::uuid
+                               AND r."superseded_by_task_id" IS NOT NULL))
+    `);
+
+    const spend: CoordinatorSpend = {
+      selfStartedTurns: project.selfStartedTurns,
+      sessionsOpened: project.sessionsOpened,
+      successorRetries: successorRetries(chained, since),
+    };
+    const limits = resolveCoordinatorSpendLimits(
+      project.limitOverrides as Partial<CoordinatorSpendLimits> | null,
+      project.unboundedAuthorizedBy as ScopeAuthorization | null,
+    );
+    return {
+      projectId,
+      coordinatorSessionId: project.coordinatorSessionId,
+      since,
+      asOf,
+      spend,
+      limits,
+      ...coordinatorSpendVerdict(spend, limits),
+    };
+  }
+
+  /**
    * What the ledger says this project's convergence state is — the read a restart resumes from.
    *
-   * There is no column anywhere holding these numbers, deliberately: a second home for a counter is
-   * a second thing that can be reset, and the whole of this unit's red line is that a restart must
-   * not give the project a fresh budget. The last committed row IS the state.
+   * There is no column anywhere holding these numbers, deliberately: a second home for them is a
+   * second thing that can disagree with the ledger. The last committed row IS the state.
    */
   async state(projectId: string): Promise<WakeConvergenceState & { decisions: number }> {
     const state = await this.readState(this.prisma, projectId);
@@ -243,16 +310,11 @@ export class CoordinatorConvergenceService {
        WHERE f."project_id" = ${projectId}::uuid
     `);
 
-    // 3. Blockers — every one of them EXCEPT this unit's own stop-loss row.
+    // 3. Blockers — every one of them EXCEPT the rows the retired breaker raised.
     //
-    //    The exclusion is what keeps the measurement independent of the thing doing the measuring.
-    //    Counted, the breaker's own output would enter the next vector as a defect: whether
-    //    clearing it read as "the work improved" would then depend on whether a fact happened to
-    //    arrive while it was open, and the coordinator would resume — or not — for a reason that
-    //    is about the breaker's history rather than about the project. Left out, the rule is one
-    //    sentence a person can act on: closing this row changes nothing, and the coordinator comes
-    //    back when the work moves, when the project is re-scoped, or when somebody raises the
-    //    limit on purpose.
+    //    Those record that this ledger once stopped the project (`coordinator-convergence.ts` §1),
+    //    not something standing between the project and its acceptance, so counting them would put
+    //    the ledger's own history into the thing it measures.
     //
     //    Every OTHER blocker is counted, including a second episode of this kind on a subject that
     //    is not the project, because those are real things standing between the project and its
@@ -297,52 +359,6 @@ export class CoordinatorConvergenceService {
     return deriveProgressVector(snapshot);
   }
 
-  /**
-   * §11: the row a person acts on, inserted at most once per episode.
-   *
-   * `ON CONFLICT DO NOTHING` against the partial unique index over OPEN rows is the second guard,
-   * not the first: the planner has already refused to raise while a stop is committed, and this is
-   * what holds if two writers reach the same edge at once. `lifecycle_generation` is allocated
-   * `MAX + 1` over the key's whole history so that a genuinely new episode — a project that
-   * converged again, stalled again and crossed the line again — is a NEW row rather than the old
-   * one seen twice.
-   */
-  private async raiseBlocker(
-    tx: Prisma.TransactionClient,
-    fact: WakeFact,
-    wake: WakeClaim,
-    planned: PlannedWakeConvergence,
-    observedAt: Date,
-  ): Promise<string | null> {
-    const blocker = noProgressBlocker(fact.projectId, planned, {
-      wakeId: wake.wakeId,
-      event: fact.event,
-      idempotencyKey: wake.idempotencyKey,
-    });
-    const id = randomUUID();
-    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      INSERT INTO "project_blocker" (
-        "id", "project_id", "kind", "owner", "recovery", "severity", "required_action",
-        "next_check_at", "subject_type", "subject_id", "detail", "dedupe_key",
-        "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at", "updated_at"
-      )
-      SELECT ${id}::uuid, ${fact.projectId}::uuid, ${blocker.kind},
-             ${blocker.owner}::"project_blocker_owner",
-             ${blocker.recovery}::"project_blocker_recovery",
-             ${blocker.severity}::"project_blocker_severity",
-             ${blocker.requiredAction}, ${blocker.nextCheckAt}, ${blocker.subjectType},
-             ${blocker.subjectId}, ${JSON.stringify(blocker.detail)}::jsonb,
-             ${blocker.dedupeKey},
-             coalesce(max(b."lifecycle_generation"), 0) + 1,
-             ${blocker.conditionVersion}, ${observedAt}, ${observedAt}, ${observedAt}
-        FROM "project_blocker" b
-       WHERE b."project_id" = ${fact.projectId}::uuid AND b."dedupe_key" = ${blocker.dedupeKey}
-      ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
-      RETURNING "id"
-    `);
-    return rows[0]?.id ?? null;
-  }
-
   /** The project row, locked, plus what it is asking for and the thresholds in force. */
   private async lockProject(
     tx: Prisma.TransactionClient,
@@ -380,16 +396,14 @@ export class CoordinatorConvergenceService {
     return {
       acceptanceCriteria: row.acceptanceCriteria,
       // §1's frozen identity of what is being asked for, over the same three fields the task ledger
-      // digests. Editing any of them is a new question — and, per §4 PV4, a new budget. That is the
-      // one reset a person has that does not require the work itself to improve.
+      // digests. Editing any of them is a new question, and the ledger records it as one.
       scopeHash: scopeHash({
         title: row.title,
         description: row.goal,
         acceptanceCriteria: row.acceptanceCriteria,
       }),
-      // `convergence_thresholds` is null on essentially every project, so this is where the
-      // documented default actually comes from: `DEFAULT_CONVERGENCE_THRESHOLDS`, whose
-      // `maxDecisionsWithoutProgress` of 6 is the N this unit's stop-loss counts to.
+      // `convergence_thresholds` is null on essentially every project, so what each judgment
+      // records beside itself is `DEFAULT_CONVERGENCE_THRESHOLDS`.
       thresholds: resolveThresholds(
         row.thresholdOverrides as Partial<ConvergenceThresholds> | null,
         row.unboundedAuthorizedBy as ScopeAuthorization | null,
@@ -448,14 +462,10 @@ export class CoordinatorConvergenceService {
       counters: unknown;
       progressVector: unknown;
       previousProgressVector: unknown;
-      nonConvergenceReason: string | null;
-      raisedBlockerId: string | null;
     }>>(Prisma.sql`
       SELECT "id", "idempotency_key" AS "idempotencyKey", "outcome", "progressed", "counters",
              "progress_vector" AS "progressVector",
-             "previous_progress_vector" AS "previousProgressVector",
-             "non_convergence_reason" AS "nonConvergenceReason",
-             "blocker_id" AS "raisedBlockerId"
+             "previous_progress_vector" AS "previousProgressVector"
         FROM "project_convergence_decision" WHERE "idempotency_key" = ${key}
     `);
     if (!row) return null;
@@ -467,13 +477,11 @@ export class CoordinatorConvergenceService {
       counters: row.counters as ConvergenceCounters,
       progressVector: row.progressVector as ProgressVector,
       previousProgressVector: row.previousProgressVector as ProgressVector | null,
-      nonConvergenceReason: row.nonConvergenceReason,
-      raisedBlockerId: row.raisedBlockerId,
     };
   }
 }
 
-/** What the project is asking for, and what bounds the asking. */
+/** What the project is asking for, and the thresholds recorded beside each judgment. */
 interface ProjectScope {
   acceptanceCriteria: string | null;
   scopeHash: string;
@@ -483,15 +491,24 @@ interface ProjectScope {
 export interface RecordedWakeConvergence {
   id: string;
   idempotencyKey: string;
+  /** `PROCEED` for every judgment recorded now; a row the retired breaker wrote may read `STOP`. */
   outcome: WakeConvergenceOutcome;
   progressed: boolean;
   counters: ConvergenceCounters;
   progressVector: ProgressVector;
   previousProgressVector: ProgressVector | null;
-  nonConvergenceReason: string | null;
-  /** Named as the column's Prisma field is, and for the same reason: `blockerId` is a spelling the
-   *  public-id codec already owns on another surface. */
-  raisedBlockerId: string | null;
   /** True when this delivery read a judgment that was already committed for the same fact. */
   duplicate: boolean;
+}
+
+/** What the fuse read, and what it concluded. */
+export interface CoordinatorSpendAssessment extends CoordinatorSpendVerdict {
+  projectId: string;
+  /** The standing coordinator conversation whose turns and calls were counted, if there is one. */
+  coordinatorSessionId: string | null;
+  /** The window: after `since`, up to and including `asOf`. */
+  since: Date;
+  asOf: Date;
+  spend: CoordinatorSpend;
+  limits: CoordinatorSpendLimits;
 }

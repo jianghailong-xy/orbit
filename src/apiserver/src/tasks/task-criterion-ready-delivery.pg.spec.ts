@@ -17,7 +17,6 @@ import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
-import { PROJECT_NOT_CONVERGING } from '../projects/coordinator-convergence';
 import { CoordinatorConvergenceService } from '../projects/coordinator-convergence.service';
 import { CoordinatorDeliveryService } from '../projects/coordinator-delivery.service';
 import { CoordinatorJudgmentService } from '../projects/coordinator-judgment.service';
@@ -98,13 +97,6 @@ function verifyDisposableDatabase(): Promise<void> {
   return safety;
 }
 
-/** A convergence service that refuses every wake, with the real unit's own refusal code. */
-function refusingConvergence(): CoordinatorConvergenceService {
-  return {
-    authorizeWake: async () => ({ allowed: false as const, refusalCode: PROJECT_NOT_CONVERGING }),
-  } as unknown as CoordinatorConvergenceService;
-}
-
 interface Stack {
   db: PrismaClient;
   /** The runner door, holding the one `TasksService` the production module gives it. */
@@ -113,30 +105,15 @@ interface Stack {
   projects: ProjectsService;
 }
 
-/**
- * The production wiring, over one client.
- *
- * `convergence` is the only seam: passing a refusing double is how a case asks "was this fact
- * authorized THERE", because a delivery that ate the router's always-allow default would never
- * consult it and would land CONSUMED instead of REFUSED.
- *
- * It is handed to both criterion producers, not just the one a case is about, because that is what
- * the ledger it doubles for IS: a per-project accounting of whether this project is still
- * converging, which cannot be true for one fact about a criterion and false for another. The
- * landing fact derived from the very same finished work would otherwise be authorized by a real
- * ledger and — since `wake-disposition.ts` §2.1 — open a session, which is a second event's
- * terminal arriving inside a case about this one's.
- */
-async function connect(options: {
-  convergence?: CoordinatorConvergenceService;
-} = {}): Promise<Stack> {
+/** The production wiring, over one client. */
+async function connect(): Promise<Stack> {
   await verifyDisposableDatabase();
   const db = prismaClientFor(URL!);
   const prisma = db as unknown as PrismaService;
   const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   const sessions = new SessionsService(prisma, queue, realtime);
-  const convergence = options.convergence ?? new CoordinatorConvergenceService(prisma);
+  const convergence = new CoordinatorConvergenceService(prisma);
   const router = new CompletionInputRouter(
     new CoordinatorWakeService(prisma),
     new ProjectTasksSettledProducer(
@@ -452,23 +429,33 @@ test('a criterion nobody serves is not ready, and the derivation says why',
     }
   });
 
-test('a ready criterion is refused by convergence, not waved through by a default',
+test('a ready criterion is recorded by convergence, not waved through by a default',
   { skip, timeout: 240_000 }, async () => {
-    const stack = await connect({ convergence: refusingConvergence() });
+    const stack = await connect();
     try {
-      const f = await fixture(stack, 'convergence-refuses');
-      const [criterion] = await state(stack, f, ['收敛账本说这个项目不再收敛']);
+      const f = await fixture(stack, 'convergence-records');
+      const [criterion] = await state(stack, f, ['收敛账本记下了这条事实']);
       const only = await serve(stack, f, criterion!.key, '服务这条标准的唯一一件活');
-      await settleByAcceptance(stack, f, only, 'refused-by-convergence');
+      await settleByAcceptance(stack, f, only, 'recorded-by-convergence');
 
-      // The delivery reached the producer's authorizer and the authorizer reached convergence. A
-      // door that let `route()`'s always-allow default stand in would never consult it, and this
-      // row would say CONSUMED.
+      // The delivery reached the producer's authorizer and the authorizer reached convergence,
+      // which records the judgment and allows it. A door that let `route()`'s always-allow default
+      // stand in would never consult it, and this fact would have no judgment behind it.
       const wakes = await readyWakes(stack.db, f.projectId);
       assert.equal(wakes.length, 1, 'the ready criterion never reached the wake ledger');
-      assert.equal(wakes[0]!.status, 'REFUSED');
-      assert.equal(wakes[0]!.refusalCode, PROJECT_NOT_CONVERGING);
-      assert.equal(wakes[0]!.consumerType, null);
+      assert.equal(wakes[0]!.status, 'CONSUMED');
+      assert.equal(wakes[0]!.consumerType, CRITERION_READY_CONSUMER);
+      const wake = await stack.db.projectCoordinatorWake.findFirstOrThrow({
+        where: { projectId: f.projectId, event: 'CRITERION_READY' },
+        select: { id: true },
+      });
+      assert.deepEqual(
+        await stack.db.projectConvergenceDecision.findMany({
+          where: { wakeId: wake.id },
+          select: { event: true, outcome: true },
+        }),
+        [{ event: 'CRITERION_READY', outcome: 'PROCEED' }],
+      );
       assert.deepEqual(await judgmentSessions(stack.db, f.ownerId), []);
     } finally {
       await stack.db.$disconnect();

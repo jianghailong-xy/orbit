@@ -178,7 +178,7 @@ const WIRED: readonly WiredWakeFact[] = [
       },
       {
         spec: 'tasks/task-exception-convergence-budget.pg.spec.ts',
-        test: 'with the coordinator switched off the fact is refused before the budget, and never charged',
+        test: 'with the coordinator switched off the fact is refused before the ledger, and never recorded',
       },
       {
         spec: 'tasks/task-wake-disposition.pg.spec.ts',
@@ -257,7 +257,7 @@ const WIRED: readonly WiredWakeFact[] = [
       // and no blocker was raised for a person. Its paired positive is in the same case.
       {
         spec: 'tasks/task-unlanded-merge-guardrails.pg.spec.ts',
-        test: 'a switched-off coordinator charges no budget, raises no blocker, and leaves one refusal',
+        test: 'a switched-off coordinator records no judgment, raises no blocker, and leaves one refusal',
       },
     ],
   },
