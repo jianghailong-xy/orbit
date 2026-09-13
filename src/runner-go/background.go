@@ -120,6 +120,11 @@ type bgTailer struct {
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
 	// and "that job exited 7" are different answers.
 	jobs map[string]*bgJob
+	// shutdown is the runner process's own stop (runLoop's loopCtx), and stopShutdownDrain
+	// deregisters the drain that stop starts — see drainOnRunnerShutdown. Protected by mu;
+	// shutdown stays nil where no runner is at stake.
+	shutdown          context.Context
+	stopShutdownDrain func() bool
 	// engineResident answers "is there an engine to read this right now". Immutable
 	// after newBgTailer/notifyWhenCold; never called while b.mu is held, because the
 	// pool holds its own lock to answer and already calls back into this tailer.
@@ -508,10 +513,13 @@ func (b *bgTailer) stopAll() {
 	// Session end is one of the three things allowed to end a runner-hosted job,
 	// and the kind decides how: a service is killed at once, a job is given
 	// bgDrainWaitCap to land its own exit code. Before the gate closes, because a
-	// drained job still has a terminal event to emit.
+	// drained job still has a terminal event to emit. (A runner that has begun to stop
+	// is already draining — drainOnRunnerShutdown — and this drain's kills are filed as
+	// that stop's too.)
 	b.drainJobs(bgDrainWaitCap)
 	b.mu.Lock()
 	b.stopping = true
+	stopShutdownDrain := b.stopShutdownDrain
 	for id, s := range b.live {
 		s.cancel()
 		delete(b.live, id)
@@ -519,6 +527,9 @@ func (b *bgTailer) stopAll() {
 	}
 	b.monitors = map[string]engineMonitor{}
 	b.mu.Unlock()
+	if stopShutdownDrain != nil {
+		stopShutdownDrain()
+	}
 	if b.cancel != nil {
 		b.cancel() // ends watchJSONL (and anything else bound to b.ctx)
 	}

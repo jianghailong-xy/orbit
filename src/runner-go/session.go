@@ -647,6 +647,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only looked at the turn permit would rewrite the checkout under it.
 	bg := newBgTailer(sessionCtx, emit, pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
+	// A runner that stops — re-executing into an update, or its service stopped — ends these
+	// jobs too, and that is not this session ending. Its drain starts the moment the runner
+	// starts to stop rather than after this supervisor's turn drain, so what it kills is
+	// reported inside the grace the final event flush is given (eventCtx above).
+	bg.drainOnRunnerShutdown(shutdownCtx)
 	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
 	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
 	// Lend the tailer the pool's own notion of residency and the account's existing push channel,

@@ -62,9 +62,21 @@ const (
 	// looking like the silent recycling this project is removing.
 	bgDrainCapReason = "drain_cap"
 
+	// bgRunnerShutdownReason marks a kill made because the runner process itself is going
+	// away — re-executing into a self-update, or its service being stopped. That is not the
+	// session ending, so it must not read as the session's `drain` or `drain_cap`: a count of
+	// kills that sets session ends aside has to go on seeing these. Nor is it the turn's
+	// evInterrupt reason "runner_restart", which marks a turn cut short, not a process killed.
+	bgRunnerShutdownReason = "runner_shutdown"
+
 	// bgJobOutputCap bounds one bg_output read.
 	bgJobOutputCap = 256 * 1024
 )
+
+// errRunnerShuttingDown refuses a job once the runner has begun to stop. The runner is the job's
+// only host, so it would be killed within bgDrainWaitCap of starting, and nobody would start it
+// again.
+var errRunnerShuttingDown = errors.New("the runner is shutting down (restarting or updating); start the job again once the session resumes")
 
 // bgJobSpec is one request to run something in the background. Dir and ScratchDir
 // come from the runner, never from the agent's request as-is (see bgJobService).
@@ -185,6 +197,10 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		b.mu.Unlock()
 		return bgJobStatus{}, context.Canceled
 	}
+	if b.runnerStoppingLocked() {
+		b.mu.Unlock()
+		return bgJobStatus{}, errRunnerShuttingDown
+	}
 	b.wg.Add(1)
 	b.mu.Unlock()
 	waiterStarted := false
@@ -229,9 +245,10 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	}
 
 	b.mu.Lock()
-	if b.stopping {
-		// stopAll ran while we were starting: this process belongs to an epoch
-		// that is already being torn down, so it does not get to join the registry.
+	if b.stopping || b.runnerStoppingLocked() {
+		// stopAll ran, or the runner began to stop, while we were starting: this
+		// process belongs to an epoch that is already being torn down, so it does not
+		// get to join the registry.
 		b.mu.Unlock()
 		cancel()
 		f.Close()
@@ -528,13 +545,14 @@ func (b *bgTailer) killJob(jobID string, grace time.Duration) (bgJobStatus, erro
 // cut short never reads as a completion nobody witnessed.
 func (b *bgTailer) drainJobs(budget time.Duration) {
 	b.mu.Lock()
+	serviceReason, _ := b.drainReasonsLocked()
 	var services, jobs []*bgJob
 	for _, job := range b.jobs {
 		if job.status != bgStatusRunning {
 			continue
 		}
 		if job.kind == bgKindService {
-			job.killReason = "drain"
+			job.killReason = serviceReason
 			services = append(services, job)
 			continue
 		}
@@ -569,15 +587,16 @@ func (b *bgTailer) drainJobs(budget time.Duration) {
 }
 
 // killOverBudget ends the jobs a drain could not wait out, marking each so its
-// event says the budget ran out rather than leaving the user to guess.
+// event says why rather than leaving the user to guess.
 func (b *bgTailer) killOverBudget(jobs []*bgJob) {
 	b.mu.Lock()
+	_, reason := b.drainReasonsLocked()
 	var killing []*bgJob
 	for _, job := range jobs {
 		if job.status != bgStatusRunning {
 			continue
 		}
-		job.killReason = bgDrainCapReason
+		job.killReason = reason
 		killing = append(killing, job)
 	}
 	b.mu.Unlock()
@@ -590,4 +609,54 @@ func (b *bgTailer) killOverBudget(jobs []*bgJob) {
 		case <-time.After(bgKillTeardownGrace):
 		}
 	}
+}
+
+// drainOnRunnerShutdown ends this session's jobs when the runner process stops — re-executing
+// into a self-update, or its service being stopped — and files each as ended by that. Two things
+// separate it from the drain the session's own end runs:
+//
+//   - Why. The session is not ending; the runner hosting its jobs is. Filed as `drain` and
+//     `drain_cap`, every release restart read as a session end, and a count of kills that sets
+//     session ends aside could not see the builds each release was killing. Every kill a drain
+//     makes once the runner has begun to stop is filed as runner_shutdown (drainReasonsLocked).
+//   - When. The supervisor only reaches stopAll after its turn drain, which may take all of
+//     shutdownDrainTimeout, while the flush that has to deliver the kill is given a grace counted
+//     from the moment the runner began to stop. A job drain that started behind the turn drain
+//     spent its bgDrainWaitCap past that grace: the kill was emitted after the last flush had
+//     been cancelled, and the job's last delivered event stayed `running`. Draining from the
+//     moment the runner starts to stop keeps the kill and its report inside that grace, whatever
+//     the turn drain does.
+//
+// Called once, before the session serves any job; shutdown is runLoop's loopCtx.
+func (b *bgTailer) drainOnRunnerShutdown(shutdown context.Context) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.shutdown = shutdown
+	b.stopShutdownDrain = context.AfterFunc(shutdown, func() {
+		// Behind the same registration gate as every other goroutine stopAll joins.
+		b.mu.Lock()
+		if b.stopping {
+			b.mu.Unlock()
+			return
+		}
+		b.wg.Add(1)
+		b.mu.Unlock()
+		defer b.wg.Done()
+		b.drainJobs(bgDrainWaitCap)
+	})
+}
+
+// runnerStoppingLocked reports whether the runner process has begun to stop. Caller holds b.mu.
+func (b *bgTailer) runnerStoppingLocked() bool {
+	return b.shutdown != nil && b.shutdown.Err() != nil
+}
+
+// drainReasonsLocked names what a drain's kills are filed as — a service's, and a job's that
+// outlasted the budget: the session's own end, or the runner's stop once that has begun. Caller
+// holds b.mu.
+func (b *bgTailer) drainReasonsLocked() (service, overBudget string) {
+	if b.runnerStoppingLocked() {
+		return bgRunnerShutdownReason, bgRunnerShutdownReason
+	}
+	return "drain", bgDrainCapReason
 }

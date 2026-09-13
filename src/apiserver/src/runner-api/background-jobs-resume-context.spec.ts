@@ -30,6 +30,15 @@ const LIVE_PATH = '/root/.orbit/runs/abc/bgj_live.output';
 const DONE_PATH = '/root/.orbit/runs/abc/bgj_done.output';
 const FAILED_PATH = '/root/.orbit/runs/abc/bgj_failed.output';
 const OLD_PATH = '/root/.orbit/runs/abc/bgj_old.output';
+const LOST_PATH = '/root/.orbit/runs/abc/bgj_lost.output';
+const CUT_PATH = '/root/.orbit/runs/abc/bgj_cut.output';
+
+/** The runner process that holds the session now, and the one whose place it took. */
+const CURRENT_RUNNER = '77777777-7777-4777-8777-777777777777';
+const REPLACED_RUNNER = '88888888-8888-4888-8888-888888888888';
+/** When the replaced process retired its last inbox generation, and a delivery made after that. */
+const RUNNER_REPLACED = new Date('2026-09-07T09:20:00.000Z');
+const AFTER_REPLACEMENT = new Date('2026-09-07T09:40:00.000Z');
 
 type Dequeue = (
   sessionId: string,
@@ -39,7 +48,12 @@ type Dequeue = (
   declaredCapabilities?: readonly string[],
 ) => Promise<RunInboxResponse | null>;
 
-type EventRow = { seq: number; payload: Record<string, unknown>; createdAt: Date };
+type EventRow = {
+  seq: number;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+  ingestedUnderLeaseGeneration?: string | null;
+};
 
 /** One `background_task` row as the runner writes it for a job it hosts itself. */
 function jobEvent(
@@ -82,6 +96,11 @@ function finished(
   });
 }
 
+/** The same row, as delivered by one particular runner process. */
+function reportedBy(runner: string, row: EventRow): EventRow {
+  return { ...row, ingestedUnderLeaseGeneration: runner };
+}
+
 function harness(options: {
   events?: EventRow[];
   /** Deliveries already made under THIS inbox lease generation, i.e. this engine process. */
@@ -91,6 +110,10 @@ function harness(options: {
   content?: string;
   /** Whether this turn already produced runtime output, i.e. it is a lease re-delivery. */
   runtimeStarted?: boolean;
+  /** The runner process that holds the session now: `session.inbox_lease_owner`. */
+  leaseOwner?: string | null;
+  /** Inbox lease generations the session's earlier runner processes retired. */
+  retiredGenerations?: Array<{ leaseOwner: string; retiredAt: Date }>;
 }) {
   const content = options.content ?? '继续吧。';
   const tx = {
@@ -102,7 +125,7 @@ function harness(options: {
           inboxLeaseGeneration: options.leaseGeneration === undefined
             ? LEASE_GENERATION
             : options.leaseGeneration,
-          inboxLeaseOwner: null,
+          inboxLeaseOwner: options.leaseOwner ?? null,
           status: RunStatus.RUNNING,
           ownerId: OWNER_ID,
           provider: AgentProvider.CLAUDE,
@@ -148,6 +171,7 @@ function harness(options: {
       findFirst: async () => (options.runtimeStarted ? { id: 'event-1' } : null),
       findMany: async () => options.events ?? [],
     },
+    inboxLeaseGeneration: { findMany: async () => options.retiredGenerations ?? [] },
     attachment: { findMany: async () => [] },
   };
   const prisma = {
@@ -287,6 +311,100 @@ test('lists a Monitor that stopped with its engine', async () => {
   assert.match(text, /重新安排/, 'the agent must be told to arrange the wait again');
   // Not a job: there is no output file to read and nothing to pick back up.
   assert.ok(!text.includes('mcp__orbit__bg_output'), `a stopped Monitor was offered as a job:\n${text}`);
+});
+
+/** The lines listed under one heading of the block, or '' when the block has no such heading. */
+function listedUnder(text: string, heading: string): string {
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) => line.startsWith(`  ${heading}`));
+  if (start < 0) return '';
+  const listed: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (!line.startsWith('    ')) break;
+    listed.push(line);
+  }
+  return listed.join('\n');
+}
+
+test('a job whose runner process was replaced before it reported an end is not offered as running', async () => {
+  // 70d5bfef after the 0.1.155 restart: the runner process hosting the job stopped, the kill it
+  // made never reached the control plane, and a new process took the session over. The job's last
+  // row still says `running`, and the event log on its own says nothing else.
+  const { dequeue } = harness({
+    leaseOwner: CURRENT_RUNNER,
+    retiredGenerations: [{ leaseOwner: REPLACED_RUNNER, retiredAt: RUNNER_REPLACED }],
+    events: [
+      reportedBy(REPLACED_RUNNER, launched(1, 'bgj_lost', 'npm run test:full', LOST_PATH)),
+      reportedBy(CURRENT_RUNNER, launched(2, 'bgj_live', 'npm run build', LIVE_PATH)),
+    ],
+  });
+
+  const turn = await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION);
+
+  assert.ok(turn, 'the inbox handed back no turn at all');
+  const text = turn.content ?? '';
+  const running = listedUnder(text, '仍在运行');
+  const endedWhileAway = listedUnder(text, '你不在的时候结束了');
+  // The positive half: the job the current process hosts is still said to be running.
+  assert.match(running, /bgj_live/, `the live job must still be reported running:\n${text}`);
+  assert.ok(!running.includes('bgj_lost'), `a job whose runner process is gone was offered as running:\n${text}`);
+  assert.ok(
+    endedWhileAway.includes('bgj_lost'),
+    `the job the replaced runner process took with it is not reported as ended:\n${text}`,
+  );
+  assert.ok(endedWhileAway.includes(LOST_PATH), `its output file must still be named:\n${text}`);
+  assert.match(endedWhileAway, /runner 进程/, `the agent must be told why it has no exit code:\n${text}`);
+});
+
+test('a job the stopping runner reported killed keeps the end it reported', async () => {
+  // Where the runner's report did arrive, filed as runner_shutdown. Its own terminal row places it,
+  // so this is the other half of the case above: whatever tells a replaced runner's unreported job
+  // apart must not swallow the jobs that same runner did report.
+  const { dequeue } = harness({
+    leaseOwner: CURRENT_RUNNER,
+    retiredGenerations: [{ leaseOwner: REPLACED_RUNNER, retiredAt: RUNNER_REPLACED }],
+    events: [
+      reportedBy(REPLACED_RUNNER, launched(1, 'bgj_cut', 'go test ./...', CUT_PATH)),
+      reportedBy(REPLACED_RUNNER, jobEvent(2, RUNNER_REPLACED, {
+        shellId: 'bgj_cut',
+        toolUseId: 'bgj_cut',
+        status: 'killed',
+        kind: 'job',
+        command: 'go test ./...',
+        outputPath: CUT_PATH,
+        reason: 'runner_shutdown',
+        summary: 'Background job was killed',
+      })),
+    ],
+  });
+
+  const turn = await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION);
+
+  assert.ok(turn);
+  const text = turn.content ?? '';
+  assert.ok(!listedUnder(text, '仍在运行').includes('bgj_cut'), `a killed job was offered as running:\n${text}`);
+  const line = listedUnder(text, '你不在的时候结束了').split('\n').find((l) => l.includes('bgj_cut')) ?? '';
+  assert.match(line, /killed｜原因 runner_shutdown/, `the kill must be listed as the runner reported it:\n${text}`);
+  assert.ok(!line.includes('没有结束报告'), `a reported end was replaced by a guess:\n${text}`);
+});
+
+test("a replaced runner process's job is announced once, not by every engine after it", async () => {
+  const { dequeue } = harness({
+    leaseOwner: CURRENT_RUNNER,
+    retiredGenerations: [{ leaseOwner: REPLACED_RUNNER, retiredAt: RUNNER_REPLACED }],
+    previousDeliveryAt: AFTER_REPLACEMENT,
+    events: [
+      reportedBy(REPLACED_RUNNER, launched(1, 'bgj_lost', 'npm run test:full', LOST_PATH)),
+      reportedBy(CURRENT_RUNNER, launched(2, 'bgj_live', 'npm run build', LIVE_PATH)),
+    ],
+  });
+
+  const turn = await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION);
+
+  assert.ok(turn);
+  const text = turn.content ?? '';
+  assert.match(text, /bgj_live/, 'the live job must still be reported');
+  assert.ok(!text.includes('bgj_lost'), `a job already announced since the takeover was announced again:\n${text}`);
 });
 
 test('a session that never ran a background job is delivered exactly what was sent', async () => {

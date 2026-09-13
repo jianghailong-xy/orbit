@@ -23,7 +23,13 @@ const EVENT_SCAN_LIMIT = 400;
 /** Only these end a job's life; everything else is a state it is passing through. */
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
 
-type BackgroundEventRow = { seq: number; payload: unknown; createdAt: Date };
+type BackgroundEventRow = {
+  seq: number;
+  payload: unknown;
+  createdAt: Date;
+  /** The runner process (its lease owner) that delivered the row; null on rows older than that. */
+  ingestedUnderLeaseGeneration?: string | null;
+};
 
 /** One job, folded from every event that named it. */
 interface BackgroundJob {
@@ -35,7 +41,15 @@ interface BackgroundJob {
   exitCode?: number;
   reason?: string;
   endedAt?: Date;
+  /** The runner process that delivered this job's latest row, where the row records it. */
+  reportedBy?: string;
+  /** Still `running` in the log, but the runner process hosting it no longer holds the session. */
+  outlivedItsRunner?: boolean;
 }
+
+/** What can be said of a job whose runner process stopped without reporting how the job ended. */
+const RUNNER_GONE_OUTCOME =
+  '没有结束报告｜托管它的 runner 进程已经不在了（重启、自更新或崩溃），按已停止处理，没有退出码';
 
 /**
  * Whether this delivery is the first one this engine process has taken.
@@ -101,6 +115,7 @@ function foldJobs(rows: BackgroundEventRow[]): Map<string, BackgroundJob> {
     const status = String(payload.status ?? '');
     const job = jobs.get(id) ?? { id, kind, command: '', outputPath: '', status };
     job.kind = kind;
+    job.reportedBy = row.ingestedUnderLeaseGeneration ?? undefined;
     job.status = status || job.status;
     if (typeof payload.command === 'string' && payload.command) job.command = payload.command;
     if (typeof payload.outputPath === 'string' && payload.outputPath) {
@@ -112,6 +127,31 @@ function foldJobs(rows: BackgroundEventRow[]): Map<string, BackgroundJob> {
     jobs.set(id, job);
   }
   return jobs;
+}
+
+/**
+ * When each of these runner processes stopped supervising the session: the latest retirement among
+ * its inbox lease generations. A stopping process retires its own, and /takeover-leases retires
+ * whatever the previous one left open when the next process takes the session over.
+ */
+async function runnerProcessesStoppedAt(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  leaseOwners: string[],
+): Promise<Map<string, Date>> {
+  const retired = await tx.inboxLeaseGeneration.findMany({
+    where: { sessionId, leaseOwner: { in: leaseOwners }, retiredAt: { not: null } },
+    select: { leaseOwner: true, retiredAt: true },
+  });
+  const stoppedAt = new Map<string, Date>();
+  for (const generation of retired) {
+    if (!generation.leaseOwner || !generation.retiredAt) continue;
+    const latest = stoppedAt.get(generation.leaseOwner);
+    if (!latest || generation.retiredAt > latest) {
+      stoppedAt.set(generation.leaseOwner, generation.retiredAt);
+    }
+  }
+  return stoppedAt;
 }
 
 function describe(job: BackgroundJob): string {
@@ -182,6 +222,10 @@ function buildBackgroundJobsBlock(
   if (ended.length > 0) {
     lines.push('  你不在的时候结束了：');
     for (const job of ended) {
+      if (job.outlivedItsRunner) {
+        lines.push(`    ${describe(job)}｜${RUNNER_GONE_OUTCOME}${outputOf(job)}`);
+        continue;
+      }
       // The exit code is the runner's own Wait, not a number parsed out of prose — so a job that
       // ended is reported as it actually ended, including the kill it did not ask for.
       const outcome = job.exitCode === undefined
@@ -219,6 +263,8 @@ export async function appendBackgroundJobsContext(
   turnId: string,
   leaseGeneration: string | null,
   content: string | null | undefined,
+  /** The runner process that holds the session now: `session.inbox_lease_owner`. */
+  leaseOwner?: string | null,
 ): Promise<string | null | undefined> {
   if (!leaseGeneration) return content;
   if (!(await isFirstDeliveryOfGeneration(tx, sessionId, turnId, leaseGeneration))) return content;
@@ -227,7 +273,7 @@ export async function appendBackgroundJobsContext(
     where: { sessionId, type: RunEventType.BACKGROUND_TASK },
     orderBy: { seq: 'desc' },
     take: EVENT_SCAN_LIMIT,
-    select: { seq: true, payload: true, createdAt: true },
+    select: { seq: true, payload: true, createdAt: true, ingestedUnderLeaseGeneration: true },
   });
   // Read newest-first so the cap keeps the recent end of a long session, then fold oldest-first so
   // a job's terminal event wins over its launch. Ordered here rather than trusted from the read:
@@ -241,11 +287,32 @@ export async function appendBackgroundJobsContext(
   const since = await previousDeliveryAt(tx, sessionId, turnId);
   const live: BackgroundJob[] = [];
   const ended: BackgroundJob[] = [];
+  const outlived: BackgroundJob[] = [];
   for (const job of jobs.values()) {
-    if (!TERMINAL_STATUSES.has(job.status)) {
+    if (TERMINAL_STATUSES.has(job.status)) {
+      if (!since || !job.endedAt || job.endedAt > since) ended.push(job);
+    } else if (leaseOwner && job.reportedBy && job.reportedBy !== leaseOwner) {
+      outlived.push(job);
+    } else {
       live.push(job);
-    } else if (!since || !job.endedAt || job.endedAt > since) {
-      ended.push(job);
+    }
+  }
+  // A runner-hosted job lives exactly as long as the runner process hosting it: a stopping runner
+  // kills it, and the process that comes next has no record of it. So a job the log still has as
+  // `running`, last reported by a process that no longer holds this session, is one whose end was
+  // never delivered — the stop did not get its report out, or a crash left none to send. Both
+  // identities are the runners' own: each process mints its lease owner, every event row records the
+  // one that delivered it, and a takeover rotates the session's.
+  if (outlived.length > 0) {
+    const stoppedAt = await runnerProcessesStoppedAt(
+      tx,
+      sessionId,
+      [...new Set(outlived.map((job) => job.reportedBy as string))],
+    );
+    for (const job of outlived) {
+      job.outlivedItsRunner = true;
+      job.endedAt = stoppedAt.get(job.reportedBy as string);
+      if (!since || !job.endedAt || job.endedAt > since) ended.push(job);
     }
   }
   // Any delivery after an engine stopped went to the engine that replaced it, and was told then.
