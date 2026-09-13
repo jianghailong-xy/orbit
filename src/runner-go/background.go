@@ -141,6 +141,13 @@ type bgTailer struct {
 	// once by wakeSessionVia, before any job can start, so it stays immutable for the tailer's
 	// life; nil where no control plane is at stake, and then no job wakes anybody.
 	wake func(wake bgWake) error
+	// sessionID, pool and reportStopped let a job outlive this runner image across a self-update
+	// (background_job_handoff.go): the session its records are filed under, the pool that keeps a job
+	// no supervisor hosts, and how an end is reported once the supervisor has returned. Installed once
+	// by recordJobs, before any job can start; a tailer without them records nothing and hands nothing on.
+	sessionID     string
+	pool          *sessionPool
+	reportStopped func(payload map[string]interface{}) error
 }
 
 // liveShell is a background shell with a tail running. engineOwned separates the agent's

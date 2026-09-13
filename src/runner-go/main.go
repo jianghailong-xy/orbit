@@ -514,7 +514,7 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		// repeat registration and re-issue the credential from the original argv.
 		os.Args = []string{os.Args[0], "run"}
 		clearInheritedSessionContext()
-		runWithSelfUpdates(cfg, selfUpdate, func() bool { return runLoop(cfg) })
+		runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 		return
 	}
 	if !withService {
@@ -575,7 +575,7 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")
 		os.Exit(1)
 	}
-	runWithSelfUpdates(cfg, selfUpdate, func() bool { return runLoop(cfg) })
+	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 }
 
 // clearInheritedSessionContext removes a legacy/stale session identity inherited
@@ -596,18 +596,23 @@ func clearInheritedSessionContext() {
 // selfUpdate replaces this process and never returns. If a post-drain update
 // attempt returns, re-exec even the current binary so stopped runLoop goroutines
 // can never overlap a fresh reclaim in the same process.
-func runWithSelfUpdates(cfg *RunnerConfig, update func(string), loop func() bool) {
+func runWithSelfUpdates(cfg *RunnerConfig, update func(string), loop func() (bool, func())) {
 	superviseSelfUpdates(cfg.ServerURL, update, loop, execCurrentProcess)
 }
 
-func superviseSelfUpdates(server string, update func(string), loop func() bool, restart func() error) {
+// superviseSelfUpdates runs loop, which reports whether it drained to re-execute, and what ends the
+// jobs its sessions handed on to the image the re-exec starts (handOffJobs).
+func superviseSelfUpdates(server string, update func(string), loop func() (bool, func()), restart func() error) {
 	update(server)
-	if !loop() {
+	updating, endHandedOn := loop()
+	if !updating {
 		return
 	}
 	update(server)
 	if err := restart(); err != nil {
 		fmt.Fprintln(os.Stderr, "runner restart after update attempt failed:", err)
+		// No image will adopt what the sessions handed on: end it, as any other runner stop would.
+		endHandedOn()
 	}
 }
 

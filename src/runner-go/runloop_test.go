@@ -141,9 +141,9 @@ func TestSelfUpdateSupervisorReexecsInsteadOfReusingStoppedRunLoop(t *testing.T)
 	var events []string
 	superviseSelfUpdates("https://control.example",
 		func(server string) { events = append(events, "update:"+server) },
-		func() bool {
+		func() (bool, func()) {
 			events = append(events, "loop")
-			return true
+			return true, func() { events = append(events, "end handed-on jobs") }
 		},
 		func() error {
 			events = append(events, "reexec")

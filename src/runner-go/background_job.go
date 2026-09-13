@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -191,6 +192,25 @@ type bgJob struct {
 	// own that a retry of it is recognised by.
 	wokenThrough int64
 	outputWakes  int
+
+	// recorded is whether the job has a record (background_job_record.go); one without is never
+	// handed on. handedOff marks a job handed on to the runner's next image, which the tailer that
+	// handed it on — formerHost — no longer kills, reaps or reports. reaping marks a job whose exited
+	// process its waiter has begun to reap: it is ending here, and is not handed on. exited marks one
+	// that exited after it was handed on, and adoptedExit is the exit code of one adopted from its
+	// record that had exited already.
+	recorded    bool
+	handedOff   bool
+	formerHost  *bgTailer
+	reaping     bool
+	exited      bool
+	adoptedExit *int
+	// kill ends the job's process group, and reap waits for its exited process and returns the exit
+	// code: through the exec.Cmd that started it, or by pid for a job adopted from its record.
+	kill func()
+	reap func() int
+	// waiterSlot gives the waiter's place in the tailer's WaitGroup back once (releaseWaiter).
+	waiterSlot sync.Once
 }
 
 // statusLocked snapshots the job. Caller holds b.mu.
@@ -274,6 +294,34 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	jobCtx, cancel := context.WithCancel(b.ctx)
 	cmd := exec.CommandContext(jobCtx, "bash", "-lc", spec.Command)
 	configureSessionProcessTree(cmd)
+	job := &bgJob{
+		id:           jobID,
+		kind:         spec.Kind,
+		command:      spec.Command,
+		description:  spec.Description,
+		outputPath:   outputPath,
+		cancel:       cancel,
+		done:         make(chan struct{}),
+		wakeOnExit:   spec.WakeOnExit,
+		wakeOnOutput: spec.WakeOnOutput,
+		status:       bgStatusRunning,
+		kill:         func() { _ = terminateSessionProcessTree(cmd) },
+		reap: func() int {
+			waitErr := waitSessionProcessTree(cmd)
+			f.Close()
+			return exitCodeFromWait(cmd, waitErr)
+		},
+	}
+	// A job handed on to the runner's next image is not this image's to kill, although the context it
+	// was started under ends with this image's supervisor. Nor is there anything to wait out after a
+	// cancel: the output goes to a file, not a pipe, and the delay would end in a kill of its own.
+	cmd.Cancel = func() error {
+		if !b.killable(job) {
+			return os.ErrProcessDone
+		}
+		return terminateSessionProcessTree(cmd)
+	}
+	cmd.WaitDelay = 0
 	cmd.Dir = spec.Dir
 	cmd.Env = envWithAgent(spec.Env)
 	cmd.Stdout = f
@@ -283,20 +331,9 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		f.Close()
 		return bgJobStatus{}, err
 	}
-	job := &bgJob{
-		id:           jobID,
-		kind:         spec.Kind,
-		command:      spec.Command,
-		description:  spec.Description,
-		outputPath:   outputPath,
-		pid:          cmd.Process.Pid,
-		startedAt:    time.Now(),
-		cancel:       cancel,
-		done:         make(chan struct{}),
-		wakeOnExit:   spec.WakeOnExit,
-		wakeOnOutput: spec.WakeOnOutput,
-		status:       bgStatusRunning,
-	}
+	job.pid = cmd.Process.Pid
+	job.startedAt = time.Now()
+	job.recorded = b.recordJob(job)
 
 	b.mu.Lock()
 	if b.stopping || b.runnerStoppingLocked() {
@@ -306,6 +343,9 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		b.mu.Unlock()
 		cancel()
 		f.Close()
+		if job.recorded {
+			removeBgJobRecord(b.sessionID, jobID)
+		}
 		return bgJobStatus{}, context.Canceled
 	}
 	if b.jobs == nil {
@@ -352,10 +392,12 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 
 	waiterStarted = true
 	go func() {
-		defer b.wg.Done()
-		waitErr := waitSessionProcessTree(cmd)
-		f.Close()
-		b.finishJob(job, exitCodeFromWait(cmd, waitErr))
+		defer job.releaseWaiter(&b.wg)
+		// Waits without reaping, so that a job handed on meanwhile stays unreaped for its next host.
+		awaitChildExit(job.pid)
+		if b.claimReap(job) {
+			b.finishJob(job, job.reap())
+		}
 	}()
 	return status, nil
 }
@@ -388,23 +430,7 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 		reason, _ = b.drainReasonsLocked()
 		job.killReason = reason
 	}
-	status := bgStatusCompleted
-	switch {
-	case reason != "":
-		status = bgStatusKilled
-	case exit != 0:
-		status = bgStatusFailed
-	}
-	job.status = status
-	job.endedAt = time.Now()
-	if status != bgStatusKilled {
-		code := exit
-		job.exitCode = &code
-	}
-	summary := fmt.Sprintf("Background %s completed (exit code %d)", job.kind, exit)
-	if status == bgStatusKilled {
-		summary = fmt.Sprintf("Background %s was killed", job.kind)
-	}
+	status := job.endLocked(exit)
 	b.mu.Unlock()
 
 	// The session is going away and events emitted now would be persisted but no
@@ -412,28 +438,59 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 	// user must not have to guess about.
 	if b.ctx.Err() == nil || reason != "" {
 		if b.markTerminal(job.id) {
-			payload := map[string]interface{}{
-				"shellId":    job.id,
-				"toolUseId":  job.id,
-				"status":     status,
-				"kind":       job.kind,
-				"command":    job.command,
-				"summary":    summary,
-				"output":     readCapped(job.outputPath),
-				"outputPath": job.outputPath,
-			}
-			if status != bgStatusKilled {
-				payload["exitCode"] = exit
-			}
-			if reason != "" {
-				payload["reason"] = reason
-			}
-			b.emit(evBackgroundTask, payload)
+			b.emit(evBackgroundTask, job.endPayload(status, exit, reason))
 			b.alertIfNobodyIsWatching(job, status, exit)
 			b.wakeOnEnd(job, reason)
 		}
 	}
+	if job.recorded {
+		removeBgJobRecord(b.sessionID, job.id)
+	}
 	close(job.done)
+}
+
+// endLocked records how a job ended — killed when a reason was named for killing it, otherwise as its
+// exit code says — and returns that status. Caller holds b.mu.
+func (j *bgJob) endLocked(exit int) string {
+	status := bgStatusCompleted
+	switch {
+	case j.killReason != "":
+		status = bgStatusKilled
+	case exit != 0:
+		status = bgStatusFailed
+	}
+	j.status = status
+	j.endedAt = time.Now()
+	if status != bgStatusKilled {
+		code := exit
+		j.exitCode = &code
+	}
+	return status
+}
+
+// endPayload is the one terminal background_task that reports how a job ended.
+func (j *bgJob) endPayload(status string, exit int, reason string) map[string]interface{} {
+	summary := fmt.Sprintf("Background %s completed (exit code %d)", j.kind, exit)
+	if status == bgStatusKilled {
+		summary = fmt.Sprintf("Background %s was killed", j.kind)
+	}
+	payload := map[string]interface{}{
+		"shellId":    j.id,
+		"toolUseId":  j.id,
+		"status":     status,
+		"kind":       j.kind,
+		"command":    j.command,
+		"summary":    summary,
+		"output":     readCapped(j.outputPath),
+		"outputPath": j.outputPath,
+	}
+	if status != bgStatusKilled {
+		payload["exitCode"] = exit
+	}
+	if reason != "" {
+		payload["reason"] = reason
+	}
+	return payload
 }
 
 // alertIfNobodyIsWatching is the whole point of stage 2b: a job that finishes while
@@ -521,24 +578,27 @@ func (j *bgJob) wakeLocked(trigger string, size int64) bgWake {
 // cancellation does wake it, since the session may go on without the job; whether it has ended is
 // the control plane's to say.
 func (b *bgTailer) wakeOnEnd(job *bgJob, reason string) {
+	if wake, ok := b.wakeFor(job, reason); ok {
+		b.sendWake(wake)
+	}
+}
+
+// wakeFor is the wake wakeOnEnd sends, when the job's end owes its session one.
+func (b *bgTailer) wakeFor(job *bgJob, reason string) (bgWake, bool) {
 	switch reason {
 	case "requested", "drain", bgDrainCapReason:
-		return
+		return bgWake{}, false
 	}
 	size := outputSizeOf(job.outputPath)
 	b.mu.Lock()
-	var wake bgWake
+	defer b.mu.Unlock()
 	switch {
 	case job.wakeOnExit:
-		wake = job.wakeLocked(bgWakeOnExit, size)
+		return job.wakeLocked(bgWakeOnExit, size), true
 	case job.wakeOnOutput && size > job.wokenThrough:
-		wake = job.wakeLocked(bgWakeOnOutput, size)
-	default:
-		b.mu.Unlock()
-		return
+		return job.wakeLocked(bgWakeOnOutput, size), true
 	}
-	b.mu.Unlock()
-	b.sendWake(wake)
+	return bgWake{}, false
 }
 
 // startOutputWakes watches a job that asked to be woken for new output, for as long as it runs.
@@ -572,6 +632,11 @@ func (b *bgTailer) watchOutputForWakes(job *bgJob) {
 		}
 		size := outputSizeOf(job.outputPath)
 		b.mu.Lock()
+		if job.handedOff {
+			// The runner's next image wakes the session for it, from where this one got to.
+			b.mu.Unlock()
+			return
+		}
 		if job.status != bgStatusRunning || size <= job.wokenThrough {
 			b.mu.Unlock()
 			continue
@@ -606,19 +671,27 @@ func (b *bgTailer) sendWake(wake bgWake) {
 	b.mu.Unlock()
 	go func() {
 		defer b.wg.Done()
-		wake.OutputExcerpt = wakeExcerpt(wake.OutputPath)
-		for attempt := 1; ; attempt++ {
-			err := b.wake(wake)
-			if err == nil {
-				return
-			}
-			if attempt == bgWakeAttempts || !isRetryableTransportError(err) {
-				logln("could not wake the session for background job", wake.JobID+":", err)
-				return
-			}
-			time.Sleep(time.Duration(attempt) * bgWakeRetryDelay)
-		}
+		b.deliverWake(wake)
 	}()
+}
+
+// deliverWake sends one wake, retrying a control plane that does not answer for a little while.
+func (b *bgTailer) deliverWake(wake bgWake) {
+	if b.wake == nil {
+		return
+	}
+	wake.OutputExcerpt = wakeExcerpt(wake.OutputPath)
+	for attempt := 1; ; attempt++ {
+		err := b.wake(wake)
+		if err == nil {
+			return
+		}
+		if attempt == bgWakeAttempts || !isRetryableTransportError(err) {
+			logln("could not wake the session for background job", wake.JobID+":", err)
+			return
+		}
+		time.Sleep(time.Duration(attempt) * bgWakeRetryDelay)
+	}
 }
 
 func outputSizeOf(path string) int64 {
@@ -787,8 +860,12 @@ func (b *bgTailer) killJob(jobID string, grace time.Duration) (bgJobStatus, erro
 // drain open for a watcher helps nobody. A job is given until budget to finish on
 // its own, because restarting one costs hours — and whatever is still running
 // when the budget runs out is killed AND reported as killed, so a build that was
-// cut short never reads as a completion nobody witnessed.
+// cut short never reads as a completion nobody witnessed. A runner re-executing into
+// a self-update ends no job at all: it hands the jobs on (handOffJobs).
 func (b *bgTailer) drainJobs(budget time.Duration) {
+	if b.handOffJobs() {
+		return
+	}
 	b.mu.Lock()
 	serviceReason, _ := b.drainReasonsLocked()
 	var services, jobs []*bgJob

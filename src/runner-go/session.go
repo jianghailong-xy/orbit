@@ -689,6 +689,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		return err
 	})
+	// A runner re-executing into a self-update hands this session's jobs on to its next image instead
+	// of ending them (handOffJobs). Should that image never come, they are ended after this supervisor
+	// has returned, and reported through its event stream all the same — past the gates, which closed
+	// with it. Jobs the runner adopted for this session across such a re-exec are this supervisor's now.
+	bg.recordJobs(sessionID, pool, func(payload map[string]interface{}) error {
+		emitThrough(&eventEmissionGate{}, "", evBackgroundTask, payload)
+		reportCtx, cancelReport := context.WithTimeout(context.Background(), bgHandedOnReportTimeout)
+		defer cancelReport()
+		return flushWithContext(reportCtx)
+	})
+	bg.adoptJobs(pool.takeHostlessJobs(sessionID))
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
 	// that finishes between turns still clears from the "Background processes" tray. (Claude

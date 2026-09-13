@@ -39,7 +39,12 @@ func terminateSessionProcessTree(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return os.ErrProcessDone
 	}
-	rootPID := cmd.Process.Pid
+	return terminateProcessTree(cmd.Process.Pid)
+}
+
+// terminateProcessTree is terminateSessionProcessTree for a process known only by its pid: a job
+// adopted from its record across a self-update, whose exec.Cmd stayed with the image that started it.
+func terminateProcessTree(rootPID int) error {
 	// Fast path for the overwhelmingly common case — a runtime that already exited
 	// cleanly. Only a group that is still alive is worth a descendant scan.
 	if err := syscall.Kill(-rootPID, 0); errors.Is(err, syscall.ESRCH) {

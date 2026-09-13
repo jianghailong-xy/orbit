@@ -538,8 +538,10 @@ func (l *runnerAgentList) providerConfigured(provider string) bool {
 
 // runLoop returns true only when it drained because a newer runner release was
 // published. The caller performs the existing atomic self-update after all live
-// sessions have detached; SIGINT/SIGTERM continue to return false and exit.
-func runLoop(cfg *RunnerConfig) bool {
+// sessions have detached; SIGINT/SIGTERM continue to return false and exit. The
+// func returned beside true ends the jobs the sessions handed on to the image the
+// update re-executes into, for a caller whose re-exec failed.
+func runLoop(cfg *RunnerConfig) (bool, func()) {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
 
 	// Claude Code's cwd is per session: the server hands each claimed/reclaimed
@@ -563,6 +565,10 @@ func runLoop(cfg *RunnerConfig) bool {
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
 	pool := newSessionPool(cfg.MaxConcurrent)
+	// Before this image does anything else — spawns a probe, reclaims a session, sweeps a checkout. A
+	// job the image before handed on as it re-executed is still this process's child, and until the
+	// pool holds it again the sweep takes its checkout for one nobody is using.
+	pool.adoptRecordedJobs()
 
 	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
 	// the same reason as max-concurrent above: the worktree sweep reclaims checkouts against it,
@@ -572,7 +578,8 @@ func runLoop(cfg *RunnerConfig) bool {
 	// too old to send one mean, and what the sweep reads as "no disk-pressure gate".
 	var diskFloorMb atomic.Int64
 
-	loopCtx, loopCancel := context.WithCancel(context.Background())
+	loopCtx, stopLoop := context.WithCancelCause(context.Background())
+	loopCancel := func() { stopLoop(nil) }
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())
@@ -591,6 +598,10 @@ func runLoop(cfg *RunnerConfig) bool {
 		if reason == runLoopStopUpdate {
 			updateRequested.Store(true)
 			logln(fmt.Sprintf("orbit %s update available; stopping claims and draining sessions", remote))
+			// The cause tells each session's drain that this stop re-executes, so its jobs are handed
+			// on rather than ended (handOffJobs).
+			stopLoop(errRunnerSelfUpdate)
+			return
 		}
 		loopCancel()
 	}()
@@ -1302,7 +1313,8 @@ func runLoop(cfg *RunnerConfig) bool {
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
 			// lightweight until their first real claim instead of starting one flush
 			// ticker, background tailer, and transcript watcher per cold session.
-			if !activeAtRegister && !pool.waitActive(live, jobCtx, loopCtx) {
+			// Jobs adopted for the session across a self-update need their host now, not at its next claim.
+			if !activeAtRegister && !pool.hasAdoptedJobs(j.SessionID) && !pool.waitActive(live, jobCtx, loopCtx) {
 				if loopCtx.Err() != nil || jobCtx.Err() == nil {
 					return
 				}
@@ -1364,6 +1376,10 @@ func runLoop(cfg *RunnerConfig) bool {
 	// This is now the FIRST sweep rather than the only one: the claim loop below repeats it on
 	// worktreeGCInterval, sharing this same gate through the sweeper's `armed` flag.
 	worktreeGC := worktreeSweeper{interval: worktreeGCInterval, armed: reclaimed && !reclaimSkipped}
+	// The same answer says which sessions' adopted jobs no supervisor is coming for.
+	if worktreeGC.armed {
+		pool.endUnclaimedHostlessJobs()
+	}
 	if worktreeGC.due(time.Now()) {
 		liveSet := pool.ids()
 		gcWorktrees(t, liveSet, measureWorktreePressure(diskFloorMb.Load()))
@@ -1398,6 +1414,7 @@ func runLoop(cfg *RunnerConfig) bool {
 			// retry cannot take those supervisors back out of the pool.
 			if !skipped {
 				worktreeGC.armed = true
+				pool.endUnclaimedHostlessJobs()
 			}
 		}
 		// Re-sweep leftover checkouts on the way round the loop. Finalization no longer removes
@@ -1540,7 +1557,14 @@ func runLoop(cfg *RunnerConfig) bool {
 	// Never enter another run loop in this process while an old session goroutine
 	// may still own its credential or worktree. The service manager can restart a
 	// timed-out daemon; foreground mode exits cleanly for operator intervention.
-	return restartForUpdate(updateRequested.Load(), drainTimedOut, sig)
+	restart := restartForUpdate(updateRequested.Load(), drainTimedOut, sig)
+	endHandedOn := func() { pool.endHostlessJobs(bgRunnerShutdownReason) }
+	if !restart {
+		// No re-exec after all — a signal came during the drain, or the drain ran out of time. What the
+		// sessions handed on for one is ended now, as a runner stop ends every job it hosts.
+		endHandedOn()
+	}
+	return restart, endHandedOn
 }
 
 func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand) ArtifactResultRequest {

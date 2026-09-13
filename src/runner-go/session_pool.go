@@ -149,8 +149,13 @@ type sessionPool struct {
 	// name a receipt calls it, and whether the runner hosts it. A shell is a writer
 	// of the checkout for exactly as long as it runs, and it routinely outlives the
 	// turn that launched it.
-	bgJobs  map[string]map[string]bgHold
-	changed chan struct{}
+	bgJobs map[string]map[string]bgHold
+	// hostless is sessionID → the runner-hosted jobs of that session no supervisor hosts right now:
+	// handed on by a supervisor whose runner is re-executing into a self-update, or adopted from their
+	// records before any supervisor started (background_job_handoff.go). The pool keeps them because it
+	// outlives supervisors, and a session that stays cold has none.
+	hostless map[string][]*bgJob
+	changed  chan struct{}
 }
 
 func newSessionPool(max int) *sessionPool {
