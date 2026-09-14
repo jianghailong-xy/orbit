@@ -4429,6 +4429,9 @@ export class RunnerApiController {
           // this batch is the one that delivers the task's brief (`readTaskStartCard` below).
           taskId: true,
           runSource: true,
+          // The line an account-pool member switch owes the transcript, taken below by the first
+          // engine start this batch carries (QueueService.resolvePoolMember writes it).
+          poolSwitchNotice: true,
         },
       });
       // The owner fence alone is insufficient when the same runner process
@@ -4533,6 +4536,18 @@ export class RunnerApiController {
           e.payload,
           (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
         );
+      }
+      // A move between account-pool members is said on the first engine start after it — the first
+      // event from a process holding the new member's key. It rides on the runner's own event
+      // because the runner numbers this session's events: a row written here would take the seq its
+      // next event is about to use, and skipDuplicates would silently drop that event instead.
+      if (session.poolSwitchNotice) {
+        const start = durable.find((e) => e.type === RunEventType.SYSTEM
+          && ['init', 'resumed'].includes(String(e.payload?.subtype)));
+        if (start) {
+          start.payload = { ...start.payload, notice: session.poolSwitchNotice, noticeKind: 'pool-member-switched' };
+          sessionData.poolSwitchNotice = null;
+        }
       }
       if (durable.length > 0) {
         // The one place a run_event is ever written, and the reason the per-token progress pings

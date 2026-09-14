@@ -1316,6 +1316,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "push/push.controller.ts#register", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "push/push.controller.ts#unregister", class: "ONE_ROW_CAS", statements: 1 },
   { at: "push/push.service.ts#deliver", class: "ONE_ROW_CAS", statements: 1, note: "Runs inside the APNs delivery loop: the HTTP call is what decides the delete, so the write is a consequence of an external action rather than the other way round. Nothing about it is transactional and nothing re-sends the notification." },
+  { at: "queue/queue.service.ts#resolvePoolMember", class: "ONE_ROW_BY_KEY", statements: 1, note: "Records the account-pool member a claim chose, with the transcript line owed when that moves the session off another member, on the session row this claim already moved to RUNNING. Outside buildSession's seeding transaction and after the claim committed; a claim hydrated again chooses from the rows as they then stand and writes that choice." },
   { at: "realtime/realtime.service.ts#drainCommitRequests", class: "ONE_ROW_CAS", statements: 1 },
   { at: "realtime/realtime.service.ts#drainMergeRequests", class: "ONE_ROW_CAS", statements: 1 },
   { at: "realtime/realtime.service.ts#failAbandonedWorktreeOperations", class: "MANY_ROWS", statements: 2 },

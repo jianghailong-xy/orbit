@@ -2,7 +2,13 @@ import { AssertionError, strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { PlanUsageSnapshot } from '@orbit/shared';
 import { parseSubscriptionUsage } from './plan-usage';
-import { selectPoolMember, type PoolCandidate, type PoolSelection } from './pool-select';
+import {
+  choosePoolMember,
+  poolSwitchNotice,
+  selectPoolMember,
+  type PoolCandidate,
+  type PoolSelection,
+} from './pool-select';
 
 const NOW = new Date('2026-09-14T12:00:00.000Z');
 const AN_HOUR_AGO = '2026-09-14T11:00:00.000Z';
@@ -160,4 +166,41 @@ test('a sticky member that is still usable is kept, even with more room elsewher
   assert.equal(chosen(selectPoolMember([roomier, refused], current.row.id, NOW)), 'anthropic');
   // And so it does once it has left the pool.
   assert.equal(chosen(selectPoolMember([member('anthropic-3', fiveHour(60)), roomier], current.row.id, NOW)), 'anthropic');
+});
+
+test("a claim on a spent pool still runs on the pool's own accounts: its member, else the first to reset", () => {
+  const later = member('anthropic', fiveHour(100));
+  const sooner = member('anthropic-2', reported({ five_hour: { utilization: 100, resets_at: IN_AN_HOUR } }));
+  assert.equal(choosePoolMember([later, sooner], null, NOW)?.slug, 'anthropic-2');
+  assert.equal(choosePoolMember([later, sooner], later.row.id, NOW)?.slug, 'anthropic');
+  // A refused member is not one of them, even as the session's own.
+  assert.equal(choosePoolMember([member('anthropic', fiveHour(100), true), sooner], 'id-anthropic', NOW)?.slug, 'anthropic-2');
+  // Nothing any reset brings back: no member at all, and dispatch falls back as for a deleted provider.
+  assert.equal(choosePoolMember([member('anthropic', fiveHour(10), true)], null, NOW), null);
+  assert.equal(choosePoolMember([], null, NOW), null);
+  assert.equal(choosePoolMember([later, member('anthropic-3', fiveHour(20))], later.row.id, NOW)?.slug, 'anthropic-3');
+});
+
+test('the switch line says why the session left its member', () => {
+  const to = { label: 'Work' };
+  const from = { label: 'Personal', enabled: true, refused: false };
+  assert.equal(
+    poolSwitchNotice(to, { ...from, usage: fiveHour(100) }, NOW),
+    "Switched to Work — Personal's 5-hour window is spent",
+  );
+  const weekSpent = reported({
+    five_hour: { utilization: 20, resets_at: IN_TWO_HOURS },
+    seven_day: { utilization: 100, resets_at: IN_THREE_DAYS },
+  });
+  assert.equal(
+    poolSwitchNotice(to, { ...from, usage: weekSpent }, NOW),
+    "Switched to Work — Personal's weekly window is spent",
+  );
+  // A refused key keeps its last snapshot, which can read as barely used: the refusal is the reason.
+  assert.equal(
+    poolSwitchNotice(to, { ...from, usage: fiveHour(3), refused: true }, NOW),
+    "Switched to Work — Personal's key was refused",
+  );
+  assert.equal(poolSwitchNotice(to, { ...from, usage: null, enabled: false }, NOW), 'Switched to Work — Personal is disabled');
+  assert.equal(poolSwitchNotice(to, null, NOW), 'Switched to Work — the previous account is no longer in this pool');
 });
