@@ -205,6 +205,8 @@ func isJobLaunch(jobID string) func(RunEvent) bool {
 // runnerStopSupervisor is one session under runInteractiveSession whose runner stop the test holds.
 type runnerStopSupervisor struct {
 	job  *ClaimedSession
+	pool *sessionPool
+	live *liveSession
 	stop context.CancelFunc // the runner stopping
 	end  context.CancelFunc // the session ending
 	done chan struct{}
@@ -225,7 +227,7 @@ func superviseUntilRunnerStop(t *testing.T, job *ClaimedSession, active bool, ap
 	if !added {
 		t.Fatal("the session was not registered")
 	}
-	s := &runnerStopSupervisor{job: job, stop: stopRunner, end: cancelSession, done: make(chan struct{})}
+	s := &runnerStopSupervisor{job: job, pool: pool, live: live, stop: stopRunner, end: cancelSession, done: make(chan struct{})}
 	execDir := t.TempDir()
 	go func() {
 		defer close(s.done)

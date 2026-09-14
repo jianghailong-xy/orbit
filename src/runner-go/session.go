@@ -575,6 +575,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Baseline for the shared-checkout warning below, taken before this session runs anything
 	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
 	sharedDirt := watchSharedCheckout(job.WT)
+	// The session's background work (newBgTailer below), declared ahead of emitThrough, which
+	// announces its runner-hosted jobs again behind every `resumed` handshake.
+	var bg *bgTailer
 	// emitThrough buffers one event, filed against turnID, if gate still admits it.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		// The one place a turn the engine runs on its own shows up at all. Told before the
@@ -587,7 +590,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				lastErrMu.Unlock()
 			}
 		}
-		gate.run(func() {
+		admitted := gate.run(func() {
 			seqMu.Lock()
 			s := seq
 			seq++
@@ -599,6 +602,16 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			}
 			bufMu.Unlock()
 		})
+		// A `resumed` handshake says this session's engine was replaced, and the control plane empties
+		// the session's running background set on it (runner-api.controller bgReset): the replaced
+		// engine's own shells died with it. The jobs this runner hosts did not, so each one still
+		// running is announced again, behind the handshake that erased it. Every in-place restart says
+		// so through here, the supervisor's own and those inside a provider's loop alike.
+		if admitted && eventType == evSystem {
+			if subtype, _ := payload["subtype"].(string); subtype == "resumed" {
+				bg.announceRunningJobs()
+			}
+		}
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
@@ -659,7 +672,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The pool is told about every shell tailed here: a background shell writes
 	// this session's checkout for as long as it runs, and a merge/commit/GC that
 	// only looked at the turn permit would rewrite the checkout under it.
-	bg := newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
+	bg = newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and

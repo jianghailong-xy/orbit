@@ -177,14 +177,7 @@ func (b *bgTailer) adoptJobs(jobs []*bgJob) {
 				job.kill()
 			}
 		})
-		b.emit(evBackgroundTask, map[string]interface{}{
-			"shellId":    job.id,
-			"toolUseId":  job.id,
-			"status":     bgStatusRunning,
-			"kind":       job.kind,
-			"command":    job.command,
-			"outputPath": job.outputPath,
-		})
+		b.emit(evBackgroundTask, job.runningPayload())
 		b.startTail(job.id, job.id, job.outputPath, false)
 		if job.wakeOnOutput {
 			b.startOutputWakes(job)

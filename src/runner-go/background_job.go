@@ -375,14 +375,7 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	// this event and the terminal one below — see apiserver background-jobs-context.ts. `kind`
 	// rides along as the discriminator: an engine-owned shell has none, and it died with its
 	// engine, so it must never be offered as work to pick back up.
-	b.emit(evBackgroundTask, map[string]interface{}{
-		"shellId":    jobID,
-		"toolUseId":  jobID,
-		"status":     bgStatusRunning,
-		"kind":       spec.Kind,
-		"command":    spec.Command,
-		"outputPath": outputPath,
-	})
+	b.emit(evBackgroundTask, job.runningPayload())
 	// Tails the output for live UI, registers the worktree hold, and — with
 	// engineOwned false — puts this job outside killEngineShells' reach.
 	b.startTail(jobID, jobID, outputPath, false)
@@ -414,6 +407,40 @@ func exitCodeFromWait(cmd *exec.Cmd, waitErr error) int {
 		return exitErr.ExitCode()
 	}
 	return -1
+}
+
+// runningPayload is the `running` background_task a job is reported with while it runs: at its
+// launch, when the runner image that adopted it after a self-update takes it on, and again behind
+// every `resumed` handshake (announceRunningJobs). One shape for all three, since the control plane
+// reads the job off it (runner-api.controller bgRunning, background-jobs-context.ts).
+func (j *bgJob) runningPayload() map[string]interface{} {
+	return map[string]interface{}{
+		"shellId":    j.id,
+		"toolUseId":  j.id,
+		"status":     bgStatusRunning,
+		"kind":       j.kind,
+		"command":    j.command,
+		"outputPath": j.outputPath,
+	}
+}
+
+// announceRunningJobs reports every job this tailer hosts that is still running, as its launch did.
+// emitThrough calls it behind each `resumed` handshake the session sends: on that handshake the
+// control plane empties the session's running background set (runner-api.controller bgReset), since
+// the replaced engine's own shells died with it — and these jobs did not (killEngineShells passes
+// them by).
+//
+// Emitted under b.mu, where a job's end is recorded before it is reported (finishJob), so a job that
+// ends meanwhile is announced before its end is reported or not at all. A `running` report that came
+// after the end would put a job that has finished back in the set.
+func (b *bgTailer) announceRunningJobs() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, job := range b.jobs {
+		if job.status == bgStatusRunning {
+			b.emit(evBackgroundTask, job.runningPayload())
+		}
+	}
 }
 
 // finishJob retires a job whose process has gone: it ends the tail, releases the
