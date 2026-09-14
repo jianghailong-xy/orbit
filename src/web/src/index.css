@@ -10762,6 +10762,121 @@ button.composer-usage:focus-visible {
   }
 }
 
+/* Blockers (mock 6): each open blocker's kind, the work it is about, what it asks for and its
+   files, with the press that resolves it. Drawn only while something is open. */
+.project-blockers {
+  margin-bottom: 14px;
+  padding: 14px 18px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.project-blockers-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.project-blockers-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-blockers-count {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.project-blockers-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.project-blockers-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: start;
+  padding: 10px 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+.project-blockers-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-blockers-headline .ant-tag {
+  margin-inline-end: 0;
+  font-weight: 400;
+}
+.project-blockers-subject {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.project-blockers-action {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.project-blockers-paths {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.project-blockers-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.project-blockers-age {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.project-blockers-resolved {
+  padding: 8px 2px 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.project-blockers-resolved > summary {
+  cursor: pointer;
+}
+.project-blockers-resolved ul {
+  margin: 6px 0 2px;
+  padding-left: 16px;
+}
+.project-blockers-dialog-subject {
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.project-blockers-dialog-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.project-blockers-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.project-blockers-dialog-note {
+  margin-inline-end: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
 /* Work account and human control are one command centre: a flexible evidence card and a stable
    352px action rail. Both stretch to one row, so the overview absorbs the coordinator's height
    instead of leaving dead canvas under the title. Below 920px each gets the full reading width. */

@@ -2718,6 +2718,11 @@ model ProjectBlocker {
 
   resolvedAt DateTime?                 @map("resolved_at")
   resolvedBy ProjectBlockerResolvedBy? @map("resolved_by")
+  /// Why the episode ended: the owner's reason, or what the platform observed (0269). Frozen with
+  /// the resolution by `project_blocker_resolution_final`.
+  resolutionNote   String? @map("resolution_note")
+  /// The account owner who resolved it, on USER resolutions only (0269). No foreign key: history.
+  resolvedByUserId String? @map("resolved_by_user_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

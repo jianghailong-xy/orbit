@@ -558,6 +558,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no DELETE —
   //        the key's `ON DELETE CASCADE` is a referential action on the new table's rows. Nothing reads a
   //        wakeup to allow or refuse a status: a wakeup says when a turn is filed, not what is decided.
+  //   0269 let a project blocker be resolved with a reason: it ALTERs `project_blocker`, a relation
+  //        this file does not preserve, adding the nullable `resolution_note` and
+  //        `resolved_by_user_id`, and it restates
+  //        `project_blocker_resolution_final` (0125) with those two columns among the ones a resolved
+  //        row may not change. Read against every claim above: it does not touch `task`, `project`
+  //        or `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions. The one
+  //        function it replaces is a `project_blocker` trigger function that reads only its own row,
+  //        so it is not another writer of the DONE fence; it creates no table, enum, type or trigger,
+  //        carries no `ALTER TYPE` and no `DROP TYPE`, so all three `task_completion_criterion`
+  //        labels survive, and it has no INSERT, UPDATE or DELETE: both columns start NULL on every
+  //        existing row. Nothing reads them to allow or refuse a status: they say why a blocker
+  //        ended and who ended it.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -589,7 +604,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0261_watch_expiry_delivery',
       '0262_background_job_wake',
       '0263_watch_revoked_unresolvable_delivery',
-      '0264_session_scheduled_wakeup'],
+      '0264_session_scheduled_wakeup',
+      '0269_project_blocker_resolution_note'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

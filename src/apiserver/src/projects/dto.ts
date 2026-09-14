@@ -24,6 +24,7 @@ import {
 import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
+import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
 const PROJECT_AUTOMATION_POLICIES = Object.values(ProjectAutomationPolicy);
@@ -394,6 +395,14 @@ export class DecideCriteriaChangeDto {
   baseSeal!: string;
 
   @IsOptional() @IsString() @MinLength(1) @MaxLength(4_000) note?: string;
+}
+
+/**
+ * The account owner ending one project blocker. The reason is required — a blank one is refused by
+ * the service, which restates this rule — and it is recorded beside who gave it.
+ */
+export class ResolveProjectBlockerDto {
+  @IsString() @MaxLength(MAX_BLOCKER_RESOLUTION_REASON_CHARS) reason!: string;
 }
 
 export class RecordMergeEvidenceDto {

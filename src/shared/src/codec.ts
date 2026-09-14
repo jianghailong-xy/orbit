@@ -203,6 +203,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'requestedBySessionId',
   'decidedByUserId',
   'appliedTaskId',
+  // The account owner who resolved a project blocker (0269), named exactly as `decidedByUserId` is.
+  'resolvedByUserId',
   // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
   // and a person opens it, so it is an address like every other id in an error body.
   'handoffId',

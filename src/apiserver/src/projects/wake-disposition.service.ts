@@ -12,6 +12,7 @@ import {
 } from '../tasks/executable-acceptance-round';
 import { readTaskCriterionChange } from '../tasks/task-completion-criterion-change-guard';
 import {
+  BLOCKER_KIND_FOR,
   type BlockerDisposition,
   type DeliveryObservations,
   blockerDisposition,
@@ -494,7 +495,7 @@ export class WakeDispositionService {
     taskId: string,
     disposition: BlockerDisposition,
   ): Promise<string | null> {
-    const dedupeKey = `${disposition.kind}:${disposition.reason}:${taskId}`;
+    const dedupeKey = dispositionKey(disposition.reason, taskId);
     const detail = {
       reason: disposition.reason,
       source: 'CRITERION_UNLANDED',
@@ -533,6 +534,71 @@ export class WakeDispositionService {
       return rows[0]?.id ?? null;
     }, loggedRetry(this.logger, 'wakeDisposition.raiseBlocker'));
   }
+
+  /**
+   * Resolve the blockers `raiseBlocker` opened whose work has since landed.
+   *
+   * Three of the four reasons are questions about whether a delivery may be merged: an argued
+   * exemption, a moved standard, files nobody asked for. Once a receipt puts the work on the branch
+   * it lands on, the merge they were holding back has happened and they no longer block anything.
+   * A branch git refused is not among them: that ends when a person has untangled the tree.
+   *
+   * "Landed" is `receiptIsLandingEvidence`, the definition every other reader of landing uses, so
+   * this follows it when that definition changes. Rows are chosen by the key `raiseBlocker` writes —
+   * never by `kind`, which the missing-judgment-path signal shares, and never by `detail`, which is
+   * display only. Each is a compare-and-set on the row still being open, so a redelivery, a second
+   * receipt or an owner resolving it first writes nothing twice.
+   */
+  async resolveLandedBlockers(projectIds: ReadonlyArray<string | null | undefined>): Promise<number> {
+    const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (ids.length === 0) return 0;
+    const open = await this.prisma.projectBlocker.findMany({
+      where: {
+        projectId: { in: ids },
+        resolvedAt: null,
+        subjectType: 'TASK',
+        OR: LANDED_WORK_REASONS.map((reason) => ({ dedupeKey: { startsWith: dispositionKey(reason) } })),
+      },
+      select: { id: true, subjectId: true },
+    });
+    if (open.length === 0) return 0;
+    const receipts = await this.prisma.sessionMergeReceipt.findMany({
+      where: { taskId: { in: [...new Set(open.map((blocker) => blocker.subjectId))] } },
+      orderBy: { createdAt: 'asc' },
+      select: { taskId: true, result: true, targetBranch: true },
+    });
+
+    let resolved = 0;
+    for (const blocker of open) {
+      const landed = receipts.find((receipt) => receipt.taskId === blocker.subjectId
+        && receiptIsLandingEvidence(receipt));
+      if (!landed) continue;
+      const now = new Date();
+      const { count } = await this.prisma.projectBlocker.updateMany({
+        where: { id: blocker.id, resolvedAt: null },
+        data: {
+          resolvedAt: now,
+          resolvedBy: 'AUTO',
+          resolutionNote: `the work landed on ${landed.targetBranch}`,
+          updatedAt: now,
+        },
+      });
+      resolved += count;
+    }
+    return resolved;
+  }
+}
+
+/** The reasons whose blocker a landing ends — see `resolveLandedBlockers`. */
+const LANDED_WORK_REASONS: ReadonlyArray<BlockerDisposition['reason']> = [
+  'CRITERION_EXEMPTION_ARGUED',
+  'ACCEPTANCE_STANDARD_MOVED',
+  'OUTSIDE_DECLARED_SCOPE',
+];
+
+/** The open-episode key a reason's blocker is raised under for one task, or the prefix of all of them. */
+function dispositionKey(reason: BlockerDisposition['reason'], taskId = ''): string {
+  return `${BLOCKER_KIND_FOR[reason]}:${reason}:${taskId}`;
 }
 
 /** One executable sentence per reason, addressed to the person the blocker hands the delivery to. */

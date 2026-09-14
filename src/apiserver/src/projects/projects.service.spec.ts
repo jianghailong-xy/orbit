@@ -361,6 +361,8 @@ test('the detail read reports progress without loading the project’s tasks', a
     // The independence lane's second statement: who wrote each criterion, which cannot be a
     // nested select because 0251 puts no foreign key on `definition_id`.
     projectCriteriaAuthorship: { findMany: async () => [] },
+    // The project's blockers, read in one raw statement beside the lanes above.
+    $queryRaw: async () => [],
   });
 
   const project = await service.get(OWNER_ID, PROJECT_ID);
@@ -399,6 +401,8 @@ test('the detail read serves the authored criteria and no second representation 
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
     projectCriteriaAuthorship: { findMany: async () => [] },
+    // The project's blockers, read in one raw statement beside the lanes above.
+    $queryRaw: async () => [],
   });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);
@@ -439,6 +443,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
     // Nobody recorded who wrote this criterion, which is the case the independence lane reports
     // as INDEPENDENT rather than as a fourth kind of doubt — see the assertion below.
     projectCriteriaAuthorship: { findMany: async () => [] },
+    // The project's blockers, read in one raw statement beside the lanes above.
+    $queryRaw: async () => [],
   });
 
   const project: any = await service.get(OWNER_ID, PROJECT_ID);

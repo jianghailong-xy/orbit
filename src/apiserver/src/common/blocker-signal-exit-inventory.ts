@@ -13,7 +13,9 @@
  * This is intentionally an inventory, not a new runtime dispatcher. Some project-blocker kinds
  * survive the deleted coordinator control loop as database-compatible history, and this task does
  * not reintroduce or refactor that loop. `resolveWhen` states the predicate that ends an episode;
- * the service that owns that predicate remains the service that applies it.
+ * the service that owns that predicate remains the service that applies it. Besides its own
+ * predicate, every open `PROJECT_BLOCKER` also ends when the account owner resolves it with a written
+ * reason (`project-blocker-resolution.ts`, resolved_by = USER).
  *
  * SCOPE
  * -----
@@ -104,7 +106,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'AWAITING_USER_APPROVAL',
     resolveWhen:
-      'The referenced approval is approved, denied, expired, or withdrawn, leaving no unanswered approval request for this episode.',
+      'The referenced approval is approved, denied, expired, or withdrawn, leaving no unanswered approval request for this episode. Raised for a delivery that changed files outside its declaration (OUTSIDE_DECLARED_SCOPE), it ends when that task has a merge receipt that is landing evidence.',
   },
   {
     family: 'PROJECT_BLOCKER',
@@ -116,7 +118,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'POLICY_MANUAL_HOLD',
     resolveWhen:
-      'The project is no longer MANUAL, or no eligible task remains held because the work was manually started, settled, cancelled, or otherwise became ineligible.',
+      'The project is no longer MANUAL, or no eligible task remains held because the work was manually started, settled, cancelled, or otherwise became ineligible. Raised for work whose stated criterion moved after it was declared (ACCEPTANCE_STANDARD_MOVED), it ends when that task has a merge receipt that is landing evidence.',
   },
   {
     family: 'PROJECT_BLOCKER',
@@ -170,7 +172,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'HUMAN_DECISION_REQUIRED',
     resolveWhen:
-      'The stored episode resolves when the task reaches a terminal status; the evidence-bound projection that used to raise it was removed with the judgment machinery on 2026-09-02.',
+      'The stored episode resolves when the task reaches a terminal status; the evidence-bound projection that used to raise it was removed with the judgment machinery on 2026-09-02. Raised for a delivery that argues a criterion does not apply (CRITERION_EXEMPTION_ARGUED), it ends when that task has a merge receipt that is landing evidence.',
   },
   {
     family: 'PROJECT_BLOCKER',

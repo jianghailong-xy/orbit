@@ -25,6 +25,7 @@ import {
   ProjectAcceptanceCard,
   type AcceptanceCriterionItem,
 } from '../components/ProjectAcceptanceCard';
+import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import {
@@ -143,6 +144,8 @@ interface ProjectDetail extends Project {
    *  card draws its rows from this same document; the status press reads it for the evidence it
    *  puts in front of somebody about to claim the goal is met. */
   acceptanceCriteriaItems?: ProjectCriterionStanding[];
+  /** Every open blocker and the latest resolved ones. Absent from a server that predates the read. */
+  blockers?: ProjectBlockers;
 }
 
 const STATUS_COLOR: Record<Project['status'], string> = {
@@ -1080,6 +1083,11 @@ export function ProjectDetailPage() {
               description={remove.error.message}
             />
           ) : null}
+
+          {/* What is standing in this project's way, above everything that describes it: each open
+              blocker's kind, what it asks for and its files, and the press that resolves it. Drawn
+              from this same document, and not at all while nothing is open. */}
+          <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
 
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On

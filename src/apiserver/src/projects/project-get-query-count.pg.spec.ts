@@ -64,7 +64,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Seventeen statements, and every one of them is per RELATION rather than per row:
+ * Eighteen statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally (`task.groupBy`);
@@ -72,7 +72,9 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      verifications pointed at them, their newest completion evidence, and that evidence's
  *      decisions;
  *   3  the landing lane — its criteria, their serving tasks, and those tasks' merge receipts;
- *   4  the independence lane, which is the one that is not shaped like the other two.
+ *   4  the independence lane, which is the one that is not shaped like the other two;
+ *   1  the project's blockers — every open one and the latest resolved, each with the title of the
+ *      task it is about, joined in the same statement (`project-blocker-resolution.ts`).
  *
  * Measured, not asserted from the code: the derivations are each written as ONE `findMany` (two,
  * for the lane below), and Prisma resolves a nested `select` with one statement per relation
@@ -108,7 +110,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 17;
+const STATEMENTS_PER_READ = 18;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,
@@ -261,7 +263,7 @@ test('the project detail read costs the same number of statements at either size
     // number of the wrong things would satisfy every assertion after this one.
     const { sent } = await measure(large);
     for (const table of ['"project"', '"task"', '"project_acceptance_criterion_definition"',
-      '"session_merge_receipt"', '"project_criteria_authorship"']) {
+      '"session_merge_receipt"', '"project_criteria_authorship"', '"project_blocker"']) {
       assert.ok(sent.some((text) => text.includes(table)),
         `the project detail read must reach ${table}; it sent:\n${listing(sent)}`);
     }

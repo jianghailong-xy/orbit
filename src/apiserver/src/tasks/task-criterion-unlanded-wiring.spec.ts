@@ -70,6 +70,7 @@ function routerOver(
       openIfDecisive: async () => null,
       chooseAction: async () => null,
       raiseBlockerIfNeeded: async () => null,
+      resolveLandedBlockers: async () => 0,
     } as unknown as WakeDispositionService,
     unlanded,
   );

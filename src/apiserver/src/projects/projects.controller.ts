@@ -24,6 +24,7 @@ import {
   RebindProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
+  ResolveProjectBlockerDto,
   UpdateProjectDto,
 } from './dto';
 import { SessionAttemptService } from './session-attempt.service';
@@ -401,6 +402,24 @@ export class ProjectsController {
     @Body() dto: DecideCriteriaChangeDto,
   ) {
     return this.projects.decideCriteriaChange(user.userId, id, intentId, dto);
+  }
+
+  /**
+   * End one of this project's blockers, saying why it no longer blocks.
+   *
+   * The owner's, and only with a reason: the row records resolved_by = USER, the reason and who gave
+   * it. Any kind can be ended here. A blocker that is already resolved answers 409
+   * `BLOCKER_ALREADY_RESOLVED` and keeps the resolution it has — 0125's trigger, widened by 0269,
+   * refuses any rewrite of it as well.
+   */
+  @Post(':id/blockers/:blockerId/resolve')
+  resolveBlocker(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('blockerId', PublicIdPipe) blockerId: string,
+    @Body() dto: ResolveProjectBlockerDto,
+  ) {
+    return this.projects.resolveBlocker(user.userId, id, blockerId, dto.reason);
   }
 
   /**

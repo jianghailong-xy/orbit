@@ -108,6 +108,7 @@ import {
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
 import { type CriterionLanding, readCriterionLanding } from './project-criterion-landing';
+import { readProjectBlockers, resolveProjectBlocker } from './project-blocker-resolution';
 import {
   readCriterionIndependence,
   type CriterionIndependenceAnswer,
@@ -2180,7 +2181,7 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, satisfaction, landing, independence] = await Promise.all([
+    const [byStatus, satisfaction, landing, independence, blockers] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId: id },
@@ -2202,6 +2203,9 @@ export class ProjectsService {
       // statements the pair costs are one per relation, counted and argued one by one in
       // `project-get-query-count.pg.spec.ts`.
       readCriterionIndependence(this.prisma, ownerId, id),
+      // What is standing in this project's way and who has to act: every open blocker with its
+      // kind, what it asks for and its detail, and the latest resolved. One statement.
+      readProjectBlockers(this.prisma, ownerId, id),
     ]);
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
     const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
@@ -2227,7 +2231,13 @@ export class ProjectsService {
         // that will not settle is shown which criterion, which conversation, and what to do.
         ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
+      blockers,
     };
+  }
+
+  /** The account owner ending one of this project's blockers with a written reason. */
+  resolveBlocker(ownerId: string, projectId: string, blockerId: string, reason: unknown) {
+    return resolveProjectBlocker(this.prisma, { ownerId, projectId, blockerId, reason });
   }
 
   /**

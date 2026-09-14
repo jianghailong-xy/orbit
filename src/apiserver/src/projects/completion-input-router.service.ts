@@ -303,6 +303,9 @@ export class CompletionInputRouter {
         ...(routed.blockerKind ? { blockerKind: routed.blockerKind } : {}),
       });
     }
+    // Last, and for every project named rather than only those with a fact left: a criterion whose
+    // work just landed derives no unlanded fact at all, and that is exactly when its blockers end.
+    await this.disposition.resolveLandedBlockers(projectIds);
     return deliveries;
   }
 }
