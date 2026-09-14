@@ -730,6 +730,33 @@ test('a change whose hint meets a landing that read the rows before it is still 
   console.log(`HINT-NOTE ${JSON.stringify(latencyMs)}`);
 });
 
+test('a hint that finds its watch held asks again for what the holder was: a landing older than the hint leaves the watch due, a claim leaves it claimed', { skip, timeout: 60_000 }, async () => {
+  const { evaluator } = replica(); // never started: nothing but this hint moves either watch
+  const task = await insertTask('OPEN');
+  const landed = await insertWatch([{ kind: 'TASK', id: task }], all('TASK_TERMINAL'));
+  const claimed = await insertWatch([{ kind: 'TASK', id: task }], all('TASK_TERMINAL'));
+  for (const id of [landed, claimed]) assert.equal((await evaluator.evaluate(id)).outcome, 'SCHEDULED');
+
+  // Each row is held by a transaction that writes what its real counterpart writes, and began before the hint:
+  // a landing moves the schedule and `last_evaluated_at`; a claim moves the schedule by its lease and nothing else.
+  const releaseLanding = await holdRow(
+    `UPDATE "watch" SET "last_evaluated_at" = now(), "next_evaluate_at" = LEAST(now() + interval '30 minutes', "expires_at") WHERE "id" = '${landed}'`,
+  );
+  const releaseClaim = await holdRow(
+    `UPDATE "watch" SET "next_evaluate_at" = LEAST(now() + interval '1 minute', "expires_at") WHERE "id" = '${claimed}'`,
+  );
+  const since = await dbNow();
+  const hinting = evaluator.hint('TASK', [task]);
+  await eventually('the hint to find both watches held', () => startedSince(MARK_DUE, since), (n) => n > 0);
+  await releaseLanding();
+  await releaseClaim();
+  const moved = await hinting;
+
+  assert.equal((await readWatch(landed)).due, true, 'a watch whose landing began before the hint was left to its sweep');
+  assert.equal((await readWatch(claimed)).due, false, 'a watch claimed while the hint was held off was made due again beside its claim');
+  assert.equal(moved, 1);
+});
+
 test('an expired lease is taken over, and the stalled holder lands nothing a second time', { skip, timeout: 120_000 }, async () => {
   const holder = replica({ leaseMs: 2_000 }).evaluator;
   const taker = replica({ leaseMs: 2_000 }).evaluator;

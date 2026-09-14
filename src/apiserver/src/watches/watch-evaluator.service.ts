@@ -188,6 +188,15 @@ interface WatchDecision {
   expirySnapshot: Record<string, unknown> | null;
 }
 
+/** One watch a hint's ask named: whether it moved, whether it was free to, and what a later ask compares (see `markDue`). */
+interface HintedWatch {
+  id: string;
+  pulled: boolean;
+  free: boolean;
+  seen: string | null;
+  at: string;
+}
+
 @Injectable()
 export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('WatchEvaluator');
@@ -342,48 +351,62 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
    * as soon as that moved anything; returns how many moved. A watch already due is not written again,
    * and a terminal one has no schedule to move.
    *
-   * A watch another transaction holds — a landing above all, or a claim, a transition, another hint —
-   * is passed over and asked about again after a pause, with no connection held in between, until it
-   * is found free. Waiting for the row instead would hold a pooled connection for as long as the holder
-   * runs, and a landing parked on a lock runs for as long as that lock is held: a burst of hints would
-   * hold the replica's whole pool. Asking again is what keeps the hint: a landing that read its rows
-   * before the change this hint announces lands a schedule a reconciliation period away, and only the
-   * watch being made due after that landing catches the change sooner. The asking stops when the loop
-   * stops, and once a reconciliation period has passed, by which time the sweep has come round.
+   * A watch another transaction holds — a landing, a claim, a transition, another hint — is passed over
+   * and asked about again after a pause, with no connection held in between, until it is found free.
+   * Waiting for the row instead would hold a pooled connection for as long as the holder runs, and a
+   * landing parked on a lock runs for as long as that lock is held: a burst of hints would hold the
+   * replica's whole pool. Asking again is what keeps the hint, and what it asks is whether the holder
+   * was a landing that began before this hint's first ask — one that may have read its rows before the
+   * change the hint announces, and so lands a schedule a reconciliation period away. Only then is the
+   * watch made due: its `last_evaluated_at` has moved since that first ask, to a time no later than it.
+   * Any other holder left nothing to catch up on — a claim or a hint is followed by an evaluation that
+   * reads the rows afresh, and a landing that began later already did — and making the watch due again
+   * would only run a second evaluation beside that one. The asking stops when the loop stops, and once
+   * a reconciliation period has passed, by which time the sweep has come round.
    */
   async markDue(kind: WatchTargetKind, resourceIds: readonly string[]): Promise<number> {
     if (resourceIds.length === 0) return 0;
-    let candidates = Prisma.sql`
-      SELECT "watch_id" FROM "watch_target"
+    let asked: Prisma.Sql = Prisma.sql`
+      SELECT DISTINCT "watch_id" AS "id", NULL::text AS "seen" FROM "watch_target"
       WHERE "target_kind" = ${kind} AND "target_resource_id" = ANY(${[...resourceIds]}::uuid[])`;
+    /** The first ask's clock, and — per watch it found held — the `last_evaluated_at` it read: null until then. */
+    let firstAskAt: string | null = null;
     const startedAt = Date.now();
     let pulled = 0;
     for (let pause = WATCH_HINT_RETRY_MS; ; pause = Math.min(pause * 2, WATCH_HINT_RETRY_MAX_MS)) {
-      const hinted = await this.prisma.$queryRaw<Array<{ id: string; pulled: boolean }>>`
-        WITH "hinted" AS (
+      const hinted: HintedWatch[] = await this.prisma.$queryRaw<HintedWatch[]>`
+        WITH "asked" AS (${asked}), "hinted" AS (
+          SELECT w."id", w."last_evaluated_at"::text AS "last", a."seen" FROM "watch" w JOIN "asked" a ON a."id" = w."id"
+          WHERE w."state" = 'ACTIVE' AND w."next_evaluate_at" > now()
+        ), "free" AS (
           SELECT "id" FROM "watch"
-          WHERE "id" IN (${candidates}) AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
+          WHERE "id" IN (SELECT "id" FROM "hinted") AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
+          FOR UPDATE SKIP LOCKED
         ), "pulled" AS (
           UPDATE "watch" AS w
           SET "next_evaluate_at" = now()
-          FROM (
-            SELECT "id" FROM "watch"
-            WHERE "id" IN (SELECT "id" FROM "hinted") AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
-            FOR UPDATE SKIP LOCKED
-          ) AS free
-          WHERE w."id" = free."id"
+          FROM "hinted" AS h
+          WHERE w."id" = h."id" AND w."id" IN (SELECT "id" FROM "free")
+            AND (${firstAskAt}::timestamptz IS NULL OR (w."last_evaluated_at" IS DISTINCT FROM h."seen"::timestamptz
+                                                        AND w."last_evaluated_at" <= ${firstAskAt}::timestamptz))
           RETURNING w."id"
         )
-        SELECT "id", "id" IN (SELECT "id" FROM "pulled") AS "pulled" FROM "hinted"`;
-      const held = hinted.filter((watch) => !watch.pulled).map((watch) => watch.id);
-      if (held.length < hinted.length) {
-        pulled += hinted.length - held.length;
+        SELECT h."id", h."id" IN (SELECT "id" FROM "pulled") AS "pulled", h."id" IN (SELECT "id" FROM "free") AS "free",
+               CASE WHEN ${firstAskAt}::text IS NULL THEN h."last" ELSE h."seen" END AS "seen",
+               coalesce(${firstAskAt}::text, now()::text) AS "at"
+        FROM "hinted" AS h`;
+      const held: HintedWatch[] = hinted.filter((watch) => !watch.free);
+      const moved = hinted.filter((watch) => watch.pulled).length;
+      if (moved > 0) {
+        pulled += moved;
         this.kick();
       }
       if (held.length === 0 || Date.now() - startedAt + pause > this.reconcileIntervalMs) return pulled;
       await new Promise((resolve) => setTimeout(resolve, pause).unref());
       if (this.loop === 'STOPPED') return pulled;
-      candidates = Prisma.sql`SELECT unnest(${held}::uuid[])`;
+      firstAskAt = held[0].at;
+      asked = Prisma.sql`
+        SELECT * FROM unnest(${held.map((watch) => watch.id)}::uuid[], ${held.map((watch) => watch.seen)}::text[]) AS h("id", "seen")`;
     }
   }
 
