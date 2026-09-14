@@ -54,7 +54,9 @@ import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { SameOriginLink } from './SameOriginLink';
+import { WatchWakeCard } from './WatchWakeCard';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
+import { parseWatchWake } from '../lib/watches';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -832,9 +834,24 @@ function StandaloneResult({ node }: { node: ResultNode }) {
 // which resolves anything folded inside one (a tool_result, a grouped run, a sub-workspace's events)
 // to the card that contains it.
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
+  const exporting = useContext(ExportCtx);
   switch (node.kind) {
-    case 'user':
-      return <UserBubble node={node} />;
+    case 'user': {
+      // A turn a watch queued is the watch's to show, not a message the user typed.
+      const wake = parseWatchWake(node.text);
+      return wake ? (
+        <WatchWakeCard
+          wake={wake}
+          text={node.text}
+          seq={node.seq}
+          ts={node.ts}
+          linkable={!exporting}
+          undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+        />
+      ) : (
+        <UserBubble node={node} />
+      );
+    }
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
     case 'thinking':

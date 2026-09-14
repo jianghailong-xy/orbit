@@ -11487,3 +11487,615 @@ button.composer-usage:focus-visible {
     min-width: 0;
   }
 }
+
+/* ── Watches (docs/watch-contract.md): the Following page, watch cards, the session and task
+   relations, and the transcript card for a turn a watch queued. A watch is not a process, so none of
+   this borrows the Background processes tray's look (contract §9.2). */
+/* One type size and one link treatment for every watch surface, which otherwise inherit whatever the
+   page around them set. */
+.watch-card,
+.watch-row,
+.watch-wake {
+  font-size: 13px;
+  line-height: 1.45;
+}
+.watch-target,
+.watch-observer,
+.watch-row-open,
+.watch-relations-more,
+.watch-wake a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.watch-target:hover .watch-target-name,
+.watch-observer:hover,
+.watch-row-open:hover,
+.watch-relations-more:hover,
+.watch-wake a:hover {
+  text-decoration: underline;
+}
+.following-page {
+  max-width: 920px;
+}
+.following-head {
+  margin-bottom: 14px;
+}
+.following-sub {
+  margin: 4px 0 0;
+  color: var(--text-3);
+}
+.following-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--fill-inset);
+}
+.following-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+.following-tab.is-on {
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.following-count {
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.following-count.is-alert {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--error);
+  color: #fff;
+}
+.following-empty {
+  padding: 32px 16px;
+  color: var(--text-3);
+  text-align: center;
+}
+.following-note {
+  margin: 8px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.watch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.watch-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+.watch-card.tone-error {
+  border-color: var(--error-border);
+}
+.watch-card.tone-warning {
+  border-color: var(--warning-border);
+}
+.watch-card.is-focused {
+  box-shadow: 0 0 0 2px var(--brand-border);
+}
+.watch-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px 8px;
+}
+.watch-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  margin-top: 1px;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.watch-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.watch-state.tone-live {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.watch-state.tone-paused {
+  border-color: var(--border);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+.watch-state.tone-met {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.watch-state.tone-ended {
+  border-color: var(--border-subtle);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+}
+.watch-state.tone-failed {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.watch-condition {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.watch-age {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.watch-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 14px 10px;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.watch-editor .watch-problem {
+  margin: 0;
+}
+.watch-problem strong {
+  font-size: 13px;
+}
+.watch-problem span {
+  color: var(--text-2);
+}
+.watch-problem.tone-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error);
+}
+.watch-problem.tone-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.watch-facts {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 5px 12px;
+  margin: 0;
+  padding: 0 14px 10px;
+}
+.watch-facts dt {
+  padding-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.watch-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-1);
+}
+.watch-targets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+}
+.watch-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--brand);
+}
+.watch-target-kind {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+}
+.watch-target-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-target-state {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.watch-target.is-satisfied .watch-target-state {
+  color: var(--success);
+}
+.watch-target.is-gone .watch-target-name {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.watch-more,
+.watch-details-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.watch-more:hover,
+.watch-details-toggle:hover {
+  color: var(--brand);
+}
+.watch-muted {
+  color: var(--text-3);
+}
+.watch-soon {
+  color: var(--warning);
+  font-weight: 600;
+}
+.watch-bar {
+  display: inline-block;
+  width: 90px;
+  height: 6px;
+  margin-right: 8px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--fill-inset);
+  vertical-align: middle;
+}
+.watch-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--success-solid);
+}
+.watch-delivery-state.is-delivered {
+  color: var(--success);
+}
+.watch-delivery-state.is-dead_letter {
+  color: var(--error);
+}
+.watch-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+.watch-spacer {
+  flex: 1;
+}
+.watch-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.watch-details-section h4 {
+  margin: 0 0 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.watch-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.watch-delivery-error {
+  margin-top: 2px;
+  color: var(--error);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  word-break: break-word;
+}
+.watch-details-id {
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.watch-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ant-popover .watch-row-list {
+  width: min(460px, 80vw);
+}
+.watch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.watch-row.tone-error {
+  border-color: var(--error-border);
+}
+.watch-row.tone-warning {
+  border-color: var(--warning-border);
+}
+.watch-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.watch-row-condition {
+  overflow: hidden;
+  color: var(--text-1);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-row-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.watch-row-open {
+  flex: none;
+  font-size: 12px;
+}
+.watch-relations-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.watch-relations-more {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.watch-badges {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+.watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.watch-chip.is-quiet,
+.watch-chip.is-action {
+  border-color: var(--border);
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+.watch-chip.is-action:hover {
+  color: var(--brand);
+}
+.watch-strip {
+  margin: 0 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-left: 3px solid var(--brand);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.watch-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 10px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.watch-strip-row:hover {
+  background: var(--bg-hover);
+}
+.watch-strip-ico {
+  flex: none;
+  color: var(--brand);
+}
+.watch-strip-title {
+  flex: none;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.watch-strip-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watch-strip-caret {
+  flex: none;
+  color: var(--text-3);
+}
+.watch-strip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  padding: 8px;
+  overflow: auto;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+/* Natural height inside the height-capped list, as .bg-shell does: flex-shrink would otherwise squash
+   an opened card to fit and clip its details with no scrollbar to reach them. */
+.watch-strip-list .watch-card {
+  flex: none;
+}
+.watch-wake-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+.watch-wake {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+.watch-wake.is-expired,
+.watch-wake.is-revoked,
+.watch-wake.is-unresolvable {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.watch-wake-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-weight: 600;
+}
+.watch-wake.is-expired .watch-wake-title,
+.watch-wake.is-revoked .watch-wake-title,
+.watch-wake.is-unresolvable .watch-wake-title {
+  color: var(--warning);
+}
+.watch-wake-why {
+  margin: 3px 0 6px;
+}
+.watch-wake-changed {
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 12px;
+  list-style: none;
+}
+.watch-wake-meta {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.watch-wake-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.watch-wake-links {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.watch-wake-raw {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.watch-wake-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.watch-wake-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.watch-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.watch-editor-label {
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.watch-editor-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.watch-editor-option {
+  display: block;
+  color: var(--text-1);
+}
+.watch-editor-hint {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.watch-editor-aggregation {
+  margin-bottom: 8px;
+}
+.watch-editor-fixed {
+  color: var(--text-1);
+}
+.watch-editor-session {
+  width: 100%;
+  margin-top: 8px;
+}
+@media (max-width: 600px) {
+  .watch-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .watch-facts dd {
+    margin-bottom: 6px;
+  }
+  .watch-card-head {
+    flex-wrap: wrap;
+  }
+}

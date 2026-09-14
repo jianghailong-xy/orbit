@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { EventSearchResponse, SessionSearchResponse } from '@orbit/shared';
+import type { EventSearchResponse, SessionSearchResponse, WatchView } from '@orbit/shared';
 import {
   api,
   getSession,
@@ -556,4 +556,32 @@ export const pendingCriteriaDecisionsQuery = (projectId: string) =>
       api<PendingCriteriaDecisionQueue>(
         `/projects/${encodeURIComponent(projectId)}/acceptance/criteria-decisions/pending`,
       ),
+  });
+
+/**
+ * The owner's watches, newest first — `GET /watches`, which answers with at most 100. The Following
+ * page, every watch card and the Following / Followed by relations on sessions and tasks are all drawn
+ * from this one read, so a watch reads the same wherever it is shown. The control-plane stream nudges
+ * it on the session, approval and task events that can move a watch (useControlPlane); the slow poll
+ * is for what no event reports — a deadline passing, or a delivery settling in a server worker.
+ */
+export const watchesQuery = () =>
+  queryOptions({
+    queryKey: ['watches'] as const,
+    queryFn: () => api<WatchView[]>('/watches'),
+    refetchInterval: 60_000,
+  });
+
+/**
+ * A task as its list row reads it — the light read that names a watch's target. Its own key root,
+ * not under `['task']`: every `task.*` event refetches that prefix, and a watch only needs the name.
+ */
+export const taskRowQuery = (taskId: string) =>
+  queryOptions({
+    queryKey: ['task-row', taskId] as const,
+    queryFn: () =>
+      api<{ id: string; title?: string; status?: string }>(
+        `/tasks/${encodeURIComponent(taskId)}/row`,
+      ),
+    staleTime: 5 * 60_000,
   });

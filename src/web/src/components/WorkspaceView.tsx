@@ -133,6 +133,7 @@ import {
   sameRuntimeChoices,
 } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
+import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
@@ -5443,6 +5444,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {!composing && (
                 <CoordinatorBadge projectId={selectedSession?.projectId} />
               )}
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
+                <SessionWatchBadges sessionId={selectedId} />
+              )}
             </div>
             <div className="workspace-sub">{headSub}</div>
           </div>
@@ -5949,6 +5953,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             )}
           </div>
         )}
+        {/* What this session is waiting on: live watches it observes. A watch waits on the server,
+            not in a process, so it gets its own strip rather than a row in the tray below
+            (docs/watch-contract.md §9.2). Hidden when there are none. */}
+        {selectedId && !selectedTrashed && <SessionWatchStrip sessionId={selectedId} />}
         {/* Background processes the workspace launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (

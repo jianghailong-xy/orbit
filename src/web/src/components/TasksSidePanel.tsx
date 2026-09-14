@@ -5,6 +5,7 @@ import {
   CheckOutlined,
   DesktopOutlined,
   DisconnectOutlined,
+  EyeOutlined,
   FolderOutlined,
   InboxOutlined,
   LoadingOutlined,
@@ -102,6 +103,8 @@ const TOP: TopNavItem[] = [
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
+  // What you and your sessions are waiting on: watches, which wait on the server, not in a process.
+  { key: 'following', icon: <EyeOutlined />, label: 'Following' },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.

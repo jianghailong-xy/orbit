@@ -21,6 +21,7 @@ import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
+import { FollowingPage } from './pages/FollowingPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -166,6 +167,16 @@ export function App() {
               }
             />
             <Route path="admin/providers" element={<Navigate to="/providers" replace />} />
+            {/* Everything this account follows: watches, filed Active / Needs attention / Triggered
+                history. `?watch=<id>` opens one watch's card. */}
+            <Route
+              path="following"
+              element={
+                <DocView>
+                  <FollowingPage />
+                </DocView>
+              }
+            />
             <Route
               path="projects"
               element={

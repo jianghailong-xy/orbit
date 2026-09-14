@@ -15,6 +15,11 @@ const REFRESH_DEBOUNCE_MS = 500;
 // already declares 5s of staleness acceptable there, so refetching it faster than that is strictly
 // more work than the poll this stream replaced.
 const LISTS_MIN_INTERVAL_MS = 5_000;
+// How long after a nudge the watch list is read a second time. No event names a watch: the evaluator
+// moves one by reading the database AFTER the session or task event that hinted at it
+// (docs/watch-contract.md §8), so the refetch riding the burst mostly reads the watch just before it
+// lands — a settled turn is matched in about a second and a half.
+const WATCH_SETTLE_MS = 3_000;
 // The server pings ~every 20s (EventsController keepalive); 45s of total silence means the socket
 // went half-dead without firing onerror. EventSource has no read timeout, so we watch for it.
 const WATCHDOG_SILENCE_MS = 45_000;
@@ -45,6 +50,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let listsTimer: ReturnType<typeof setTimeout> | undefined;
+    let watchesTimer: ReturnType<typeof setTimeout> | undefined;
     let listsRefetchedAt = 0;
     let stopped = false;
     let dropped = false;
@@ -128,6 +134,16 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // itself, and is far too expensive to re-run on every status change.
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     };
+    // The owner's watches: re-read with the burst, then once more WATCH_SETTLE_MS later for the
+    // evaluation that burst set off. A later burst restarts that second read instead of adding one.
+    const refetchWatches = (): void => {
+      void qc.invalidateQueries({ queryKey: ['watches'] });
+      if (watchesTimer) clearTimeout(watchesTimer);
+      watchesTimer = setTimeout(() => {
+        watchesTimer = undefined;
+        void qc.invalidateQueries({ queryKey: ['watches'] });
+      }, WATCH_SETTLE_MS);
+    };
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
       tasks: refetchTasks,
@@ -135,6 +151,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       tags: refetchTags,
       providers: refetchProviders,
       decisions: refetchPendingDecisions,
+      watches: refetchWatches,
     };
     // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
     // delta), so this is a plain type-prefix → group map. Note the pairs: a workspace rename and a
@@ -142,11 +159,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // held criteria proposal keeps the default for the same reason, since its coordinator's row
     // counts it in pendingApprovals.
     const groupsFor = (type: string): string[] => {
-      if (type === 'task.changed') return ['tasks', 'decisions'];
+      if (type === 'task.changed') return ['tasks', 'decisions', 'watches'];
       if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
       if (type.startsWith('workspace.')) return ['workspaces', 'sessions'];
       if (type.startsWith('tag.')) return ['tags', 'sessions'];
       if (type.startsWith('provider.')) return ['providers'];
+      // What a watch's leaves read besides a task's status: a session's status and filing, and its
+      // pending approvals (docs/watch-contract.md §2.2).
+      if (type.startsWith('session.') || type.startsWith('approval.')) return ['sessions', 'watches'];
       return ['sessions'];
     };
     const pending = new Set<string>();
@@ -227,6 +247,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
       if (listsTimer) clearTimeout(listsTimer);
+      if (watchesTimer) clearTimeout(watchesTimer);
       es?.close();
     };
   }, [qc]);

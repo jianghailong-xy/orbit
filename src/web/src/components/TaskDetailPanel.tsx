@@ -45,6 +45,7 @@ import { MD } from './Transcript';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
+import { TaskFollowedBy } from './WatchRelations';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -1129,6 +1130,9 @@ export function TaskDetailPanel({
               rather than about an attempt at it — and because a run of a task filed under the
               wrong goal is the thing this section exists to make catchable before it happens. */}
           <TaskAttributionCard taskId={taskId} />
+
+          {/* Who is waiting on this task: the watches that name it, and the way to follow it. */}
+          <TaskFollowedBy taskId={taskId} />
 
           <section className="tdp-section">
             <div className="tdp-section-title">Runs ({sessions.length})</div>
