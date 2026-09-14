@@ -55,6 +55,9 @@ test('workspace counts separate queued activity from Session-list spinner work',
     projectCriteriaDecision: { findMany: async () => [] },
     // The other kind of owner decision, evidence waiting on the coordinator's card: none here.
     task: { findMany: async () => [] },
+    // And the third, an OWNER_CONFIRMED task's run waiting on its owner in the task's own session:
+    // none here either, so every `needsYou` below is still a statement about the first two.
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

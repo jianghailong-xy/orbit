@@ -355,12 +355,18 @@ describe('what a press sends', () => {
       </QueryClientProvider>,
     );
     await press(buttonIn(scope, OWNER_CONFIRM_ACTION));
-    expect(apiMock).toHaveBeenCalledTimes(1);
-    expect(apiMock).toHaveBeenCalledWith(`/tasks/${TASK_ID}/owner-confirmation`, {
+    // One press is one decision...
+    const posts = apiMock.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === 'POST',
+    );
+    expect(posts).toEqual([[`/tasks/${TASK_ID}/owner-confirmation`, {
       method: 'POST',
       body: { decision: 'CONFIRM', requestId: REQUEST_ID },
-    });
+    }]]);
+    expect(apiMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+    // ...and the read the card is drawn from is asked again once the door has answered.
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['task', TASK_ID] });
+    expect(apiMock.mock.calls.slice(1).map(([path]) => path)).toContain(`/tasks/${TASK_ID}/owner-confirmation`);
   });
 });
 

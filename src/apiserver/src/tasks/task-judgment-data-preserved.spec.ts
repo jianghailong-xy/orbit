@@ -588,6 +588,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        labels survive, and it has no INSERT, UPDATE or DELETE: both columns start NULL on every
   //        existing row. Nothing reads them to allow or refuse a status: they say why a blocker
   //        ended and who ended it.
+  //   0267 adds OWNER_CONFIRMED, the fourth completion criterion: the account owner's own decision,
+  //        recorded from the app, is what settles it. Read against every claim above: it carries an
+  //        `ALTER TYPE "task_completion_criterion" ADD VALUE`, which adds a fourth label and can
+  //        remove none, so all three labels this file keeps survive beside it; there is no
+  //        `DROP TYPE`. It creates one enum of its own (`task_owner_decision_value`) and two tables
+  //        of its own, `task_owner_confirmation_request` and `task_owner_decision`, each with a
+  //        composite foreign key to `task`("id", "owner_id") — being pointed at is not being
+  //        written, so `task` is neither altered nor written — and indexes and CHECKs on the new
+  //        tables only. There is no `ALTER TABLE` at all, so `project`,
+  //        `project_acceptance_criterion_definition`, the 0177 pair, `task_executable_acceptance_pair`
+  //        and every stored row are out of its reach, and no criterion's `text` or
+  //        `verification_method` can move by one byte. It names no `project_acceptance_*` object.
+  //        It IS a writer of the DONE fence, like 0230 and 0239: its one `CREATE OR REPLACE
+  //        FUNCTION` is `task_done_canonical_writer_fence`, restating every lane 0228, 0230 and 0239
+  //        wrote line for line and adding one — the owner's newest `task_owner_decision` is a
+  //        CONFIRM — plus the HINT that names it; it touches none of the other five preserved
+  //        triggers/functions and creates no trigger. It has no INSERT, no row UPDATE and no DELETE:
+  //        both tables start empty. Like 0239's lane, the new one only READS a row — the owner's
+  //        decision — to admit a DONE that decision derives; nothing reads a preserved row to allow
+  //        or refuse a status.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -621,6 +641,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0263_watch_revoked_unresolvable_delivery',
       '0264_session_scheduled_wakeup',
       '0266_coordinator_no_progress_retirement',
+      '0267_task_owner_confirmation',
       '0269_project_blocker_resolution_note'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

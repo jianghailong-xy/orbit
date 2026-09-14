@@ -41,9 +41,10 @@ type Row = {
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
 // the mock ignores `select` and returns the whole row, which satisfies both selects),
-// approval.count, project.findMany (no project is coordinated from these conversations, so the
-// owner-decision half of the count is zero), and the $executeRawUnsafe that publish() fires for
-// the cross-replica NOTIFY.
+// approval.count, project.findMany (no project is coordinated from these conversations) and
+// taskOwnerConfirmationRequest.findMany (no OWNER_CONFIRMED run is waiting on its owner in them),
+// so the owner-decision half of the count is zero, and the $executeRawUnsafe that publish() fires
+// for the cross-replica NOTIFY.
 function fakePrisma(
   rows: Record<string, Row>,
   pendingApprovals = 0,
@@ -57,6 +58,7 @@ function fakePrisma(
     // coordinate no project, so the second half contributes nothing and the numbers below are
     // still statements about the first.
     project: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 
@@ -176,7 +178,9 @@ test('an APPROVAL_REQUEST maps to approval.requested with the live pending count
 
   assert.equal(got.length, 1);
   assert.equal(got[0].type, 'approval.requested');
-  assert.deepEqual(got[0].data, { approvalId: 'ap1', pendingApprovals: 2 });
+  // The kind rides with the count because clients overwrite the row with both: a blocked tool call
+  // is counted here, so this row says "approval", not "Waiting for your confirmation".
+  assert.deepEqual(got[0].data, { approvalId: 'ap1', pendingApprovals: 2, waitingKind: null });
 });
 
 test('transcript events (text deltas) are dropped, not forwarded', async () => {

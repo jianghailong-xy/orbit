@@ -71,9 +71,11 @@ test('UI list and detail payloads include the same derived capabilities', async 
       }),
     },
     // The list's `pendingApprovals` is blocked tool calls plus the owner decisions each row is the
-    // surface for (`projects/owner-decision-signal.ts`). This row coordinates nothing, so the
-    // second half is empty and the capabilities below are unaffected either way.
+    // surface for (`projects/owner-decision-signal.ts`). This row coordinates nothing and no
+    // OWNER_CONFIRMED run is waiting on it, so the second half is empty and the capabilities below
+    // are unaffected either way.
     project: { findMany: async () => [] },
+    taskOwnerConfirmationRequest: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

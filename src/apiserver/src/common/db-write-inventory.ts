@@ -695,6 +695,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion; invalid ownership/input is 400/404 and conflicting import identity is 409.',
   },
   {
+    at: 'tasks/task-owner-confirmation.service.ts#confirm',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), then the task\'s newest task_owner_confirmation_request read and one task_owner_decision INSERT (rank 60, whose foreign keys re-check the task row this unit already holds and the request row it names), then the derived status back onto the same task row. The decision\'s time is read with clock_timestamp() after the task lock is held, so decisions about one task are ordered as they were made.',
+    identity: 'The confirmation request the decision answers, or none for a task no run is waiting on. The door compares it with the request waiting now under the task lock, so a second press of the same card finds that request already decided and is refused as stale, and task_owner_decision_request_key makes one decision per request a database fact.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the task and re-reads its criterion, status and newest request inside the closure, so a re-run decides against the same facts or refuses; a rolled-back attempt leaves no decision and no status behind.',
+    effects: 'After commit only: a task.changed nudge, a session row refresh for the session whose run was answered, and the successor dispatch when the CONFIRM settled the task — the same dispatch the other criteria use.',
+    answer: 'Typed 503 after retry exhaustion. A task declaring another criterion, a settled task and a stale answer are explicit 409s; an agent session is a 403 before the transaction opens.',
+  },
+  {
     at: 'tasks/tasks.service.ts#create',
     shape: 'TX_RETRIED',
     locks: 'user FOR UPDATE (rank 10, whenever it restructures), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40 when it retires a predecessor), then the successor/source task rows (50), dependency edges (60), and dependency revision triggers (70).',
@@ -915,6 +926,12 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceUnavailableComment', under: 'runnerApi.turnComplete — after the reserved shell turn is ACKed and the rank-50 task is locked; it is the durable needs-human branch mutually exclusive with a comparable result and status derivation' },
   { at: 'tasks/tasks.service.ts#linkSupersededBy', under: 'tasks.create, tasks.update' },
   { at: 'tasks/tasks.service.ts#lockTaskForSupersessionWrite', under: 'tasks.update' },
+  // OWNER_CONFIRMED. The question is recorded in the transaction that acknowledges the successful
+  // turn; a decision is recorded under the task's row lock, and a send-back's inside the transaction
+  // that files its reason as the next message, after that transaction's Session lock.
+  { at: 'tasks/owner-confirmation-read.ts#recordOwnerConfirmationRequest', under: 'runnerApi.turnComplete — after the SUCCEEDED message turn is ACKed under the rank-30 Session lock; one task_owner_confirmation_request child row per turn (unique on session and turn), whose task foreign key takes FOR KEY SHARE on the rank-50 task and nothing else' },
+  { at: 'tasks/task-owner-confirmation.service.ts#lockedStanding', under: "taskOwnerConfirmation.confirm, and sessions.createTurn's participateSendTransaction hook for a send-back — the rank-50 task lock a decision is ordered by, taken after createTurn's rank-30 Session lock on the send-back path" },
+  { at: 'tasks/task-owner-confirmation.service.ts#writeDecision', under: "taskOwnerConfirmation.confirm, and sessions.createTurn's participateSendTransaction hook for a send-back — one task_owner_decision child row under the rank-50 task lock lockedStanding already took, so a send-back's decision commits with the turn that delivers its reason" },
   // Unit L3's effect-time fence. Rank 40 only — the project row its callers already take at that
   // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the
   // refusal it can raise is an authorization answer that rolls its caller's transaction back whole.

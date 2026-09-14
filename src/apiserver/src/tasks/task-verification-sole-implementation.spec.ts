@@ -14,10 +14,11 @@ import { test } from 'node:test';
  *
  * On 2026-09-03 EXECUTABLE stopped being one of those, by the account owner's decision: it gained
  * back one exit-code comparison and two argument fields. On 2026-09-04 EVIDENCE_JUDGMENT did the
- * same, with two revision fields and one CONFIRM decision to compare them against. Those are peer
- * implementations, not substitutes for this one — the three share `evaluateTaskCompletion` and
- * touch nothing of each other's — so what is pinned below is the ceiling: each criterion may read
- * its own facts, and no criterion may read another's.
+ * same, with two revision fields and one CONFIRM decision to compare them against. On 2026-09-14
+ * OWNER_CONFIRMED joined them with one field of its own, the account owner's newest decision. Those
+ * are peer implementations, not substitutes for this one — the four share `evaluateTaskCompletion`
+ * and touch nothing of each other's — so what is pinned below is the ceiling: each criterion may
+ * read its own facts, and no criterion may read another's.
  *
  * `task-status-derived-end-to-end.pg.spec.ts` runs the positive path on a real server. This file
  * holds the shape: what the surviving predicates read, and what nothing reads any more.
@@ -82,12 +83,12 @@ test('no criterion reads a fact outside its own, and none of them borrows anothe
   const criterion = read('src/tasks/task-completion-criterion.ts');
   const evaluator = criterion.slice(criterion.indexOf('export function evaluateTaskCompletion'));
   const body = evaluator.slice(0, evaluator.indexOf('\n}\n'));
-  // Three criteria, two or three facts each. The whole set is eight, and a ninth appearing here is
+  // Four criteria, one to three facts each. The whole set is nine, and a tenth appearing here is
   // an input growing in that nobody has argued for.
   const factReads = [...body.matchAll(/facts\.([a-zA-Z]+)/gu)].map((match) => match[1]);
   assert.deepEqual([...new Set(factReads)].sort(),
     ['acceptanceExpectedExitCode', 'completionCriterion', 'confirmedEvidenceRevision',
-      'executableExitCode', 'latestEvidenceRevision', 'ownVerdict',
+      'executableExitCode', 'latestEvidenceRevision', 'ownVerdict', 'ownerDecision',
       'verificationVerdict', 'verifiesTaskId']);
   // EVIDENCE_JUDGMENT's arm in particular: it compares its own two revisions and reads nothing
   // else — not a verdict, not an exit code, and not a status.
@@ -96,6 +97,13 @@ test('no criterion reads a fact outside its own, and none of them borrows anothe
   assert.deepEqual(
     [...new Set([...evidenceArm.matchAll(/facts\.([a-zA-Z]+)/gu)].map((match) => match[1]))].sort(),
     ['confirmedEvidenceRevision', 'latestEvidenceRevision']);
+  // OWNER_CONFIRMED's arm reads the owner's decision and nothing else: no run's exit code, no
+  // verdict and no evidence revision stands in for the owner saying the work is done.
+  const ownerArm = body.slice(body.indexOf("case 'OWNER_CONFIRMED':"));
+  assert.deepEqual(
+    [...new Set([...ownerArm.slice(0, ownerArm.indexOf('break;')).matchAll(/facts\.([a-zA-Z]+)/gu)]
+      .map((match) => match[1]))],
+    ['ownerDecision']);
 
   // And the facts type carries nothing else to read: a field left behind is the seam a substitute
   // would grow back through. In particular neither of 0200's typed-termination fields is back.
@@ -106,9 +114,9 @@ test('no criterion reads a fact outside its own, and none of them borrows anothe
   const fields = [...shape.matchAll(/^\s{2}([a-zA-Z]+)\??:/gmu)].map((match) => match[1]);
   assert.deepEqual(fields.sort(),
     ['acceptanceExpectedExitCode', 'completionCriterion', 'confirmedEvidenceRevision',
-      'executableExitCode', 'latestEvidenceRevision', 'ownVerdict',
+      'executableExitCode', 'latestEvidenceRevision', 'ownVerdict', 'ownerDecision',
       'verificationVerdict', 'verifiesTaskId']);
-  // And exactly one of the eight is mandatory. Since 0237 the criterion must be supplied, because the
+  // And exactly one of the nine is mandatory. Since 0237 the criterion must be supplied, because the
   // evaluator used to substitute EVIDENCE_JUDGMENT for an absent one and thereby answer about a
   // criterion no task had declared — the same substitution in the type that the arm above refuses
   // in the code.

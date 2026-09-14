@@ -34,8 +34,11 @@ function git(...args: string[]): string {
 // ── (a) HUMAN_SIGNOFF is not a criterion any caller can declare ────────────────────────────────
 
 test('(a) HUMAN_SIGNOFF is not a completionCriterion value at any door', () => {
+  // OWNER_CONFIRMED (0267) is not the removed step coming back under another name: HUMAN_SIGNOFF
+  // was a sign-off anyone credentialed could record, and the fourth criterion is recorded by the
+  // account owner alone, from the app, with no session behind the request.
   assert.deepEqual([...TASK_COMPLETION_CRITERIA],
-    ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT']);
+    ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT', 'OWNER_CONFIRMED']);
   assert.ok(!TASK_COMPLETION_CRITERIA.includes('HUMAN_SIGNOFF' as never));
 
   // The wire contract is the same list at all three doors, so a declaration this list rejects is

@@ -12,6 +12,14 @@ priority order or an escalation chain:
   compatibility value for a task
   that predates the field or whose legacy user/JWT creator omitted it. It does not mean another
   criterion failed.
+- `OWNER_CONFIRMED` is satisfied only by the account owner's own decision: their newest decision
+  about the task, recorded from the app with no session header (`POST /tasks/:taskId/owner-confirmation`),
+  is a `CONFIRM`. It takes `completionPolicy: MANUAL` and no command or verifier, and it is declarable
+  inside a project or outside one. When a run of the task ends a turn successfully, the owner is asked
+  on a card in that run's own session; `Send back` needs a reason, which is delivered to that session
+  as the owner's next message while the task stays open. A task no run is waiting on is confirmed
+  from its detail panel. No agent session can confirm or send back, a coordinator included: every
+  such call is refused `OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER`.
 
 Runner CLI, MCP, and runner REST creates require `completionCriterion` explicitly on every task
 and batch item. Command, policy, or verifier-relation fields do not stand in for that declaration;
@@ -54,7 +62,9 @@ criterion and a criterion-specific `requiredAction`:
   not recorded);
 - record an independent verification `PASS` for `VERIFICATION`; or
 - decide the open judgment request with `orbit task judge … --evidence …`, the `task_judge` MCP
-  tool, or `POST /tasks/:id/judgment` for `EVIDENCE_JUDGMENT`.
+  tool, or `POST /tasks/:id/judgment` for `EVIDENCE_JUDGMENT`; or
+- have the account owner press Confirm done in the app for `OWNER_CONFIRMED`
+  (`HAVE_THE_ACCOUNT_OWNER_CONFIRM_IN_THE_APP`).
 
 The refusal deliberately remains at the task boundary rather than removing `DONE` from the generic
 status enum: that is how it can name the task's actual route instead of saying only “not allowed.”

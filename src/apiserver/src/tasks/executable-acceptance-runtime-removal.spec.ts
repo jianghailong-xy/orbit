@@ -368,7 +368,8 @@ test('(c) the completionCriterion vocabulary is untouched by this removal', () =
     // The enum is not this removal's to change, and it is still not changed: all three labels are
     // declared. What DID change, one migration later, is that 0228 removed the implementations
     // behind two of them at the account owner's direction — which is why this asserts the
-    // vocabulary rather than that each value can be satisfied.
+    // vocabulary rather than that each value can be satisfied. 0267 later ADDED a fourth,
+    // OWNER_CONFIRMED, and removed none; the three this removal kept are still the first three.
     // Statements only: the header prose says why the enum is out of scope.
     assert.doesNotMatch(statementsOf(REMOVAL_SQL), /task_completion_criterion/,
       'this removal must not issue a statement against the criterion enum');
@@ -379,7 +380,7 @@ test('(c) the completionCriterion vocabulary is untouched by this removal', () =
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => /^[A-Z_]+$/.test(line));
-    assert.deepEqual(declared, ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT']);
+    assert.deepEqual(declared, ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT', 'OWNER_CONFIRMED']);
     const criterion = read('src/apiserver/src/tasks/task-completion-criterion.ts');
     assert.match(criterion, /export function evaluateTaskCompletion\(/);
     assert.match(criterion, /export function deriveTaskCompletionStatus\(/);
