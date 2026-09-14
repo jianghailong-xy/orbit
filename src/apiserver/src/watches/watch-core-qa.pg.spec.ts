@@ -169,13 +169,18 @@ beforeEach(async () => {
 after(async () => {
   if (skip) return;
   await quiesce();
-  for (const client of clients.splice(0)) await client.$disconnect().catch(() => undefined);
   await sql?.end().catch(() => undefined);
 });
 
+/**
+ * Stops what a case left running and closes its pools. QA-03 alone opens seventy connections, and a pool keeps
+ * idle ones for ten seconds: closed only at the end of the file, the cases right after it open theirs on top,
+ * and a PostgreSQL at its default 100 refuses them — `53300 sorry, too many clients already`.
+ */
 async function quiesce(): Promise<void> {
   for (const release of heldLocks.splice(0)) await release();
   for (const loop of loops.splice(0)) await loop.stop();
+  for (const client of clients.splice(0)) await client.$disconnect().catch(() => undefined);
 }
 
 /**
