@@ -44,7 +44,7 @@
 5. **one-shot 是默认。** continuous 必须带 debounce 与预算（§5）。
 6. **TTL 必填且有上限；到期也要交付。** 等在 Watch 上的会话不会被静默遗忘（§5）。
 7. **唤醒复用 ConversationTurn 的唯一键。** `clientTurnId = watch:<watchId>:<generation>`，
-   重复交付塌缩成同一个 turn，而不是第二次唤醒（§6）。
+   重复交付塌缩成同一个 turn，而不是第二次唤醒；键下若是载荷不同的别的 turn，那不是唤醒，交付记死信（§6）。
 8. **权限在交付时复核，不只在创建时。** 撤销后不投递载荷，状态进 `REVOKED` 而不是悄悄停掉；等在它上面的
    会话只收到一个说明 `REVOKED` 的 turn，不含任何目标状态（§3、§7）。
 9. **停不下来的 Watch 必须可见。** 目标全没了是 `UNRESOLVABLE`，不是沉默（§3）。
@@ -251,6 +251,14 @@ turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，�
   用的是同一个机制，**不要新造一套幂等**。
 - Watch 没有成立就结束时（§3），终态 turn 的 key 是 `watch:<watchId>:expired` / `:revoked` / `:unresolvable`。
   这些后缀都不是数字，不会与任何 generation 的键冲突；重投同样塌缩到已经入队的那个 turn 上。
+- **键下只有唤醒本身才算送达。** `clientTurnId` 由调用方自选，别人发的 turn 也可能先占住唤醒的键。`createTurn`
+  只把载荷逐字相同的 turn 当作重投塌缩；键下是载荷不同的 turn 时，它不是唤醒，唤醒也无法再以这个键入队，交付立即记
+  `DEAD_LETTER`，`last_error` 以 `WAKE_KEY_TAKEN:` 开头，不重试。观察者已进 Trash、已移入 Completed 或 run 已结束时，
+  照旧记对应的 `OBSERVER_SESSION_*` 死信。
+- **只有 worker 会写出的键才被当作唤醒。** 排空、打断、撤回（§3）只认两种键：`watch:<watchId>:<generation>`，其中
+  generation 是规范十进制（无前导零，不超过 `integer` 上限）；以及各自只对应本类终态交付的 `:expired`（EXPIRY）、
+  `:revoked`（REVOKED）、`:unresolvable`（UNRESOLVABLE）。`watch:<watchId>:01`、`:anything`、别的终态的词都是普通消息，
+  把它们从队列里收掉不改变任何交付。
 - `sendIntent = NEXT_TURN`。唤醒是新工作，不是插进正在跑的那个 turn。用 `CURRENT_WORK` 会在
   没有在飞的 message turn 时被 `CURRENT_WORK_UNAVAILABLE` 拒绝——而「观察者正停着」恰恰是最常见的情况。
 - **运行中的观察者不需要特例**：`statusAfterTurnEnqueued` 让 `RUNNING` 保持 `RUNNING`、

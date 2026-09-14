@@ -181,7 +181,9 @@
       "idempotency": {
         "clientTurnId": "watch:<watchId>:<generation>",
         "why": "conversation_turn has UNIQUE (session_id, client_turn_id), so a redelivered match collapses onto the turn already enqueued instead of waking the session twice. This is the same mechanism TASK_RUN_TRIGGER already uses for sched:/dep:/first-run:/batch: turns.",
-        "authority": "src/apiserver/prisma/schema.prisma UNIQUE([sessionId, clientTurnId]); src/apiserver/src/tasks/task-run-identity.ts"
+        "authority": "src/apiserver/prisma/schema.prisma UNIQUE([sessionId, clientTurnId]); src/apiserver/src/tasks/task-run-identity.ts",
+        "heldByAnotherTurn": "clientTurnId is the caller's own choice on every door into createTurn, so a turn somebody else queued can already hold a wake's key. Only a turn with the wake's exact payload collapses a redelivery. A turn with another payload is not the wake, the wake cannot be queued under the key it holds, and the delivery becomes a DEAD_LETTER at once (WAKE_KEY_TAKEN) — unless the observer's life is over, which is refused as such (OBSERVER_SESSION_*).",
+        "recognizedKeys": "A drain, an interrupt or a withdrawal (states.delivery) takes a queued turn for a wake only under a key the worker writes: watch:<watchId>:<generation> with the generation in canonical decimal (no leading zero, within integer range), or watch:<watchId>:expired, :revoked or :unresolvable, each for its own end's delivery kind. A turn under any other watch: key is an ordinary message, and taking it off the queue changes no delivery."
       },
       "sendIntent": {
         "value": "NEXT_TURN",

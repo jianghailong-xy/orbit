@@ -1012,3 +1012,25 @@ for (const [end, other] of [['REVOKED', 'UNRESOLVABLE'], ['UNRESOLVABLE', 'REVOK
     assert.equal((await onlyEnd(bystander.watchId, end)).state, 'DELIVERED', 'another observer\'s withdrawal dead-lettered this one\'s end wake');
   });
 }
+
+// A client chooses its own clientTurnId, so the words of the other ends can sit on the observer's queue too.
+for (const end of ENDS) {
+  test(`a queued turn keyed with another end's word under a ${end} watch is not its end wake: withdrawn, it leaves the delivery of the end wake the runner took DELIVERED`, { skip, timeout: 120_000 }, async () => {
+    const owner = await insertUser();
+    const runner = await insertRunner(owner);
+    const pool = worker();
+    const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, realtime as never);
+    const taken = await endTakenByRunner(end, owner, runner, pool);
+
+    for (const word of ['expired', 'revoked', 'unresolvable'].filter((word) => word !== end.toLowerCase())) {
+      const forged = `watch:${taken.watchId}:${word}`;
+      await sessions.createTurn(owner, taken.observer, { clientTurnId: forged, content: `a message keyed ${word}, not a wake`, intent: 'NEXT_TURN' });
+      const [turn] = (await turnsOn(taken.observer)).filter((row) => row.clientTurnId === forged);
+      assert.equal(turn?.status, 'PENDING', `${forged}: queued behind the end wake the runner took`);
+      await sessions.cancelQueuedTurn(owner, taken.observer, turn.id);
+      assert.deepEqual((await turnsOn(taken.observer)).filter((row) => row.clientTurnId === forged), [], `${forged}: not withdrawn`);
+      const settled = await onlyEnd(taken.watchId, end);
+      assert.equal(settled.state, 'DELIVERED', `withdrawing ${forged} made the ${end} delivery ${settled.state} (${settled.lastError})`);
+    }
+  });
+}

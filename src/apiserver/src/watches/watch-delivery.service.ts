@@ -58,6 +58,14 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
  * is built only from rows that never change (the Match; the expired watch and its delivery's snapshot;
  * the revoked or unresolvable watch's id and its delivery's kind), so the replay compares equal.
  *
+ * The key is not the worker's alone: every door into `createTurn` takes the caller's own `clientTurnId`,
+ * so a turn somebody else queued can already hold a wake's key. `createTurn` replays only a turn with the
+ * wake's exact payload and refuses any other as a conflict, and a turn with another payload is not the
+ * wake: the observer was not woken, and the wake cannot be queued under a key that is taken. So a conflict
+ * is a refusal no retry can change — `WAKE_KEY_TAKEN` — unless the observer's life is over, which is
+ * refused as it would have been had the key been free. Acknowledging it instead would record DELIVERED
+ * for a wake nobody queued.
+ *
  * The session's state needs no special case to be safe: a RUNNING observer keeps running and the
  * turn queues behind the current one, AWAITING_INPUT and INTERRUPTED go PENDING and wait for a runner
  * slot like any sent message, and the queue never runs two turns of one session at once. What
@@ -420,24 +428,20 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
           ?? new DeliveryRefused('OBSERVER_SESSION_UNAVAILABLE', messageOf(error));
       }
       if (error instanceof BadRequestException) throw new DeliveryRefused('TURN_REFUSED', messageOf(error));
-      // The key already names a turn whose content differs — queued by a build that worded the payload
-      // differently. It is still the one turn this key names, so the wake has happened.
-      if (!(error instanceof ConflictException) || !(await this.turnQueued(sessionId, clientTurnId))) throw error;
+      if (!(error instanceof ConflictException)) throw error;
+      // The key already holds a turn with another payload, which is not this wake (ONE TURN PER GENERATION
+      // above). `createTurn` looks the key up before it looks at the observer, so an observer whose life is
+      // over is refused as such here.
+      throw observerRefusal(await readObserver(this.prisma, sessionId))
+        ?? new DeliveryRefused('WAKE_KEY_TAKEN', `another turn on the observer session already holds ${clientTurnId}, so the wake was not queued`);
     }
-    // The turn is on the session: written just now together with the acknowledgement, or replayed from
-    // an earlier attempt that never acknowledged it — in which case this is the acknowledgement.
+    // The turn is on the session: written just now together with the acknowledgement, or replayed — the key
+    // already holds this wake's exact payload, from an attempt whose acknowledgement never landed or a
+    // redelivery after it did — in which case this is the acknowledgement.
     if (!(await acknowledgeDelivery(this.prisma, claim))) {
       const settled = await this.prisma.watchDelivery.findUnique({ where: { id: claim.id }, select: { state: true } });
       if (settled?.state !== 'DELIVERED') throw new DeliveryLeaseLost();
     }
-  }
-
-  private async turnQueued(sessionId: string, clientTurnId: string): Promise<boolean> {
-    const turn = await this.prisma.conversationTurn.findUnique({
-      where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
-      select: { id: true },
-    });
-    return turn !== null;
   }
 
   /** Record a failed attempt under the claim's lease: the next try on the backoff, or a dead letter. */

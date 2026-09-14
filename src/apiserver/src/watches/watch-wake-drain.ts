@@ -1,11 +1,24 @@
 import type { Prisma } from '@prisma/client';
 
 /**
- * The keys a wake's turn is queued under, exactly as the delivery worker writes them: `watch:<watchId>:`
- * and a suffix. A number is a Match's generation (`watchTurnClientId`); any other suffix is how the watch
- * ended — `expired` (`watchExpiryTurnClientId`), `revoked` or `unresolvable` (`watchEndTurnClientId`).
+ * The keys a wake's turn is queued under, exactly as the delivery worker writes them, and no others:
+ * `watch:<watchId>:` and a suffix. A Match's generation is written as the number it is
+ * (`watchTurnClientId`): canonical decimal, no leading zero, and never past the `integer` column it was
+ * read from. A watch that ended unmatched is written with its end's own word: `expired` for an EXPIRY
+ * (`watchExpiryTurnClientId`), `revoked` or `unresolvable` for those two ends (`watchEndTurnClientId`).
+ *
+ * Every door into `SessionsService.createTurn` takes the caller's own `clientTurnId`, so a queue can hold
+ * a turn under a key that only looks like a wake's — `watch:<id>:01`, `watch:<id>:anything`, or another
+ * end's word. The worker never wrote such a turn, and taking one off the queue says nothing about any
+ * delivery.
  */
-const WAKE_TURN_KEY = /^watch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(.+)$/;
+const WAKE_TURN_KEY = /^watch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([1-9][0-9]{0,9}|expired|revoked|unresolvable)$/;
+
+/** The largest generation `watch_match.generation`, a PostgreSQL `integer`, can hold. */
+const MAX_GENERATION = 2_147_483_647;
+
+/** The delivery kind each end's word is written for. */
+const END_KIND: Readonly<Record<string, string>> = { expired: 'EXPIRY', revoked: 'REVOKED', unresolvable: 'UNRESOLVABLE' };
 
 /** What took a queued wake off its observer's queue before any runner took it. The code heads its dead letter. */
 export type UnrunWake =
@@ -68,11 +81,15 @@ export async function deadLetterQueuedWatchWakes(
   const wakes = queued.flatMap(({ clientTurnId }): Prisma.WatchDeliveryWhereInput[] => {
     const key = WAKE_TURN_KEY.exec(clientTurnId);
     if (!key) return [];
-    // A Match's delivery names its watch through the Match. Any other suffix is the watch's end, whose
-    // delivery names the watch itself whichever end it was; a watch ends once, so that is at most one row.
-    return /^\d+$/.test(key[2])
-      ? [{ match: { watchId: key[1], generation: Number(key[2]), watch: { observerSessionId: sessionId } } }]
-      : [{ kind: { not: 'MATCH' }, watchId: key[1], watch: { observerSessionId: sessionId } }];
+    const [, watchId, suffix] = key;
+    // A watch's end is a delivery that names the watch itself, and a watch ends once, so that is at most
+    // one row — and only of the kind its word is written for.
+    const end = END_KIND[suffix];
+    if (end) return [{ kind: end, watchId, watch: { observerSessionId: sessionId } }];
+    // A Match's delivery names its watch through the Match.
+    const generation = Number(suffix);
+    if (generation > MAX_GENERATION) return [];
+    return [{ match: { watchId, generation, watch: { observerSessionId: sessionId } } }];
   });
   if (wakes.length === 0) return;
   await tx.watchDelivery.updateMany({

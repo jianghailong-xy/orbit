@@ -532,6 +532,35 @@ test('RESUME_SESSION on an AWAITING_INPUT observer: one turn keyed watch:<id>:<g
   assert.equal((await onlyDelivery(watchId)).state, 'DELIVERED');
 });
 
+test('a turn somebody else queued under a wake\'s key is not the wake: the delivery is a WAKE_KEY_TAKEN dead letter the watch read shows, and the turn under the key is left as it was', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const observer = await insertSession(owner, 'AWAITING_INPUT', await insertRunner(owner));
+  const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
+  const { id: deliveryId } = await onlyDelivery(watchId);
+  const { sessions, delivery } = worker();
+
+  // Before any worker reached the Match, the owner's client sent a message under the key its wake is written under.
+  await sessions.createTurn(owner, observer, { clientTurnId: `watch:${watchId}:1`, content: 'a message of the owner\'s, not the wake', intent: 'NEXT_TURN' });
+  const queued = await turnsOn(observer);
+  const signals = queueSignals;
+
+  assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), ['DEAD_LETTER'], 'a wake that was never queued was not refused for good');
+  const settled = await onlyDelivery(watchId);
+  assert.equal(settled.state, 'DEAD_LETTER');
+  assert.equal(settled.delivered, false);
+  assert.equal(settled.attempts, 1, 'a taken key is retried');
+  assert.match(settled.lastError ?? '', new RegExp(`^WAKE_KEY_TAKEN: .*watch:${watchId}:1\\b`));
+  assert.deepEqual(await turnsOn(observer), queued, 'the delivery wrote a turn or changed the one under its key');
+  assert.equal(queueSignals, signals, 'the observer was queued again');
+  const view = await watches.get(owner, watchId);
+  assert.deepEqual(
+    view.matches[0].deliveries.map(({ id, state, lastError }) => ({ id, state, lastError })),
+    [{ id: deliveryId, state: 'DEAD_LETTER', lastError: settled.lastError }],
+    'the dead letter is not on the watch read',
+  );
+  assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), [], 'a dead letter is never claimed again');
+});
+
 test('a worker whose lease was taken over writes nothing — no turn, no acknowledgement — and the takeover delivers the one turn', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const observer = await insertSession(owner, 'AWAITING_INPUT', await insertRunner(owner));
@@ -1106,4 +1135,20 @@ test('a wake its owner withdraws from the observer\'s queue is a dead letter; th
   const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
   assert.equal(waiting?.status, 'PENDING', 'another observer lost its queued wake');
   assert.equal((await onlyDelivery(bystander.watchId)).state, 'DELIVERED', 'other observers\' withdrawals dead-lettered this one\'s wake');
+});
+
+test('a queued turn keyed watch:<id>:<a generation no integer holds> is not a wake: withdrawing it succeeds and changes no delivery', { skip, timeout: 120_000 }, async () => {
+  const owner = await insertUser();
+  const runner = await insertRunner(owner);
+  const pool = worker();
+  const taken = await wakeTakenByRunner(owner, runner, pool);
+
+  // No Match has such a generation: `watch_match.generation` is an integer.
+  const forged = `watch:${taken.watchId}:2147483648`;
+  await pool.sessions.createTurn(owner, taken.observer, { clientTurnId: forged, content: 'a message keyed past any generation', intent: 'NEXT_TURN' });
+  const [turn] = (await turnsOn(taken.observer)).filter((row) => row.clientTurnId === forged);
+  assert.equal(turn?.status, 'PENDING', 'the message waits behind the wake the runner took');
+  await pool.sessions.cancelQueuedTurn(owner, taken.observer, turn.id);
+  assert.deepEqual((await turnsOn(taken.observer)).filter((row) => row.clientTurnId === forged), [], 'the message was not withdrawn');
+  assert.equal((await onlyDelivery(taken.watchId)).state, 'DELIVERED', 'withdrawing a message dead-lettered the wake the runner took');
 });
