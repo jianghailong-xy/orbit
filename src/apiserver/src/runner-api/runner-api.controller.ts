@@ -1883,7 +1883,9 @@ export class RunnerApiController {
       // only fire when an engine actually starts, which for a session that parks and is never
       // resumed is never — leaving it reading "N background processes running" for the rest of
       // its life. Takeover is the one point where the handoff is observable without the user
-      // having to touch the session.
+      // having to touch the session. The one background process a predecessor hands on — a
+      // runner-hosted job, across a self-update — comes back through the `running` report the new
+      // process sends when it adopts the job (see bgRunning in events).
       //
       // engineTurnActive is the same kind of claim about the predecessor's engine process, and
       // dies with it for the same reason. A runner killed mid-turn (crash, restart, self-update)
@@ -4057,7 +4059,8 @@ export class RunnerApiController {
       // "Background running" status on the list + header. Added on a background launch (keyed by
       // its tool_use id), removed on that task's terminal <task-notification> — which the runner
       // also synthesizes when the launching runtime stops, since its children die with it — and
-      // cleared on a respawn handshake (see bgReset).
+      // cleared on a respawn handshake (see bgReset). A runner-hosted job adopted after a
+      // self-update is put back by its `running` report (see bgRunning).
       // Two tools launch one: Bash with run_in_background, and Monitor, a watcher that has no such
       // flag because backgrounding is all it does. Both report in through the same
       // <task-notification> carrying the launch tool_use id (a Monitor's per-event pings carry
@@ -4133,6 +4136,22 @@ export class RunnerApiController {
           e.type === RunEventType.SYSTEM &&
           String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
       );
+      // A runner-hosted job (runner-go background_job.go) also reports itself with a `running`
+      // background_task: at launch, beside the tool_use bgStarted counts, and again when a runner
+      // that re-executed into a self-update adopts it. That second report is the only thing that
+      // can put the job back: the new process's /takeover-leases has just cleared this set, and it
+      // does not re-send the tool_use, since tool_call has no uniqueness on its id and a second one
+      // would be a second row. Only a report carrying a `kind` counts — that is what marks a
+      // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
+      // shell carries none, and that shell died with its engine.
+      const bgRunning = events
+        .filter((e) => {
+          if (e.type !== RunEventType.BACKGROUND_TASK) return false;
+          const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
+          return status === 'running' && typeof kind === 'string' && kind !== '';
+        })
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
       // The two running sets, folded in the order the separate statements used to apply them:
       // reset, then the launches, then the terminal notifications, then the synchronous
       // sub-workspace completions. Computed from the values read under the row lock rather than
@@ -4143,6 +4162,10 @@ export class RunnerApiController {
       let shells = bgReset ? [] : [...session.runningBgShells];
       let subagents = bgReset ? [] : [...session.runningSubagents];
       for (const id of bgStarted) shells = [...shells.filter((v) => v !== id), id];
+      // A `running` report counts with the launches, and adds only an id that is missing — the
+      // adoption. At launch the tool_use has already added it, and moving it would write the row
+      // for nothing.
+      for (const id of bgRunning) if (!shells.includes(id)) shells = [...shells, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
