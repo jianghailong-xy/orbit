@@ -19,7 +19,6 @@ import { establishProjectContractForPgTest } from '../projects/project-contract-
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { AUTO_RUN_RETRY_BACKOFF_MS } from './task-retry-policy';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { TASK_RUN_ACTION } from './task-run-receipt';
 import { TasksService } from './tasks.service';
@@ -41,7 +40,13 @@ import { TasksService } from './tasks.service';
  * ONE slot and a second task waiting for it, so "the replay spent no slot" is not an absence to
  * assert but a run that has to exist: the waiting task starts in the same pass. They are the two
  * candidate scans the fix changes — the independent-task scan with a run a person stopped, and the
- * dependency scan with a run that failed.
+ * dependency scan with a run a person filed away.
+ *
+ * Since 2026-09-14 a run that ended WITHOUT anybody asking is retried instead, at a new moment
+ * (TasksService.rearmEndedAutoRuns; task-auto-run-retry-after-run-ended.pg.spec.ts). That pass starts
+ * a new run and replays nothing, so the replay this file guards against is the moment the retry
+ * policy leaves where it is: one whose run somebody asked to stop. The read names that hold now
+ * (`STOPPED_ON_REQUEST`, with the run's end reason) where it used to say MOMENT_ALREADY_DISPATCHED.
  *
  * Every read of `autoRunSkipped` comes after the sweep has been checked, and through a view in which
  * the field is optional: a tree without the fix still compiles this file, and goes red first on the
@@ -57,6 +62,7 @@ const RUN = randomUUID().slice(0, 8);
 
 interface Services {
   db: PrismaClient;
+  sessions: SessionsService;
   tasks: TasksService;
 }
 
@@ -75,7 +81,7 @@ function connect(): Services {
     { notifySessionQueued: () => undefined } as unknown as QueueService,
     publishes,
   );
-  return { db, tasks: new TasksService(prisma, sessions, publishes) };
+  return { db, sessions, tasks: new TasksService(prisma, sessions, publishes) };
 }
 
 /** An owner, one online runner with exactly ONE slot, and one workspace bound to it. */
@@ -206,6 +212,8 @@ interface AutoRunSkippedView {
     dispatchEpoch: string;
     sessionId: string | null;
     sessionStatus: string | null;
+    endReason?: string | null;
+    retryAt?: Date | null;
     requiredAction: string;
   } | null;
 }
@@ -218,14 +226,20 @@ async function autoRunSkippedOf(s: Services, ownerId: string, taskId: string) {
 /** The reason's facts, and a non-empty instruction beside them. */
 function assertSkippedBecause(
   actual: AutoRunSkippedView['autoRunSkipped'],
-  expected: { dispatchEpoch: bigint; sessionId: string; sessionStatus: RunStatus },
+  expected: {
+    dispatchEpoch: bigint; sessionId: string; sessionStatus: RunStatus; endReason: string;
+  },
 ): void {
   const { requiredAction, ...facts } = actual ?? {};
   assert.deepEqual(facts, {
-    code: 'MOMENT_ALREADY_DISPATCHED',
+    // The hold a stopped run is left under has its own name since the retry policy (see above); the
+    // facts beside it are the ones this read has always been held to, plus who ended the run.
+    code: 'STOPPED_ON_REQUEST',
     dispatchEpoch: expected.dispatchEpoch.toString(),
     sessionId: expected.sessionId,
     sessionStatus: expected.sessionStatus,
+    endReason: expected.endReason,
+    retryAt: null,
   }, 'the task read does not say that this moment already had its run');
   assert.match(requiredAction ?? '', /\S/, 'the reason carries no instruction');
 }
@@ -300,6 +314,7 @@ test('an auto-run whose session was CANCELLED is not replayed by the next reconc
     // (2) Where the task went: out of the ready set, with the reason on its read.
     assertSkippedBecause(await autoRunSkippedOf(s, ids.ownerId, stopped), {
       dispatchEpoch: moment, sessionId: run.id, sessionStatus: RunStatus.CANCELLED,
+      endReason: 'cancelled',
     });
     // ...and only there: not on a task whose live run is what holds it, nor on one whose moment has
     // had no automatic run at all.
@@ -310,77 +325,77 @@ test('an auto-run whose session was CANCELLED is not replayed by the next reconc
   }
 });
 
-test('the dependency scan stops offering a task whose moment\'s run FAILED, and the slot goes to '
-  + 'the next task',
+test('the dependency scan stops offering a task whose moment\'s run was filed away, and the slot goes '
+  + 'to the next task',
 { skip, timeout: 300_000 }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
   const s = connect();
   try {
-    const ids = await world(s.db, 'replay-failed');
+    const ids = await world(s.db, 'replay-filed');
     // The other five production tasks: a DONE prerequisite, in a project with no coordinator.
-    const legacy = await project(s.db, ids, 'replay-failed-legacy', false);
+    const legacy = await project(s.db, ids, 'replay-filed-legacy', false);
     const prerequisite = await seedTask(s.db, ids, legacy, 'prerequisite', {
       status: TaskStatus.DONE, autoRunWhenReady: false,
     });
-    const failing = await seedTask(s.db, ids, legacy, 'failing');
-    await s.db.taskDependency.create({ data: { taskId: failing, dependsOnTaskId: prerequisite } });
+    const filed = await seedTask(s.db, ids, legacy, 'filed');
+    await s.db.taskDependency.create({ data: { taskId: filed, dependsOnTaskId: prerequisite } });
     // The task the slot should go to instead. Independent and under a coordinated project, so the
     // sweep reaches it only after the dependency scan's rows: a replay, if there is one, comes first.
-    const coordinated = await project(s.db, ids, 'replay-failed-coordinated', true);
+    const coordinated = await project(s.db, ids, 'replay-filed-coordinated', true);
     const waiting = await seedTask(s.db, ids, coordinated, 'waiting');
 
     const first = await sweep(s);
-    const [run] = await workRuns(s.db, failing);
+    const [run] = await workRuns(s.db, filed);
     assert.ok(run, 'the first sweep did not start the dependent task, so nothing below is a replay');
-    assert.ok(first.includes(dispatchLine(failing)), `no dispatch line: ${JSON.stringify(first)}`);
+    assert.ok(first.includes(dispatchLine(filed)), `no dispatch line: ${JSON.stringify(first)}`);
     assert.equal((await workRuns(s.db, waiting)).length, 0,
       'both tasks started, so the runner has more than the one slot this case is about');
-    const moment = await epochOf(s.db, failing);
+    const moment = await epochOf(s.db, filed);
 
-    // The run fails, and long enough ago that the failure backoff has let go of the task — as the
-    // production rows had: failed on 2026-08-23, still replayed on 2026-09-12. Inside the window the
-    // sweep holds the task off for that reason instead, and the pass would not be a replay at all.
-    const longAgo = new Date(
-      Date.now() - 2 * AUTO_RUN_RETRY_BACKOFF_MS[AUTO_RUN_RETRY_BACKOFF_MS.length - 1],
-    );
-    await s.db.session.update({
-      where: { id: run.id },
-      data: {
-        status: RunStatus.FAILED, error: 'the engine exited before the work was done',
-        createdAt: longAgo, finishedAt: longAgo,
-      },
+    // A person files the run away: Complete, the `end_reason = completed` shape one of the production
+    // rows had. Until 2026-09-14 this case FAILED the run instead, long enough ago that the backoff
+    // had let go of it. That run is now retried at a new moment, which starts a real run rather than
+    // replaying this one, so the dependency scan's guard is held here to the end the retry policy
+    // does not retry (task-auto-run-retry-after-run-ended.pg.spec.ts covers the failed run).
+    await s.sessions.complete(ids.ownerId, run.id);
+    const ended = await s.db.session.findUniqueOrThrow({
+      where: { id: run.id }, select: { status: true, endReason: true, completedAt: true },
     });
+    assert.equal(ended.status, RunStatus.CANCELLED);
+    assert.equal(ended.endReason, 'completed');
+    assert.ok(ended.completedAt, 'Complete did not file the run');
     assert.equal(
-      (await s.db.task.findUniqueOrThrow({ where: { id: failing } })).status, TaskStatus.OPEN,
+      (await s.db.task.findUniqueOrThrow({ where: { id: filed } })).status, TaskStatus.OPEN,
     );
-    assert.equal(await epochOf(s.db, failing), moment,
-      'the failure moved the dispatch moment, so the next sweep would not be a replay');
+    assert.equal(await epochOf(s.db, filed), moment,
+      'filing the run moved the dispatch moment, so the next sweep would not be a replay');
     assert.equal(
-      (await receiptOf(s.db, ids.ownerId, TASK_RUN_TRIGGER.dependency(failing, moment)))?.status,
+      (await receiptOf(s.db, ids.ownerId, TASK_RUN_TRIGGER.dependency(filed, moment)))?.status,
       'COMPLETED',
     );
 
     const second = await sweep(s);
 
-    assert.ok(!second.includes(dispatchLine(failing)),
-      `the sweep reported a dispatch of the failed task it only replayed: ${JSON.stringify(second)}`);
-    assert.equal((await workRuns(s.db, failing)).length, 1,
-      'the failed task was started again by the sweep');
+    assert.ok(!second.includes(dispatchLine(filed)),
+      `the sweep reported a dispatch of the filed task it only replayed: ${JSON.stringify(second)}`);
+    assert.equal((await workRuns(s.db, filed)).length, 1,
+      'the filed task was started again by the sweep');
     assert.equal((await workRuns(s.db, waiting)).length, 1,
       'the waiting task did not start — the slot was spent on the replay');
     assert.ok(second.includes(dispatchLine(waiting)), JSON.stringify(second));
 
-    assertSkippedBecause(await autoRunSkippedOf(s, ids.ownerId, failing), {
-      dispatchEpoch: moment, sessionId: run.id, sessionStatus: RunStatus.FAILED,
+    assertSkippedBecause(await autoRunSkippedOf(s, ids.ownerId, filed), {
+      dispatchEpoch: moment, sessionId: run.id, sessionStatus: RunStatus.CANCELLED,
+      endReason: 'completed',
     });
 
     // What the reason leaves to a person still works: Run Now names its own request and answers to
     // no moment. Once that run holds the task, the read stops blaming the moment.
-    const manual = await s.tasks.execute(ids.ownerId, failing, undefined, `manual-${RUN}`);
+    const manual = await s.tasks.execute(ids.ownerId, filed, undefined, `manual-${RUN}`);
     assert.equal(manual.ok, true, `Run Now refused: ${JSON.stringify(manual)}`);
     assert.notEqual(manual.sessionId, run.id);
-    assert.equal((await workRuns(s.db, failing)).length, 2);
-    assert.equal(await autoRunSkippedOf(s, ids.ownerId, failing), null);
+    assert.equal((await workRuns(s.db, filed)).length, 2);
+    assert.equal(await autoRunSkippedOf(s, ids.ownerId, filed), null);
   } finally {
     await s.db.$disconnect();
   }

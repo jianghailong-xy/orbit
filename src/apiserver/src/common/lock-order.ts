@@ -109,7 +109,7 @@ export const LOCK_ORDER = [
   {
     rank: 70,
     relation: 'task_dependency_revision, task_dispatch_epoch',
-    modes: 'FOR NO KEY UPDATE (0132 advances the revision after an edge write; 0137 advances the epoch after an edge or Task write) · FOR SHARE (the dispatch decision reads the edge set under the revision)',
+    modes: 'FOR NO KEY UPDATE (0132 advances the revision after an edge write; 0137 advances the epoch after an edge or Task write; the auto-run sweep re-arms one Task\'s epoch after its run ended) · FOR SHARE (the dispatch decision reads the edge set under the revision)',
     why:
       'The dispatch version boundary for one Task\'s prerequisite set, and the last lock anybody ' +
       'takes. BELOW the edges (60) because a writer changes edges and then advances the revision, ' +
@@ -121,7 +121,9 @@ export const LOCK_ORDER = [
       '`task_dispatch_epoch` (0137) is the same shape at the same rank and is named here rather ' +
       'than given a rank of its own precisely because it is: one row per Task, advanced ' +
       '`ORDER BY task_id FOR NO KEY UPDATE` by a statement trigger, never held while anything ' +
-      'below is reached for. It advances from `task` as well as from `task_dependency`, so a ' +
+      'below is reached for. The one writer outside the triggers, the auto-run sweep\'s re-arm ' +
+      '(`TasksService.rearmAutoRunMoment`), is an autocommit compare-and-set on a single row that ' +
+      'holds nothing else while it waits. It advances from `task` as well as from `task_dependency`, so a ' +
       'single statement can move both a Task\'s own row and its dependents\' — and 0154 is why ' +
       'that is still one sorted acquisition rather than two: 0137 took the two halves in ' +
       'sequence, which is not a total order and deadlocked two ordinary status writes against ' +

@@ -145,6 +145,7 @@ import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
+  autoRunEnd,
 } from './task-retry-policy';
 
 export {
@@ -747,13 +748,15 @@ const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
  * slot on it every minute, while nothing started the task again (2026-09-12: six tasks, the oldest
  * for three weeks).
  *
- * The moment does not move on when its run ends, and that is 0137's transition table working, not
- * a hole in it: an epoch advances on a task-row fact — this task's `status` or `run_at`, a
- * prerequisite's `status`, the edges — and a Session ending is none of those. Where an ended run is
- * meant to go back into the pool, a status write says so (`reclaimStalledTask` returning an
- * IN_PROGRESS task to OPEN advances the epoch). An OPEN task whose run was stopped or failed has had
- * this moment's automatic run; another one is a new moment's to start, or a person's (Run Now names
- * its own request and is fenced by no moment).
+ * A run ending does not move the moment by itself: 0137's triggers advance an epoch on a task-row
+ * fact — this task's `status` or `run_at`, a prerequisite's `status`, the edges — and a Session
+ * ending is none of those. Where an ended run is meant to go back into the pool, whatever decides so
+ * moves the moment on: a status write (`reclaimStalledTask` returning an IN_PROGRESS task to OPEN
+ * advances the epoch), or, for a run that ended while its task stayed OPEN, the retry policy
+ * (`rearmEndedAutoRuns`, 2026-09-14), which re-arms the moment once the failure backoff, the failure
+ * limit and the quota gate allow it, and never for a run somebody asked to stop. Until then the task
+ * has had this moment's automatic run; another one is a new moment's to start, or a person's (Run
+ * Now names its own request and is fenced by no moment).
  *
  * In the SQL rather than after the scan, because both scans spend a budget inside the statement:
  * the independent scan's `rank <= free` window and `dispatchIndependentSiblingsOf`'s LIMIT. The
@@ -855,7 +858,8 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   )
   -- ...nor is a task whose current dispatch moment has already had its automatic run. Offering it
   -- again is answered from that moment's receipt with the run it already started, and starts
-  -- nothing (AUTO_RUN_MOMENT_DISPATCHED_SQL).
+  -- nothing (AUTO_RUN_MOMENT_DISPATCHED_SQL). A run that ended and may be retried comes back at a
+  -- new moment instead (rearmEndedAutoRuns).
   AND NOT EXISTS (SELECT 1 FROM task_run_request receipt WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL})`;
 
 /**
@@ -900,6 +904,89 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
       )})
   )
   AND NOT EXISTS (SELECT 1 FROM task_run_request receipt WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL})`;
+
+/**
+ * An auto-run task the retry policy may re-arm (see rearmEndedAutoRuns), correlated to an outer
+ * `task t`. The scan that uses it joins the current moment's COMPLETED receipt itself.
+ *
+ * The standing rules that decide whether re-arming a moment could lead anywhere, and only those:
+ * OPEN, opted into auto-run, not held, an assignee bound to a runner, not retired, and nothing
+ * occupying it. An occupied task is not waiting on its moment at all: the run occupying it (the
+ * moment's own, or one a person started by hand) is what holds it. The rest of the two candidate
+ * predicates is left to them, because each of those clauses is either fixed for the life of one
+ * moment or applied again by the pass that dispatches the new one: a schedule, a prerequisite's
+ * status and the edges cannot change without advancing the epoch themselves, and a Project's
+ * coordinator switch is read by the scan that would release the task.
+ */
+const AUTO_RUN_RETRY_CANDIDATE_SQL = Prisma.sql`
+  t.status = 'OPEN'::task_status
+  AND t.auto_run_when_ready = true
+  AND t.dispatch_hold = false
+  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND ${Prisma.raw(taskNotObsoleteSql('t'))}
+  AND NOT EXISTS (
+    SELECT 1 FROM session s
+    WHERE s.task_id = t.id
+      AND s.status IN (${Prisma.join(
+        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+        ', ',
+      )})
+  )`;
+
+/** An auto-run task whose current dispatch moment has had its automatic run, as the retry policy reads it. */
+interface EndedAutoRunMoment {
+  id: string;
+  ownerId: string;
+  workspaceId: string;
+  runnerId: string | null;
+  /** The moment the task is at: `task_dispatch_epoch.epoch`. */
+  dispatchEpoch: bigint;
+  /** The receipt's, so it still names the run after that Session has been purged. */
+  sessionId: string | null;
+  /** The run's own row, read for autoRunEnd; all null once that row is gone. */
+  sessionStatus: RunStatus | null;
+  endReason: string | null;
+  completedAt: Date | null;
+  archivedAt: Date | null;
+  deletedAt: Date | null;
+  /** The run's own automatic retry (AutoRetryService), when one is armed. */
+  retryAt: Date | null;
+}
+
+/**
+ * Why the sweep leaves an auto-run task on a moment that has had its run, and what that asks of
+ * whoever reads the reason. The task read (`autoRunSkipped`) returns the code and this text; the
+ * retry policy (autoRunRetryDecisions) is what picks the code.
+ */
+const AUTO_RUN_SKIPPED_REQUIRED_ACTION = {
+  STOPPED_ON_REQUEST:
+    'start the task by hand (Run Now / task_start) when it should run again. Somebody asked this ' +
+    'run to end or filed it away (Stop, End, Complete or Trash, by a person or an agent acting on ' +
+    'their grant), and the sweep does not restart a run that was stopped',
+  RETRY_BACKOFF:
+    'nothing, unless it should run sooner: the sweep starts a new run at a new dispatch moment ' +
+    'once retryAt has passed. Run Now / task_start retries it now',
+  RETRY_LIMIT_REACHED:
+    `find out why its runs fail, then start it by hand (Run Now / task_start): they have failed ` +
+    `${MAX_AUTO_RUN_FAILURES} times, and the sweep does not retry it again`,
+  QUOTA_EXHAUSTED:
+    'nothing: the provider quota resets at retryAt, and the sweep retries the task then. Runs the ' +
+    'quota killed do not count toward the retry limit',
+  RUN_RETRY_ARMED:
+    "nothing: the run's own automatic retry resumes it at retryAt. The sweep starts a new run only " +
+    'once that retry has been spent or turned off',
+  MOMENT_ALREADY_DISPATCHED:
+    'start the task by hand (Run Now / task_start). Its run finished without failing and without ' +
+    'settling the task, and the sweep does not repeat a finished run; a new moment (the task ' +
+    "rescheduled, or its own or a prerequisite's status changing) makes it a candidate again",
+} as const;
+
+type AutoRunSkippedCode = keyof typeof AUTO_RUN_SKIPPED_REQUIRED_ACTION;
+
+/** The retry policy's answer for one such task: re-arm its moment now, or what holds it and until when. */
+type AutoRunRetryDecision =
+  | { code: 'RETRY'; retryAt: null }
+  | { code: AutoRunSkippedCode; retryAt: Date | null };
 
 /**
  * The scheduled sweep's candidate predicate (see dispatchDueScheduledTasks), correlated to an
@@ -1007,11 +1094,11 @@ const RECONCILE_INTERVAL_MS = 60_000;
 
 // Brake on the reconciler's re-dispatch. A task it auto-runs can land straight back in
 // the candidate set: when a run dies before its workspace ever moved the task to IN_PROGRESS,
-// reclaimStalledTask leaves the task OPEN (it only rewrites IN_PROGRESS), and the sweep
-// re-dispatches it a minute later. Nothing else stops that, so a failure the retry cannot
-// clear — a provider usage limit, a missing input file — becomes a once-a-minute respawn
-// loop that burns a session per attempt for as long as the failure lasts (days, for a
-// usage limit). Hold the task off for progressively longer after each failed run, then
+// reclaimStalledTask leaves the task OPEN (it only rewrites IN_PROGRESS), and the sweep re-arms
+// its dispatch moment and dispatches it again (rearmEndedAutoRuns). Nothing else stops that, so
+// a failure the retry cannot clear — a provider usage limit, a missing input file — becomes a
+// once-a-minute respawn loop that burns a session per attempt for as long as the failure lasts
+// (days, for a usage limit). Hold the task off for progressively longer after each failed run, then
 // stop auto-running it: past MAX_AUTO_RUN_FAILURES only an explicit trigger ("开始执行",
 // an @-mention, a prerequisite reaching DONE) starts it again. Indexed by failure count,
 // so entry [0] is the wait after the first failed run.
@@ -1061,8 +1148,9 @@ const INDEPENDENT_DISPATCH_MAX_PER_SWEEP = 200;
  * So what is carried is the MOMENT's name: `task_dispatch_epoch.epoch`, monotone, advanced once per
  * statement that creates a moment at which an automatic door may legitimately start this task's
  * work (a new or consumed appointment, this task reopening, a prerequisite's status moving, the
- * waiting set changing). Equal epochs mean the world this pass selected under is the world the
- * dispatch is writing into; different ones mean this delivery is answering a moment that is gone.
+ * waiting set changing, the retry policy re-arming a task whose run ended while it stayed OPEN).
+ * Equal epochs mean the world this pass selected under is the world the dispatch is writing into;
+ * different ones mean this delivery is answering a moment that is gone.
  */
 export interface AutoDispatch {
   /** `task_dispatch_epoch.epoch` as the candidate scan read it, and the epoch its token names. */
@@ -7047,55 +7135,41 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * Why the auto-run sweep leaves this task alone although it looks ready to start — for the one
    * cause that says so nowhere else: its current dispatch moment has already had its automatic run
-   * (AUTO_RUN_MOMENT_DISPATCHED_SQL), so neither candidate predicate selects it. Null for every task
-   * that is not what holds.
+   * (AUTO_RUN_MOMENT_DISPATCHED_SQL), so neither candidate predicate selects it, and the retry policy
+   * has not given it a new one. `code` says which of its holds applies and `retryAt` until when
+   * (autoRunRetryDecisions, the same decision the sweep acts on). Null for every task that is not
+   * what holds, including one whose ended run is due its retry: the next sweep re-arms that moment.
    *
    * On the read because no other surface will ever carry it. The refusals the sweep leaves to its
    * log — quota, disk, the failure backoff, no free slot — are re-offered every minute and clear by
    * themselves; a task out of the candidate set is never offered, so it leaves no log line, and it
-   * stays out until somebody starts it or its dispatch moment moves on.
+   * stays out until the retry policy re-arms it, somebody starts it, or its dispatch moment moves on.
    *
-   * Asked only of a task the predicates could otherwise select, OPEN and opted into auto-run, and
-   * not while a run occupies it: that run is what holds the task then, and naming the moment would
-   * send a reader after the wrong cause. `sessionId` is the receipt's, so it still names the run
-   * after that Session has been purged; `sessionStatus` is null then.
+   * Asked only of a task the retry policy reads (AUTO_RUN_RETRY_CANDIDATE_SQL), and so not while a
+   * run occupies it: that run is what holds the task then, and naming the moment would send a reader
+   * after the wrong cause. `sessionId` is the receipt's, so it still names the run after that Session
+   * has been purged; `sessionStatus` and `endReason` are null then.
    */
   private async autoRunSkipped(
     ownerId: string,
     task: { id: string; status: string; autoRunWhenReady: boolean },
   ) {
     if (task.status !== TaskStatus.OPEN || !task.autoRunWhenReady) return null;
-    const [row] = await this.prisma.$queryRaw<Array<{
-      epoch: bigint;
-      sessionId: string | null;
-      sessionStatus: RunStatus | null;
-    }>>(Prisma.sql`
-      SELECT current_moment.epoch, receipt.result->>'sessionId' AS "sessionId",
-             s.status AS "sessionStatus"
-        FROM task t
-        JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
-        JOIN task_run_request receipt ON ${AUTO_RUN_MOMENT_DISPATCHED_SQL}
-        LEFT JOIN session s ON s.id = (receipt.result->>'sessionId')::uuid
-       WHERE t.id = ${task.id}::uuid
-         AND t.owner_id = ${ownerId}::uuid
-         AND NOT EXISTS (
-           SELECT 1 FROM session occupying
-            WHERE occupying.task_id = t.id
-              AND occupying.status IN (${Prisma.join(
-                TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                ', ',
-              )})
-         )`);
-    if (!row) return null;
+    const [moment] = await this.endedAutoRunMoments(
+      Prisma.sql`t.id = ${task.id}::uuid AND t.owner_id = ${ownerId}::uuid`,
+    );
+    if (!moment) return null;
+    const decision = (await this.autoRunRetryDecisions([moment])).get(moment.id);
+    if (!decision) return null;
+    if (decision.code === 'RETRY') return null;
     return {
-      code: 'MOMENT_ALREADY_DISPATCHED' as const,
-      dispatchEpoch: row.epoch.toString(),
-      sessionId: row.sessionId,
-      sessionStatus: row.sessionStatus,
-      requiredAction:
-        'start the task by hand (Run Now / task_start). The auto-run sweep does not start one ' +
-        'dispatch moment twice; a new moment — the task rescheduled, or its own or a ' +
-        "prerequisite's status changing — makes it a candidate again",
+      code: decision.code,
+      dispatchEpoch: moment.dispatchEpoch.toString(),
+      sessionId: moment.sessionId,
+      sessionStatus: moment.sessionStatus,
+      endReason: moment.endReason,
+      retryAt: decision.retryAt,
+      requiredAction: AUTO_RUN_SKIPPED_REQUIRED_ACTION[decision.code],
     };
   }
 
@@ -8606,6 +8680,68 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The retry policy for an auto-run task whose run ended while the task stayed OPEN (the account
+   * owner's decision, 2026-09-14): give the task a NEW dispatch moment, so the candidate scans offer
+   * it again and its dispatch is a new request with a new Session, rather than the old moment's
+   * receipt answering with the run that ended.
+   *
+   * Nothing did this before. A Session ending moves no epoch, so from H2G (2026-08-23) such a task
+   * was replayed every minute and started nothing, and since AUTO_RUN_MOMENT_DISPATCHED_SQL it was
+   * left alone for good. The failure backoff and the quota gate written for exactly this case
+   * (2026-08-03) were unreachable for all of that time.
+   *
+   * Re-armed only when autoRunRetryDecisions says RETRY, which is the decision the task read reports:
+   * never for a run somebody asked to stop (autoRunEnd), not while the run's own automatic retry is
+   * armed, not while the provider quota is spent, not before the failure backoff lets it go, and not
+   * once the failure limit is reached. What else a dispatch meets — a Project's budget, the runner's
+   * slots, the disk floor — the scans apply to the new moment as to any other.
+   *
+   * At most one re-arm per ended run, and that is what bounds a task to one new Session per backoff
+   * window: the new moment has had no run, so it is not this policy's again until the scans have
+   * started one and that one has ended too. Two passes racing over the same ended run advance the
+   * epoch once (rearmAutoRunMoment), and their dispatches of the new moment are one request.
+   */
+  private async rearmEndedAutoRuns(): Promise<void> {
+    const moments = await this.endedAutoRunMoments(Prisma.sql`true`);
+    if (moments.length === 0) return;
+    const decisions = await this.autoRunRetryDecisions(moments);
+    for (const moment of moments) {
+      if (decisions.get(moment.id)?.code !== 'RETRY') continue;
+      if (!(await this.rearmAutoRunMoment(moment.id, moment.dispatchEpoch))) continue;
+      this.logger.log(
+        `re-armed auto-run task ${moment.id} past dispatch moment ${moment.dispatchEpoch}: its run ` +
+          `${moment.sessionId} ended ${moment.sessionStatus}`,
+      );
+    }
+  }
+
+  /**
+   * Move one task's dispatch epoch past the moment the retry policy read, and only past that one.
+   *
+   * A compare-and-set on the epoch the scan saw. Two passes that both decided to re-arm the same
+   * ended run advance it once: the second UPDATE waits on the first one's row lock, then finds the
+   * epoch already moved and matches nothing. The occupancy clause narrows the one race the scan
+   * cannot see, a run started by hand in between. `false` means something else moved the task on,
+   * which is an answer rather than a failure.
+   */
+  private async rearmAutoRunMoment(taskId: string, observedEpoch: bigint): Promise<boolean> {
+    const moved = await this.prisma.$executeRaw`
+      UPDATE "task_dispatch_epoch" moment
+         SET "epoch" = moment."epoch" + 1
+       WHERE moment."task_id" = ${taskId}::uuid
+         AND moment."epoch" = ${String(observedEpoch)}::bigint
+         AND NOT EXISTS (
+           SELECT 1 FROM "session" s
+            WHERE s."task_id" = moment."task_id"
+              AND s."status" IN (${Prisma.join(
+                TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+                ', ',
+              )})
+         )`;
+    return moved > 0;
+  }
+
+  /**
    * Periodic backstop for the auto-run edges the completion path can miss. triggerDependents
    * fires only at the instant a prerequisite reaches DONE, so a dependent that is READY
    * then but not yet runnable — no assignee, its assignee's runner offline, or a transient
@@ -8625,10 +8761,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * task a candidate again: execute()'s session dedup covers a run still in flight, and once one
    * ends, AUTO_RUN_MOMENT_DISPATCHED_SQL keeps its task out until the task's dispatch moment moves
    * on — before it, the pass re-offered the task every minute and was answered with the ended run.
-   * When the moment does move on, the quota gate and the failure backoff below are what bound the
-   * next attempt — without them this is an unbounded respawn loop.
+   * For a run that ended while its task stayed OPEN, this pass moves the moment on itself, first
+   * (rearmEndedAutoRuns). However the moment moves on, the quota gate and the failure backoff below
+   * are what bound the next attempt — without them this is an unbounded respawn loop.
    */
   private async reconcileReadyTasks(): Promise<void> {
+    // First, so the scans below read the moments it re-arms: a retry that is due starts in the pass
+    // that decided it. Failing here costs this pass its retries and nothing else; the next pass
+    // decides them again.
+    try {
+      await this.rearmEndedAutoRuns();
+    } catch (e) {
+      this.logger.warn(`re-arming ended auto-runs failed: ${e instanceof Error ? e.message : e}`);
+    }
     // AUTO_RUN_READY_SQL resolves READY database-side — the task HAS prerequisites and none of
     // them is unfinished, the same predicate as computeDependencyState's READY, so BLOCKED and
     // BLOCKED_FAILED alike drop out. Filtering in SQL rather than in memory is what keeps this
@@ -9280,7 +9425,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const usageByRunner = new Map(
       runners.map((r) => [r.id, r.planUsage as unknown as PlanUsage | null]),
     );
-    const now = new Date();
+    const now = this.now();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
@@ -9312,13 +9457,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * whose runner *does* report a healthy quota is dispatched at once instead: that report is
    * positive evidence the window reset, and delaying it would be the very "un-runnable fleet"
    * this exemption exists to prevent.
+   *
+   * `countUnrequestedEnds` is the retry policy's question (autoRunRetryDecisions), not the
+   * dispatch's: it also counts the runs that ended CANCELLED without anybody asking, which that
+   * policy retries like failed ones and so has to count like them. A task reaching a new moment any
+   * other way has never had a cancelled run held against it, and still does not.
    */
   private async autoRunHoldOff(
     taskIds: string[],
     quotaBlindTaskIds: ReadonlySet<string>,
+    { countUnrequestedEnds = false }: { countUnrequestedEnds?: boolean } = {},
   ): Promise<Map<string, Date | null>> {
     const held = new Map<string, Date | null>();
     const uniqueIds = [...new Set(taskIds)];
+    const now = this.now().getTime();
     const usageLimitIs = (negated: boolean) => {
       const clauses = USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
         error: { contains: marker, mode: Prisma.QueryMode.insensitive },
@@ -9332,23 +9484,58 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: {
           taskId: { in: ids },
           status: RunStatus.FAILED,
-          ...usageLimitIs(true),
+          // A run that failed with no error text matches no usage-limit marker, so it is an
+          // ordinary failure and counts. Said explicitly: the runner's /finalize omits `error` when
+          // its engine died without a message, and a negated match alone is not true of a NULL.
+          OR: [{ error: null }, usageLimitIs(true)],
         },
         _count: { _all: true },
         _max: { createdAt: true },
       });
-      const now = Date.now();
-      for (const row of failures) {
-        if (!row.taskId) continue;
-        const failed = row._count._all;
+      const spent = new Map<string, { failed: number; lastFailedAt?: number }>();
+      const spend = (rows: Array<{
+        taskId: string | null;
+        _count: { _all: number };
+        _max: { createdAt: Date | null };
+      }>) => {
+        for (const row of rows) {
+          if (!row.taskId) continue;
+          const sofar = spent.get(row.taskId) ?? { failed: 0 };
+          const at = row._max.createdAt?.getTime();
+          spent.set(row.taskId, {
+            failed: sofar.failed + row._count._all,
+            lastFailedAt:
+              at === undefined ? sofar.lastFailedAt : Math.max(at, sofar.lastFailedAt ?? at),
+          });
+        }
+      };
+      spend(failures);
+      if (countUnrequestedEnds) {
+        // autoRunEnd's UNREQUESTED cancels: no end reason, never filed away. Counted into the same
+        // budget, because a retried end that spends none is a retry with no brake.
+        const cancels = await this.prisma.session.groupBy({
+          by: ['taskId'],
+          where: {
+            taskId: { in: ids },
+            status: RunStatus.CANCELLED,
+            endReason: null,
+            completedAt: null,
+            archivedAt: null,
+            deletedAt: null,
+          },
+          _count: { _all: true },
+          _max: { createdAt: true },
+        });
+        spend(cancels);
+      }
+      for (const [taskId, { failed, lastFailedAt }] of spent) {
         if (failed >= MAX_AUTO_RUN_FAILURES) {
-          held.set(row.taskId, null);
+          held.set(taskId, null);
           continue;
         }
-        const lastFailedAt = row._max.createdAt?.getTime();
         if (lastFailedAt === undefined) continue;
         const until = lastFailedAt + AUTO_RUN_RETRY_BACKOFF_MS[failed - 1];
-        if (now < until) held.set(row.taskId, new Date(until));
+        if (now < until) held.set(taskId, new Date(until));
       }
       // The mirror query: only the usage-limit failures, counted for their recency alone, and
       // only for the tasks the gate is blind on. A separate round trip rather than one
@@ -9375,6 +9562,105 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return held;
+  }
+
+  /**
+   * The instant the auto-run retry policy decides against: the failure backoff, the quota gate and
+   * the task read that reports them. One seam, so a spec can put those windows exactly where it needs
+   * them; everything the candidate SQL decides still runs on the database's clock.
+   */
+  private now(): Date {
+    return new Date();
+  }
+
+  /**
+   * The auto-run tasks within `scope` (a condition on the outer `task t`) whose current dispatch
+   * moment has had its automatic run, with the run's own row as the retry policy reads it. The
+   * sweep's re-arm asks this of every task and the task read of one.
+   */
+  private endedAutoRunMoments(scope: Prisma.Sql): Promise<EndedAutoRunMoment[]> {
+    return this.prisma.$queryRaw<EndedAutoRunMoment[]>(Prisma.sql`
+      SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId",
+             a.runner_id AS "runnerId", current_moment.epoch AS "dispatchEpoch",
+             receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
+             run.end_reason AS "endReason", run.completed_at AS "completedAt",
+             run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
+             run.retry_at AS "retryAt"
+        FROM task t
+        JOIN workspace a ON a.id = t.assignee_id
+        JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
+        JOIN task_run_request receipt ON ${AUTO_RUN_MOMENT_DISPATCHED_SQL}
+        LEFT JOIN session run ON run.id = (receipt.result->>'sessionId')::uuid
+       WHERE ${AUTO_RUN_RETRY_CANDIDATE_SQL}
+         AND ${scope}`);
+  }
+
+  /**
+   * What the retry policy does with each of these moments: re-arm it now, or which hold keeps the
+   * task where it is and until when. One decision for both of its readers, the sweep that acts on it
+   * (rearmEndedAutoRuns) and the task read that explains it (autoRunSkipped), so the reason somebody
+   * reads is the reason the sweep applied.
+   *
+   * In order: how the run ended (autoRunEnd), then the run's own armed retry, then the same quota
+   * gate and failure budget the dispatch applies, on the provider the dispatch would use, so that a
+   * moment re-armed here is not one the dispatch then holds back.
+   */
+  private async autoRunRetryDecisions(
+    moments: EndedAutoRunMoment[],
+  ): Promise<Map<string, AutoRunRetryDecision>> {
+    const decisions = new Map<string, AutoRunRetryDecision>();
+    const retryable: EndedAutoRunMoment[] = [];
+    for (const moment of moments) {
+      const ended = autoRunEnd(moment);
+      if (ended === 'REQUESTED') {
+        decisions.set(moment.id, { code: 'STOPPED_ON_REQUEST', retryAt: null });
+      } else if (ended === 'FINISHED') {
+        decisions.set(moment.id, { code: 'MOMENT_ALREADY_DISPATCHED', retryAt: null });
+      } else if (moment.retryAt) {
+        // AutoRetryService is going to resume this very Session. Two schedulers reviving one task
+        // is how it gets two runs, so this one waits until that retry is spent or turned off.
+        decisions.set(moment.id, { code: 'RUN_RETRY_ARMED', retryAt: moment.retryAt });
+      } else {
+        retryable.push(moment);
+      }
+    }
+    if (retryable.length === 0) return decisions;
+    const seeds = await lastProviderByWorkspace(
+      this.prisma,
+      retryable.map((moment) => moment.workspaceId),
+    );
+    const assigned = retryable.map((moment) => ({
+      id: moment.id,
+      assignee: {
+        provider: (seeds.get(moment.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
+        runnerId: moment.runnerId,
+      },
+    }));
+    const quotaKey = (t: (typeof assigned)[number]) =>
+      `${t.assignee.runnerId}:${t.assignee.provider}`;
+    const { blocked, blind } = await this.quotaGate(assigned);
+    const heldOff = await this.autoRunHoldOff(
+      assigned.map((t) => t.id),
+      new Set(assigned.filter((t) => blind.has(quotaKey(t))).map((t) => t.id)),
+      { countUnrequestedEnds: true },
+    );
+    for (const t of assigned) {
+      const quotaResetsAt = blocked.get(quotaKey(t));
+      if (quotaResetsAt) {
+        decisions.set(t.id, { code: 'QUOTA_EXHAUSTED', retryAt: quotaResetsAt });
+      } else if (heldOff.has(t.id)) {
+        const until = heldOff.get(t.id) ?? null;
+        decisions.set(
+          t.id,
+          until
+            ? { code: 'RETRY_BACKOFF', retryAt: until }
+            : { code: 'RETRY_LIMIT_REACHED', retryAt: null },
+        );
+      } else {
+        decisions.set(t.id, { code: 'RETRY', retryAt: null });
+      }
+    }
+    return decisions;
   }
 
   /**

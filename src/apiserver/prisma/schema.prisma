@@ -2753,7 +2753,9 @@ model ProjectBlocker {
 /// 09:00 -> 10:00 -> 09:00 is a legitimate second appointment that re-derives the first one's name,
 /// and a prerequisite going DONE -> reopened -> DONE is a legitimate second READY transition under
 /// an unchanged edge set. Both would be answered with the first request's receipt — silently never
-/// running. See §7.7 D5-b4 for the transition table.
+/// running. See §7.7 D5-b4 for the transition table: task-row facts, advanced by triggers, plus one
+/// writer outside it since 2026-09-14 — the auto-run sweep re-arming a task whose run ended while it
+/// stayed OPEN (`TasksService.rearmEndedAutoRuns`, a compare-and-set on the epoch it read).
 ///
 /// A side table rather than a column on `task`, for the three costs 0132 measured: writing the Task
 /// row re-checks all its foreign keys, re-runs every row trigger on it, and moves a clock users

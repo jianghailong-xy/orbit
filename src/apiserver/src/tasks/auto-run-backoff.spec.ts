@@ -14,8 +14,8 @@ interface FailureHistory {
   taskId: string;
   /** Failure count, when the failures' text doesn't matter. */
   failed?: number;
-  /** `session.error` of each failed run, when it does (usage-limit filtering). */
-  errors?: string[];
+  /** `session.error` of each failed run, when it does (usage-limit filtering); null records none. */
+  errors?: Array<string | null>;
   lastFailedAt: Date;
 }
 
@@ -37,10 +37,11 @@ type ErrorClause = Array<{ error: { contains: string } }>;
 type GroupByArgs = {
   where: {
     taskId: { in: string[] };
-    /** Present on the usage-limit query: count only failures matching a marker. */
-    OR?: ErrorClause;
-    /** Present on the budget query: count only failures matching no marker. */
-    NOT?: { OR?: ErrorClause };
+    /**
+     * The usage-limit query: count only failures matching a marker. The budget query: count a
+     * failure that recorded no error text, or one matching no marker.
+     */
+    OR?: Array<{ error: { contains: string } | null } | { NOT: { OR: ErrorClause } }>;
   };
 };
 
@@ -93,8 +94,14 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {
-        const included = (where.OR ?? []).map((c) => c.error.contains.toLowerCase());
-        const excluded = (where.NOT?.OR ?? []).map((c) => c.error.contains.toLowerCase());
+        const clauses = where.OR ?? [];
+        const included = clauses.flatMap((c) =>
+          'error' in c && c.error ? [c.error.contains.toLowerCase()] : []);
+        const excluded = clauses.flatMap((c) =>
+          'NOT' in c ? c.NOT.OR.map((m) => m.error.contains.toLowerCase()) : []);
+        // A NULL `error` matches no marker, and a negated match is not true of it either — so a
+        // query counts one only when it says so.
+        const countsNoText = clauses.some((c) => 'error' in c && c.error === null);
         // A `failed: n` fixture means n ordinary failures with no usage-limit wording, so it
         // stands in as n empty error strings — counted by the exclusion query, ignored by the
         // inclusion one. Modelling both directions is what lets a test assert that a quota
@@ -102,6 +109,7 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
         const counted = (h: FailureHistory): number => {
           const errors = h.errors ?? Array.from({ length: h.failed ?? 0 }, () => '');
           return errors.filter((e) => {
+            if (e === null) return countsNoText;
             const lower = e.toLowerCase();
             return included.length
               ? included.some((m) => lower.includes(m))
@@ -131,6 +139,17 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
 const sweep = (service: TasksService): Promise<void> =>
   (service as unknown as { reconcileReadyTasks(): Promise<void> }).reconcileReadyTasks();
 
+/**
+ * The dependency scan's SQL among what a sweep sent, found by what it selects rather than by its
+ * position: the pass opens with the retry policy's read of ended runs (rearmEndedAutoRuns), which
+ * reads a different shape and starts nothing itself.
+ */
+const candidateScan = (statements: Array<{ text: string }>): string => {
+  const scan = statements.find((statement) => statement.text.includes('work_dir_free_bytes'));
+  assert.ok(scan, `no candidate scan among the sweep's ${statements.length} statements`);
+  return scan.text;
+};
+
 const agoMs = (ms: number): Date => new Date(Date.now() - ms);
 
 // Verbatim from a FAILED session's `error` when the account's weekly quota was spent.
@@ -158,6 +177,18 @@ test('a task is held off while inside the backoff window for its failure count',
   const { service, executed } = makeService(
     [],
     [{ taskId: 'task-just-failed', failed: 1, lastFailedAt: agoMs(30_000) }],
+  );
+  await sweep(service);
+  assert.deepEqual(executed, []);
+});
+
+test('a failed run that recorded no error text still counts toward the backoff', async () => {
+  // The runner's /finalize omits `error` when its engine died without a message. A NULL matches no
+  // usage-limit marker, so it is an ordinary failure — and a budget query that only negated the
+  // markers would not count it, leaving exactly these runs retried every minute.
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-silent-failure', errors: [null], lastFailedAt: agoMs(30_000) }],
   );
   await sweep(service);
   assert.deepEqual(executed, []);
@@ -387,7 +418,7 @@ test('a held task is filtered out of the candidate scan, without reading its lis
     $queryRaw: raw.$queryRaw,
   } as never;
   await sweep(new TasksService(prisma, {} as never, {} as never));
-  const sql = raw.statements[0].text;
+  const sql = candidateScan(raw.statements);
   // In the scan, not only in execute(): a paused 500-task list would otherwise throw once per
   // task per minute for as long as the pause lasted.
   assert.match(sql, /t\.dispatch_hold = false/);
@@ -406,7 +437,7 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
     $queryRaw: raw.$queryRaw,
   } as never;
   await sweep(new TasksService(prisma, {} as never, {} as never));
-  const sql = raw.statements[0].text;
+  const sql = candidateScan(raw.statements);
 
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.auto_run_when_ready = true/);

@@ -75,7 +75,10 @@ export function taskRunDesiredSessionId(requestKey: string): string {
  * `task_dispatch_epoch` (0137, advanced in one canonical batch since 0154) and §7.7 D5-b4's
  * transition table are what make that impossible: the counter advances once per statement that
  * creates a moment at which an automatic door may legitimately start this task's work, and it only
- * ever goes up. Two passes over the same moment read the same epoch off a committed row — on two
+ * ever goes up. The table's rows are task-row facts, advanced by triggers. Since 2026-09-14 one row
+ * is not: an auto-run task whose run ended while it stayed OPEN is given a new moment by the sweep's
+ * retry policy (`TasksService.rearmEndedAutoRuns`, a compare-and-set on the epoch it read), once
+ * the backoff, the failure limit and the quota allow it and never after a run somebody stopped. Two passes over the same moment read the same epoch off a committed row — on two
  * replicas, before and after a restart — which is the half that makes a redelivered pass ONE
  * request; and a moment that has passed can never be re-entered, which is the half that lets an
  * automatic stand-down FREEZE its answer instead of leaving the request open for ever.
@@ -96,7 +99,9 @@ export const TASK_RUN_TRIGGER = {
   scheduled: (taskId: string, epoch: bigint | number | string): string =>
     `sched:${taskId}:${epoch}`,
   /**
-   * The moment this task became READY, at the epoch the unlock was read under.
+   * The moment this task became READY, at the epoch the unlock was read under — or the moment the
+   * retry policy gave it again after its run ended, which the dependency and independent scans
+   * dispatch under this same name.
    *
    * Keyed on the epoch rather than on `task_dependency_revision` (0132), which is what H2F carried:
    * the edge set does not change while a prerequisite goes DONE -> reopened -> DONE, nor while this

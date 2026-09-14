@@ -134,7 +134,11 @@ test('the auto-run sweep will not start a task before its scheduled time', () =>
   const service = serviceWith({ $queryRaw });
 
   return (service as any).reconcileReadyTasks().then(() => {
-    assert.match(statements[0].text, /\(t\.run_at IS NULL OR t\.run_at <= now\(\)\)/);
+    // The candidate scan, found by what it selects rather than by position: the pass opens with the
+    // retry policy's read of ended runs (rearmEndedAutoRuns), which dispatches nothing itself.
+    const scan = statements.find((statement) => statement.text.includes('work_dir_free_bytes'));
+    assert.ok(scan, `no candidate scan among ${JSON.stringify(statements.map((s) => s.text))}`);
+    assert.match(scan.text, /\(t\.run_at IS NULL OR t\.run_at <= now\(\)\)/);
   });
 });
 
