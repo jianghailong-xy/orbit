@@ -2516,7 +2516,11 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	specs = append(specs, mergeReceiptCLICapabilities...)
 	// Ungated like the task commands, but SessionOnly: a watch wakes the session that makes it.
 	// session_await is not here; it rides the orchestration gate with the session commands.
-	specs = append(specs, watchCLICapabilities...)
+	// Neither is listed in a session spawned with Watch off (watch_rollout.go).
+	watches := watchesEnabledFromEnv()
+	if watches {
+		specs = append(specs, watchCLICapabilities...)
+	}
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:
@@ -2531,6 +2535,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			continue
 		}
 		if spec.HeadlessOnly && ctx.SessionID != "" {
+			continue
+		}
+		if spec.Tool == "session_await" && !watches {
 			continue
 		}
 		d := descriptors[spec.Tool]

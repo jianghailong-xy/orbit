@@ -472,6 +472,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_AGENT_ID":                  publicID(job.AgentID),
 		"ORBIT_TASK_ID":                   publicID(job.TaskID),
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
+		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
 	})
@@ -856,7 +857,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 	}
 	appendPrompt := strings.TrimSpace(strings.Join(nonEmptyStrings(
 		job.Agent.AppendSystemPrompt,
-		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork()),
+		openCodeOrbitCLIInstructions(executable, job.insideRecordedWork(), job.watchesOn()),
 	), "\n\n"))
 	if appendPrompt != "" {
 		instructionsPath := filepath.Join(scratchDir, "opencode-instructions.txt")
@@ -889,6 +890,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_AGENT_ID":            publicID(job.AgentID),
 			"ORBIT_TASK_ID":             publicID(job.TaskID),
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
+			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
 		}
@@ -923,8 +925,8 @@ func nonEmptyStrings(values ...string) []string {
 	return out
 }
 
-func openCodeOrbitCLIInstructions(executable string, insideRecordedWork bool) string {
-	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork), "mcp__orbit__*", "orbit_*", 1)
+func openCodeOrbitCLIInstructions(executable string, insideRecordedWork, watches bool) string {
+	return strings.Replace(orbitCLIInstructions(executable, insideRecordedWork, watches), "mcp__orbit__*", "orbit_*", 1)
 }
 
 func appendConfigString(value interface{}, addition string) []string {

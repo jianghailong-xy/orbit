@@ -592,6 +592,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),
 		"ORBIT_TASK_ID="+publicID(job.TaskID),
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
+		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envMCPPermissionPrompt+"=0",
 	)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Kimi's `orbit` MCP server
@@ -1037,12 +1038,12 @@ func kimiNameValuePairs(value interface{}) []map[string]string {
 	return pairs
 }
 
-func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork bool) string {
+func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecordedWork, watches bool) string {
 	parts := []string{}
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches)); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
@@ -1054,8 +1055,8 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	return strings.Join(parts, "\n\n")
 }
 
-func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork bool) string {
-	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork)
+func kimiPromptText(agent AgentExecConfig, orbitExe, text string, insideRecordedWork, watches bool) string {
+	instructions := kimiAgentInstructions(agent, orbitExe, insideRecordedWork, watches)
 	if instructions == "" {
 		return text
 	}
@@ -1107,7 +1108,7 @@ func prepareKimiPrompt(ctx context.Context, t *Transport, job *ClaimedSession, r
 			feedText = note
 		}
 	}
-	feedText = kimiPromptText(job.Agent, orbitCLIExecutable(), feedText, job.insideRecordedWork())
+	feedText = kimiPromptText(job.Agent, orbitCLIExecutable(), feedText, job.insideRecordedWork(), job.watchesOn())
 	if feedText != "" || len(blocks) == 0 {
 		blocks = append(blocks, map[string]interface{}{"type": "text", "text": feedText})
 	}

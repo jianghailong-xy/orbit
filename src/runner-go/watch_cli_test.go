@@ -283,7 +283,7 @@ func TestWatchHelpIsReachableFromEveryDoor(t *testing.T) {
 
 func TestAgentInstructionsSendOrbitWaitsToWatches(t *testing.T) {
 	const exe = "/usr/local/bin/orbit"
-	instructions := orbitCLIInstructions(exe, true)
+	instructions := orbitCLIInstructions(exe, true, true)
 	for _, phrase := range []string{"do not poll", "task_await", "session_await", "end your turn"} {
 		if !strings.Contains(instructions, phrase) {
 			t.Errorf("instructions do not say %q", phrase)

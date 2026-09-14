@@ -151,6 +151,9 @@ func watchCLIContext(command string) (cliOrchestrationContext, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return cliOrchestrationContext{}, fmt.Errorf("ORBIT_SESSION_ID %w", err)
 	}
+	if !watchesEnabledFromEnv() {
+		return cliOrchestrationContext{}, fmt.Errorf("%s", watchesOffMessage(command))
+	}
 	return cliOrchestrationContext{sessionID: id, token: strings.TrimSpace(os.Getenv(envOrchestrationToken))}, nil
 }
 
@@ -358,6 +361,9 @@ func cliTaskAwait(args []string, out io.Writer) error {
 // cliSessionAwait is `orbit session await`. cmdSessionCLI has already resolved the orchestration context
 // session_await needs, which has no headless form.
 func cliSessionAwait(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	if !watchesEnabledFromEnv() {
+		return fmt.Errorf("%s", watchesOffMessage("orbit session await"))
+	}
 	return cliAwait("orbit session await", "session-id", "SESSION", sessionAwaitPresets, args, out, ctx)
 }
 

@@ -31,6 +31,7 @@ import { dispatchAllowedTools } from '../common/permission-rules';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
 import { sessionSourceSnapshot } from '../projects/session-source';
+import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -432,6 +433,9 @@ export class QueueService {
       // Mirror the workspace's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
       // and `orbit mcp` exposes the session_* tools only for enabled workspaces.
       allowOrchestration: workspace?.enableOrchestration ?? false,
+      // Absent while Watch is on for the owner, the payload runners have always had; `watchesDisabled` otherwise, so
+      // the runner spawns the session without the watch tools (docs/watch-rollout.md).
+      ...watchClaimFields(currentWatchRollout(), session.ownerId),
       // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
       // cannot outlast the one waiting on it.
       spawnDepth: session.spawnDepth,

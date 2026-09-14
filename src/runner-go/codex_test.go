@@ -59,7 +59,7 @@ func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	// a deliberate edit, because Codex hands its MCP servers this ALLOWLIST instead
 	// of its own environment — a variable the spawn sets but this list omits simply
 	// never arrives (ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on it for that reason).
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {
@@ -169,8 +169,8 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if !ok || orbit["kind"] != "application" {
 		t.Fatalf("orbit CLI context = %#v", additional["orbit_00000000_cli"])
 	}
-	if orbit["value"] != orbitCLIInstructions(exe, false) {
-		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe, false))
+	if orbit["value"] != orbitCLIInstructions(exe, false, true) {
+		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe, false, true))
 	}
 	owner, ok := additional["orbit_00000000_agent_append_00000000"].(map[string]interface{})
 	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {
@@ -405,7 +405,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	if len(input) != 2 || !strings.Contains(input[0]["text"].(string), "<orbit_application_context>") || input[1]["text"] != "hello" {
 		t.Fatalf("legacy input = %#v", input)
 	}
-	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false)
+	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false, true)
 	if len(items) != 1 || items[0]["role"] != "developer" {
 		t.Fatalf("injected items = %#v", items)
 	}
@@ -421,7 +421,7 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 
 func TestCodexAdditionalContextChunksLongOwnerInstructionsLosslessly(t *testing.T) {
 	want := strings.Repeat("界abc", 900)
-	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false)
+	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7, false, true)
 	keys := make([]string, 0, len(context))
 	for key := range context {
 		if strings.HasPrefix(key, "orbit_00000007_agent_append_") {

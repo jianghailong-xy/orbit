@@ -28,6 +28,7 @@ import {
   WatchTargetFact,
   WatchTargetKind,
 } from './watch-predicate';
+import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch-rollout';
 
 /**
  * The Watch evaluator (docs/watch-contract.md §8, §12): it decides from the database, schedules on
@@ -106,6 +107,8 @@ export interface WatchEvaluatorOptions {
   reconcileIntervalMs?: number;
   pollIntervalMs?: number;
   claimBatch?: number;
+  /** How far Watch is switched on (docs/watch-rollout.md); ORBIT_WATCHES as the environment sets it when omitted. */
+  rollout?: WatchRollout;
 }
 
 /**
@@ -242,6 +245,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   private readonly reconcileIntervalMs: number;
   private readonly pollIntervalMs: number;
   private readonly claimBatch: number;
+  private readonly rollout: WatchRollout;
 
   private loop: 'IDLE' | 'RUNNING' | 'STOPPED' = 'IDLE';
   private hints?: Subscription;
@@ -260,9 +264,16 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     this.reconcileIntervalMs = options.reconcileIntervalMs ?? WATCH_RECONCILE_INTERVAL_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? WATCH_POLL_INTERVAL_MS;
     this.claimBatch = options.claimBatch ?? WATCH_CLAIM_BATCH;
+    this.rollout = options.rollout ?? currentWatchRollout();
   }
 
   onModuleInit(): void {
+    // ORBIT_WATCHES=off (docs/watch-rollout.md): every watch stays as it is, due or not, until a replica that runs the
+    // loop starts it again, and that replica's first pass is the one that finds what came due meanwhile.
+    if (!watchWorkersRun(this.rollout)) {
+      this.log.warn('Watch is off (ORBIT_WATCHES=off): this replica evaluates no watch');
+      return;
+    }
     this.start();
   }
 

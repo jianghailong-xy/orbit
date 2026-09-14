@@ -68,7 +68,7 @@ func orbitCLIInstructionExecutable(exe string) string {
 //
 // Kept ASCII and roughly a paragraph long: codex carries this as a single
 // application-context value capped at 1,000 tokens (see codexAgentAdditionalContext).
-func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
+func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) string {
 	executable = orbitCLIInstructionExecutable(executable)
 	if executable == "" {
 		return ""
@@ -86,7 +86,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
-		orbitWaitInstructions +
+		orbitWaitInstructionsFor(watches) +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
@@ -101,6 +101,16 @@ const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status
 	"poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for " +
 	"other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a " +
 	"structured payload when the condition holds, even if this engine was recycled in the meantime.\n\n"
+
+// orbitWaitInstructionsFor is that paragraph for a session spawned with Watch on, and nothing for one spawned
+// with it off (watch_rollout.go): it has no await tool to send a wait to, and is told what sessions were told
+// before watches.
+func orbitWaitInstructionsFor(watches bool) string {
+	if !watches {
+		return ""
+	}
+	return orbitWaitInstructions
+}
 
 // orbitProgressInstructions tells a session running a task how its progress reaches Orbit. A watch on the
 // task decides from task_progress_report alone, so "3 of 8 done" written into a reply or printed by a shell
@@ -152,8 +162,8 @@ func (s *ClaimedSession) insideRecordedWork() bool {
 	return s != nil && s.TaskID != ""
 }
 
-func withOrbitCLIInstructions(configured, executable string, insideRecordedWork bool) string {
-	orbit := orbitCLIInstructions(executable, insideRecordedWork)
+func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches bool) string {
+	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches)
 	if orbit == "" {
 		return configured
 	}
@@ -250,6 +260,7 @@ func appendClaudeAgentInstructionArgs(
 	executable string,
 	allowOrchestration bool,
 	insideRecordedWork bool,
+	watches bool,
 ) []string {
 	// The raw absolute path remains safe for direct exec/MCP configuration. Only
 	// inject and auto-allow the CLI when it is also unambiguous in Claude's
@@ -258,7 +269,7 @@ func appendClaudeAgentInstructionArgs(
 	if agent.SystemPrompt != "" {
 		args = append(args, "--system-prompt", agent.SystemPrompt)
 	}
-	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork); appendPrompt != "" {
+	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
 	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable, allowOrchestration)...)

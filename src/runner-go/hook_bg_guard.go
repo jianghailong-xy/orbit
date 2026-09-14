@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -49,6 +50,55 @@ const bgGuardScheduleWakeupReason = "Orbit holds this session's wakeups on its s
 	" session even if this engine is gone by then. To wait for Orbit tasks or sessions, use" +
 	" mcp__orbit__task_await or mcp__orbit__session_await, which wake you when they finish."
 
+// A poll of Orbit's own work is refused wherever it is started from — a Bash call in the turn, a background
+// shell, a Monitor, a runner-hosted job — because the wait it keeps is one the control plane holds for nothing:
+// task_await and session_await ask it to. Only while Watch is on for the session (watch_rollout.go): with
+// Watch off there is nothing to route the wait to, and polling is what waiting was before watches.
+const bgGuardOrbitPollReason = "This command waits on Orbit's own work by polling it: it reads an Orbit task or session" +
+	" and sleeps between reads. Orbit holds that wait on its server instead, so nothing has to keep polling: call" +
+	" mcp__orbit__task_await for tasks or mcp__orbit__session_await for sessions (mcp__orbit__watch_create for other" +
+	" conditions), then end your turn. Orbit starts a turn in this session when the condition holds, even after this" +
+	" engine is recycled or the runner restarts. A single read without a wait (task_get, session_get) is fine, and" +
+	" real background work still goes to mcp__orbit__bg_run: builds, test suites, dev servers, and waits on something" +
+	" outside Orbit such as CI."
+
+// A poll of Orbit's work, as one command shows it: a read of an Orbit task or session, and a wait between reads.
+// The reads are the CLI's get and list of tasks, sessions, task lists and projects, the REST routes behind them,
+// and SQL on Orbit's tables through psql; the wait is a sleep, a `watch -n` or Python's time.sleep. Both halves
+// have to be in the command itself. A script run by its path is not opened, because what an arbitrary script
+// does is not something a hook can read reliably, and a single read is not a wait (docs/watch-rollout.md §4).
+var (
+	orbitWorkReadPattern  = regexp.MustCompile(`(?i)\borbit\b[^|;&\n]*\s(?:task|session|tasklist|task-list|project)\s+(?:get|list)\b|/api/(?:runner/)?(?:tasks|sessions)\b`)
+	orbitSQLClientPattern = regexp.MustCompile(`(?i)\bpsql\b`)
+	orbitSQLReadPattern   = regexp.MustCompile(`(?i)\b(?:from|join)\s+"?(?:task|session|conversation_turn|task_progress)\b`)
+	pollDelayPattern      = regexp.MustCompile(`(?i)\bsleep\s+[0-9$({"']|time\.sleep\s*\(|\bwatch\s+(?:-[a-z]+\s+)*-n\b`)
+)
+
+// pollsOrbitWork reports whether a tool input's command polls Orbit's own work.
+func pollsOrbitWork(input map[string]interface{}) bool {
+	command, _ := input["command"].(string)
+	if !pollDelayPattern.MatchString(command) {
+		return false
+	}
+	if orbitWorkReadPattern.MatchString(command) {
+		return true
+	}
+	return orbitSQLClientPattern.MatchString(command) && orbitSQLReadPattern.MatchString(command) &&
+		strings.Contains(strings.ToLower(command), "orbit")
+}
+
+// bgGuardAwaitAdvice is a refusal as a session with Watch reads it, and without its closing advice to await
+// Orbit's work in a session spawned with Watch off, which has no await tool to be pointed at.
+func bgGuardAwaitAdvice(reason string, watches bool) string {
+	if watches {
+		return reason
+	}
+	if cut := strings.Index(reason, " To wait for Orbit tasks or sessions"); cut >= 0 {
+		return reason[:cut]
+	}
+	return reason
+}
+
 // hookInput is the PreToolUse payload Claude Code writes on the hook's stdin.
 type hookInput struct {
 	HookEventName string                 `json:"hook_event_name"`
@@ -68,17 +118,27 @@ func cmdHookBgGuard(stdin io.Reader, stdout io.Writer) {
 
 func bgGuardDecision(in hookInput) map[string]interface{} {
 	decision, reason := "allow", ""
+	watches := watchesEnabledFromEnv()
 	switch in.ToolName {
 	// Only Bash. run_in_background also appears on sub-agent launches, which are
 	// engine-internal work the runner cannot host — denying those would remove a
 	// working capability to no end.
 	case "Bash":
-		if asBool(in.ToolInput["run_in_background"]) {
-			decision, reason = "deny", bgGuardDenyReason
+		switch {
+		// First: a poll of Orbit's work in the background is sent to the wait itself, not on to bg_run.
+		case watches && pollsOrbitWork(in.ToolInput):
+			decision, reason = "deny", bgGuardOrbitPollReason
+		case asBool(in.ToolInput["run_in_background"]):
+			decision, reason = "deny", bgGuardAwaitAdvice(bgGuardDenyReason, watches)
+		}
+	// Both keep something running, which is how a poll outlives the call that started it.
+	case "Monitor", "mcp__orbit__bg_run":
+		if watches && pollsOrbitWork(in.ToolInput) {
+			decision, reason = "deny", bgGuardOrbitPollReason
 		}
 	// Every call, whatever it asks for: see bgGuardScheduleWakeupReason.
 	case "ScheduleWakeup":
-		decision, reason = "deny", bgGuardScheduleWakeupReason
+		decision, reason = "deny", bgGuardAwaitAdvice(bgGuardScheduleWakeupReason, watches)
 	// The readers for the engine's own background tasks (old names and new). A
 	// runner-hosted job is not one, and the id says so — the runner issued that
 	// prefix itself, so this is not a guess about who owns what.

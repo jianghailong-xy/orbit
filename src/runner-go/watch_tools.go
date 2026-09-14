@@ -364,6 +364,9 @@ func (s *mcpServer) callWatchTool(name string, args map[string]interface{}) (map
 	if !watchToolNames[name] {
 		return nil, false
 	}
+	if s.watchesOff {
+		return toolResult(watchesOffMessage(name), true), true
+	}
 	if name == "session_await" && !s.orchestrationEnabled() {
 		return toolResult(orchestrationOffMsg, true), true
 	}
@@ -706,6 +709,12 @@ func watchDoorMissing(err error) bool {
 // watchCallError says what failed. For a server without the door it says so in words: this binary can be
 // newer than the control plane it talks to, and a bare 404 reads like a wrong watch id.
 func watchCallError(action string, err error) error {
+	// Before the missing door: the refusal of a server that has Watch off is a 404 too, on purpose.
+	if watchesDisabledByServer(err) {
+		return fmt.Errorf("%s: Watch is not on for this account on this Orbit server (%s), so it cannot hold this wait. "+
+			"Do not fall back to polling with sleep, Bash loops or Monitor: look again in a later turn, or tell the user "+
+			"what you are waiting for", action, watchesDisabledCode)
+	}
 	if watchDoorMissing(err) {
 		return fmt.Errorf("%s: this Orbit server has no watch door for agents yet (it answered 404 for /api/runner/watches), "+
 			"so it cannot hold a wait. Upgrade the Orbit server; until then do not fall back to polling with sleep or Bash "+

@@ -88,6 +88,19 @@ func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created js
 		wait.session, wait.settled = raw, sessionRawSettled(raw)
 		return wait, err
 	}
+	// Spawned with Watch off (watch_rollout.go): the wait runs the way it did before watches, and an answer that
+	// has not settled says that nothing holds it.
+	if !watchesEnabledFromEnv() {
+		raw, err := waitForSessionRaw(t, ctx, created)
+		if err != nil {
+			return wait, err
+		}
+		wait.session, wait.settled = raw, sessionRawSettled(raw)
+		if !wait.settled {
+			wait.watch = &sessionWaitWatch{Code: watchesDisabledCode, Error: "Watch is switched off for this session", Note: sessionWaitUnbackedNote}
+		}
+		return wait, nil
+	}
 	watchID, err := recordSessionWaitWatch(t, ctx, childID)
 	if err != nil {
 		if !sessionWaitWatchRefused(err) {
@@ -245,8 +258,13 @@ func (w sessionWait) unbacked() bool {
 // unbackedNote is what an unbacked wait tells its caller, in the words of the surface that waited: get and await
 // name that surface's ways to look at the session again and to be woken when it settles.
 func (w sessionWait) unbackedNote(get, await string) string {
-	return "The session has not settled, and no server-held watch backs this wait (" + w.watch.Error +
-		"): look at it again later with " + get + ", or call " + await + " to be woken when it settles."
+	note := "The session has not settled, and no server-held watch backs this wait (" + w.watch.Error +
+		"): look at it again later with " + get
+	if w.watch.Code == watchesDisabledCode {
+		// Watch is off for this account, and awaiting the session would be refused the same way.
+		return note + "."
+	}
+	return note + ", or call " + await + " to be woken when it settles."
 }
 
 // sessionRawSettled reads a session body's status the way sessionSettled judges it.
@@ -285,6 +303,8 @@ func unbackedSessionWaitReason(err error) (reason, code string) {
 	}
 	failure = strings.Join(strings.Fields(failure), " ")
 	switch {
+	case watchesDisabledByServer(err):
+		return "Watch is not on for this account on this Orbit server", code
 	case watchDoorMissing(err):
 		return "this Orbit server predates watches", code
 	case sessionWaitWatchRefused(err):

@@ -1085,6 +1085,10 @@ export interface ClaimedSession {
   /** Whether this session's agent may orchestrate other sessions (Agent.enableOrchestration).
    *  Injected as ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes session_* tools. */
   allowOrchestration?: boolean;
+  /** Present, and true, only when Watch is not switched on for this session's owner (the apiserver's ORBIT_WATCHES,
+   *  docs/watch-rollout.md). Injected as ORBIT_WATCHES=off so `orbit mcp` leaves out the watch tools and waits
+   *  inline, and the bg-guard hook lets polling through, as before watches. Absent means on. */
+  watchesDisabled?: boolean;
   /** How many spawn links sit above this session (a root is 0), injected as
    *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
    *  nested wait always finishes inside the wait that is waiting on it. */
@@ -1416,6 +1420,8 @@ export interface ReclaimSession {
   taskId?: string;
   /** Orchestration opt-in, cf. ClaimedSession.allowOrchestration. */
   allowOrchestration?: boolean;
+  /** Watch not switched on for the owner, cf. ClaimedSession.watchesDisabled. */
+  watchesDisabled?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
   /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived

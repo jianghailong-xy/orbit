@@ -36,6 +36,7 @@ func cmdMcp() {
 		orchestrationToken:    os.Getenv(envOrchestrationToken),
 		allowPermissionPrompt: mcpPermissionPromptEnabled(),
 		allowOrchestration:    mcpOrchestrationEnabled(),
+		watchesOff:            !watchesEnabledFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -48,6 +49,7 @@ type mcpServer struct {
 	orchestrationToken    string // signed proof binding orchestration calls to sessionID
 	allowPermissionPrompt bool   // Claude-only live approval bridge
 	allowOrchestration    bool   // L3: expose session_* tools (Agent.enableOrchestration)
+	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
@@ -155,7 +157,11 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())}), true
+		tools := toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())
+		if s.watchesOff {
+			tools = withoutWatchTools(tools)
+		}
+		return s.ok(req.ID, map[string]interface{}{"tools": tools}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`

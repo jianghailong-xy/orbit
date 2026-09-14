@@ -593,6 +593,9 @@ type ClaimedSession struct {
 	// AllowOrchestration mirrors the agent's enableOrchestration; injected as
 	// ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes the session_* tools.
 	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
+	// WatchesDisabled is set when Watch is not switched on for this session's owner (the apiserver's
+	// ORBIT_WATCHES); injected as ORBIT_WATCHES=off (watch_rollout.go). Absent means on.
+	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	// SpawnDepth is how many spawn links sit above this session (a root is 0), injected as
 	// ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
 	// nested wait always settles inside the wait that is waiting on it.

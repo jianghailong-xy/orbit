@@ -135,6 +135,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
+import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
@@ -1601,6 +1602,7 @@ export class RunnerApiController {
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only write below is an
     // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again.
+    const watchRollout = currentWatchRollout();
     const out: ReclaimSession[] = [];
     for (const s of reclaimable) {
       if (!supportsTerminalHandoff && isTerminalResumeHandoffOwner(s.inboxLeaseOwner)) {
@@ -1748,6 +1750,8 @@ export class RunnerApiController {
         orchestrationToken: allowOrchestration
           ? await this.orchestration.issue(runner.id, s.id)
           : undefined,
+        // cf. the claim path: a reclaimed session is spawned again, and Watch may have been switched since its claim.
+        ...watchClaimFields(watchRollout, s.ownerId),
         // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first
         // claim froze, whatever the binding's configuration or the ref's tip have done since —
         // that is what makes a runner restart a continuation of the same run rather than a new one

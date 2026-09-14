@@ -27,7 +27,7 @@ import {
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
-import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive } from './watch-metrics';
+import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive, countWatchRolloutRefusal } from './watch-metrics';
 import {
   describePredicate,
   leafHolds,
@@ -45,6 +45,13 @@ import {
   parseRequestedPredicate,
   watchRefusal,
 } from './watch-request';
+import {
+  currentWatchRollout,
+  watchesAcceptWaits,
+  watchesDisabledError,
+  type WatchRollout,
+  type WatchRolloutGatedWrite,
+} from './watch-rollout';
 
 /** A delivery as a client reads it: a retry in progress and a dead letter are read here. */
 const DELIVERY_VIEW_SELECT = {
@@ -141,6 +148,8 @@ export interface WatchesOptions {
   maxLiveWatchesPerOwner?: number;
   maxLiveWatchesPerTarget?: number;
   maxCreateWaitMs?: number;
+  /** How far Watch is switched on (docs/watch-rollout.md); ORBIT_WATCHES as the environment sets it when omitted. */
+  rollout?: WatchRollout;
 }
 
 const TRANSITION_SELECT = {
@@ -197,6 +206,7 @@ export class WatchesService {
   private readonly maxLiveWatchesPerOwner: number;
   private readonly maxLiveWatchesPerTarget: number;
   private readonly maxCreateWaitMs: number;
+  private readonly rollout: WatchRollout;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -205,6 +215,17 @@ export class WatchesService {
     this.maxLiveWatchesPerOwner = options.maxLiveWatchesPerOwner ?? WATCH_LIMITS.maxLiveWatchesPerOwner;
     this.maxLiveWatchesPerTarget = options.maxLiveWatchesPerTarget ?? WATCH_LIMITS.maxLiveWatchesPerTarget;
     this.maxCreateWaitMs = options.maxCreateWaitMs ?? CREATE_WAIT_MS;
+    this.rollout = options.rollout ?? currentWatchRollout();
+  }
+
+  /**
+   * Refuse a write that would add a wait or a wake while Watch is not on for the account (docs/watch-rollout.md). What
+   * reads a watch or stops one is never asked: it is how an owner winds down what was made while Watch was on.
+   */
+  private assertWatchesOn(ownerId: string, write: WatchRolloutGatedWrite): void {
+    if (watchesAcceptWaits(this.rollout, ownerId)) return;
+    countWatchRolloutRefusal(write);
+    throw watchesDisabledError(this.rollout, write);
   }
 
   /**
@@ -238,6 +259,8 @@ export class WatchesService {
       const committed = await this.replay(ownerId, request);
       if (committed) return replayed(committed);
     }
+    // After the replay, like every other gate: a retry of a create made while Watch was on gets back what it made.
+    this.assertWatchesOn(ownerId, 'create');
     let watchId: string;
     try {
       watchId = await this.untilOwnerTurn(ownerId, () => withTransactionRetry(
@@ -340,6 +363,7 @@ export class WatchesService {
 
   /** Edit the condition or the deadline of a live watch. Its targets, its action and its mode stay as created. */
   async update(ownerId: string, id: string, dto: UpdateWatchDto): Promise<WatchRow> {
+    this.assertWatchesOn(ownerId, 'update');
     if (dto.predicate === undefined && dto.ttlSeconds === undefined) {
       throw new BadRequestException('nothing to update: send a predicate with its predicateVersion, or ttlSeconds');
     }
@@ -380,7 +404,8 @@ export class WatchesService {
     });
   }
 
-  resume(ownerId: string, id: string): Promise<WatchRow> {
+  async resume(ownerId: string, id: string): Promise<WatchRow> {
+    this.assertWatchesOn(ownerId, 'resume');
     return this.transition(ownerId, id, (watch, now) => {
       if (watch.state === 'ACTIVE') return null;
       if (watch.state !== 'PAUSED') throw notLive(watch.state, 'resumed');
@@ -422,6 +447,7 @@ export class WatchesService {
    * the `last_error` the decision read, so two requests racing on one dead letter redrive it once.
    */
   async retryDelivery(ownerId: string, id: string): Promise<DeliveryOpsView> {
+    this.assertWatchesOn(ownerId, 'redrive');
     const row = await this.prisma.watchDelivery.findFirst({ where: { id, ...ownedBy(ownerId) }, select: DELIVERY_OPS_SELECT });
     if (!row) throw new NotFoundException('delivery not found');
     const view = opsView(row);

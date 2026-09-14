@@ -334,7 +334,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 	}
 
 	const exe = "/usr/local/bin/orbit"
-	inside := orbitCLIInstructions(exe, true)
+	inside := orbitCLIInstructions(exe, true, true)
 	for _, phrase := range []string{
 		"report it with task_progress_report",
 		"never from your Bash output or transcript",
@@ -345,7 +345,7 @@ func TestTaskProgressAgentTextSaysWhatProgressIs(t *testing.T) {
 			t.Errorf("a task session's instructions do not say %q", phrase)
 		}
 	}
-	if strings.Contains(orbitCLIInstructions(exe, false), "task_progress_report") {
+	if strings.Contains(orbitCLIInstructions(exe, false, true), "task_progress_report") {
 		t.Error("a session running no task is told to report a task's progress")
 	}
 	paragraph := orbitProgressInstructions(true)

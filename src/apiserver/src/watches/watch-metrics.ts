@@ -9,6 +9,12 @@ import {
   watchDeadLetterCodeOf,
   type WatchDeadLetterCode,
 } from '@orbit/shared';
+import {
+  currentWatchRollout,
+  WATCH_ROLLOUT_GATED_WRITES,
+  WATCH_ROLLOUT_MODES,
+  type WatchRolloutGatedWrite,
+} from './watch-rollout';
 
 /**
  * Watch counters, gauges and alerts, served at GET /api/metrics beside the database-conflict and Codex reset ones
@@ -99,7 +105,22 @@ const effectiveWakes = counter(
 const duplicates = counter('orbit_watch_duplicates_suppressed_total', 'Repeats absorbed instead of acted on twice, by kind.');
 const repairs = counter('orbit_watch_reconcile_repairs_total', 'What reconciliation put right that no event did, by kind.');
 const redrives = counter('orbit_watch_redrives_total', 'Dead letters an owner asked to redrive, by outcome.');
-const COUNTERS: readonly Counter[] = [creates, refusals, evaluations, attempts, deadLetters, effectiveWakes, duplicates, repairs, redrives];
+const rolloutRefusals = counter(
+  'orbit_watch_rollout_refusals_total',
+  'Writes refused because Watch is not on for the account (ORBIT_WATCHES), by write: create, update, resume or redrive.',
+);
+const COUNTERS: readonly Counter[] = [
+  creates,
+  refusals,
+  evaluations,
+  attempts,
+  deadLetters,
+  effectiveWakes,
+  duplicates,
+  repairs,
+  redrives,
+  rolloutRefusals,
+];
 
 const evaluationDelay = { buckets: WATCH_EVALUATION_DELAY_BUCKETS.map(() => 0), count: 0, sum: 0 };
 
@@ -124,6 +145,10 @@ function bump(target: Counter, labels: Labels, by = 1): void {
 
 export function countWatchCreate(outcome: WatchCreateOutcome): void {
   bump(creates, { outcome: label(SETS.create, outcome) });
+}
+
+export function countWatchRolloutRefusal(write: WatchRolloutGatedWrite): void {
+  bump(rolloutRefusals, { write: label(WATCH_ROLLOUT_GATED_WRITES, write) });
 }
 
 export function countWatchRefusal(code: string): void {
@@ -328,6 +353,20 @@ export async function renderWatchMetrics(db?: GaugeReader): Promise<string> {
       ],
     );
   }
+  // Read from this process's environment, not the database: replicas restarted with different flags disagree here.
+  const rollout = currentWatchRollout();
+  gauge(
+    lines,
+    'orbit_watch_rollout',
+    'How far Watch is switched on in this replica (ORBIT_WATCHES): 1 for its mode, 0 for every other.',
+    WATCH_ROLLOUT_MODES.map((mode): [Labels, number] => [{ mode }, mode === rollout.mode ? 1 : 0]),
+  );
+  gauge(
+    lines,
+    'orbit_watch_rollout_canary_owners',
+    'Accounts ORBIT_WATCHES_CANARY_OWNERS lets watch in this replica; 0 unless the mode is canary.',
+    [[{}, rollout.canaryOwners.size]],
+  );
   if (db) lines.push(...(await gaugeLines(db)));
   return `${lines.join('\n')}\n`;
 }

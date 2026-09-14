@@ -33,6 +33,7 @@ import {
   countWatchReconcileRepair,
 } from './watch-metrics';
 import { redactErrorText, redactReason, redactSnapshot } from './watch-redaction';
+import { currentWatchRollout, watchWorkersRun, type WatchRollout } from './watch-rollout';
 
 /**
  * The Watch delivery worker (docs/watch-contract.md §3, §6): it turns a recorded Match into its one
@@ -127,6 +128,8 @@ export interface WatchDeliveryOptions {
   maxWakesPerOwnerPerDay?: number;
   /** Contract `limits.continuousDebounceSeconds`, in milliseconds. */
   continuousDebounceMs?: number;
+  /** How far Watch is switched on (docs/watch-rollout.md); ORBIT_WATCHES as the environment sets it when omitted. */
+  rollout?: WatchRollout;
 }
 
 /** A delivery this worker holds, and the lease generation every write that settles it must match. */
@@ -234,6 +237,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
   private readonly maxWakesPerObserverPerHour: number;
   private readonly maxWakesPerOwnerPerDay: number;
   private readonly continuousDebounceMs: number;
+  private readonly rollout: WatchRollout;
 
   private loop: 'IDLE' | 'RUNNING' | 'STOPPED' = 'IDLE';
   private timer?: ReturnType<typeof setTimeout>;
@@ -256,9 +260,16 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     this.maxWakesPerObserverPerHour = options.maxWakesPerObserverPerHour ?? WATCH_LIMITS.maxWakesPerObserverPerHour;
     this.maxWakesPerOwnerPerDay = options.maxWakesPerOwnerPerDay ?? WATCH_LIMITS.maxWakesPerOwnerPerDay;
     this.continuousDebounceMs = options.continuousDebounceMs ?? WATCH_LIMITS.continuousDebounceSeconds * 1_000;
+    this.rollout = options.rollout ?? currentWatchRollout();
   }
 
   onModuleInit(): void {
+    // ORBIT_WATCHES=off (docs/watch-rollout.md): a PENDING delivery stays PENDING until a replica that runs the loop
+    // starts it again; nothing is dead-lettered for the wait.
+    if (!watchWorkersRun(this.rollout)) {
+      this.log.warn('Watch is off (ORBIT_WATCHES=off): this replica delivers no watch wake or notification');
+      return;
+    }
     this.start();
   }
 

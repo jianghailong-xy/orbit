@@ -8,12 +8,12 @@ import (
 
 func TestWithOrbitCLIInstructions(t *testing.T) {
 	exe := "/opt/orbit runner/bin/orbit"
-	orbit := orbitCLIInstructions(exe, false)
-	if got := withOrbitCLIInstructions("", exe, false); got != orbit {
+	orbit := orbitCLIInstructions(exe, false, true)
+	if got := withOrbitCLIInstructions("", exe, false, true); got != orbit {
 		t.Fatalf("empty configured instructions = %q", got)
 	}
 
-	got := withOrbitCLIInstructions("Owner instructions.\n", exe, false)
+	got := withOrbitCLIInstructions("Owner instructions.\n", exe, false, true)
 	want := "Owner instructions.\n\n" + orbit
 	if got != want {
 		t.Fatalf("merged instructions = %q, want %q", got, want)
@@ -59,12 +59,12 @@ func TestAppendClaudeAgentInstructionArgsAddsOnlyAbsolutePhase1Rules(t *testing.
 		SystemPrompt:       "Base agent instructions.",
 		AppendSystemPrompt: "Owner append instructions.",
 		AllowedTools:       []string{"Read", "mcp__orbit__*"},
-	}, exe, false, false)
+	}, exe, false, false, true)
 	wantAllowed := append([]string{"Read", "mcp__orbit__*"}, orbitCLIAllowedTools(exe, false)...)
 	want := []string{
 		"-p",
 		"--system-prompt", "Base agent instructions.",
-		"--append-system-prompt", "Owner append instructions.\n\n" + orbitCLIInstructions(exe, false),
+		"--append-system-prompt", "Owner append instructions.\n\n" + orbitCLIInstructions(exe, false, true),
 		"--allowedTools", strings.Join(wantAllowed, ","),
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -94,13 +94,13 @@ func TestAppendClaudeAgentInstructionArgsFailsClosedWithoutSafeExecutable(t *tes
 		AllowedTools:       []string{"Read"},
 	}
 	want := []string{"-p", "--append-system-prompt", "Owner instructions.", "--allowedTools", "Read"}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false); !reflect.DeepEqual(got, want) {
+	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false, true); !reflect.DeepEqual(got, want) {
 		t.Fatalf("missing executable args = %#v, want %#v", got, want)
 	}
-	if got := withOrbitCLIInstructions("Owner instructions.", "", false); got != "Owner instructions." {
+	if got := withOrbitCLIInstructions("Owner instructions.", "", false, true); got != "Owner instructions." {
 		t.Fatalf("missing executable instructions = %q", got)
 	}
-	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false); !reflect.DeepEqual(got, []string{"-p"}) {
+	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
 		t.Fatalf("empty fail-closed args = %#v", got)
 	}
 }
@@ -114,7 +114,7 @@ func TestOrbitCLIAllowedToolsRejectsPolicyMetacharacters(t *testing.T) {
 	if got := orbitCLIAllowedTools("", false); len(got) != 0 {
 		t.Fatalf("empty executable rules = %#v", got)
 	}
-	if got := orbitCLIInstructions("/tmp/or`bit", false); got != "" {
+	if got := orbitCLIInstructions("/tmp/or`bit", false, true); got != "" {
 		t.Fatalf("Markdown-unsafe executable instructions = %q", got)
 	}
 	spaced := orbitCLIAllowedTools("/opt/orbit runner/bin/orbit", false)
@@ -145,8 +145,8 @@ func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) 
 // still offered the proposal, or an open form that had lost it, would each pass a one-sided check.
 func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	open := orbitCLIInstructions(exe, false)
-	inside := orbitCLIInstructions(exe, true)
+	open := orbitCLIInstructions(exe, false, true)
+	inside := orbitCLIInstructions(exe, true, true)
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
@@ -197,7 +197,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 		t.Error("a session dispatched for a task does not read as inside recorded work")
 	}
 	appendPromptFor := func(job *ClaimedSession) string {
-		args := appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork())
+		args := appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, job.insideRecordedWork(), true)
 		for i, arg := range args {
 			if arg == "--append-system-prompt" && i+1 < len(args) {
 				return args[i+1]

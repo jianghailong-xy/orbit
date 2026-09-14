@@ -52,6 +52,7 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		orbitExe,
 		job.AllowOrchestration,
 		job.insideRecordedWork(),
+		job.watchesOn(),
 	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
@@ -147,6 +148,8 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
 				{"matcher": "ScheduleWakeup", "hooks": guard},
+				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
+				{"matcher": "Monitor|mcp__orbit__bg_run", "hooks": guard},
 			},
 		}
 	}
@@ -202,6 +205,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		"ORBIT_AGENT_ID="+publicID(job.AgentID), // empty => orbit mcp falls back to USER attribution
 		"ORBIT_TASK_ID="+publicID(job.TaskID),   // empty => no "current task"
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
+		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
