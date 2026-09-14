@@ -76,7 +76,9 @@ orbit watch cancel <watch-id> --json
 A watch wakes the session that makes it, so these commands need `ORBIT_SESSION_ID` and have no headless form.
 `session await`, and a watch that names sessions, need orchestration, as `session get` does. `orbit session create
 --wait` records its wait as a watch before it starts: if the wait runs out or the control plane stops answering, the
-output carries that watch under `"watch"`, and the watch keeps waiting.
+output carries that watch under `"watch"`, and the watch keeps waiting. If no watch could be recorded, a session that
+has not settled carries `"watch": {"error", "note"}` instead, and nothing will wake the caller for it; a watch the
+control plane refuses (a quota, a permission) ends the wait at once.
 
 ## Headless runner-local access
 

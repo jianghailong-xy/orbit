@@ -11,12 +11,14 @@ import (
 	"time"
 )
 
-// shortenSessionWait makes a wait poll, and a release retry, in a millisecond for the test that calls it.
+// shortenSessionWait makes a wait poll, and a release or record retry, in a millisecond for the test that calls it.
 func shortenSessionWait(t *testing.T) {
 	t.Helper()
-	interval, retry := sessionWaitInterval, watchReleaseRetryInterval
-	sessionWaitInterval, watchReleaseRetryInterval = time.Millisecond, time.Millisecond
-	t.Cleanup(func() { sessionWaitInterval, watchReleaseRetryInterval = interval, retry })
+	interval, retry, record := sessionWaitInterval, watchReleaseRetryInterval, watchRecordRetryInterval
+	sessionWaitInterval, watchReleaseRetryInterval, watchRecordRetryInterval = time.Millisecond, time.Millisecond, time.Millisecond
+	t.Cleanup(func() {
+		sessionWaitInterval, watchReleaseRetryInterval, watchRecordRetryInterval = interval, retry, record
+	})
 }
 
 // sessionWaitServer is the control plane one session_create(wait) talks to. It creates the child, records
@@ -260,6 +262,79 @@ func TestSessionCreateWaitAgainstAServerWithoutTheWatchDoorWaitsAsBefore(t *test
 	}
 }
 
+func TestSessionCreateWaitReturnsAtOnceWhenOrbitRefusesTheWatch(t *testing.T) {
+	shortenSessionWait(t)
+	for _, refusal := range []struct {
+		status int
+		code   string
+	}{
+		{http.StatusBadRequest, "WATCH_QUOTA_EXCEEDED"},
+		{http.StatusForbidden, "PERMISSION_DENIED"},
+	} {
+		t.Run(refusal.code, func(t *testing.T) {
+			server := &sessionWaitServer{
+				t:         t,
+				statuses:  []string{"SUCCEEDED"},
+				watchCode: refusal.status,
+				watchBody: `{"code":"` + refusal.code + `","kind":"REFUSAL","message":"refused by the test"}`,
+			}
+			out, err := runSessionCreateWait(t, server)
+			// The session exists either way, and a caller told the call failed would create another.
+			if err != nil {
+				t.Fatalf("a refused watch must print the session it created, not fail: %v", err)
+			}
+			// Asking again gets the same refusal, and polling would hold the call for a wait nothing records.
+			if want := []string{"POST /api/runner/sessions", "POST /api/runner/watches"}; !reflect.DeepEqual(server.requests, want) {
+				t.Fatalf("requests = %#v, want %#v", server.requests, want)
+			}
+			got := decodeHandedBack(t, out)
+			if got.ID != "child-session" || got.Status != "PENDING" {
+				t.Fatalf("the session = %#v, want the one just created", got)
+			}
+			if got.Watch.ID != "" || got.Watch.HandedBack != "" || !strings.Contains(got.Watch.Error, "refused") ||
+				!strings.Contains(got.Watch.Error, refusal.code) || !strings.Contains(got.Watch.Note, "No server-held watch backs this wait") {
+				t.Fatalf("watch = %#v, want the refusal and a note that no watch backs the wait", got.Watch)
+			}
+		})
+	}
+}
+
+func TestSessionCreateWaitSaysNoWatchBacksAnAnswerThatHasNotSettled(t *testing.T) {
+	shortenSessionWait(t)
+	t.Setenv(envSpawnDepth, "10")
+	for _, tc := range []struct {
+		name    string
+		code    int
+		body    string
+		records int
+		reason  string
+	}{
+		{"server error", http.StatusInternalServerError, `{"statusCode":500,"message":"Internal server error"}`, watchRecordAttempts, "recording the watch failed"},
+		{"no watch door", http.StatusNotFound, `{"message":"Cannot POST /api/runner/watches","error":"Not Found","statusCode":404}`, 1, "this Orbit server predates watches"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := &sessionWaitServer{t: t, statuses: []string{"RUNNING"}, watchCode: tc.code, watchBody: tc.body}
+			out, err := runSessionCreateWait(t, server)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if records := server.count("POST /api/runner/watches"); records != tc.records {
+				t.Fatalf("the watch was asked for %d times, want %d", records, tc.records)
+			}
+			// Nothing refused the wait, so it still waits inline for its whole budget.
+			if polls := server.count("GET /api/runner/sessions/child-session"); polls != minSessionWaitPolls+1 {
+				t.Fatalf("polls = %d, want the depth budget %d plus the final look", polls, minSessionWaitPolls+1)
+			}
+			// This used to print the running session alone, which reads as a wait the server is holding.
+			got := decodeHandedBack(t, out)
+			if got.Status != "RUNNING" || got.Watch.ID != "" || got.Watch.HandedBack != "" ||
+				!strings.Contains(got.Watch.Error, tc.reason) || !strings.Contains(got.Watch.Note, "No server-held watch backs this wait") {
+				t.Fatalf("output = %#v, want the running session and why no watch backs the wait", got)
+			}
+		})
+	}
+}
+
 func TestSessionWaitWithNoCallingSessionRecordsNoWatch(t *testing.T) {
 	shortenSessionWait(t)
 	server := &sessionWaitServer{t: t, statuses: []string{"SUCCEEDED"}}
@@ -301,6 +376,26 @@ func TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost(t *testing.T) {
 				watchBody: `{"message":"Cannot POST /api/runner/watches","error":"Not Found","statusCode":404}`,
 			},
 			phrases: []string{"this Orbit server predates watches", "session_await"},
+		},
+		{
+			name: "watch refused",
+			server: &sessionWaitServer{
+				t:         t,
+				statuses:  []string{"RUNNING"},
+				watchCode: http.StatusBadRequest,
+				watchBody: `{"code":"WATCH_QUOTA_EXCEEDED","kind":"REFUSAL","message":"this account already has 500 live watches"}`,
+			},
+			phrases: []string{"no server-held watch backs this wait", "Orbit refused to record the watch", "WATCH_QUOTA_EXCEEDED", `"status": "PENDING"`},
+		},
+		{
+			name: "recording the watch failed",
+			server: &sessionWaitServer{
+				t:         t,
+				statuses:  []string{"RUNNING"},
+				watchCode: http.StatusInternalServerError,
+				watchBody: `{"statusCode":500,"message":"Internal server error"}`,
+			},
+			phrases: []string{"no server-held watch backs this wait", "recording the watch failed", "-> 500", `"status": "RUNNING"`},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

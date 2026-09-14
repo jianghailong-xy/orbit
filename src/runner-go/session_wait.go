@@ -15,7 +15,8 @@ import (
 // So before it waits, the wait now records that intent on the server as a watch that wakes the calling
 // session when the new session's turn settles. It still waits inline for the same bounded time and still
 // answers with the settled session when it can, then releases the watch so the answer arrives once. When
-// it cannot answer, it hands the watch back instead of dropping the intent.
+// it cannot answer, it hands the watch back instead of dropping the intent. When the server did not record
+// the watch, nothing holds the intent, so an answer that has not settled says that instead.
 
 // sessionWaitWatchKeyPrefix names the watch a wait records for one new session, so a repeated wait on the
 // same session reads back the watch already made instead of making another.
@@ -28,14 +29,26 @@ var (
 	watchReleaseAttempts      = 15
 )
 
+// Recording the watch is asked again when the failure could clear on its own (a 5xx, a timeout, a dropped
+// connection). The idempotency key makes that safe: an attempt whose answer was lost reads back as the
+// watch it recorded.
+var (
+	watchRecordRetryInterval = time.Second
+	watchRecordAttempts      = 3
+)
+
 const sessionWaitUnreleasedNote = "The session settled, and its state is the answer. The watch that recorded this wait " +
 	"could not be taken back, so a turn from it saying the same may still arrive in the calling session: treat that turn " +
 	"as already handled."
 
+const sessionWaitUnbackedNote = "No server-held watch backs this wait: nothing starts a turn in the calling session when " +
+	"the new session settles. Look at it again later, or await it to be woken when it settles."
+
 // sessionWaitWatch is what a caller has to know about the watch behind a wait. It is printed beside the
 // session under "watch" whenever the wait did not end cleanly inline.
 type sessionWaitWatch struct {
-	ID string `json:"id"`
+	// Empty when no watch could be recorded; Error says why.
+	ID string `json:"id,omitempty"`
 	// Why the call stopped waiting while the watch goes on waiting: TIMEOUT or TRANSPORT_ERROR.
 	HandedBack string `json:"handedBack,omitempty"`
 	// What releasing the watch came to, when an inline answer could not release it cleanly.
@@ -51,15 +64,16 @@ type sessionWait struct {
 	session json.RawMessage
 	settled bool
 	budget  time.Duration
-	// Set when the caller has to know about the watch: nil after a clean inline answer, or with no watch.
+	// Set when the caller has to know about the watch: nil after a clean inline answer, and for a caller with
+	// no session a watch could wake.
 	watch *sessionWaitWatch
-	// Why no watch backs a wait that ended unsettled; empty otherwise.
-	unbacked string
 }
 
 // waitForSessionDurably waits for a session just created from ctx's session to settle, recording the wait
-// as a watch first. A caller with no session of its own (headless) has nothing a watch could wake, and a
-// control plane that cannot hold the watch leaves nothing to hand back: both wait the way they always did.
+// as a watch first. A caller with no session of its own (headless) has nothing a watch could wake and waits
+// the way it always did. When the watch could not be recorded the call still waits inline, unless the
+// control plane refused it: asking again gets the same answer, so the call returns the session as created.
+// Either way an answer that has not settled carries under "watch" why nothing backs the wait.
 func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created json.RawMessage) (sessionWait, error) {
 	childID := rawJSONID(created)
 	if childID == "" {
@@ -72,20 +86,19 @@ func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created js
 		wait.session, wait.settled = raw, sessionRawSettled(raw)
 		return wait, err
 	}
-	watchRaw, err := t.createWatch(ctx.sessionID, ctx.token, sessionWaitWatchBody(childID))
-	watchID := ""
-	if err == nil {
-		if watchID = rawJSONID(watchRaw); watchID == "" {
-			err = fmt.Errorf("the server answered without a watch id")
-		}
-	}
+	watchID, err := recordSessionWaitWatch(t, ctx, childID)
 	if err != nil {
-		raw, waitErr := waitForSessionRaw(t, ctx, created)
-		wait.session, wait.settled = raw, sessionRawSettled(raw)
-		if waitErr == nil && !wait.settled {
-			wait.unbacked = unbackedSessionWaitReason(err)
+		if !sessionWaitWatchRefused(err) {
+			raw, waitErr := waitForSessionRaw(t, ctx, created)
+			if waitErr != nil {
+				return wait, waitErr
+			}
+			wait.session = raw
 		}
-		return wait, waitErr
+		if wait.settled = sessionRawSettled(wait.session); !wait.settled {
+			wait.watch = &sessionWaitWatch{Error: unbackedSessionWaitReason(err), Note: sessionWaitUnbackedNote}
+		}
+		return wait, nil
 	}
 	for i := 0; ; i++ {
 		final := i == polls
@@ -120,6 +133,26 @@ func sessionWaitWatchBody(sessionID string) map[string]interface{} {
 		"action":           "RESUME_SESSION",
 		"idempotencyKey":   sessionWaitWatchKeyPrefix + sessionID,
 	}
+}
+
+// recordSessionWaitWatch records the watch behind a wait and returns its id.
+func recordSessionWaitWatch(t *Transport, ctx cliOrchestrationContext, sessionID string) (string, error) {
+	var raw json.RawMessage
+	var err error
+	for attempt := 1; ; attempt++ {
+		raw, err = t.createWatch(ctx.sessionID, ctx.token, sessionWaitWatchBody(sessionID))
+		if err == nil || !isRetryableTransportError(err) || attempt >= watchRecordAttempts {
+			break
+		}
+		time.Sleep(watchRecordRetryInterval)
+	}
+	if err != nil {
+		return "", err
+	}
+	if id := rawJSONID(raw); id != "" {
+		return id, nil
+	}
+	return "", fmt.Errorf("the server answered without a watch id")
 }
 
 func handedBackWatch(watchID, why string, cause error) *sessionWaitWatch {
@@ -192,11 +225,11 @@ func (w sessionWait) text() string {
 			"Orbit's server and starts a turn in this session when that session's turn settles, or once if the watch "+
 			"expires first. End your turn now; do not poll session_get or sleep to wait for it.\n%s",
 			w.sessionID, why, w.watch.ID, body)
+	case w.watch != nil && w.watch.ID == "":
+		return body + "\n\nThe session has not settled, and no server-held watch backs this wait (" + w.watch.Error +
+			"): look at it again later with session_get, or call session_await to be woken when it settles."
 	case w.watch != nil:
 		return body + "\n\n" + w.watch.Note
-	case w.unbacked != "":
-		return body + "\n\nThe session has not settled, and no server-held watch backs this wait (" + w.unbacked +
-			"): look at it again later with session_get, or call session_await to be woken when it settles."
 	default:
 		return body
 	}
@@ -221,9 +254,20 @@ func rawJSONID(raw json.RawMessage) string {
 	return strings.TrimSpace(handle.ID)
 }
 
+// sessionWaitWatchRefused reports a control plane that answered the watch with a refusal (a quota, a
+// permission), which asking again only repeats. A server without the watch door is not refusing: it
+// predates watches, and the wait polls the way it always did.
+func sessionWaitWatchRefused(err error) bool {
+	return !isRetryableTransportError(err) && !watchDoorMissing(err)
+}
+
 func unbackedSessionWaitReason(err error) string {
-	if watchDoorMissing(err) {
+	switch {
+	case watchDoorMissing(err):
 		return "this Orbit server predates watches"
+	case sessionWaitWatchRefused(err):
+		return "Orbit refused to record the watch, so the call did not wait: " + err.Error()
+	default:
+		return "recording the watch failed: " + err.Error()
 	}
-	return "recording the watch failed: " + err.Error()
 }

@@ -591,8 +591,11 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
    - 撤不回（`ALREADY_WOKEN`、重问用尽、release 出错）→ 输出带 `watch`，说明稍后可能还有一个内容相同的 turn，按已处理对待。
 4. 预算用尽（`TIMEOUT`）或轮询时服务端不再应答（`TRANSPORT_ERROR`）：返回最后看到的会话，旁边是 `watch: {id, handedBack, note}`。
    **不报错、不丢等待意图**；MCP 文本明确让 Agent 结束本轮。
-5. 兼容：没有调用会话（headless CLI、service token）时没有可唤醒的会话，服务端没有 runner 门时 watch 建不起来，两者都走迁移前的轮询，
-   行为不变。
+5. 兼容：没有调用会话（headless CLI、service token）时没有可唤醒的会话，服务端没有 runner 门时 watch 建不起来，两者都走迁移前的轮询。
+6. watch 没记下：建 watch 遇到 5xx、408、429 或网络错误时，用同一 `idempotencyKey` 最多试 3 次（间隔 1 秒），仍失败就走迁移前的轮询；
+   被明确拒绝（其余 4xx，如 `WATCH_QUOTA_EXCEEDED`、`PERMISSION_DENIED`）时不再轮询，立即返回刚建好的会话。没有 runner 门、重试用尽、
+   被拒这三种情况下，返回时会话尚未 settle 就带 `watch: {error, note}`（没有 `id`），MCP 文本写明 no server-held watch backs this wait：
+   **没有 watch 托底的等待不当成正常返回**。
 
 ### 13.4 Agent 指令
 

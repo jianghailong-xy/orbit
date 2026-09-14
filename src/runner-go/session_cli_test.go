@@ -480,6 +480,75 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 	}
 }
 
+// A watch the control plane failed to record (a 500 from a transaction that timed out under load) is asked for
+// again under the caller's credential and the same idempotency key, so an attempt whose answer was lost reads
+// back as the watch it recorded, and a wait whose watch was recorded in the end answers exactly as before.
+func TestSessionCreateWaitAsksAgainForAWatchTheServerFailedToRecord(t *testing.T) {
+	shortenSessionWait(t)
+	var requests []string
+	var keys []interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		request := r.Method + " " + r.URL.Path
+		requests = append(requests, request)
+		if r.Header.Get("X-Orbit-Session-Id") != "caller-session" || r.Header.Get("X-Orbit-Session-Token") != "session-token" {
+			t.Errorf("%s went out without the caller's session and credential", request)
+		}
+		w.Header().Set("content-type", "application/json")
+		switch request {
+		case "POST /api/runner/sessions":
+			_, _ = w.Write([]byte(`{"id":"child-session","status":"PENDING"}`))
+		case "POST /api/runner/watches":
+			var body map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			keys = append(keys, body["idempotencyKey"])
+			if len(keys) < watchRecordAttempts {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"statusCode":500,"message":"Internal server error"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"id":"watch-1","state":"ACTIVE"}`))
+		case "GET /api/runner/sessions/child-session":
+			_, _ = w.Write([]byte(`{"id":"child-session","status":"SUCCEEDED","result":"done"}`))
+		case "POST /api/runner/watches/watch-1/release":
+			_, _ = w.Write([]byte(`{"outcome":"CANCELLED"}`))
+		default:
+			t.Errorf("unexpected request %s", request)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+	t.Setenv("ORBIT_AGENT_ID", "")
+	t.Setenv("ORBIT_SERVICE_TOKEN", "")
+
+	var out bytes.Buffer
+	if err := cmdSessionCLI([]string{"create", "--prompt", "work", "--wait", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	wantKeys := make([]interface{}, watchRecordAttempts)
+	for i := range wantKeys {
+		wantKeys[i] = "session-create-wait:child-session"
+	}
+	if !reflect.DeepEqual(keys, wantKeys) {
+		t.Fatalf("idempotency keys = %#v, want the same key on each of the %d attempts", keys, watchRecordAttempts)
+	}
+	want := []string{"POST /api/runner/sessions"}
+	for i := 0; i < watchRecordAttempts; i++ {
+		want = append(want, "POST /api/runner/watches")
+	}
+	want = append(want, "GET /api/runner/sessions/child-session", "POST /api/runner/watches/watch-1/release")
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("requests = %#v, want %#v", requests, want)
+	}
+	if got, want := out.String(), "{\"id\":\"child-session\",\"status\":\"SUCCEEDED\",\"result\":\"done\"}\n"; got != want {
+		t.Errorf("wait output = %q, want %q", got, want)
+	}
+}
+
 // A launchd/cron process has no ORBIT_* session variables at all: get/list/send must go out on
 // the runner credential alone, carrying no session headers (which is what tells the control plane
 // to scope the request to this runner's own sessions) and never touching the session-credential

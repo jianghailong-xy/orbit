@@ -460,7 +460,8 @@
         "TIMEOUT": "The wait budget ran out. The call returns the session as last seen with the watch beside it, still waiting.",
         "TRANSPORT_ERROR": "The control plane stopped answering mid-wait. The call returns the session as last seen with the watch beside it instead of an error."
       },
-      "legacy": "No calling session (a headless CLI), or a control plane without the runner door: the poll that predates watches, unchanged."
+      "unrecorded": "The watch could not be recorded. A failure that can clear on its own (5xx, 408, 429, a dropped connection) is asked again, up to 3 times under the same idempotency key, and then the call polls without a watch; a refusal (any other 4xx, such as WATCH_QUOTA_EXCEEDED) returns the session as created at once. An answer that has not settled carries watch: { error, note } with no id, because nothing will wake the calling session for it.",
+      "legacy": "No calling session (a headless CLI), or a control plane without the runner door: the poll that predates watches. Without the door, an answer that has not settled says so as under unrecorded."
     }
   },
 

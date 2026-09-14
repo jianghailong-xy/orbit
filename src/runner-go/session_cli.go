@@ -102,7 +102,9 @@ Options:
   --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
                            recorded as a watch that wakes this session when the turn settles: if
                            the wait runs out or the server stops answering, the output carries
-                           that watch under "watch" instead of losing it
+                           that watch under "watch" instead of losing it. If no watch could be
+                           recorded, a session that has not settled carries why under "watch"
+                           instead, and a watch the server refuses ends the wait at once
   --json
 
 Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
