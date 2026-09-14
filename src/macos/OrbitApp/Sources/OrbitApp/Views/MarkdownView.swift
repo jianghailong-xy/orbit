@@ -354,6 +354,8 @@ private struct MarkdownImageView: View {
     // A tap opens the shared full-screen viewer, like a sent-image thumbnail. Unused on macOS,
     // where the image isn't tappable.
     @State private var previewTarget: ImagePreviewTarget?
+    @Environment(\.sessionImagePreview) private var sessionPreview
+    @Environment(\.previewOwnerID) private var ownerID
 
     // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`, rendered at an exact fitted
     // size (below) against a fixed cap — the same approach as the sibling `ChatAttachmentImage` /
@@ -421,15 +423,22 @@ private struct MarkdownImageView: View {
 
     /// iOS: a tap expands the image into the shared full-screen viewer (pinch/pan/drag-to-dismiss) —
     /// the same preview, and the same zoom transition, a sent-image thumbnail or a tool-result image
-    /// opens. Its pager holds a single page: the renderer builds one `MarkdownImageView` per image
-    /// and never tells any of them about the others, so a document's images aren't a swipeable group
-    /// the way one turn's attachments or one tool result's screenshots are. macOS: the image stays
-    /// static (both helpers are no-ops there), matching the transcript's other thumbnails.
+    /// opens. In the console that's the session's viewer, opened on this image's page — named by the
+    /// transcript item rendering this Markdown (`previewOwnerID`). Elsewhere its pager holds a single
+    /// page: the renderer builds one `MarkdownImageView` per image and never tells any of them about
+    /// the others. macOS: the image stays static (both helpers are no-ops there), matching the
+    /// transcript's other thumbnails.
     @ViewBuilder private func withPreview(_ view: some View, image img: PlatformImage) -> some View {
-        let item = PreviewImage.inline(id: source, image: img)
+        let id = ownerID.map { SessionPreviewImages.markdownKey(itemID: $0, source: source) } ?? source
+        let item = PreviewImage.inline(id: id, image: img)
         view
-            .imageTap({ previewTarget = ImagePreviewTarget(index: 0, id: item.id) },
-                      sourceID: item.id, ns: previewNS)
+            .imageTap({
+                if let sessionPreview {
+                    sessionPreview.open(id, [item], 0)
+                } else {
+                    previewTarget = ImagePreviewTarget(index: 0, id: id)
+                }
+            }, sourceID: id, ns: sessionPreview?.ns ?? previewNS)
             .imagePreview($previewTarget, images: [item], ns: previewNS)
     }
 
@@ -447,15 +456,9 @@ private struct MarkdownImageView: View {
         .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    /// The attachment id from an `orbit-attachment:<id>` source (mirrors web's parse: strip prefix,
-    /// trim, take the leading non-whitespace run). `nil` for any other scheme.
-    private var attachmentID: String? {
-        let prefix = "orbit-attachment:"
-        guard source.hasPrefix(prefix) else { return nil }
-        let rest = source.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
-        let id = rest.prefix { !$0.isWhitespace }
-        return id.isEmpty ? nil : String(id)
-    }
+    /// The attachment id from an `orbit-attachment:<id>` source, `nil` for any other scheme — read the
+    /// same way the session's viewer reads it when it gathers its pages.
+    private var attachmentID: String? { AttachmentLink.attachmentID(source: source) }
 
     private var remoteURL: URL? {
         (source.hasPrefix("http://") || source.hasPrefix("https://")) ? URL(string: source) : nil

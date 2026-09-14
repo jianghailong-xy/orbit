@@ -34,8 +34,10 @@ struct ToolCardView: View {
     /// a result that yields neither (a picture whose bytes failed to decode) still resolves once.
     @State private var resultResolved = false
     @Namespace private var previewNS
-    /// Tapped result image → full-screen pager (iOS). Unused on macOS, where thumbnails aren't tappable.
+    /// Tapped result image → full-screen pager (iOS): the console's, over the whole session, or this
+    /// card's own where there's no console. Unused on macOS, where thumbnails aren't tappable.
     @State private var previewTarget: ImagePreviewTarget?
+    @Environment(\.sessionImagePreview) private var sessionPreview
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.card = card
@@ -51,7 +53,7 @@ struct ToolCardView: View {
     private var previewImages: [PreviewImage] {
         images.indices.compactMap { i in
             guard let img = PlatformImage(data: images[i]) else { return nil }
-            return PreviewImage.inline(id: "\(card.id)-img\(i)", image: img)
+            return PreviewImage.inline(id: SessionPreviewImages.toolKey(cardID: card.id, index: i), image: img)
         }
     }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
@@ -109,6 +111,7 @@ struct ToolCardView: View {
             resultResolved = true
             fullResult = ToolResultContent.text(p["content"])
             fullImages = ToolResultContent.images(p["content"])
+            if let fullImages, !fullImages.isEmpty { sessionPreview?.rememberToolImages(card.id, fullImages) }
         }
     }
 
@@ -213,8 +216,13 @@ struct ToolCardView: View {
             if !previews.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(previews.enumerated()), id: \.element.id) { i, item in
-                        ToolResultImageView(item: item, ns: previewNS,
-                                            onTap: { previewTarget = ImagePreviewTarget(index: i, id: item.id) })
+                        ToolResultImageView(item: item, ns: sessionPreview?.ns ?? previewNS, onTap: {
+                            if let sessionPreview {
+                                sessionPreview.open(item.id, previews, i)
+                            } else {
+                                previewTarget = ImagePreviewTarget(index: i, id: item.id)
+                            }
+                        })
                     }
                 }
             }
@@ -235,9 +243,9 @@ struct ToolCardView: View {
                             in: RoundedRectangle(cornerRadius: 6))
             }
         }
-        // Hosted on the detail block, so the pager exists exactly while the open card's thumbnails
-        // are on screen. Its pages are this result's images — the swipe stays inside the one tool
-        // call you tapped into, like a turn's attachments stay inside their bubble.
+        // Outside the console only (in it, the session's viewer opens instead): hosted on the detail
+        // block, so the pager exists exactly while the open card's thumbnails are on screen, and its
+        // pages are this result's images.
         .imagePreview($previewTarget, images: previews, ns: previewNS)
     }
 }

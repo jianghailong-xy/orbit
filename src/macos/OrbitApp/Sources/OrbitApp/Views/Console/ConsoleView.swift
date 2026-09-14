@@ -15,6 +15,12 @@ struct ConsoleView: View {
     let sessionID: String
     var agentID: String? = nil
     let registry: ConsoleRegistry
+    /// The transcript's one full-screen image viewer (see `SessionImagePreview`): the image it's open
+    /// on, and the pages it was opened over.
+    @Namespace private var imagePreviewNS
+    @State private var imagePreviewTarget: ImagePreviewTarget?
+    @State private var imagePreviewPages: [PreviewImage] = []
+    @State private var fetchedToolImages = FetchedToolImages()
     #if os(iOS)
     // Looked up to build the nav-bar title (session name + "state · when"), mirroring how web's
     // console header reads `selected` off the cached session list. iOS-only: macOS shows status in
@@ -43,6 +49,34 @@ struct ConsoleView: View {
         #else
         consoleBody(navTitleWidth: 0)
         #endif
+    }
+
+    /// Gathers the session's pages when a thumbnail is tapped — never while the transcript renders or
+    /// streams — and opens the viewer on the tapped one.
+    private func sessionImagePreview(_ console: ConsoleModel) -> SessionImagePreview {
+        let fetched = fetchedToolImages
+        return SessionImagePreview(
+            consoleID: ObjectIdentifier(console),
+            ns: imagePreviewNS,
+            open: { key, fallback, fallbackIndex in
+                let pages = SessionPreviewImages
+                    .collect(console.state.items) { fetched.byCard[$0.id] ?? $0.resultImages }
+                    .compactMap { PreviewImage($0) }
+                if let index = pages.firstIndex(where: { $0.id == key }) {
+                    imagePreviewPages = pages
+                    imagePreviewTarget = ImagePreviewTarget(index: index, id: key)
+                } else if fallback.indices.contains(fallbackIndex) {
+                    imagePreviewPages = fallback
+                    imagePreviewTarget = ImagePreviewTarget(index: fallbackIndex, id: key)
+                }
+            },
+            rememberToolImages: { cardID, images in fetched.byCard[cardID] = images })
+    }
+
+    /// Screenshot bytes that open tool cards fetched back, by card. A reference, not state: filling it
+    /// needn't re-render the console, only be there when the viewer next gathers its pages.
+    private final class FetchedToolImages {
+        var byCard: [String: [Data]] = [:]
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -79,6 +113,11 @@ struct ConsoleView: View {
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
+                // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
+                // and pages across every image in the session, in transcript order (web parity).
+                .environment(\.sessionImagePreview, sessionImagePreview(console))
+                .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
+                              store: registry.attachments)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }

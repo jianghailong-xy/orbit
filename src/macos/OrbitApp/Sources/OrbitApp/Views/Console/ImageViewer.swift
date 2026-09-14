@@ -8,19 +8,20 @@ import Photos
 // and the menu a long press on its image opens. iOS-only behind `#if os(iOS)` — on macOS thumbnails
 // aren't tappable, so both helpers are no-ops there. Split out of ConsoleView.swift.
 
-/// One page of the full-screen viewer. A sent turn's attachment resolves through the shared
+/// One page of the full-screen viewer. An attachment resolves through the shared
 /// `AttachmentImageStore` — the pager may open on a page whose bytes the bounded cache evicted, and
 /// only the store can fetch them back. A tool-result image and a staged composer draft already hold
 /// their decoded bytes, so they carry them directly.
 enum PreviewImage: Identifiable {
-    case attachment(TurnAttachment)
+    /// `id` names the page (spelled as `SessionPreviewImages` spells it); `attachmentID` is the store's.
+    case attachment(id: String, attachmentID: String)
     case inline(id: String, image: PlatformImage)
 
     /// Doubles as the iOS-18 zoom-transition source id, so it has to match the `imageTap` of the
     /// thumbnail this page belongs to.
     var id: String {
         switch self {
-        case .attachment(let att): return att.id
+        case .attachment(let id, _): return id
         case .inline(let id, _): return id
         }
     }
@@ -30,6 +31,18 @@ enum PreviewImage: Identifiable {
     var inlineImage: PlatformImage? {
         if case .inline(_, let image) = self { return image }
         return nil
+    }
+
+    /// A page of the session's viewer. Nil for tool-result bytes that don't decode as an image, which
+    /// the card shows no thumbnail for either.
+    init?(_ ref: PreviewImageRef) {
+        switch ref.source {
+        case .attachment(let attachmentID):
+            self = .attachment(id: ref.key, attachmentID: attachmentID)
+        case .data(let data):
+            guard let image = PlatformImage(data: data) else { return nil }
+            self = .inline(id: ref.key, image: image)
+        }
     }
 }
 
@@ -41,14 +54,58 @@ struct ImagePreviewTarget: Identifiable {
     let id: String
 }
 
+/// The console's one full-screen viewer, handed down its transcript. A thumbnail there opens it over
+/// every image in the session — paging across messages, tool calls and thinking blocks — instead of
+/// hosting a pager over its own message's images. Absent outside the console (task pages, the
+/// composer's drafts), where a thumbnail keeps its own.
+struct SessionImagePreview: Equatable {
+    /// The console this viewer belongs to, and — with `ns` — all of its identity. The console rebuilds
+    /// this value on every render, which while a reply streams is several times a second; compared by
+    /// its closures it would never be equal, and every thumbnail and tool card reading it would
+    /// re-render with the console.
+    let consoleID: ObjectIdentifier
+    /// The zoom-transition namespace the viewer presents in; a thumbnail marks itself in it.
+    let ns: Namespace.ID
+    /// Opens on the page `key` names. A thumbnail the session's images don't list — Markdown in a tool
+    /// card or an approval, a message still queued — pages through `fallback` from `fallbackIndex`.
+    let open: (_ key: String, _ fallback: [PreviewImage], _ fallbackIndex: Int) -> Void
+    /// An open tool card hands over the screenshot bytes it fetched back, so they join the pages.
+    let rememberToolImages: (_ cardID: String, _ images: [Data]) -> Void
+
+    static func == (lhs: SessionImagePreview, rhs: SessionImagePreview) -> Bool {
+        lhs.consoleID == rhs.consoleID && lhs.ns == rhs.ns
+    }
+}
+
+private struct SessionImagePreviewKey: EnvironmentKey {
+    static let defaultValue: SessionImagePreview? = nil
+}
+
+/// The transcript item whose Markdown is being rendered, so an image in it can name its page.
+private struct PreviewOwnerIDKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var sessionImagePreview: SessionImagePreview? {
+        get { self[SessionImagePreviewKey.self] }
+        set { self[SessionImagePreviewKey.self] = newValue }
+    }
+
+    var previewOwnerID: String? {
+        get { self[PreviewOwnerIDKey.self] }
+        set { self[PreviewOwnerIDKey.self] = newValue }
+    }
+}
+
 extension View {
     /// iOS: present the full-screen image pager for `target`, zooming out of the tapped thumbnail on
     /// iOS 18+. Every tappable image in the console is presented through here, so the transition is
-    /// the same wherever you tap; what differs per surface is only how far you can swipe — the pager
-    /// spans the images of the one message you tapped into (a turn's attachments, a tool result's
-    /// screenshots, the staged drafts). `store` is needed only for `.attachment` pages; a list of
-    /// already-decoded images passes nil. macOS: no-op (thumbnails aren't tappable there, so
-    /// `target` never becomes non-nil).
+    /// the same wherever you tap; what differs is only how far you can swipe — the console's viewer
+    /// spans the whole session (`SessionImagePreview`), a pager elsewhere the images of the one surface
+    /// you tapped into (the staged drafts, a task's Markdown). `store` is needed only for
+    /// `.attachment` pages; a list of already-decoded images passes nil. macOS: no-op (thumbnails
+    /// aren't tappable there, so `target` never becomes non-nil).
     @ViewBuilder
     func imagePreview(_ target: Binding<ImagePreviewTarget?>, images: [PreviewImage],
                       ns: Namespace.ID, store: AttachmentImageStore? = nil) -> some View {
@@ -88,11 +145,12 @@ extension View {
 }
 
 #if os(iOS)
-/// Full-screen, swipeable viewer for the images of one message — opened by tapping any console
-/// thumbnail. Swipe left/right to move between them; pinch or double-tap to zoom, drag to pan while
-/// zoomed; drag down at fit scale to dismiss (the image shrinks and the transcript shows through). A
-/// single `DragGesture` routes by direction — horizontal ⇒ page, vertical ⇒ dismiss (or scroll, on a
-/// long image), any drag while zoomed ⇒ pan — so paging, dismissing and panning never fight each other.
+/// Full-screen, swipeable viewer over a group of images — in the console every image in the session,
+/// elsewhere the images of the surface tapped. Swipe left/right to move between them; pinch or
+/// double-tap to zoom, drag to pan while zoomed; drag down at fit scale to dismiss (the image shrinks
+/// and the transcript shows through). A single `DragGesture` routes by direction — horizontal ⇒ page,
+/// vertical ⇒ dismiss (or scroll, on a long image), any drag while zoomed ⇒ pan — so paging, dismissing
+/// and panning never fight each other.
 ///
 /// An image proportionally taller than the screen — a long screenshot — opens filling the width, top
 /// edge first, since fitted whole it would be a sliver down the middle. A vertical drag scrolls it, and
@@ -132,8 +190,10 @@ struct ImagePagerView: View {
 
     /// The current page's image, once its bytes have landed.
     private var currentImage: PlatformImage? {
-        let item = images[index]
-        return item.inlineImage ?? store?.image(for: item.id)
+        switch images[index] {
+        case .attachment(_, let attachmentID): return store?.image(for: attachmentID)
+        case .inline(_, let image): return image
+        }
     }
 
     var body: some View {
@@ -223,8 +283,16 @@ struct ImagePagerView: View {
 
                 HStack(spacing: Self.gap) {
                     ForEach(Array(images.enumerated()), id: \.element.id) { i, item in
-                        page(item, isCurrent: i == index, size: geo.size)
-                            .frame(width: w, height: geo.size.height)
+                        Group {
+                            // Only the page on screen and the two a swipe can reveal are built: over a
+                            // whole session, every page would fetch and decode its image on opening.
+                            if abs(i - index) <= 1 {
+                                page(item, isCurrent: i == index, size: geo.size)
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(width: w, height: geo.size.height)
                     }
                 }
                 .offset(x: -CGFloat(index) * stride + pageDX)   // slide content within the fixed window
@@ -247,7 +315,7 @@ struct ImagePagerView: View {
             }
         }
         .ignoresSafeArea()
-        .overlay(alignment: .bottom) { pageDots }
+        .overlay(alignment: .bottom) { pageCounter }
         .overlay(alignment: .top) { noticeCard }
         .statusBarHidden(true)
         .presentationBackground(.clear)
@@ -276,7 +344,7 @@ struct ImagePagerView: View {
     private func page(_ item: PreviewImage, isCurrent: Bool, size: CGSize) -> some View {
         Group {
             switch item {
-            case .attachment(let att): attachmentPage(att, isCurrent: isCurrent, size: size)
+            case .attachment(_, let attachmentID): attachmentPage(attachmentID, isCurrent: isCurrent, size: size)
             case .inline(_, let img): pageBody(img, isCurrent: isCurrent, size: size)
             }
         }
@@ -286,16 +354,16 @@ struct ImagePagerView: View {
     /// A store-backed page: shows a spinner until the bytes land, and keeps asking for them for as
     /// long as the page exists (the cache is bounded and may have dropped this id).
     @ViewBuilder
-    private func attachmentPage(_ att: TurnAttachment, isCurrent: Bool, size: CGSize) -> some View {
+    private func attachmentPage(_ attachmentID: String, isCurrent: Bool, size: CGSize) -> some View {
         if let store {
             Group {
-                if let img = store.image(for: att.id) {
+                if let img = store.image(for: attachmentID) {
                     pageBody(img, isCurrent: isCurrent, size: size)
                 } else {
                     ProgressView().tint(.white)
                 }
             }
-            .loadsAttachmentImage(att.id, from: store)
+            .loadsAttachmentImage(attachmentID, from: store)
         } else {
             ProgressView().tint(.white)
         }
@@ -319,18 +387,21 @@ struct ImagePagerView: View {
                       height: (rest + pan.height) * k + panLive.height)
     }
 
+    /// "3 / 12" under the image. A counter rather than a dot per page: a session's images outrun the
+    /// width of the screen long before they outrun a number.
     @ViewBuilder
-    private var pageDots: some View {
+    private var pageCounter: some View {
         if images.count > 1 {
-            HStack(spacing: 6) {
-                ForEach(images.indices, id: \.self) { i in
-                    Circle()
-                        .fill(i == index ? Color.white : Color.white.opacity(0.4))
-                        .frame(width: 6, height: 6)
-                }
-            }
-            .padding(.bottom, 30)
-            .opacity(1 - dismissProgress)
+            Text("\(index + 1) / \(images.count)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.92))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(.white.opacity(0.16), in: Capsule())
+                .padding(.bottom, 30)
+                .opacity(1 - dismissProgress)
+                .accessibilityLabel("Image \(index + 1) of \(images.count)")
         }
     }
 

@@ -21,6 +21,16 @@ public enum AttachmentLink {
         return id.isEmpty ? nil : String(id)
     }
 
+    /// The same reading on the raw source a Markdown image carries (`![alt](orbit-attachment:<id>)`),
+    /// which is a string rather than a URL. Nil for any other source.
+    public static func attachmentID(source: String) -> String? {
+        let prefix = scheme + ":"
+        guard source.hasPrefix(prefix) else { return nil }
+        let rest = source.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = rest.prefix { !$0.isWhitespace }
+        return id.isEmpty ? nil : String(id)
+    }
+
     /// True for a link that names a file on the runner's disk rather than something a client can
     /// open. Deliberately limited to the roots web chips (`/root`, `/home`, `/tmp`, `/Users`), so an
     /// ordinary site-relative link isn't mistaken for one.

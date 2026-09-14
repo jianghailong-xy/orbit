@@ -1,0 +1,194 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>iOS image viewer — page across the whole session</title>
+<style>
+  html, body { margin: 0; background: #eceef2; }
+  body { width: 962px; padding: 44px 48px; box-sizing: border-box;
+         font-family: "Inter", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; color: #111; }
+  h1 { margin: 0 0 6px; font-size: 32px; letter-spacing: -0.3px; }
+  .sub { margin: 0 0 30px; font-size: 18px; color: #555; }
+  .grid { display: grid; grid-template-columns: repeat(2, 413px); column-gap: 40px; row-gap: 34px; }
+  .cap { margin-top: 16px; font-size: 17px; line-height: 1.5; color: #444; }
+  .cap b { display: block; margin-bottom: 3px; font-size: 21px; color: #111; }
+
+  .device { width: 413px; height: 872px; border-radius: 62px; background: #1b1b1d; padding: 10px; box-sizing: border-box;
+            box-shadow: 0 22px 50px rgba(0,0,0,.22), inset 0 0 0 1.5px #3a3a3c; }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 52px; overflow: hidden; background: #000; }
+  .screen.light { background: #fff; color: #000; }
+  .island { position: absolute; top: 11px; left: 134px; width: 125px; height: 36px; border-radius: 18px; background: #000; z-index: 20; }
+  .home { position: absolute; bottom: 8px; left: 129px; width: 135px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.75); z-index: 20; }
+  .light .home { background: rgba(0,0,0,.8); }
+  .sb { position: absolute; top: 16px; font-size: 16px; font-weight: 600; }
+
+  /* session page (light) */
+  .navbtn { position: absolute; top: 56px; width: 44px; height: 44px; border-radius: 50%; background: #f2f2f5;
+            box-shadow: 0 2px 8px rgba(0,0,0,.08); display: flex; align-items: center; justify-content: center; }
+  .navbtn svg { width: 20px; height: 20px; }
+  .ttl { position: absolute; top: 58px; left: 70px; right: 70px; text-align: center; }
+  .ttl b { display: block; font-size: 17px; }
+  .ttl span { font-size: 12.5px; color: #8e8e93; }
+  .yq { position: absolute; top: 112px; left: 0; right: 0; height: 40px; border-bottom: .5px solid #e5e5ea; font-size: 14px;
+        color: #8e8e93; display: flex; align-items: center; padding: 0 16px; gap: 8px; background: rgba(255,255,255,.95); z-index: 5; }
+  .yq i { font-style: normal; color: #000; }
+  .content { position: absolute; top: 164px; left: 16px; right: 16px; font-size: 15px; line-height: 1.5; }
+  .ubub { margin-left: auto; width: 214px; background: rgba(0,122,255,.13); border-radius: 12px; padding: 8px 10px; }
+  .ubub p { margin: 0 0 6px; }
+  .thumb-photo { position: relative; width: 150px; height: 96px; border-radius: 8px;
+                 background: linear-gradient(135deg, #1d2b64 0%, #6b4fa1 55%, #f8cdda 100%); }
+  .thumb-photo::after { content: ""; position: absolute; left: 22px; top: 18px; width: 26px; height: 26px; border-radius: 50%;
+                        background: radial-gradient(circle at 40% 40%, #fff6d6, #e9c46a); }
+  .tool { margin-top: 14px; border: 1px solid #e5e5ea; border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
+  .tool .hd { display: flex; align-items: center; gap: 7px; color: #3a3a3c; }
+  .tool .hd b { font-weight: 600; color: #000; }
+  .tool .lbl { margin: 8px 0 14px; font-size: 10.5px; letter-spacing: .4px; color: #8e8e93; font-weight: 600; }
+  .shot { position: relative; width: 170px; height: 104px; border-radius: 6px; background: #f7f7fa; border: 1px solid #e5e5ea; overflow: hidden; }
+  .shot i { position: absolute; top: 14px; width: 30px; height: 60px; border-radius: 5px; }
+  .shot u { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 8px; border-radius: 4px; background: #d1d1d6; }
+  .md p { margin: 12px 0 8px; }
+  .artbox { position: relative; width: 300px; height: 220px; border-radius: 8px; overflow: hidden; }
+  .artbox .art { transform: scale(.7634); transform-origin: top left; }
+  .badge { position: absolute; z-index: 8; width: 28px; height: 28px; border-radius: 50%; background: #ff9f0a; color: #000;
+           font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+           box-shadow: 0 0 0 3px #fff; }
+  .rel { position: relative; }
+
+  /* the picture (stand-in for the werewolf mockup) */
+  .art { position: absolute; width: 393px; height: 288px; background: #0c0a18; display: flex; gap: 9px; padding: 14px 12px; box-sizing: border-box; }
+  .mini { flex: 1; position: relative; border-radius: 14px; overflow: hidden; background: linear-gradient(180deg, #2b2356 0%, #171331 72%); }
+  .moon { position: absolute; left: 50%; top: 44px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%;
+          background: radial-gradient(circle at 40% 40%, #fff6d6, #e9c46a); }
+  .bar { position: absolute; height: 6px; border-radius: 3px; background: rgba(255,255,255,.85); }
+  .gbtn { position: absolute; left: 10px; right: 10px; height: 16px; border-radius: 8px; background: linear-gradient(#f3d27a, #d9a93f); }
+  .lc { position: absolute; left: 10px; right: 10px; height: 20px; border-radius: 6px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+  .seats { position: absolute; left: 12px; right: 12px; top: 84px; display: grid; grid-template-columns: repeat(4, 16px); justify-content: space-between; row-gap: 12px; }
+  .seats i { width: 16px; height: 16px; border-radius: 50%; }
+  .rolecard { position: absolute; left: 12px; right: 12px; top: 30px; height: 152px; border-radius: 10px; border: 1px solid #d9a93f; }
+  .rolecircle { position: absolute; left: 50%; top: 24px; width: 42px; height: 42px; margin-left: -23px; border-radius: 50%; border: 2px solid #d9a93f;
+                color: #f0c75e; font-size: 20px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  /* viewer mid-swipe */
+  .bigshot { position: absolute; width: 393px; height: 240px; background: #f7f7fa; overflow: hidden; }
+  .bigshot i { position: absolute; top: 34px; width: 68px; height: 138px; border-radius: 10px; }
+  .bigshot u { position: absolute; left: 22px; right: 22px; bottom: 26px; height: 16px; border-radius: 8px; background: #d1d1d6; }
+  .counter { position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%); padding: 4px 12px; border-radius: 13px;
+             background: rgba(255,255,255,.16); color: rgba(255,255,255,.92); font-size: 15px; font-weight: 600; z-index: 10;
+             font-variant-numeric: tabular-nums; }
+  .new { outline: 2.5px dashed #ff9f0a; outline-offset: 5px; }
+  .tag { position: absolute; z-index: 30; padding: 2px 7px; border-radius: 6px; background: #ff9f0a; color: #000; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .touch { position: absolute; z-index: 30; width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,.26);
+           border: 2px solid rgba(255,255,255,.9); box-shadow: 0 0 0 9px rgba(255,255,255,.12); }
+  .swipe { position: absolute; z-index: 30; color: #fff; font-size: 15px; font-weight: 700; }
+  .srcl { position: absolute; z-index: 30; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.9); color: #000; font-size: 12.5px; font-weight: 700; }
+
+  /* scope card */
+  .note { grid-column: 1 / span 2; border-radius: 30px; background: #fff; box-sizing: border-box; padding: 28px 32px;
+          box-shadow: 0 22px 50px rgba(0,0,0,.12); font-size: 17px; line-height: 1.55; }
+  .note h2 { margin: 0 0 14px; font-size: 23px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .cols h3 { margin: 0 0 6px; font-size: 16px; }
+  .cols ul { margin: 0; padding-left: 20px; }
+  .cols li { margin-bottom: 8px; }
+  .in h3 { color: #248a3d; } .out h3 { color: #c93400; }
+  .foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; color: #555; font-size: 16px; }
+</style>
+</head>
+<body>
+<h1>大图翻页 · 跨整个会话</h1>
+<p class="sub">不管图在哪条消息、哪个工具结果里，点开任意一张都能一路左右翻完整个会话。</p>
+
+<div class="grid">
+
+  <!-- A: session page, numbered in pager order -->
+  <div>
+    <div class="device"><div class="screen light">
+      <div class="island"></div>
+      <div class="sb" style="left:44px">9:41</div>
+      <div class="sb" style="right:30px">100%</div>
+      <div class="navbtn" style="left:16px"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+      <div class="navbtn" style="right:16px"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8v12"/><path d="M8 6.8l4-4 4 4"/><path d="M8.6 10H7.2A2.2 2.2 0 0 0 5 12.2v6.6A2.2 2.2 0 0 0 7.2 21h9.6a2.2 2.2 0 0 0 2.2-2.2v-6.6A2.2 2.2 0 0 0 16.8 10h-1.4"/></svg></div>
+      <div class="ttl"><b>设计狼人杀软件界面</b><span>Open · 5m ago</span></div>
+      <div class="yq">↑ Your question <i>帮我做一个狼人杀软件…</i></div>
+      <div class="content">
+        <div class="ubub rel">
+          <p>参考这张图的配色</p>
+          <div class="rel"><div class="thumb-photo"></div><div class="badge" style="left:-10px;top:-10px">1</div></div>
+        </div>
+        <div class="tool">
+          <div class="hd">⌘ <b>Read</b> moodboard.png <span style="margin-left:auto">⌄</span></div>
+          <div class="lbl">OUTPUT</div>
+          <div class="rel" style="width:170px">
+            <div class="shot"><i style="left:10px;background:#2b2356"></i><i style="left:48px;background:#d9a93f"></i><i style="left:86px;background:#d9604f"></i><i style="left:124px;background:#5bb35c"></i><u></u></div>
+            <div class="badge" style="left:-10px;top:-10px">2</div>
+          </div>
+        </div>
+        <div class="md">
+          <p>先按手机上多人联网玩的思路画了 6 个界面：</p>
+          <div class="rel"><div class="artbox"><div class="art" data-art style="top:0;left:0"></div></div><div class="badge" style="left:-10px;top:-10px">3</div></div>
+          <p>风格：暗色月夜，金色代表神职和主按钮…</p>
+          <div class="rel"><div class="artbox" style="height:120px"><div class="art" data-art style="top:0;left:0"></div></div><div class="badge" style="left:-10px;top:-10px">4</div></div>
+        </div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>① 会话页里的图</b>图可能在你发的消息里、工具结果里、回复里。橙色数字是大图里的翻页顺序，按会话从上到下排。</div>
+  </div>
+
+  <!-- B: viewer mid-swipe, crossing from the tool result into the reply -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="bigshot" style="left:-150px;top:306px"><i style="left:22px;background:#2b2356"></i><i style="left:112px;background:#d9a93f"></i><i style="left:202px;background:#d9604f"></i><i style="left:292px;background:#5bb35c"></i><u></u></div>
+      <div class="art" data-art style="left:267px;top:282px"></div>
+      <div class="srcl" style="left:12px;top:262px">2 · 工具结果</div>
+      <div class="srcl" style="left:279px;top:238px">3 · 回复里的图</div>
+      <div class="touch" style="left:196px;top:600px"></div>
+      <div class="swipe" style="left:120px;top:614px">←</div>
+      <div class="counter new">2 / 4</div>
+      <div class="tag" style="left:244px;top:776px">页码</div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>② 大图里一路翻</b>手指往左滑看下一张（会话里更靠下的），往右滑看上一张，到第一张或最后一张会回弹。图多了小圆点排不下，改成底部页码。白色标签只是说明，界面上不显示。</div>
+  </div>
+
+  <!-- C: scope -->
+  <div class="note">
+    <h2>哪些图算进去</h2>
+    <div class="cols">
+      <div class="in">
+        <h3>算进去</h3>
+        <ul>
+          <li>你发的图</li>
+          <li>工具结果里的截图（卡片折叠着也算）</li>
+          <li>回复里的图，以及思考过程里的图（折叠着也算）</li>
+        </ul>
+      </div>
+      <div class="out">
+        <h3>暂时不算</h3>
+        <ul>
+          <li>输入框里还没发出去的图：还是只在它们之间翻</li>
+          <li>还没加载的更早记录：往上翻、加载出来后就算进去</li>
+          <li>服务端没带回来的超大工具截图：展开那张卡片、重新拉取后就算进去</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot">打开大图时定下这一组；看的过程中新到的图，下次打开才会出现（和网页端一样）。长按保存、长图铺满宽度照旧。</div>
+  </div>
+
+</div>
+
+<script>
+  const seat = ['#5aa9c8','#e0a24a','#d9604f','#5bb35c','#5b5bd6','#c9669a','#4aa3a3','#e2a04f','#d9604f','#5bb35c','#9a5bd6','#5b7bd6'];
+  const ART =
+    '<div class="mini"><div class="moon"></div><div class="bar" style="left:26px;right:26px;top:84px"></div>' +
+    '<div class="gbtn" style="top:106px"></div><div class="lc" style="top:158px"></div><div class="lc" style="top:186px"></div><div class="lc" style="top:212px"></div></div>' +
+    '<div class="mini"><div class="bar" style="left:10px;right:52px;top:28px"></div>' +
+    '<div class="lc" style="top:44px;height:26px"></div><div class="seats">' + seat.map(c => '<i style="background:' + c + '"></i>').join('') + '</div>' +
+    '<div class="gbtn" style="bottom:12px;left:48px"></div></div>' +
+    '<div class="mini"><div class="rolecard"><div class="rolecircle">预</div>' +
+    '<div class="bar" style="left:30px;right:30px;top:80px;background:#e9b949"></div></div><div class="gbtn" style="bottom:12px"></div></div>';
+  document.querySelectorAll('[data-art]').forEach(el => { el.innerHTML = ART; });
+</script>
+</body>
+</html>

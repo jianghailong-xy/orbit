@@ -27,10 +27,19 @@ struct UserBubbleView: View {
 
     @Environment(AttachmentImageStore.self) private var store
     @Namespace private var previewNS
-    // Tapped image → full-screen pager (iOS). Unused on macOS, where thumbnails aren't tappable.
+    // Tapped image → full-screen pager (iOS): the console's, over the whole session, or this bubble's
+    // own where there's no console. Unused on macOS, where thumbnails aren't tappable.
     @State private var previewTarget: ImagePreviewTarget?
+    @Environment(\.sessionImagePreview) private var sessionPreview
 
     private var images: [TurnAttachment] { bubble.attachments.filter(\.isImage) }
+    /// This bubble's images as viewer pages, keyed the way `SessionPreviewImages` keys them.
+    private var pages: [PreviewImage] {
+        images.map { .attachment(id: pageID($0), attachmentID: $0.id) }
+    }
+    private func pageID(_ attachment: TurnAttachment) -> String {
+        SessionPreviewImages.attachmentKey(itemID: bubble.id, attachmentID: attachment.id)
+    }
     private var files: [TurnAttachment] { bubble.attachments.filter { !$0.isImage } }
 
     var body: some View {
@@ -83,8 +92,7 @@ struct UserBubbleView: View {
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
         }
-        .imagePreview($previewTarget, images: images.map { PreviewImage.attachment($0) },
-                      ns: previewNS, store: store)
+        .imagePreview($previewTarget, images: pages, ns: previewNS, store: store)
     }
 
     // Markdown-rendered by the same renderer as the assistant turn (web parity): the messages sent
@@ -98,6 +106,7 @@ struct UserBubbleView: View {
         MarkdownView(source: shown, base: .body, ink: .primary, fillWidth: false)
             .font(.orbitProse)
             .textSelection(.enabled)
+            .environment(\.previewOwnerID, bubble.id)
     }
 
     /// The entry under the person's words: one line naming what was attached, opened by a tap — a
@@ -133,21 +142,29 @@ struct UserBubbleView: View {
     // Tapping any thumbnail opens the full-screen pager at that image (iOS).
     @ViewBuilder
     private var imageBlock: some View {
+        let ns = sessionPreview?.ns ?? previewNS
         if images.count == 1 {
             ChatAttachmentImage(attachment: images[0], onTap: tapAction(0),
-                                sourceID: images[0].id, ns: previewNS)
+                                sourceID: pageID(images[0]), ns: ns)
         } else {
             FlowLayout(spacing: 6) {
                 ForEach(Array(images.enumerated()), id: \.element.id) { i, att in
                     ChatAttachmentThumb(attachment: att, onTap: tapAction(i),
-                                        sourceID: att.id, ns: previewNS)
+                                        sourceID: pageID(att), ns: ns)
                 }
             }
         }
     }
 
     private func tapAction(_ i: Int) -> () -> Void {
-        { previewTarget = ImagePreviewTarget(index: i, id: images[i].id) }
+        {
+            let id = pageID(images[i])
+            if let sessionPreview {
+                sessionPreview.open(id, pages, i)
+            } else {
+                previewTarget = ImagePreviewTarget(index: i, id: id)
+            }
+        }
     }
 
     /// Anything not yet (or never) confirmed keeps its label on screen permanently; a settled turn
@@ -280,6 +297,7 @@ struct AssistantBubbleView: View {
             .font(.orbitProse)
             .foregroundStyle(Color.transcriptInk)
             .textSelection(.enabled)
+            .environment(\.previewOwnerID, bubble.id)
             if !bubble.isFinalized { TypingDots() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -339,6 +357,7 @@ struct ThinkingView: View {
             }
             .font(.orbitProseAside).foregroundStyle(.secondary)
             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            .environment(\.previewOwnerID, block.id)
         } label: {
             Label("Thinking", systemImage: "brain").font(.orbitLabel).foregroundStyle(.secondary)
         }
