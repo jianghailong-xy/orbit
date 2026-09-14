@@ -284,3 +284,42 @@ func TestWorktreeIsNotCreatedBeforeThePin(t *testing.T) {
 		t.Error("a failed pin does not stop the session from starting")
 	}
 }
+
+// A pinned run whose checkout was refused is reported the way an engine that cannot start is: the run
+// ends FAILED with the refusal's code in its error, and no engine is started for it.
+func TestSourceRefusedRunFailsBeforeAnyEngine(t *testing.T) {
+	// Asserted in the source first, so a build without the check stops here instead of reaching the
+	// real engine path through the call below.
+	source, err := os.ReadFile("session.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := strings.Index(string(source), "func runSessionProcess(")
+	if start < 0 {
+		t.Fatal("cannot find runSessionProcess in session.go")
+	}
+	body := string(source)[start:]
+	refusal, engine := strings.Index(body, "job.SourceRefusal"), strings.Index(body, "ensureEngine(")
+	if refusal < 0 || engine < 0 || refusal > engine {
+		t.Fatalf("runSessionProcess does not stop a refused run before ensureEngine (refusal check at %d, ensureEngine at %d)", refusal, engine)
+	}
+
+	job := &ClaimedSession{SessionID: "s-refused", SourceRefusal: &SourcePinRefusal{
+		Code:   sourceRefusalDependencyNotLanded,
+		Detail: map[string]interface{}{"reason": "pinned commit abc does not contain prerequisite commit(s) def"},
+	}}
+	var events []string
+	emit := func(eventType string, payload map[string]interface{}) {
+		msg, _ := payload["message"].(string)
+		events = append(events, eventType+": "+msg)
+	}
+	st, ended, reload := runSessionProcess(context.Background(), context.Background(), nil, job, "", "", t.TempDir(),
+		emit, nil, func(string) {}, true, nil, nil, nil, nil, nil)
+	if st != stFailed || !ended || reload {
+		t.Errorf("runSessionProcess = (%s, ended=%v, reload=%v), want a failed end", st, ended, reload)
+	}
+	if len(events) != 1 || !strings.HasPrefix(events[0], evError+": ") ||
+		!strings.Contains(events[0], sourceRefusalDependencyNotLanded) || !strings.Contains(events[0], "does not contain prerequisite") {
+		t.Errorf("events = %q, want exactly one error naming the refusal", events)
+	}
+}

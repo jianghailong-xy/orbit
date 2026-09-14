@@ -15,12 +15,10 @@ import (
 // compare-and-set. Only then may a worktree be created, and only then may an engine be spawned
 // (SR33).
 //
-// What is deliberately NOT here is the admission gate's later levels — repository identity (G1),
-// object availability (G4), dependency containment (G5) and isolation (G6) — and the fail-closed
-// reporting that goes with them. Those belong to the runner worktree task
-// (34D2Ag9O0KnLGxLXifk39), which is also where `setupWorktree` learns to fork from BaseSha instead
-// of HEAD. This file establishes the ORDER those checks will slot into; it does not pretend to be
-// them.
+// The admission gate's later levels are not here. Object availability (G4), dependency containment
+// (G5) and isolation (G6) run where the pinned commit becomes a checkout — setupSourceWorktree in
+// worktree.go, which forks from BaseSha instead of HEAD and fails the run closed with one of
+// §10.1's codes. Repository identity (G1) is not run by this build.
 
 const (
 	sourceStateUnbound  = "UNBOUND"
@@ -31,10 +29,13 @@ const (
 	refAuthorityRemote      = "REMOTE"
 	refAuthorityRunnerLocal = "RUNNER_LOCAL"
 
-	// §10.1's codes, spelled here only where this file can actually report one.
+	// §10.1's codes, spelled here only where the runner can actually report one: a resolution refusal
+	// is sent to /source/pin, a checkout refusal is setupSourceWorktree's.
 	sourceRefusalAuthorityUnreachable = "SOURCE_AUTHORITY_UNREACHABLE"
 	sourceRefusalRefNotFound          = "BASE_REF_NOT_FOUND"
 	sourceRefusalShaUnavailable       = "BASE_SHA_UNAVAILABLE"
+	sourceRefusalDependencyNotLanded  = "DEPENDENCY_BASE_NOT_LANDED"
+	sourceRefusalWorktreeRequired     = "WORKTREE_REQUIRED"
 )
 
 var fullSha = regexp.MustCompile(`^[0-9a-f]{40}$`)

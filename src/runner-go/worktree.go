@@ -27,13 +27,13 @@ const (
 // Worktree is a per-session git worktree the runner created for isolation. It lets
 // concurrent sessions on the same agent edit files without clobbering each other: each
 // runs claude in its own checkout on its own branch, forked from the workDir HEAD at
-// claim. On terminal completion the runner commits the work to Branch — after which the
-// branch stays behind for a manual merge in the UI, and the checkout outlives the session
-// until gcWorktrees reclaims it.
+// claim, or from the pinned commit when its SOURCE is pinned. On terminal completion the
+// runner commits the work to Branch — after which the branch stays behind for a manual
+// merge in the UI, and the checkout outlives the session until gcWorktrees reclaims it.
 type Worktree struct {
 	Path    string // the worktree checkout dir
 	Branch  string // orbit/<slug>-<hash>
-	BaseSha string // commit Branch forked from (workDir HEAD at claim)
+	BaseSha string // commit Branch forked from (workDir HEAD at claim, or the pinned SOURCE commit)
 	RepoDir string // the git repo root, for `git -C RepoDir worktree ...`
 	Session string // session id (names the checkout dir + base ref)
 
@@ -613,12 +613,102 @@ func shortSha(sha string) string {
 	return sha
 }
 
+// setupSourceWorktree is setupWorktree for a session whose SOURCE is pinned
+// (docs/project-integration-line-contract.md §1.5 L10): the checkout forks from the pinned commit —
+// for a project code task, the tip its integration line had when the run started — and the shared
+// checkout's HEAD is not an input. Its only outcomes are that checkout, or "" with job.SourceRefusal
+// set: it never creates or `git init`s the workDir and never falls back to HEAD or to running in the
+// workDir (PSC SR33). Minimal on purpose: repository identity (gate G1) is not checked, and a pinned
+// commit this repository lacks is refused rather than fetched.
+func setupSourceWorktree(job *ClaimedSession, baseDir string) string {
+	src := job.Source
+	pin := src.BaseSha
+	if src.State != sourceStatePinned || !fullSha.MatchString(pin) {
+		return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
+			fmt.Sprintf("the run reached its checkout with SOURCE %s and no pinned commit", src.State))
+	}
+	if job.Branch == "" {
+		return refuseSourceWorktree(job, sourceRefusalWorktreeRequired,
+			"the session has no branch to isolate on, and a pinned run may not run in the workDir itself")
+	}
+	repoRoot, err := git(baseDir, "rev-parse", "--show-toplevel")
+	if err != nil || repoRoot == "" {
+		return refuseSourceWorktree(job, sourceRefusalWorktreeRequired,
+			fmt.Sprintf("workDir %q is not a git checkout", baseDir))
+	}
+	wtPath := filepath.Join(worktreesDir(), job.SessionID)
+	rel, _ := filepath.Rel(repoRoot, baseDir)
+	if rel == "" || rel == "." || strings.HasPrefix(rel, "..") {
+		rel = "."
+	}
+	execDir := filepath.Join(wtPath, rel)
+
+	// Re-attach after a restart. The fork point comes from the base ref, else the pin — never from
+	// merge-base with HEAD, which for a checkout forked off a project branch is main's fork point.
+	if isGitRepo(wtPath) {
+		base := pin
+		if persisted, err := git(repoRoot, "rev-parse", "--verify", "--quiet", baseRefName(job.SessionID)); err == nil && persisted != "" {
+			base = persisted
+		}
+		base = resolveBaseSha(repoRoot, job.SessionID, job.Branch, base)
+		job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
+		job.IsolationStatus = isoWorktree
+		logln(fmt.Sprintf("session %s — re-attached worktree %s (branch %s, pinned %s)", job.SessionID, wtPath, job.Branch, shortSha(pin)))
+		return execDir
+	}
+
+	if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
+		return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
+			fmt.Sprintf("pinned commit %s is not in the repository at %s", pin, repoRoot))
+	}
+	var missing []string
+	for _, sha := range src.RequiredContains {
+		if _, err := git(repoRoot, "merge-base", "--is-ancestor", sha, pin); err != nil {
+			missing = append(missing, sha)
+		}
+	}
+	if len(missing) > 0 {
+		return refuseSourceWorktree(job, sourceRefusalDependencyNotLanded,
+			fmt.Sprintf("pinned commit %s does not contain prerequisite commit(s) %s", pin, strings.Join(missing, ", ")))
+	}
+
+	base := pin
+	add := []string{"worktree", "add", "-b", job.Branch, wtPath, pin}
+	if branchExists(repoRoot, job.Branch) {
+		// A revived session whose checkout was reclaimed: the branch already holds its work, and its
+		// fork point heals from the pin like any other checkout's (see resolveBaseSha).
+		base = resolveBaseSha(repoRoot, job.SessionID, job.Branch, pin)
+		add = []string{"worktree", "add", wtPath, job.Branch}
+	}
+	_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
+	if _, err := git(repoRoot, add...); err != nil {
+		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
+		return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("`git worktree add` failed: %v", err))
+	}
+	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
+	job.IsolationStatus = isoWorktree
+	logln(fmt.Sprintf("session %s — isolated in worktree %s (branch %s @ pinned %s)", job.SessionID, wtPath, job.Branch, shortSha(base)))
+	return execDir
+}
+
+// refuseSourceWorktree records why a pinned run may not start and returns the "" that says it has
+// nowhere to run; runSessionProcess reports the refusal as the run's error.
+func refuseSourceWorktree(job *ClaimedSession, code, reason string) string {
+	job.SourceRefusal = &SourcePinRefusal{Code: code, Detail: map[string]interface{}{"reason": reason}}
+	logln(fmt.Sprintf("session %s — not starting: %s: %s", job.SessionID, code, reason))
+	return ""
+}
+
 // setupWorktree ensures a per-session git worktree exists for job and returns the dir
 // claude should run in, creating baseDir first when it isn't there yet. When job has no
 // branch, baseDir isn't a git repo, or the repo has no commits, it returns baseDir
 // unchanged (shared-dir fallback) and records why on job.IsolationStatus. Otherwise it
-// sets job.WT and returns the checkout's exec dir.
+// sets job.WT and returns the checkout's exec dir. A session whose SOURCE is resolved takes
+// setupSourceWorktree instead, and none of those fallbacks.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
+	if needsSourcePin(job) {
+		return setupSourceWorktree(job, baseDir)
+	}
 	// An agent's workDir is a path the user typed against a machine the control plane
 	// cannot see, so it may simply not be there yet: a fresh runner, a reinstalled box, or
 	// a project the session is meant to start ("create the dir if it doesn't exist" is a

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1474,4 +1475,165 @@ func TestMergeToMainIgnoresUntrustworthyAnchor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// §1.5 L10 of docs/project-integration-line-contract.md: a code task's checkout forks from the tip
+// of its project's integration line, as the SOURCE handshake froze it — not from the shared
+// checkout's HEAD. Real git and the real handshake: the ref is a project branch that exists only on
+// the authority, and the workDir sits on main, whose tip differs.
+func TestWorktreeForksFromIntegrationRefTip(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	origin, clone, mainTip := originAndClone(t)
+	mustGit(t, origin, "checkout", "-b", "project/p1")
+	commitFile(t, origin, "landed.txt", "landed on the project line\n", "a prerequisite lands on the project branch")
+	lineTip := mustGit(t, origin, "rev-parse", "HEAD")
+	mustGit(t, origin, "checkout", "main")
+	if lineTip == mainTip {
+		t.Fatal("fixture: the project branch tip must differ from main's")
+	}
+
+	srv := newPinServer(t)
+	job := selectedJob(clone)
+	job.Source.Ref = "refs/heads/project/p1"
+	if err := ensureSourcePinned(context.Background(), NewTransport(srv.URL, "tok"), job); err != nil {
+		t.Fatalf("ensureSourcePinned: %v", err)
+	}
+	execDir := setupWorktree(job, clone)
+
+	if job.WT == nil || job.IsolationStatus != isoWorktree {
+		t.Fatalf("no worktree: isolation=%q", job.IsolationStatus)
+	}
+	if got := job.WT.baseSha(); got != lineTip {
+		t.Errorf("worktree base = %s, want the integration line's tip %s (the workDir HEAD is %s)", got, lineTip, mainTip)
+	}
+	if got := mustGit(t, execDir, "rev-parse", "HEAD"); got != lineTip {
+		t.Errorf("checkout HEAD = %s, want %s", got, lineTip)
+	}
+	if got := mustGit(t, clone, "rev-parse", baseRefName(job.SessionID)); got != lineTip {
+		t.Errorf("persisted base ref = %s, want %s", got, lineTip)
+	}
+	// The shared checkout is an input to nothing here, and nothing here moves it.
+	if got := mustGit(t, clone, "symbolic-ref", "--short", "HEAD"); got != "main" {
+		t.Errorf("shared checkout switched to %q", got)
+	}
+	if got := mustGit(t, clone, "rev-parse", "HEAD"); got != mainTip {
+		t.Errorf("shared checkout moved to %s", got)
+	}
+
+	// Control on the same fixture: a Legacy session still forks from the workDir's HEAD (PSC SR45),
+	// which is also what shows the assertions above can tell the two baselines apart.
+	legacy := &ClaimedSession{SessionID: "s-legacy-control", Branch: "orbit/legacy-control"}
+	setupWorktree(legacy, clone)
+	if legacy.WT == nil {
+		t.Fatalf("Legacy control session was not isolated: %q", legacy.IsolationStatus)
+	}
+	if got := legacy.WT.baseSha(); got != mainTip {
+		t.Errorf("Legacy session base = %s, want the workDir HEAD %s", got, mainTip)
+	}
+}
+
+// pinnedJob is a code task's session as a claim delivers it once its SOURCE is frozen.
+func pinnedJob(workDir, sessionID, baseSha string, requiredContains ...string) *ClaimedSession {
+	job := selectedJob(workDir)
+	job.SessionID = sessionID
+	job.Branch = "orbit/" + sessionID
+	job.Source.State = sourceStatePinned
+	job.Source.BaseSha = baseSha
+	job.Source.RequiredContains = requiredContains
+	return job
+}
+
+// assertRefusedWithoutCheckout is PSC SR33 as setupWorktree's caller sees a refused run: one stable
+// code, no dir to run in, and nothing isolated or shared.
+func assertRefusedWithoutCheckout(t *testing.T, job *ClaimedSession, execDir, wantCode string) {
+	t.Helper()
+	if job.WT != nil {
+		t.Fatalf("a checkout was created on %s for a run that must be refused", job.WT.baseSha())
+	}
+	if execDir != "" {
+		t.Errorf("execDir = %q; a refused run has nowhere to run", execDir)
+	}
+	if job.IsolationStatus == isoShared || job.IsolationStatus == isoSharedNoGit {
+		t.Errorf("isolation = %q: the run degraded to the shared workDir", job.IsolationStatus)
+	}
+	if job.SourceRefusal == nil || job.SourceRefusal.Code != wantCode {
+		t.Errorf("refusal = %+v, want code %s", job.SourceRefusal, wantCode)
+	}
+}
+
+// L10's containment check (PSC gate G5): a pinned base that does not contain every prerequisite
+// commit the session was created to build on is refused before anything is checked out.
+func TestWorktreeRefusesUnlandedRequiredContains(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	mustGit(t, repo, "checkout", "-b", "project/p1")
+	commitFile(t, repo, "landed.txt", "landed\n", "prerequisite A lands on the project line")
+	landed := mustGit(t, repo, "rev-parse", "HEAD")
+	commitFile(t, repo, "line.txt", "line\n", "the project line moves on")
+	lineTip := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "task/b", "main")
+	commitFile(t, repo, "unlanded.txt", "unlanded\n", "prerequisite B, never landed on the line")
+	unlanded := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "main")
+
+	job := pinnedJob(repo, "s-unlanded", lineTip, landed, unlanded)
+	execDir := setupWorktree(job, repo)
+	assertRefusedWithoutCheckout(t, job, execDir, sourceRefusalDependencyNotLanded)
+	if branchExists(repo, job.Branch) {
+		t.Errorf("branch %s was created for a refused run", job.Branch)
+	}
+
+	// The same repository with only the landed prerequisite, so a check that refused everything
+	// cannot pass.
+	admitted := pinnedJob(repo, "s-landed", lineTip, landed)
+	setupWorktree(admitted, repo)
+	if admitted.WT == nil || admitted.SourceRefusal != nil {
+		t.Fatalf("a base that contains its prerequisite was refused: %+v", admitted.SourceRefusal)
+	}
+	if got := admitted.WT.baseSha(); got != lineTip {
+		t.Errorf("admitted base = %s, want %s", got, lineTip)
+	}
+}
+
+// PSC SR33: when the pinned commit cannot become this run's checkout, the run is refused with a
+// stable code. It never forks from the workDir's HEAD, never runs in the workDir, and never creates
+// or `git init`s it — each of which the Legacy path does on the same input.
+func TestWorktreeRefusesToFallBackWhenThePinCannotBeCheckedOut(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	head := mustGit(t, repo, "rev-parse", "HEAD")
+
+	t.Run("the pinned commit is not in this repository", func(t *testing.T) {
+		job := pinnedJob(repo, "s-missing-object", strings.Repeat("ab", 20))
+		assertRefusedWithoutCheckout(t, job, setupWorktree(job, repo), sourceRefusalShaUnavailable)
+	})
+	t.Run("git worktree add fails", func(t *testing.T) {
+		job := pinnedJob(repo, "s-add-fails", head)
+		// A non-empty directory where the checkout has to go, which `git worktree add` refuses.
+		occupied := filepath.Join(worktreesDir(), job.SessionID)
+		if err := os.MkdirAll(occupied, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(occupied, "squatter.txt"), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		assertRefusedWithoutCheckout(t, job, setupWorktree(job, repo), sourceRefusalWorktreeRequired)
+		if _, err := git(repo, "rev-parse", "--verify", "--quiet", baseRefName(job.SessionID)); err == nil {
+			t.Error("a refused checkout left its base ref behind")
+		}
+	})
+	t.Run("the session has no branch to isolate on", func(t *testing.T) {
+		job := pinnedJob(repo, "s-no-branch", head)
+		job.Branch = ""
+		assertRefusedWithoutCheckout(t, job, setupWorktree(job, repo), sourceRefusalWorktreeRequired)
+	})
+	t.Run("the workDir is not a git checkout", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "never-created")
+		job := pinnedJob(missing, "s-not-a-repo", head)
+		job.AutoInitGit = true
+		assertRefusedWithoutCheckout(t, job, setupWorktree(job, missing), sourceRefusalWorktreeRequired)
+		if _, err := os.Stat(missing); !os.IsNotExist(err) {
+			t.Errorf("the workDir was created (stat err %v); a refused run writes nothing", err)
+		}
+	})
 }

@@ -631,6 +631,11 @@ type ClaimedSession struct {
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
 	WT              *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
+	// SourceRefusal is why a pinned run may not start: setupWorktree could not stand a checkout on the
+	// pinned commit (docs/project-integration-line-contract.md §1.5 L10). Non-nil means no checkout
+	// was created and nothing runs in the workDir; runSessionProcess ends the run FAILED with it
+	// instead of starting an engine. Runner-internal.
+	SourceRefusal *SourcePinRefusal `json:"-"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen

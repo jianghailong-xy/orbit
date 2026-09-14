@@ -1320,6 +1320,13 @@ func envWithAgent(agentEnv map[string]string) []string {
 }
 
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+	// A pinned run whose checkout setupWorktree refused gets no engine at all. The refusal is this
+	// run's error, reported the way an engine that cannot start is reported just below.
+	if r := job.SourceRefusal; r != nil {
+		reason, _ := r.Detail["reason"].(string)
+		emit(evError, map[string]interface{}{"message": r.Code + ": " + reason})
+		return stFailed, true, false
+	}
 	provider := runtimeProvider(job)
 	// The engine CLI is installed on demand, so this is where a runner that has never
 	// run this provider gets it — and where a machine that can't (no consent, install
