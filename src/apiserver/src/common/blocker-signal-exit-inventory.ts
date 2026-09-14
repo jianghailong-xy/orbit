@@ -136,7 +136,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'COORDINATOR_NO_PROGRESS',
     resolveWhen:
-      'Nothing raises this kind any more: the coordinator fuse counts agent spend, not wakes. A row raised before that change is resolved by the person it was addressed to.',
+      'Nothing raises this kind any more: the coordinator fuse counts agent spend, not wakes. Migration 0266 resolved, as AUTO, every row raised before that change.',
   },
   {
     family: 'PROJECT_BLOCKER',

@@ -558,6 +558,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no DELETE —
   //        the key's `ON DELETE CASCADE` is a referential action on the new table's rows. Nothing reads a
   //        wakeup to allow or refuse a status: a wakeup says when a turn is filed, not what is decided.
+  //   0266 resolved, once, the `COORDINATOR_NO_PROGRESS` blockers the retired coordinator breaker
+  //        left open: nothing raises that kind any more, so no condition and no code could clear
+  //        one. Read against every claim above: it is one `UPDATE "project_blocker"`, a relation
+  //        this file does not preserve, which writes `resolved_at`, `resolved_by` and `updated_at`
+  //        on the open rows of that one kind and nothing else. It does not touch `task`, `project`
+  //        or `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, column, index, enum, type, function or trigger — so it is not another
+  //        writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive. It has no INSERT and no DELETE, and reads no
+  //        other relation. Nothing reads these rows to allow or refuse a status: the project list's
+  //        attention read counts an open blocker, which is what they stop lighting, and the
+  //        convergence measurement already left this kind out.
   //   0269 let a project blocker be resolved with a reason: it ALTERs `project_blocker`, a relation
   //        this file does not preserve, adding the nullable `resolution_note` and
   //        `resolved_by_user_id`, and it restates
@@ -605,6 +620,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0262_background_job_wake',
       '0263_watch_revoked_unresolvable_delivery',
       '0264_session_scheduled_wakeup',
+      '0266_coordinator_no_progress_retirement',
       '0269_project_blocker_resolution_note'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
