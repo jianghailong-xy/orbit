@@ -225,6 +225,7 @@ export const WATCH_DEAD_LETTER_CODES = [
   'OBSERVER_SESSION_UNAVAILABLE',
   'OBSERVER_TURN_INTERRUPTED',
   'WAKE_WITHDRAWN',
+  'WAKE_KEY_TAKEN',
   'WAKE_STORM_SUPPRESSED',
   'WAKE_BUDGET_EXHAUSTED',
   'TURN_REFUSED',
@@ -236,13 +237,15 @@ export type WatchDeadLetterCode = (typeof WATCH_DEAD_LETTER_CODES)[number];
 
 /**
  * The dead letters `POST /api/watches/deliveries/:id/retry` does not redrive: a wake that left its observer's queue
- * unrun is never queued a second time, and nothing is delivered about targets its owner can no longer read.
+ * unrun is never queued a second time, a key another turn already holds is still held on the next attempt, and
+ * nothing is delivered about targets its owner can no longer read.
  */
 export const WATCH_UNRETRYABLE_DEAD_LETTER_CODES: readonly WatchDeadLetterCode[] = [
   'PERMISSION_REVOKED',
   'OBSERVER_SESSION_ENDED',
   'OBSERVER_TURN_INTERRUPTED',
   'WAKE_WITHDRAWN',
+  'WAKE_KEY_TAKEN',
 ];
 
 /** The dead-letter code of a delivery that stopped with this `lastError` after this many failed attempts. */

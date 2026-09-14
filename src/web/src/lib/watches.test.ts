@@ -425,6 +425,25 @@ describe('the turn a watch queues', () => {
     });
   });
 
+  it('recognises the last wake of a continuous budget, whose head is followed by the line saying it is the last', () => {
+    const reason = 'ANY TASK_PROGRESS_AT_LEAST(5) 1/1; 2 crossings since 2026-09-14T11:58:40.000Z; wake 5 of 5';
+    const last = [
+      `Orbit Watch ${WATCH} matched at generation 5: ${reason}`,
+      '',
+      'That was the last wake its budget allows: the watch has ended and will not wake this session again.',
+      '',
+      'This turn was queued by the watch, not typed by a person. What the watch recorded when its condition held:',
+    ].join('\n');
+    const payload = { watchId: WATCH, generation: 5, matchedAt: '2026-09-14T11:59:00.000Z', reason, changedTargets: [] };
+    expect(parseWatchWake(`${last}\n\n${fenced(payload)}`)).toEqual({
+      watchId: WATCH,
+      kind: 'MATCHED',
+      generation: 5,
+      reason,
+      changedTargets: [],
+    });
+  });
+
   it('recognises the three unmatched ends', () => {
     const expiry = [
       `Orbit Watch ${WATCH} EXPIRED at 2026-09-14T11:00:00.000Z without its condition ever holding.`,
@@ -462,7 +481,8 @@ describe('the turn a watch queues', () => {
     ].find(existsSync);
     if (!source) throw new Error('watch-delivery.service.ts not found from the test working directory');
     const text = readFileSync(source, 'utf8');
-    expect(text).toContain('`Orbit Watch ${watchId} matched at generation ${match.generation}: ${match.reason}`');
+    expect(text).toContain('`Orbit Watch ${watchId} matched at generation ${match.generation}: ${reason}`');
+    expect(text).toContain("'That was the last wake its budget allows: the watch has ended and will not wake this session again.'");
     expect(text).toContain('`Orbit Watch ${watch.id} EXPIRED at ${expiresAt} without its condition ever holding.`');
     expect(text).toContain('`Orbit Watch ${watchId} ended ${end}: ${WATCH_END_MEANING[end]}.`');
     expect(text.match(/'This turn was queued by the watch, not typed by a person\./g)?.length).toBe(3);

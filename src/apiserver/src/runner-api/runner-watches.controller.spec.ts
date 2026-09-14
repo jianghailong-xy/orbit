@@ -393,13 +393,15 @@ test('every await preset the contract gives agents is a predicate this server ac
     CONTRACT.agentSurface.awaitPresets,
   );
   assert.deepEqual(families.map(([tool]) => tool).sort(), ['session_await', 'task_await']);
+  // Parsed under the grammar the agent tools send them in: runner-go's watchPredicateVersion.
+  const toolsVersion = 1;
   for (const [tool, family] of families) {
     for (const [until, predicate] of Object.entries(family.until)) {
-      const parsed = parseRequestedPredicate(predicate);
+      const parsed = parseRequestedPredicate(predicate, toolsVersion);
       assert.deepEqual(parsed, predicate, `${tool} ${until} did not survive the request parser unchanged`);
       assert.doesNotThrow(() => assertLeavesFitTargets(parsed, [family.targetKind]), `${tool} ${until}`);
     }
   }
   const wait = CONTRACT.agentSurface.sessionCreateWait.watch.predicate;
-  assert.doesNotThrow(() => assertLeavesFitTargets(parseRequestedPredicate(wait), ['SESSION']));
+  assert.doesNotThrow(() => assertLeavesFitTargets(parseRequestedPredicate(wait, toolsVersion), ['SESSION']));
 });

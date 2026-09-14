@@ -403,6 +403,19 @@ security('S-00', 'the new refusal codes, limits and dead-letter codes are the co
     Object.entries(codes).filter(([, code]) => !code.retryable).map(([name]) => name).sort(),
     [...WATCH_UNRETRYABLE_DEAD_LETTER_CODES].sort(),
   );
+  // Every code a dead letter's lastError is headed with where it is written is in that table. One that is not is
+  // counted as OTHER and offered for redrive whatever it says, which is how WAKE_KEY_TAKEN first arrived.
+  const written = new Set<string>();
+  for (const file of ['watch-delivery.service.ts', 'watch-wake-drain.ts']) {
+    const source = readFileSync(path.resolve(__dirname, '../../src/watches', file), 'utf8');
+    for (const [, code] of source.matchAll(/new DeliveryRefused\(\s*'([A-Z][A-Z0-9_]*)'/g)) written.add(code);
+    for (const [, code] of source.matchAll(/['"`]([A-Z][A-Z0-9_]*): /g)) written.add(code);
+  }
+  written.delete('CONTINUOUS_RATE_LIMITED'); // a deferral back to PENDING, never a dead letter
+  for (const code of ['PERMISSION_REVOKED', 'WAKE_KEY_TAKEN', 'LEASE_EXPIRED', 'WAKE_WITHDRAWN']) {
+    assert.ok(written.has(code), `the scan of the worker's sources did not find ${code}: ${[...written].join(', ')}`);
+  }
+  assert.deepEqual([...written].filter((code) => !(WATCH_DEAD_LETTER_CODES as readonly string[]).includes(code)), []);
   assert.deepEqual(Object.keys(CONTRACT.deliveryGuards.redrive.refused).sort(), ['DELIVERY_NOT_DEAD_LETTER', 'DELIVERY_NOT_RETRYABLE']);
 });
 
@@ -747,10 +760,13 @@ security('S-08', 'a continuous watch wakes its observer no faster than its windo
   const { owner, observer } = await account();
   const waiting = await wake(owner, observer, await insertTask(owner, 'OPEN'));
   const notifying = await create(owner, { targets: onTask(await insertTask(owner, 'OPEN')) });
-  // No build records a continuous watch's generations yet, so they are written as its evaluator would write them:
-  // generation 1 delivered a second ago, generation 2 due now.
+  // Its generations are written as its evaluator would write them, with the debounce window and wake budget 0271 holds
+  // every CONTINUOUS row to: generation 1 delivered a second ago, generation 2 due now.
   const secondGeneration = async (watchId: string, action: string): Promise<string> => {
-    await sql.query(`UPDATE "watch" SET "mode" = 'CONTINUOUS', "generation" = 2 WHERE "id" = $1`, [watchId]);
+    await sql.query(
+      `UPDATE "watch" SET "mode" = 'CONTINUOUS', "debounce_seconds" = 10, "wake_budget" = 10, "generation" = 2 WHERE "id" = $1`,
+      [watchId],
+    );
     const [first, second, pending] = [randomUUID(), randomUUID(), randomUUID()];
     const snapshot = JSON.stringify({ evaluatedAt: new Date().toISOString(), targets: [] });
     await sql.query(

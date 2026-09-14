@@ -219,7 +219,6 @@ export class WatchesService {
           const facts = observed.map((target) => target.fact);
           const holds = request.mode === 'ONE_SHOT' && predicateHolds(request.predicate, facts, now.getTime());
           const snapshot = snapshotAtCreate(request.predicate, observed, now);
-          await this.assertCapacity(tx, ownerId, request, holds);
           const watch = await tx.watch.create({
             data: {
               ownerId,
@@ -242,6 +241,9 @@ export class WatchesService {
             },
             select: { id: true },
           });
+          // After the watch row, not before it: creates that collide on one idempotency key meet at its insert, where
+          // the key decides between them, and only then take their turn at the account's capacity.
+          await this.assertCapacity(tx, ownerId, request, holds, watch.id);
           await tx.watchTarget.createMany({
             data: snapshot.targets.map((target) => ({
               watchId: watch.id,
@@ -554,9 +556,11 @@ export class WatchesService {
    * targets past its live-watch quota. Decided under a transaction-scoped advisory lock on the owner, so of two
    * creates for one account the second reads the first's watch: two sessions asking to wake each other cannot
    * both succeed, and a quota cannot be passed by racing. Every watch these reads count is the owner's, because
-   * a watch names only targets its owner can read.
+   * a watch names only targets its owner can read. The lock is taken once the new watch row is written and before its
+   * targets are, so that row (`watchId`) is left out of the account's count, and is not yet part of a loop or of a
+   * target's count.
    */
-  private async assertCapacity(tx: Prisma.TransactionClient, ownerId: string, request: CreateRequest, holds: boolean): Promise<void> {
+  private async assertCapacity(tx: Prisma.TransactionClient, ownerId: string, request: CreateRequest, holds: boolean, watchId: string): Promise<void> {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`watch-owner:${ownerId}`}, 0))`;
     const sessionTargets = request.targets.filter((target) => target.kind === 'SESSION').map((target) => target.id);
     if (request.action === 'RESUME_SESSION' && sessionTargets.length > 0) {
@@ -587,7 +591,7 @@ export class WatchesService {
     if (holds) return;
     const [{ live }] = await tx.$queryRaw<Array<{ live: number }>>`
       SELECT count(*)::int AS "live" FROM "watch"
-      WHERE "owner_id" = ${ownerId}::uuid AND "state" IN ('ACTIVE', 'PAUSED')`;
+      WHERE "owner_id" = ${ownerId}::uuid AND "state" IN ('ACTIVE', 'PAUSED') AND "id" <> ${watchId}::uuid`;
     if (live >= this.maxLiveWatchesPerOwner) {
       throw watchRefusal(
         'WATCH_QUOTA_EXCEEDED',

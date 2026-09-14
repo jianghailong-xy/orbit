@@ -1,7 +1,7 @@
 import {
+  WATCH_LEAF_SINCE_VERSION,
   WATCH_LEAVES,
   WATCH_LIMITS,
-  WATCH_PREDICATE_VERSION,
   type CreateWatchRequest,
   type UpdateWatchRequest,
   type WatchAction,
@@ -136,6 +136,21 @@ export const LEAF_COPY: Record<WatchLeaf, LeafCopy> = {
     hint: 'Marked failed.',
     met: 'failed',
   },
+  // Version 2 leaves: read on watches an agent made, never offered by the editor (leavesFor).
+  TASK_PROGRESS_AT_LEAST: {
+    one: 'reaches its progress mark',
+    many: 'reach their progress mark',
+    option: 'Reaches a progress mark',
+    hint: 'The progress it reports reaches a count, or a share of its total.',
+    met: 'reached their mark',
+  },
+  TASK_NO_PROGRESS_FOR: {
+    one: 'stalls',
+    many: 'stall',
+    option: 'Stalls',
+    hint: 'Still open, and the progress it reports has not moved for a set time.',
+    met: 'stalled',
+  },
 };
 
 const NOUN: Record<WatchTargetKind, [one: string, many: string]> = {
@@ -158,6 +173,7 @@ export function describeCondition(
       const n = targets.filter((t) => t.targetKind === kind).length;
       const [one, many] = NOUN[kind];
       if (n <= 1) return `the ${one} ${copy.one}`;
+      if (p.kind === 'AT_LEAST') return `at least ${p.count} of ${n} ${many} ${copy.many}`;
       if (p.kind === 'ANY') return `any of ${n} ${many} ${copy.one}`;
       return `${n === 2 ? 'both' : `all ${n}`} ${many} ${copy.many}`;
     }
@@ -401,9 +417,13 @@ export interface ConditionChoice {
   orAnyFails?: boolean;
 }
 
+/** A leaf the editor can say: one of its own grammar's (EDITOR_PREDICATE_VERSION), which takes no parameters. */
+const editorLeaf = (leaf: WatchLeaf): boolean =>
+  !!LEAF_COPY[leaf] && WATCH_LEAF_SINCE_VERSION[leaf] <= EDITOR_PREDICATE_VERSION;
+
 /** The leaves a target kind can be watched for, in the order the editor offers them (LEAF_COPY's). */
 export const leavesFor = (kind: WatchTargetKind): WatchLeaf[] =>
-  (Object.keys(LEAF_COPY) as WatchLeaf[]).filter((leaf) => WATCH_LEAVES[leaf] === kind);
+  (Object.keys(LEAF_COPY) as WatchLeaf[]).filter((leaf) => WATCH_LEAVES[leaf] === kind && editorLeaf(leaf));
 
 export const DEFAULT_LEAF: Record<WatchTargetKind, WatchLeaf> = {
   SESSION: 'SESSION_TURN_SETTLED',
@@ -419,13 +439,15 @@ export function predicateFor(choice: ConditionChoice): WatchPredicate {
 /** The editor's reading of a stored condition, or null when it says more than the editor can. */
 export function choiceOf(p: WatchPredicate): ConditionChoice | null {
   if (!p || typeof p !== 'object') return null;
-  if ('leaf' in p) return LEAF_COPY[p.leaf] ? { leaf: p.leaf, aggregation: p.kind } : null;
+  // A quorum, or a leaf of a later grammar and its parameters, says more than the editor can.
+  if ('leaf' in p) return p.kind !== 'AT_LEAST' && editorLeaf(p.leaf) ? { leaf: p.leaf, aggregation: p.kind } : null;
   if (p.kind !== 'ANY_OF' || p.operands?.length !== 2) return null;
   const [first, second] = p.operands;
   if (
     'leaf' in first &&
     first.kind === 'ALL' &&
     WATCH_LEAVES[first.leaf] === 'TASK' &&
+    editorLeaf(first.leaf) &&
     'leaf' in second &&
     second.kind === 'ANY' &&
     second.leaf === 'TASK_FAILED'
@@ -444,6 +466,12 @@ export const TTL_CHOICES: readonly { seconds: number; label: string }[] = [
   { seconds: (30 * DAY) / SECOND, label: '30 days' },
 ];
 
+/**
+ * The grammar every condition this editor offers is written in. The server serves version 1 beside the newer
+ * grammars and decides a predicate under the version it was sent with, so a request names the one its terms are in.
+ */
+export const EDITOR_PREDICATE_VERSION = 1;
+
 export function createWatchBody(input: {
   targets: readonly { kind: WatchTargetKind; id: string }[];
   choice: ConditionChoice;
@@ -453,7 +481,7 @@ export function createWatchBody(input: {
   idempotencyKey: string;
 }): CreateWatchRequest {
   return {
-    predicateVersion: WATCH_PREDICATE_VERSION,
+    predicateVersion: EDITOR_PREDICATE_VERSION,
     predicate: predicateFor(input.choice),
     targets: input.targets.map((t) => ({ kind: t.kind, id: t.id })),
     action: input.action,
@@ -473,9 +501,14 @@ const REFUSAL_COPY: Record<WatchRefusalCode, string> = {
   PREDICATE_TOO_DEEP: 'That condition is nested too deeply.',
   UNKNOWN_PREDICATE_KIND: 'This server does not know that condition.',
   PREDICATE_VERSION_UNSUPPORTED: 'This server does not serve that version of watch conditions.',
+  PREDICATE_PARAMETER_INVALID: 'A number in that condition is out of range.',
   DYNAMIC_SET_UNSUPPORTED: 'A task list or project cannot be watched as a live set yet. Watch its sessions or tasks.',
   SELF_WATCH_LOOP: 'A session cannot be resumed by a watch on itself.',
+  WAKE_LOOP: 'That watch would close a loop of sessions waking each other.',
   TTL_OUT_OF_RANGE: 'The deadline has to be between 1 minute and 30 days away.',
+  WATCH_QUOTA_EXCEEDED:
+    'There are already as many live watches as allowed, for this account or for one of the targets. Stop one that is no longer needed.',
+  CONTINUOUS_POLICY_INVALID: 'The window or the wake budget of a continuous watch is out of range.',
   PERMISSION_DENIED: 'This account cannot read one of the targets.',
 };
 

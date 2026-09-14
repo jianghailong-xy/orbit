@@ -272,7 +272,7 @@
     "why": "A Match is recorded once, but what it causes costs a turn or reaches a device, and a stored snapshot can outlive the permission that let it be taken. So every attempt is checked again when it is made, and every wake counts against what one session and one account may be given.",
     "order": ["permissionRecheck", "observerLife", "continuousSpacing", "storm", "budget"],
     "permissionRecheck": "Before any payload is built, every target of the watch that still exists must belong to the watch's owner, and so must the observer session. Otherwise the delivery is a PERMISSION_REVOKED dead letter and nothing about the targets leaves the database. The watch keeps its state: a Match is immutable and every watch end is terminal. A REVOKED or UNRESOLVABLE end's turn carries no target, so only its observer is rechecked.",
-    "redaction": "A wake's payload is rebuilt from the stored snapshot through an allowlist: each target's kind, id, epoch, state and changed; the leaves the grammar declares, answered true or false; observed status, endReason, runState, lifecycleState and pendingApproval, each a single word or a boolean. Any other key is dropped, a value of the wrong shape is written [redacted], and so is a reason outside the predicate vocabulary. A lastError has URL credentials, bearer tokens, API keys and key=value secrets replaced by [redacted] before it is stored.",
+    "redaction": "A wake's payload is rebuilt from the stored snapshot through an allowlist: each target's kind, id, epoch, state and changed; the leaves the grammar declares, keyed by leaf label (the leaf, followed by its parameters when it takes any) and answered true or false; observed status, endReason, runState, lifecycleState and pendingApproval, each a single word or a boolean, and, when the predicate reads progress, observed progress phase (a single word), current and total (counts), lastProgressAt and epochStartedAt (instants); and a CONTINUOUS watch's window, budget and openWindow, each kept only when every field has its shape. Any other key is dropped, a value of the wrong shape is written [redacted], and so is a reason outside the predicate vocabulary, which includes a leaf's parameters and a CONTINUOUS Match's crossings and wake of its budget. A lastError has URL credentials, bearer tokens, API keys and key=value secrets replaced by [redacted] before it is stored.",
     "continuousSpacing": "A CONTINUOUS watch's Match deliveries are at least limits.continuousDebounceSeconds apart. One due sooner goes back to PENDING until then, its lastError headed CONTINUOUS_RATE_LIMITED, and no attempt is counted.",
     "storm": "A RESUME_SESSION wake whose observer session was already given limits.maxWakesPerObserverPerHour wakes in the last hour is a WAKE_STORM_SUPPRESSED dead letter. Counted under the observer's row lock, so the limit is exact.",
     "budget": "A RESUME_SESSION wake whose owner's watches already gave limits.maxWakesPerOwnerPerDay wakes in the last 24 hours is a WAKE_BUDGET_EXHAUSTED dead letter. Wakes to different observers of one account do not wait on each other, so concurrent ones may pass the budget by as many as are in flight.",
@@ -286,6 +286,7 @@
       "OBSERVER_SESSION_UNAVAILABLE": { "retryable": true, "when": "The queue entry point refused the observer session for any other reason." },
       "OBSERVER_TURN_INTERRUPTED": { "retryable": false, "when": "An interrupt deleted the queued wake (section 3)." },
       "WAKE_WITHDRAWN": { "retryable": false, "when": "The owner withdrew the queued wake (section 3)." },
+      "WAKE_KEY_TAKEN": { "retryable": false, "when": "Another turn on the observer session already holds the wake's clientTurnId with a different payload, so no wake was queued and a retry would find the key held again (section 6, clientTurnId.heldByAnotherTurn)." },
       "WAKE_STORM_SUPPRESSED": { "retryable": true, "when": "deliveryGuards.storm." },
       "WAKE_BUDGET_EXHAUSTED": { "retryable": true, "when": "deliveryGuards.budget." },
       "TURN_REFUSED": { "retryable": true, "when": "The queue entry point refused the turn." },
@@ -299,7 +300,7 @@
       "effect": "The dead letter goes back to PENDING, due at once, with its attempts counted from zero, and the worker attempts it again under every guard above. Its lastError stays until the next attempt writes one.",
       "refused": {
         "DELIVERY_NOT_DEAD_LETTER": "Only a dead letter is redriven.",
-        "DELIVERY_NOT_RETRYABLE": "Its code is retryable: false. A wake that left its observer's queue unrun is not queued a second time, and a payload whose permission was revoked is not delivered."
+        "DELIVERY_NOT_RETRYABLE": "Its code is retryable: false. A wake that left its observer's queue unrun is not queued a second time, a key another turn holds is still held, and a payload whose permission was revoked is not delivered."
       }
     }
   },

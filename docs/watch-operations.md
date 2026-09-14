@@ -59,10 +59,15 @@
 Watch 往外说的每一样东西都只从白名单取：
 
 - **唤醒 turn 的快照**（Match 的 `latestSnapshot` 与 `changedTargets`、到期 turn 的 `latestSnapshot`）：每个目标只保留
-  `kind`、`id`、`epoch`、`state`、`changed`；`leaves` 只保留契约声明过的 leaf，值必须是布尔；`observed` 只保留 `status`、
-  `endReason`、`runState`、`lifecycleState`（都必须是单个标识符）和 `pendingApproval`（布尔）。**其他键直接丢弃；
-  形状不对的值写成 `[redacted]`**，读 turn 的人能看出有东西被扣下了。
-- **reason**（turn 标题行、载荷、推送正文）：必须是谓词描述的词汇，例如 `ANY_OF(ALL TASK_TERMINAL 7/7, ANY TASK_FAILED 1/7)`，
+  `kind`、`id`、`epoch`、`state`、`changed`；`leaves` 只保留契约声明过的 leaf（以 leaf 标签为键，带参数的形如
+  `TASK_NO_PROGRESS_FOR(600s)`），值必须是布尔；`observed` 只保留 `status`、`endReason`、`runState`、`lifecycleState`
+  （都必须是单个标识符）、`pendingApproval`（布尔），以及谓词读进度时的 `progress`：`phase`（单个标识符）、`current` / `total`
+  （计数）、`lastProgressAt` / `epochStartedAt`（时间）。报告的 `message` 从不进快照；`phase` 不是单个标识符时写成
+  `[redacted]`，完整的报告用 `GET /api/tasks/:id/progress` 读。continuous Watch 的 Match 带 `window` 与 `budget`，到期带
+  `openWindow`，每个字段形状都对才保留，否则整个写成 `[redacted]`。**其他键直接丢弃；形状不对的值写成 `[redacted]`**，
+  读 turn 的人能看出有东西被扣下了。
+- **reason**（turn 标题行、载荷、推送正文）：必须是谓词描述的词汇，例如 `ANY_OF(ALL TASK_TERMINAL 7/7, ANY TASK_FAILED 1/7)`、
+  `ANY TASK_NO_PROGRESS_FOR(600s) 1/1`；continuous Watch 的 Match 后面还跟着 `; 2 crossings since <时间>; wake 3 of 10`。
   否则整条写成 `[redacted]`。推送要经过 Apple 的服务，只带这条 reason，不带任何目标。
 - **`REVOKED` / `UNRESOLVABLE` 的终态 turn**：只有 `watchId` 和 `state`，从来不含目标。
 - **`last_error`**：落库前，URL 里的用户名密码、`Bearer`/`Basic` 凭据、JWT、`sk-`/`gh*_`/`AKIA` 形式的 key、
@@ -202,8 +207,8 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" "$ORBIT/api/watches/deliveries
   worker 在下一轮（默认 5 秒内）重新尝试，并重新经过全部防护：权限复核、观察者是否还活着、风暴上限、每日预算。
 - 不是死信 → 409 `DELIVERY_NOT_DEAD_LETTER`。
 - `retryable: false` 的死信 → 409 `DELIVERY_NOT_RETRYABLE`，包括 `PERMISSION_REVOKED`、`OBSERVER_SESSION_ENDED`、
-  `OBSERVER_TURN_INTERRUPTED`、`WAKE_WITHDRAWN`。没跑的唤醒是被有意收回的，重投会叫醒一个刚被停下的会话；
-  权限已撤销的载荷不应再发出去。
+  `OBSERVER_TURN_INTERRUPTED`、`WAKE_WITHDRAWN`、`WAKE_KEY_TAKEN`。没跑的唤醒是被有意收回的，重投会叫醒一个刚被停下的会话；
+  唤醒的键被别的 turn 占着，重投时它仍然占着；权限已撤销的载荷不应再发出去。
 - 条件还在的死信，重投后会再次变成同一个码的死信，例如预算窗口还没过去。这不是故障。
 - 同一个死信被并发重投时只有一次生效（按 `state` 与 `last_error` 做 compare-and-set），另一次返回 409。
 

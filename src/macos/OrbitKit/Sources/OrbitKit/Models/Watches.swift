@@ -160,7 +160,8 @@ public indirect enum WatchPredicate: Codable, Hashable, Sendable {
     /// edit replaces the predicate whole.
     case unknown(String)
 
-    /// The grammar version this build reads and writes. The server refuses any other.
+    /// The grammar version this build reads and writes. The server serves it beside the newer ones
+    /// (contract `servedPredicateVersions`) and refuses a version it does not serve.
     public static let version = 1
 
     private enum CodingKeys: String, CodingKey { case kind, over, leaf, operands }

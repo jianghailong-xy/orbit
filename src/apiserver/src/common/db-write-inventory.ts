@@ -499,7 +499,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'watches/watches.service.ts#create',
     shape: 'TX_RETRIED',
-    locks: 'Unlocked reads of the named task (with its progress row), session and approval rows first — the permission check and the snapshot are the same read — then a transaction-scoped advisory lock on the owner (assertCapacity), taken before any row lock and by nothing else, and unlocked reads of the live watches of that owner and of their targets; then the new watch row, whose foreign keys take FOR KEY SHARE on the owner user (rank 10) and, for a SESSION observer, on that session (rank 30), in that order; then watch_target, watch_match and watch_delivery rows only this transaction can see. Monotone, and no row another transaction can see is written.',
+    locks: 'Unlocked reads of the named task (with its progress row), session and approval rows first — the permission check and the snapshot are the same read — then the new watch row, whose foreign keys take FOR KEY SHARE on the owner user (rank 10) and, for a SESSION observer, on that session (rank 30), in that order, and whose idempotency key is where two creates with one key meet; then a transaction-scoped advisory lock on the owner (assertCapacity), taken by nothing else and held by no create that waits on another, and unlocked reads of the live watches of that owner and of their targets; then watch_target, watch_match and watch_delivery rows only this transaction can see. Monotone, and no row another transaction can see is written.',
     identity: 'The account-scoped `idempotencyKey` when the request carries one, enforced by `watch_owner_idempotency_key`: a concurrent twin that loses the insert, and a later retry, both read the committed watch back instead of making a second. Without a key every request is a new watch.',
     isolation: '',
     attempts: 4,
@@ -959,8 +959,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'watches/watch-wake-drain.ts#deadLetterQueuedWatchWakes', under: 'runnerApi turn-complete/finalize, sessions end/interrupt/cancelQueuedTurn and realtime reaper — each caller already owns the rank-30 Session transaction that takes the wake off the queue unrun' },
   { at: 'watches/watch-evaluator.service.ts#land', under: 'watchEvaluator.evaluate' },
   // A Watch create's capacity checks. Its one write-shaped statement is `pg_advisory_xact_lock` on the owner, taken
-  // before the create's first row lock; the rest are unlocked reads of that owner's live watches, so two creates of
-  // one account decide one after the other and nothing else waits on that lock.
+  // after the create's watch row and before its targets; the rest are unlocked reads of that owner's live watches, so
+  // two creates of one account decide one after the other and nothing else waits on that lock.
   { at: 'watches/watches.service.ts#assertCapacity', under: 'watches.create' },
   // Test-only, and reachable only from the harness's own transaction.
 ];

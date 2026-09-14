@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Checkbox, Modal, Radio, Select } from 'antd';
 import {
   WATCH_LIMITS,
-  WATCH_PREDICATE_VERSION,
   type UpdateWatchRequest,
   type WatchAction,
   type WatchTargetKind,
@@ -14,6 +13,7 @@ import { useToast } from '../lib/toast';
 import { compatibleUuid } from '../lib/uuid';
 import {
   DEFAULT_LEAF,
+  EDITOR_PREDICATE_VERSION,
   LEAF_COPY,
   TTL_CHOICES,
   choiceOf,
@@ -92,7 +92,7 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
       }
       const body: UpdateWatchRequest = {};
       if (!fixedCondition && choice && !sameChoice(choice, stored)) {
-        body.predicateVersion = WATCH_PREDICATE_VERSION;
+        body.predicateVersion = EDITOR_PREDICATE_VERSION;
         body.predicate = predicateFor(choice);
       }
       if (ttl !== KEEP_DEADLINE) body.ttlSeconds = ttl;

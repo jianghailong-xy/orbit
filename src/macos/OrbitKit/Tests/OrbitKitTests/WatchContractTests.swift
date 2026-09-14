@@ -100,7 +100,13 @@ final class WatchContractTests: XCTestCase {
 
     func testLeavesAndTheKindEachIsEvaluatedAgainstMatchTheContract() throws {
         let leaves = try object(contract()["leaves"], "leaves")
-        XCTAssertEqual(Set(leaves.keys), Set(known(WatchLeaf.self)))
+        // The leaves of the grammar this build reads and writes. A leaf a later grammar introduced declares its
+        // sinceVersion, and is one this build reads as a leaf it does not know.
+        let served = leaves.filter { (($0.value as? [String: Any])?["sinceVersion"] as? Int ?? 1) <= WatchPredicate.version }
+        XCTAssertEqual(Set(served.keys), Set(known(WatchLeaf.self)))
+        for later in leaves.keys where served[later] == nil {
+            XCTAssertEqual(try JSONDecoder().decode([WatchLeaf].self, from: Data("[\"\(later)\"]".utf8)), [.unknown], later)
+        }
         for leaf in WatchLeaf.allCases where leaf != .unknown {
             let definition = try object(leaves[leaf.rawValue], "leaves.\(leaf.rawValue)")
             XCTAssertEqual(definition["targetKind"] as? String, leaf.targetKind?.rawValue, leaf.rawValue)
@@ -116,13 +122,23 @@ final class WatchContractTests: XCTestCase {
             try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(predicate)) as? [String: Any])
         }
         let kinds = encoded.compactMap { $0["kind"] as? String }
-        XCTAssertEqual(Array(kinds.prefix(2)), try strings(c["aggregations"], "aggregations"))
+        // This build's two aggregations are the contract's, in its order; one a later grammar added (a quorum) is a
+        // term this build reads as one it does not know, and never sends back.
+        let aggregations = try strings(c["aggregations"], "aggregations")
+        XCTAssertEqual(Array(kinds.prefix(2)), aggregations.filter { kinds.prefix(2).contains($0) })
+        for later in aggregations where !kinds.prefix(2).contains(later) {
+            let term: [String: Any] = ["kind": later, "count": 1, "over": "ALL_TARGETS", "leaf": WatchLeaf.taskDone.rawValue]
+            let data = try JSONSerialization.data(withJSONObject: term)
+            XCTAssertEqual(try JSONDecoder().decode(WatchPredicate.self, from: data), .unknown(later), later)
+        }
         XCTAssertEqual(Array(kinds.suffix(2)), try strings(c["composites"], "composites"))
         XCTAssertEqual(Set(encoded.prefix(2).compactMap { $0["over"] as? String }),
                        Set(try strings(c["targetSelectors"], "targetSelectors")))
         let actions = try XCTUnwrap(c["actions"] as? [[String: Any]]).compactMap { $0["kind"] as? String }
         XCTAssertEqual(actions, known(WatchAction.self))
-        XCTAssertEqual(c["predicateVersion"] as? Int, WatchPredicate.version)
+        // The grammar this build writes is one the server still serves, and none newer than the contract's.
+        XCTAssertTrue(try XCTUnwrap(c["servedPredicateVersions"] as? [Int]).contains(WatchPredicate.version))
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(c["predicateVersion"] as? Int), WatchPredicate.version)
     }
 
     /// The canonical agent request (vector `all-terminal-or-any-failed`) reads into the Swift grammar

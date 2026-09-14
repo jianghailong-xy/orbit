@@ -755,10 +755,12 @@ scenario('A3', 'a stall is decided on next_evaluate_at by the one evaluator loop
     assert.equal((await scheduleOf(watchId, taskId)).atDeadline, true,
       'the watch was not scheduled at its stall deadline: its next look is the reconciliation an hour out');
   }
+  // Counted once the first pass is over and has armed its one timer, not as soon as the two above landed: the watches of
+  // one claim are evaluated in the order its UPDATE returned them, which can put those two before idle ones.
+  await eventually('the loop down to its one timer', async () => probe.live(), (live) => live === 1, 5_000);
   const { rows: [{ n: evaluatedIdle }] } = await sql.query<{ n: number }>(
     `SELECT count(*)::int AS "n" FROM "watch" WHERE "id" = ANY($1::uuid[]) AND "last_evaluated_at" > "created_at"`, [idle]);
   assert.equal(evaluatedIdle, idle.length, 'the first pass did not evaluate every idle watch');
-  await eventually('the loop down to its one timer', async () => probe.live(), (live) => live === 1, 5_000);
 
   // A report before its deadline moves it. Its hint is dropped too, so only the rows can tell the evaluator.
   const oldDeadline = (await scheduleOf(movingWatch.id, moving)).deadline;

@@ -20,10 +20,17 @@ import { WATCH_LEAVES, type WatchSnapshot, type WatchTargetObservation } from '@
 export const REDACTED = '[redacted]';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-/** A status, a run or lifecycle state, an end reason: one identifier, never a sentence. */
+/** A status, a run or lifecycle state, an end reason, a progress phase: one identifier, never a sentence. */
 const WORD = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
-/** What `describePredicate` writes: kinds, leaves, counts, parentheses and commas. */
-const REASON = /^[A-Z][A-Z_(), 0-9/]*$/;
+/**
+ * What the evaluator writes as a reason: `describePredicate`'s kinds, leaves, counts, parentheses and commas, a
+ * leaf's parameters as `(600s)`, `(50%)` or `(5)`, and on a CONTINUOUS watch's Match the crossings its window
+ * coalesced and which wake of its budget it is.
+ */
+const REASON =
+  /^[A-Z](?:[A-Z_(), 0-9/]|(?<=\(\d+)[s%](?=\)))*(?:; \d+ crossings? since \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z; wake \d+ of \d+)?$/;
+/** A key of a target's `leaves`: the leaf, followed by its parameters when it takes any, as in `TASK_NO_PROGRESS_FOR(600s)`. */
+const LEAF_LABEL = /^([A-Z][A-Z_]*)(?:\(\d+[s%]?\))?$/;
 const REASON_MAX_CHARS = 1_000;
 const ERROR_MAX_CHARS = 1_000;
 const TARGET_KINDS: readonly string[] = ['SESSION', 'TASK'];
@@ -33,10 +40,17 @@ const TARGET_STATES: readonly string[] = ['OBSERVED', 'SATISFIED', 'GONE'];
 export function redactSnapshot(stored: unknown): WatchSnapshot {
   const snapshot = isRecord(stored) ? stored : {};
   const evaluatedAt = snapshot.evaluatedAt;
-  return {
+  const redacted: Record<string, unknown> = {
     evaluatedAt: typeof evaluatedAt === 'string' && !Number.isNaN(Date.parse(evaluatedAt)) ? evaluatedAt : REDACTED,
     targets: (Array.isArray(snapshot.targets) ? snapshot.targets : []).map(redactTarget),
   };
+  // A CONTINUOUS watch's Match names the window it closed and which wake of its budget it is, and its expiry the window
+  // still open. Each is copied only when every field has its shape, and is otherwise `[redacted]` whole: the wake turn
+  // reads `budget` to say whether this is the last wake, and half a budget would answer that wrongly.
+  if ('window' in snapshot) redacted.window = shaped(snapshot.window, { openedAt: isInstant, closedAt: isInstant, crossings: isCount });
+  if ('budget' in snapshot) redacted.budget = shaped(snapshot.budget, { wake: isCount, of: isCount });
+  if ('openWindow' in snapshot) redacted.openWindow = shaped(snapshot.openWindow, { openedAt: isInstant, crossings: isCount });
+  return redacted as unknown as WatchSnapshot;
 }
 
 function redactTarget(stored: unknown): WatchTargetObservation {
@@ -52,8 +66,11 @@ function redactTarget(stored: unknown): WatchTargetObservation {
   if (isRecord(target.leaves)) {
     observation.leaves = Object.fromEntries(
       Object.entries(target.leaves)
-        .filter(([leaf]) => Object.prototype.hasOwnProperty.call(WATCH_LEAVES, leaf))
-        .map(([leaf, held]) => [leaf, typeof held === 'boolean' ? held : REDACTED]),
+        .filter(([label]) => {
+          const leaf = LEAF_LABEL.exec(label)?.[1];
+          return leaf !== undefined && Object.prototype.hasOwnProperty.call(WATCH_LEAVES, leaf);
+        })
+        .map(([label, held]) => [label, typeof held === 'boolean' ? held : REDACTED]),
     );
   }
   if (isRecord(target.observed)) {
@@ -64,6 +81,18 @@ function redactTarget(stored: unknown): WatchTargetObservation {
     if ('lifecycleState' in observed) view.lifecycleState = word(observed.lifecycleState);
     if ('pendingApproval' in observed) {
       view.pendingApproval = typeof observed.pendingApproval === 'boolean' ? observed.pendingApproval : REDACTED;
+    }
+    // Only a predicate that reads progress records it. The reporter's message is never part of it.
+    if ('progress' in observed) {
+      const progress = isRecord(observed.progress) ? observed.progress : null;
+      view.progress = progress && {
+        phase: progress.phase === null ? null : word(progress.phase),
+        current: progress.current === null ? null : count(progress.current),
+        total: progress.total === null ? null : count(progress.total),
+        lastProgressAt: progress.lastProgressAt === null ? null : instant(progress.lastProgressAt),
+        epochStartedAt: instant(progress.epochStartedAt),
+      };
+      view.progress ??= REDACTED;
     }
     observation.observed = view;
   }
@@ -101,10 +130,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isInstant(value: unknown): boolean {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
+}
+
+function isCount(value: unknown): boolean {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+/** The named fields of a small record when every one has its shape, and `[redacted]` when any does not. */
+function shaped(value: unknown, fields: Record<string, (field: unknown) => boolean>): unknown {
+  if (!isRecord(value) || !Object.entries(fields).every(([name, holds]) => holds(value[name]))) return REDACTED;
+  return Object.fromEntries(Object.keys(fields).map((name) => [name, value[name]]));
+}
+
 function oneOf(value: unknown, allowed: readonly string[]): string {
   return typeof value === 'string' && allowed.includes(value) ? value : REDACTED;
 }
 
 function word(value: unknown): string {
   return typeof value === 'string' && WORD.test(value) ? value : REDACTED;
+}
+
+function instant(value: unknown): unknown {
+  return isInstant(value) ? value : REDACTED;
+}
+
+function count(value: unknown): unknown {
+  return isCount(value) ? value : REDACTED;
 }

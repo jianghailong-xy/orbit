@@ -529,14 +529,6 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 - **编辑与创建**：改谓词会重置 `holding` 并丢弃未关闭的窗口；continuous Watch 不在创建时 Match，创建即到期，
   第一次求值看到的成立就是第一次 crossing。
 
-## 13. 测试
-
-```bash
-npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
-bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
-bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
-```
-
 ---
 
 ## 13. Agent / MCP / CLI 表面
@@ -599,3 +591,13 @@ bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts 
 
 「CLI 断开后 Watch 仍存在」和「Agent 不再生成 Bash monitor」的黑盒语义由独立的 Claude 产品 QA Gate 验证。本节的机械下限是上面三份测试，
 加上 `src/runner-go/session_wait_test.go` 与 `src/runner-go/watch_cli_test.go`。
+
+---
+
+## 14. 测试
+
+```bash
+npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
+```
