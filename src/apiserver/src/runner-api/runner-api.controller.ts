@@ -2952,6 +2952,15 @@ export class RunnerApiController {
     // this body — without the pipe the id reaches `where: { id: dto.turnId }` exactly as sent.
     @Body(PublicIdPipe.forFields('turnId')) dto: TurnCompleteRequest,
   ) {
+    // The pipe decodes a turnId that is there and passes an absent one through. To Prisma
+    // `where: { id: undefined }` is no condition at all, so the ACK below would answer every
+    // unanswered turn of the session — queued messages and Watch wakes, none of them run. Refused
+    // before the lock, so a completion that names no turn changes nothing.
+    if (typeof dto?.turnId !== 'string' || dto.turnId.trim() === '') {
+      throw new BadRequestException(
+        'turnId is required: a turn completion must name the turn it completes',
+      );
+    }
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const usage = dto.usage;
     // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's

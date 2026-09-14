@@ -230,3 +230,33 @@ test('write leaseOwner UUIDs are normalized and malformed values fail before a t
     assert.deepEqual(h.writes, []);
   }
 });
+
+test('a turn completion that names no turn is refused with 400 before a transaction', async () => {
+  // Prisma reads `where: { id: undefined }` as no condition, so a completion reaching the ACK
+  // without a turnId would answer every unanswered turn of the session. Blank is the same request.
+  for (const body of [
+    { status: SharedRunStatus.SUCCEEDED, leaseOwner: OWNER },
+    { turnId: '', status: SharedRunStatus.SUCCEEDED, leaseOwner: OWNER },
+    { turnId: '   ', status: SharedRunStatus.FAILED, leaseOwner: OWNER },
+  ]) {
+    const h = harness();
+    await assert.rejects(
+      h.controller.turnComplete({ id: RUNNER_ID }, SESSION_ID, body as never),
+      (error: unknown) =>
+        error instanceof BadRequestException
+        && error.getStatus() === 400
+        && /turnId is required/.test(error.message),
+    );
+    assert.equal(h.transactions(), 0);
+    assert.deepEqual(h.writes, []);
+  }
+  // The paired control: the same completion naming its turn reaches the ACK in this harness.
+  const named = harness();
+  await named.controller.turnComplete({ id: RUNNER_ID }, SESSION_ID, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.SUCCEEDED,
+    leaseOwner: OWNER,
+  });
+  assert.equal(named.transactions(), 1);
+  assert.ok(named.writes.includes('turn-update'));
+});
