@@ -380,6 +380,17 @@ async function waitingOnLocks(fragment: string): Promise<number> {
   return n;
 }
 
+/** Backends of this database whose last statement containing `fragment` started at or after `since` and has finished. */
+async function finishedSince(fragment: string, since: string): Promise<number> {
+  const { rows: [{ n }] } = await sql.query<{ n: number }>(
+    `SELECT count(*)::int AS "n" FROM pg_stat_activity
+     WHERE "datname" = current_database() AND "state" = 'idle' AND position($1 in "query") > 0
+       AND "query_start" >= $2::timestamp AT TIME ZONE 'UTC'`,
+    [fragment, since],
+  );
+  return n;
+}
+
 /** Backends of this database that started a statement containing `fragment` at or after `since`, running or finished. */
 async function startedSince(fragment: string, since: string): Promise<number> {
   const { rows: [{ n }] } = await sql.query<{ n: number }>(
@@ -747,7 +758,9 @@ test('a hint that finds its watch held asks again for what the holder was: a lan
   );
   const since = await dbNow();
   const hinting = evaluator.hint('TASK', [task]);
-  await eventually('the hint to find both watches held', () => startedSince(MARK_DUE, since), (n) => n > 0);
+  // Released only once the hint's first ask has finished: a release that lands while that statement is still
+  // running would let the ask find a row free, and nothing after it would have been needed.
+  await eventually('the hint\'s first ask to finish while both watches are held', () => finishedSince(MARK_DUE, since), (n) => n > 0);
   await releaseLanding();
   await releaseClaim();
   const moved = await hinting;
