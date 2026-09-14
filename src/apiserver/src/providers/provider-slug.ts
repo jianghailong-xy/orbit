@@ -37,6 +37,10 @@ export function slugBase(input: string): string {
  * is what keeps that from surfacing at all: they both connect Anthropic, one row is `anthropic`
  * and the other `anthropic-2`, and both are Anthropic providers because the preset link, not the
  * slug, says so.
+ *
+ * An account pool dispatches under the same field a provider does (Agent/Session.provider), so its
+ * slug comes out of this namespace too: `taken` is every provider's slug and every pool's, and
+ * migration 0265's dispatch-slug guard refuses a slug the other table already holds.
  */
 export function pickFreeSlug(base: string, taken: Iterable<string>): string {
   const used = new Set(taken);

@@ -363,6 +363,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'dependsOnTaskIds',
   'anchorTaskId',
   'attachmentIds',
+  // An account pool's membership (migration 0265): the pool and the provider a member row names, and
+  // the providers a pool is created with. Addresses the pool list hands out and a caller hands straight
+  // back to add or remove a member.
+  'poolId',
+  'providerId',
+  'providerIds',
   // `[K6]` §7: the known-good point a merge landed, and the attempt that produced it. Addresses,
   // not fences — a checkpoint is audit material a person reads and quotes back ("merge cp X"), and
   // the merge gate's refusals name one, so it has to survive the round trip in the spelling

@@ -279,6 +279,7 @@ model User {
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
   modelProviders   ModelProvider[] // personal (BYOK) model providers
+  providerPools    ProviderPool[] // account pools of those providers, each dispatchable by its own slug
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   clientVersions   ClientVersion[] // which build of each client this user is running
@@ -5013,11 +5014,55 @@ model ModelProvider {
   // unique either way, so dispatch-by-slug is never ambiguous.
   ownerId       String?  @map("owner_id") @db.Uuid
   owner         User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // The account pools this provider is a member of. Joining one adds a way to dispatch it and
+  // takes nothing away: the row keeps its own slug and can still be pinned on its own.
+  poolMemberships ProviderPoolMember[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  // What a pool member points at: this provider together with its owner, so a member can only name
+  // a personal provider of the pool's own owner — a shared row's NULL owner matches no member.
+  @@unique([id, ownerId], map: "model_provider_id_owner_id_key")
   @@index([ownerId])
   @@map("model_provider")
+}
+
+/// An account pool (migration 0265): several of one owner's Claude subscription providers, dispatched
+/// under a slug of the pool's own. That slug comes out of the same namespace as ModelProvider.slug —
+/// provider-slug.ts picks it, and the `*_dispatch_slug_guard` triggers refuse a slug the other table
+/// holds — so a name in Agent/Session.provider still resolves to exactly one thing.
+///
+/// A pool adds an identity and removes none: its members keep their own slugs. Only a personal
+/// provider whose credential reports a 5-hour window may join (ProvidersService.addPoolMember).
+model ProviderPool {
+  id        String               @id @default(uuid(7)) @db.Uuid
+  slug      String               @unique
+  label     String
+  // Always a person: a pool is personal, like every provider allowed into it.
+  ownerId   String               @map("owner_id") @db.Uuid
+  owner     User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members   ProviderPoolMember[]
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  @@unique([id, ownerId], map: "provider_pool_id_owner_id_key")
+  @@index([ownerId])
+  @@map("provider_pool")
+}
+
+/// One provider's membership of one pool. `ownerId` is in both foreign keys, so the pool and the
+/// provider have the same owner, and a shared provider (owner NULL) can never be a member.
+model ProviderPoolMember {
+  poolId     String        @map("pool_id") @db.Uuid
+  providerId String        @map("provider_id") @db.Uuid
+  ownerId    String        @map("owner_id") @db.Uuid
+  pool       ProviderPool  @relation(fields: [poolId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  provider   ModelProvider @relation(fields: [providerId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  @@id([poolId, providerId])
+  @@index([providerId, ownerId])
+  @@map("provider_pool_member")
 }
 
 /// One confirmed Codex earned rate-limit reset (docs/codex-rate-limit-reset-contract.md §5, §7, §9.3).

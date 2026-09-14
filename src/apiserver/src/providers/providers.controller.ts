@@ -3,7 +3,9 @@ import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
+  AddProviderPoolMemberDto,
   CreateModelProviderDto,
+  CreateProviderPoolDto,
   TestModelProviderDto,
   UpdateModelProviderDto,
 } from './dto';
@@ -64,5 +66,41 @@ export class ProvidersController {
   @Delete('mine/:id')
   removeMine(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.providers.remove(user.userId, id);
+  }
+
+  // Account pools: several of the caller's own subscription providers dispatched under one slug.
+  // Owner-scoped like /mine. A provider that could never be chosen from a pool is refused with the
+  // reason, not accepted.
+  @Get('pools')
+  listPools(@CurrentUser() user: AuthUser) {
+    return this.providers.listPools(user.userId);
+  }
+
+  @Post('pools')
+  createPool(@CurrentUser() user: AuthUser, @Body() dto: CreateProviderPoolDto) {
+    return this.providers.createPool(user.userId, dto);
+  }
+
+  @Delete('pools/:id')
+  removePool(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.providers.removePool(user.userId, id);
+  }
+
+  @Post('pools/:id/members')
+  addPoolMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: AddProviderPoolMemberDto,
+  ) {
+    return this.providers.addPoolMember(user.userId, id, dto.providerId);
+  }
+
+  @Delete('pools/:id/members/:providerId')
+  removePoolMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('providerId', PublicIdPipe) providerId: string,
+  ) {
+    return this.providers.removePoolMember(user.userId, id, providerId);
   }
 }
