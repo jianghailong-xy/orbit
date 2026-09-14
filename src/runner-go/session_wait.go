@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -47,12 +48,13 @@ const sessionWaitUnbackedNote = "No server-held watch backs this wait: nothing s
 // sessionWaitWatch is what a caller has to know about the watch behind a wait. It is printed beside the
 // session under "watch" whenever the wait did not end cleanly inline.
 type sessionWaitWatch struct {
-	// Empty when no watch could be recorded; Error says why.
+	// Empty when no watch could be recorded; Error says why, and Code is the server's refusal code when it named one.
 	ID string `json:"id,omitempty"`
 	// Why the call stopped waiting while the watch goes on waiting: TIMEOUT or TRANSPORT_ERROR.
 	HandedBack string `json:"handedBack,omitempty"`
 	// What releasing the watch came to, when an inline answer could not release it cleanly.
 	Release string `json:"release,omitempty"`
+	Code    string `json:"code,omitempty"`
 	Error   string `json:"error,omitempty"`
 	Note    string `json:"note"`
 }
@@ -96,7 +98,8 @@ func waitForSessionDurably(t *Transport, ctx cliOrchestrationContext, created js
 			wait.session = raw
 		}
 		if wait.settled = sessionRawSettled(wait.session); !wait.settled {
-			wait.watch = &sessionWaitWatch{Error: unbackedSessionWaitReason(err), Note: sessionWaitUnbackedNote}
+			reason, code := unbackedSessionWaitReason(err)
+			wait.watch = &sessionWaitWatch{Code: code, Error: reason, Note: sessionWaitUnbackedNote}
 		}
 		return wait, nil
 	}
@@ -225,14 +228,25 @@ func (w sessionWait) text() string {
 			"Orbit's server and starts a turn in this session when that session's turn settles, or once if the watch "+
 			"expires first. End your turn now; do not poll session_get or sleep to wait for it.\n%s",
 			w.sessionID, why, w.watch.ID, body)
-	case w.watch != nil && w.watch.ID == "":
-		return body + "\n\nThe session has not settled, and no server-held watch backs this wait (" + w.watch.Error +
-			"): look at it again later with session_get, or call session_await to be woken when it settles."
+	case w.unbacked():
+		return body + "\n\n" + w.unbackedNote("session_get", "session_await")
 	case w.watch != nil:
 		return body + "\n\n" + w.watch.Note
 	default:
 		return body
 	}
+}
+
+// unbacked reports a wait that ended before the session settled with no watch recorded behind it.
+func (w sessionWait) unbacked() bool {
+	return w.watch != nil && w.watch.ID == ""
+}
+
+// unbackedNote is what an unbacked wait tells its caller, in the words of the surface that waited: get and await
+// name that surface's ways to look at the session again and to be woken when it settles.
+func (w sessionWait) unbackedNote(get, await string) string {
+	return "The session has not settled, and no server-held watch backs this wait (" + w.watch.Error +
+		"): look at it again later with " + get + ", or call " + await + " to be woken when it settles."
 }
 
 // sessionRawSettled reads a session body's status the way sessionSettled judges it.
@@ -261,13 +275,21 @@ func sessionWaitWatchRefused(err error) bool {
 	return !isRetryableTransportError(err) && !watchDoorMissing(err)
 }
 
-func unbackedSessionWaitReason(err error) string {
+// unbackedSessionWaitReason says why no watch backs a wait, on one line as the CLI says it inside one on stderr: a
+// refusal gives its code and what it said, without the body repeating both. code is that refusal code, if any.
+func unbackedSessionWaitReason(err error) (reason, code string) {
+	failure := err.Error()
+	var httpErr *transportHTTPError
+	if errors.As(err, &httpErr) && httpErr.refusal() != "" {
+		failure, code = httpErr.refusal(), httpErr.code()
+	}
+	failure = strings.Join(strings.Fields(failure), " ")
 	switch {
 	case watchDoorMissing(err):
-		return "this Orbit server predates watches"
+		return "this Orbit server predates watches", code
 	case sessionWaitWatchRefused(err):
-		return "Orbit refused to record the watch, so the call did not wait: " + err.Error()
+		return "Orbit refused to record the watch, so the call did not wait: " + failure, code
 	default:
-		return "recording the watch failed: " + err.Error()
+		return "recording the watch failed: " + failure, code
 	}
 }

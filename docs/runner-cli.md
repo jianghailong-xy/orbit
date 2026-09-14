@@ -77,8 +77,9 @@ A watch wakes the session that makes it, so these commands need `ORBIT_SESSION_I
 `session await`, and a watch that names sessions, need orchestration, as `session get` does. `orbit session create
 --wait` records its wait as a watch before it starts: if the wait runs out or the control plane stops answering, the
 output carries that watch under `"watch"`, and the watch keeps waiting. If no watch could be recorded, a session that
-has not settled carries `"watch": {"error", "note"}` instead, and nothing will wake the caller for it; a watch the
-control plane refuses (a quota, a permission) ends the wait at once.
+has not settled carries `"watch": {"error", "note", "code"}` instead (`code` is the control plane's refusal code, when it
+gave one), stderr says so in one line naming `orbit session await`, and nothing will wake the caller for it; a watch the
+control plane refuses (a quota, a permission) ends the wait at once. The exit status stays 0: the session exists.
 
 ## Headless runner-local access
 

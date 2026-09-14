@@ -104,7 +104,8 @@ Options:
                            the wait runs out or the server stops answering, the output carries
                            that watch under "watch" instead of losing it. If no watch could be
                            recorded, a session that has not settled carries why under "watch"
-                           instead, and a watch the server refuses ends the wait at once
+                           instead and stderr says so in one line, and a watch the server
+                           refuses ends the wait at once
   --json
 
 Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
@@ -549,6 +550,12 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("wait for session: %w", err)
 		}
 		raw = result.json()
+		if result.unbacked() {
+			// Said on stderr as well as under "watch", and still exit 0 as session_create(wait) answers without
+			// isError: the session exists, and a failed exit reads as a create to try again.
+			fmt.Fprintln(os.Stderr, "orbit session create: "+result.unbackedNote(
+				"`orbit session get "+result.sessionID+"`", "`orbit session await --session-id "+result.sessionID+"`"))
+		}
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

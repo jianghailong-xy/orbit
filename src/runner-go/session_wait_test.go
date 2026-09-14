@@ -250,12 +250,17 @@ func TestSessionCreateWaitAgainstAServerWithoutTheWatchDoorWaitsAsBefore(t *test
 		watchCode: http.StatusNotFound,
 		watchBody: `{"message":"Cannot POST /api/runner/watches","error":"Not Found","statusCode":404}`,
 	}
+	stderr := captureStderr(t)
 	out, err := runSessionCreateWait(t, server)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := "{\"id\":\"child-session\",\"status\":\"SUCCEEDED\",\"result\":\"done\"}\n"; out != want {
 		t.Fatalf("output = %q, want %q", out, want)
+	}
+	// The session settled, so its state is the whole answer: no watch was owed, and none is spoken of.
+	if said := stderr(); said != "" {
+		t.Fatalf("stderr = %q, want nothing beside a settled answer", said)
 	}
 	if server.count("POST /api/runner/watches/watch-1/release") != 0 {
 		t.Fatal("released a watch the server never made")

@@ -595,7 +595,9 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 6. watch 没记下：建 watch 遇到 5xx、408、429 或网络错误时，用同一 `idempotencyKey` 最多试 3 次（间隔 1 秒），仍失败就走迁移前的轮询；
    被明确拒绝（其余 4xx，如 `WATCH_QUOTA_EXCEEDED`、`PERMISSION_DENIED`）时不再轮询，立即返回刚建好的会话。没有 runner 门、重试用尽、
    被拒这三种情况下，返回时会话尚未 settle 就带 `watch: {error, note}`（没有 `id`），MCP 文本写明 no server-held watch backs this wait：
-   **没有 watch 托底的等待不当成正常返回**。
+   **没有 watch 托底的等待不当成正常返回**。`watch` 里另带 `code`（服务端的拒绝码，有才带），`error` 只占一行。CLI 另在 stderr
+   写一行，就是 MCP 文本末尾那句，`session_get` / `session_await` 换成 `orbit session get` / `orbit session await`；退出码仍是 0
+   （MCP 也不置 isError）：子会话已经建好，非零退出会被读成建会话失败而重试。
 
 ### 13.4 Agent 指令
 
