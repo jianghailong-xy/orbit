@@ -20,8 +20,8 @@ import UIKit
 /// The cache is *bounded* and evicts on its own: this used to be a plain dictionary that only ever
 /// grew, so every image scrolled past stayed decoded until logout. A phone screenshot decodes to tens
 /// of megabytes, which on iOS is a straight line from browsing a few image-heavy sessions to a jetsam
-/// kill. Anything evicted is re-fetchable — see `loadsAttachmentImage`, which is how a view that lost
-/// its entry asks for the bytes again.
+/// kill. What a view on screen is drawing is pinned and stays (see `keep`); anything else may be
+/// evicted, and is fetched again when a view next asks for it — see `loadsAttachmentImage`.
 @MainActor
 @Observable
 final class AttachmentImageStore {
@@ -34,7 +34,7 @@ final class AttachmentImageStore {
     }
 
     private let api: APIClient
-    private let cache = NSCache<NSString, Entry>()
+    private let cache: PinnedCache<Entry>
 
     /// Ids with a fetch in flight — dedups concurrent callers. Bounded by what's actually in flight:
     /// every insert below is paired with a `defer`red removal.
@@ -62,29 +62,27 @@ final class AttachmentImageStore {
 
     init(baseURL: URL, tokenStore: TokenStore) {
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
-        cache.totalCostLimit = Self.byteLimit
-        cache.countLimit = Self.entryLimit
+        self.cache = PinnedCache(totalCostLimit: Self.byteLimit, countLimit: Self.entryLimit)
     }
 
     /// Decoded image for `id`, if still cached. Non-mutating — safe in a view `body`. May answer nil
-    /// for an id it answered non-nil for earlier: the cache evicts, and the view's `.task` refetches.
+    /// for an id it answered non-nil for earlier, once no view on screen holds it: the cache evicts.
     func image(for id: String) -> PlatformImage? {
         _ = revision
-        return cache.object(forKey: id as NSString)?.image
+        return cache.object(forKey: id)?.image
     }
 
     /// True once a fetch decided `id` isn't a renderable image (show a file chip).
     func isNotImage(_ id: String) -> Bool {
         _ = revision
-        guard let entry = cache.object(forKey: id as NSString) else { return false }
+        guard let entry = cache.object(forKey: id) else { return false }
         return entry.image == nil
     }
 
-    /// Whether `id` has an answer — of either kind — still in the cache. What `loadsAttachmentImage`
-    /// watches to notice an eviction.
+    /// Whether `id` has an answer — of either kind — still in the cache.
     func isResolved(_ id: String) -> Bool {
         _ = revision
-        return cache.object(forKey: id as NSString) != nil
+        return cache.object(forKey: id) != nil
     }
 
     /// Pre-fill the cache from bytes already in hand (the just-uploaded attachment), so the sent
@@ -124,11 +122,23 @@ final class AttachmentImageStore {
         remember(id, PlatformImage(data: data))   // undecodable bytes resolve as "not an image"
     }
 
+    /// Holds `id`'s answer for as long as the calling task runs, fetching it first if there isn't one:
+    /// what a view runs for the length of its appearance (`loadsAttachmentImage`), so the image it
+    /// draws can't be evicted by whatever loads beside it.
+    func keep(_ id: String) async {
+        cache.pin(id)
+        defer { cache.unpin(id) }
+        await load(id)
+        // Parked until the view goes away and SwiftUI cancels the task.
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 3_600_000_000_000)
+        }
+    }
+
     /// The one way in, so every path (seed and load alike) is charged the same cost and every landing
     /// entry re-renders the views waiting on it.
     private func remember(_ id: String, _ image: PlatformImage?) {
-        cache.setObject(Entry(image), forKey: id as NSString,
-                        cost: image.map(Self.bitmapBytes) ?? Self.markerCost)
+        cache.setObject(Entry(image), forKey: id, cost: image.map(Self.bitmapBytes) ?? Self.markerCost)
         revision &+= 1
     }
 
@@ -149,21 +159,17 @@ final class AttachmentImageStore {
 }
 
 extension View {
-    /// Keep `id`'s attachment image loaded for as long as this view is on screen, re-fetching it if
-    /// the bounded cache evicted it.
+    /// Keep `id`'s attachment image loaded — and held — for as long as this view is on screen.
     ///
-    /// The task is keyed on *whether the store still has an answer*, not just on the id, and that's
-    /// the whole point: with a plain `.task(id: id)`, a body pass that ran after an eviction would
-    /// swap in the placeholder and then nothing would ever ask for the bytes again — the id, and so
-    /// the task, hasn't changed — leaving a grey box until the row happened to be rebuilt.
+    /// Held, not just loaded. This task used to be keyed on whether the store still had an answer, so
+    /// that a view whose image the bounded cache evicted would fetch it again. But an image on screen
+    /// was as evictable as any other, and two of them together over the limit then evicted each other
+    /// in turn: an image-viewer page and its neighbour flickered between picture and spinner,
+    /// re-downloading both, for as long as the viewer stayed open. Pinned for the view's lifetime,
+    /// the image isn't evicted, so the task only has to start when the view appears or its id changes.
     func loadsAttachmentImage(_ id: String, from store: AttachmentImageStore) -> some View {
-        task(id: AttachmentImageLoad(id: id, resolved: store.isResolved(id))) {
-            await store.load(id)
+        task(id: id) {
+            await store.keep(id)
         }
     }
-}
-
-private struct AttachmentImageLoad: Equatable {
-    let id: String
-    let resolved: Bool
 }
