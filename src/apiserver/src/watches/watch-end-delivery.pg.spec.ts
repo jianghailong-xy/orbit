@@ -13,6 +13,11 @@
  * another account, and makes one unresolvable by deleting its only target. Those are the two conditions the
  * evaluator decides these ends on.
  *
+ * An end wake no runner has taken yet can still leave the observer's queue unrun: a failed running turn
+ * drains it, an interrupt deletes it, a withdrawal deletes it alone. Its delivery then says so as a dead
+ * letter instead of going on reading DELIVERED; those cases go through the production turn completion,
+ * interrupt and cancelQueuedTurn.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-end-delivery.pg.spec.ts
  *
  * Non-destructive: every row carries an id this run generated, and the constraint drill runs in a
@@ -809,3 +814,201 @@ test('with the evaluator and the delivery worker running and nothing called by h
   }
   assert.deepEqual(handed.sort(), [...keys].sort(), 'the runner was handed each end turn once');
 });
+
+// ── a queued end wake taken off its observer's queue unrun ─────────────────────────────────────
+
+interface QueuedEnd {
+  end: End;
+  observer: string;
+  watchId: string;
+  deliveryId: string;
+  wakeId: string;
+}
+
+/** An observer RUNNING a turn the runner holds, so whatever is queued for it waits behind that turn. */
+async function runningObserver(owner: string, runner: string): Promise<{ observer: string; current: string }> {
+  const observer = await insertSession(owner, 'RUNNING', runner);
+  const current = randomUUID();
+  await sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","kind","content","status","delivered_at","lease_deadline_at")
+     VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
+    [current, observer, `current-${current}`],
+  );
+  return { observer, current };
+}
+
+/** A watch that ended REVOKED or UNRESOLVABLE, delivered to `observer`: DELIVERED, with its end wake waiting in the queue. */
+async function queuedEnd(end: End, owner: string, observer: string, pool: ReturnType<typeof worker>): Promise<QueuedEnd> {
+  const { watchId } = await endedWatch(end, owner, observer);
+  const { id: deliveryId } = await onlyEnd(watchId, end);
+  assert.deepEqual(outcomesFor(await pool.delivery.drain(), deliveryId), ['DELIVERED'], end);
+  const [wake] = (await turnsOn(observer)).filter((turn) => turn.clientTurnId === endKey(end, watchId));
+  assert.equal(wake?.status, 'PENDING', `${end}: the end wake waits in the queue`);
+  return { end, observer, watchId, deliveryId, wakeId: wake.id };
+}
+
+/** The state an ending, an interrupt and a withdrawal each meet (watch-wake-drain.ts). */
+async function endQueuedBehindRunningTurn(
+  end: End,
+  owner: string,
+  runner: string,
+  pool: ReturnType<typeof worker>,
+): Promise<QueuedEnd & { current: string }> {
+  const { observer, current } = await runningObserver(owner, runner);
+  return { ...(await queuedEnd(end, owner, observer, pool)), current };
+}
+
+/** The runner's own doors onto its sessions: settle a turn it ran, and take the next one queued. */
+function runnerDoors(pool: ReturnType<typeof worker>, runner: string) {
+  const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
+  const inbox = runnerApi as unknown as {
+    dequeueTurn(
+      sessionId: string,
+      runnerId: string,
+      leaseGeneration: null,
+      acceptsSteer: boolean,
+      declaredCapabilities: readonly string[],
+    ): Promise<{ turnId: string } | null>;
+  };
+  return {
+    complete: (observer: string, turnId: string, status: 'SUCCEEDED' | 'FAILED') =>
+      runnerApi.turnComplete({ id: runner }, observer, {
+        turnId,
+        status,
+        subtype: status === 'FAILED' ? 'error_during_execution' : 'completed',
+        ...(status === 'FAILED' ? { result: 'API Error: 529 overloaded' } : {}),
+        numTurns: 2,
+        costUsd: 0,
+      } as never),
+    take: async (observer: string) => (await inbox.dequeueTurn(observer, runner, null, false, []))?.turnId,
+  };
+}
+
+/** A queued end wake the runner took: the turn in front of it finished, and the end wake is the turn running now. */
+async function endTakenByRunner(end: End, owner: string, runner: string, pool: ReturnType<typeof worker>): Promise<QueuedEnd> {
+  const { current, ...queued } = await endQueuedBehindRunningTurn(end, owner, runner, pool);
+  const doors = runnerDoors(pool, runner);
+  await doors.complete(queued.observer, current, 'SUCCEEDED');
+  assert.equal(await doors.take(queued.observer), queued.wakeId, `${end}: the runner took the end wake`);
+  return queued;
+}
+
+/**
+ * The end wake was taken off the queue unrun — answered by an ending's drain, or deleted by an interrupt or
+ * a withdrawal — its delivery says so on the watch's own read, and the watch is the terminal fact it was.
+ */
+async function assertEndDeadLettered(
+  owner: string,
+  queued: QueuedEnd,
+  how: string,
+  { code, deleted }: { code: string; deleted: boolean },
+): Promise<void> {
+  const why = `${queued.end}, ${how}`;
+  const [wake] = (await turnsOn(queued.observer)).filter((turn) => turn.id === queued.wakeId);
+  if (deleted) assert.equal(wake, undefined, `${why}: the wake is deleted as a queued message always was`);
+  else assert.equal(wake?.status, 'ANSWERED', `${why}: the queue is drained as it always was`);
+  const settled = await onlyEnd(queued.watchId, queued.end);
+  assert.equal(settled.state, 'DEAD_LETTER', `${why}: a queued end wake no runner took still reads ${settled.state}`);
+  assert.match(settled.lastError ?? '', new RegExp(`^${code}: `), why);
+  const view = await watches.get(owner, queued.watchId);
+  assert.equal(view.state, queued.end, `${why}: the watch is the terminal fact it was`);
+  assert.deepEqual(
+    view.expiryDeliveries.map(({ id, kind, state, lastError, deliveredAt, deadLetteredAt }) => (
+      { id, kind, state, lastError, delivered: deliveredAt !== null, deadLettered: deadLetteredAt !== null }
+    )),
+    [{ id: queued.deliveryId, kind: queued.end, state: 'DEAD_LETTER', lastError: settled.lastError, delivered: false, deadLettered: true }],
+    `${why}: its dead letter is on the watch's read`,
+  );
+}
+
+// One case per end and per door, so a key the helper does not recognize fails under its own name.
+for (const end of ENDS) {
+  test(`a queued end wake keyed watch:<id>:${end.toLowerCase()} is a dead letter, not DELIVERED, when its observer's running turn fails; one the runner took stays delivered, and another observer's is left alone`, { skip, timeout: 120_000 }, async () => {
+    const owner = await insertUser();
+    const runner = await insertRunner(owner);
+    const pool = worker();
+    const doors = runnerDoors(pool, runner);
+    // Another observer of the same owner on the same runner, whose run nothing here ends.
+    const bystander = await endQueuedBehindRunningTurn(end, owner, runner, pool);
+
+    const queued = await endQueuedBehindRunningTurn(end, owner, runner, pool);
+    await doors.complete(queued.observer, queued.current, 'FAILED');
+    assert.equal((await sessionOf(queued.observer)).status, 'FAILED');
+    await assertEndDeadLettered(owner, queued, 'the running turn failed', { code: 'OBSERVER_SESSION_ENDED', deleted: false });
+    assert.deepEqual(outcomesFor(await pool.delivery.drain(), queued.deliveryId), [], 'a dead letter is never claimed again');
+
+    // The control: the runner took the end wake, and it is the wake's own turn that fails. The engine
+    // received it, so it was delivered, whatever its run came to.
+    const taken = await endTakenByRunner(end, owner, runner, pool);
+    await doors.complete(taken.observer, taken.wakeId, 'FAILED');
+    assert.equal((await sessionOf(taken.observer)).status, 'FAILED', 'the run the end wake started failed');
+    assert.equal((await onlyEnd(taken.watchId, end)).state, 'DELIVERED', 'an end wake the runner took was dead-lettered by its run failing');
+
+    const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+    assert.equal(waiting?.status, 'PENDING', 'another observer lost its queued end wake');
+    assert.equal((await onlyEnd(bystander.watchId, end)).state, 'DELIVERED', 'another observer\'s ending dead-lettered this one\'s end wake');
+  });
+
+  test(`a queued end wake keyed watch:<id>:${end.toLowerCase()} that an interrupt of its observer deletes is a dead letter (OBSERVER_TURN_INTERRUPTED); one the runner took stays delivered, and another observer's is left alone`, { skip, timeout: 120_000 }, async () => {
+    const owner = await insertUser();
+    const runner = await insertRunner(owner);
+    const pool = worker();
+    const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, realtime as never);
+    // Another observer of the same owner on the same runner, which nobody interrupts.
+    const bystander = await endQueuedBehindRunningTurn(end, owner, runner, pool);
+
+    const queued = await endQueuedBehindRunningTurn(end, owner, runner, pool);
+    await sessions.interrupt(owner, queued.observer);
+    assert.equal((await sessionOf(queued.observer)).status, 'RUNNING', 'an interrupt stops a turn, and the observer lives on');
+    await assertEndDeadLettered(owner, queued, 'the observer was interrupted', { code: 'OBSERVER_TURN_INTERRUPTED', deleted: true });
+    assert.deepEqual(outcomesFor(await pool.delivery.drain(), queued.deliveryId), [], 'a dead letter is never claimed again');
+
+    // The control: the runner took the end wake, and it is the wake's own turn the interrupt stops. The
+    // engine received it, so it was delivered, whatever the interrupt makes of its run.
+    const taken = await endTakenByRunner(end, owner, runner, pool);
+    await sessions.interrupt(owner, taken.observer);
+    const [stopping] = (await turnsOn(taken.observer)).filter((turn) => turn.id === taken.wakeId);
+    assert.equal(stopping?.status, 'IN_FLIGHT', 'the interrupt deleted an end wake the runner had taken');
+    assert.equal((await onlyEnd(taken.watchId, end)).state, 'DELIVERED', 'an end wake the runner took was dead-lettered by an interrupt');
+
+    const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+    assert.equal(waiting?.status, 'PENDING', 'another observer lost its queued end wake');
+    assert.equal((await onlyEnd(bystander.watchId, end)).state, 'DELIVERED', 'another observer\'s interrupt dead-lettered this one\'s end wake');
+  });
+}
+
+for (const [end, other] of [['REVOKED', 'UNRESOLVABLE'], ['UNRESOLVABLE', 'REVOKED']] as const) {
+  test(`a queued end wake keyed watch:<id>:${end.toLowerCase()} that its owner withdraws is a dead letter (WAKE_WITHDRAWN) for that wake alone: the observer's other queued end wake keeps its delivery, and one the runner took cannot be withdrawn`, { skip, timeout: 120_000 }, async () => {
+    const owner = await insertUser();
+    const runner = await insertRunner(owner);
+    const pool = worker();
+    const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, realtime as never);
+    // Another observer of the same owner on the same runner, whose queue nobody touches.
+    const bystander = await endQueuedBehindRunningTurn(end, owner, runner, pool);
+
+    // One observer waits on two watches that ended: this end's wake is queued first, the other end's behind it.
+    const { observer, current } = await runningObserver(owner, runner);
+    const withdrawn = await queuedEnd(end, owner, observer, pool);
+    const kept = await queuedEnd(other, owner, observer, pool);
+
+    await sessions.cancelQueuedTurn(owner, observer, withdrawn.wakeId);
+    assert.equal((await sessionOf(observer)).status, 'RUNNING', 'the observer keeps the run it has');
+    await assertEndDeadLettered(owner, withdrawn, 'the end wake was withdrawn', { code: 'WAKE_WITHDRAWN', deleted: true });
+    assert.deepEqual(outcomesFor(await pool.delivery.drain(), withdrawn.deliveryId), [], 'a dead letter is never claimed again');
+    assert.deepEqual(
+      (await turnsOn(observer)).map(({ id, status }) => ({ id, status })),
+      [{ id: current, status: 'IN_FLIGHT' }, { id: kept.wakeId, status: 'PENDING' }],
+      'withdrawing one end wake took more than its own turn off the queue',
+    );
+    assert.equal((await onlyEnd(kept.watchId, other)).state, 'DELIVERED', 'withdrawing one end wake dead-lettered the observer\'s other');
+
+    // The control: an end wake the runner took can no longer be withdrawn, and stays delivered.
+    const taken = await endTakenByRunner(end, owner, runner, pool);
+    await assert.rejects(sessions.cancelQueuedTurn(owner, taken.observer, taken.wakeId), /already started or not found/);
+    assert.equal((await onlyEnd(taken.watchId, end)).state, 'DELIVERED', 'an end wake the runner took was dead-lettered by a refused withdrawal');
+
+    const [waiting] = (await turnsOn(bystander.observer)).filter((turn) => turn.id === bystander.wakeId);
+    assert.equal(waiting?.status, 'PENDING', 'another observer lost its queued end wake');
+    assert.equal((await onlyEnd(bystander.watchId, end)).state, 'DELIVERED', 'another observer\'s withdrawal dead-lettered this one\'s end wake');
+  });
+}

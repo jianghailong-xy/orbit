@@ -1,11 +1,11 @@
 import type { Prisma } from '@prisma/client';
 
 /**
- * The keys a wake's turn is queued under, exactly as the delivery worker writes them:
- * `watch:<watchId>:<generation>` for a Match (`watchTurnClientId`) and `watch:<watchId>:expired` for an
- * expiry (`watchExpiryTurnClientId`).
+ * The keys a wake's turn is queued under, exactly as the delivery worker writes them: `watch:<watchId>:`
+ * and a suffix. A number is a Match's generation (`watchTurnClientId`); any other suffix is how the watch
+ * ended — `expired` (`watchExpiryTurnClientId`), `revoked` or `unresolvable` (`watchEndTurnClientId`).
  */
-const WAKE_TURN_KEY = /^watch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(\d+|expired)$/;
+const WAKE_TURN_KEY = /^watch:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(.+)$/;
 
 /** What took a queued wake off its observer's queue before any runner took it. The code heads its dead letter. */
 export type UnrunWake =
@@ -20,13 +20,14 @@ export type UnrunWake =
  * A Watch wake taken off its observer's queue before any runner took it (docs/watch-contract.md §3, §5, §6).
  *
  * The delivery worker queues a RESUME_SESSION wake as one turn, keyed `watch:<watchId>:<generation>` for
- * a Match and `watch:<watchId>:expired` for a watch that expired unmatched, and acknowledges the delivery
- * DELIVERED in that same transaction: from then on the wake waits on the observer's queue like any sent
- * message. Every way that run can end with the wake still waiting — its running turn fails, the reaper
- * finalizes it after its runner went quiet, the runner finalizes it, an end is requested — drains the
- * queue so nothing can be leased afterwards, and answers the wake away unrun. Nothing else would ever
- * say so: neither a Match nor an expiry changes, the watch is already terminal, a retry would replay the
- * drained turn under the same key, and AutoRetryService re-sends only the last message a person sent.
+ * a Match and `watch:<watchId>:expired`, `:revoked` or `:unresolvable` for a watch that ended unmatched,
+ * and acknowledges the delivery DELIVERED in that same transaction: from then on the wake waits on the
+ * observer's queue like any sent message. Every way that run can end with the wake still waiting — its
+ * running turn fails, the reaper finalizes it after its runner went quiet, the runner finalizes it, an
+ * end is requested — drains the queue so nothing can be leased afterwards, and answers the wake away
+ * unrun. Nothing else would ever say so: neither a Match nor a watch's end changes, the watch is already
+ * terminal, a retry would replay the drained turn under the same key, and AutoRetryService re-sends only
+ * the last message a person sent.
  *
  * So each of those drains calls this first, inside its own transaction and under the observer's Session
  * row lock it already holds. A delivery whose wake turn is still PENDING there becomes a DEAD_LETTER
@@ -67,10 +68,11 @@ export async function deadLetterQueuedWatchWakes(
   const wakes = queued.flatMap(({ clientTurnId }): Prisma.WatchDeliveryWhereInput[] => {
     const key = WAKE_TURN_KEY.exec(clientTurnId);
     if (!key) return [];
-    // An expiry's delivery names its watch itself; a Match's names it through the Match.
-    return key[2] === 'expired'
-      ? [{ kind: 'EXPIRY', watchId: key[1], watch: { observerSessionId: sessionId } }]
-      : [{ match: { watchId: key[1], generation: Number(key[2]), watch: { observerSessionId: sessionId } } }];
+    // A Match's delivery names its watch through the Match. Any other suffix is the watch's end, whose
+    // delivery names the watch itself whichever end it was; a watch ends once, so that is at most one row.
+    return /^\d+$/.test(key[2])
+      ? [{ match: { watchId: key[1], generation: Number(key[2]), watch: { observerSessionId: sessionId } } }]
+      : [{ kind: { not: 'MATCH' }, watchId: key[1], watch: { observerSessionId: sessionId } }];
   });
   if (wakes.length === 0) return;
   await tx.watchDelivery.updateMany({

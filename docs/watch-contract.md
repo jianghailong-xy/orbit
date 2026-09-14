@@ -183,9 +183,9 @@ Watch 只会进入一个终态，所以这样的 turn 最多一个。`REVOKED` �
 `IN_FLIGHT` 由 `(leaseOwner, leaseGeneration)` 围栏；租约过期由别的 worker 接管。
 `maxDeliveryAttempts = 8` 之后进 `DEAD_LETTER`，**死信必须在界面上可见**。
 
-`RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队，Match 的唤醒（`watch:<watchId>:<generation>`）和到期的
-唤醒（`watch:<watchId>:expired`，§5）都是如此。runner 取走它之前，下面三种情况会把这个 turn 从队列里
-收掉，交付随之 `DELIVERED → DEAD_LETTER`，不再报已送达，也不重投：
+`RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队，Match 的唤醒（`watch:<watchId>:<generation>`）和上面三种
+终态的唤醒（`watch:<watchId>:expired` / `:revoked` / `:unresolvable`）都是如此。runner 取走它之前，下面三种情况会把这个
+turn 从队列里收掉，交付随之 `DELIVERED → DEAD_LETTER`，不再报已送达，也不重投：
 
 | 情况 | 唤醒 turn | `last_error` 开头 |
 | --- | --- | --- |

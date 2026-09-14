@@ -145,7 +145,7 @@
         {
           "from": "DELIVERED",
           "to": "DEAD_LETTER",
-          "trigger": "RESUME_SESSION only: the observer's run ended while the wake turn was still queued (a Match's, keyed watch:<watchId>:<generation>, or an expiry's, keyed watch:<watchId>:expired), and the drain that ended its queue answered the wake before any runner took it (OBSERVER_SESSION_ENDED)"
+          "trigger": "RESUME_SESSION only: the observer's run ended while the wake turn was still queued (a Match's, keyed watch:<watchId>:<generation>, or a watch end's, keyed watch:<watchId>:expired, :revoked or :unresolvable), and the drain that ended its queue answered the wake before any runner took it (OBSERVER_SESSION_ENDED)"
         },
         {
           "from": "DELIVERED",
@@ -158,7 +158,7 @@
           "trigger": "RESUME_SESSION only: the owner withdrew the queued wake turn before any runner took it, and the withdrawal deleted that turn alone (WAKE_WITHDRAWN)"
         }
       ],
-      "deliveredNote": "DELIVERED is final for NOTIFY_USER and for a wake a runner has taken. A RESUME_SESSION delivery, a Match's or an expiry's, is DELIVERED once its turn is queued; until a runner takes that turn, three things take the wake off the queue and make the delivery a dead letter: the end of the observer's run drains it, an interrupt of the observer deletes it with the rest of the queue, and the owner withdrawing it deletes that one turn. None of them is redelivered. A wake never revives an ended session, and a drained turn cannot be delivered again under its key; an interrupt means stop, so a wake kept queued or redelivered would wake the observer right after it was stopped; a withdrawal is the owner taking the wake back."
+      "deliveredNote": "DELIVERED is final for NOTIFY_USER and for a wake a runner has taken. A RESUME_SESSION delivery, a Match's or a watch end's (EXPIRED, REVOKED or UNRESOLVABLE), is DELIVERED once its turn is queued; until a runner takes that turn, three things take the wake off the queue and make the delivery a dead letter: the end of the observer's run drains it, an interrupt of the observer deletes it with the rest of the queue, and the owner withdrawing it deletes that one turn. None of them is redelivered. A wake never revives an ended session, and a drained turn cannot be delivered again under its key; an interrupt means stop, so a wake kept queued or redelivered would wake the observer right after it was stopped; a withdrawal is the owner taking the wake back."
     }
   },
 
