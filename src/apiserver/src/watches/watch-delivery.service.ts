@@ -19,12 +19,20 @@ import {
   SessionLifecycleState,
   SessionRunState,
   WATCH_LIMITS,
-  type WatchSnapshot,
+  watchDeadLetterCodeOf,
 } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import {
+  countWatchDeadLetter,
+  countWatchDeliveryAttempt,
+  countWatchDuplicateSuppressed,
+  countWatchEffectiveWake,
+  countWatchReconcileRepair,
+} from './watch-metrics';
+import { redactErrorText, redactReason, redactSnapshot } from './watch-redaction';
 
 /**
  * The Watch delivery worker (docs/watch-contract.md §3, §6): it turns a recorded Match into its one
@@ -83,6 +91,16 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
  * that brings `attempts` to the contract's `maxDeliveryAttempts` makes the row a DEAD_LETTER, and so
  * does a refusal no retry can change. Both keep `last_error`, and the watch's own read lists every
  * delivery with its state, so a dead letter is something a client reads, not a line a log once said.
+ *
+ * GUARDS
+ * Every attempt is checked again when it is made (contract `deliveryGuards`, docs/watch-operations.md).
+ * Before any payload is built, every target that still exists and the observer must still belong to the
+ * watch's owner, or the delivery is a PERMISSION_REVOKED dead letter and nothing about the targets leaves
+ * the database. Under the observer's row lock, a continuous watch that woke its observer less than its
+ * window ago is put back until the window ends, without counting an attempt; an observer already given
+ * its hourly wakes makes the wake a WAKE_STORM_SUPPRESSED dead letter, and an account whose watches already
+ * gave their daily wakes makes it a WAKE_BUDGET_EXHAUSTED one. What a turn or a push says about the targets
+ * is rebuilt through an allowlist (`watch-redaction.ts`), and `last_error` is stored with secrets replaced.
  */
 
 /** How long a claim keeps a delivery from every other worker. Far longer than one attempt. */
@@ -103,6 +121,12 @@ export interface WatchDeliveryOptions {
   claimBatch?: number;
   retryBaseMs?: number;
   retryMaxMs?: number;
+  /** Contract `limits.maxWakesPerObserverPerHour`. */
+  maxWakesPerObserverPerHour?: number;
+  /** Contract `limits.maxWakesPerOwnerPerDay`. */
+  maxWakesPerOwnerPerDay?: number;
+  /** Contract `limits.continuousDebounceSeconds`, in milliseconds. */
+  continuousDebounceMs?: number;
 }
 
 /** A delivery this worker holds, and the lease generation every write that settles it must match. */
@@ -113,9 +137,10 @@ export interface ClaimedWatchDelivery {
 
 /**
  * What one attempt came to. `LEASE_LOST`: the row was no longer this claim's, so this attempt wrote
- * nothing — whoever holds it now settles it.
+ * nothing — whoever holds it now settles it. `DEFERRED`: a continuous watch woke its observer too recently, so
+ * the row is PENDING again until its window ends, and no attempt was counted.
  */
-export type WatchDeliveryOutcome = 'DELIVERED' | 'RETRY' | 'DEAD_LETTER' | 'LEASE_LOST';
+export type WatchDeliveryOutcome = 'DELIVERED' | 'RETRY' | 'DEAD_LETTER' | 'LEASE_LOST' | 'DEFERRED';
 
 export interface WatchDeliveryResult {
   deliveryId: string;
@@ -165,6 +190,7 @@ interface DeliveredWatch {
   id: string;
   ownerId: string;
   observerSessionId: string | null;
+  mode: string;
 }
 
 interface DeliveredMatch {
@@ -185,6 +211,16 @@ class DeliveryRefused extends Error {
 /** The claim's lease generation is no longer the row's. */
 class DeliveryLeaseLost extends Error {}
 
+/** Not a failure: the wake may not happen before `until`, and is due again then. */
+class DeliveryDeferred extends Error {
+  constructor(
+    readonly until: Date,
+    detail: string,
+  ) {
+    super(`CONTINUOUS_RATE_LIMITED: ${detail}`);
+  }
+}
+
 @Injectable()
 export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('WatchDelivery');
@@ -195,6 +231,9 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
   private readonly claimBatch: number;
   private readonly retryBaseMs: number;
   private readonly retryMaxMs: number;
+  private readonly maxWakesPerObserverPerHour: number;
+  private readonly maxWakesPerOwnerPerDay: number;
+  private readonly continuousDebounceMs: number;
 
   private loop: 'IDLE' | 'RUNNING' | 'STOPPED' = 'IDLE';
   private timer?: ReturnType<typeof setTimeout>;
@@ -214,6 +253,9 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     this.claimBatch = options.claimBatch ?? WATCH_DELIVERY_CLAIM_BATCH;
     this.retryBaseMs = options.retryBaseMs ?? WATCH_DELIVERY_RETRY_BASE_MS;
     this.retryMaxMs = options.retryMaxMs ?? WATCH_DELIVERY_RETRY_MAX_MS;
+    this.maxWakesPerObserverPerHour = options.maxWakesPerObserverPerHour ?? WATCH_LIMITS.maxWakesPerObserverPerHour;
+    this.maxWakesPerOwnerPerDay = options.maxWakesPerOwnerPerDay ?? WATCH_LIMITS.maxWakesPerOwnerPerDay;
+    this.continuousDebounceMs = options.continuousDebounceMs ?? WATCH_LIMITS.continuousDebounceSeconds * 1_000;
   }
 
   onModuleInit(): void {
@@ -329,7 +371,7 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
    * back to PENDING on the ordinary backoff, or becomes a dead letter if it was the last one.
    */
   async reclaimExpired(): Promise<number> {
-    const reclaimed = await this.prisma.$queryRaw<Array<{ id: string }>>`
+    const reclaimed = await this.prisma.$queryRaw<Array<{ id: string; state: string }>>`
       UPDATE "watch_delivery" AS d
       SET ${afterFailedAttempt(false, this.retryBaseMs, this.retryMaxMs)},
           "last_error" = 'LEASE_EXPIRED: the worker holding this delivery stopped before settling it'
@@ -341,12 +383,22 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         FOR UPDATE SKIP LOCKED
       ) AS expired
       WHERE d."id" = expired."id"
-      RETURNING d."id"`;
+      RETURNING d."id", d."state"`;
+    // Reconciliation, not an event, noticed these: their workers stopped without a word.
+    countWatchReconcileRepair('delivery_lease_expired', reclaimed.length);
+    for (const row of reclaimed) if (row.state === 'DEAD_LETTER') countWatchDeadLetter('LEASE_EXPIRED');
     return reclaimed.length;
   }
 
   /** Attempt one claimed delivery and settle it under the claim's lease. */
   async deliver(claim: ClaimedWatchDelivery): Promise<WatchDeliveryOutcome> {
+    const outcome = await this.attempt(claim);
+    countWatchDeliveryAttempt(outcome);
+    if (outcome === 'LEASE_LOST') countWatchDuplicateSuppressed('lease_lost');
+    return outcome;
+  }
+
+  private async attempt(claim: ClaimedWatchDelivery): Promise<WatchDeliveryOutcome> {
     const delivery = await this.prisma.watchDelivery.findFirst({
       where: { id: claim.id, state: 'IN_FLIGHT', leaseGeneration: claim.leaseGeneration },
       select: {
@@ -358,16 +410,19 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
             matchedAt: true,
             reason: true,
             perTargetSnapshot: true,
-            watch: { select: { id: true, ownerId: true, observerSessionId: true } },
+            watch: { select: { id: true, ownerId: true, observerSessionId: true, mode: true } },
           },
         },
-        watch: { select: { id: true, ownerId: true, observerSessionId: true, expiresAt: true } },
+        watch: { select: { id: true, ownerId: true, observerSessionId: true, mode: true, expiresAt: true } },
         expirySnapshot: true,
       },
     });
     if (!delivery) return 'LEASE_LOST';
     const { match, watch } = delivery;
     try {
+      // Before anything about the targets is built into a payload (GUARDS above).
+      const revoked = await permissionRecheck(this.prisma, match?.watch ?? watch!, delivery.kind);
+      if (revoked) throw revoked;
       if (!match && delivery.kind === 'EXPIRY') {
         // An expiry. `watch_delivery_kind_shape_chk` guarantees such a row names its watch, carries its
         // snapshot, and is RESUME_SESSION.
@@ -381,30 +436,40 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         await this.resumeObserver(claim, watch!, watchEndTurnClientId(watch!.id, end), watchEndTurnContent(watch!.id, end));
       } else if (delivery.action === 'RESUME_SESSION') {
         await this.resumeObserver(
-          claim, match.watch, watchTurnClientId(match.watch.id, match.generation), watchTurnContent(match.watch.id, match),
+          claim, match.watch, watchTurnClientId(match.watch.id, match.generation), watchTurnContent(match.watch.id, match), true,
         );
-      } else if (!(await acknowledgeDelivery(this.prisma, claim))) {
-        return 'LEASE_LOST';
+      } else {
+        await this.spaceContinuous(this.prisma, match.watch);
+        if (!(await acknowledgeDelivery(this.prisma, claim))) return 'LEASE_LOST';
       }
     } catch (error) {
       if (error instanceof DeliveryLeaseLost) return 'LEASE_LOST';
+      if (error instanceof DeliveryDeferred) return this.defer(claim, error);
       return this.fail(claim, error);
     }
+    countWatchEffectiveWake(delivery.action);
     if (match && delivery.action === 'NOTIFY_USER') {
       // After the acknowledgement committed, never before: see AT MOST ONE NOTIFICATION above.
       await this.push.notifyWatchMatched({
         ownerId: match.watch.ownerId,
         watchId: match.watch.id,
         generation: match.generation,
-        reason: match.reason,
+        reason: redactReason(match.reason),
       });
     }
     return 'DELIVERED';
   }
 
-  private async resumeObserver(claim: ClaimedWatchDelivery, watch: DeliveredWatch, clientTurnId: string, content: string): Promise<void> {
+  private async resumeObserver(
+    claim: ClaimedWatchDelivery,
+    watch: DeliveredWatch,
+    clientTurnId: string,
+    content: string,
+    spaced = false,
+  ): Promise<void> {
     const sessionId = watch.observerSessionId;
     if (!sessionId) throw new DeliveryRefused('OBSERVER_SESSION_GONE', 'the watch names no observer session');
+    let queued = false;
     try {
       await this.sessions.createTurn(
         watch.ownerId,
@@ -413,14 +478,20 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         {
           // Called under the observer's row lock, after `createTurn` refused Trash, an ending session
           // and a terminal run, and before the turn is written: what is decided here commits with the
-          // turn, and a refusal or a lost lease leaves no turn behind.
+          // turn, and a refusal, a deferral or a lost lease leaves no turn behind. The wake guards run
+          // here because only a NEW turn is a wake that costs anything (GUARDS above).
           participateSendTransaction: async (tx) => {
             const refusal = observerRefusal(await readObserver(tx, sessionId));
             if (refusal) throw refusal;
+            if (spaced) await this.spaceContinuous(tx, watch);
+            await this.guardWake(tx, watch, sessionId);
             if (!(await acknowledgeDelivery(tx, claim))) throw new DeliveryLeaseLost();
+            queued = true;
           },
         },
       );
+      // `createTurn` calls the hook only for a NEW turn: the key already held this wake, and nothing was queued twice.
+      if (!queued) countWatchDuplicateSuppressed('wake_replay');
     } catch (error) {
       if (error instanceof DeliveryRefused || error instanceof DeliveryLeaseLost) throw error;
       if (error instanceof NotFoundException || error instanceof SessionNotSendable) {
@@ -456,12 +527,108 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     const [settled] = rows;
     if (!settled) return 'LEASE_LOST';
     if (settled.state === 'DEAD_LETTER') {
+      countWatchDeadLetter(watchDeadLetterCodeOf(messageOf(error), settled.attempts));
       this.log.error(`watch delivery ${claim.id} is a dead letter after ${settled.attempts} attempt(s): ${messageOf(error)}`);
       return 'DEAD_LETTER';
     }
     this.log.warn(`watch delivery ${claim.id} attempt ${settled.attempts} failed, will retry: ${messageOf(error)}`);
     return 'RETRY';
   }
+
+  /**
+   * Put a wake that may not happen yet back to PENDING, due when it may, under the claim's lease. It is not a
+   * failure, so no attempt is counted; its `last_error` says why it waits until the next attempt writes one.
+   */
+  private async defer(claim: ClaimedWatchDelivery, deferred: DeliveryDeferred): Promise<WatchDeliveryOutcome> {
+    const settled = await this.prisma.$executeRaw`
+      UPDATE "watch_delivery"
+      SET "state" = 'PENDING', "next_attempt_at" = ${deferred.until}, "last_error" = ${deferred.message},
+          "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL, "updated_at" = now()
+      WHERE "id" = ${claim.id}::uuid AND "state" = 'IN_FLIGHT' AND "lease_generation" = ${claim.leaseGeneration}::uuid`;
+    return settled === 1 ? 'DEFERRED' : 'LEASE_LOST';
+  }
+
+  /**
+   * Contract `deliveryGuards.continuousSpacing`: a continuous watch's wakes are at least `continuousDebounceMs`
+   * apart, so one due sooner is deferred to the end of the window. A one-shot watch has one generation and nothing
+   * to space.
+   */
+  private async spaceContinuous(db: Prisma.TransactionClient | PrismaService, watch: DeliveredWatch): Promise<void> {
+    if (watch.mode !== 'CONTINUOUS') return;
+    const [previous] = await db.$queryRaw<Array<{ until: Date }>>`
+      SELECT max(d."delivered_at") + ${this.continuousDebounceMs}::int * interval '1 millisecond' AS "until"
+      FROM "watch_match" m JOIN "watch_delivery" d ON d."match_id" = m."id"
+      WHERE m."watch_id" = ${watch.id}::uuid AND d."state" = 'DELIVERED'
+      HAVING max(d."delivered_at") > now() - ${this.continuousDebounceMs}::int * interval '1 millisecond'`;
+    if (previous) {
+      throw new DeliveryDeferred(
+        previous.until,
+        `this continuous watch woke its observer less than ${this.continuousDebounceMs}ms ago, so its next wake waits until ${previous.until.toISOString()}`,
+      );
+    }
+  }
+
+  /**
+   * Contract `deliveryGuards.storm` and `.budget`: the wakes this observer was given in the last hour and this
+   * account's watches gave in the last 24 hours, read under the observer's row lock `createTurn` holds. Wakes to one
+   * observer are therefore counted one after another and its limit is exact; wakes to different observers of one
+   * account are not, which is why the daily budget can be passed by as many as are in flight at once.
+   */
+  private async guardWake(tx: Prisma.TransactionClient, watch: DeliveredWatch, sessionId: string): Promise<void> {
+    const [given] = await tx.$queryRaw<Array<{ observer: number; owner: number }>>`
+      SELECT (count(*) FILTER (WHERE w."observer_session_id" = ${sessionId}::uuid
+                                 AND d."delivered_at" > now() - interval '1 hour'))::int AS "observer",
+             count(*)::int AS "owner"
+      FROM "watch" w
+      CROSS JOIN LATERAL (
+        SELECT e."delivered_at" FROM "watch_delivery" e WHERE e."watch_id" = w."id"
+        UNION ALL
+        SELECT e."delivered_at" FROM "watch_match" m JOIN "watch_delivery" e ON e."match_id" = m."id" WHERE m."watch_id" = w."id"
+      ) AS d
+      WHERE w."owner_id" = ${watch.ownerId}::uuid AND w."action" = 'RESUME_SESSION'
+        AND d."delivered_at" > now() - interval '24 hours'`;
+    if (given.observer >= this.maxWakesPerObserverPerHour) {
+      throw new DeliveryRefused(
+        'WAKE_STORM_SUPPRESSED',
+        `the observer session was already woken ${given.observer} times in the last hour, its limit; a session woken this often is usually in a loop`,
+      );
+    }
+    if (given.owner >= this.maxWakesPerOwnerPerDay) {
+      throw new DeliveryRefused(
+        'WAKE_BUDGET_EXHAUSTED',
+        `this account's watches already woke sessions ${given.owner} times in the last 24 hours, its daily budget`,
+      );
+    }
+  }
+}
+
+/**
+ * Contract `deliveryGuards.permissionRecheck`: whether this delivery may still say what it would say. Every target
+ * of the watch that still exists must belong to the watch's owner — a deleted one has nothing left to leak — unless
+ * the delivery is a REVOKED or UNRESOLVABLE end, whose turn names no target; and the session it would wake must
+ * belong to the owner too. Read once, before any payload is built.
+ */
+async function permissionRecheck(db: PrismaService, watch: DeliveredWatch, kind: string): Promise<DeliveryRefused | null> {
+  const [held] = await db.$queryRaw<Array<{ targets: number; observer: boolean }>>`
+    SELECT
+      (SELECT count(*)::int
+         FROM "watch_target" t
+         LEFT JOIN "task" k ON t."target_kind" = 'TASK' AND k."id" = t."target_resource_id"
+         LEFT JOIN "session" s ON t."target_kind" = 'SESSION' AND s."id" = t."target_resource_id"
+        WHERE t."watch_id" = ${watch.id}::uuid AND ${kind === 'MATCH' || kind === 'EXPIRY'}::boolean
+          AND COALESCE(k."owner_id", s."owner_id") <> ${watch.ownerId}::uuid) AS "targets",
+      EXISTS (SELECT 1 FROM "session" o
+               WHERE o."id" = ${watch.observerSessionId}::uuid AND o."owner_id" <> ${watch.ownerId}::uuid) AS "observer"`;
+  if (held.targets > 0) {
+    return new DeliveryRefused(
+      'PERMISSION_REVOKED',
+      `${held.targets} of the watch's targets no longer belong to its owner, so nothing about them was delivered`,
+    );
+  }
+  if (held.observer) {
+    return new DeliveryRefused('PERMISSION_REVOKED', "the observer session no longer belongs to the watch's owner, so it was not woken");
+  }
+  return null;
 }
 
 /**
@@ -530,9 +697,11 @@ function observerRefusal(session: ObserverRow | null): DeliveryRefused | null {
  * to read it; the changed targets are still named.
  */
 function watchTurnContent(watchId: string, match: DeliveredMatch): string {
-  const snapshot = match.perTargetSnapshot as unknown as WatchSnapshot;
+  // Contract `deliveryGuards.redaction`: the stored snapshot and reason pass through the allowlist first.
+  const snapshot = redactSnapshot(match.perTargetSnapshot);
+  const reason = redactReason(match.reason);
   const header = [
-    `Orbit Watch ${watchId} matched at generation ${match.generation}: ${match.reason}`,
+    `Orbit Watch ${watchId} matched at generation ${match.generation}: ${reason}`,
     '',
     'This turn was queued by the watch, not typed by a person. What the watch recorded when its condition held:',
   ].join('\n');
@@ -541,9 +710,9 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
     watchId,
     generation: match.generation,
     matchedAt: match.matchedAt.toISOString(),
-    reason: match.reason,
+    reason,
   };
-  const changed = snapshot.targets.filter((target) => target.changed);
+  const changed = snapshot.targets.filter((target) => target.changed === true);
   const whole = render({
     ...base,
     changedTargets: changed.map(({ kind, id, state, observed }) => ({ kind, id, state, ...(observed ? { observed } : {}) })),
@@ -569,7 +738,7 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
  * turn is replaced by its size and where to read it.
  */
 function watchExpiryTurnContent(watch: { id: string; expiresAt: Date }, expirySnapshot: Prisma.JsonValue): string {
-  const snapshot = expirySnapshot as unknown as WatchSnapshot;
+  const snapshot = redactSnapshot(expirySnapshot);
   const expiresAt = watch.expiresAt.toISOString();
   const header = [
     `Orbit Watch ${watch.id} EXPIRED at ${expiresAt} without its condition ever holding.`,
@@ -606,7 +775,7 @@ function watchEndTurnContent(watchId: string, end: BareWatchEnd): string {
   return `${header}\n\n\`\`\`json\n${JSON.stringify({ watchId, state: end }, null, 2)}\n\`\`\``;
 }
 
+/** Failure text as a delivery stores and logs it: secrets replaced, cut to a thousand characters. */
 function messageOf(error: unknown): string {
-  const text = error instanceof Error ? error.message : String(error);
-  return text.length > 1_000 ? `${text.slice(0, 1_000)}…` : text;
+  return redactErrorText(error instanceof Error ? error.message : String(error));
 }

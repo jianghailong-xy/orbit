@@ -1,7 +1,9 @@
-import { Controller, Get, Header, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Optional, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
+import { PrismaService } from '../prisma/prisma.service';
 import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
+import { renderWatchMetrics } from '../watches/watch-metrics';
 
 /**
  * Where the database-conflict counters are read from.
@@ -19,6 +21,9 @@ import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
 @UseGuards(JwtAuthGuard)
 @Controller('metrics')
 export class MetricsController {
+  /** Absent only where a module boots this controller without a database; the Watch gauges are then not read. */
+  constructor(@Optional() private readonly prisma?: PrismaService) {}
+
   /**
    * The counters, in Prometheus text exposition format.
    *
@@ -29,7 +34,8 @@ export class MetricsController {
   @Get()
   @Header('Content-Type', 'text/plain; version=0.0.4')
   @Header('Cache-Control', 'no-store')
-  read(): string {
-    return renderDbConflictMetrics() + renderCodexResetMetrics();
+  async read(): Promise<string> {
+    // The Watch gauges are the one part read from the database, on every scrape (watches/watch-metrics.ts).
+    return renderDbConflictMetrics() + renderCodexResetMetrics() + (await renderWatchMetrics(this.prisma));
   }
 }

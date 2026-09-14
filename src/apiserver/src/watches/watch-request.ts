@@ -8,6 +8,7 @@ import {
   type WatchRefusalCode,
   type WatchTargetKind,
 } from '@orbit/shared';
+import { countWatchRefusal } from './watch-metrics';
 import { predicateLeaves } from './watch-predicate';
 
 /**
@@ -21,8 +22,12 @@ import { predicateLeaves } from './watch-predicate';
  * unknown key would store it, and a stored `script` is one reader away from being run.
  */
 
-/** A refusal carrying the contract's code: 403 for `PERMISSION_DENIED`, 400 for the rest. */
+/**
+ * A refusal carrying the contract's code: 403 for `PERMISSION_DENIED`, 400 for the rest. Counted where it is made
+ * (`orbit_watch_refusals_total`), because every one is thrown where it is made.
+ */
 export function watchRefusal(code: WatchRefusalCode, message: string): BadRequestException | ForbiddenException {
+  countWatchRefusal(code);
   const body = { code, kind: 'REFUSAL' as const, message };
   return code === 'PERMISSION_DENIED' ? new ForbiddenException(body) : new BadRequestException(body);
 }

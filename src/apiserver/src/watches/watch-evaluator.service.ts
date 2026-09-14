@@ -14,6 +14,12 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import {
+  countWatchDuplicateSuppressed,
+  countWatchEvaluation,
+  countWatchReconcileRepair,
+  observeWatchEvaluationDelay,
+} from './watch-metrics';
+import {
   describePredicate,
   leafHolds,
   parseWatchPredicate,
@@ -299,18 +305,37 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   async drain(): Promise<number> {
     let evaluated = 0;
     for (;;) {
-      const claimed = await this.claimDue();
-      for (const watchId of claimed) {
+      const claimed = await this.claimDueWithDelay();
+      for (const { id: watchId, dueSeconds } of claimed) {
+        const startedAt = Date.now();
         try {
           await this.evaluate(watchId);
           evaluated += 1;
+          observeWatchEvaluationDelay(dueSeconds + (Date.now() - startedAt) / 1_000);
         } catch (error) {
           // Its lease lapses and it is due again; one watch that cannot be evaluated holds up no other.
+          countWatchEvaluation('FAILED');
           this.log.error(`watch ${watchId} evaluation failed: ${error instanceof Error ? error.message : error}`);
         }
       }
       if (claimed.length < this.claimBatch || this.loop === 'STOPPED') return evaluated;
     }
+  }
+
+  /** `claimDue`, with how long each watch it claimed had been due, on the database's clock. */
+  private async claimDueWithDelay(): Promise<Array<{ id: string; dueSeconds: number }>> {
+    return this.prisma.$queryRaw<Array<{ id: string; dueSeconds: number }>>`
+      UPDATE "watch" AS w
+      SET "next_evaluate_at" = LEAST(now() + ${this.leaseMs}::int * interval '1 millisecond', w."expires_at")
+      FROM (
+        SELECT "id", "next_evaluate_at" FROM "watch"
+        WHERE "next_evaluate_at" <= now()
+        ORDER BY "next_evaluate_at", "id"
+        LIMIT ${this.claimBatch}
+        FOR UPDATE SKIP LOCKED
+      ) AS due
+      WHERE w."id" = due."id"
+      RETURNING w."id", EXTRACT(EPOCH FROM now() - due."next_evaluate_at")::float8 AS "dueSeconds"`;
   }
 
   /**
@@ -321,19 +346,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
    * a second claimer can only repeat a landing that finds it settled.
    */
   async claimDue(): Promise<string[]> {
-    const claimed = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      UPDATE "watch" AS w
-      SET "next_evaluate_at" = LEAST(now() + ${this.leaseMs}::int * interval '1 millisecond', w."expires_at")
-      FROM (
-        SELECT "id" FROM "watch"
-        WHERE "next_evaluate_at" <= now()
-        ORDER BY "next_evaluate_at", "id"
-        LIMIT ${this.claimBatch}
-        FOR UPDATE SKIP LOCKED
-      ) AS due
-      WHERE w."id" = due."id"
-      RETURNING w."id"`;
-    return claimed.map((row) => row.id);
+    return (await this.claimDueWithDelay()).map((claimed) => claimed.id);
   }
 
   /** A hint, applied (see `markDue`). A hint that fails is a hint that was lost, which the sweep absorbs. */
@@ -416,7 +429,12 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
    * or not — see THE LANDING above.
    */
   async evaluate(watchId: string): Promise<WatchEvaluation> {
-    return withTransactionRetry(this.prisma, async (tx): Promise<WatchEvaluation> => {
+    // What the attempt that committed wrote, for the counters: a retried attempt overwrites an aborted one's.
+    let gone = 0;
+    let adopted = false;
+    const evaluation = await withTransactionRetry(this.prisma, async (tx): Promise<WatchEvaluation> => {
+      gone = 0;
+      adopted = false;
       const [watch] = await tx.$queryRaw<WatchRow[]>`
         SELECT "owner_id" AS "ownerId", "state", "mode", "action", "predicate",
                "predicate_version" AS "predicateVersion", "generation",
@@ -430,8 +448,15 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
       const targets = await readTargets(tx, watchId);
       const decision = decide(watch, targets, await readFacts(tx, targets), this.reconcileIntervalMs);
       const matchId = await this.land(tx, watchId, watch, decision);
+      gone = decision.targetStates.filter((change) => change.state === 'GONE').length;
+      adopted = decision.match !== null && matchId === null;
       return { watchId, outcome: decision.outcome, matchId };
     }, loggedRetry(this.log, 'watches.evaluate'));
+    countWatchEvaluation(evaluation.outcome);
+    if (evaluation.outcome === 'SETTLED') countWatchDuplicateSuppressed('settled_evaluation');
+    if (adopted) countWatchDuplicateSuppressed('match');
+    countWatchReconcileRepair('target_gone', gone);
+    return evaluation;
   }
 
   private async land(

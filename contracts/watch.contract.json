@@ -82,7 +82,11 @@
     "defaultTtlSeconds": 86400,
     "maxTtlSeconds": 2592000,
     "continuousDebounceSeconds": 10,
-    "maxDeliveryAttempts": 8
+    "maxDeliveryAttempts": 8,
+    "maxLiveWatchesPerOwner": 500,
+    "maxLiveWatchesPerTarget": 50,
+    "maxWakesPerObserverPerHour": 60,
+    "maxWakesPerOwnerPerDay": 1000
   },
 
   "states": {
@@ -226,9 +230,47 @@
     { "code": "PREDICATE_VERSION_UNSUPPORTED", "when": "The request's predicateVersion is not served by this build." },
     { "code": "DYNAMIC_SET_UNSUPPORTED", "when": "A TASK_LIST/PROJECT ref was given as live membership rather than a creation-time snapshot source." },
     { "code": "SELF_WATCH_LOOP", "when": "A RESUME_SESSION watch names its own observer session among its targets." },
+    { "code": "WAKE_LOOP", "when": "A RESUME_SESSION watch names a session its own observer already wakes, directly or through a chain of live (ACTIVE or PAUSED) RESUME_SESSION watches: the new watch would close a wake cycle." },
     { "code": "TTL_OUT_OF_RANGE", "when": "ttl is outside [minTtlSeconds, maxTtlSeconds]." },
+    { "code": "WATCH_QUOTA_EXCEEDED", "when": "A watch that stays live after its first evaluation would give the account more than limits.maxLiveWatchesPerOwner live watches, or one of its targets more than limits.maxLiveWatchesPerTarget. A watch matched at create occupies no live slot and is not refused." },
     { "code": "PERMISSION_DENIED", "when": "The observer cannot read every target at create time." }
   ],
+
+  "deliveryGuards": {
+    "why": "A Match is recorded once, but what it causes costs a turn or reaches a device, and a stored snapshot can outlive the permission that let it be taken. So every attempt is checked again when it is made, and every wake counts against what one session and one account may be given.",
+    "order": ["permissionRecheck", "observerLife", "continuousSpacing", "storm", "budget"],
+    "permissionRecheck": "Before any payload is built, every target of the watch that still exists must belong to the watch's owner, and so must the observer session. Otherwise the delivery is a PERMISSION_REVOKED dead letter and nothing about the targets leaves the database. The watch keeps its state: a Match is immutable and every watch end is terminal. A REVOKED or UNRESOLVABLE end's turn carries no target, so only its observer is rechecked.",
+    "redaction": "A wake's payload is rebuilt from the stored snapshot through an allowlist: each target's kind, id, epoch, state and changed; the leaves the grammar declares, answered true or false; observed status, endReason, runState, lifecycleState and pendingApproval, each a single word or a boolean. Any other key is dropped, a value of the wrong shape is written [redacted], and so is a reason outside the predicate vocabulary. A lastError has URL credentials, bearer tokens, API keys and key=value secrets replaced by [redacted] before it is stored.",
+    "continuousSpacing": "A CONTINUOUS watch's Match deliveries are at least limits.continuousDebounceSeconds apart. One due sooner goes back to PENDING until then, its lastError headed CONTINUOUS_RATE_LIMITED, and no attempt is counted.",
+    "storm": "A RESUME_SESSION wake whose observer session was already given limits.maxWakesPerObserverPerHour wakes in the last hour is a WAKE_STORM_SUPPRESSED dead letter. Counted under the observer's row lock, so the limit is exact.",
+    "budget": "A RESUME_SESSION wake whose owner's watches already gave limits.maxWakesPerOwnerPerDay wakes in the last 24 hours is a WAKE_BUDGET_EXHAUSTED dead letter. Wakes to different observers of one account do not wait on each other, so concurrent ones may pass the budget by as many as are in flight.",
+    "counted": "A wake counts while its delivery is DELIVERED. One its observer's queue lost unrun is a dead letter and no longer counts.",
+    "deadLetterCodes": {
+      "PERMISSION_REVOKED": { "retryable": false, "when": "The permission recheck failed." },
+      "OBSERVER_SESSION_GONE": { "retryable": true, "when": "The observer session does not exist, or the watch names none." },
+      "OBSERVER_SESSION_IN_TRASH": { "retryable": true, "when": "The observer session is in Trash, and a watch does not restore it." },
+      "OBSERVER_SESSION_COMPLETED": { "retryable": true, "when": "The observer session was moved to Completed, and a watch does not reopen it." },
+      "OBSERVER_SESSION_ENDED": { "retryable": false, "when": "The observer's run was over, or it ended while the wake was still queued (section 3)." },
+      "OBSERVER_SESSION_UNAVAILABLE": { "retryable": true, "when": "The queue entry point refused the observer session for any other reason." },
+      "OBSERVER_TURN_INTERRUPTED": { "retryable": false, "when": "An interrupt deleted the queued wake (section 3)." },
+      "WAKE_WITHDRAWN": { "retryable": false, "when": "The owner withdrew the queued wake (section 3)." },
+      "WAKE_STORM_SUPPRESSED": { "retryable": true, "when": "deliveryGuards.storm." },
+      "WAKE_BUDGET_EXHAUSTED": { "retryable": true, "when": "deliveryGuards.budget." },
+      "TURN_REFUSED": { "retryable": true, "when": "The queue entry point refused the turn." },
+      "LEASE_EXPIRED": { "retryable": true, "when": "Workers holding the delivery kept stopping before they settled it, until its attempts ran out." },
+      "ATTEMPTS_EXHAUSTED": { "retryable": true, "when": "Retryable failures reached limits.maxDeliveryAttempts. It heads no lastError, whose text is the last failure." },
+      "OTHER": { "retryable": true, "when": "Any dead letter this build does not classify." }
+    },
+    "redrive": {
+      "list": "GET /api/watches/deliveries?state=DEAD_LETTER",
+      "route": "POST /api/watches/deliveries/:id/retry",
+      "effect": "The dead letter goes back to PENDING, due at once, with its attempts counted from zero, and the worker attempts it again under every guard above. Its lastError stays until the next attempt writes one.",
+      "refused": {
+        "DELIVERY_NOT_DEAD_LETTER": "Only a dead letter is redriven.",
+        "DELIVERY_NOT_RETRYABLE": "Its code is retryable: false. A wake that left its observer's queue unrun is not queued a second time, and a payload whose permission was revoked is not delivered."
+      }
+    }
+  },
 
   "factSource": {
     "authoritative": "PostgreSQL rows named by each leaf's sourceColumns, read inside the evaluating transaction.",
@@ -471,10 +513,10 @@
       "why": "A watch that can never be decided must say so; stopping quietly is the failure mode being designed out."
     },
     {
-      "id": "permission-revoked-before-delivery-yields-revoked",
-      "given": { "match": "recorded", "permissionRecheck": "fails" },
-      "expect": { "watchState": "REVOKED", "payloadDelivered": false },
-      "why": "Permission is rechecked at delivery, so revocation between create and match cannot leak target state."
+      "id": "permission-revoked-before-delivery-delivers-nothing",
+      "given": { "match": "recorded", "permissionRecheck": "fails at delivery" },
+      "expect": { "watchState": "MATCHED", "delivery": "DEAD_LETTER", "deadLetterCode": "PERMISSION_REVOKED", "payloadDelivered": false },
+      "why": "Permission is rechecked where the payload is built, so a revocation after the Match cannot leak target state. The Match stays the fact it was, and its delivery says why nothing was delivered."
     },
     {
       "id": "ttl-expiry-wakes-a-waiting-observer",
@@ -538,6 +580,45 @@
       "given": { "action": "RESUME_SESSION", "cancelledBy": "the owner or the observer" },
       "expect": { "watchState": "CANCELLED", "delivery": "none" },
       "why": "The owner or the observer cancelled the watch, so nobody waiting on it is left uninformed."
+    },
+    {
+      "id": "live-watch-quota-refused",
+      "given": { "liveWatchesOfOwner": "limits.maxLiveWatchesPerOwner", "request": "a watch whose condition does not hold yet" },
+      "expect": { "refusal": "WATCH_QUOTA_EXCEEDED" },
+      "why": "Every live watch is evaluated again every reconciliation period, so an account cannot make that cost unbounded. A refused create writes nothing."
+    },
+    {
+      "id": "wake-cycle-refused",
+      "given": {
+        "liveWatches": [{ "action": "RESUME_SESSION", "observerSessionId": "S1", "targets": [{ "kind": "SESSION", "id": "S2" }] }],
+        "request": { "action": "RESUME_SESSION", "observerSessionId": "S2", "targets": [{ "kind": "SESSION", "id": "S1" }] }
+      },
+      "expect": { "refusal": "WAKE_LOOP" },
+      "why": "S2 settling wakes S1, and S1's turn settling would wake S2: two sessions waking each other are the self-watch loop with one more hop."
+    },
+    {
+      "id": "wake-storm-dead-letters-past-the-hourly-limit",
+      "given": { "observerWakesInLastHour": "limits.maxWakesPerObserverPerHour", "match": "recorded", "action": "RESUME_SESSION" },
+      "expect": { "delivery": "DEAD_LETTER", "deadLetterCode": "WAKE_STORM_SUPPRESSED", "conversationTurns": 0 },
+      "why": "A session woken that often is almost certainly looping. The next wake stops at a dead letter anyone can see, not another turn."
+    },
+    {
+      "id": "daily-wake-budget-dead-letters",
+      "given": { "ownerWakesInLast24Hours": "limits.maxWakesPerOwnerPerDay", "match": "recorded", "action": "RESUME_SESSION" },
+      "expect": { "delivery": "DEAD_LETTER", "deadLetterCode": "WAKE_BUDGET_EXHAUSTED", "retryable": true },
+      "why": "Every wake is a turn somebody pays for. Past the budget a wake waits where its owner can see it and redrive it."
+    },
+    {
+      "id": "continuous-wakes-spaced-by-debounce",
+      "given": { "mode": "CONTINUOUS", "previousWakeDeliveredSecondsAgo": 1, "nextMatch": "recorded" },
+      "expect": { "delivery": "PENDING", "attempts": 0, "nextAttemptAt": "the previous delivery + limits.continuousDebounceSeconds" },
+      "why": "A continuous watch cannot wake its observer faster than its window, however fast its generations are recorded."
+    },
+    {
+      "id": "unrun-wake-is-not-redriven",
+      "given": { "deadLetterCode": "WAKE_WITHDRAWN", "redrive": "requested" },
+      "expect": { "redriveRefusal": "DELIVERY_NOT_RETRYABLE", "delivery": "DEAD_LETTER" },
+      "why": "A wake that left its observer's queue unrun was taken back on purpose; redriving it would wake a session its owner stopped."
     }
   ]
 }

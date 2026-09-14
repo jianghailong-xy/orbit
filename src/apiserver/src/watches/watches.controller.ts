@@ -22,6 +22,19 @@ export class WatchesController {
     return this.watches.list(user.userId, state);
   }
 
+  /** The account's deliveries in one state, dead letters unless `?state=` names another: the operations entry. */
+  @Get('deliveries')
+  listDeliveries(@CurrentUser() user: AuthUser, @Query('state') state?: string) {
+    return this.watches.listDeliveries(user.userId, state);
+  }
+
+  /** Redrive a dead letter: back to PENDING for the delivery worker, unless its code says it may not be. */
+  @Post('deliveries/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  retryDelivery(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.watches.retryDelivery(user.userId, id);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.watches.get(user.userId, id);

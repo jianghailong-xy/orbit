@@ -45,9 +45,13 @@
 6. **TTL 必填且有上限；到期也要交付。** 等在 Watch 上的会话不会被静默遗忘（§5）。
 7. **唤醒复用 ConversationTurn 的唯一键。** `clientTurnId = watch:<watchId>:<generation>`，
    重复交付塌缩成同一个 turn，而不是第二次唤醒；键下若是载荷不同的别的 turn，那不是唤醒，交付记死信（§6）。
-8. **权限在交付时复核，不只在创建时。** 撤销后不投递载荷，状态进 `REVOKED` 而不是悄悄停掉；等在它上面的
-   会话只收到一个说明 `REVOKED` 的 turn，不含任何目标状态（§3、§7）。
+8. **权限在求值和交付时都复核，不只在创建时。** 求值时复核失败，Watch 进 `REVOKED` 而不是悄悄停掉，等在它上面的
+   会话只收到一个说明 `REVOKED` 的 turn，不含任何目标状态；Match 之后才撤销的，交付记 `PERMISSION_REVOKED`
+   死信，不投递任何载荷（§3、§7）。
 9. **停不下来的 Watch 必须可见。** 目标全没了是 `UNRESOLVABLE`，不是沉默（§3）。
+10. **成本有上限，超限也要可见。** live Watch 数量、每个观察者每小时的唤醒次数、每个账号每天的唤醒次数都有上限，
+    唤醒环在创建时拒绝。超限不会被悄悄丢弃：创建时返回拒绝码，交付时记成死信，并配有指标和告警
+    （§5、§7、[`watch-operations.md`](./watch-operations.md)）。
 
 ---
 
@@ -182,6 +186,9 @@ Watch 只会进入一个终态，所以这样的 turn 最多一个。`REVOKED` �
 **WatchDelivery**：`PENDING → IN_FLIGHT →`（`DELIVERED` | 回到 `PENDING` 重试 | `DEAD_LETTER`）。
 `IN_FLIGHT` 由 `(leaseOwner, leaseGeneration)` 围栏；租约过期由别的 worker 接管。
 `maxDeliveryAttempts = 8` 之后进 `DEAD_LETTER`，**死信必须在界面上可见**。
+每个死信的 `last_error` 都以一个死信码开头（`deliveryGuards.deadLetterCodes`），说明为什么没有送到、能不能重投：
+权限复核失败、观察者已结束、唤醒风暴、每日预算耗尽、重试用尽等各有其码。continuous Watch 的唤醒间隔不足时，交付回到
+`PENDING` 等窗口结束，不计失败次数（§5）。死信的列出与重投见 [`watch-operations.md`](./watch-operations.md) 第 5 节。
 
 `RESUME_SESSION` 的 `DELIVERED` 只说明唤醒 turn 已经入队，Match 的唤醒（`watch:<watchId>:<generation>`）和上面三种
 终态的唤醒（`watch:<watchId>:expired` / `:revoked` / `:unresolvable`）都是如此。runner 取走它之前，下面三种情况会把这个
@@ -224,7 +231,15 @@ turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，�
 `(watchId, generation)` 唯一约束让「第二次成立」不可能产生第二个 Match，而不是不太可能。
 
 `mode = CONTINUOUS`：每次成立把 `generation` 加一。必须带 debounce（默认 10 秒窗口合并）与
-交付预算，否则一个高频变化的目标就是一场唤醒风暴。
+交付预算，否则一个高频变化的目标就是一场唤醒风暴。交付层已经为它设了下限：同一个 continuous Watch 的两次唤醒至少相隔
+`continuousDebounceSeconds`，更早到期的交付回到 `PENDING` 等窗口结束，`last_error` 以 `CONTINUOUS_RATE_LIMITED` 开头，
+不计失败次数。
+
+**配额与唤醒预算**（`limits`）：一个账号最多持有 `maxLiveWatchesPerOwner` 个 live（ACTIVE 或 PAUSED）Watch，一个目标
+最多被 `maxLiveWatchesPerTarget` 个 live Watch 盯着，超出的创建返回 `WATCH_QUOTA_EXCEEDED`，什么都不写；创建时条件已经成立的
+Watch 当场结束，不占 live 名额。一个观察者会话一小时内最多被唤醒 `maxWakesPerObserverPerHour` 次，一个账号的 Watch
+24 小时内最多唤醒 `maxWakesPerOwnerPerDay` 次，超出的那次唤醒分别记 `WAKE_STORM_SUPPRESSED` / `WAKE_BUDGET_EXHAUSTED`
+死信，窗口过去后可以重投。
 
 **创建即求值**：创建时条件已经成立，就立刻产生一个 `generation = 1` 的 Match，而不是等下一次变化。
 否则「等这些 Task 全部结束」在它们已经结束时会永远等下去。
@@ -284,6 +299,20 @@ turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，�
 
 **自唤醒保护**：`RESUME_SESSION` 的 Watch 把自己的观察者会话列为目标 → `SELF_WATCH_LOOP`。
 一个能唤醒自己的会话是一个没有上界的唤醒环。
+
+**唤醒环**：观察者已经能经由 live `RESUME_SESSION` Watch 链唤醒的会话，不能再被它等 → `WAKE_LOOP`。S1 等着 S2，S2
+就不能再等 S1；三个会话围成一圈同理。创建时条件已经成立的也拒绝：反复重建一个已经成立的等待，正是两个会话一次一个
+即时唤醒地互相乒乓的方式。同一账号的创建在 owner 级 advisory 锁下判定，两个会话同时互等只会成功一个。超过 32 跳的环
+不在创建时查，由唤醒风暴上限兜底。
+
+**交付时复核**：每次交付尝试在构造载荷之前复核：Watch 仍存在的每个目标、以及要唤醒的观察者会话，都必须仍属于 Watch 的
+owner。不满足就记 `PERMISSION_REVOKED` 死信，不投递任何载荷，也不允许重投。Watch 保持原状态，因为 Match 不可变，终态也没有
+出边。已删除的目标不算撤销，它的状态不会因此落到别人手里。`REVOKED` / `UNRESOLVABLE` 的终态 turn 不含目标，只复核观察者。
+
+**脱敏**：唤醒载荷从存储的快照按白名单重建，只保留契约列出的键：目标的 kind、id、epoch、state、changed，谓词声明过的 leaf
+（布尔值），observed 里的 status、endReason、runState、lifecycleState（单个词）与 pendingApproval（布尔值）。其他键一律丢弃，
+形状不对的值写成 `[redacted]`；不在谓词词汇里的 reason 也一样。推送只带脱敏后的 reason。`last_error` 落库前替换掉 URL 凭据、
+Bearer token、API key 与 `key=value` 形式的密钥。
 
 ---
 
@@ -368,7 +397,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 
 ## 10. 边界测试向量
 
-全部 28 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
+全部 34 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
 `watchContract.spec.ts` 保证每条都有 `given` / `expect` / `why`、id 唯一、
 引用的拒绝码与状态都是本契约声明过的，且**每个 leaf 至少被一条向量覆盖**。
 
@@ -392,7 +421,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 | 16 | `dropped-hint-still-matches-via-reconciliation` | **实时事件不是事实源** |
 | 17 | `target-deleted-is-excluded-and-recorded` | GONE 不算已满足 |
 | 18 | `all-targets-gone-is-unresolvable-not-silent` | 判不了要说出来 |
-| 19 | `permission-revoked-before-delivery-yields-revoked` | 交付时复核权限 |
+| 19 | `permission-revoked-before-delivery-delivers-nothing` | 交付时复核权限：记死信，不投递载荷 |
 | 20 | `ttl-expiry-wakes-a-waiting-observer` | 到期也要叫醒等的人 |
 | 21 | `resume-into-running-session-queues-one-turn` | 不并发恢复运行中的会话 |
 | 22 | `self-watch-resume-loop-refused` | 自唤醒环 |
@@ -402,6 +431,12 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 | 26 | `revoked-wakes-a-waiting-observer-with-no-target-state` | 撤销也要叫醒等的人，但**不带任何目标状态** |
 | 27 | `unresolvable-wakes-a-waiting-observer` | 判不了也要告诉等的人 |
 | 28 | `cancelled-watch-wakes-nobody` | 取消是自己的动作，不交付 |
+| 29 | `live-watch-quota-refused` | live Watch 配额 |
+| 30 | `wake-cycle-refused` | 两个会话互相唤醒 |
+| 31 | `wake-storm-dead-letters-past-the-hourly-limit` | 唤醒风暴止于死信 |
+| 32 | `daily-wake-budget-dead-letters` | 每日唤醒预算 |
+| 33 | `continuous-wakes-spaced-by-debounce` | continuous 唤醒间隔 |
+| 34 | `unrun-wake-is-not-redriven` | 没跑的唤醒不重投 |
 
 ---
 
@@ -419,6 +454,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 
 ```bash
 npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
 ```
 
 ---

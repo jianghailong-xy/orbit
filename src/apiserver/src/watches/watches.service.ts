@@ -1,11 +1,14 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  WATCH_DELIVERY_STATES,
   WATCH_LIMITS,
   WATCH_PREDICATE_VERSION,
   WATCH_STATES,
+  WATCH_UNRETRYABLE_DEAD_LETTER_CODES,
   deriveSessionLifecycleState,
   deriveSessionRunState,
+  watchDeadLetterCodeOf,
   type WatchAction,
   type WatchPredicate,
   type WatchSnapshot,
@@ -15,6 +18,7 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
+import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive } from './watch-metrics';
 import { describePredicate, leafHolds, predicateHolds, predicateLeaves, type WatchTargetFact } from './watch-predicate';
 import { assertLeavesFitTargets, assertPredicateVersion, parseRequestedPredicate, watchRefusal } from './watch-request';
 
@@ -77,6 +81,27 @@ const WATCH_VIEW_SELECT = {
 
 type WatchRow = Prisma.WatchGetPayload<{ select: typeof WATCH_VIEW_SELECT }>;
 
+/** A delivery as the operations read lists it: what a watch's read shows, and the watch and Match it belongs to. */
+const DELIVERY_OPS_SELECT = {
+  ...DELIVERY_VIEW_SELECT,
+  kind: true,
+  watchId: true,
+  match: { select: { watchId: true, generation: true } },
+} satisfies Prisma.WatchDeliverySelect;
+
+type DeliveryOpsRow = Prisma.WatchDeliveryGetPayload<{ select: typeof DELIVERY_OPS_SELECT }>;
+
+/** How far the wake-loop check follows a chain of watches. A longer cycle is left to the observer's storm limit. */
+const WAKE_LOOP_SEARCH_DEPTH = 32;
+
+export const WATCHES_OPTIONS = Symbol('WATCHES_OPTIONS');
+
+/** The live-watch quotas, defaulting to the contract's limits. */
+export interface WatchesOptions {
+  maxLiveWatchesPerOwner?: number;
+  maxLiveWatchesPerTarget?: number;
+}
+
 const TRANSITION_SELECT = {
   state: true,
   expiresAt: true,
@@ -120,8 +145,16 @@ interface ObservedTarget {
 @Injectable()
 export class WatchesService {
   private readonly logger = new Logger(WatchesService.name);
+  private readonly maxLiveWatchesPerOwner: number;
+  private readonly maxLiveWatchesPerTarget: number;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(WATCHES_OPTIONS) options: WatchesOptions = {},
+  ) {
+    this.maxLiveWatchesPerOwner = options.maxLiveWatchesPerOwner ?? WATCH_LIMITS.maxLiveWatchesPerOwner;
+    this.maxLiveWatchesPerTarget = options.maxLiveWatchesPerTarget ?? WATCH_LIMITS.maxLiveWatchesPerTarget;
+  }
 
   /**
    * Create a one-shot watch, and decide it before answering.
@@ -132,6 +165,10 @@ export class WatchesService {
    * for. A condition that does not hold yet leaves the watch ACTIVE and due at once — a change
    * committed after that read reached no watch, because this row was not visible yet, and being due
    * is what makes the next evaluation, not a hint about the change, the thing that sees it.
+   *
+   * A RESUME_SESSION watch may not close a wake loop, and a watch that stays live must keep the account and
+   * each of its targets within their live-watch quotas (`assertCapacity`). Both are decided in the same
+   * transaction, after the first evaluation: a watch matched at create occupies no live slot.
    */
   async create(ownerId: string, dto: CreateWatchDto): Promise<WatchRow> {
     const request = this.createRequest(dto);
@@ -139,7 +176,7 @@ export class WatchesService {
     // has since become unreadable. What already happened is looked up, not judged again.
     if (request.idempotencyKey !== null) {
       const committed = await this.replay(ownerId, request);
-      if (committed) return committed;
+      if (committed) return replayed(committed);
     }
     let watchId: string;
     try {
@@ -151,6 +188,7 @@ export class WatchesService {
           const facts = observed.map((target) => target.fact);
           const holds = predicateHolds(request.predicate, facts);
           const snapshot = snapshotAtCreate(request.predicate, observed, now);
+          await this.assertCapacity(tx, ownerId, request, holds);
           const watch = await tx.watch.create({
             data: {
               ownerId,
@@ -204,11 +242,13 @@ export class WatchesService {
       // of them insert. The other gets the answer a later retry would get.
       if (request.idempotencyKey !== null && isUniqueViolation(error)) {
         const committed = await this.replay(ownerId, request);
-        if (committed) return committed;
+        if (committed) return replayed(committed);
       }
       throw error;
     }
-    return this.get(ownerId, watchId);
+    const watch = await this.get(ownerId, watchId);
+    countWatchCreate(watch.state === 'MATCHED' ? 'matched_at_create' : 'created');
+    return watch;
   }
 
   async get(ownerId: string, id: string, scope: WatchScope = {}): Promise<WatchRow> {
@@ -282,6 +322,64 @@ export class WatchesService {
       if (!LIVE_STATES.includes(watch.state)) throw notLive(watch.state, 'cancelled');
       return { state: 'CANCELLED', nextEvaluateAt: null };
     });
+  }
+
+  /**
+   * The account's deliveries in one state, most recently changed first: its dead letters unless another state is
+   * asked for (docs/watch-operations.md §5). Each names its watch, its dead-letter code and whether a redrive is
+   * allowed, so a dead letter is something to act on, not only a line on one watch's read.
+   */
+  async listDeliveries(ownerId: string, state = 'DEAD_LETTER'): Promise<DeliveryOpsView[]> {
+    if (!(WATCH_DELIVERY_STATES as readonly string[]).includes(state)) {
+      throw new BadRequestException(`state is one of ${WATCH_DELIVERY_STATES.join(', ')}`);
+    }
+    const rows = await this.prisma.watchDelivery.findMany({
+      where: { state, ...ownedBy(ownerId) },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: LIST_LIMIT,
+      select: DELIVERY_OPS_SELECT,
+    });
+    return rows.map(opsView);
+  }
+
+  /**
+   * Redrive one dead letter (contract `deliveryGuards.redrive`): back to PENDING, due at once, its attempts counted
+   * from zero, for the delivery worker to attempt under every guard again. A delivery that is not a dead letter is
+   * refused, and so is a dead letter whose code is not retryable. The write is a compare-and-set on the state and
+   * the `last_error` the decision read, so two requests racing on one dead letter redrive it once.
+   */
+  async retryDelivery(ownerId: string, id: string): Promise<DeliveryOpsView> {
+    const row = await this.prisma.watchDelivery.findFirst({ where: { id, ...ownedBy(ownerId) }, select: DELIVERY_OPS_SELECT });
+    if (!row) throw new NotFoundException('delivery not found');
+    const view = opsView(row);
+    if (view.state !== 'DEAD_LETTER') {
+      countWatchRedrive('refused');
+      throw new ConflictException({
+        code: 'DELIVERY_NOT_DEAD_LETTER',
+        message: `a ${view.state} delivery is not redriven: only a dead letter is`,
+        state: view.state,
+      });
+    }
+    if (!view.retryable) {
+      countWatchRedrive('refused');
+      throw new ConflictException({
+        code: 'DELIVERY_NOT_RETRYABLE',
+        message: `a ${view.deadLetterCode} dead letter is not redriven: a wake that left its observer's queue unrun is not queued again, and a revoked payload is not delivered`,
+        deadLetterCode: view.deadLetterCode,
+      });
+    }
+    const redriven = await this.prisma.$executeRaw`
+      UPDATE "watch_delivery"
+      SET "state" = 'PENDING', "attempts" = 0, "next_attempt_at" = now(), "dead_lettered_at" = NULL, "updated_at" = now()
+      WHERE "id" = ${id}::uuid AND "state" = 'DEAD_LETTER' AND "last_error" IS NOT DISTINCT FROM ${row.lastError}::text`;
+    if (redriven !== 1) {
+      countWatchRedrive('refused');
+      throw new ConflictException('the delivery changed while this request decided; read it again and retry');
+    }
+    countWatchRedrive('redriven');
+    const after = await this.prisma.watchDelivery.findFirst({ where: { id, ...ownedBy(ownerId) }, select: DELIVERY_OPS_SELECT });
+    if (!after) throw new NotFoundException('delivery not found');
+    return opsView(after);
   }
 
   private createRequest(dto: CreateWatchDto): CreateRequest {
@@ -365,6 +463,70 @@ export class WatchesService {
         },
       };
     });
+  }
+
+  /**
+   * What a create has to pass beyond permission (contract `refusals`). A RESUME_SESSION watch may not close a wake
+   * loop, even one that holds at once: re-arming a wait that already holds is how two sessions ping-pong one
+   * immediate wake at a time. A watch that stays live (`holds` false) may not take the account or any of its
+   * targets past its live-watch quota. Decided under a transaction-scoped advisory lock on the owner, so of two
+   * creates for one account the second reads the first's watch: two sessions asking to wake each other cannot
+   * both succeed, and a quota cannot be passed by racing. Every watch these reads count is the owner's, because
+   * a watch names only targets its owner can read.
+   */
+  private async assertCapacity(tx: Prisma.TransactionClient, ownerId: string, request: CreateRequest, holds: boolean): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`watch-owner:${ownerId}`}, 0))`;
+    const sessionTargets = request.targets.filter((target) => target.kind === 'SESSION').map((target) => target.id);
+    if (request.action === 'RESUME_SESSION' && sessionTargets.length > 0) {
+      // The sessions a turn settling on the observer already wakes, and the sessions those wake in turn. A session
+      // this watch waits on among them closes the loop: its turn would wake the observer, whose turn comes back to it.
+      const [loop] = await tx.$queryRaw<Array<{ depth: number }>>`
+        WITH RECURSIVE "woken" ("session_id", "depth") AS (
+          SELECT ${request.observerSessionId}::uuid, 0
+          UNION
+          SELECT w."observer_session_id", r."depth" + 1
+          FROM "woken" r
+          JOIN "watch_target" t ON t."target_kind" = 'SESSION' AND t."target_resource_id" = r."session_id"
+          JOIN "watch" w ON w."id" = t."watch_id"
+          WHERE r."depth" < ${WAKE_LOOP_SEARCH_DEPTH}::int
+            AND w."owner_id" = ${ownerId}::uuid AND w."action" = 'RESUME_SESSION' AND w."state" IN ('ACTIVE', 'PAUSED')
+        )
+        SELECT min("depth")::int AS "depth" FROM "woken"
+        WHERE "session_id" = ANY(${sessionTargets}::uuid[])
+        HAVING count(*) > 0`;
+      if (loop) {
+        throw watchRefusal(
+          'WAKE_LOOP',
+          `a session this watch waits on is already woken by its observer through ${loop.depth} live watch${loop.depth === 1 ? '' : 'es'}, so this watch would close a wake loop`,
+        );
+      }
+    }
+    // A watch matched at create is terminal: it occupies no live slot.
+    if (holds) return;
+    const [{ live }] = await tx.$queryRaw<Array<{ live: number }>>`
+      SELECT count(*)::int AS "live" FROM "watch"
+      WHERE "owner_id" = ${ownerId}::uuid AND "state" IN ('ACTIVE', 'PAUSED')`;
+    if (live >= this.maxLiveWatchesPerOwner) {
+      throw watchRefusal(
+        'WATCH_QUOTA_EXCEEDED',
+        `this account already holds ${live} live watches, and it may hold ${this.maxLiveWatchesPerOwner}: cancel one it no longer needs`,
+      );
+    }
+    const [{ full }] = await tx.$queryRaw<Array<{ full: number }>>`
+      SELECT count(*)::int AS "full" FROM (
+        SELECT 1 FROM "watch_target" t JOIN "watch" w ON w."id" = t."watch_id"
+        WHERE w."owner_id" = ${ownerId}::uuid AND w."state" IN ('ACTIVE', 'PAUSED')
+          AND (t."target_kind", t."target_resource_id") IN (
+            SELECT * FROM unnest(${request.targets.map((target) => target.kind)}::text[], ${request.targets.map((target) => target.id)}::uuid[]))
+        GROUP BY t."target_kind", t."target_resource_id"
+        HAVING count(*) >= ${this.maxLiveWatchesPerTarget}::int
+      ) AS "crowded"`;
+    if (full > 0) {
+      throw watchRefusal(
+        'WATCH_QUOTA_EXCEEDED',
+        `${full} of this watch's targets already have ${this.maxLiveWatchesPerTarget} live watches, the most one target may have`,
+      );
+    }
   }
 
   /** The watch this key already made, if the request is the one that made it; a 409 if it is not. */
@@ -475,6 +637,32 @@ function earlier(left: Date, right: Date): Date {
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
+
+/** A create answered with the watch its idempotency key already made, counted as the repeat it is. */
+function replayed<T>(watch: T): T {
+  countWatchCreate('replayed');
+  countWatchDuplicateSuppressed('create_replay');
+  return watch;
+}
+
+/** The deliveries of this account's watches: a Match's through its Match, a watch end's through the watch itself. */
+function ownedBy(ownerId: string): Prisma.WatchDeliveryWhereInput {
+  return { OR: [{ match: { watch: { ownerId } } }, { watch: { ownerId } }] };
+}
+
+function opsView({ match, watchId, ...delivery }: DeliveryOpsRow) {
+  const deadLetterCode = delivery.state === 'DEAD_LETTER' ? watchDeadLetterCodeOf(delivery.lastError, delivery.attempts) : null;
+  return {
+    ...delivery,
+    // `watch_delivery_kind_shape_chk`: a MATCH row names its Match, and every other kind names its watch.
+    watchId: (watchId ?? match?.watchId) as string,
+    generation: match?.generation ?? null,
+    deadLetterCode,
+    retryable: deadLetterCode !== null && !WATCH_UNRETRYABLE_DEAD_LETTER_CODES.includes(deadLetterCode),
+  };
+}
+
+type DeliveryOpsView = ReturnType<typeof opsView>;
 
 /** JSON with every object's keys sorted, so a jsonb round trip compares equal to what was sent. */
 function canonicalJson(value: unknown): string {

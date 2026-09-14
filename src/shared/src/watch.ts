@@ -38,8 +38,18 @@ export const WATCH_LIMITS = {
   minTtlSeconds: 60,
   defaultTtlSeconds: 86_400,
   maxTtlSeconds: 2_592_000,
+  /** A continuous watch's window: two of its wakes are at least this far apart, and one due sooner waits until then. */
+  continuousDebounceSeconds: 10,
   /** The failed attempt that brings a delivery's `attempts` here makes it a dead letter. */
   maxDeliveryAttempts: 8,
+  /** Live (ACTIVE or PAUSED) watches one account may hold. A create that would stay live past it is `WATCH_QUOTA_EXCEEDED`. */
+  maxLiveWatchesPerOwner: 500,
+  /** Live watches that may name one target. A create that would stay live past it is `WATCH_QUOTA_EXCEEDED`. */
+  maxLiveWatchesPerTarget: 50,
+  /** Wakes one observer session is given in a rolling hour. The next one is a `WAKE_STORM_SUPPRESSED` dead letter. */
+  maxWakesPerObserverPerHour: 60,
+  /** Wakes one account's watches give in a rolling 24 hours. The next one is a `WAKE_BUDGET_EXHAUSTED` dead letter. */
+  maxWakesPerOwnerPerDay: 1_000,
 } as const;
 
 export type WatchState = 'ACTIVE' | 'PAUSED' | 'MATCHED' | 'EXPIRED' | 'CANCELLED' | 'REVOKED' | 'UNRESOLVABLE';
@@ -61,7 +71,9 @@ export const WATCH_REFUSAL_CODES = [
   'PREDICATE_VERSION_UNSUPPORTED',
   'DYNAMIC_SET_UNSUPPORTED',
   'SELF_WATCH_LOOP',
+  'WAKE_LOOP',
   'TTL_OUT_OF_RANGE',
+  'WATCH_QUOTA_EXCEEDED',
   'PERMISSION_DENIED',
 ] as const;
 export type WatchRefusalCode = (typeof WATCH_REFUSAL_CODES)[number];
@@ -135,6 +147,51 @@ export interface WatchTargetView {
 }
 
 export type WatchDeliveryState = 'PENDING' | 'IN_FLIGHT' | 'DELIVERED' | 'DEAD_LETTER';
+export const WATCH_DELIVERY_STATES: readonly WatchDeliveryState[] = ['PENDING', 'IN_FLIGHT', 'DELIVERED', 'DEAD_LETTER'];
+
+/**
+ * Why a delivery is a dead letter: the code heading its `lastError`, transcribed from the contract's
+ * `deliveryGuards.deadLetterCodes`. `ATTEMPTS_EXHAUSTED` heads no `lastError` — it names retryable failures that
+ * ran out of attempts, whose text is the last failure — and `OTHER` is a dead letter this build does not classify.
+ */
+export const WATCH_DEAD_LETTER_CODES = [
+  'PERMISSION_REVOKED',
+  'OBSERVER_SESSION_GONE',
+  'OBSERVER_SESSION_IN_TRASH',
+  'OBSERVER_SESSION_COMPLETED',
+  'OBSERVER_SESSION_ENDED',
+  'OBSERVER_SESSION_UNAVAILABLE',
+  'OBSERVER_TURN_INTERRUPTED',
+  'WAKE_WITHDRAWN',
+  'WAKE_STORM_SUPPRESSED',
+  'WAKE_BUDGET_EXHAUSTED',
+  'TURN_REFUSED',
+  'LEASE_EXPIRED',
+  'ATTEMPTS_EXHAUSTED',
+  'OTHER',
+] as const;
+export type WatchDeadLetterCode = (typeof WATCH_DEAD_LETTER_CODES)[number];
+
+/**
+ * The dead letters `POST /api/watches/deliveries/:id/retry` does not redrive: a wake that left its observer's queue
+ * unrun is never queued a second time, and nothing is delivered about targets its owner can no longer read.
+ */
+export const WATCH_UNRETRYABLE_DEAD_LETTER_CODES: readonly WatchDeadLetterCode[] = [
+  'PERMISSION_REVOKED',
+  'OBSERVER_SESSION_ENDED',
+  'OBSERVER_TURN_INTERRUPTED',
+  'WAKE_WITHDRAWN',
+];
+
+/** The dead-letter code of a delivery that stopped with this `lastError` after this many failed attempts. */
+export function watchDeadLetterCodeOf(lastError: string | null, attempts: number): WatchDeadLetterCode {
+  const heading = /^([A-Z][A-Z0-9_]*):/.exec(lastError ?? '')?.[1];
+  if (heading !== undefined && heading !== 'ATTEMPTS_EXHAUSTED' && heading !== 'OTHER'
+    && (WATCH_DEAD_LETTER_CODES as readonly string[]).includes(heading)) {
+    return heading as WatchDeadLetterCode;
+  }
+  return attempts >= WATCH_LIMITS.maxDeliveryAttempts ? 'ATTEMPTS_EXHAUSTED' : 'OTHER';
+}
 
 /**
  * What a Match caused, and whether it worked. `attempts` counts the attempts that failed; the one that
@@ -152,6 +209,21 @@ export interface WatchDeliveryView {
   deadLetteredAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A delivery as the operations read lists it (`GET /api/watches/deliveries`): the watch it belongs to, why it is a
+ * dead letter, and whether `POST /api/watches/deliveries/:id/retry` redrives it.
+ */
+export interface WatchDeliveryOpsView extends WatchDeliveryView {
+  watchId: string;
+  kind: 'MATCH' | 'EXPIRY' | 'REVOKED' | 'UNRESOLVABLE';
+  /** The Match's generation, or null for the delivery a watch's end owes its observer. */
+  generation: number | null;
+  /** Set exactly on a `DEAD_LETTER`. */
+  deadLetterCode: WatchDeadLetterCode | null;
+  /** A dead letter whose code is not one of {@link WATCH_UNRETRYABLE_DEAD_LETTER_CODES}. */
+  retryable: boolean;
 }
 
 export interface WatchMatchView {
