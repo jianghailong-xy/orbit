@@ -228,7 +228,7 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
   }
 
   // ═══ 3. the enum survives, whole ══════════════════════════════════════════════════════════════
-  await t.test('task_completion_criterion still exists with all three labels', async () => {
+  await t.test('task_completion_criterion still exists with all four labels', async () => {
     const { rows } = await sql.query<{ typname: string; enumlabel: string }>(
       `SELECT ty."typname", e."enumlabel"
          FROM "pg_type" ty JOIN "pg_enum" e ON e."enumtypid" = ty."oid"
@@ -236,8 +236,9 @@ test('T4: a criterion no longer names the work, and task_completion_criterion ou
         WHERE n."nspname" = 'public' AND ty."typname" = 'task_completion_criterion'
         ORDER BY e."enumsortorder"`,
     );
+    // The three 0233 left alone, and OWNER_CONFIRMED, which 0267 added after them.
     assert.deepEqual(rows.map((row) => row.enumlabel),
-      ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
+      ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT', 'OWNER_CONFIRMED'],
       'removing the criterion’s use of the enum must not remove the enum');
   });
 

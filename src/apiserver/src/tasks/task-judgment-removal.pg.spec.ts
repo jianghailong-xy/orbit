@@ -250,7 +250,7 @@ suite('(r) nothing refuses a hand-written DONE any more: 0229 removed the gate',
 });
 
 // (e)(g) -----------------------------------------------------------------------------------------
-suite('(e)(g) the 0177 declaration and all three criterion labels survive the removal', async (t) => {
+suite('(e)(g) the 0177 declaration and all four criterion labels survive the removal', async (t) => {
   const client = await connect();
   t.after(async () => { await client.end(); });
 
@@ -294,5 +294,6 @@ suite('(e)(g) the 0177 declaration and all three criterion labels survive the re
        FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
       WHERE t.typname = 'task_completion_criterion'`,
   )).rows[0].labels;
-  assert.equal(labels, 'EXECUTABLE,VERIFICATION,EVIDENCE_JUDGMENT');
+  // The three the removal kept, in their order, and OWNER_CONFIRMED, which 0267 added after them.
+  assert.equal(labels, 'EXECUTABLE,VERIFICATION,EVIDENCE_JUDGMENT,OWNER_CONFIRMED');
 });

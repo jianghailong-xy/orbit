@@ -61,7 +61,10 @@ suite('(a) the database refuses a HUMAN_SIGNOFF declaration outright', { timeout
         `SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
           WHERE t.typname = 'task_completion_criterion' ORDER BY e.enumsortorder`,
       )).rows.map((row) => row.enumlabel);
-      assert.deepEqual(labels, ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT']);
+      // 0267 added a fourth label, OWNER_CONFIRMED, after the three; why that is not HUMAN_SIGNOFF
+      // back under another name is the sibling spec's (a).
+      assert.deepEqual(labels,
+        ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT', 'OWNER_CONFIRMED']);
       await assert.rejects(
         sql.query(`SELECT 'HUMAN_SIGNOFF'::"task_completion_criterion"`),
         (error: unknown) => {

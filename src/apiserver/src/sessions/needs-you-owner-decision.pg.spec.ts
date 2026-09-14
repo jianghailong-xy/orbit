@@ -308,8 +308,8 @@ test('the badge counts an owner decision, points at it, and hands out no key', {
     // The signal read itself, which is what both of the above are folded from.
     const signals = await readOwnerDecisionSignals(db as never, f.ownerId);
     assert.deepEqual(signals,
-      [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1 }],
-      'a count and an address, and nothing else in the row');
+      [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION' }],
+      'a count, an address and its kind, and nothing else in the row');
   });
 
   await t.test('(2) deciding it puts both counts back, and only the decision changed', async () => {
@@ -576,7 +576,7 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
         'the run that submitted is not where the question is asked, so its row stays dark');
       assert.equal(await needsYou(), 1, 'one conversation needs you, in this workspace');
       assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId),
-        [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1 }]);
+        [{ sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION' }]);
       assert.deepEqual(nudged, [f.coordinatorSessionId],
         'and the submission asked for that row to be re-drawn, so it lights without a reload');
     });
