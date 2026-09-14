@@ -93,6 +93,14 @@ const TRANSITION_ATTEMPTS = 3;
 
 const LIST_LIMIT = 100;
 
+/**
+ * Narrows a read to the watches one session observes. The runner door passes the calling session, so
+ * an agent reads and edits its own waits and never the rest of the owner's.
+ */
+export interface WatchScope {
+  observerSessionId?: string;
+}
+
 interface CreateRequest {
   predicate: WatchPredicate;
   /** Deduplicated and sorted, so two spellings of one set are one request. */
@@ -203,18 +211,21 @@ export class WatchesService {
     return this.get(ownerId, watchId);
   }
 
-  async get(ownerId: string, id: string): Promise<WatchRow> {
-    const watch = await this.prisma.watch.findFirst({ where: { id, ownerId }, select: WATCH_VIEW_SELECT });
+  async get(ownerId: string, id: string, scope: WatchScope = {}): Promise<WatchRow> {
+    const watch = await this.prisma.watch.findFirst({
+      where: { id, ownerId, ...scopeWhere(scope) },
+      select: WATCH_VIEW_SELECT,
+    });
     if (!watch) throw new NotFoundException('watch not found');
     return watch;
   }
 
-  async list(ownerId: string, state?: string): Promise<WatchRow[]> {
+  async list(ownerId: string, state?: string, scope: WatchScope = {}): Promise<WatchRow[]> {
     if (state !== undefined && !(WATCH_STATES as readonly string[]).includes(state)) {
       throw new BadRequestException(`state is one of ${WATCH_STATES.join(', ')}`);
     }
     return this.prisma.watch.findMany({
-      where: { ownerId, ...(state !== undefined ? { state } : {}) },
+      where: { ownerId, ...(state !== undefined ? { state } : {}), ...scopeWhere(scope) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: LIST_LIMIT,
       select: WATCH_VIEW_SELECT,
@@ -438,6 +449,10 @@ function snapshotAtCreate(predicate: WatchPredicate, observed: readonly Observed
       };
     }),
   };
+}
+
+function scopeWhere(scope: WatchScope): Prisma.WatchWhereInput {
+  return scope.observerSessionId === undefined ? {} : { observerSessionId: scope.observerSessionId };
 }
 
 function assertTtl(ttlSeconds: number): void {

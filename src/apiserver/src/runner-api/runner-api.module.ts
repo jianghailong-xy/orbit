@@ -15,6 +15,7 @@ import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
+import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
   createServiceTokenJwt,
@@ -31,6 +32,7 @@ import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
+import { WatchesModule } from '../watches/watches.module';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -52,6 +54,8 @@ import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconcile
     ProvidersModule,
     ProjectsModule,
     OutcomeReconcilerModule,
+    // RunnerWatchesController reads and writes through the one WatchesService the user door uses.
+    WatchesModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -66,6 +70,7 @@ import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconcile
     RunnerProvidersController,
     RunnerNotifyController,
     RunnerProjectsController,
+    RunnerWatchesController,
   ],
   providers: [
     RunnerAuthGuard,

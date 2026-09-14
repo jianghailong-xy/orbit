@@ -37,6 +37,7 @@ Usage:
   orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]
   orbit task dependency-add [task-id] --depends-on ID [--json]
   orbit task dependency-remove [task-id] --depends-on ID [--json]
+  orbit task await --task-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]
 
 When task-id is omitted, ORBIT_TASK_ID is used if this command is running inside
 an Orbit task session. Run 'orbit task <command> --help' for command options.
@@ -53,6 +54,7 @@ Usage:
 `
 
 var taskActionHelp = map[string]string{
+	"await": taskAwaitHelp,
 	"list": `orbit task list — list tasks
 
 Usage:
@@ -629,6 +631,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskDependencyAdd(args[1:], out)
 	case "dependency-remove":
 		return cliTaskDependencyRemove(args[1:], out)
+	case "await":
+		return cliTaskAwait(args[1:], out)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", action, taskHelp)
 	}
@@ -2365,6 +2369,9 @@ type cliCapabilitySpec struct {
 	// Their absence from the MCP descriptor set is intentional, so the capability document only
 	// includes them when there is no acting Session.
 	HeadlessOnly bool
+	// The reverse: commands that act for the Session they run in and have nothing to act for at a
+	// terminal outside one, like the watch commands, whose watches wake that Session.
+	SessionOnly bool
 }
 
 var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
@@ -2502,6 +2509,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Same argument again (§13.7): recording that a merge happened is evidence about the caller's
 	// own work, not a power over somebody else's session.
 	specs = append(specs, mergeReceiptCLICapabilities...)
+	// Ungated like the task commands, but SessionOnly: a watch wakes the session that makes it.
+	// session_await is not here; it rides the orchestration gate with the session commands.
+	specs = append(specs, watchCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:
@@ -2512,6 +2522,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	}
 	commands := make([]cliCapability, 0, len(specs))
 	for _, spec := range specs {
+		if spec.SessionOnly && ctx.SessionID == "" {
+			continue
+		}
 		if spec.HeadlessOnly && ctx.SessionID != "" {
 			continue
 		}

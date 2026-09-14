@@ -51,7 +51,7 @@ func TestMCPPermissionPromptDisabledFailsClosed(t *testing.T) {
 func TestMCPOrchestrationToolsGated(t *testing.T) {
 	on := toolDescriptors(false, true)
 	off := toolDescriptors(false, false)
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update"} {
 		if !hasMCPTool(on, name) {
 			t.Fatalf("%s missing when orchestration enabled", name)
 		}
@@ -411,7 +411,7 @@ func TestMCPOrchestrationEnv(t *testing.T) {
 
 func TestMCPSessionToolsDisabledAreError(t *testing.T) {
 	srv := &mcpServer{allowOrchestration: false}
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_await", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "session_delete", "agent_list", "agent_create", "agent_update"} {
 		res := srv.callTool(name, map[string]interface{}{})
 		if res["isError"] != true {
 			t.Fatalf("%s with orchestration off: isError = %#v", name, res["isError"])

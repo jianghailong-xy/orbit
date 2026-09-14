@@ -261,6 +261,87 @@
     "forbidden": "A Match must never be derived from the content of an event payload."
   },
 
+  "agentSurface": {
+    "why": "An agent that has to wait on Orbit's own work (tasks reaching a status, sessions finishing a turn) asks the server to watch it and ends its turn, instead of holding the turn open in a sleep loop or a background process that dies with its engine.",
+    "tools": ["watch_create", "watch_get", "watch_list", "watch_update", "watch_cancel", "task_await", "session_await"],
+    "runnerDoor": {
+      "routes": [
+        "POST /api/runner/watches",
+        "GET /api/runner/watches",
+        "GET /api/runner/watches/:id",
+        "PATCH /api/runner/watches/:id",
+        "POST /api/runner/watches/:id/cancel",
+        "POST /api/runner/watches/:id/release"
+      ],
+      "observer": "The calling session named by X-Orbit-Session-Id, which must be a session this runner hosts. It observes every watch this door creates; a body cannot name another, and every read and edit is confined to the watches that session observes.",
+      "action": "RESUME_SESSION unless the request names NOTIFY_USER.",
+      "sessionTargets": "A watch that names a SESSION target also needs the calling session's orchestration credential, the authority session_get needs. A watch over TASK targets needs none, as task_get needs none.",
+      "headless": "Refused: outside a session there is nothing to wake."
+    },
+    "awaitPresets": {
+      "task_await": {
+        "targetKind": "TASK",
+        "default": "ALL_TERMINAL_OR_ANY_FAILED",
+        "until": {
+          "ALL_TERMINAL_OR_ANY_FAILED": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+            ]
+          },
+          "ALL_TERMINAL": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "ALL_DONE": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_DONE" },
+          "ANY_TERMINAL": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "ANY_FAILED": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+        }
+      },
+      "session_await": {
+        "targetKind": "SESSION",
+        "default": "ALL_SETTLED_OR_ANY_NEEDS_ATTENTION",
+        "until": {
+          "ALL_SETTLED_OR_ANY_NEEDS_ATTENTION": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "ALL_SETTLED": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+          "ANY_SETTLED": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+          "ALL_RUN_TERMINAL": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_RUN_TERMINAL" },
+          "ANY_NEEDS_ATTENTION": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+        }
+      }
+    },
+    "release": {
+      "route": "POST /api/runner/watches/:id/release",
+      "why": "A caller that got its answer inline takes back what the watch still owes its session, so the answer arrives once: inline, or as the wake, never both.",
+      "outcomes": {
+        "CANCELLED": "The watch was still ACTIVE or PAUSED. It is cancelled, and a cancelled watch wakes nobody.",
+        "WAKE_WITHDRAWN": "The watch had ended and its wake turn was queued. The turn is withdrawn and its delivery becomes a DEAD_LETTER under WAKE_WITHDRAWN, as an owner's withdrawal does (section 3).",
+        "WAKE_NOT_QUEUED": "The watch ended but its wake is not queued yet (the delivery is PENDING or IN_FLIGHT), or it is still settling. Ask again shortly.",
+        "ALREADY_WOKEN": "A runner already took the wake turn, so nothing is left to withdraw.",
+        "NOTHING_OWED": "Nothing will wake the session for this watch: it was cancelled, it notifies the user instead, or its delivery is already a dead letter."
+      }
+    },
+    "sessionCreateWait": {
+      "watch": {
+        "targets": "the session just created",
+        "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+        "action": "RESUME_SESSION",
+        "idempotencyKey": "session-create-wait:<sessionId>"
+      },
+      "order": "The watch is recorded before the wait begins, so a caller killed or cut off mid-wait leaves it behind to wake its session.",
+      "inline": "A session that settles within the wait budget is returned in full, exactly as before, and the call releases the watch.",
+      "handedBack": {
+        "TIMEOUT": "The wait budget ran out. The call returns the session as last seen with the watch beside it, still waiting.",
+        "TRANSPORT_ERROR": "The control plane stopped answering mid-wait. The call returns the session as last seen with the watch beside it instead of an error."
+      },
+      "legacy": "No calling session (a headless CLI), or a control plane without the runner door: the poll that predates watches, unchanged."
+    }
+  },
+
   "vectors": [
     {
       "id": "awaiting-input-is-settled-not-terminal",

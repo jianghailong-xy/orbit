@@ -108,6 +108,43 @@ describe('watch contract', () => {
     expect(CONTRACT.factSource.authoritative).toMatch(/PostgreSQL/u);
   });
 
+  it('builds every agent await preset from declared leaves of its own target kind, inside the grammar', () => {
+    const surface = CONTRACT.agentSurface;
+    const check = (term: any, depth: number): string[] => {
+      expect(depth, 'a preset nests deeper than the grammar allows').toBeLessThanOrEqual(CONTRACT.limits.maxPredicateDepth);
+      if (CONTRACT.aggregations.includes(term.kind)) {
+        expect(Object.keys(term).sort()).toEqual(['kind', 'leaf', 'over']);
+        expect(CONTRACT.targetSelectors).toContain(term.over);
+        expect(Object.keys(CONTRACT.leaves)).toContain(term.leaf);
+        return [term.leaf];
+      }
+      expect(CONTRACT.composites, `unknown predicate kind ${term.kind}`).toContain(term.kind);
+      expect(Object.keys(term).sort()).toEqual(['kind', 'operands']);
+      expect(term.operands.length).toBeGreaterThan(0);
+      expect(term.operands.length).toBeLessThanOrEqual(CONTRACT.limits.maxOperandsPerComposite);
+      return term.operands.flatMap((operand: any) => check(operand, depth + 1));
+    };
+    for (const [tool, family] of Object.entries<any>(surface.awaitPresets)) {
+      expect(surface.tools, `${tool} is not one of the agent tools`).toContain(tool);
+      expect(CONTRACT.watchableTargetKinds).toContain(family.targetKind);
+      expect(Object.keys(family.until), `${tool}'s default is not one of its presets`).toContain(family.default);
+      for (const [until, predicate] of Object.entries<any>(family.until)) {
+        for (const leaf of check(predicate, 1)) {
+          expect(CONTRACT.leaves[leaf].targetKind, `${tool} ${until} reads ${leaf}`).toBe(family.targetKind);
+        }
+      }
+    }
+    // The request agents make most, "all of these tasks settled or any one failed", is the default.
+    const headline = CONTRACT.vectors.find((v: any) => v.id === 'all-terminal-or-any-failed');
+    const tasks = surface.awaitPresets.task_await;
+    expect(tasks.until[tasks.default]).toEqual(headline.given.predicate);
+    // session_create(wait) keeps waiting for the line it always waited for: a settled turn.
+    expect(surface.sessionCreateWait.watch.predicate).toEqual({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' });
+    expect(Object.keys(surface.release.outcomes).sort()).toEqual(
+      ['ALREADY_WOKEN', 'CANCELLED', 'NOTHING_OWED', 'WAKE_NOT_QUEUED', 'WAKE_WITHDRAWN'],
+    );
+  });
+
   it('names exactly one effect per action kind', () => {
     const kinds = CONTRACT.actions.map((a: any) => a.kind);
     expect(new Set(kinds).size).toBe(kinds.length);

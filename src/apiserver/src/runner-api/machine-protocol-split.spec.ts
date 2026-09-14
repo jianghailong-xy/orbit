@@ -11,6 +11,7 @@ import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
+import { RunnerWatchesController } from './runner-watches.controller';
 
 /**
  * Which half of `/api/runner/*` a controller belongs to, pinned.
@@ -41,6 +42,7 @@ test('only the machine protocol keeps UUIDs', () => {
     RunnerAgentsController,
     RunnerProjectsController,
     RunnerServiceTokensController,
+    RunnerWatchesController,
   ]) {
     assert.equal(
       Reflect.getMetadata(MACHINE_PROTOCOL, controller),

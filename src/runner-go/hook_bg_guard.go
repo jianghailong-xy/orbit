@@ -29,7 +29,8 @@ const bgGuardDenyReason = "Orbit hosts background work for this session. Bash's 
 	" something valuable when it finishes (build, test suite), or \"watch\" for a wait on" +
 	" something else (CI, a deploy); with wakeOnExit: true you are woken when it ends, even after" +
 	" this engine is recycled. Read its output with" +
-	" mcp__orbit__bg_output, stop it with mcp__orbit__bg_kill."
+	" mcp__orbit__bg_output, stop it with mcp__orbit__bg_kill. To wait for Orbit tasks or sessions, run" +
+	" nothing: mcp__orbit__task_await and mcp__orbit__session_await wake you when they finish."
 
 const bgGuardForeignJobReason = "That id belongs to an Orbit runner-hosted background job, which is not in" +
 	" this CLI's task registry. Use mcp__orbit__bg_output to read it, mcp__orbit__bg_kill to stop it," +
@@ -45,7 +46,8 @@ const bgGuardScheduleWakeupReason = "Orbit holds this session's wakeups on its s
 	" memory pressure) or restarting the runner loses the wakeup, and it does not fire while a Monitor or a" +
 	" background task is still running. Use mcp__orbit__schedule_wakeup instead — the same delaySeconds," +
 	" reason and prompt, and stop: true cancels the pending one. When it is due, Orbit starts a turn in this" +
-	" session even if this engine is gone by then."
+	" session even if this engine is gone by then. To wait for Orbit tasks or sessions, use" +
+	" mcp__orbit__task_await or mcp__orbit__session_await, which wake you when they finish."
 
 // hookInput is the PreToolUse payload Claude Code writes on the hook's stdin.
 type hookInput struct {

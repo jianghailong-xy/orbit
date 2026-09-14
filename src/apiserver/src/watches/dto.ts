@@ -60,6 +60,38 @@ export class CreateWatchDto {
   idempotencyKey?: string;
 }
 
+/**
+ * A watch an agent asks for from inside its session (RunnerWatchesController). CreateWatchDto's fields
+ * without the observer, which is the session asking, so no field can name another; the action defaults
+ * to waking that session.
+ */
+export class RunnerCreateWatchDto {
+  @Allow()
+  predicateVersion?: unknown;
+
+  @Allow()
+  predicate?: unknown;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WatchTargetRefDto)
+  targets!: WatchTargetRefDto[];
+
+  @IsOptional()
+  @IsIn(WATCH_ACTIONS)
+  action?: WatchAction;
+
+  @IsOptional()
+  @IsInt()
+  ttlSeconds?: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey?: string;
+}
+
 export class UpdateWatchDto {
   @Allow()
   predicateVersion?: unknown;

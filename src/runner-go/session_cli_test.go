@@ -426,30 +426,30 @@ func TestSessionCLICreateUsesMCPAgentRoutingDefaults(t *testing.T) {
 }
 
 func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
-	requestCount := 0
+	shortenSessionWait(t)
+	var requests []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
+		request := r.Method + " " + r.URL.Path
+		requests = append(requests, request)
 		if got := r.Header.Get("X-Orbit-Session-Id"); got != "caller-session" {
-			t.Errorf("request %d caller header = %q", requestCount, got)
+			t.Errorf("%s caller header = %q", request, got)
 		}
 		if got := r.Header.Get("X-Orbit-Session-Token"); got != "session-token" {
-			t.Errorf("request %d caller token header = %q", requestCount, got)
+			t.Errorf("%s caller token header = %q", request, got)
 		}
 		w.Header().Set("content-type", "application/json")
-		switch requestCount {
-		case 1:
-			if r.Method != http.MethodPost || r.URL.Path != "/api/runner/sessions" {
-				t.Errorf("create request = %s %s", r.Method, r.URL.Path)
-			}
+		switch request {
+		case "POST /api/runner/sessions":
 			_, _ = w.Write([]byte(`{"id":"child-session","status":"PENDING"}`))
-		case 2:
-			if r.Method != http.MethodGet || r.URL.Path != "/api/runner/sessions/child-session" {
-				t.Errorf("poll request = %s %s", r.Method, r.URL.Path)
-			}
+		case "POST /api/runner/watches":
+			_, _ = w.Write([]byte(`{"id":"watch-1","state":"ACTIVE"}`))
+		case "GET /api/runner/sessions/child-session":
 			_, _ = w.Write([]byte(`{"id":"child-session","status":"SUCCEEDED","result":"done"}`))
+		case "POST /api/runner/watches/watch-1/release":
+			_, _ = w.Write([]byte(`{"outcome":"CANCELLED"}`))
 		default:
-			t.Errorf("unexpected request %d: %s %s", requestCount, r.Method, r.URL.Path)
-			_, _ = w.Write([]byte(`{"id":"child-session","status":"SUCCEEDED"}`))
+			t.Errorf("unexpected request %s", request)
+			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer srv.Close()
@@ -464,9 +464,17 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 	if err := cmdSessionCLI([]string{"create", "--prompt", "work", "--wait", "--json"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if requestCount != 2 {
-		t.Fatalf("request count = %d, want create plus one poll", requestCount)
+	// The wait is recorded as a watch before it polls, and released once it is answered inline.
+	want := []string{
+		"POST /api/runner/sessions",
+		"POST /api/runner/watches",
+		"GET /api/runner/sessions/child-session",
+		"POST /api/runner/watches/watch-1/release",
 	}
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("requests = %#v, want %#v", requests, want)
+	}
+	// Answered inline, the output is the settled session exactly as it was before waits had watches.
 	if got, want := out.String(), "{\"id\":\"child-session\",\"status\":\"SUCCEEDED\",\"result\":\"done\"}\n"; got != want {
 		t.Errorf("wait output = %q, want %q", got, want)
 	}

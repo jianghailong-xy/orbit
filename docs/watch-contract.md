@@ -420,3 +420,66 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 ```bash
 npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
 ```
+
+---
+
+## 13. Agent / MCP / CLI 表面
+
+**状态**：任务「P2：提供 Agent/MCP/CLI Watch 工具并迁移 wait」的产物。机器可读部分在契约的 `agentSurface`；
+`src/shared/src/watchContract.spec.ts`、`src/apiserver/src/runner-api/runner-watches.controller.spec.ts` 与
+`src/runner-go/watch_tools_test.go` 读同一份文件，任何一端与它不一致都会变红。
+
+**为什么有这一层**：Agent 等 Orbit 自己的工作（Task 到某个状态、Session 的 turn 结束）时，会写它熟悉的那个循环——
+`sleep` 加 `task_get`。那个循环整段占着 turn 和 runner slot，还随 engine 回收一起消失。这一层让它改成：请服务端盯着，
+结束本轮，条件成立时经正常队列被唤醒（§6）。
+
+### 13.1 工具
+
+| MCP 工具 | CLI | 门槛 |
+| --- | --- | --- |
+| `watch_create` / `watch_get` / `watch_list` / `watch_update` / `watch_cancel` | `orbit watch create\|get\|list\|update\|cancel` | 会话内即可，与 task 工具相同 |
+| `task_await` | `orbit task await` | 会话内即可 |
+| `session_await` | `orbit session await` | orchestration，与 `session_get` 相同 |
+
+- observer 永远是调用它的会话（`ORBIT_SESSION_ID`）。会话外没有可唤醒的对象：CLI 直接拒绝，`orbit capabilities`
+  在会话外不列出这些命令（`SessionOnly`）。
+- `task_await` / `session_await` 是预设谓词的封装，一次调用只给 id。`task_await {taskIds: [7 个]}` 的默认 `until`
+  就是 §2.3 那句「全部终态或任一失败」。预设表见 `agentSurface.awaitPresets`。
+- 创建后立即返回，结果让 Agent 结束本轮。条件在创建时已成立（§5）也一样返回，唤醒 turn 在本轮结束后到达。
+- 旧 apiserver 没有 runner 门（`/api/runner/watches` 回 404 `Cannot …`）时，工具明说「服务端没有 watch 门，升级服务端；
+  不要退回 sleep/Bash 轮询」，不静默降级。
+
+### 13.2 runner 门
+
+`/api/runner/watches`（`RunnerWatchesController`，runner 凭据 + `X-Orbit-Session-Id`）：
+
+- observer 是 `X-Orbit-Session-Id` 指向、由本 runner 承载的会话；body 里没有能指定别的 observer 的字段。
+- 读和改只作用于该会话观察的 watch（`WatchesService.get/list` 的 `observerSessionId` 作用域）。
+- `action` 缺省 `RESUME_SESSION`，可显式 `NOTIFY_USER`。
+- 目标里有 SESSION 时，另要该会话的 orchestration 凭据；只有 TASK 时不要。`WatchesService` 逐目标的权限检查照旧。
+- 没有 headless 路径。
+
+### 13.3 session_create(wait) 迁移
+
+1. 建完子会话后、**等待开始前**建 watch：`ALL SESSION_TURN_SETTLED` 盯子会话，`RESUME_SESSION`，
+   `idempotencyKey = session-create-wait:<sessionId>`。调用在等待中被杀或断线，watch 仍在服务端，子会话 settle 时唤醒调用方。
+2. 在原有的有界预算内轮询子会话（顶层约 10 分钟，每深一层减半）。
+3. 预算内 settle：输出迁移前**逐字节相同**的会话 JSON，再 `POST /api/runner/watches/:id/release`，让答案只到达一次：
+   - watch 仍 ACTIVE/PAUSED → 取消，`CANCELLED` 不交付（§3）；
+   - 已 MATCHED、唤醒已入队且未被取走 → 走 owner 撤回（`cancelQueuedTurn`），delivery 变 `DEAD_LETTER`（`WAKE_WITHDRAWN:`，§3）；
+   - 唤醒还没入队 → `WAKE_NOT_QUEUED`，客户端隔 1 秒重问（交付 worker 每 5 秒一轮），最多 15 次；
+   - 撤不回（`ALREADY_WOKEN`、重问用尽、release 出错）→ 输出带 `watch`，说明稍后可能还有一个内容相同的 turn，按已处理对待。
+4. 预算用尽（`TIMEOUT`）或轮询时服务端不再应答（`TRANSPORT_ERROR`）：返回最后看到的会话，旁边是 `watch: {id, handedBack, note}`。
+   **不报错、不丢等待意图**；MCP 文本明确让 Agent 结束本轮。
+5. 兼容：没有调用会话（headless CLI、service token）时没有可唤醒的会话，服务端没有 runner 门时 watch 建不起来，两者都走迁移前的轮询，
+   行为不变。
+
+### 13.4 Agent 指令
+
+`orbitCLIInstructions` 多一段：等 Orbit 的工作不要用 sleep、Bash 循环、后台作业或 `schedule_wakeup` 轮询，调
+`task_await` / `session_await`（其他条件用 `watch_create`），然后结束本轮。`task_get`、`session_get`、`session_create`、
+`schedule_wakeup`、`bg_run` 的描述与 bg-guard 的拒绝文案都指向这两个工具。Claude 的 `--allowedTools` 预批准
+`orbit watch *` 与 `orbit task await`，orchestration 会话再加 `orbit session await`。
+
+「CLI 断开后 Watch 仍存在」和「Agent 不再生成 Bash monitor」的黑盒语义由独立的 Claude 产品 QA Gate 验证。本节的机械下限是上面三份测试，
+加上 `src/runner-go/session_wait_test.go` 与 `src/runner-go/watch_cli_test.go`。

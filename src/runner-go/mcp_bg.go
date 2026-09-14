@@ -83,7 +83,8 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 						" killed at once. \"job\" is valuable when it finishes and expensive to restart (build, test suite," +
 						" migration): it is waited for. \"watch\" only waits for something else to happen (CI, a deploy, a" +
 						" review) — drained like a job, but it does not count against this machine's capacity, so use it" +
-						" with wakeOnExit for a long wait. Nothing in a command line tells these apart, so say which.",
+						" with wakeOnExit for a long wait; not for Orbit tasks or sessions, which task_await and session_await" +
+						" wait for with no process at all. Nothing in a command line tells these apart, so say which.",
 				},
 				"wakeOnExit": map[string]interface{}{
 					"type": "boolean",

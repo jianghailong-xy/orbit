@@ -85,12 +85,21 @@ func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitProjectInstructions(insideRecordedWork) +
+		orbitWaitInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
 		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
 		"`" + command + " capabilities --json` first to discover its commands, then run the returned argv with that exact " +
 		"absolute path. Use `--json` output. Do not run `" + command + " mcp` directly."
 }
+
+// orbitWaitInstructions routes a wait on Orbit's own work to a watch. An agent told to "wait for these
+// tasks" otherwise writes the loop it knows, sleep plus task_get or `orbit task get`, which holds its turn
+// open for the whole wait and dies with the engine. ASCII like the rest of the paragraph.
+const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status, sessions finishing a turn -- do not " +
+	"poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for " +
+	"other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a " +
+	"structured payload when the condition holds, even if this engine was recycled in the meantime.\n\n"
 
 // orbitProjectInstructions is the paragraph about what deserves an Orbit Project, in the two
 // forms a session can be in.
@@ -153,7 +162,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
-		for _, action := range []string{"list", "get", "create", "update", "delete", "start", "comment"} {
+		for _, action := range []string{"list", "get", "create", "update", "delete", "start", "comment", "await"} {
 			rules = append(rules, "Bash("+command+" task "+action+" *)")
 		}
 		// Every task-list subcommand the CLI has. An action missing here is pre-approved for
@@ -169,8 +178,13 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		for _, action := range []string{"get", "create", "update", "delete"} {
 			rules = append(rules, "Bash("+command+" project "+action+" *)")
 		}
+		// Every watch verb: they wait on Orbit's own work for the session they run in, which is the
+		// command the instructions send an agent to instead of a sleep loop.
+		for _, action := range []string{"create", "get", "list", "update", "cancel"} {
+			rules = append(rules, "Bash("+command+" watch "+action+" *)")
+		}
 		if allowOrchestration {
-			for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete", "delete"} {
+			for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 		}

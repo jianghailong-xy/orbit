@@ -52,6 +52,11 @@ var cliParityParamAlias = map[string]string{
 	// repeats, and a separator that can occur inside a value is a parser that would silently split
 	// a filename in half.
 	"conflicts": "--conflict",
+	// One flag per target or id at a terminal, repeatable, for the same reason as --label: a watch's
+	// targets are typed as --target TASK:<id>, and an await's ids as --task-id / --session-id.
+	"targets":    "--target",
+	"taskIds":    "--task-id",
+	"sessionIds": "--session-id",
 }
 
 // The CLI and the MCP server are two doors onto the same API, and `orbit capabilities` is what an
@@ -60,7 +65,7 @@ var cliParityParamAlias = map[string]string{
 // grew `provider` and `permissionMode` and the hand-written argument list kept quiet about them.
 func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	specs := map[string]cliCapabilitySpec{}
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}

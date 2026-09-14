@@ -216,6 +216,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if result, handled := s.callBgTool(name, args); handled {
 		return result
 	}
+	// Watches are control-plane calls, but they act for this session and share their argument
+	// handling with `orbit watch` (watch_tools.go).
+	if result, handled := s.callWatchTool(name, args); handled {
+		return result
+	}
 	switch name {
 	case "task_list":
 		limit, err := getBoundedOptionalNumber(args, "limit", maxTaskListLimit)
@@ -1815,7 +1820,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_get",
-			"description": "Get one task with its comments and linked sessions.",
+			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -2398,7 +2403,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"in the meantime, and even while a Monitor or background job is still running. Use it instead of Claude's " +
 				"ScheduleWakeup, which is refused here because its timer lives inside the engine process. One wakeup waits " +
 				"per session: a new call replaces the pending one, and stop: true cancels it. To wait for something that " +
-				"ends by itself (CI, a build, a deploy), prefer bg_run with wakeOnExit, which wakes you when it happens.",
+				"ends by itself outside Orbit (CI, a build, a deploy), prefer bg_run with wakeOnExit; for Orbit tasks and " +
+				"sessions, call task_await or session_await. Both wake you when it happens.",
 			"inputSchema": obj(map[string]interface{}{
 				"delaySeconds": map[string]interface{}{
 					"type":        "number",
@@ -2441,7 +2447,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		tools = append(tools,
 			map[string]interface{}{
 				"name":        "session_create",
-				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status; poll session_get for its result. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again.",
+				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status at once. To learn when it finishes its turn, call session_await with that id and end your turn instead of polling session_get, or pass wait to hold this call for a bounded time. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again.",
 				"inputSchema": obj(map[string]interface{}{
 					"prompt":    promptDesc,
 					"agentId":   map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it (by id); defaults to the current agent."},
@@ -2458,7 +2464,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"enum":        offeredPermissionModes(),
 						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask, \"dontAsk\"/\"bypassPermissions\" never ask. Omit to use the owner's account default. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
-					"wait": map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
+					"wait": map[string]interface{}{"type": "boolean", "description": "Wait for the new session's first turn to settle and return its full state inline: up to about 10 minutes, less when this session was itself spawned by a wait. The wait is recorded on Orbit's server as a watch before it starts, so when that time runs out or the connection drops, the call returns the session as last seen with the watch under \"watch\", and the watch wakes this session when the turn settles; end your turn then instead of polling. Default false: returns immediately."},
 				}, "prompt"),
 			},
 			map[string]interface{}{
@@ -2476,7 +2482,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_get",
-				"description": "Get one session's current status and latest output (to collect a spawned sub-task's result).",
+				"description": "Get one session's current status and latest output (to collect a spawned sub-task's result). To wait for a session, call session_await instead of calling this in a loop.",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
 			},
 			map[string]interface{}{
@@ -2561,6 +2567,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 		)
 	}
+	// Waiting on Orbit's own work (watch_tools.go). session_await watches sessions, so it rides the
+	// gate the session tools ride; the rest need only a session to wake.
+	if includeOrchestration {
+		tools = append(tools, sessionAwaitDescriptor(obj))
+	}
+	tools = append(tools, watchToolDescriptors(obj)...)
 	// Always advertised: an agent that cannot see the tool falls back to
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
@@ -2591,8 +2603,10 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 }
 
 // sessionWaitInterval * maxSessionWaitPolls caps how long session_create(wait) blocks the
-// parent's tool call before handing back the last known state (~3s * 200 = ~10 min).
-const sessionWaitInterval = 3 * time.Second
+// parent's tool call before handing back the last known state and the watch that keeps waiting
+// (~3s * 200 = ~10 min). A variable only so tests can wait in milliseconds.
+var sessionWaitInterval = 3 * time.Second
+
 const maxSessionWaitPolls = 200
 
 // envSpawnDepth carries how many spawn links sit above this session (a root is 0).
@@ -2631,18 +2645,18 @@ func spawnDepthFromEnv() int {
 	return d
 }
 
-// waitForSession blocks until the freshly-created child session settles — i.e. leaves
-// PENDING/RUNNING (reaching AWAITING_INPUT once its first turn produced a result, or a
-// terminal state) — then returns its full row so the caller reads the result inline.
+// waitForSession waits for the freshly-created child session to settle — to leave PENDING/RUNNING,
+// reaching AWAITING_INPUT once its first turn produced a result, or a terminal state — behind a watch
+// that keeps waiting on the server whenever this call cannot (session_wait.go).
 func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface{} {
-	raw, err := waitForSessionRaw(s.t, cliOrchestrationContext{
+	wait, err := waitForSessionDurably(s.t, cliOrchestrationContext{
 		sessionID: s.sessionID,
 		token:     s.orchestrationToken,
 	}, created)
 	if err != nil {
 		return toolResult("wait: "+err.Error(), true)
 	}
-	return toolResult(prettyJSON(raw), false)
+	return toolResult(wait.text(), false)
 }
 
 // sessionSettled reports whether a session has no active turn running (its result is ready).

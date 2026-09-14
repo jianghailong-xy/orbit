@@ -59,6 +59,25 @@ session assignment and workspace policy, so ending, deleting, reassigning, or di
 access without waiting for proof expiry. When orchestration is enabled, `orbit agent list`, `agent create`,
 and `agent update` expose the same agent-management surface to the CLI. Only a human can enable orchestration.
 
+## Watches
+
+Inside a session, wait on Orbit's own work with a watch instead of a sleep loop. The control plane holds the watch,
+so it outlives the command, the shell and the engine; when its condition holds, Orbit starts a turn in the session
+the command ran in.
+
+```bash
+orbit task await --task-id <task-id>,<task-id> --json     # every task terminal, or any one failed
+orbit session await --session-id <session-id> --until ALL_SETTLED --json
+orbit watch create --target TASK:<task-id> --predicate '{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_DONE"}' --json
+orbit watch list --state ACTIVE --json
+orbit watch cancel <watch-id> --json
+```
+
+A watch wakes the session that makes it, so these commands need `ORBIT_SESSION_ID` and have no headless form.
+`session await`, and a watch that names sessions, need orchestration, as `session get` does. `orbit session create
+--wait` records its wait as a watch before it starts: if the wait runs out or the control plane stops answering, the
+output carries that watch under `"watch"`, and the watch keeps waiting.
+
 ## Headless runner-local access
 
 A process on a registered runner with no `ORBIT_SESSION_ID` can use the runner credential to inspect and send

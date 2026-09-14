@@ -1657,6 +1657,72 @@ func (t *Transport) deleteSession(callerSessionID, orchestrationToken, id string
 	return out, err
 }
 
+// ── Watches for `orbit mcp` and `orbit watch` (docs/watch-contract.md §13) ─────────────────
+// Each call carries the calling session and its signed credential, as the orchestration ops do: the
+// server makes that session the observer of what it creates, confines every read and edit to that
+// session's watches, and asks for the credential when a watch names sessions.
+
+func (t *Transport) createWatch(callerSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doOrchestration(http.MethodPost, "/runner/watches", body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+func (t *Transport) listWatches(callerSessionID, orchestrationToken, state string) (json.RawMessage, error) {
+	path := "/runner/watches"
+	if state != "" {
+		path += "?state=" + url.QueryEscape(state)
+	}
+	var out json.RawMessage
+	err := t.doOrchestration(http.MethodGet, path, nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+func (t *Transport) getWatch(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration(http.MethodGet, "/runner/watches/"+url.PathEscape(id), nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+func (t *Transport) updateWatch(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration(http.MethodPatch, "/runner/watches/"+url.PathEscape(id), body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+func (t *Transport) cancelWatch(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration(http.MethodPost, "/runner/watches/"+url.PathEscape(id)+"/cancel", nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// watchReleaseReceipt is what taking a watch back came to; contracts/watch.contract.json names the
+// outcomes under agentSurface.release.
+type watchReleaseReceipt struct {
+	Outcome string          `json:"outcome"`
+	Watch   json.RawMessage `json:"watch,omitempty"`
+}
+
+// releaseWatch takes back what a watch still owes the calling session once that session got its answer
+// another way: session_create(wait) calls it when the new session settled inline.
+func (t *Transport) releaseWatch(callerSessionID, orchestrationToken, id string) (watchReleaseReceipt, error) {
+	var receipt watchReleaseReceipt
+	if err := validatePathSegmentID(id); err != nil {
+		return receipt, err
+	}
+	err := t.doOrchestration(http.MethodPost, "/runner/watches/"+url.PathEscape(id)+"/release", nil, &receipt, callerSessionID, orchestrationToken)
+	return receipt, err
+}
+
 // ── Service tokens for headless processes (`orbit token`) ──────────────────
 // Runner-token authenticated on purpose: a service token can never mint another, so a leaked
 // bridge credential cannot renew itself or widen its own scope.

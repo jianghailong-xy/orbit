@@ -23,6 +23,7 @@ Usage:
   orbit session list [--status STATUS] [--parent-session-id ID] [--json]
   orbit session search --query TEXT [--limit N] [--json]
   orbit session get SESSION_ID [--json]
+  orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]
   orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]
   orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]
@@ -45,6 +46,7 @@ Run 'orbit session <command> --help' for options.
 // offeredPermissionModes), and help that names a mode the runner will refuse is how an agent picks
 // it. Package-level init order resolves runsAsRoot first — it is a dependency of this expression.
 var sessionActionHelp = map[string]string{
+	"await": sessionAwaitHelp,
 	"merge-receipt": `orbit session merge-receipt — record a merge Orbit did not perform
 
 Usage:
@@ -97,7 +99,10 @@ Options:
   --permission-mode MODE   How much the session may do unattended: %s.
                            Defaults to the owner's account setting; the ask-me modes park
                            the session on an approval card until a human answers
-  --wait[=BOOL]            Wait until the first turn settles
+  --wait[=BOOL]            Wait until the first turn settles. Inside a session the wait is first
+                           recorded as a watch that wakes this session when the turn settles: if
+                           the wait runs out or the server stops answering, the output carries
+                           that watch under "watch" instead of losing it
   --json
 
 Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
@@ -187,6 +192,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
+	{Tool: "session_await", Argv: []string{"orbit", "session", "await"}, Usage: "orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("session-id", "sessionIds", sessionAwaitPresets), Mutates: true},
 	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--json"}, Mutates: true},
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--wait-seconds <n> (1-300; wait for the outcome and return the receipt instead of just queueing)", "--json"}, Mutates: true},
@@ -273,6 +279,8 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliSessionSearch(args[1:], out, ctx)
 	case "get":
 		return cliSessionGet(args[1:], out, ctx)
+	case "await":
+		return cliSessionAwait(args[1:], out, ctx)
 	case "send":
 		return cliSessionSend(args[1:], in, out, ctx)
 	case "interrupt":
@@ -534,10 +542,11 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 		return fmt.Errorf("create session: %w", err)
 	}
 	if *wait {
-		raw, err = waitForSessionRaw(t, ctx, raw)
+		result, err := waitForSessionDurably(t, ctx, raw)
 		if err != nil {
 			return fmt.Errorf("wait for session: %w", err)
 		}
+		raw = result.json()
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
