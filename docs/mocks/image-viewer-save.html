@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>iOS image viewer — save to Photos (long press, bottom menu)</title>
+<style>
+  html, body { margin: 0; background: #eceef2; }
+  body { width: 962px; padding: 44px 48px; box-sizing: border-box;
+         font-family: "Inter", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", sans-serif; color: #111; }
+  h1 { margin: 0 0 6px; font-size: 32px; letter-spacing: -0.3px; }
+  .sub { margin: 0 0 30px; font-size: 18px; color: #555; }
+  .grid { display: grid; grid-template-columns: repeat(2, 413px); column-gap: 40px; row-gap: 34px; }
+  .cap { margin-top: 16px; font-size: 17px; line-height: 1.5; color: #444; }
+  .cap b { display: block; margin-bottom: 3px; font-size: 21px; color: #111; }
+
+  .device { width: 413px; height: 872px; border-radius: 62px; background: #1b1b1d; padding: 10px; box-sizing: border-box;
+            box-shadow: 0 22px 50px rgba(0,0,0,.22), inset 0 0 0 1.5px #3a3a3c; }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 52px; overflow: hidden; background: #000; }
+  .island { position: absolute; top: 11px; left: 134px; width: 125px; height: 36px; border-radius: 18px; background: #000;
+            box-shadow: 0 0 0 1px rgba(255,255,255,.05); z-index: 20; }
+  .home { position: absolute; bottom: 8px; left: 129px; width: 135px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.75); z-index: 20; }
+
+  /* the picture being viewed (a stand-in for the werewolf mockup) */
+  .art { position: absolute; width: 393px; height: 288px; background: #0c0a18; display: flex; gap: 9px; padding: 14px 12px; box-sizing: border-box; }
+  .mini { flex: 1; position: relative; border-radius: 14px; overflow: hidden; background: linear-gradient(180deg, #2b2356 0%, #171331 72%);
+          border: 1px solid rgba(255,255,255,.06); }
+  .moon { position: absolute; left: 50%; top: 44px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%;
+          background: radial-gradient(circle at 40% 40%, #fff6d6, #e9c46a); box-shadow: 0 0 18px rgba(233,196,106,.55); }
+  .bar { position: absolute; height: 6px; border-radius: 3px; background: rgba(255,255,255,.85); }
+  .gbtn { position: absolute; left: 10px; right: 10px; height: 16px; border-radius: 8px; background: linear-gradient(#f3d27a, #d9a93f); }
+  .ob { position: absolute; top: 130px; width: 44px; height: 13px; border-radius: 7px; border: 1px solid rgba(255,255,255,.35); }
+  .lc { position: absolute; left: 10px; right: 10px; height: 20px; border-radius: 6px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+  .seats { position: absolute; left: 12px; right: 12px; top: 84px; display: grid; grid-template-columns: repeat(4, 16px); justify-content: space-between; row-gap: 12px; }
+  .seats i { width: 16px; height: 16px; border-radius: 50%; }
+  .rolecard { position: absolute; left: 12px; right: 12px; top: 30px; height: 152px; border-radius: 10px; border: 1px solid #d9a93f; background: rgba(217,169,63,.06); }
+  .rolecircle { position: absolute; left: 50%; top: 24px; width: 42px; height: 42px; margin-left: -23px; border-radius: 50%; border: 2px solid #d9a93f;
+                color: #f0c75e; font-size: 20px; font-weight: 700; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.25); }
+
+  /* annotations */
+  .new { outline: 2.5px dashed #ff9f0a; outline-offset: 5px; }
+  .tag { position: absolute; z-index: 30; padding: 2px 7px; border-radius: 6px; background: #ff9f0a; color: #000; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .touch { position: absolute; z-index: 30; width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,.26);
+           border: 2px solid rgba(255,255,255,.9); box-shadow: 0 0 0 9px rgba(255,255,255,.12); }
+  .hold { position: absolute; z-index: 30; padding: 3px 9px; border-radius: 8px; background: rgba(255,255,255,.9); color: #000; font-size: 13px; font-weight: 700; }
+
+  /* system action sheet from the bottom */
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 12; }
+  .asheet { position: absolute; left: 8px; right: 8px; bottom: 34px; z-index: 14; }
+  .agroup { border-radius: 22px; overflow: hidden; background: rgba(44,44,46,.94); backdrop-filter: blur(30px);
+            box-shadow: inset 0 .5px 0 rgba(255,255,255,.14); }
+  .agroup + .agroup { margin-top: 8px; }
+  .arow { position: relative; height: 57px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0a84ff; }
+  .arow + .arow::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: rgba(255,255,255,.16); }
+  .arow.cancel { font-weight: 600; }
+
+  /* toast (same look as ToastHost) */
+  .toast { position: absolute; left: 16px; right: 16px; top: 62px; height: 52px; border-radius: 18px; z-index: 14; color: #fff;
+           display: flex; align-items: center; gap: 12px; padding: 0 18px; box-sizing: border-box; font-size: 17px;
+           background: rgba(44,44,46,.94); box-shadow: inset 0 0 0 .7px rgba(255,255,255,.08), 0 4px 12px rgba(0,0,0,.35); }
+  .toast svg { width: 24px; height: 24px; }
+
+  /* notes card */
+  .note { width: 413px; height: 872px; border-radius: 36px; background: #fff; box-sizing: border-box; padding: 32px 28px;
+          box-shadow: 0 22px 50px rgba(0,0,0,.12); font-size: 17px; line-height: 1.5; }
+  .note h2 { margin: 0 0 16px; font-size: 23px; }
+  .note table { width: 100%; border-collapse: collapse; font-size: 17px; }
+  .note th { text-align: left; font-size: 13px; color: #888; font-weight: 600; padding: 0 6px 6px; }
+  .note td { padding: 11px 6px; border-top: 1px solid #eee; vertical-align: top; }
+  .note td:first-child { font-weight: 600; white-space: nowrap; }
+  .note tr.chg td { background: #fff4e3; }
+  .note .same { color: #999; }
+  .note ul { margin: 22px 0 0; padding-left: 20px; }
+  .note li { margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<h1>大图保存 · 长按弹底部菜单</h1>
+<p class="sub">看图时界面上没有任何按钮。橙色虚线框 = 新加的东西。</p>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="#30d158"/><path d="M7.3 12.4l3.1 3.1 6.3-6.6" fill="none" stroke="#2c2c2e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="grid">
+
+  <!-- 1: open, unchanged -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="art" data-art style="top:282px;left:0"></div>
+      <div class="touch" style="left:170px;top:400px"></div>
+      <div class="hold" style="left:150px;top:466px">按住约半秒</div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>① 点开大图（和现在一样）</b>纯黑全屏，只有图片。单击关闭、下拉关闭、双击/捏合缩放、左右翻页都不变。</div>
+  </div>
+
+  <!-- 2: long press → bottom action sheet -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="art" data-art style="top:282px;left:0"></div>
+      <div class="dim"></div>
+      <div class="asheet new">
+        <div class="agroup">
+          <div class="arow">Save to Photos</div>
+          <div class="arow">Copy</div>
+          <div class="arow">Share…</div>
+        </div>
+        <div class="agroup">
+          <div class="arow cancel">Cancel</div>
+        </div>
+      </div>
+      <div class="tag" style="right:14px;top:548px">长按菜单</div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>② 长按 → 底部菜单</b>手机轻震一下，图片压暗，菜单从屏幕下方弹出。Share… 可以发微信、AirDrop；点 Cancel 或上方暗处收起。</div>
+  </div>
+
+  <!-- 3: saved -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="art" data-art style="top:282px;left:0"></div>
+      <div class="toast new"><svg><use href="#i-check"/></svg>Saved to Photos</div>
+      <div class="tag" style="right:22px;top:126px">保存成功提示</div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>③ 点 Save to Photos → 存好了</b>菜单收起，顶部出一条提示，约 2 秒自己消失。第一次保存时系统会问一次相册权限。</div>
+  </div>
+
+  <!-- 4: gesture table -->
+  <div>
+    <div class="note">
+      <h2>操作一览</h2>
+      <table>
+        <tr><th>操作</th><th>现在</th><th>改后</th></tr>
+        <tr class="chg"><td>长按图片</td><td>—</td><td>底部菜单<br>Save to Photos<br>Copy / Share…</td></tr>
+        <tr><td>单击</td><td>关闭</td><td class="same">不变</td></tr>
+        <tr><td>下拉</td><td>关闭</td><td class="same">不变</td></tr>
+        <tr><td>双击 / 捏合</td><td>缩放</td><td class="same">不变</td></tr>
+        <tr><td>左右滑</td><td>翻页</td><td class="same">不变</td></tr>
+      </table>
+      <ul>
+        <li><b>界面零改动：</b>不加按钮，看图时只有图。</li>
+        <li><b>菜单用系统自带的：</b>颜色、圆角跟着系统版本走，不自己画。</li>
+        <li><b>权限：</b>只申请「添加照片」，不读相册。拒绝过的话，会提示去设置里打开。</li>
+        <li>消息里的图、工具截图、输入框草稿图共用这个查看器，三处一起有。</li>
+      </ul>
+    </div>
+    <div class="cap"><b>④ 手势</b>只多了长按这一行，其余不变。</div>
+  </div>
+
+</div>
+
+<script>
+  const seat = ['#5aa9c8','#e0a24a','#d9604f','#5bb35c','#5b5bd6','#c9669a','#4aa3a3','#e2a04f','#d9604f','#5bb35c','#9a5bd6','#5b7bd6'];
+  const ART =
+    '<div class="mini"><div class="moon"></div><div class="bar" style="left:26px;right:26px;top:84px"></div>' +
+    '<div class="gbtn" style="top:106px"></div><div class="ob" style="left:10px"></div><div class="ob" style="right:10px"></div>' +
+    '<div class="lc" style="top:158px;border-color:rgba(217,169,63,.7)"></div><div class="lc" style="top:186px"></div><div class="lc" style="top:212px"></div></div>' +
+    '<div class="mini"><div class="bar" style="left:10px;right:52px;top:28px"></div>' +
+    '<div class="lc" style="top:44px;height:26px"></div><div class="seats">' + seat.map(c => '<i style="background:' + c + '"></i>').join('') + '</div>' +
+    '<div class="gbtn" style="bottom:12px;left:48px"></div><div class="ob" style="top:auto;bottom:12px;left:8px;width:32px"></div></div>' +
+    '<div class="mini"><div class="rolecard"><div class="rolecircle">预</div>' +
+    '<div class="bar" style="left:30px;right:30px;top:80px;background:#e9b949"></div><div class="bar" style="left:18px;right:18px;top:100px;height:4px;opacity:.5"></div>' +
+    '<div class="bar" style="left:24px;right:24px;top:110px;height:4px;opacity:.5"></div></div><div class="gbtn" style="bottom:12px"></div></div>';
+  document.querySelectorAll('[data-art]').forEach(el => { el.innerHTML = ART; });
+</script>
+</body>
+</html>
