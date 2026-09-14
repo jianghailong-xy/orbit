@@ -939,9 +939,12 @@ struct AgentSessionRow: View {
     /// True in Open, where pinning applies. Completed/Trash rows never show the bar.
     var showsPin: Bool = false
     private var isPinned: Bool { showsPin && session.pinnedAt != nil }
+    @Environment(AppModel.self) private var app
+    /// The live watches that will resume this session: what a parked row says it's doing instead.
+    private var watching: WatchSessionSummary? { app.watches?.summary(for: session.id) }
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
     // web's `openable` — false on the Trash tab (a deleted session isn't live), true elsewhere.
-    private var line: SessionLine { SessionLine.make(for: session, live: !deleted) }
+    private var line: SessionLine { SessionLine.make(for: session, live: !deleted, watching: watching) }
 
     var body: some View {
         #if os(iOS)
@@ -964,7 +967,7 @@ struct AgentSessionRow: View {
                 .fill(isPinned ? Color.accentColor : .clear)
                 .frame(width: 3)
             HStack(spacing: 8) {
-                StatusGlyphView(glyph: .make(for: session))
+                StatusGlyphView(glyph: .make(for: session, watching: watching))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(session.title ?? "Untitled session").lineLimit(1)
@@ -1031,7 +1034,7 @@ struct AgentSessionRow: View {
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session))
+        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching))
     }
 
     /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
@@ -1068,7 +1071,7 @@ struct AgentSessionRow: View {
         // done, queued) would otherwise no longer announce their status the way the dropped leading
         // glyph did. `statusWord` is the shared, tested port of web's `statusLabel`.
         .accessibilityElement(children: .combine)
-        .accessibilityValue(SessionHeader.statusWord(for: session))
+        .accessibilityValue(SessionHeader.statusWord(for: session, watching: watching))
     }
 
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner

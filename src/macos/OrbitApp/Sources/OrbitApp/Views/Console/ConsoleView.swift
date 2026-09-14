@@ -72,6 +72,8 @@ struct ConsoleView: View {
                             .padding(.bottom, .composerBandGap)
                         }
                         ComposerAttachmentsView(console: console)
+                        // What this session waits on — a watch, not a process — above the real shells.
+                        WatchingCardStack(sessionID: console.sessionID)
                         BackgroundTrayView(procs: console.state.background)
                         WorktreeBar(console: console)
                         ComposerView(console: console)
@@ -163,6 +165,7 @@ struct ConsoleView: View {
 /// title + timestamps) comes from the app's cached list; when it isn't loaded yet the title falls
 /// back to the live stream's agent name and the subtitle to its current status word.
 private struct ConsoleNavTitle: View {
+    @Environment(AppModel.self) private var appModel
     let session: Session?
     let console: ConsoleModel?
     /// The navigation bar's centre budget, derived from the current detail-column width. Unlike a
@@ -191,7 +194,10 @@ private struct ConsoleNavTitle: View {
     }
 
     private var subtitle: String {
-        if let s = SessionHeader.subtitle(for: session) { return s }
+        // Waiting on a watch, the subtitle says so — targets, progress, last look — instead of
+        // "Background process running · 3m ago".
+        let watching = session.flatMap { appModel.watches?.summary(for: $0.id) }
+        if let s = SessionHeader.subtitle(for: session, watching: watching) { return s }
         // No cached session yet (fresh deep link): show the live stream's status, prettified like
         // the old band did (AWAITING_INPUT -> "Awaiting Input").
         if let status = console?.state.status {
@@ -607,7 +613,8 @@ struct TranscriptView: View {
     }
 
     private var headerStatus: String {
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID)) {
+        let watching = app.watches?.summary(for: console.sessionID)
+        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching) {
             return subtitle
         }
         return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized

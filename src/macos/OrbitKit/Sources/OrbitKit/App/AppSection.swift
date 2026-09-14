@@ -4,13 +4,14 @@ import Foundation
 /// Symbol names are just strings — so it lives in OrbitKit and is unit-tested; the SwiftUI
 /// sidebar renders `visible(isAdmin:)`. Admin is role-gated like the web's route guard.
 public enum AppSection: String, CaseIterable, Sendable, Identifiable {
-    case tasks, agents, skills, runners, settings, admin
+    case tasks, following, agents, skills, runners, settings, admin
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .tasks:    return "Tasks"
+        case .following: return "Following"
         case .agents:   return "Workspaces"
         case .skills:   return "Skills"
         case .runners:  return "Runners"
@@ -23,6 +24,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     public var systemImage: String {
         switch self {
         case .tasks:    return "checklist"
+        case .following: return "eye"
         case .agents:   return "person.2"
         case .skills:   return "wand.and.stars"
         case .runners:  return "desktopcomputer"
@@ -35,9 +37,10 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     public var adminOnly: Bool { self == .admin }
 
     /// Sections to show in the nav, in display order. Runners leads; Skills is intentionally omitted
-    /// (its detail view still exists but is no longer a top-level destination). Admin is gated by role.
+    /// (its detail view still exists but is no longer a top-level destination). Following — the
+    /// watches kept on sessions and tasks — follows Tasks. Admin is gated by role.
     public static func visible(isAdmin: Bool) -> [AppSection] {
-        let order: [AppSection] = [.runners, .agents, .tasks, .settings, .admin]
+        let order: [AppSection] = [.runners, .agents, .tasks, .following, .settings, .admin]
         return order.filter { !$0.adminOnly || isAdmin }
     }
 
@@ -56,6 +59,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         case .active, .session: return .agents
         case .task:             return .tasks
         case .runner:           return .runners
+        case .watch:            return .following
         }
     }
 }

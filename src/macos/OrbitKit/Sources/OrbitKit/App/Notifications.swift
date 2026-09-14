@@ -11,6 +11,9 @@ public enum NotificationEvent: Equatable, Sendable {
     /// A previously-live session reached a terminal state (status nil = it simply left the
     /// Open list, so the exact terminal status is unknown).
     case finished(sessionID: String, title: String, status: RunStatus?)
+    /// A NOTIFY_USER watch matched: a condition you asked to be told about held. The generation is
+    /// what, with the watch's id, names that one Match.
+    case watchMatched(watchID: String, generation: Int, condition: String)
 }
 
 public enum SessionDelta {
@@ -72,6 +75,24 @@ public enum SessionDelta {
     }
 }
 
+public enum WatchDelta {
+    /// The NOTIFY_USER watches that matched between two fetched lists — how a client with no APNs
+    /// path (macOS) tells you. The watch has to have been seen live first: the first fetch only
+    /// primes, and a Match from before this client ever saw the watch is history, not news.
+    public static func matched(previous: [Watch], current: [Watch]) -> [NotificationEvent] {
+        let before = Dictionary(previous.map { (PublicID.storageKey($0.id), $0.state) },
+                                uniquingKeysWith: { a, _ in a })
+        return current.compactMap { watch in
+            guard watch.action == .notifyUser, watch.state == .matched,
+                  let was = before[PublicID.storageKey(watch.id)], WatchStateMachine.isLive(was)
+            else { return nil }
+            let condition = WatchProjection.condition(watch.predicate,
+                                                      targetCount: WatchProgress(watch.targets).live)
+            return .watchMatched(watchID: watch.id, generation: watch.generation, condition: condition)
+        }
+    }
+}
+
 /// Built notification payload — stable identifier (so re-notifying replaces, not stacks),
 /// text, category (which action buttons), thread (grouping), and the tap route.
 public struct NotificationContent: Equatable, Sendable {
@@ -103,6 +124,9 @@ public enum Notifications {
     /// notifications below and the server's APNs payload, so the delivery layer can tell which
     /// session a push (from either source) belongs to.
     public static let keySession = "sessionID"
+    /// `userInfo` key naming the watch a match alert is about — the server's APNs payload
+    /// (apiserver `PushService.notifyWatchMatched`) and the local alert below both set it.
+    public static let keyWatch = "watchID"
     static let keyKind = "kind"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
@@ -126,6 +150,18 @@ public enum Notifications {
                 threadIdentifier: sid,
                 route: .session(sid),
                 userInfo: [keySession: sid, keyKind: failed ? "failed" : "finished"])
+        case let .watchMatched(wid, generation, condition):
+            // Keyed the way the server collapses its push (`watch-<uuid>-<generation>`), so one Match
+            // can't stack two alerts on a device that got both. No category: its only action is a tap.
+            let key = PublicID.storageKey(wid)
+            return NotificationContent(
+                identifier: "watch-\(key)-\(generation)",
+                title: "Watch matched",
+                body: condition,
+                categoryIdentifier: "",
+                threadIdentifier: "watch-\(key)",
+                route: .watch(wid),
+                userInfo: [keyWatch: wid, keyKind: "watch-matched"])
         }
     }
 
@@ -133,7 +169,10 @@ public enum Notifications {
     /// `UNNotificationDefaultActionIdentifier` (→ open) or one of the action constants above.
     public static func intent(actionId: String, userInfo: [String: String],
                               responseText: String? = nil) -> AppIntent? {
-        guard let sid = userInfo[keySession] else { return nil }
+        guard let sid = userInfo[keySession] else {
+            // A watch's alert names no session and carries no actions: tapping it opens the watch.
+            return userInfo[keyWatch].map { .open(.watch($0)) }
+        }
         switch actionId {
         case actionAllow: return .approve(sessionID: sid, behavior: .allow)
         case actionDeny:  return .approve(sessionID: sid, behavior: .deny)

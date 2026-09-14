@@ -37,13 +37,16 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     }
 
     /// The glyph for a session. Lifecycle location never overrides the run's actual state.
-    public static func make(for s: Session, now: Date = Date()) -> SessionStatusGlyph {
+    /// `watching` is the session as an observer (see `SessionHeader.statusWord`).
+    public static func make(for s: Session, watching: WatchSessionSummary? = nil,
+                            now: Date = Date()) -> SessionStatusGlyph {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
              engineTurnActive: s.engineTurnActive == true,
              error: s.error,
-             retryPending: s.retryPending(now: now))
+             retryPending: s.retryPending(now: now),
+             watchingLabel: watching?.word)
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -74,7 +77,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             runningBgCount: Int? = nil,
                             engineTurnActive: Bool = false,
                             error: String? = nil,
-                            retryPending: Bool = false) -> SessionStatusGlyph {
+                            retryPending: Bool = false,
+                            watchingLabel: String? = nil) -> SessionStatusGlyph {
         // The working glyph, shared by the two states that mean the agent is generating.
         func generating() -> SessionStatusGlyph {
             if (pendingApprovals ?? 0) > 0 {
@@ -94,6 +98,12 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             // spinner a dispatched turn gets — and it outranks a background process left up
             // below, which is not the agent working at all.
             if engineTurnActive { return generating() }
+            // Parked on a live watch (`watchingLabel` is its "Watching 7 targets"): a wake is coming,
+            // so neither the reply bubble nor the background process's console glyph fits — unless
+            // somebody is waiting on you, which a watch never hides.
+            if let watchingLabel, (pendingApprovals ?? 0) == 0 {
+                return .init(shape: .symbol("eye"), tone: .neutral, label: watchingLabel)
+            }
             if (runningBgCount ?? 0) > 0 {
                 // Not the agent working: a dev server or watcher the agent left up never exits,
                 // so the working spinner would mark the session busy for the rest of its life.

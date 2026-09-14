@@ -15,14 +15,16 @@ final class AppSectionTests: XCTestCase {
     }
 
     func testNavOrder() {
-        // Runners first, then Agents, then Tasks (where Skills used to sit), then Settings; Admin last for admins.
-        XCTAssertEqual(AppSection.visible(isAdmin: false), [.runners, .agents, .tasks, .settings])
-        XCTAssertEqual(AppSection.visible(isAdmin: true), [.runners, .agents, .tasks, .settings, .admin])
+        // Runners first, then Agents, then Tasks (where Skills used to sit), then Following (watches),
+        // then Settings; Admin last for admins.
+        XCTAssertEqual(AppSection.visible(isAdmin: false), [.runners, .agents, .tasks, .following, .settings])
+        XCTAssertEqual(AppSection.visible(isAdmin: true), [.runners, .agents, .tasks, .following, .settings, .admin])
     }
 
     func testIPadManagementGroupKeepsNavOrderAndRoleGate() {
-        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .tasks, .settings])
-        XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .tasks, .settings, .admin])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .tasks, .following, .settings])
+        XCTAssertEqual(AppSection.managementSections(isAdmin: true),
+                       [.runners, .tasks, .following, .settings, .admin])
     }
 
     func testEverySectionHasTitleAndIcon() {

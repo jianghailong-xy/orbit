@@ -242,6 +242,8 @@ struct SectionContent: View {
         switch section {
         case .tasks:
             TasksListView()
+        case .following:
+            FollowingListView()
         case .agents:
             AgentContentColumn()
         case .skills:
@@ -265,6 +267,8 @@ struct SectionDetail: View {
         switch section {
         case .tasks:
             TaskDetailView()
+        case .following:
+            WatchDetailView()
         case .agents:
             AgentConsoleDetail()
         case .runners:
