@@ -295,7 +295,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" \
 
 | 被测部件 | 提交 |
 | --- | --- |
-| apiserver、web、「新」runner | `3417c261f`（本任务的产品代码；之后的提交只加测试和文档） |
+| apiserver、web、「新」runner | `3417c261f`（本任务的产品代码；之后的提交只加了测试、文档和 `docker-compose.yml` 里这两个变量的透传） |
 | 「0.1.159」runner、回滚用的旧镜像 | `1471214ac` |
 | 「Watch 之前」的 runner | `1f42ef54`（`b84e0fc00^`） |
 
