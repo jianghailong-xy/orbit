@@ -608,6 +608,23 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        both tables start empty. Like 0239's lane, the new one only READS a row — the owner's
   //        decision — to admit a DONE that decision derives; nothing reads a preserved row to allow
   //        or refuse a status.
+  //   0271 adds `task_progress` — a Task's structured progress and its lifecycle epoch — with the
+  //        `task_progress_epoch_advance` function and an AFTER UPDATE OF "status" row trigger on `task`
+  //        that calls it, and the columns and CHECKs a CONTINUOUS watch needs on `watch`. Read against
+  //        every claim above: its only `ALTER TABLE` statements are on `watch`, a table 0259 created and
+  //        this file does not preserve, so no column of `task`, `project` or
+  //        `project_acceptance_criterion_definition` is added, dropped or changed, the 0177 pair and
+  //        `task_executable_acceptance_pair` are out of its reach, and no criterion's `text` or
+  //        `verification_method` can move by one byte. The trigger it puts on `task` runs after a status
+  //        write has landed and writes only `task_progress`, never a `task` row, so it is not another
+  //        writer of the DONE fence and cannot change which status a write lands; the new table's foreign
+  //        key references `task`("id"), and being pointed at is not being written. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions, creates no
+  //        enum or type, and carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive. Its INSERT and UPDATE live inside that trigger
+  //        function's body, which runs only on a later reopen: applying the migration reads and writes no
+  //        stored row. Nothing reads progress to allow or refuse a status: it is what a reporter states,
+  //        and a Watch reads it to decide when to tell somebody, never whether a task is done.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -642,7 +659,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0264_session_scheduled_wakeup',
       '0266_coordinator_no_progress_retirement',
       '0267_task_owner_confirmation',
-      '0269_project_blocker_resolution_note'],
+      '0269_project_blocker_resolution_note',
+      '0271_watch_progress_continuous'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

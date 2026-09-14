@@ -395,7 +395,7 @@ qa('P-01', 'the production AppModule boots with the Watch modules, and the Watch
     ['a TTL under a minute', { ttlSeconds: 10 }, token, 400, 'TTL_OUT_OF_RANGE'],
     ['no targets', { targets: [] }, token, 400, 'EMPTY_TARGET_SET'],
     ['a session leaf over a task', { predicate: ALL('SESSION_TURN_SETTLED') }, token, 400, 'TARGET_KIND_MISMATCH'],
-    ['an unknown predicate version', { predicateVersion: 2 }, token, 400, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['an unknown predicate version', { predicateVersion: 3 }, token, 400, 'PREDICATE_VERSION_UNSUPPORTED'],
   ];
   for (const [name, change, caller, status, code] of refusals) {
     const refused = await request(server, 'POST', '/api/watches', {

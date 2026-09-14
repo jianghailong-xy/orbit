@@ -3,13 +3,11 @@ import { Prisma } from '@prisma/client';
 import {
   WATCH_DELIVERY_STATES,
   WATCH_LIMITS,
-  WATCH_PREDICATE_VERSION,
   WATCH_STATES,
   WATCH_UNRETRYABLE_DEAD_LETTER_CODES,
-  deriveSessionLifecycleState,
-  deriveSessionRunState,
   watchDeadLetterCodeOf,
   type WatchAction,
+  type WatchMode,
   type WatchPredicate,
   type WatchSnapshot,
   type WatchState,
@@ -19,8 +17,23 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive } from './watch-metrics';
-import { describePredicate, leafHolds, predicateHolds, predicateLeaves, type WatchTargetFact } from './watch-predicate';
-import { assertLeavesFitTargets, assertPredicateVersion, parseRequestedPredicate, watchRefusal } from './watch-request';
+import {
+  describePredicate,
+  leafHolds,
+  leafVerdicts,
+  observationOf,
+  predicateHolds,
+  predicateLeafTests,
+  type WatchTargetFact,
+} from './watch-predicate';
+import {
+  assertLeavesFitTargets,
+  assertPredicateVersion,
+  assertQuorumFitsTargets,
+  continuousPolicy,
+  parseRequestedPredicate,
+  watchRefusal,
+} from './watch-request';
 
 /** A delivery as a client reads it: a retry in progress and a dead letter are read here. */
 const DELIVERY_VIEW_SELECT = {
@@ -47,6 +60,12 @@ const WATCH_VIEW_SELECT = {
   action: true,
   state: true,
   generation: true,
+  debounceSeconds: true,
+  wakeBudget: true,
+  holding: true,
+  windowOpenedAt: true,
+  windowClosesAt: true,
+  windowCrossings: true,
   expiresAt: true,
   nextEvaluateAt: true,
   lastEvaluatedAt: true,
@@ -104,6 +123,7 @@ export interface WatchesOptions {
 
 const TRANSITION_SELECT = {
   state: true,
+  mode: true,
   expiresAt: true,
   targets: { select: { targetKind: true } },
 } satisfies Prisma.WatchSelect;
@@ -126,11 +146,18 @@ export interface WatchScope {
   observerSessionId?: string;
 }
 
+/** A watch that has no coalescing window open. What a CONTINUOUS watch coalesced is not carried past a new condition or an end. */
+const NO_WINDOW = { windowOpenedAt: null, windowClosesAt: null, windowCrossings: 0 } satisfies Prisma.WatchUpdateManyMutationInput;
+
 interface CreateRequest {
+  predicateVersion: number;
   predicate: WatchPredicate;
   /** Deduplicated and sorted, so two spellings of one set are one request. */
   targets: { kind: WatchTargetKind; id: string }[];
   action: WatchAction;
+  mode: WatchMode;
+  /** A CONTINUOUS watch's debounce window and wake budget; null on a ONE_SHOT watch. */
+  policy: { debounceSeconds: number; wakeBudget: number } | null;
   observerSessionId: string | null;
   ttlSeconds: number;
   idempotencyKey: string | null;
@@ -157,7 +184,7 @@ export class WatchesService {
   }
 
   /**
-   * Create a one-shot watch, and decide it before answering.
+   * Create a watch, and decide a one-shot watch before answering.
    *
    * Permission, the frozen target set and the first evaluation are one read inside one
    * transaction, so there is no moment at which a watch exists that has not looked at its targets:
@@ -169,6 +196,10 @@ export class WatchesService {
    * A RESUME_SESSION watch may not close a wake loop, and a watch that stays live must keep the account and
    * each of its targets within their live-watch quotas (`assertCapacity`). Both are decided in the same
    * transaction, after the first evaluation: a watch matched at create occupies no live slot.
+   *
+   * A CONTINUOUS watch is never matched here. It matches at crossings, coalesced by the evaluator, so it
+   * starts ACTIVE, due at once and not yet holding: a condition already true is the first crossing its
+   * first evaluation sees.
    */
   async create(ownerId: string, dto: CreateWatchDto): Promise<WatchRow> {
     const request = this.createRequest(dto);
@@ -186,7 +217,7 @@ export class WatchesService {
           const observed = await this.readTargets(tx, ownerId, request);
           const now = new Date();
           const facts = observed.map((target) => target.fact);
-          const holds = predicateHolds(request.predicate, facts);
+          const holds = request.mode === 'ONE_SHOT' && predicateHolds(request.predicate, facts, now.getTime());
           const snapshot = snapshotAtCreate(request.predicate, observed, now);
           await this.assertCapacity(tx, ownerId, request, holds);
           const watch = await tx.watch.create({
@@ -195,11 +226,14 @@ export class WatchesService {
               observerType: request.observerSessionId === null ? 'USER' : 'SESSION',
               observerSessionId: request.observerSessionId,
               predicate: request.predicate as unknown as Prisma.InputJsonValue,
-              predicateVersion: WATCH_PREDICATE_VERSION,
-              mode: 'ONE_SHOT',
+              predicateVersion: request.predicateVersion,
+              mode: request.mode,
+              debounceSeconds: request.policy?.debounceSeconds ?? null,
+              wakeBudget: request.policy?.wakeBudget ?? null,
               action: request.action,
               state: holds ? 'MATCHED' : 'ACTIVE',
               generation: holds ? 1 : 0,
+              holding: holds,
               expiresAt: new Date(now.getTime() + request.ttlSeconds * 1000),
               nextEvaluateAt: holds ? null : now,
               lastEvaluatedAt: now,
@@ -214,6 +248,7 @@ export class WatchesService {
               targetKind: target.kind,
               targetResourceId: target.id,
               state: target.state,
+              targetEpoch: target.epoch,
               lastEvaluatedAt: now,
               createdAt: now,
             })),
@@ -224,8 +259,8 @@ export class WatchesService {
                 watchId: watch.id,
                 generation: 1,
                 matchedAt: now,
-                reason: describePredicate(request.predicate, facts),
-                predicateVersion: WATCH_PREDICATE_VERSION,
+                reason: describePredicate(request.predicate, facts, now.getTime()),
+                predicateVersion: request.predicateVersion,
                 perTargetSnapshot: snapshot as unknown as Prisma.InputJsonValue,
               },
               select: { id: true },
@@ -272,24 +307,31 @@ export class WatchesService {
     });
   }
 
-  /** Edit the condition or the deadline of a live watch. Its targets and its action stay as created. */
+  /** Edit the condition or the deadline of a live watch. Its targets, its action and its mode stay as created. */
   async update(ownerId: string, id: string, dto: UpdateWatchDto): Promise<WatchRow> {
     if (dto.predicate === undefined && dto.ttlSeconds === undefined) {
       throw new BadRequestException('nothing to update: send a predicate with its predicateVersion, or ttlSeconds');
     }
-    let predicate: WatchPredicate | undefined;
+    let edit: { version: number; predicate: WatchPredicate } | undefined;
     if (dto.predicate !== undefined) {
-      assertPredicateVersion(dto.predicateVersion);
-      predicate = parseRequestedPredicate(dto.predicate);
+      const version = assertPredicateVersion(dto.predicateVersion);
+      edit = { version, predicate: parseRequestedPredicate(dto.predicate, version) };
     }
     const { ttlSeconds } = dto;
     if (ttlSeconds !== undefined) assertTtl(ttlSeconds);
     return this.transition(ownerId, id, (watch, now) => {
       if (!LIVE_STATES.includes(watch.state)) throw notLive(watch.state, 'edited');
-      if (predicate) assertLeavesFitTargets(predicate, watch.targets.map((target) => target.targetKind as WatchTargetKind));
+      if (edit) {
+        assertLeavesFitTargets(edit.predicate, watch.targets.map((target) => target.targetKind as WatchTargetKind));
+        assertQuorumFitsTargets(edit.predicate, watch.targets.length);
+      }
       const expiresAt = ttlSeconds === undefined ? watch.expiresAt : new Date(now.getTime() + ttlSeconds * 1000);
       return {
-        ...(predicate ? { predicate: predicate as unknown as Prisma.InputJsonValue } : {}),
+        // A new condition has not held yet: its first holding is its first crossing, and a window the old
+        // condition opened is not one it coalesces into.
+        ...(edit
+          ? { predicate: edit.predicate as unknown as Prisma.InputJsonValue, predicateVersion: edit.version, holding: false, ...NO_WINDOW }
+          : {}),
         expiresAt,
         // Level-triggered: an ACTIVE watch is due again under what it now says; a PAUSED one keeps
         // only its expiry scheduled.
@@ -320,7 +362,7 @@ export class WatchesService {
     return this.transition(ownerId, id, (watch) => {
       if (watch.state === 'CANCELLED') return null;
       if (!LIVE_STATES.includes(watch.state)) throw notLive(watch.state, 'cancelled');
-      return { state: 'CANCELLED', nextEvaluateAt: null };
+      return { state: 'CANCELLED', nextEvaluateAt: null, ...NO_WINDOW };
     });
   }
 
@@ -383,8 +425,8 @@ export class WatchesService {
   }
 
   private createRequest(dto: CreateWatchDto): CreateRequest {
-    assertPredicateVersion(dto.predicateVersion);
-    const predicate = parseRequestedPredicate(dto.predicate);
+    const predicateVersion = assertPredicateVersion(dto.predicateVersion);
+    const predicate = parseRequestedPredicate(dto.predicate, predicateVersion);
     const refs = [...new Map(dto.targets.map((target) => [`${target.kind}:${target.id}`, target])).values()];
     if (refs.length === 0) {
       throw watchRefusal('EMPTY_TARGET_SET', 'a watch names at least one target: ALL over an empty set would hold at once');
@@ -397,13 +439,16 @@ export class WatchesService {
       if (ref.kind === 'TASK_LIST' || ref.kind === 'PROJECT') {
         throw watchRefusal(
           'DYNAMIC_SET_UNSUPPORTED',
-          `a ${ref.kind} is not a watchable target in v1: name its sessions or tasks, which are frozen at create`,
+          `a ${ref.kind} is not a watchable target: name its sessions or tasks, which are frozen at create`,
         );
       }
       targets.push({ kind: ref.kind, id: ref.id });
     }
     targets.sort((left, right) => `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`));
     assertLeavesFitTargets(predicate, targets.map((target) => target.kind));
+    assertQuorumFitsTargets(predicate, targets.length);
+    const mode = dto.mode ?? 'ONE_SHOT';
+    const policy = continuousPolicy(mode, dto.debounceSeconds, dto.wakeBudget);
     const ttlSeconds = dto.ttlSeconds ?? WATCH_LIMITS.defaultTtlSeconds;
     assertTtl(ttlSeconds);
     const observerSessionId = dto.observerSessionId ?? null;
@@ -415,7 +460,17 @@ export class WatchesService {
         throw watchRefusal('SELF_WATCH_LOOP', 'a RESUME_SESSION watch cannot name its own observer session among its targets');
       }
     }
-    return { predicate, targets, action: dto.action, observerSessionId, ttlSeconds, idempotencyKey: dto.idempotencyKey ?? null };
+    return {
+      predicateVersion,
+      predicate,
+      targets,
+      action: dto.action,
+      mode,
+      policy,
+      observerSessionId,
+      ttlSeconds,
+      idempotencyKey: dto.idempotencyKey ?? null,
+    };
   }
 
   /**
@@ -425,7 +480,18 @@ export class WatchesService {
    */
   private async readTargets(tx: Prisma.TransactionClient, ownerId: string, request: CreateRequest): Promise<ObservedTarget[]> {
     const ids = (kind: WatchTargetKind) => request.targets.filter((target) => target.kind === kind).map((target) => target.id);
-    const tasks = await tx.task.findMany({ where: { id: { in: ids('TASK') }, ownerId }, select: { id: true, status: true } });
+    const tasks = await tx.task.findMany({
+      where: { id: { in: ids('TASK') }, ownerId },
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        // The progress leaves' columns and the lifecycle epoch. Never the message: no leaf reads it.
+        progress: {
+          select: { lifecycleEpoch: true, epochStartedAt: true, phase: true, current: true, total: true, lastProgressAt: true },
+        },
+      },
+    });
     const sessions = await tx.session.findMany({
       where: { id: { in: ids('SESSION') }, ownerId },
       select: { id: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true },
@@ -447,7 +513,23 @@ export class WatchesService {
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
     return request.targets.map((target): ObservedTarget => {
       if (target.kind === 'TASK') {
-        return { ...target, fact: { kind: 'TASK', status: taskById.get(target.id)!.status } };
+        const task = taskById.get(target.id)!;
+        const progress = task.progress;
+        return {
+          ...target,
+          fact: {
+            kind: 'TASK',
+            status: task.status,
+            epoch: progress?.lifecycleEpoch ?? 0,
+            epochStartedAt: progress?.epochStartedAt ?? task.createdAt,
+            progress: {
+              phase: progress?.phase ?? null,
+              current: progress?.current ?? null,
+              total: progress?.total ?? null,
+              lastProgressAt: progress?.lastProgressAt ?? null,
+            },
+          },
+        };
       }
       const session = sessionById.get(target.id)!;
       return {
@@ -537,10 +619,12 @@ export class WatchesService {
     });
     if (!committed) return null;
     const same =
-      committed.predicateVersion === WATCH_PREDICATE_VERSION
+      committed.predicateVersion === request.predicateVersion
       && canonicalJson(committed.predicate) === canonicalJson(request.predicate)
       && committed.action === request.action
-      && committed.mode === 'ONE_SHOT'
+      && committed.mode === request.mode
+      && committed.debounceSeconds === (request.policy?.debounceSeconds ?? null)
+      && committed.wakeBudget === (request.policy?.wakeBudget ?? null)
       && committed.observerSessionId === request.observerSessionId
       && committed.expiresAt.getTime() - committed.createdAt.getTime() === request.ttlSeconds * 1000
       && canonicalJson(committed.targets.map((target) => `${target.targetKind}:${target.targetResourceId}`).sort())
@@ -581,33 +665,25 @@ export class WatchesService {
 
 /**
  * The structured trigger snapshot, in the shape the evaluator's Matches carry, so a Match recorded
- * at create reads like any other. A target is SATISFIED when a leaf the predicate names holds for
- * it; every target is new, so it `changed` exactly when it left the initial OBSERVED, and its epoch
- * is the one its row starts with.
+ * at create reads like any other. A target is SATISFIED when a leaf the predicate asks holds for it;
+ * every target is new, so it `changed` exactly when it left the initial OBSERVED, and its epoch is
+ * the lifecycle epoch its row was read in.
  */
 function snapshotAtCreate(predicate: WatchPredicate, observed: readonly ObservedTarget[], evaluatedAt: Date): WatchSnapshot {
-  const leaves = predicateLeaves(predicate);
+  const tests = predicateLeafTests(predicate);
+  const now = evaluatedAt.getTime();
   return {
     evaluatedAt: evaluatedAt.toISOString(),
     targets: observed.map(({ kind, id, fact }) => {
-      const state = leaves.some((leaf) => leafHolds(leaf, fact)) ? 'SATISFIED' : 'OBSERVED';
+      const state = tests.some((test) => leafHolds(test, fact, now)) ? 'SATISFIED' : 'OBSERVED';
       return {
         kind,
         id,
-        epoch: 0,
+        epoch: fact.kind === 'TASK' ? fact.epoch : 0,
         state,
         changed: state !== 'OBSERVED',
-        leaves: Object.fromEntries(leaves.map((leaf) => [leaf, leafHolds(leaf, fact)])),
-        observed:
-          fact.kind === 'TASK'
-            ? { status: fact.status }
-            : {
-                status: fact.status,
-                endReason: fact.endReason,
-                runState: deriveSessionRunState(fact),
-                lifecycleState: deriveSessionLifecycleState(fact),
-                pendingApproval: fact.pendingApproval,
-              },
+        leaves: leafVerdicts(tests, fact, now),
+        observed: observationOf(fact, tests),
       };
     }),
   };

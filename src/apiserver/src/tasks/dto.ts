@@ -758,6 +758,19 @@ export class BatchAssignDto {
   @IsOptional() @IsPublicId() assigneeId?: string | null;
 }
 
+/**
+ * A structured progress report (`TaskProgressService.report`): each field named replaces that field and
+ * `null` clears it. Only the shapes are held here; the ranges, and what the fields add up to, are the
+ * service's to refuse, so a caller that is not an HTTP request meets the same rules.
+ */
+export class ReportTaskProgressDto {
+  @IsOptional() @IsString() phase?: string | null;
+  @IsOptional() @IsInt() current?: number | null;
+  @IsOptional() @IsInt() total?: number | null;
+  @IsOptional() @IsString() message?: string | null;
+  @IsOptional() @IsInt() expectedRevision?: number;
+}
+
 export class CreateTaskCommentDto {
   @IsString()
   @MinLength(1)

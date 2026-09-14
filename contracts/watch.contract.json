@@ -1,7 +1,8 @@
 {
   "name": "orbit.watch",
   "contractVersion": 1,
-  "predicateVersion": 1,
+  "predicateVersion": 2,
+  "servedPredicateVersions": [1, 2],
   "doc": "docs/watch-contract.md",
   "baseline": {
     "mainCommit": "88239c791f704faad01bf8c8a6144f85539c973a"
@@ -56,21 +57,46 @@
       "definition": "task.status is DONE, which is the projection of a satisfied completion criterion and never a direct write.",
       "sourceColumns": ["task.status"],
       "authority": "docs/task-completion-criteria.md"
+    },
+    "TASK_PROGRESS_AT_LEAST": {
+      "targetKind": "TASK",
+      "sinceVersion": 2,
+      "params": "exactly one of { current: integer >= 1 } or { percent: integer 1..100 }",
+      "definition": "The task's reported progress in its current lifecycle epoch has current >= params.current, or has a total and current * 100 >= params.percent * total. A count nobody reported reaches no threshold, and a report's message is never read.",
+      "sourceColumns": ["task_progress.current", "task_progress.total", "task_progress.lifecycle_epoch"],
+      "authority": "src/apiserver/src/tasks/task-progress.service.ts, the report door that writes task_progress"
+    },
+    "TASK_NO_PROGRESS_FOR": {
+      "targetKind": "TASK",
+      "sinceVersion": 2,
+      "params": "{ seconds: integer minNoProgressSeconds..maxTtlSeconds }",
+      "definition": "task.status is OPEN or IN_PROGRESS, and now >= params.seconds after task_progress.last_progress_at, or after the start of the task's current lifecycle epoch when nothing has been reported in it. Only a change of the reported position (phase, current, total) is progress.",
+      "sourceColumns": ["task.status", "task.created_at", "task_progress.last_progress_at", "task_progress.epoch_started_at", "task_progress.lifecycle_epoch"],
+      "decidedBy": "the evaluator's schedule: a landing that sees the deadline coming sets next_evaluate_at to it, and the claim that serves every due watch takes it then; no timer, sleep or process per watch",
+      "isNot": [
+        "TASK_FAILED: a stalled task has not failed, and a terminal task is finished rather than stalled."
+      ]
     }
   },
 
-  "aggregations": ["ALL", "ANY"],
+  "aggregations": ["ALL", "ANY", "AT_LEAST"],
   "composites": ["ALL_OF", "ANY_OF"],
   "targetSelectors": ["ALL_TARGETS"],
 
   "grammar": {
     "Predicate": [
-      "{ kind: 'ALL'|'ANY', over: 'ALL_TARGETS', leaf: <leaf name> }",
+      "{ kind: 'ALL'|'ANY', over: 'ALL_TARGETS', leaf: <leaf name>, params?: <the leaf's params> }",
+      "{ kind: 'AT_LEAST', count: <1..targets>, over: 'ALL_TARGETS', leaf: <leaf name>, params?: <the leaf's params> }",
       "{ kind: 'ALL_OF'|'ANY_OF', operands: Predicate[] }"
     ],
+    "versions": {
+      "1": "ALL, ANY, ALL_OF and ANY_OF over the leaves that declare no sinceVersion. No AT_LEAST and no params key.",
+      "2": "Version 1 plus AT_LEAST, the params key, and the leaves that declare sinceVersion 2."
+    },
     "notes": [
       "Closed set. No shell, no SQL, no log regex, no free-text expression.",
-      "A predicate is evaluated only against the columns its leaves declare in sourceColumns."
+      "A predicate is evaluated only against the columns its leaves declare in sourceColumns.",
+      "A predicate is stored with the version it was requested under and decided under that version's grammar."
     ]
   },
 
@@ -82,6 +108,10 @@
     "defaultTtlSeconds": 86400,
     "maxTtlSeconds": 2592000,
     "continuousDebounceSeconds": 10,
+    "maxContinuousDebounceSeconds": 3600,
+    "defaultContinuousWakeBudget": 10,
+    "maxContinuousWakeBudget": 100,
+    "minNoProgressSeconds": 60,
     "maxDeliveryAttempts": 8,
     "maxLiveWatchesPerOwner": 500,
     "maxLiveWatchesPerTarget": 50,
@@ -108,7 +138,7 @@
         {
           "from": "ACTIVE",
           "to": "MATCHED",
-          "trigger": "predicate true and mode is ONE_SHOT; the Match is recorded in the same transaction"
+          "trigger": "predicate true and mode is ONE_SHOT, or a CONTINUOUS watch's coalesced Match uses the last of its wake budget; the Match is recorded in the same transaction"
         },
         { "from": "ACTIVE", "to": "EXPIRED", "trigger": "now >= expiresAt with no match" },
         { "from": "PAUSED", "to": "EXPIRED", "trigger": "now >= expiresAt; pausing does not extend TTL" },
@@ -125,7 +155,7 @@
           "trigger": "every target is GONE, so the predicate can never be decided"
         }
       ],
-      "continuousNote": "A CONTINUOUS watch stays ACTIVE after a match and increments generation."
+      "continuousNote": "A CONTINUOUS watch stays ACTIVE after each coalesced Match and increments generation, until the Match that uses the last of its wake budget settles it at MATCHED (see continuous)."
     },
     "target": {
       "values": ["OBSERVED", "SATISFIED", "GONE"],
@@ -228,11 +258,13 @@
     { "code": "PREDICATE_TOO_DEEP", "when": "Nesting exceeds limits.maxPredicateDepth or operands exceed maxOperandsPerComposite." },
     { "code": "UNKNOWN_PREDICATE_KIND", "when": "A kind outside aggregations/composites, or a leaf outside leaves." },
     { "code": "PREDICATE_VERSION_UNSUPPORTED", "when": "The request's predicateVersion is not served by this build." },
+    { "code": "PREDICATE_PARAMETER_INVALID", "when": "A leaf's params are missing, extra or out of range, or an AT_LEAST count is below 1 or above the number of targets in the sealed set." },
     { "code": "DYNAMIC_SET_UNSUPPORTED", "when": "A TASK_LIST/PROJECT ref was given as live membership rather than a creation-time snapshot source." },
     { "code": "SELF_WATCH_LOOP", "when": "A RESUME_SESSION watch names its own observer session among its targets." },
     { "code": "WAKE_LOOP", "when": "A RESUME_SESSION watch names a session its own observer already wakes, directly or through a chain of live (ACTIVE or PAUSED) RESUME_SESSION watches: the new watch would close a wake cycle." },
     { "code": "TTL_OUT_OF_RANGE", "when": "ttl is outside [minTtlSeconds, maxTtlSeconds]." },
     { "code": "WATCH_QUOTA_EXCEEDED", "when": "A watch that stays live after its first evaluation would give the account more than limits.maxLiveWatchesPerOwner live watches, or one of its targets more than limits.maxLiveWatchesPerTarget. A watch matched at create occupies no live slot and is not refused." },
+    { "code": "CONTINUOUS_POLICY_INVALID", "when": "debounceSeconds is outside [continuousDebounceSeconds, maxContinuousDebounceSeconds], wakeBudget is outside [1, maxContinuousWakeBudget], or either is given for a ONE_SHOT watch." },
     { "code": "PERMISSION_DENIED", "when": "The observer cannot read every target at create time." }
   ],
 
@@ -270,6 +302,44 @@
         "DELIVERY_NOT_RETRYABLE": "Its code is retryable: false. A wake that left its observer's queue unrun is not queued a second time, and a payload whose permission was revoked is not delivered."
       }
     }
+  },
+
+  "progress": {
+    "relation": "task_progress (migration 0271): one row per task, absent until the task first reports progress or is reopened",
+    "fields": ["phase", "current", "total", "message", "revision", "lastProgressAt", "lifecycleEpoch", "epochStartedAt"],
+    "report": {
+      "door": "POST /api/tasks/:id/progress",
+      "semantics": "Each field named replaces that field, null clears it, an absent field is kept. What results must still be a position: a phase or a current, and a total only beside a current it bounds. expectedRevision makes the report a compare-and-set.",
+      "refusals": {
+        "TASK_NOT_OPEN": "409: the task is DONE, CANCELLED or FAILED; reopening it starts a new epoch to report into.",
+        "PROGRESS_REVISION_CONFLICT": "409: expectedRevision is not the current revision."
+      }
+    },
+    "revision": "Advanced by one by every accepted change of any field, and by the epoch advance. A report that changes nothing writes nothing.",
+    "lastProgressAt": "Moves only when the position (phase, current, total) changes. A message on its own and a report repeated verbatim are not progress: liveness is not progress.",
+    "lifecycleEpoch": "Advanced by the task_progress_epoch_advance trigger whenever a task leaves DONE, CANCELLED or FAILED for OPEN or IN_PROGRESS. The new epoch starts with nothing reported and a new revision, and its epochStartedAt is the reopen; epoch 0 starts when the task is created.",
+    "writers": [
+      "src/apiserver/src/tasks/task-progress.service.ts",
+      "src/apiserver/prisma/migrations/0271_watch_progress_continuous/migration.sql task_progress_epoch_advance"
+    ],
+    "limits": { "maxPhaseChars": 80, "maxMessageChars": 500, "maxCount": 2147483647 },
+    "forbidden": "Progress is never inferred from a transcript, a turn, a comment or shell output, and no leaf reads a report's message."
+  },
+
+  "continuous": {
+    "crossing": "The predicate holds at an evaluation when it did not at the last landed one (watch.holding). Level-sampled from the rows: a change undone between two evaluations is not seen.",
+    "window": "A crossing opens a coalescing window of debounceSeconds. Crossings seen before it closes are counted into it, and the evaluation at its close records ONE Match for all of them, at the next generation, with its one delivery.",
+    "budget": "wakeBudget caps the Matches the watch may ever record. The Match that uses the last of it settles the watch at MATCHED, and the database refuses a generation past it.",
+    "stormBound": "At most one Match, one delivery and one wake per debounceSeconds, and at most wakeBudget in all, however fast the targets change.",
+    "ends": "An expiry, revocation or unresolvable end while a window is open ends the watch without that window's Match; an expiry's snapshot names the open window.",
+    "edit": "A predicate edit resets holding and drops an open window: the new condition's first holding is its first crossing.",
+    "create": "A CONTINUOUS watch is never matched at create. It starts due and not holding, so a condition already true is the first crossing its first evaluation sees."
+  },
+
+  "quorum": {
+    "shape": "{ kind: 'AT_LEAST', count, over: 'ALL_TARGETS', leaf, params? }",
+    "sealedSet": "count is checked against the target set frozen at create, which never grows: 1 <= count <= targets. A GONE target leaves the set and is never counted.",
+    "unreachable": "A watch whose predicate can no longer hold, because a quorum asks for more targets than the set has left, becomes UNRESOLVABLE."
   },
 
   "factSource": {
@@ -619,6 +689,84 @@
       "given": { "deadLetterCode": "WAKE_WITHDRAWN", "redrive": "requested" },
       "expect": { "redriveRefusal": "DELIVERY_NOT_RETRYABLE", "delivery": "DEAD_LETTER" },
       "why": "A wake that left its observer's queue unrun was taken back on purpose; redriving it would wake a session its owner stopped."
+    },
+    {
+      "id": "progress-threshold-counts-the-reported-numbers",
+      "given": { "task": { "status": "IN_PROGRESS" }, "progress": { "current": 9, "total": 10 }, "params": { "percent": 90 } },
+      "expect": { "TASK_PROGRESS_AT_LEAST": true },
+      "why": "A threshold is decided from the position a reporter stated, as numbers."
+    },
+    {
+      "id": "progress-message-is-not-progress",
+      "given": { "task": { "status": "IN_PROGRESS" }, "progress": { "current": 1, "total": 10, "message": "100% done" }, "params": { "percent": 100 } },
+      "expect": { "TASK_PROGRESS_AT_LEAST": false },
+      "why": "No wording reaches a threshold: progress is never inferred from text."
+    },
+    {
+      "id": "no-progress-after-the-window",
+      "given": { "task": { "status": "IN_PROGRESS" }, "progress": { "current": 3, "lastProgressSecondsAgo": 120 }, "params": { "seconds": 60 } },
+      "expect": { "TASK_NO_PROGRESS_FOR": true },
+      "why": "A position unchanged for longer than the window is a stall."
+    },
+    {
+      "id": "no-progress-within-the-window",
+      "given": { "task": { "status": "IN_PROGRESS" }, "progress": { "current": 3, "lastProgressSecondsAgo": 30 }, "params": { "seconds": 60 } },
+      "expect": { "TASK_NO_PROGRESS_FOR": false },
+      "why": "The window has not passed. The evaluator schedules the watch at the deadline rather than sleeping on it."
+    },
+    {
+      "id": "terminal-task-is-not-stalled",
+      "given": { "task": { "status": "FAILED" }, "progress": { "current": 3, "lastProgressSecondsAgo": 3600 }, "params": { "seconds": 60 } },
+      "expect": { "TASK_NO_PROGRESS_FOR": false, "TASK_TERMINAL": true },
+      "why": "A task that has a conclusion has stopped, not stalled; whether it failed is TASK_FAILED's question."
+    },
+    {
+      "id": "repeated-report-is-not-progress",
+      "given": { "reports": [{ "phase": "build", "current": 2 }, { "phase": "build", "current": 2 }, { "message": "still building" }] },
+      "expect": { "revision": 2, "lastProgressAtMoves": 1 },
+      "why": "Liveness is not progress: repeating a position or narrating it must not hide a stall."
+    },
+    {
+      "id": "reopened-task-starts-an-empty-epoch",
+      "given": { "task": { "status": "FAILED" }, "progress": { "current": 3, "total": 3 }, "then": "the task is moved back to OPEN" },
+      "expect": { "lifecycleEpoch": 1, "progress": "nothing reported", "staleExpectedRevision": "PROGRESS_REVISION_CONFLICT" },
+      "why": "What was reported about the previous epoch is not progress of this one."
+    },
+    {
+      "id": "continuous-wake-budget-settles-matched",
+      "given": { "mode": "CONTINUOUS", "wakeBudget": 2, "windowsClosed": 3 },
+      "expect": { "matchCount": 2, "watchState": "MATCHED" },
+      "why": "Debounce bounds a continuous watch's rate; its wake budget bounds it in total."
+    },
+    {
+      "id": "quorum-over-the-sealed-set",
+      "given": { "tasks": ["DONE", "FAILED", "OPEN"], "predicate": { "kind": "AT_LEAST", "count": 2, "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "matches": true },
+      "why": "Two of the three have a conclusion, which is what the quorum asks."
+    },
+    {
+      "id": "quorum-larger-than-the-set-refused",
+      "given": { "tasks": ["OPEN", "OPEN"], "predicate": { "kind": "AT_LEAST", "count": 3, "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "refusal": "PREDICATE_PARAMETER_INVALID" },
+      "why": "A quorum is counted over the sealed set, which never grows; one the set cannot fit could never hold."
+    },
+    {
+      "id": "quorum-unreachable-after-deletion-is-unresolvable",
+      "given": { "tasks": ["OPEN", "OPEN", "deleted"], "predicate": { "kind": "AT_LEAST", "count": 3, "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" } },
+      "expect": { "watchState": "UNRESOLVABLE" },
+      "why": "A GONE target is never counted, so the quorum can never be reached, and a watch that can never be decided says so."
+    },
+    {
+      "id": "version-1-refuses-version-2-terms",
+      "given": { "predicateVersion": 1, "predicate": { "kind": "AT_LEAST", "count": 1, "over": "ALL_TARGETS", "leaf": "TASK_PROGRESS_AT_LEAST", "params": { "percent": 50 } } },
+      "expect": { "refusal": "UNKNOWN_PREDICATE_KIND" },
+      "why": "A predicate is read under the grammar it names, and version 1 has neither AT_LEAST nor the progress leaves."
+    },
+    {
+      "id": "continuous-policy-out-of-range-refused",
+      "given": { "mode": "CONTINUOUS", "debounceSeconds": 1 },
+      "expect": { "refusal": "CONTINUOUS_POLICY_INVALID" },
+      "why": "A window shorter than the contract's lets a busy target spend the whole wake budget in seconds."
     }
   ]
 }

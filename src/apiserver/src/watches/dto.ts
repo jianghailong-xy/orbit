@@ -10,7 +10,14 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { WATCH_ACTIONS, WATCH_RESOURCE_KINDS, type WatchAction, type WatchResourceKind } from '@orbit/shared';
+import {
+  WATCH_ACTIONS,
+  WATCH_MODES,
+  WATCH_RESOURCE_KINDS,
+  type WatchAction,
+  type WatchMode,
+  type WatchResourceKind,
+} from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 
 export class WatchTargetRefDto {
@@ -21,9 +28,10 @@ export class WatchTargetRefDto {
   id!: string;
 }
 
-// `predicateVersion`, `predicate`, the target count, the target kinds and the TTL range are left to
-// WatchesService on purpose: each has a refusal code in contracts/watch.contract.json, and a
-// class-validator message cannot carry one. `@Allow()` only keeps the whitelist from stripping them.
+// `predicateVersion`, `predicate`, the target count, the target kinds, the TTL range and a CONTINUOUS
+// watch's debounce and wake budget ranges are left to WatchesService on purpose: each has a refusal
+// code in contracts/watch.contract.json, and a class-validator message cannot carry one. `@Allow()`
+// only keeps the whitelist from stripping them.
 export class CreateWatchDto {
   @Allow()
   predicateVersion?: unknown;
@@ -40,10 +48,16 @@ export class CreateWatchDto {
   action!: WatchAction;
 
   @IsOptional()
-  @IsIn(['ONE_SHOT'], {
-    message: 'mode must be ONE_SHOT: a CONTINUOUS watch needs a debounce and a delivery budget this build does not serve',
-  })
-  mode?: 'ONE_SHOT';
+  @IsIn(WATCH_MODES)
+  mode?: WatchMode;
+
+  @IsOptional()
+  @IsInt()
+  debounceSeconds?: number;
+
+  @IsOptional()
+  @IsInt()
+  wakeBudget?: number;
 
   @IsOptional()
   @IsPublicId()

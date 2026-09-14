@@ -204,9 +204,12 @@ suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took t
         WHERE NOT t.tgisinternal AND c.relname = 'task' ORDER BY t.tgname`,
     )).rows.map((row) => row.tgname);
     // Measured on the merged base (origin/main a6c02b35, ledger through 0227): 27 triggers on
-    // `task`, of which this change removes exactly the three below.
-    assert.equal(taskTriggers.length, 24,
+    // `task`, of which this change removes exactly the three below. 25 since 0271 added
+    // `task_progress_epoch_advance`, which writes only `task_progress` — named below, so the one
+    // trigger added since is accounted for rather than absorbed by the count.
+    assert.equal(taskTriggers.length, 25,
       `task carries ${taskTriggers.length} triggers: ${taskTriggers.join(', ')}`);
+    assert.ok(taskTriggers.includes('task_progress_epoch_advance'), 'the count no longer includes the one 0271 added');
     for (const removed of DROPPED_CORE_TASK_TRIGGERS) {
       assert.ok(!taskTriggers.includes(removed));
     }

@@ -18,11 +18,24 @@ const CONTRACT = readJson('contracts/watch.contract.json');
 const STATE_MACHINES = ['watch', 'target', 'delivery'] as const;
 
 describe('watch contract', () => {
-  it('is version 1 and points at a document that exists', () => {
+  it('is version 1, serves predicate versions 1 and 2, and points at a document that exists', () => {
     expect(CONTRACT.name).toBe('orbit.watch');
     expect(CONTRACT.contractVersion).toBe(1);
-    expect(CONTRACT.predicateVersion).toBe(1);
+    expect(CONTRACT.predicateVersion).toBe(2);
+    // The newest grammar is served, and so is every one before it: a stored predicate is decided under
+    // the version it was requested with, so dropping one would strand every watch written under it.
+    expect(CONTRACT.servedPredicateVersions).toEqual([1, 2]);
+    expect(Object.keys(CONTRACT.grammar.versions)).toEqual(['1', '2']);
     expect(existsSync(path.join(ROOT, CONTRACT.doc))).toBe(true);
+  });
+
+  it('introduces every later leaf under a served version', () => {
+    for (const [name, leaf] of Object.entries<any>(CONTRACT.leaves)) {
+      const since = leaf.sinceVersion ?? 1;
+      expect(CONTRACT.servedPredicateVersions, `${name} arrives in an unserved version`).toContain(since);
+      // A leaf that takes parameters says what they are, and none of the version-1 leaves takes any.
+      expect(Boolean(leaf.params), `${name}'s params and its version disagree`).toBe(since > 1);
+    }
   });
 
   it('declares every leaf against a watchable target kind and named source columns', () => {

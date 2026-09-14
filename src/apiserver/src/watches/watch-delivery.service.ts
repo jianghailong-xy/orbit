@@ -700,9 +700,12 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
   // Contract `deliveryGuards.redaction`: the stored snapshot and reason pass through the allowlist first.
   const snapshot = redactSnapshot(match.perTargetSnapshot);
   const reason = redactReason(match.reason);
+  // A CONTINUOUS watch's Match says which wake of its budget it is (contract §12), and the last one ends the watch.
+  const last = snapshot.budget !== undefined && snapshot.budget.wake >= snapshot.budget.of;
   const header = [
     `Orbit Watch ${watchId} matched at generation ${match.generation}: ${reason}`,
     '',
+    ...(last ? ['That was the last wake its budget allows: the watch has ended and will not wake this session again.', ''] : []),
     'This turn was queued by the watch, not typed by a person. What the watch recorded when its condition held:',
   ].join('\n');
   const render = (payload: Record<string, unknown>) => `${header}\n\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
@@ -725,6 +728,8 @@ function watchTurnContent(watchId: string, match: DeliveredMatch): string {
     latestSnapshot: {
       evaluatedAt: snapshot.evaluatedAt,
       targets: snapshot.targets.length,
+      ...(snapshot.window && { window: snapshot.window }),
+      ...(snapshot.budget && { budget: snapshot.budget }),
       omitted: `too large for one turn; GET /api/watches/${watchId} returns it whole`,
     },
   });

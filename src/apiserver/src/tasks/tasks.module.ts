@@ -12,6 +12,8 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 import { PendingEvidenceJudgmentsController } from './pending-evidence-judgments.controller';
 import { TaskOwnerConfirmationController } from './task-owner-confirmation.controller';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
+import { TaskProgressController } from './task-progress.controller';
+import { TaskProgressService } from './task-progress.service';
 
 @Module({
   imports: [
@@ -26,12 +28,14 @@ import { TaskOwnerConfirmationService } from './task-owner-confirmation.service'
     PendingEvidenceJudgmentsController,
     TaskCompletionEvidenceController,
     TaskOwnerConfirmationController,
+    TaskProgressController,
   ],
   providers: [
     TasksService,
     ReferenceExpansionService,
     TaskCompletionEvidenceService,
     TaskOwnerConfirmationService,
+    TaskProgressService,
   ],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService
   // in a second module would construct a second one, and its onModuleInit would start a

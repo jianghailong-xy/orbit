@@ -31,6 +31,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
 import {
   WATCH_ACTIONS,
+  WATCH_LEAF_SINCE_VERSION,
   WATCH_LEAVES,
   WATCH_LIMITS,
   WATCH_PREDICATE_VERSION,
@@ -339,7 +340,7 @@ test('a predicate outside the v1 grammar is refused with the contract code, and 
     ],
     ['five operands', { predicate: { kind: 'ANY_OF', operands: Array(5).fill(ALL_TERMINAL) } }, 'PREDICATE_TOO_DEEP'],
     ['no predicateVersion', { predicateVersion: undefined }, 'PREDICATE_VERSION_UNSUPPORTED'],
-    ['predicateVersion 2', { predicateVersion: 2 }, 'PREDICATE_VERSION_UNSUPPORTED'],
+    ['predicateVersion 3', { predicateVersion: 3 }, 'PREDICATE_VERSION_UNSUPPORTED'],
     ['predicateVersion as text', { predicateVersion: '1' }, 'PREDICATE_VERSION_UNSUPPORTED'],
   ];
   for (const [why, over, code] of refused) {
@@ -352,8 +353,12 @@ test('a predicate outside the v1 grammar is refused with the contract code, and 
   // contract lists is accepted, up to both structural limits.
   let accepted = 0;
   for (const kind of CONTRACT.aggregations) {
+    // AT_LEAST, the quorum predicateVersion 2 added, takes a count and is served under that version.
+    const quorum = kind === 'AT_LEAST' ? { predicateVersion: 2, count: 1 } : {};
     for (const leaf of ['TASK_TERMINAL', 'TASK_FAILED', 'TASK_DONE']) {
-      await create(h, owner, watchBody(targets, { predicate: { kind, over: CONTRACT.targetSelectors[0], leaf } }), `${kind} ${leaf}`);
+      const { predicateVersion, ...count } = quorum as { predicateVersion?: number; count?: number };
+      const predicate = { kind, ...count, over: CONTRACT.targetSelectors[0], leaf };
+      await create(h, owner, watchBody(targets, { predicate, ...(predicateVersion ? { predicateVersion } : {}) }), `${kind} ${leaf}`);
       accepted += 1;
     }
   }
@@ -362,7 +367,7 @@ test('a predicate outside the v1 grammar is refused with the contract code, and 
     await create(h, owner, watchBody(targets, { predicate: { kind, operands } }), `${kind} at its operand limit`);
     accepted += 1;
   }
-  assert.equal(accepted, 8);
+  assert.equal(accepted, 11);
   assert.equal((await rowsOf(h, owner.id)).watches, accepted);
 });
 
@@ -400,7 +405,7 @@ test('create refuses what the contract refuses: an empty set, too many targets, 
     expectRefusal(await call(h, owner.bearer, 'POST', '/watches', body), code, why);
   }
   // Refused without a contract code because they are not domain refusals: the request is malformed.
-  expectStatus(await call(h, owner.bearer, 'POST', '/watches', watchBody(tasks([done]), { mode: 'CONTINUOUS' })), 400, 'CONTINUOUS is not served');
+  expectStatus(await call(h, owner.bearer, 'POST', '/watches', watchBody(tasks([done]), { mode: 'EVERY_TIME' })), 400, 'a mode the contract does not name');
   expectStatus(await call(h, owner.bearer, 'POST', '/watches', watchBody(tasks([done]), { action: 'RESUME_SESSION' })), 400, 'a resume watch with no observer session');
   expectStatus(await call(h, owner.bearer, 'POST', '/watches', watchBody([{ kind: 'RUNNER', id: randomUUID() }])), 400, 'a kind that is no resource');
   assert.deepEqual(await rowsOf(h, owner.id), NOTHING, 'a refused create wrote something');
@@ -448,14 +453,14 @@ test('a condition already true at create is matched in the create itself: one Ma
   assert.equal(watch.state, 'MATCHED');
   assert.equal(watch.generation, 1);
   assert.equal(watch.nextEvaluateAt, null, 'a terminal watch is not scheduled');
-  assert.equal(watch.predicateVersion, WATCH_PREDICATE_VERSION);
+  assert.equal(watch.predicateVersion, 1, 'a watch is stored under the grammar version it was requested with');
   assert.equal(watch.mode, 'ONE_SHOT');
   assert.equal(watch.observerType, 'USER');
   assert.deepEqual(watch.targets.map((target: { state: string }) => target.state), ['SATISFIED', 'SATISFIED']);
   assert.equal(watch.matches.length, 1);
   const [match] = watch.matches;
   assert.equal(match.generation, 1);
-  assert.equal(match.predicateVersion, WATCH_PREDICATE_VERSION);
+  assert.equal(match.predicateVersion, 1, 'a Match records the grammar version that decided it');
   assert.equal(match.reason, 'ALL TASK_TERMINAL 2/2');
   assert.ok(Date.parse(match.perTargetSnapshot.evaluatedAt) > 0, 'the snapshot says when it was taken');
   const byId = (left: { id: string }, right: { id: string }) => left.id.localeCompare(right.id);
@@ -520,7 +525,10 @@ test('the contract leaf vectors decide create-time matches: settled, run-termina
   let decided = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const vector of CONTRACT.vectors as Array<{ id: string; given: Record<string, any>; expect: Record<string, unknown> }>) {
-    const leaves = Object.entries(vector.expect).filter(([key]) => key in WATCH_LEAVES) as Array<[keyof typeof WATCH_LEAVES, boolean]>;
+    // The version-1 leaves: a bare `{ kind, over, leaf }` term under predicateVersion 1 asks them. The leaves
+    // version 2 added take params and progress rows, and watch-advanced.pg.spec.ts drives their vectors.
+    const leaves = Object.entries(vector.expect)
+      .filter(([key]) => key in WATCH_LEAVES && WATCH_LEAF_SINCE_VERSION[key as keyof typeof WATCH_LEAVES] === 1) as Array<[keyof typeof WATCH_LEAVES, boolean]>;
     if (leaves.length === 0) continue;
     const given = vector.given;
     const sessionId = given.session

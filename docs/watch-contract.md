@@ -41,7 +41,7 @@
    互不蕴含（§2.2）。
 4. **目标集合在创建时快照。** 动态集合（Task List / Project 的实时成员）v1 不做，只能作为
    快照来源展开一次（§4）。
-5. **one-shot 是默认。** continuous 必须带 debounce 与预算（§5）。
+5. **one-shot 是默认。** continuous 必须带 debounce 与唤醒预算，按窗口合并成一个 Match（§5、§12.4）。
 6. **TTL 必填且有上限；到期也要交付。** 等在 Watch 上的会话不会被静默遗忘（§5）。
 7. **唤醒复用 ConversationTurn 的唯一键。** `clientTurnId = watch:<watchId>:<generation>`，
    重复交付塌缩成同一个 turn，而不是第二次唤醒；键下若是载荷不同的别的 turn，那不是唤醒，交付记死信（§6）。
@@ -52,6 +52,8 @@
 10. **成本有上限，超限也要可见。** live Watch 数量、每个观察者每小时的唤醒次数、每个账号每天的唤醒次数都有上限，
     唤醒环在创建时拒绝。超限不会被悄悄丢弃：创建时返回拒绝码，交付时记成死信，并配有指标和告警
     （§5、§7、[`watch-operations.md`](./watch-operations.md)）。
+11. **进展只来自结构化报告。** phase/current/total 由报告者声明，message 与任何文本都不是进展；停滞由集中调度判定，
+    不靠每个 Watch 的 sleep（§12）。
 
 ---
 
@@ -231,7 +233,7 @@ turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，�
 `(watchId, generation)` 唯一约束让「第二次成立」不可能产生第二个 Match，而不是不太可能。
 
 `mode = CONTINUOUS`：每次成立把 `generation` 加一。必须带 debounce（默认 10 秒窗口合并）与
-交付预算，否则一个高频变化的目标就是一场唤醒风暴。交付层已经为它设了下限：同一个 continuous Watch 的两次唤醒至少相隔
+交付预算，否则一个高频变化的目标就是一场唤醒风暴。完整语义见 §12.4。交付层已经为它设了下限：同一个 continuous Watch 的两次唤醒至少相隔
 `continuousDebounceSeconds`，更早到期的交付回到 `PENDING` 等窗口结束，`last_error` 以 `CONTINUOUS_RATE_LIMITED` 开头，
 不计失败次数。
 
@@ -397,7 +399,7 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 
 ## 10. 边界测试向量
 
-全部 34 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
+全部 47 条以机器可读形式存于 `contracts/watch.contract.json` 的 `vectors`，
 `watchContract.spec.ts` 保证每条都有 `given` / `expect` / `why`、id 唯一、
 引用的拒绝码与状态都是本契约声明过的，且**每个 leaf 至少被一条向量覆盖**。
 
@@ -437,24 +439,102 @@ Watch 是控制面的一行，没有进程，**熬得过客户端关闭、协调
 | 32 | `daily-wake-budget-dead-letters` | 每日唤醒预算 |
 | 33 | `continuous-wakes-spaced-by-debounce` | continuous 唤醒间隔 |
 | 34 | `unrun-wake-is-not-redriven` | 没跑的唤醒不重投 |
+| 35 | `progress-threshold-counts-the-reported-numbers` | 阈值只读报告的数字 |
+| 36 | `progress-message-is-not-progress` | **任何文字都不是进展** |
+| 37 | `no-progress-after-the-window` | 位置超过窗口未变 = 停滞 |
+| 38 | `no-progress-within-the-window` | 窗口未到不成立，调度到截止时间 |
+| 39 | `terminal-task-is-not-stalled` | 有结论的 Task 不算停滞 |
+| 40 | `repeated-report-is-not-progress` | **活性不是进展** |
+| 41 | `reopened-task-starts-an-empty-epoch` | 重开 = 新 epoch、空进度、旧 revision 失效 |
+| 42 | `continuous-wake-budget-settles-matched` | 唤醒预算用完即 `MATCHED` |
+| 43 | `quorum-over-the-sealed-set` | quorum 在封存集合上计数 |
+| 44 | `quorum-larger-than-the-set-refused` | 放不下的 quorum 创建时拒绝 |
+| 45 | `quorum-unreachable-after-deletion-is-unresolvable` | quorum 永远够不着要说出来 |
+| 46 | `version-1-refuses-version-2-terms` | 谓词按它声明的版本解析 |
+| 47 | `continuous-policy-out-of-range-refused` | debounce/预算越界拒绝 |
 
 ---
 
 ## 11. 已知限制与非目标
 
-- **v1 不做动态集合**（§4）、不做结构化 progress 与 no-progress timer、不做外部 connector。
-  这些是 P3 的事，它们要先把成员资格与进展语义封存下来。
+- **不做动态集合**（§4），不做外部 connector。结构化进度、停滞条件、continuous 与 quorum 已在
+  predicateVersion 2 落地（§12）；quorum 只在创建时封存的集合上成立，动态成员资格仍未封存。
+- **进度没有 agent 工具与界面呈现**：服务端的报告门与读门已在（§12.1），MCP/CLI 的 `task_progress_report`
+  与 Web/macOS 展示是后续任务。
 - **v1 每个 Watch 只有一个动作。** 「既通知又唤醒」要等有人明确定义两个交付各自的成功与死信语义。
 - **`UNRESOLVABLE` / `REVOKED` 是终态**：不自动复活。目标回来了或权限恢复了要新建一个 Watch，
   因为那是一次新的观察关系，不是旧关系的续期。
 - 本契约**没有**证明任何实现是对的：`watchContract.spec.ts` 校验的是契约自洽与覆盖，
   求值器、迁移、索引与端到端行为都还不存在，由 P1 起的任务对着这些向量建立。
 
-## 12. 测试
+## 12. 结构化进度、停滞条件、quorum 与 continuous（predicateVersion 2）
+
+v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predicateVersion` 1 与 2 都被服务：谓词以请求时声明的版本存储，
+并按那个版本的文法判定，所以 v1 的 Watch 永远不会遇到它没要求过的项；v1 请求里出现 v2 的项 → `UNKNOWN_PREDICATE_KIND`。
+
+### 12.1 结构化进度与 lifecycle epoch
+
+`task_progress`（迁移 0271）每个 Task 一行：`phase` / `current` / `total` / `message` / `revision` / `lastProgressAt`，
+以及它所属的 `lifecycleEpoch` 与 `epochStartedAt`。写入方只有两个：报告门 `POST /api/tasks/:id/progress`
+（`TaskProgressService.report`，读门是同路径的 `GET`），和重开触发器。
+
+- **报告是补丁**：出现的字段替换原值，`null` 清空，缺省保持。结果必须仍是一个位置（`phase` 或 `current`），
+  `total` 只能和它界定的 `current` 同在且 `current <= total`。带 `expectedRevision` 时是 compare-and-set，不符 →
+  409 `PROGRESS_REVISION_CONFLICT`；终态 Task 没有进展 → 409 `TASK_NOT_OPEN`。
+- **revision**：每次被接受的变化加一（epoch 前进也算）；什么都没改变的报告不写任何东西。
+- **`lastProgressAt` 只随位置移动**：只改 `message`、原样重复上一次报告都**不是**进展。否则一个不停说「还在做」的
+  reporter 永远不会被看成停滞——活性不是进展。
+- **lifecycle epoch**：Task 从 `DONE` / `CANCELLED` / `FAILED` 回到 `OPEN` / `IN_PROGRESS` 时，触发器
+  `task_progress_epoch_advance` 把 epoch 加一、清空上一 epoch 的全部进度、推进 revision（旧 revision 的报告因此失败）。
+  用触发器而不是应用代码，因为它是**每一个**重开写入都会经过的唯一地方。Epoch 0 从 Task 创建开始。
+- **禁止推断**：transcript、turn、评论、shell 输出里写着「90%」不会改变进度；求值器读 `task_progress` 时不选
+  `message`，没有任何 leaf 读它。
+
+`WatchTarget.targetEpoch` 是目标最近一次被观察到的 epoch；Match 快照里每个目标的 `epoch` 是那次求值看到的 epoch，
+重开之后已经写下的 Match 不变（向量 23、35）。
+
+### 12.2 两个进度 leaf
+
+| leaf | `params` | 成立条件 |
+| --- | --- | --- |
+| `TASK_PROGRESS_AT_LEAST` | `{ current }` 或 `{ percent }`，恰好一个 | 当前 epoch 报告的 `current >= params.current`；或有 `total` 且 `current × 100 >= percent × total` |
+| `TASK_NO_PROGRESS_FOR` | `{ seconds }`，`[60, 30d]` | Task 为 `OPEN`/`IN_PROGRESS`，且 `now >= (lastProgressAt ?? epochStartedAt) + seconds` |
+
+写法：`{ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_NO_PROGRESS_FOR', params: { seconds: 900 } }`。参数缺失、多余或
+越界 → `PREDICATE_PARAMETER_INVALID`。快照的 `leaves` 以 leaf 标签为键（`TASK_NO_PROGRESS_FOR(900s)`），`observed`
+只有在谓词读进度时才带 `progress`。
+
+**停滞由集中调度判定，不靠每个 Watch 的 sleep。** 停滞开始成立的那一刻没有任何事件会宣布（它是「没有报告」），所以
+求值落地时若看到一个未来的停滞截止时间，就把 `next_evaluate_at` 设为最早的那个；到点时服务所有 Watch 的同一个 claim
+循环把它取走。没有计时器、进程或会话属于某一个 Watch。终态 Task 不算停滞：它有结论了，失败与否是 `TASK_FAILED` 的问题。
+
+### 12.3 quorum：`AT_LEAST`
+
+`{ kind: 'AT_LEAST', count, over: 'ALL_TARGETS', leaf, params? }` 在**创建时封存的目标集合**上计数：
+`1 <= count <= 目标数`，否则 `PREDICATE_PARAMETER_INVALID`（编辑谓词时同样按封存集合检查）。集合永不增长；`GONE` 的目标
+离开集合、永不计入，剩下的目标少于 `count` 时条件再也不可能成立，Watch 进 `UNRESOLVABLE`——判不了要说出来。
+
+### 12.4 continuous：generation / debounce / coalesce / 唤醒预算
+
+`mode = CONTINUOUS` 带 `debounceSeconds`（`[10, 3600]`，默认 10）与 `wakeBudget`（`[1, 100]`，默认 10）；越界，
+或给 ONE_SHOT 传这两个字段 → `CONTINUOUS_POLICY_INVALID`。数据库 CHECK 持有同样的范围。
+
+- **crossing**：求值时条件成立、而上一次落地时不成立（`watch.holding`）。按行电平采样：两次求值之间被撤销的变化看不到。
+- **debounce 与合并**：一次 crossing 打开一个 `debounceSeconds` 的合并窗口；窗口关闭前看到的 crossing 计入窗口，
+  窗口关闭时的那次求值只记**一个** Match（`generation` 加一）和它唯一的交付；`reason` 与快照的 `window` 写明合并了几次。
+- **唤醒预算**：`wakeBudget` 是这个 Watch 一生最多能记的 Match 数。用掉最后一次的那个 Match 把 Watch 置为 `MATCHED`，
+  数据库拒绝超过预算的 `generation`；那次唤醒的 turn 会说明这是最后一次。
+- **不形成唤醒风暴**：无论目标变化多快，每个窗口至多一个 Match、一个交付、一次唤醒，总数至多 `wakeBudget`。
+- **结束**：窗口未关闭时到期、撤销或不可判定，直接结束，不补记那个窗口的 Match；到期快照用 `openWindow` 写明它。
+- **编辑与创建**：改谓词会重置 `holding` 并丢弃未关闭的窗口；continuous Watch 不在创建时 Match，创建即到期，
+  第一次求值看到的成立就是第一次 crossing。
+
+## 13. 测试
 
 ```bash
 npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
 ```
 
 ---

@@ -192,9 +192,10 @@ test('0259 · the Watch data model', { skip, concurrency: 1, timeout: 300_000 },
   await t.test('a continuous watch may cross again — the positive control for the two above',
     async () => {
       await seed(client);
-      // Identical to the refused case in every respect except the mode, so the two refusals above
-      // are attributable to one-shot semantics and not to some other constraint refusing both.
-      await insertWatch(client, { mode: 'CONTINUOUS', generation: 2 });
+      // Identical to the refused case in every respect except the mode — and the debounce window and
+      // wake budget 0271 requires of a CONTINUOUS watch, with room for generation 2 — so the two
+      // refusals above are attributable to one-shot semantics and not to some other constraint.
+      await insertWatch(client, { mode: 'CONTINUOUS', generation: 2, debounce_seconds: 10, wake_budget: 2 });
       await insertMatch(client, { generation: 1 });
       await insertMatch(client, { id: id('302'), generation: 2 });
       const matches = await client.query<{ n: string }>(

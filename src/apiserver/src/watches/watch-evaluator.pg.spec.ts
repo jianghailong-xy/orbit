@@ -60,7 +60,7 @@ const WATCH_CODE = /[\\/]watches[\\/]watch-(?:evaluator\.service|evaluator\.modu
 const CONTRACT = JSON.parse(
   readFileSync(path.resolve(__dirname, '../../../../contracts/watch.contract.json'), 'utf8'),
 ) as {
-  leaves: Record<string, { targetKind: 'SESSION' | 'TASK' }>;
+  leaves: Record<string, { targetKind: 'SESSION' | 'TASK'; sinceVersion?: number }>;
   vectors: Array<{ id: string; given: Record<string, any>; expect: Record<string, unknown> }>;
 };
 
@@ -459,7 +459,9 @@ test('every leaf decides the contract vectors from the rows the evaluator reads'
   const exercised = new Set<string>();
   let vectors = 0;
   for (const vector of CONTRACT.vectors) {
-    const expectations = Object.entries(vector.expect).filter(([key]) => key in CONTRACT.leaves);
+    // The version-1 leaves, which a bare `{ kind, over, leaf }` term asks. The leaves a later grammar
+    // added take params and progress rows, and watch-advanced.pg.spec.ts drives their vectors.
+    const expectations = Object.entries(vector.expect).filter(([key]) => key in CONTRACT.leaves && !CONTRACT.leaves[key].sinceVersion);
     const { session: givenSession, task: givenTask, approvals = [] } = vector.given;
     if (expectations.length === 0 || !(givenSession || givenTask)) continue;
     vectors += 1;
@@ -484,7 +486,11 @@ test('every leaf decides the contract vectors from the rows the evaluator reads'
     }
   }
   assert.ok(vectors >= 9, `only ${vectors} contract vectors carried a leaf expectation`);
-  assert.deepEqual([...exercised].sort(), Object.keys(CONTRACT.leaves).sort(), 'a leaf no vector exercised');
+  assert.deepEqual(
+    [...exercised].sort(),
+    Object.keys(CONTRACT.leaves).filter((leaf) => !CONTRACT.leaves[leaf].sinceVersion).sort(),
+    'a leaf no vector exercised',
+  );
 });
 
 test('a Match states what the rows said: GONE targets leave the set, a reopened task unmatches nothing, a foreign target is REVOKED', { skip, timeout: 120_000 }, async () => {

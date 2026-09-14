@@ -5,10 +5,18 @@
  * below to that file, so a change here that the contract did not make first goes red.
  */
 
-/** The one predicate grammar this build serves. Any other version is refused, never guessed at. */
-export const WATCH_PREDICATE_VERSION = 1;
+/** The newest predicate grammar this build serves. */
+export const WATCH_PREDICATE_VERSION = 2;
 
-/** Every leaf of the v1 grammar, and the only target kind each one can be evaluated against. */
+/**
+ * Every grammar this build serves; any other version is refused, never guessed at. Version 2 is
+ * version 1 plus the two progress leaves, the `params` a leaf takes and the `AT_LEAST` quorum. A
+ * predicate is decided under the version it was stored with, so a version-1 watch never meets a term
+ * it did not ask for.
+ */
+export const WATCH_PREDICATE_VERSIONS: readonly number[] = [1, 2];
+
+/** Every leaf, and the only target kind each one can be evaluated against. */
 export const WATCH_LEAVES = {
   SESSION_TURN_SETTLED: 'SESSION',
   SESSION_RUN_TERMINAL: 'SESSION',
@@ -17,18 +25,42 @@ export const WATCH_LEAVES = {
   TASK_TERMINAL: 'TASK',
   TASK_FAILED: 'TASK',
   TASK_DONE: 'TASK',
+  TASK_PROGRESS_AT_LEAST: 'TASK',
+  TASK_NO_PROGRESS_FOR: 'TASK',
 } as const;
 
 export type WatchLeaf = keyof typeof WATCH_LEAVES;
+
+/** The grammar version each leaf first appears in. A request under an earlier version naming it is refused. */
+export const WATCH_LEAF_SINCE_VERSION: Readonly<Record<WatchLeaf, number>> = {
+  SESSION_TURN_SETTLED: 1,
+  SESSION_RUN_TERMINAL: 1,
+  SESSION_LIFECYCLE_TERMINAL: 1,
+  SESSION_NEEDS_ATTENTION: 1,
+  TASK_TERMINAL: 1,
+  TASK_FAILED: 1,
+  TASK_DONE: 1,
+  TASK_PROGRESS_AT_LEAST: 2,
+  TASK_NO_PROGRESS_FOR: 2,
+};
 
 /** What a target may name. Only `SESSION` and `TASK` are watchable; the other two are refused as live sets. */
 export type WatchResourceKind = 'SESSION' | 'TASK' | 'TASK_LIST' | 'PROJECT';
 export type WatchTargetKind = 'SESSION' | 'TASK';
 export const WATCH_RESOURCE_KINDS: readonly WatchResourceKind[] = ['SESSION', 'TASK', 'TASK_LIST', 'PROJECT'];
 
+/**
+ * What a parameterized leaf is asked (predicateVersion 2). `TASK_PROGRESS_AT_LEAST` takes exactly one of
+ * `current` (the reported count reaches it) or `percent` (the count reaches that share of the reported
+ * total); `TASK_NO_PROGRESS_FOR` takes `seconds`. No other leaf takes any.
+ */
+export type WatchLeafParams = { current: number } | { percent: number } | { seconds: number };
+
 /** A closed grammar: no shell, no SQL, no log regex, no free-text expression. */
 export type WatchPredicate =
-  | { kind: 'ALL' | 'ANY'; over: 'ALL_TARGETS'; leaf: WatchLeaf }
+  | { kind: 'ALL' | 'ANY'; over: 'ALL_TARGETS'; leaf: WatchLeaf; params?: WatchLeafParams }
+  /** A quorum over the sealed target set: at least `count` of the targets, never more than the set holds. */
+  | { kind: 'AT_LEAST'; count: number; over: 'ALL_TARGETS'; leaf: WatchLeaf; params?: WatchLeafParams }
   | { kind: 'ALL_OF' | 'ANY_OF'; operands: WatchPredicate[] };
 
 export const WATCH_LIMITS = {
@@ -38,8 +70,14 @@ export const WATCH_LIMITS = {
   minTtlSeconds: 60,
   defaultTtlSeconds: 86_400,
   maxTtlSeconds: 2_592_000,
-  /** A continuous watch's window: two of its wakes are at least this far apart, and one due sooner waits until then. */
+  /** A CONTINUOUS watch's coalescing window: its default, and the shortest one served. Two of its wakes are also delivered at least this far apart, and one due sooner waits until then. */
   continuousDebounceSeconds: 10,
+  maxContinuousDebounceSeconds: 3_600,
+  /** How many Matches a CONTINUOUS watch may record when its request names no budget, and the most it may name. */
+  defaultContinuousWakeBudget: 10,
+  maxContinuousWakeBudget: 100,
+  /** The shortest `TASK_NO_PROGRESS_FOR` window; the longest is the longest TTL. */
+  minNoProgressSeconds: 60,
   /** The failed attempt that brings a delivery's `attempts` here makes it a dead letter. */
   maxDeliveryAttempts: 8,
   /** Live (ACTIVE or PAUSED) watches one account may hold. A create that would stay live past it is `WATCH_QUOTA_EXCEEDED`. */
@@ -57,6 +95,7 @@ export const WATCH_STATES: readonly WatchState[] = [
   'ACTIVE', 'PAUSED', 'MATCHED', 'EXPIRED', 'CANCELLED', 'REVOKED', 'UNRESOLVABLE',
 ];
 export type WatchMode = 'ONE_SHOT' | 'CONTINUOUS';
+export const WATCH_MODES: readonly WatchMode[] = ['ONE_SHOT', 'CONTINUOUS'];
 export type WatchAction = 'NOTIFY_USER' | 'RESUME_SESSION';
 export const WATCH_ACTIONS: readonly WatchAction[] = ['NOTIFY_USER', 'RESUME_SESSION'];
 export type WatchObserverType = 'USER' | 'SESSION';
@@ -69,11 +108,13 @@ export const WATCH_REFUSAL_CODES = [
   'PREDICATE_TOO_DEEP',
   'UNKNOWN_PREDICATE_KIND',
   'PREDICATE_VERSION_UNSUPPORTED',
+  'PREDICATE_PARAMETER_INVALID',
   'DYNAMIC_SET_UNSUPPORTED',
   'SELF_WATCH_LOOP',
   'WAKE_LOOP',
   'TTL_OUT_OF_RANGE',
   'WATCH_QUOTA_EXCEEDED',
+  'CONTINUOUS_POLICY_INVALID',
   'PERMISSION_DENIED',
 ] as const;
 export type WatchRefusalCode = (typeof WATCH_REFUSAL_CODES)[number];
@@ -91,14 +132,18 @@ export interface WatchTargetRef {
 }
 
 export interface CreateWatchRequest {
-  /** Required. Must be {@link WATCH_PREDICATE_VERSION}. */
+  /** Required: one of {@link WATCH_PREDICATE_VERSIONS}. The predicate is read under that grammar. */
   predicateVersion: number;
   predicate: WatchPredicate;
   /** An explicit set, frozen at create. Duplicates collapse. */
   targets: WatchTargetRef[];
   action: WatchAction;
-  /** Only `ONE_SHOT` is served in v1. */
-  mode?: 'ONE_SHOT';
+  /** `ONE_SHOT` (the default) matches once; `CONTINUOUS` matches at each coalesced crossing, within its wake budget. */
+  mode?: WatchMode;
+  /** CONTINUOUS only. Defaults to {@link WATCH_LIMITS.continuousDebounceSeconds}. */
+  debounceSeconds?: number;
+  /** CONTINUOUS only: how many Matches the watch may ever record. Defaults to {@link WATCH_LIMITS.defaultContinuousWakeBudget}. */
+  wakeBudget?: number;
   /** Names the session to resume; absent means the account's user is the observer. */
   observerSessionId?: string;
   /** Defaults to {@link WATCH_LIMITS.defaultTtlSeconds}. */
@@ -107,12 +152,21 @@ export interface CreateWatchRequest {
   idempotencyKey?: string;
 }
 
-/** An edit of a live (ACTIVE or PAUSED) watch. The target set and the action are not editable. */
+/** An edit of a live (ACTIVE or PAUSED) watch. The target set, the action and the mode are not editable. */
 export interface UpdateWatchRequest {
   predicateVersion?: number;
   predicate?: WatchPredicate;
   /** Counted from the edit, not from the create. */
   ttlSeconds?: number;
+}
+
+/** A Task's progress as a progress leaf read it. Only a predicate that names a progress leaf records it. */
+export interface WatchObservedProgress {
+  phase: string | null;
+  current: number | null;
+  total: number | null;
+  lastProgressAt: string | null;
+  epochStartedAt: string;
 }
 
 /**
@@ -122,20 +176,28 @@ export interface UpdateWatchRequest {
 export interface WatchTargetObservation {
   kind: WatchTargetKind;
   id: string;
+  /** The lifecycle epoch the target was observed in: a Task's advances each time it is reopened, a session's is 0. */
   epoch: number;
   state: WatchTargetState;
   /** Whether that evaluation moved the target's state. */
   changed: boolean;
-  leaves?: Partial<Record<WatchLeaf, boolean>>;
+  /** Keyed by leaf label: the leaf's name, followed by its parameters when it takes any, as in `TASK_NO_PROGRESS_FOR(600s)`. */
+  leaves?: Record<string, boolean>;
   observed?:
-    | { status: string }
+    | { status: string; progress?: WatchObservedProgress }
     | { status: string; endReason: string | null; runState: string; lifecycleState: string; pendingApproval: boolean };
 }
 
-/** A Match's `perTargetSnapshot`. */
+/** A Match's `perTargetSnapshot`, and an expiry's. */
 export interface WatchSnapshot {
   evaluatedAt: string;
   targets: WatchTargetObservation[];
+  /** A CONTINUOUS watch's Match: the coalescing window it closed, and the crossings seen in it. */
+  window?: { openedAt: string; closedAt: string; crossings: number };
+  /** A CONTINUOUS watch's Match: this is wake `wake` of the `of` its budget allows, and the last one settles the watch. */
+  budget?: { wake: number; of: number };
+  /** A CONTINUOUS watch's expiry: the window still open when it expired, which no Match will close. */
+  openWindow?: { openedAt: string; crossings: number };
 }
 
 export interface WatchTargetView {
@@ -257,6 +319,15 @@ export interface WatchView {
   action: WatchAction;
   state: WatchState;
   generation: number;
+  /** CONTINUOUS only, null on a ONE_SHOT watch. */
+  debounceSeconds: number | null;
+  wakeBudget: number | null;
+  /** Whether the predicate held at the last evaluation: a crossing is it holding when this was false. */
+  holding: boolean;
+  /** The coalescing window a crossing opened on a live CONTINUOUS watch, until the Match that closes it. */
+  windowOpenedAt: string | null;
+  windowClosesAt: string | null;
+  windowCrossings: number;
   expiresAt: string;
   nextEvaluateAt: string | null;
   lastEvaluatedAt: string | null;
@@ -267,4 +338,52 @@ export interface WatchView {
   matches: WatchMatchView[];
   /** At most one, and only for a RESUME_SESSION watch that expired, was revoked or became unresolvable; a cancelled watch has none. A dead letter shows here just as it does on a Match. */
   expiryDeliveries: WatchExpiryDeliveryView[];
+}
+
+/** The bounds a progress report is held to (contract `progress.limits`); the database's CHECKs hold the same. */
+export const TASK_PROGRESS_LIMITS = {
+  maxPhaseChars: 80,
+  maxMessageChars: 500,
+  /** The largest `current` or `total`: a PostgreSQL integer. */
+  maxCount: 2_147_483_647,
+} as const;
+
+/**
+ * A structured progress report, `POST /api/tasks/:id/progress`. Each field it names replaces that field of
+ * the Task's progress, `null` clears one, and an absent field keeps what is there. What results must still
+ * report a position — a `phase` or a `current` — and `current` may not pass `total`. `expectedRevision`,
+ * when sent, makes the report a compare-and-set on the revision the reporter read.
+ */
+export interface TaskProgressReport {
+  phase?: string | null;
+  current?: number | null;
+  total?: number | null;
+  message?: string | null;
+  expectedRevision?: number;
+}
+
+/**
+ * A Task's progress in its current lifecycle epoch. `revision` counts every accepted change, the epoch
+ * advance among them. `lastProgressAt` is when the reported position (phase, current, total) last changed
+ * in this epoch: a message alone never moves it, and neither does a report repeated verbatim. A reopened
+ * Task starts a new epoch with nothing reported.
+ */
+export interface TaskProgressView {
+  taskId: string;
+  lifecycleEpoch: number;
+  /** When this epoch began: the Task's creation for epoch 0, the reopen for every later one. */
+  epochStartedAt: string;
+  phase: string | null;
+  current: number | null;
+  total: number | null;
+  message: string | null;
+  revision: number;
+  lastProgressAt: string | null;
+  updatedAt: string | null;
+}
+
+/** A report's answer: the progress as it now stands, whether the report changed it, and whether that was progress. */
+export interface TaskProgressReportResult extends TaskProgressView {
+  changed: boolean;
+  progressed: boolean;
 }

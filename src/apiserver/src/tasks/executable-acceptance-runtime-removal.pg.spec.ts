@@ -697,7 +697,8 @@ suite('(q) the core tables keep every trigger that predates this project', async
        JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname IN ('task', 'session', 'run_event')
       GROUP BY 1 ORDER BY 1`)).rows.map((row) => [row.table, row.n]));
-  assert.deepEqual(counts, { run_event: 1, session: 11, task: 24 });
+  // task: 25 since 0271 added `task_progress_epoch_advance`, which writes only `task_progress`.
+  assert.deepEqual(counts, { run_event: 1, session: 11, task: 25 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

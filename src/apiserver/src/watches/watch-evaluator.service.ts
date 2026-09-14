@@ -2,12 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import {
-  deriveSessionLifecycleState,
-  deriveSessionRunState,
-  NormalizedRunEvent,
-  RunEventType,
-} from '@orbit/shared';
+import { NormalizedRunEvent, RunEventType } from '@orbit/shared';
 import { Subscription } from 'rxjs';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -22,19 +17,22 @@ import {
 import {
   describePredicate,
   leafHolds,
+  leafVerdicts,
+  nextStallDeadline,
+  observationOf,
   parseWatchPredicate,
   predicateHolds,
-  predicateLeaves,
-  WATCH_PREDICATE_VERSION,
-  WatchLeaf,
+  predicateLeafTests,
+  predicateReachable,
+  WatchLeafTest,
   WatchTargetFact,
   WatchTargetKind,
 } from './watch-predicate';
 
 /**
- * The Watch evaluator (docs/watch-contract.md §8): it decides from the database, schedules on
- * `watch.next_evaluate_at`, and treats every real-time event as a hint that can only move a
- * decision earlier.
+ * The Watch evaluator (docs/watch-contract.md §8, §12): it decides from the database, schedules on
+ * `watch.next_evaluate_at`, and treats every real-time event as a hint that can only move a decision
+ * earlier.
  *
  * THE LOOP
  * One timer per replica, however many watches exist. A pass claims what is due and evaluates it; a
@@ -66,13 +64,26 @@ import {
  * leaves no event covers at all (a session moved to Completed, an approval row) that sweep is the
  * mechanism, not a backstop.
  *
+ * STALLS
+ * A no-progress leaf starts to hold when a Task's reported position has gone unchanged for its window.
+ * Nothing announces that moment — it is the absence of a report — so the landing that sees one coming
+ * schedules the watch's next evaluation at it: `next_evaluate_at` becomes the earliest stall deadline,
+ * and the claim that serves every due watch serves this one. No sleep, timer or process waits on a watch.
+ *
+ * CONTINUOUS
+ * A CONTINUOUS watch matches at crossings: its predicate holding at an evaluation when it did not at the
+ * last landing (`holding`). A crossing opens a coalescing window of the watch's `debounce_seconds`; the
+ * crossings seen before the window closes are counted into it, and the evaluation at its close records
+ * ONE Match for all of them, at the next generation, with its one delivery. However fast its targets
+ * change, a continuous watch therefore records at most one Match per window and never more than its
+ * `wake_budget` in all — the Match that uses the last of the budget settles it at MATCHED. An expiry,
+ * revocation or unresolvable end that comes while a window is open ends the watch without that window's
+ * Match; an expiry's snapshot names the window instead.
+ *
  * NOT HERE
  * What a Match causes — a turn, a notification — is the delivery worker's; its row joins the Match
  * inside `land`, and so does the row for the turn a RESUME_SESSION watch's end owes its observer when
- * the watch expires, is revoked or becomes unresolvable (contract §3, §5). CONTINUOUS watches get expiry
- * and GONE bookkeeping but never a Match: when a continuous watch has crossed again needs the edge,
- * debounce and budget semantics the continuous subscription work defines, and nothing creates one
- * before then.
+ * the watch expires, is revoked or becomes unresolvable (contract §3, §5).
  */
 
 /** How long a claim keeps a due watch from every other worker. Far longer than one evaluation. */
@@ -97,7 +108,11 @@ export interface WatchEvaluatorOptions {
   claimBatch?: number;
 }
 
-/** What one evaluation concluded. `SETTLED`: the watch was already terminal or gone, and nothing was written. */
+/**
+ * What one evaluation concluded. `MATCHED`: it recorded a Match — which settles a ONE_SHOT watch, and a
+ * CONTINUOUS one only when that Match used the last of its wake budget. `SETTLED`: the watch was already
+ * terminal or gone, and nothing was written.
+ */
 export type WatchEvaluationOutcome = 'MATCHED' | 'EXPIRED' | 'UNRESOLVABLE' | 'REVOKED' | 'SCHEDULED' | 'SETTLED';
 
 export interface WatchEvaluation {
@@ -163,6 +178,12 @@ interface WatchRow {
   predicate: unknown;
   predicateVersion: number;
   generation: number;
+  debounceSeconds: number | null;
+  wakeBudget: number | null;
+  holding: boolean;
+  windowOpenedAt: Date | null;
+  windowClosesAt: Date | null;
+  windowCrossings: number;
   expiresAt: Date;
   /** The transaction's clock: every time this evaluation compares is the database's. */
   now: Date;
@@ -181,12 +202,23 @@ type OwnedFact = WatchTargetFact & { ownerId: string };
 interface TargetStateChange {
   id: string;
   state: string;
+  /** The lifecycle epoch the target was observed in. */
+  epoch: number;
+}
+
+/** A CONTINUOUS watch's open coalescing window. */
+interface CoalescingWindow {
+  openedAt: Date;
+  closesAt: Date;
+  crossings: number;
 }
 
 interface WatchDecision {
   outcome: Exclude<WatchEvaluationOutcome, 'SETTLED'>;
   state: string;
   generation: number;
+  holding: boolean;
+  window: CoalescingWindow | null;
   nextEvaluateAt: Date | null;
   targetStates: TargetStateChange[];
   match: { reason: string; snapshot: Record<string, unknown> } | null;
@@ -438,6 +470,9 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
       const [watch] = await tx.$queryRaw<WatchRow[]>`
         SELECT "owner_id" AS "ownerId", "state", "mode", "action", "predicate",
                "predicate_version" AS "predicateVersion", "generation",
+               "debounce_seconds" AS "debounceSeconds", "wake_budget" AS "wakeBudget", "holding",
+               "window_opened_at" AS "windowOpenedAt", "window_closes_at" AS "windowClosesAt",
+               "window_crossings" AS "windowCrossings",
                "expires_at" AS "expiresAt", now() AS "now"
         FROM "watch"
         WHERE "id" = ${watchId}::uuid
@@ -468,9 +503,10 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     if (decision.targetStates.length > 0) {
       await tx.$executeRaw`
         UPDATE "watch_target" AS t
-        SET "state" = v."state", "last_evaluated_at" = now()
+        SET "state" = v."state", "target_epoch" = v."epoch", "last_evaluated_at" = now()
         FROM unnest(${decision.targetStates.map((change) => change.id)}::uuid[],
-                    ${decision.targetStates.map((change) => change.state)}::text[]) AS v("id", "state")
+                    ${decision.targetStates.map((change) => change.state)}::text[],
+                    ${decision.targetStates.map((change) => change.epoch)}::int[]) AS v("id", "state", "epoch")
         WHERE t."id" = v."id" AND t."watch_id" = ${watchId}::uuid`;
     }
     let matchId: string | null = null;
@@ -514,7 +550,12 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
           "generation" = ${decision.generation},
           "next_evaluate_at" = ${decision.nextEvaluateAt},
           "last_evaluated_at" = now(),
-          "updated_at" = CASE WHEN "state" = ${decision.state} THEN "updated_at" ELSE now() END
+          "holding" = ${decision.holding},
+          "window_opened_at" = ${decision.window?.openedAt ?? null},
+          "window_closes_at" = ${decision.window?.closesAt ?? null},
+          "window_crossings" = ${decision.window?.crossings ?? 0},
+          "updated_at" = CASE WHEN "state" = ${decision.state} AND "generation" = ${decision.generation}
+                              THEN "updated_at" ELSE now() END
       WHERE "id" = ${watchId}::uuid AND "state" = ${read.state} AND "generation" = ${read.generation}`;
     if (landed !== 1) throw new Error(`watch ${watchId} changed under its own row lock`);
     return matchId;
@@ -530,18 +571,46 @@ async function readTargets(tx: Prisma.TransactionClient, watchId: string): Promi
     ORDER BY "id"`;
 }
 
-/** The leaves' source columns (contract `leaves[].sourceColumns`) for every target not yet GONE, plus the owner the permission recheck compares. */
+/**
+ * The leaves' source columns (contract `leaves[].sourceColumns`) for every target not yet GONE, plus the
+ * owner the permission recheck compares. A Task's progress and lifecycle epoch come from `task_progress`,
+ * and a Task with no row there is in epoch 0, begun at its creation, with nothing reported. The report's
+ * message is not read: no leaf may decide from it.
+ */
 async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetRow[]): Promise<Map<string, OwnedFact>> {
   const ids = (kind: WatchTargetKind) =>
     targets.filter((target) => target.kind === kind && target.state !== 'GONE').map((target) => target.resourceId);
   const facts = new Map<string, OwnedFact>();
   const taskIds = ids('TASK');
   if (taskIds.length > 0) {
-    const tasks = await tx.$queryRaw<Array<{ id: string; ownerId: string; status: string }>>`
-      SELECT "id", "owner_id" AS "ownerId", "status"::text AS "status"
-      FROM "task"
-      WHERE "id" = ANY(${taskIds}::uuid[])`;
-    for (const task of tasks) facts.set(`TASK:${task.id}`, { kind: 'TASK', ownerId: task.ownerId, status: task.status });
+    const tasks = await tx.$queryRaw<Array<{
+      id: string;
+      ownerId: string;
+      status: string;
+      epoch: number;
+      epochStartedAt: Date;
+      phase: string | null;
+      current: number | null;
+      total: number | null;
+      lastProgressAt: Date | null;
+    }>>`
+      SELECT t."id", t."owner_id" AS "ownerId", t."status"::text AS "status",
+             COALESCE(p."lifecycle_epoch", 0) AS "epoch",
+             COALESCE(p."epoch_started_at", t."created_at" AT TIME ZONE 'UTC') AS "epochStartedAt",
+             p."phase", p."current", p."total", p."last_progress_at" AS "lastProgressAt"
+      FROM "task" t
+      LEFT JOIN "task_progress" p ON p."task_id" = t."id"
+      WHERE t."id" = ANY(${taskIds}::uuid[])`;
+    for (const task of tasks) {
+      facts.set(`TASK:${task.id}`, {
+        kind: 'TASK',
+        ownerId: task.ownerId,
+        status: task.status,
+        epoch: task.epoch,
+        epochStartedAt: task.epochStartedAt,
+        progress: { phase: task.phase, current: task.current, total: task.total, lastProgressAt: task.lastProgressAt },
+      });
+    }
   }
   const sessionIds = ids('SESSION');
   if (sessionIds.length > 0) {
@@ -564,26 +633,43 @@ function decide(
 ): WatchDecision {
   const now = watch.now.getTime();
   const expired = now >= watch.expiresAt.getTime();
-  const settle = (outcome: 'UNRESOLVABLE' | 'REVOKED', targetStates: TargetStateChange[] = []): WatchDecision => ({
-    outcome, state: outcome, generation: watch.generation, nextEvaluateAt: null, targetStates, match: null, expirySnapshot: null,
+  const open: CoalescingWindow | null = watch.windowOpenedAt && watch.windowClosesAt
+    ? { openedAt: watch.windowOpenedAt, closesAt: watch.windowClosesAt, crossings: watch.windowCrossings }
+    : null;
+  // A watch that ends keeps no window: what it was coalescing will not become a Match.
+  const end = (
+    outcome: 'UNRESOLVABLE' | 'REVOKED' | 'EXPIRED',
+    targetStates: TargetStateChange[],
+    expirySnapshot: Record<string, unknown> | null = null,
+  ): WatchDecision => ({
+    outcome, state: outcome, generation: watch.generation, holding: watch.holding, window: null,
+    nextEvaluateAt: null, targetStates, match: null, expirySnapshot,
   });
-  // Contract §5: an expiry is delivered too, so it carries what this evaluation saw, in a Match snapshot's shape.
+  // Contract §5: an expiry is delivered too, so it carries what this evaluation saw, in a Match snapshot's
+  // shape — and, for a CONTINUOUS watch, the window that was still open, which no Match will close.
   const expire = (
     seen: ReadonlyArray<{ target: TargetRow; fact: OwnedFact | undefined }>,
     targetStates: TargetStateChange[],
-    leaves: readonly WatchLeaf[],
-  ): WatchDecision => ({
-    outcome: 'EXPIRED', state: 'EXPIRED', generation: watch.generation, nextEvaluateAt: null, targetStates, match: null,
-    expirySnapshot: snapshotOf(watch, seen, targetStates, leaves),
+    tests: readonly WatchLeafTest[],
+    window: CoalescingWindow | null = open,
+  ): WatchDecision => end('EXPIRED', targetStates, {
+    ...snapshotOf(watch, seen, targetStates, tests),
+    ...(window && { openWindow: { openedAt: window.openedAt.toISOString(), crossings: window.crossings } }),
   });
-  const schedule = (at: Date, targetStates: TargetStateChange[] = []): WatchDecision => ({
-    outcome: 'SCHEDULED', state: watch.state, generation: watch.generation, nextEvaluateAt: at, targetStates, match: null, expirySnapshot: null,
+  const schedule = (
+    at: number,
+    targetStates: TargetStateChange[] = [],
+    holding: boolean = watch.holding,
+    window: CoalescingWindow | null = open,
+  ): WatchDecision => ({
+    outcome: 'SCHEDULED', state: watch.state, generation: watch.generation, holding, window,
+    nextEvaluateAt: new Date(at), targetStates, match: null, expirySnapshot: null,
   });
 
   // Pausing stops evaluation, not the clock (contract §3): a paused watch is looked at again at its expiry and not before.
   // A paused watch skips the permission recheck, so its expiry lists the targets only as recorded, with none of their rows.
   if (watch.state === 'PAUSED') {
-    return expired ? expire(targets.map((target) => ({ target, fact: undefined })), [], []) : schedule(watch.expiresAt);
+    return expired ? expire(targets.map((target) => ({ target, fact: undefined })), [], []) : schedule(watch.expiresAt.getTime());
   }
 
   const observed = targets.map((target) => ({
@@ -592,52 +678,99 @@ function decide(
   }));
   // Contract §7: permission is rechecked where it is used. A target that is no longer the owner's
   // ends the watch as REVOKED before anything about that target is written down.
-  if (observed.some(({ fact }) => fact && fact.ownerId !== watch.ownerId)) return settle('REVOKED');
+  if (observed.some(({ fact }) => fact && fact.ownerId !== watch.ownerId)) return end('REVOKED', []);
 
   // Contract §4: a deleted target is recorded GONE and leaves the set; it never counts as satisfied.
   const gone = observed
     .filter(({ target, fact }) => !fact && target.state !== 'GONE')
-    .map(({ target }) => ({ id: target.id, state: 'GONE' }));
+    .map(({ target }) => ({ id: target.id, state: 'GONE', epoch: target.epoch }));
   const live = observed.flatMap(({ target, fact }) => (fact ? [{ target, fact }] : []));
-  if (live.length === 0) return settle('UNRESOLVABLE', gone);
+  if (live.length === 0) return end('UNRESOLVABLE', gone);
 
-  const reconcileAt = new Date(Math.min(now + reconcileIntervalMs, watch.expiresAt.getTime()));
-  const predicate = watch.predicateVersion === WATCH_PREDICATE_VERSION ? parseWatchPredicate(watch.predicate) : null;
+  const reconcileAt = Math.min(now + reconcileIntervalMs, watch.expiresAt.getTime());
+  const predicate = parseWatchPredicate(watch.predicate, watch.predicateVersion);
   // Not a term this build can decide. Guessing would be worse than waiting: it keeps its schedule,
   // and its TTL still ends it visibly.
   if (!predicate) return expired ? expire(observed, gone, []) : schedule(reconcileAt, gone);
 
-  const leaves = predicateLeaves(predicate);
+  const tests = predicateLeafTests(predicate);
   const liveFacts = live.map(({ fact }) => fact);
   const changes = [
     ...gone,
     ...live.flatMap(({ target, fact }) => {
       // One-shot targets stay SATISFIED once they were (contract §3 lets only CONTINUOUS go back).
       // The predicate never reads this column — it reads the rows.
-      const satisfied = leaves.some((leaf) => leafHolds(leaf, fact))
+      const satisfied = tests.some((test) => leafHolds(test, fact, now))
         || (watch.mode === 'ONE_SHOT' && target.state === 'SATISFIED');
       const state = satisfied ? 'SATISFIED' : 'OBSERVED';
-      return state === target.state ? [] : [{ id: target.id, state }];
+      const epoch = fact.kind === 'TASK' ? fact.epoch : target.epoch;
+      return state === target.state && epoch === target.epoch ? [] : [{ id: target.id, state, epoch }];
     }),
   ];
+  const holds = predicateHolds(predicate, liveFacts, now);
+  // STALLS above: the moment a stall starts to hold is the next look, since nothing will announce it.
+  const stall = nextStallDeadline(predicate, liveFacts, now) ?? Infinity;
 
-  // Evaluated before the expiry check: a condition that holds when the watch is looked at is a
-  // Match even if the look came late, so a hint that was lost changes when, never whether.
-  if (watch.mode === 'ONE_SHOT' && predicateHolds(predicate, liveFacts)) {
+  if (watch.mode === 'ONE_SHOT') {
+    // Evaluated before the expiry check: a condition that holds when the watch is looked at is a
+    // Match even if the look came late, so a hint that was lost changes when, never whether.
+    if (holds) {
+      return {
+        outcome: 'MATCHED',
+        state: 'MATCHED',
+        generation: watch.generation + 1,
+        holding: true,
+        window: null,
+        nextEvaluateAt: null,
+        targetStates: changes,
+        match: {
+          reason: describePredicate(predicate, liveFacts, now),
+          snapshot: snapshotOf(watch, observed, changes, tests),
+        },
+        expirySnapshot: null,
+      };
+    }
+    // A quorum larger than the set it has left can never hold, and a watch that can never be decided says so.
+    if (!predicateReachable(predicate, live.length)) return end('UNRESOLVABLE', changes);
+    return expired ? expire(observed, changes, tests) : schedule(Math.min(reconcileAt, stall), changes, holds);
+  }
+
+  // CONTINUOUS above: a crossing is the predicate holding now when it did not at the last landing.
+  const crossed = holds && !watch.holding;
+  let window = open;
+  if (crossed) {
+    window = open
+      ? { ...open, crossings: open.crossings + 1 }
+      : { openedAt: watch.now, closesAt: new Date(now + (watch.debounceSeconds ?? 0) * 1000), crossings: 1 };
+  }
+  if (expired) return expire(observed, changes, tests, window);
+  if (window && now >= window.closesAt.getTime()) {
+    const generation = watch.generation + 1;
+    const budget = watch.wakeBudget ?? generation;
+    const last = generation >= budget;
+    const crossings = `${window.crossings} crossing${window.crossings === 1 ? '' : 's'}`;
     return {
       outcome: 'MATCHED',
-      state: 'MATCHED',
-      generation: watch.generation + 1,
-      nextEvaluateAt: null,
+      state: last ? 'MATCHED' : 'ACTIVE',
+      generation,
+      holding: holds,
+      window: null,
+      nextEvaluateAt: last ? null : new Date(Math.min(reconcileAt, stall)),
       targetStates: changes,
       match: {
-        reason: describePredicate(predicate, liveFacts),
-        snapshot: snapshotOf(watch, observed, changes, leaves),
+        reason: `${describePredicate(predicate, liveFacts, now)}; ${crossings} since ${
+          window.openedAt.toISOString()}; wake ${generation} of ${budget}`,
+        snapshot: {
+          ...snapshotOf(watch, observed, changes, tests),
+          window: { openedAt: window.openedAt.toISOString(), closedAt: watch.now.toISOString(), crossings: window.crossings },
+          budget: { wake: generation, of: budget },
+        },
       },
       expirySnapshot: null,
     };
   }
-  return expired ? expire(observed, changes, leaves) : schedule(reconcileAt, changes);
+  if (!holds && !predicateReachable(predicate, live.length)) return end('UNRESOLVABLE', changes);
+  return schedule(Math.min(reconcileAt, stall, window?.closesAt.getTime() ?? Infinity), changes, holds, window);
 }
 
 /** The structured snapshot a Match or an expiry carries: every target as this evaluation saw it. */
@@ -645,31 +778,22 @@ function snapshotOf(
   watch: WatchRow,
   observed: ReadonlyArray<{ target: TargetRow; fact: OwnedFact | undefined }>,
   changes: readonly TargetStateChange[],
-  leaves: readonly WatchLeaf[],
+  tests: readonly WatchLeafTest[],
 ): Record<string, unknown> {
-  const next = new Map(changes.map((change) => [change.id, change.state]));
+  const now = watch.now.getTime();
+  const next = new Map(changes.map((change) => [change.id, change]));
   return {
     evaluatedAt: watch.now.toISOString(),
     targets: observed.map(({ target, fact }) => {
-      const state = next.get(target.id) ?? target.state;
+      const change = next.get(target.id);
+      const state = change?.state ?? target.state;
       return {
         kind: target.kind,
         id: target.resourceId,
-        epoch: target.epoch,
+        epoch: change?.epoch ?? target.epoch,
         state,
         changed: state !== target.state,
-        ...(fact && {
-          leaves: Object.fromEntries(leaves.map((leaf) => [leaf, leafHolds(leaf, fact)])),
-          observed: fact.kind === 'TASK'
-            ? { status: fact.status }
-            : {
-                status: fact.status,
-                endReason: fact.endReason,
-                runState: deriveSessionRunState(fact),
-                lifecycleState: deriveSessionLifecycleState(fact),
-                pendingApproval: fact.pendingApproval,
-              },
-        }),
+        ...(fact && { leaves: leafVerdicts(tests, fact, now), observed: observationOf(fact, tests) }),
       };
     }),
   };

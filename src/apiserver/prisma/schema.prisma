@@ -2789,6 +2789,39 @@ model TaskDispatchEpoch {
   @@map("task_dispatch_epoch")
 }
 
+/// A Task's structured progress in its current lifecycle epoch (migration 0271): the projection the
+/// report door (`TaskProgressService`) writes and the Watch evaluator reads. One row per Task, and none
+/// until the Task first reports progress or is reopened: a Task without one is in epoch 0, which began
+/// when the Task was created, with nothing reported.
+///
+/// `revision` counts every accepted change. `lastProgressAt` moves only when the reported position —
+/// `phase`, `current`, `total` — changes, so neither a message nor a report repeated verbatim is
+/// progress. The `task_progress_epoch_advance` trigger starts the next epoch, with nothing reported in
+/// it, whenever a Task leaves DONE, CANCELLED or FAILED for OPEN or IN_PROGRESS. Nothing here is derived
+/// from a transcript or from a shell's output: progress is what a reporter states.
+model TaskProgress {
+  taskId String @id @map("task_id") @db.Uuid
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  lifecycleEpoch Int       @default(0) @map("lifecycle_epoch")
+  /// NULL on epoch 0, which began when the Task was created.
+  epochStartedAt DateTime? @map("epoch_started_at") @db.Timestamptz(6)
+
+  phase   String?
+  current Int?
+  total   Int?
+  /// For a reader. No Watch leaf reads it, and on its own it is not progress.
+  message String?
+
+  revision       Int       @default(0)
+  lastProgressAt DateTime? @map("last_progress_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("task_progress")
+}
+
 model TaskRunRequest {
   ownerId      String   @map("owner_id") @db.Uuid
   owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -3447,6 +3480,9 @@ model Task {
   dependencyRevision TaskDependencyRevision?
   /// The automatic doors' request identity (0137). Always present.
   dispatchEpoch      TaskDispatchEpoch?
+  /// Structured progress and the lifecycle epoch it belongs to (0271). Absent until the task first
+  /// reports progress or is reopened.
+  progress           TaskProgress?
   /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
   /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
@@ -4522,8 +4558,22 @@ model Watch {
   state  String @default("ACTIVE")
 
   /// Advanced by one per match. A ONE_SHOT watch stops at 1 — a CHECK refuses generation 2, which
-  /// is the state from which a second Match would have been legal.
+  /// is the state from which a second Match would have been legal. A CONTINUOUS watch stops at its
+  /// `wakeBudget` the same way (migration 0271).
   generation Int @default(0)
+
+  /// CONTINUOUS only, NULL on a ONE_SHOT watch (0271): crossings within `debounceSeconds` of the first
+  /// become one Match, and `wakeBudget` is how many Matches the watch may ever record. The Match that
+  /// uses the last of it settles the watch at MATCHED, as a ONE_SHOT watch settles at its first.
+  debounceSeconds Int? @map("debounce_seconds")
+  wakeBudget      Int? @map("wake_budget")
+  /// Whether the predicate held at the last landed evaluation: a crossing is it holding when this was false.
+  holding         Boolean @default(false)
+  /// The coalescing window a crossing opened on a live CONTINUOUS watch, and the crossings seen in it.
+  /// A CHECK holds all three together, and keeps them off a watch that has ended.
+  windowOpenedAt  DateTime? @map("window_opened_at") @db.Timestamptz(6)
+  windowClosesAt  DateTime? @map("window_closes_at") @db.Timestamptz(6)
+  windowCrossings Int       @default(0) @map("window_crossings")
 
   /// TTL is mandatory: there is no "forever" to store. Expiry is delivered like a match is, so a
   /// session waiting on a watch that expired is told rather than left waiting.
@@ -4569,9 +4619,10 @@ model WatchTarget {
 
   /// `OBSERVED` | `SATISFIED` | `GONE`. A CONTINUOUS watch may go back from SATISFIED to OBSERVED.
   state String @default("OBSERVED")
-  /// The lifecycle epoch seen when the snapshot was taken. A Task reopened after a Match advances
-  /// its epoch and the Match is NOT rewritten — it was true about the epoch it observed, and
-  /// storing that epoch is what lets a later reader tell the two worlds apart.
+  /// The lifecycle epoch this target was last observed in: a Task's `TaskProgress.lifecycleEpoch`
+  /// (0271), 0 for a session. A Task reopened after a Match advances its epoch and the Match is NOT
+  /// rewritten — its snapshot keeps the epoch it observed, which is what lets a later reader tell the
+  /// two worlds apart.
   targetEpoch Int @default(0) @map("target_epoch")
 
   /// Where this target was expanded from, if it was not named directly. `TASK_LIST` | `PROJECT`,
