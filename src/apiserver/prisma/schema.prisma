@@ -971,6 +971,15 @@ model Session {
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
   // stale old-replica write that still uses the former custom-provider slug `kimi`.
   providerBuiltin      Boolean   @default(false) @map("provider_builtin")
+  // Only for a session whose provider is an account pool (migration 0268): the ModelProvider its last
+  // claim dispatched on, which the next claim stays on until that member is spent or refused
+  // (QueueService.resolvePoolMember). No relation: a member deleted or taken out of the pool matches
+  // none of the pool's members, and the claim simply chooses again.
+  poolMemberProviderId String?   @map("pool_member_provider_id") @db.Uuid
+  // The transcript line owed for the last move between pool members, until the runner's next engine
+  // start event carries it (RunnerApiController.events). Not a run_event of its own: the runner
+  // numbers those, and a row inserted here would take the seq its next event is about to use.
+  poolSwitchNotice     String?   @map("pool_switch_notice")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid

@@ -79,15 +79,76 @@ export function selectPoolMember<Row extends PoolMemberRow>(
 }
 
 /**
- * The resets of a member's spent windows: at or over 100% and not yet past their reset time. A window
- * with no reset time we can read is kept, as NaN — nothing says it has reset.
+ * The member a claim dispatches on: `selectPoolMember`'s choice, and when every member is spent still
+ * one of the pool's own accounts — the session's member if it is one of them, else the one that frees
+ * up first. The run then meets the limit, and the retry it arms waits out the reset, exactly as a
+ * session on a single account does, rather than moving onto the runner's own login. Null only when no
+ * member can run at all (UNAVAILABLE), which dispatches as a deleted provider does.
  */
+export function choosePoolMember<Row extends PoolMemberRow>(
+  candidates: readonly PoolCandidate<Row>[],
+  stickyId: string | null,
+  now: Date,
+): Row | null {
+  const selection = selectPoolMember(candidates, stickyId, now);
+  if (selection.kind === 'SELECTED') return selection.row;
+  if (selection.kind === 'UNAVAILABLE') return null;
+  const spent = selection.members.filter((m) => !m.refused);
+  const firstToReset = spent.find((m) => m.resetsAt?.getTime() === selection.resetsAt?.getTime());
+  return (spent.find((m) => m.row.id === stickyId) ?? firstToReset ?? spent[0]).row;
+}
+
+/** What saying why a session left a member needs to know about that member. */
+export interface PoolSwitchFrom {
+  label: string;
+  enabled: boolean;
+  usage: PlanUsageSnapshot | null;
+  refused: boolean;
+}
+
+/**
+ * The transcript line for a session moving onto `to`, naming why it left the member it ran on. Without
+ * it, a 5-hour gauge that drops from 91% to 12% between two turns reads as a broken gauge. `from` is
+ * null when that member is no longer in the pool.
+ */
+export function poolSwitchNotice(to: { label: string }, from: PoolSwitchFrom | null, now: Date): string {
+  return `Switched to ${to.label} — ${from ? whyLeft(from, now) : 'the previous account is no longer in this pool'}`;
+}
+
+function whyLeft(from: PoolSwitchFrom, now: Date): string {
+  if (from.refused) return `${from.label}'s key was refused`;
+  if (!from.enabled) return `${from.label} is disabled`;
+  const spent = spentWindow(from.usage, now);
+  return spent ? `${from.label}'s ${spent} window is spent` : `${from.label} is unavailable`;
+}
+
+/** Every Claude window a member can spend, with the name the transcript gives it. */
+const WINDOWS = [
+  ['fiveHour', '5-hour'],
+  ['sevenDay', 'weekly'],
+  ['sevenDayOpus', 'weekly Opus'],
+  ['sevenDaySonnet', 'weekly Sonnet'],
+] as const;
+
+/**
+ * At or over 100% and not yet past its reset time. A window with no reset time we can read counts as
+ * spent — nothing says it has reset.
+ */
+function isSpent(w: PlanUsageWindow | undefined, now: Date): w is PlanUsageWindow {
+  return w !== undefined && w.utilization >= SPENT_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime());
+}
+
+/** The resets of a member's spent windows, NaN for one with no reset time. */
 function spentResets(usage: PlanUsageSnapshot | null, now: Date): number[] {
   if (!usage) return [];
-  return [usage.fiveHour, usage.sevenDay, usage.sevenDayOpus, usage.sevenDaySonnet]
-    .filter((w): w is PlanUsageWindow => w !== undefined && w.utilization >= SPENT_UTILIZATION)
-    .map((w) => Date.parse(w.resetsAt ?? ''))
-    .filter((resetsAt) => !(resetsAt <= now.getTime()));
+  return WINDOWS.map(([key]) => usage[key])
+    .filter((w): w is PlanUsageWindow => isSpent(w, now))
+    .map((w) => Date.parse(w.resetsAt ?? ''));
+}
+
+/** The name of the first spent window, or null when none is. */
+function spentWindow(usage: PlanUsageSnapshot | null, now: Date): string | null {
+  return WINDOWS.find(([key]) => isSpent(usage?.[key], now))?.[1] ?? null;
 }
 
 /** Every one of them has to pass, so the latest — unknown if any one is. */

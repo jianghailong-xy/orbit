@@ -369,6 +369,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'poolId',
   'providerId',
   'providerIds',
+  // The pool member a session last ran on (migration 0268): the same provider address as above.
+  'poolMemberProviderId',
   // `[K6]` §7: the known-good point a merge landed, and the attempt that produced it. Addresses,
   // not fences — a checkpoint is audit material a person reads and quotes back ("merge cp X"), and
   // the merge gate's refusals name one, so it has to survive the round trip in the spelling

@@ -78,6 +78,14 @@ export class ProviderPlanUsageService {
     return rotated ? null : (entry?.usage ?? null);
   }
 
+  /** Whether the endpoint refused this row's current key (401/403). An account pool takes that as
+   *  final, like the probe does: the member is unavailable, not idle. A replaced key is not refused
+   *  until the endpoint refuses it too. */
+  refused(row: UsageProviderRow): boolean {
+    const entry = this.cache.get(row.id);
+    return entry?.keyEnc === row.apiKeyEnc && entry.refreshAt === NEVER;
+  }
+
   /** Refresh this row's quota. Concurrent callers share the one request in flight — and get a
    *  promise that resolves when it lands, rather than one that resolves immediately. */
   refresh(row: UsageProviderRow): Promise<void> {

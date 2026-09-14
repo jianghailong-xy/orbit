@@ -11,6 +11,8 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { ProviderPlanUsageService } from '../providers/plan-usage.service';
+import { choosePoolMember, poolSwitchNotice } from '../providers/pool-select';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForRuntimeModel,
@@ -52,6 +54,12 @@ export class QueueService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    /**
+     * An account pool's quota, from the cache the provider pickers fill. Nest always provides it
+     * (QueueModule imports ProvidersModule); optional only for the specs that construct this service
+     * directly, none of whose sessions names a pool.
+     */
+    private readonly planUsage?: ProviderPlanUsageService,
   ) {
     this.signal.setMaxListeners(0);
   }
@@ -365,13 +373,14 @@ export class QueueService {
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
     // scope: a personal (BYOK) provider resolves only for its owner's sessions — otherwise a
-    // user could burn another tenant's key by naming their slug.
+    // user could burn another tenant's key by naming their slug. A slug no provider holds may be one
+    // of the owner's account pools, which dispatches as the member chosen for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, session.providerBuiltin);
     const customRow = declaredIsBuiltin
       ? null
-      : await this.prisma.modelProvider.findFirst({
+      : ((await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
-        });
+        })) ?? (await this.resolvePoolMember(session, declared!)));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
@@ -551,6 +560,72 @@ export class QueueService {
       },
       source,
     };
+  }
+
+  /**
+   * The member an account pool dispatches this claim on (providers/pool-select.ts), or null when `slug`
+   * names no pool of this session's owner or none of its members can run. Null dispatches as a deleted
+   * provider does, on the Claude default, so a pool deleted or emptied under a session never fails the
+   * claim.
+   *
+   * A pool is personal: only its owner's sessions resolve it, or naming its slug would spend another
+   * user's keys. The member chosen is recorded on the session, which is what the next claim stays on,
+   * and a move off another member records the line the transcript owes for it — carried by the next
+   * engine start event the runner reports (RunnerApiController.events).
+   */
+  private async resolvePoolMember(
+    session: { id: string; ownerId: string; poolMemberProviderId: string | null },
+    slug: string,
+  ) {
+    const pool = await this.prisma.providerPool.findFirst({
+      where: { slug, ownerId: session.ownerId },
+      select: {
+        members: {
+          where: { ownerId: session.ownerId },
+          orderBy: { provider: { slug: 'asc' } },
+          select: { provider: true },
+        },
+      },
+    });
+    if (!pool) return null;
+    const now = new Date();
+    const rows = pool.members.map((member) => member.provider);
+    // A disabled member is no candidate, and nobody asks after its quota.
+    const candidates = rows
+      .filter((row) => row.enabled)
+      .map((row) => ({
+        row,
+        usage: this.planUsage?.snapshot(row) ?? null,
+        refused: this.planUsage?.refused(row) ?? false,
+      }));
+    const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
+    if (!chosen || chosen.id === session.poolMemberProviderId) return chosen;
+    const previous = rows.find((row) => row.id === session.poolMemberProviderId);
+    const standing = candidates.find((candidate) => candidate.row.id === previous?.id);
+    await this.prisma.session.update({
+      where: { id: session.id },
+      data: {
+        poolMemberProviderId: chosen.id,
+        // The first member a session runs on is where it starts, not a move.
+        ...(session.poolMemberProviderId
+          ? {
+              poolSwitchNotice: poolSwitchNotice(
+                chosen,
+                previous
+                  ? {
+                      label: previous.label,
+                      enabled: previous.enabled,
+                      usage: standing?.usage ?? null,
+                      refused: standing?.refused ?? false,
+                    }
+                  : null,
+                now,
+              ),
+            }
+          : {}),
+      },
+    });
+    return chosen;
   }
 
   /**
