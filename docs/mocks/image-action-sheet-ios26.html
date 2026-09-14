@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>iOS 26 image menu — three options</title>
+<style>
+  html, body { margin: 0; background: #eceef2; }
+  body { width: 1415px; padding: 44px 48px; box-sizing: border-box;
+         font-family: "Inter", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; color: #111; }
+  h1 { margin: 0 0 6px; font-size: 32px; letter-spacing: -0.3px; }
+  .sub { margin: 0 0 30px; font-size: 18px; color: #555; }
+  .grid { display: grid; grid-template-columns: repeat(3, 413px); column-gap: 40px; row-gap: 34px; }
+  .cap { margin-top: 16px; font-size: 17px; line-height: 1.5; color: #444; }
+  .cap b { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; font-size: 21px; color: #111; }
+  .pill { font-size: 13px; font-weight: 700; padding: 2px 8px; border-radius: 7px; }
+  .rec { background: #34c759; color: #fff; }
+  .sys { background: #e5e5ea; color: #3a3a3c; }
+  .own { background: #ff9f0a; color: #000; }
+
+  .device { width: 413px; height: 872px; border-radius: 62px; background: #1b1b1d; padding: 10px; box-sizing: border-box;
+            box-shadow: 0 22px 50px rgba(0,0,0,.22), inset 0 0 0 1.5px #3a3a3c; }
+  .screen { position: relative; width: 393px; height: 852px; border-radius: 52px; overflow: hidden; background: #000; }
+  .island { position: absolute; top: 11px; left: 134px; width: 125px; height: 36px; border-radius: 18px; background: #000; z-index: 20; }
+  .home { position: absolute; bottom: 8px; left: 129px; width: 135px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.75); z-index: 20; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.42); z-index: 12; }
+
+  /* the picture (stand-in for the mockup being viewed) */
+  .art { position: absolute; width: 393px; height: 288px; background: #0c0a18; display: flex; gap: 9px; padding: 14px 12px; box-sizing: border-box; }
+  .mini { flex: 1; position: relative; border-radius: 14px; overflow: hidden; background: linear-gradient(180deg, #2b2356 0%, #171331 72%); }
+  .moon { position: absolute; left: 50%; top: 44px; width: 28px; height: 28px; margin-left: -14px; border-radius: 50%;
+          background: radial-gradient(circle at 40% 40%, #fff6d6, #e9c46a); }
+  .bar { position: absolute; height: 6px; border-radius: 3px; background: rgba(255,255,255,.85); }
+  .gbtn { position: absolute; left: 10px; right: 10px; height: 16px; border-radius: 8px; background: linear-gradient(#f3d27a, #d9a93f); }
+  .lc { position: absolute; left: 10px; right: 10px; height: 20px; border-radius: 6px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+  .seats { position: absolute; left: 12px; right: 12px; top: 84px; display: grid; grid-template-columns: repeat(4, 16px); justify-content: space-between; row-gap: 12px; }
+  .seats i { width: 16px; height: 16px; border-radius: 50%; }
+  .rolecard { position: absolute; left: 12px; right: 12px; top: 30px; height: 152px; border-radius: 10px; border: 1px solid #d9a93f; }
+  .rolecircle { position: absolute; left: 50%; top: 24px; width: 42px; height: 42px; margin-left: -23px; border-radius: 50%; border: 2px solid #d9a93f;
+                color: #f0c75e; font-size: 20px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  /* iOS 26 Liquid Glass menu (A: anchored, B: centred) */
+  .glass { position: absolute; z-index: 14; box-sizing: border-box; padding: 16px 15px; display: flex; flex-direction: column; gap: 8px;
+           background: rgba(40,40,42,.80); backdrop-filter: blur(28px) saturate(150%);
+           box-shadow: inset 0 .5px 0 rgba(255,255,255,.22), inset 0 0 0 .5px rgba(255,255,255,.10), 0 14px 40px rgba(0,0,0,.45); }
+  .cbtn { height: 48px; border-radius: 24px; background: rgba(255,255,255,.13); color: #fff; font-size: 19px; font-weight: 500;
+          display: flex; align-items: center; justify-content: center; box-shadow: inset 0 .5px 0 rgba(255,255,255,.12); }
+  .cbtn.cancel { font-weight: 650; background: rgba(255,255,255,.20); }
+
+  /* C: hand-drawn iOS 18 style sheet */
+  .asheet { position: absolute; left: 8px; right: 8px; bottom: 34px; z-index: 14; }
+  .agroup { border-radius: 22px; overflow: hidden; background: rgba(44,44,46,.94); box-shadow: inset 0 .5px 0 rgba(255,255,255,.14); }
+  .agroup + .agroup { margin-top: 8px; }
+  .arow { position: relative; height: 57px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #0a84ff; }
+  .arow + .arow::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: rgba(255,255,255,.16); }
+  .arow.cancel { font-weight: 600; }
+  .anchor { position: absolute; z-index: 30; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #ff9f0a;
+            box-shadow: 0 0 0 4px rgba(255,159,10,.35); }
+  .note-tag { position: absolute; z-index: 30; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.9); color: #000;
+              font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+
+  /* comparison */
+  .note { grid-column: 1 / span 3; border-radius: 30px; background: #fff; padding: 26px 32px 22px; box-sizing: border-box;
+          box-shadow: 0 22px 50px rgba(0,0,0,.12); }
+  .note h2 { margin: 0 0 12px; font-size: 23px; }
+  table { width: 100%; border-collapse: collapse; font-size: 17px; }
+  th { text-align: left; font-size: 15px; color: #111; padding: 8px 10px; border-bottom: 2px solid #eee; }
+  td { padding: 10px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  td:first-child { color: #888; font-weight: 600; width: 130px; }
+  .good { color: #248a3d; } .bad { color: #c93400; }
+</style>
+</head>
+<body>
+<h1>长按图片菜单 · iOS 26 上的三种样式</h1>
+<p class="sub">① 是 beta.71 真机截图的还原；② 按 Apple 的说明画的示意，真机以系统为准；③ 需要自己画。</p>
+
+<div class="grid">
+
+  <!-- A: current, anchored at bottom centre -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="art" data-art style="top:282px;left:0"></div>
+      <div class="glass" style="left:77px;top:616px;width:238px;border-radius:34px">
+        <div class="cbtn">Save to Photos</div>
+        <div class="cbtn">Copy</div>
+        <div class="cbtn">Share…</div>
+      </div>
+      <div class="anchor" style="left:196px;top:822px"></div>
+      <div class="note-tag" style="left:212px;top:812px">弹出点</div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>① 现在（beta.71） <span class="pill rec">推荐</span> <span class="pill sys">系统原生</span></b>从屏幕下方冒出一块窄玻璃面板。没有 Cancel，点面板外面就关。不用改。</div>
+  </div>
+
+  <!-- B: no source, centred with Cancel -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="art" data-art style="top:282px;left:0"></div>
+      <div class="dim"></div>
+      <div class="glass" style="left:46px;top:302px;width:301px;border-radius:36px">
+        <div class="cbtn">Save to Photos</div>
+        <div class="cbtn">Copy</div>
+        <div class="cbtn">Share…</div>
+        <div class="cbtn cancel">Cancel</div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>② 去掉弹出点 <span class="pill sys">系统原生</span></b>iOS 26 把它放到屏幕正中，有 Cancel，背景变暗，看起来像一个提示框。只需删几行代码。</div>
+  </div>
+
+  <!-- C: hand-drawn bottom sheet -->
+  <div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="art" data-art style="top:282px;left:0"></div>
+      <div class="dim"></div>
+      <div class="asheet">
+        <div class="agroup">
+          <div class="arow">Save to Photos</div>
+          <div class="arow">Copy</div>
+          <div class="arow">Share…</div>
+        </div>
+        <div class="agroup"><div class="arow cancel">Cancel</div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <div class="cap"><b>③ 自己画底部菜单 <span class="pill own">自己画</span></b>铺满宽度、带 Cancel，就是最早那张效果图。不是系统组件，在 iOS 26 上和其他系统弹层风格对不上。</div>
+  </div>
+
+  <div class="note">
+    <h2>对比</h2>
+    <table>
+      <tr><th></th><th>① 现在（推荐）</th><th>② 去掉弹出点</th><th>③ 自己画底部菜单</th></tr>
+      <tr><td>位置</td><td class="good">屏幕下方</td><td class="bad">屏幕正中</td><td class="good">屏幕底边，铺满宽度</td></tr>
+      <tr><td>Cancel</td><td>没有，点外面关闭</td><td class="good">有</td><td class="good">有</td></tr>
+      <tr><td>风格</td><td class="good">iOS 26 系统原生</td><td class="good">iOS 26 系统原生</td><td class="bad">仿 iOS 18，和系统其他弹层不一致</td></tr>
+      <tr><td>改动</td><td>不用改</td><td>删几行</td><td class="bad">自绘弹层，还要自己做动画、iPad、无障碍</td></tr>
+      <tr><td>iOS 17/18 手机</td><td>整宽 + Cancel（老样式）</td><td>整宽 + Cancel（老样式）</td><td>和 iOS 26 一样</td></tr>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  const seat = ['#5aa9c8','#e0a24a','#d9604f','#5bb35c','#5b5bd6','#c9669a','#4aa3a3','#e2a04f','#d9604f','#5bb35c','#9a5bd6','#5b7bd6'];
+  const ART =
+    '<div class="mini"><div class="moon"></div><div class="bar" style="left:26px;right:26px;top:84px"></div>' +
+    '<div class="gbtn" style="top:106px"></div><div class="lc" style="top:158px"></div><div class="lc" style="top:186px"></div><div class="lc" style="top:212px"></div></div>' +
+    '<div class="mini"><div class="bar" style="left:10px;right:52px;top:28px"></div>' +
+    '<div class="lc" style="top:44px;height:26px"></div><div class="seats">' + seat.map(c => '<i style="background:' + c + '"></i>').join('') + '</div>' +
+    '<div class="gbtn" style="bottom:12px;left:48px"></div></div>' +
+    '<div class="mini"><div class="rolecard"><div class="rolecircle">预</div>' +
+    '<div class="bar" style="left:30px;right:30px;top:80px;background:#e9b949"></div></div><div class="gbtn" style="bottom:12px"></div></div>';
+  document.querySelectorAll('[data-art]').forEach(el => { el.innerHTML = ART; });
+</script>
+</body>
+</html>
