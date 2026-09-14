@@ -45,6 +45,7 @@ import { TaskProgressService } from './task-progress.service';
     ReferenceExpansionService,
     TaskCompletionEvidenceService,
     TaskOwnerConfirmationService,
+    TaskProgressService,
   ],
 })
 export class TasksModule {}

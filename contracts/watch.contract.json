@@ -316,6 +316,14 @@
         "PROGRESS_REVISION_CONFLICT": "409: expectedRevision is not the current revision."
       }
     },
+    "runnerDoor": {
+      "routes": ["GET /api/runner/tasks/:id/progress", "POST /api/runner/tasks/:id/progress"],
+      "scope": "The runner credential's owner, through the same TaskProgressService as the report door: another owner's task answers 404 to a read and to a report alike, and a report meets the same refusals. No calling session is required, as task_get requires none.",
+      "tool": "task_progress_report",
+      "cli": "orbit task progress",
+      "read": "Given none of phase, current, total or message, the tool and the command read the progress and its revision instead of reporting.",
+      "conflict": "On 409 PROGRESS_REVISION_CONFLICT the agent reads the progress again, then reports against the revision it shows."
+    },
     "revision": "Advanced by one by every accepted change of any field, and by the epoch advance. A report that changes nothing writes nothing.",
     "lastProgressAt": "Moves only when the position (phase, current, total) changes. A message on its own and a report repeated verbatim are not progress: liveness is not progress.",
     "lifecycleEpoch": "Advanced by the task_progress_epoch_advance trigger whenever a task leaves DONE, CANCELLED or FAILED for OPEN or IN_PROGRESS. The new epoch starts with nothing reported and a new revision, and its epochStartedAt is the reopen; epoch 0 starts when the task is created.",

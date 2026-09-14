@@ -1078,6 +1078,28 @@ func (t *Transport) getTaskAttribution(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// getTaskProgress and reportTaskProgress are the runner's progress door (docs/watch-contract.md §12.1),
+// behind task_progress_report and `orbit task progress`. Owner-scoped like every task route here, and
+// with no session header: a report is a statement about the task, which needs no session to make.
+func (t *Transport) getTaskProgress(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id)+"/progress", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// reportTaskProgress sends exactly the fields in body; a nil value is the JSON null that clears one.
+func (t *Transport) reportTaskProgress(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/progress", body, &out, taskOpTimeout)
+	return out, err
+}
+
 // getProjectHandoffs reads what has been asked and answered about work crossing into or out of one
 // project, in both directions.
 //

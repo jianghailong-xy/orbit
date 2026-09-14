@@ -85,6 +85,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork bool) string {
 		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
 		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
 		orbitProjectInstructions(insideRecordedWork) +
+		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
@@ -100,6 +101,20 @@ const orbitWaitInstructions = "To wait for Orbit work -- tasks reaching a status
 	"poll with sleep, Bash loops, background jobs or schedule_wakeup: call task_await or session_await (watch_create for " +
 	"other conditions) and end your turn. Orbit holds the watch on its server and starts a turn in this session with a " +
 	"structured payload when the condition holds, even if this engine was recycled in the meantime.\n\n"
+
+// orbitProgressInstructions tells a session running a task how its progress reaches Orbit. A watch on the
+// task decides from task_progress_report alone, so "3 of 8 done" written into a reply or printed by a shell
+// has reported nothing, and a report that changes only its message has not progressed. Only the task form
+// carries it: without a taskId the tool reports on the task being run. ASCII like the rest of the paragraph.
+func orbitProgressInstructions(insideRecordedWork bool) string {
+	if !insideRecordedWork {
+		return ""
+	}
+	return "When this task's position changes -- a new phase, or another item of a known total done -- report it " +
+		"with task_progress_report. Orbit reads progress only from that report, never from your Bash output or " +
+		"transcript, and only a change of phase, current or total counts as progress; a message alone does not. If a " +
+		"report is refused with 409 PROGRESS_REVISION_CONFLICT, read the progress again, then report.\n\n"
+}
 
 // orbitProjectInstructions is the paragraph about what deserves an Orbit Project, in the two
 // forms a session can be in.
@@ -162,7 +177,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
-		for _, action := range []string{"list", "get", "create", "update", "delete", "start", "comment", "await"} {
+		for _, action := range []string{"list", "get", "create", "update", "delete", "start", "comment", "await", "progress"} {
 			rules = append(rules, "Bash("+command+" task "+action+" *)")
 		}
 		// Every task-list subcommand the CLI has. An action missing here is pre-approved for

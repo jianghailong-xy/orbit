@@ -10,6 +10,7 @@ import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
 import { RunnerTaskOwnerConfirmationController } from './runner-task-owner-confirmation.controller';
+import { RunnerTaskProgressController } from './runner-task-progress.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
@@ -64,6 +65,7 @@ import { WatchesModule } from '../watches/watches.module';
     RunnerTasksController,
     RunnerTaskCompletionEvidenceController,
     RunnerTaskOwnerConfirmationController,
+    RunnerTaskProgressController,
     RunnerServiceTokensController,
     RunnerSessionsController,
     RunnerAgentsController,

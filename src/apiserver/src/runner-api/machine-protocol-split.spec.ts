@@ -10,6 +10,7 @@ import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
+import { RunnerTaskProgressController } from './runner-task-progress.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 
@@ -43,6 +44,7 @@ test('only the machine protocol keeps UUIDs', () => {
     RunnerProjectsController,
     RunnerServiceTokensController,
     RunnerWatchesController,
+    RunnerTaskProgressController,
   ]) {
     assert.equal(
       Reflect.getMetadata(MACHINE_PROTOCOL, controller),

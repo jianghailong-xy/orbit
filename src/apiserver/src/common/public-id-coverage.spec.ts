@@ -36,6 +36,7 @@ import { RunnerServiceTokensController } from '../runner-api/runner-service-toke
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-task-completion-evidence.controller';
+import { RunnerTaskProgressController } from '../runner-api/runner-task-progress.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -82,6 +83,7 @@ const CONTROLLERS = [
   RunnerSessionsController,
   RunnerTasksController,
   RunnerTaskCompletionEvidenceController,
+  RunnerTaskProgressController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

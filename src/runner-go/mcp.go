@@ -685,6 +685,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_progress_report":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		text, err := runTaskProgressTool(s.t, id, args)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		return toolResult(text, false)
+
 	case "tasklist_list":
 		raw, err := s.t.listTaskLists()
 		if err != nil {
@@ -2290,6 +2301,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"description": "Add a comment to a task (attributed to this agent).",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp, "body": str}, "body"),
 		},
+		// A task's structured progress, which the progress watches read (task_progress.go).
+		taskProgressDescriptor(obj, taskIDProp),
 		{
 			"name":        "tasklist_list",
 			"description": "List the caller's task lists (groups) with task counts.",

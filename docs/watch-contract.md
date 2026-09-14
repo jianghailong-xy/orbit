@@ -476,7 +476,9 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 
 `task_progress`（迁移 0271）每个 Task 一行：`phase` / `current` / `total` / `message` / `revision` / `lastProgressAt`，
 以及它所属的 `lifecycleEpoch` 与 `epochStartedAt`。写入方只有两个：报告门 `POST /api/tasks/:id/progress`
-（`TaskProgressService.report`，读门是同路径的 `GET`），和重开触发器。
+（`TaskProgressService.report`，读门是同路径的 `GET`），和重开触发器。会话里的 Agent 经 runner 门
+`GET|POST /api/runner/tasks/:id/progress`（`RunnerTaskProgressController`，runner 凭据，按 runner 的 owner 限定，不要求调用会话）
+到达同一个 service，拒绝与用户门相同；MCP 工具是 `task_progress_report`，CLI 是 `orbit task progress`（§13.1，契约 `progress.runnerDoor`）。
 
 - **报告是补丁**：出现的字段替换原值，`null` 清空，缺省保持。结果必须仍是一个位置（`phase` 或 `current`），
   `total` 只能和它界定的 `current` 同在且 `current <= total`。带 `expectedRevision` 时是 compare-and-set，不符 →
@@ -548,6 +550,7 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 | `watch_create` / `watch_get` / `watch_list` / `watch_update` / `watch_cancel` | `orbit watch create\|get\|list\|update\|cancel` | 会话内即可，与 task 工具相同 |
 | `task_await` | `orbit task await` | 会话内即可 |
 | `session_await` | `orbit session await` | orchestration，与 `session_get` 相同 |
+| `task_progress_report` | `orbit task progress` | 与 task 工具相同，不要求会话（§12.1 的 runner 门） |
 
 - observer 永远是调用它的会话（`ORBIT_SESSION_ID`）。会话外没有可唤醒的对象：CLI 直接拒绝，`orbit capabilities`
   在会话外不列出这些命令（`SessionOnly`）。
@@ -556,6 +559,9 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 - 创建后立即返回，结果让 Agent 结束本轮。条件在创建时已成立（§5）也一样返回，唤醒 turn 在本轮结束后到达。
 - 旧 apiserver 没有 runner 门（`/api/runner/watches` 回 404 `Cannot …`）时，工具明说「服务端没有 watch 门，升级服务端；
   不要退回 sleep/Bash 轮询」，不静默降级。
+- `task_progress_report` / `orbit task progress` 不给 phase、current、total、message 时是读。工具描述写明：进展只由这份报告声明，
+  不从 Bash 输出或 transcript 推断；只有 phase/current/total 变化才算进展；遇 409 `PROGRESS_REVISION_CONFLICT` 先重读，再上报。
+  旧 apiserver 没有进度门（404 `Cannot …`）时明说要升级服务端，不当成「task 不存在」。
 
 ### 13.2 runner 门
 
@@ -589,8 +595,12 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 `schedule_wakeup`、`bg_run` 的描述与 bg-guard 的拒绝文案都指向这两个工具。Claude 的 `--allowedTools` 预批准
 `orbit watch *` 与 `orbit task await`，orchestration 会话再加 `orbit session await`。
 
+执行 Task 的会话（`insideRecordedWork`）另有一段进度指令：位置变化时用 `task_progress_report` 上报；Orbit 只读这份报告，
+不读 Bash 输出或 transcript；只有 phase/current/total 变化才算进展；遇 409 `PROGRESS_REVISION_CONFLICT` 先重读，再上报。
+`--allowedTools` 预批准 `orbit task progress`。
+
 「CLI 断开后 Watch 仍存在」和「Agent 不再生成 Bash monitor」的黑盒语义由独立的 Claude 产品 QA Gate 验证。本节的机械下限是上面三份测试，
-加上 `src/runner-go/session_wait_test.go` 与 `src/runner-go/watch_cli_test.go`。
+加上 `src/runner-go/session_wait_test.go`、`src/runner-go/watch_cli_test.go` 与 `src/runner-go/task_progress_test.go`。
 
 ---
 
@@ -600,4 +610,5 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
+bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-task-progress.pg.spec.ts   # §12.1 runner 门：owner 隔离、revision 冲突、终态拒绝
 ```
