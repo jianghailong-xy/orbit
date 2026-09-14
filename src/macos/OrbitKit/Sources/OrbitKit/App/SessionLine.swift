@@ -13,6 +13,7 @@ public struct SessionLine: Equatable, Sendable {
         case approval    // needs you
         case queued      // waiting for a slot
         case background  // a process the agent left up — outlives the turn, but isn't work
+        case watching    // parked on a watch that will resume it — not a process, not waiting on you
     }
     public let text: String
     public let tone: Tone
@@ -24,7 +25,8 @@ public struct SessionLine: Equatable, Sendable {
     /// Build the line for a session. `live` is false in Trash. Always yields a line: a run that
     /// ended before producing any reply still says what happened, so the row can't shrink to a
     /// bare title (iOS sizes its list row from its content — a missing line visibly shortens it).
-    public static func make(for s: Session, live: Bool) -> SessionLine {
+    /// `watching` is the session as an observer: parked with a live watch that will resume it.
+    public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil) -> SessionLine {
         // Somebody is waiting on YOU here, which outranks everything else the row could say: every
         // other line reports what the agent is doing, and this one is the only one you can act on.
         //
@@ -49,6 +51,11 @@ public struct SessionLine: Equatable, Sendable {
         }
         if live && s.effectiveRunState == .queued {
             return SessionLine(text: "Queued", tone: .queued)
+        }
+        // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
+        // else it left running — not a background process (contract §9.2). Said in the watch's words.
+        if live, let watching, s.effectiveRunState == .awaitingInput {
+            return SessionLine(text: "\(watching.word) · \(watching.progress)", tone: .watching)
         }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
         // not the agent working either (see the glyph): muted, not the working blue.

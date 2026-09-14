@@ -453,6 +453,20 @@ public final class APIClient: @unchecked Sendable {
     public func addTaskDependency(taskID: String, _ req: AddDependencyRequest) async throws { try await postRaw("tasks/\(taskID)/dependencies", body: req) }
     public func removeTaskDependency(taskID: String, dependsOnTaskID: String) async throws { try await deleteRaw("tasks/\(taskID)/dependencies/\(dependsOnTaskID)") }
 
+    // MARK: watches (docs/watch-contract.md)
+
+    /// `GET /watches`: the newest 100, narrowed to one state when `state` is given.
+    public func watches(state: WatchState? = nil) async throws -> [Watch] {
+        try await get("watches", query: state.map { [URLQueryItem(name: "state", value: $0.rawValue)] } ?? [])
+    }
+    public func watch(_ id: String) async throws -> Watch { try await get("watches/\(id)") }
+    /// Edit the condition and/or the deadline of a live watch; answers with the watch as it now stands.
+    public func updateWatch(_ id: String, _ req: UpdateWatchRequest) async throws -> Watch { try await patch("watches/\(id)", body: req) }
+    public func pauseWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/pause") }
+    public func resumeWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/resume") }
+    /// Stop: the contract's CANCELLED.
+    public func cancelWatch(_ id: String) async throws -> Watch { try await postEmpty("watches/\(id)/cancel") }
+
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }

@@ -7,11 +7,13 @@ public enum Route: Equatable, Sendable {
     case session(String)
     case task(String)
     case runner(String)
+    /// A watch's detail on the Following page — where a watch's notification lands.
+    case watch(String)
 }
 
 /// `orbit://` URL scheme. `orbit://session/<id>`, `orbit://task/<id>`, `orbit://runner/<id>`,
-/// `orbit://active`. Parsing/formatting is pure so it's unit-tested; registering the scheme
-/// (Info.plist `CFBundleURLTypes`) + `onOpenURL` handling is the app's macOS glue.
+/// `orbit://watch/<id>`, `orbit://active`. Parsing/formatting is pure so it's unit-tested;
+/// registering the scheme (Info.plist `CFBundleURLTypes`) + `onOpenURL` handling is the app's glue.
 public enum DeepLink {
     public static let scheme = "orbit"
 
@@ -23,6 +25,7 @@ public enum DeepLink {
         case "session": return id.map(Route.session)
         case "task":    return id.map(Route.task)
         case "runner":  return id.map(Route.runner)
+        case "watch":   return id.map(Route.watch)
         case "active", "": return .active
         default:        return nil
         }
@@ -34,6 +37,7 @@ public enum DeepLink {
         case .session(let id):   return URL(string: "\(scheme)://session/\(encode(id))")!
         case .task(let id):      return URL(string: "\(scheme)://task/\(encode(id))")!
         case .runner(let id):    return URL(string: "\(scheme)://runner/\(encode(id))")!
+        case .watch(let id):     return URL(string: "\(scheme)://watch/\(encode(id))")!
         }
     }
 

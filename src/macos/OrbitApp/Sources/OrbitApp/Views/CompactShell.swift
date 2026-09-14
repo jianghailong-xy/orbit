@@ -277,6 +277,16 @@ private struct CompactSections: View {
                 RunnerDetailView()
             }
 
+        // FOLLOWING — watches → one watch's record
+        case .following:
+            NavigationSplitView {
+                FollowingListView()
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.watches?.load() }
+            } detail: {
+                WatchDetailView()
+            }
+
         // SKILLS / SETTINGS / ADMIN — single-pane sections, first-class drawer destinations. Admin is
         // reachable only for admins (the drawer hides it otherwise), so it needs no extra role gate.
         case .skills:

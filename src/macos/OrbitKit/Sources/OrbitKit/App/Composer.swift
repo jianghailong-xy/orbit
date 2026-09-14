@@ -245,7 +245,7 @@ public enum ComposerLogic {
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
     /// validation failure); the raw body when it isn't one, nil when there's nothing to show.
-    private static func serverMessage(_ body: String?) -> String? {
+    static func serverMessage(_ body: String?) -> String? {
         let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty else { return nil }
         guard let data = trimmed.data(using: .utf8),

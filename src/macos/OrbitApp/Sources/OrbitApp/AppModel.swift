@@ -71,6 +71,8 @@ final class AppModel {
         }
     }
     var selectedRunnerID: String?
+    /// The watch whose record fills Following's detail: a public id, or the UUID a push names.
+    var selectedWatchID: String?
     /// iOS only: whether Tasks has pushed the searchable directory of every named task list.
     /// The drawer shows only a compact preview; this state also tells the shell to leave the
     /// leading edge to the system back-swipe while the directory page is visible.
@@ -251,6 +253,8 @@ final class AppModel {
     private(set) var agents: AgentsModel?
     private(set) var runners: RunnersModel?
     private(set) var admin: AdminModel?
+    /// The account's watches: Following, the console's Watching card, and every session's row and header.
+    private(set) var watches: WatchesModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
     #if os(macOS)
@@ -285,6 +289,15 @@ final class AppModel {
         agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
+        let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
+        #if os(macOS)
+        // macOS has no APNs path, so a NOTIFY_USER watch that matched is announced from the refetch;
+        // iOS already gets the server's push for it (PushService.notifyWatchMatched).
+        watchesModel.onMatched = { [weak self] event in
+            self?.notifications.post(Notifications.content(for: event))
+        }
+        #endif
+        watches = watchesModel
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
@@ -451,6 +464,7 @@ final class AppModel {
         composingAgentSession = false
         composedConsoleSessionID = nil
         selectedUserID = nil
+        selectedWatchID = nil
     }
 
     /// Wire up notifications. Call once at launch.
@@ -512,10 +526,22 @@ final class AppModel {
                     // remote lifecycle change or permanent deletion cannot leave a ghost console.
                     await self.refreshFocusedSessionDetailIfNeeded()
                     self.consoleRegistry?.flush(self.focusedConsoleSessionID)
+                    await self.refreshWatchesIfDue()
                 }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
+    }
+
+    /// The watch list's floor. No control event names a watch, so this is what brings in one an agent
+    /// just created, and the evaluator's newer looks behind every "Last evaluated".
+    private var watchesRefreshNotBefore = Date.distantPast
+    private static let watchesRefreshInterval: TimeInterval = 30
+
+    private func refreshWatchesIfDue(now: Date = Date()) async {
+        guard now >= watchesRefreshNotBefore, let watches else { return }
+        watchesRefreshNotBefore = now.addingTimeInterval(Self.watchesRefreshInterval)
+        await watches.load()
     }
 
     #if os(iOS)
@@ -574,6 +600,8 @@ final class AppModel {
                         // keep fresh (they have no poll at all) alongside the session snapshot.
                         scheduleLibraryRefresh(.agents)
                         scheduleLibraryRefresh(.tasks)
+                        // No event carries a watch either: re-read the list the stream can't replay.
+                        if let watches { Task { await watches.load() } }
                         // Runners has neither push nor poll: a list that failed while offline
                         // would otherwise stay on its error until someone pulls to refresh.
                         if let runners, runners.loadState.lastLoadFailed {
@@ -624,6 +652,13 @@ final class AppModel {
     /// nudges the snapshot: either a row is leaving Open, or the field that changed isn't on the
     /// event. The 4s tick in `startPolling` remains the floor for those slim-payload gaps.
     private func apply(_ ev: ControlEvent) {
+        switch ev.type {
+        // A watch's target may have moved with this row, and no event names watches: refetch soon.
+        case .sessionCreated, .sessionUpdated, .sessionEnded, .approvalRequested, .approvalResolved, .taskChanged:
+            watches?.nudge()
+        default:
+            break
+        }
         switch ev.type {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
         // only an explicit coarse invalidation (or an older/malformed payload) needs a snapshot.
@@ -1200,6 +1235,7 @@ final class AppModel {
         // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
         case .agents:  return selectedAgentSessionID == nil && !composingAgentSession
         case .runners: return selectedRunnerID == nil
+        case .following: return selectedWatchID == nil
         // Settings pushes its Runners sub-page (iOS); it's at root only when that isn't up, so the
         // pushed runner pages yield the edge to the system back-swipe.
         case .settings: return !settingsShowingRunners
@@ -1561,6 +1597,20 @@ final class AppModel {
             tasks?.searchText = ""
             selectedTaskID = id
         case .runner(let id):  selectedRunnerID = id
+        case .watch(let id):   openWatch(id)
+        }
+    }
+
+    /// Open a watch's record on Following. A push names the watch by its UUID while the list tags rows
+    /// by public id, so the selection takes the list's spelling once the watch is in hand — fetched
+    /// first when it's an older one the list doesn't hold.
+    private func openWatch(_ id: String) {
+        selectedWatchID = watches?.watch(id)?.id ?? id
+        guard let watches, watches.watch(id) == nil else { return }
+        Task { @MainActor [weak self] in
+            await watches.fetch(id)
+            guard let self, self.selectedWatchID == id, let watch = watches.watch(id) else { return }
+            self.selectedWatchID = watch.id
         }
     }
 
