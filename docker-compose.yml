@@ -104,6 +104,12 @@ services:
       # twice a day. Point at a mirror or a pinned copy where models.dev isn't reachable; a failed
       # fetch just leaves the pickers on the lists this build shipped.
       MODEL_CATALOG_URL: "${MODEL_CATALOG_URL:-https://models.dev/api.json}"
+      # Optional: how far native Watch is switched on (docs/watch-rollout.md): on (default), canary (only the
+      # accounts ORBIT_WATCHES_CANARY_OWNERS lists, comma-separated ids), drain (no new watches; the ones made
+      # keep running) or off (drain, and this apiserver runs no Watch evaluation or delivery). Takes effect on
+      # `docker compose up -d apiserver`; no migration and no runner release either way.
+      ORBIT_WATCHES: "${ORBIT_WATCHES:-on}"
+      ORBIT_WATCHES_CANARY_OWNERS: "${ORBIT_WATCHES_CANARY_OWNERS:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived

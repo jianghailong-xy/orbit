@@ -565,6 +565,10 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 - 创建后立即返回，结果让 Agent 结束本轮。条件在创建时已成立（§5）也一样返回，唤醒 turn 在本轮结束后到达。
 - 旧 apiserver 没有 runner 门（`/api/runner/watches` 回 404 `Cannot …`）时，工具明说「服务端没有 watch 门，升级服务端；
   不要退回 sleep/Bash 轮询」，不静默降级。
+- apiserver 对该账号没开 Watch（`ORBIT_WATCHES`，见 [`watch-rollout.md`](./watch-rollout.md)）时，新建、编辑、恢复与死信重投回
+  404 `WATCHES_DISABLED`，读、暂停、取消、release 照常。这个 404 与没有 runner 门时一样，已发布的 runner 照样按上一条降级；
+  本版工具认出这个码，明说「Watch 没开」。claim 带 `watchesDisabled` 时 runner 注入 `ORBIT_WATCHES=off`：MCP 与 CLI 不列出
+  这些工具，指令里不带等待那一段，bg-guard 不拦轮询。
 - `task_progress_report` / `orbit task progress` 不给 phase、current、total、message 时是读。工具描述写明：进展只由这份报告声明，
   不从 Bash 输出或 transcript 推断；只有 phase/current/total 变化才算进展；遇 409 `PROGRESS_REVISION_CONFLICT` 先重读，再上报。
   旧 apiserver 没有进度门（404 `Cannot …`）时明说要升级服务端，不当成「task 不存在」。
@@ -592,6 +596,7 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 4. 预算用尽（`TIMEOUT`）或轮询时服务端不再应答（`TRANSPORT_ERROR`）：返回最后看到的会话，旁边是 `watch: {id, handedBack, note}`。
    **不报错、不丢等待意图**；MCP 文本明确让 Agent 结束本轮。
 5. 兼容：没有调用会话（headless CLI、service token）时没有可唤醒的会话，服务端没有 runner 门时 watch 建不起来，两者都走迁移前的轮询。
+   引擎带 `ORBIT_WATCHES=off`（该账号没开 Watch）时也一样，不建 watch；没等到就在 `watch` 里带 `code: WATCHES_DISABLED`，说明里不再建议 await。
 6. watch 没记下：建 watch 遇到 5xx、408、429 或网络错误时，用同一 `idempotencyKey` 最多试 3 次（间隔 1 秒），仍失败就走迁移前的轮询；
    被明确拒绝（其余 4xx，如 `WATCH_QUOTA_EXCEEDED`、`PERMISSION_DENIED`）时不再轮询，立即返回刚建好的会话。没有 runner 门、重试用尽、
    被拒这三种情况下，返回时会话尚未 settle 就带 `watch: {error, note}`（没有 `id`），MCP 文本写明 no server-held watch backs this wait：

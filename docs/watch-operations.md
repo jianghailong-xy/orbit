@@ -12,6 +12,7 @@
 | 脱敏 | `src/apiserver/src/watches/watch-redaction.ts` |
 | 指标与告警 | `src/apiserver/src/watches/watch-metrics.ts`，由 `GET /api/metrics` 暴露 |
 | 测试 | `src/apiserver/src/watches/watch-security.pg.spec.ts` |
+| 灰度开关、回退与旧轮询的迁移 | [`watch-rollout.md`](./watch-rollout.md) |
 
 ## 0. 一页结论
 
