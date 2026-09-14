@@ -418,6 +418,18 @@ test('(a) twenty external facts with the progress vector unchanged are all deliv
     }
   });
 
+/**
+ * Now on the clock that stamps `run_event.ingested_at`, as a Date no earlier than any row stamped so far.
+ * The column keeps microseconds and a Date keeps milliseconds, so `new Date()` taken in the millisecond a
+ * turn was ingested truncates to before that turn — and the fuse, rightly, does not count a turn ingested
+ * after the instant it is asked about.
+ */
+async function afterIngestion(db: PrismaClient): Promise<Date> {
+  const [{ now }] = await db.$queryRaw<Array<{ now: Date }>>`
+    SELECT date_trunc('milliseconds', clock_timestamp()) + interval '1 millisecond' AS "now"`;
+  return now;
+}
+
 test('(b) self-started turns past the limit pause the coordinator; delivered turns, other sessions and old turns do not count',
   { skip, timeout: 240_000 }, async () => {
     const { db, convergence } = await connect();
@@ -451,7 +463,7 @@ test('(b) self-started turns past the limit pause the coordinator; delivered tur
       await turnEnds(db, await openSession(db, f), 1, limit + 5, null);
 
       seq = await turnEnds(db, f.coordinatorSessionId, seq, limit, null);
-      const atLimit = await assessSpend(convergence, f.projectId);
+      const atLimit = await assessSpend(convergence, f.projectId, await afterIngestion(db));
       assert.equal(atLimit.spend.selfStartedTurns, limit);
       assert.equal(atLimit.paused, false, 'reaching the limit is not exceeding it');
 
@@ -461,7 +473,7 @@ test('(b) self-started turns past the limit pause the coordinator; delivered tur
       assert.equal(nextDay.spend.selfStartedTurns, 0, 'turns from more than a day ago were counted');
 
       await turnEnds(db, f.coordinatorSessionId, seq, 1, null);
-      const over = await assessSpend(convergence, f.projectId);
+      const over = await assessSpend(convergence, f.projectId, await afterIngestion(db));
       assert.equal(over.paused, true);
       assert.equal(over.reason, 'SELF_STARTED_TURNS');
       assert.equal(over.observed, limit + 1);
