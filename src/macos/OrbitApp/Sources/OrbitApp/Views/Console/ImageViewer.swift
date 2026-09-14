@@ -174,6 +174,8 @@ struct ImagePagerView: View {
     /// Set when a long press opens the image menu. Lifting that finger can still complete the single
     /// tap, which would close the viewer — and the menu with it — the moment the menu appears.
     @State private var swallowTap = false
+    /// The image a long press opened the menu for; nil while the menu is closed.
+    @State private var menuImage: PlatformImage?
     @State private var notice: SaveNotice?
 
     private enum DragMode { case idle, page, dismiss, pan, scroll }
@@ -204,6 +206,8 @@ struct ImagePagerView: View {
 
             let drag = DragGesture()
                 .onChanged { v in
+                    // The finger that long-pressed the menu open can go on to drag; the image stays put.
+                    guard menuImage == nil else { return }
                     if mode == .idle {
                         if zoomed { mode = .pan }
                         else if abs(v.translation.width) > abs(v.translation.height) { mode = .page }
@@ -226,6 +230,10 @@ struct ImagePagerView: View {
                     }
                 }
                 .onEnded { v in
+                    guard menuImage == nil else {
+                        mode = .idle
+                        return
+                    }
                     switch mode {
                     case .page:
                         var next = index
@@ -268,12 +276,10 @@ struct ImagePagerView: View {
             // left to compete, it would lose the touch to the drag and taps and never fire.
             let longPress = LongPressGesture(minimumDuration: 0.4)
                 .onEnded { _ in
-                    guard let image = currentImage else { return }
+                    guard menuImage == nil, let image = currentImage else { return }
                     swallowTap = true
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    presentImageActionSheet(image,
-                                            onClose: { swallowTap = false },
-                                            onSaved: { notice = SaveNotice(saved: $0) })
+                    withAnimation(Self.menuAnimation) { menuImage = image }
                 }
 
             ZStack {
@@ -316,6 +322,7 @@ struct ImagePagerView: View {
         }
         .ignoresSafeArea()
         .overlay(alignment: .bottom) { pageCounter }
+        .overlay { imageMenu }
         .overlay(alignment: .top) { noticeCard }
         .statusBarHidden(true)
         .presentationBackground(.clear)
@@ -405,6 +412,83 @@ struct ImagePagerView: View {
         }
     }
 
+    private static let menuAnimation = Animation.spring(response: 0.32, dampingFraction: 0.9)
+    private static let menuGroupShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+    private static let menuFill = Color(white: 0.17).opacity(0.94)
+
+    /// The menu a long press opens: Save to Photos, Copy and Share over a separate Cancel, rising
+    /// full-width from the bottom edge over the dimmed image. Drawn here rather than presented as a
+    /// system action sheet, which from iOS 26 no longer looks like this — it floats as a narrow panel
+    /// by its source with no Cancel or, given no source, sits centred like an alert. Dark whatever the
+    /// app's appearance, like the viewer under it; tapping the dimmed image closes it, as Cancel does.
+    private var imageMenu: some View {
+        ZStack(alignment: .bottom) {
+            if menuImage != nil {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { closeMenu() }
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+            if let image = menuImage {
+                VStack(spacing: 8) {
+                    VStack(spacing: 0) {
+                        menuRow("Save to Photos") {
+                            Task { await saveToPhotos(image) { notice = SaveNotice(saved: $0) } }
+                        }
+                        menuDivider
+                        menuRow("Copy") {
+                            UIPasteboard.general.image = image
+                            PlatformHaptics.success()
+                        }
+                        menuDivider
+                        menuRow("Share…") { shareImage(image) }
+                    }
+                    .background(Self.menuFill, in: Self.menuGroupShape)
+                    .clipShape(Self.menuGroupShape)
+                    menuRow("Cancel", weight: .semibold) {}
+                        .background(Self.menuFill, in: Self.menuGroupShape)
+                        .clipShape(Self.menuGroupShape)
+                }
+                .frame(maxWidth: 500)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+                .environment(\.colorScheme, .dark)
+                .accessibilityElement(children: .contain)
+                .accessibilityAddTraits(.isModal)
+                .accessibilityAction(.escape) { closeMenu() }
+                .transition(.move(edge: .bottom))
+            }
+        }
+    }
+
+    private var menuDivider: some View {
+        Rectangle().fill(Color.white.opacity(0.16)).frame(height: 0.5)
+    }
+
+    /// One row of the menu. Every row closes the menu before acting, so what an action presents — the
+    /// share sheet, the Photos-access alert — comes up over the viewer, not over the menu.
+    private func menuRow(_ title: String, weight: Font.Weight = .regular,
+                         action: @escaping () -> Void) -> some View {
+        Button {
+            closeMenu()
+            action()
+        } label: {
+            Text(title)
+                .font(.title3.weight(weight))
+                .foregroundStyle(Color.blue)
+                .frame(maxWidth: .infinity, minHeight: 57)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuRowStyle())
+    }
+
+    private func closeMenu() {
+        withAnimation(Self.menuAnimation) { menuImage = nil }
+        swallowTap = false
+    }
+
     /// What a save from the image menu came to.
     private struct SaveNotice: Equatable {
         let saved: Bool
@@ -454,47 +538,28 @@ struct ImagePagerView: View {
     }
 }
 
-/// Presents the image menu a long press opens in the full-screen viewer: the system action sheet from
-/// the bottom of the screen — the convention for a full-screen photo — with Save to Photos, Copy and
-/// Share. UIKit on purpose: SwiftUI's `.confirmationDialog`, presented from inside the viewer's
-/// clear-background `fullScreenCover`, renders as a centred card with no Cancel instead.
-/// `onClose` runs whichever way the sheet goes; `onSaved` reports whether a save landed.
-@MainActor
-func presentImageActionSheet(_ image: UIImage, onClose: @escaping () -> Void,
-                             onSaved: @escaping (Bool) -> Void) {
-    guard let host = frontmostViewController() else {
-        onClose()
-        return
+/// A menu row's pressed state: the row lights up under the finger, as a system action sheet's does.
+private struct MenuRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(Color.white.opacity(configuration.isPressed ? 0.12 : 0))
     }
-    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-    sheet.addAction(UIAlertAction(title: "Save to Photos", style: .default) { _ in
-        onClose()
-        Task { await saveToPhotos(image, from: host, onSaved: onSaved) }
-    })
-    sheet.addAction(UIAlertAction(title: "Copy", style: .default) { _ in
-        onClose()
-        UIPasteboard.general.image = image
-        PlatformHaptics.success()
-    })
-    sheet.addAction(UIAlertAction(title: "Share…", style: .default) { _ in
-        onClose()
-        let share = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        anchorAtBottom(share.popoverPresentationController, of: host.view)
-        host.present(share, animated: true)
-    })
-    sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in onClose() })
-    // The viewer is black whatever the app's appearance, so the sheet is dark to sit on it.
-    sheet.overrideUserInterfaceStyle = .dark
-    anchorAtBottom(sheet.popoverPresentationController, of: host.view)
-    host.present(sheet, animated: true)
+}
+
+/// Hands the image to the system share sheet — Messages, WeChat, AirDrop, Save Image — over the viewer.
+@MainActor
+private func shareImage(_ image: UIImage) {
+    guard let host = frontmostViewController() else { return }
+    let share = UIActivityViewController(activityItems: [image], applicationActivities: nil)
+    anchorAtBottom(share.popoverPresentationController, of: host.view)
+    host.present(share, animated: true)
 }
 
 /// Adds the image to the photo library, asking for add-only access the first time — all a save needs
 /// (`NSPhotoLibraryAddUsageDescription` in Info.plist). A refusal gets the way to Settings rather than
 /// nothing, since it's the one failure the user can fix.
 @MainActor
-private func saveToPhotos(_ image: UIImage, from host: UIViewController,
-                          onSaved: @escaping (Bool) -> Void) async {
+private func saveToPhotos(_ image: UIImage, onSaved: @escaping (Bool) -> Void) async {
     let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
     guard status == .authorized || status == .limited else {
         let alert = UIAlertController(title: "Can't Save to Photos",
@@ -506,7 +571,7 @@ private func saveToPhotos(_ image: UIImage, from host: UIViewController,
                 UIApplication.shared.open(url)
             }
         })
-        host.present(alert, animated: true)
+        frontmostViewController()?.present(alert, animated: true)
         return
     }
     do {
@@ -532,8 +597,8 @@ private func frontmostViewController() -> UIViewController? {
     return top
 }
 
-/// iPad shows an action or share sheet as a popover, which traps without an anchor: pin it, arrowless,
-/// to the bottom centre so it still rises from the bottom of the image. A no-op on iPhone.
+/// iPad shows the share sheet as a popover, which traps without an anchor: pin it, arrowless, to the
+/// bottom centre of the viewer.
 @MainActor
 private func anchorAtBottom(_ popover: UIPopoverPresentationController?, of view: UIView) {
     guard let popover else { return }
