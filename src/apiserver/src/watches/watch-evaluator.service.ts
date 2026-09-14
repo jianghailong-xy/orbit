@@ -53,7 +53,9 @@ import {
  * An event this replica published about a session, or naming tasks, pulls the watches targeting
  * exactly those rows to due. That is all a hint can do: its payload is never read for a verdict, a
  * duplicate finds the watch already due, and one that arrives out of order only causes an
- * evaluation that re-reads the rows. A hint that never arrives costs latency and nothing else,
+ * evaluation that re-reads the rows. A hint never waits in the database for a watch another
+ * transaction holds — it passes the row over and asks again after a pause, holding no connection
+ * in between (see `markDue`). A hint that never arrives costs latency and nothing else,
  * because a live watch is never scheduled more than `reconcileIntervalMs` ahead — and for the
  * leaves no event covers at all (a session moved to Completed, an approval row) that sweep is the
  * mechanism, not a backstop.
@@ -75,6 +77,10 @@ export const WATCH_RECONCILE_INTERVAL_MS = 60_000;
 export const WATCH_POLL_INTERVAL_MS = 5_000;
 /** Due watches taken per claim. */
 export const WATCH_CLAIM_BATCH = 25;
+/** How soon a hint asks again about a watch it found another transaction holding: a landing takes milliseconds. */
+export const WATCH_HINT_RETRY_MS = 50;
+/** The longest pause between two asks, however long that watch stays held. */
+export const WATCH_HINT_RETRY_MAX_MS = 1_000;
 
 export const WATCH_EVALUATOR_OPTIONS = Symbol('WATCH_EVALUATOR_OPTIONS');
 
@@ -321,12 +327,10 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     return claimed.map((row) => row.id);
   }
 
-  /** A hint, applied: start a pass when it made anything due. A hint that fails is a hint that was lost, which the sweep absorbs. */
+  /** A hint, applied (see `markDue`). A hint that fails is a hint that was lost, which the sweep absorbs. */
   async hint(kind: WatchTargetKind, resourceIds: readonly string[]): Promise<number> {
     try {
-      const pulled = await this.markDue(kind, resourceIds);
-      if (pulled > 0) this.kick();
-      return pulled;
+      return await this.markDue(kind, resourceIds);
     } catch (error) {
       this.log.warn(`watch hint failed: ${error instanceof Error ? error.message : error}`);
       return 0;
@@ -334,28 +338,53 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Make every ACTIVE watch with a target of this kind and one of these ids due now; returns how many
-   * moved. A watch already due is not written again, a terminal one has no schedule to move, and the
-   * rows are locked in id order so two hints naming overlapping watches take them in one order.
+   * Make every ACTIVE watch with a target of this kind and one of these ids due now, and start a pass
+   * as soon as that moved anything; returns how many moved. A watch already due is not written again,
+   * and a terminal one has no schedule to move.
+   *
+   * A watch another transaction holds — a landing above all, or a claim, a transition, another hint —
+   * is passed over and asked about again after a pause, with no connection held in between, until it
+   * is found free. Waiting for the row instead would hold a pooled connection for as long as the holder
+   * runs, and a landing parked on a lock runs for as long as that lock is held: a burst of hints would
+   * hold the replica's whole pool. Asking again is what keeps the hint: a landing that read its rows
+   * before the change this hint announces lands a schedule a reconciliation period away, and only the
+   * watch being made due after that landing catches the change sooner. The asking stops when the loop
+   * stops, and once a reconciliation period has passed, by which time the sweep has come round.
    */
   async markDue(kind: WatchTargetKind, resourceIds: readonly string[]): Promise<number> {
     if (resourceIds.length === 0) return 0;
-    const pulled = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      UPDATE "watch" AS w
-      SET "next_evaluate_at" = now()
-      FROM (
-        SELECT "id" FROM "watch"
-        WHERE "id" IN (
-            SELECT "watch_id" FROM "watch_target"
-            WHERE "target_kind" = ${kind} AND "target_resource_id" = ANY(${[...resourceIds]}::uuid[]))
-          AND "state" = 'ACTIVE'
-          AND "next_evaluate_at" > now()
-        ORDER BY "id"
-        FOR UPDATE
-      ) AS hinted
-      WHERE w."id" = hinted."id"
-      RETURNING w."id"`;
-    return pulled.length;
+    let candidates = Prisma.sql`
+      SELECT "watch_id" FROM "watch_target"
+      WHERE "target_kind" = ${kind} AND "target_resource_id" = ANY(${[...resourceIds]}::uuid[])`;
+    const startedAt = Date.now();
+    let pulled = 0;
+    for (let pause = WATCH_HINT_RETRY_MS; ; pause = Math.min(pause * 2, WATCH_HINT_RETRY_MAX_MS)) {
+      const hinted = await this.prisma.$queryRaw<Array<{ id: string; pulled: boolean }>>`
+        WITH "hinted" AS (
+          SELECT "id" FROM "watch"
+          WHERE "id" IN (${candidates}) AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
+        ), "pulled" AS (
+          UPDATE "watch" AS w
+          SET "next_evaluate_at" = now()
+          FROM (
+            SELECT "id" FROM "watch"
+            WHERE "id" IN (SELECT "id" FROM "hinted") AND "state" = 'ACTIVE' AND "next_evaluate_at" > now()
+            FOR UPDATE SKIP LOCKED
+          ) AS free
+          WHERE w."id" = free."id"
+          RETURNING w."id"
+        )
+        SELECT "id", "id" IN (SELECT "id" FROM "pulled") AS "pulled" FROM "hinted"`;
+      const held = hinted.filter((watch) => !watch.pulled).map((watch) => watch.id);
+      if (held.length < hinted.length) {
+        pulled += hinted.length - held.length;
+        this.kick();
+      }
+      if (held.length === 0 || Date.now() - startedAt + pause > this.reconcileIntervalMs) return pulled;
+      await new Promise((resolve) => setTimeout(resolve, pause).unref());
+      if (this.loop === 'STOPPED') return pulled;
+      candidates = Prisma.sql`SELECT unnest(${held}::uuid[])`;
+    }
   }
 
   /**

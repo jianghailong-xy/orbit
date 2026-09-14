@@ -2,8 +2,9 @@
  * The Watch evaluator against a real PostgreSQL: leases, hints, reconciliation and restarts.
  *
  * What is under test is a set of promises about time and concurrency — a hint that arrives twice
- * or out of order, a notification that never arrives, a worker that dies holding a lease, a process
- * restarted around a waiting watch — and none of them is witnessed except by making it happen. So
+ * or out of order, a notification that never arrives, a hint that meets a landing parked on a lock, a
+ * worker that dies holding a lease, a process restarted around a waiting watch — and none of them is
+ * witnessed except by making it happen. So
  * each case injects its fault itself: replicas that each own a Prisma pool and a realtime hub race
  * on one database, a hub drops every event on purpose, a worker is killed between its claim and its
  * landing, a Nest application context is closed and booted again as a new process would be.
@@ -23,7 +24,8 @@ import { after, before, beforeEach, test } from 'node:test';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 import {
   NormalizedRunEvent,
   RunEventType,
@@ -149,8 +151,8 @@ function replica(
   options: WatchEvaluatorOptions = {},
   hub: (prisma: PrismaClient) => LocalRealtime = (prisma) => new LocalRealtime(prisma),
   Evaluator: typeof WatchEvaluatorService = WatchEvaluatorService,
+  prisma: PrismaClient = prismaClientFor(URL!),
 ): Replica {
-  const prisma = prismaClientFor(URL!);
   clients.push(prisma);
   const realtime = hub(prisma);
   const evaluator = new Evaluator(prisma as unknown as PrismaService, realtime, {
@@ -333,6 +335,113 @@ const event = (type: RunEventType, payload: Record<string, unknown> = {}): Norma
   ts: new Date().toISOString(),
   payload,
 });
+
+/** pg.Pool's default size, which a PrismaPg built from a URL keeps: each replica's pool here, and the apiserver's own. */
+const POOL_MAX = 10;
+/** A fragment of the statement a hint issues. */
+const MARK_DUE = 'SET "next_evaluate_at" = now()';
+
+/**
+ * A client whose transactions outlast the lock a case parks them on. Prisma rolls an interactive
+ * transaction back after five seconds, which a parked landing on a starved host could reach before the
+ * case lets it go; nothing else about it differs from a replica's own.
+ */
+function patientPrisma(): PrismaClient {
+  return new PrismaClient({ adapter: new PrismaPg(URL!), transactionOptions: { timeout: 60_000 } });
+}
+
+/** Opens every connection a pool keeps, as a replica that has been serving has them open. */
+async function warm(prisma: PrismaClient): Promise<void> {
+  await Promise.all(Array.from({ length: POOL_MAX }, () => prisma.$executeRaw`SELECT pg_sleep(0.1)`));
+}
+
+/**
+ * A transaction of the case's own holding one row lock until released. It is released before anything
+ * else a case started is stopped: an evaluation still waiting on it would keep its pool from closing.
+ */
+async function holdRow(statement: string): Promise<() => Promise<void>> {
+  const holder = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
+  await holder.connect();
+  await holder.query('BEGIN');
+  await holder.query(statement);
+  let released: Promise<void> | undefined;
+  const release = () => (released ??= holder.query('COMMIT').then(() => holder.end()).catch(() => {}));
+  running.unshift({ stop: release });
+  return release;
+}
+
+/** Backends of this database waiting on a lock in a statement containing `fragment`. */
+async function waitingOnLocks(fragment: string): Promise<number> {
+  const { rows: [{ n }] } = await sql.query<{ n: number }>(
+    `SELECT count(*)::int AS "n" FROM pg_stat_activity
+     WHERE "datname" = current_database() AND "wait_event_type" = 'Lock' AND position($1 in "query") > 0`,
+    [fragment],
+  );
+  return n;
+}
+
+/** Backends of this database that started a statement containing `fragment` at or after `since`, running or finished. */
+async function startedSince(fragment: string, since: string): Promise<number> {
+  const { rows: [{ n }] } = await sql.query<{ n: number }>(
+    `SELECT count(*)::int AS "n" FROM pg_stat_activity
+     WHERE "datname" = current_database() AND position($1 in "query") > 0
+       AND "query_start" >= $2::timestamp AT TIME ZONE 'UTC'`,
+    [fragment, since],
+  );
+  return n;
+}
+
+/**
+ * A landing parked halfway, as a lock held elsewhere parks one. A watch over two open tasks is evaluated
+ * once; its first task ends; its next evaluation — `called` directly, or `claimed` by the judge's running
+ * loop — reads both tasks, has the ended target's state to write, and stops at that write because the
+ * case holds the target's row. Until the case lets go, that evaluation holds the watch's row, having read
+ * the second task open. No other loop may be running yet: it would claim the watch, created due, and
+ * write the ended target's state itself, leaving the evaluation nothing to stop at.
+ */
+async function parkLanding(judge: Replica, how: 'called' | 'claimed') {
+  const ended = await insertTask('OPEN');
+  const open = await insertTask('OPEN');
+  const watchId = await insertWatch([{ kind: 'TASK', id: ended }, { kind: 'TASK', id: open }], all('TASK_TERMINAL'));
+  assert.equal((await judge.evaluator.evaluate(watchId)).outcome, 'SCHEDULED');
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [ended]);
+  const release = await holdRow(
+    `SELECT 1 FROM "watch_target" WHERE "watch_id" = '${watchId}' AND "target_resource_id" = '${ended}' FOR UPDATE`,
+  );
+  let landing: Promise<WatchEvaluation> | null = null;
+  if (how === 'called') {
+    landing = judge.evaluator.evaluate(watchId);
+    landing.catch(() => undefined); // awaited by the case; a case that fails first leaves it to settle unobserved
+  } else {
+    await sql.query(`UPDATE "watch" SET "next_evaluate_at" = "created_at" WHERE "id" = $1`, [watchId]);
+    judge.evaluator.start();
+    judge.evaluator.kick();
+  }
+  await eventually('the landing to park on the target row', () => waitingOnLocks('UPDATE "watch_target"'), (n) => n === 1, 10_000);
+  return { watchId, open, release, landing };
+}
+
+/** Every hint a replica is handed, published or direct: once all have settled, how many watches they made due. */
+function hintsOf(evaluator: WatchEvaluatorService): { settled(): Promise<number> } {
+  const applying = new Set<Promise<number>>();
+  let pulled = 0;
+  const hint = evaluator.hint.bind(evaluator);
+  evaluator.hint = (kind, ids) => {
+    const applied = hint(kind, ids).then((moved) => {
+      pulled += moved;
+      return moved;
+    });
+    applying.add(applied);
+    void applied.finally(() => applying.delete(applied));
+    return applied;
+  };
+  return {
+    async settled() {
+      while (applying.size > 0) await Promise.all(applying);
+      return pulled;
+    },
+  };
+}
 
 test('every leaf decides the contract vectors from the rows the evaluator reads', { skip, timeout: 120_000 }, async () => {
   const { evaluator } = replica();
@@ -547,6 +656,78 @@ test('notifications dropped on purpose are caught by the periodic reconciliation
   prompt.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [other], resync: false });
   const [match] = await eventually('the hinted Match', () => readMatches(hinted), (m) => m.length === 1);
   assert.ok(match.matchedAt < first.nextEvaluateAt!, 'a delivered hint still waited for the sweep');
+});
+
+test('a burst of hints naming a watch whose landing is parked on a lock waits for nothing: it holds none of its replica\'s pooled connections, and the watch is still evaluated once the landing lets go', { skip, timeout: 120_000 }, async () => {
+  const judge = replica({}, undefined, undefined, patientPrisma());
+  const hinted = replica();
+  const parked = await parkLanding(judge, 'called');
+  await warm(hinted.prisma);
+  const hints = hintsOf(hinted.evaluator);
+  hinted.evaluator.start();
+
+  // Twice as many hints as the replica has connections, as a burst of events naming one task arrives.
+  for (let i = 0; i < 2 * POOL_MAX; i += 1) {
+    hinted.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [parked.open], resync: false });
+  }
+  const burstAt = Date.now();
+  const unrelated = hinted.prisma.$queryRaw`SELECT 1`.then(() => Date.now() - burstAt);
+  let waiting = 0;
+  while (waiting < POOL_MAX && Date.now() - burstAt < 1_500) {
+    waiting = Math.max(waiting, await waitingOnLocks(MARK_DUE));
+    await sleep(25);
+  }
+  assert.equal(
+    waiting,
+    0,
+    `${waiting} hints were waiting in the database for the parked landing's watch row, each on one of the ${POOL_MAX} connections its replica's pool has`,
+  );
+  const answeredMs = await Promise.race([unrelated, sleep(1_000).then(() => null)]);
+  assert.notEqual(answeredMs, null, 'a query that reads no watch found no free connection on the replica the hints arrived at');
+
+  // Nothing was dropped: once the landing lets go, the hints make its watch due, and it is evaluated again.
+  const releasedAt = await dbNow();
+  await parked.release();
+  assert.equal((await parked.landing!).outcome, 'SCHEDULED');
+  assert.ok((await hints.settled()) >= 1, 'no hint of the burst made the watch due once the landing had let go');
+  const again = await eventually(
+    'the evaluation the hints caused',
+    () => readWatch(parked.watchId),
+    (w) => w.evaluatedAt! > releasedAt && w.due === false,
+    10_000,
+  );
+  assert.equal(again.state, 'ACTIVE');
+});
+
+test('a change whose hint meets a landing that read the rows before it is still matched within seconds, not at the reconciliation', { skip, timeout: 120_000 }, async () => {
+  const judge = replica({}, undefined, undefined, patientPrisma());
+  const hinted = replica();
+  const latencyMs: Record<string, number> = {};
+
+  // 1. The landing is another replica's. The change commits while it is parked, then its hint arrives.
+  const across = await parkLanding(judge, 'called');
+  hinted.evaluator.start();
+  let since = await dbNow();
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [across.open]);
+  hinted.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [across.open], resync: false });
+  await eventually('the hint to reach the database while the landing holds its watch', () => startedSince(MARK_DUE, since), (n) => n > 0);
+  let releasedAt = Date.now();
+  await across.release();
+  assert.equal((await across.landing!).outcome, 'SCHEDULED', 'the parked landing read the change it was parked to miss');
+  await eventually('the Match of the change the hint announced', () => readMatches(across.watchId), (m) => m.length === 1, 10_000);
+  latencyMs.anotherReplicasLanding = Date.now() - releasedAt;
+
+  // 2. The landing is the hinted replica's own, inside the pass its running loop started.
+  const own = await parkLanding(judge, 'claimed');
+  since = await dbNow();
+  await sql.query(`UPDATE "task" SET "status" = 'CANCELLED' WHERE "id" = $1`, [own.open]);
+  judge.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [own.open], resync: false });
+  await eventually('the hint to reach the database while the landing holds its watch', () => startedSince(MARK_DUE, since), (n) => n > 0);
+  releasedAt = Date.now();
+  await own.release();
+  await eventually('the Match of the change the hint announced', () => readMatches(own.watchId), (m) => m.length === 1, 10_000);
+  latencyMs.itsOwnLanding = Date.now() - releasedAt;
+  console.log(`HINT-NOTE ${JSON.stringify(latencyMs)}`);
 });
 
 test('an expired lease is taken over, and the stalled holder lands nothing a second time', { skip, timeout: 120_000 }, async () => {
