@@ -2,9 +2,9 @@ import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Spin } from 'antd';
 import { useSearchParams } from 'react-router-dom';
-import type { WatchView } from '@orbit/shared';
+import type { WatchState, WatchView } from '@orbit/shared';
 import { WatchCard } from '../components/WatchCard';
-import { watchesQuery } from '../lib/queries';
+import { watchQuery, watchesQuery } from '../lib/queries';
 import {
   groupWatches,
   sameResourceId,
@@ -13,8 +13,11 @@ import {
   type WatchBucket,
 } from '../lib/watches';
 
-/** The most rows `GET /watches` answers with (WatchesService LIST_LIMIT). */
+/** The most rows one `GET /watches` read answers with (WatchesService LIST_LIMIT), of every state or of one. */
 export const FOLLOWING_LIST_LIMIT = 100;
+
+/** The states read on their own (lib/queries `watchesQuery`), each up to FOLLOWING_LIST_LIMIT. */
+const LIVE_STATES: readonly WatchState[] = ['ACTIVE', 'PAUSED'];
 
 const TABS: readonly { key: WatchBucket; label: string; empty: string }[] = [
   {
@@ -38,20 +41,29 @@ const isBucket = (value: string | null): value is WatchBucket => TABS.some((tab)
  * Everything this account follows, filed by what it asks of a reader: Active (still waiting), Needs
  * attention (an end or a failure nobody would otherwise hear about — lib/watches `watchProblem`) and
  * Triggered history (every other end, newest first). `?watch=<id>` opens that watch's card on its
- * tab, and `?tab=` picks a tab.
+ * tab, read on its own when no list holds it, and `?tab=` picks a tab.
  */
 export function FollowingPage() {
   const [params, setParams] = useSearchParams();
   const watchesQ = useQuery(watchesQuery());
   const data = watchesQ.data;
-  const watches = useMemo<WatchView[]>(() => (Array.isArray(data) ? data : []), [data]);
-  const groups = useMemo(() => groupWatches(watches), [watches]);
+  const listed = useMemo<WatchView[]>(() => (Array.isArray(data) ? data : []), [data]);
   const wanted = params.get('watch');
-  const focused = wanted ? watches.find((w) => sameResourceId(w.id, wanted)) : undefined;
+  const inList = wanted ? listed.find((w) => sameResourceId(w.id, wanted)) : undefined;
+  // A link can name a watch older than every list: a wake card names the watch that queued it, however old.
+  const wantedQ = useQuery({ ...watchQuery(wanted ?? ''), enabled: !!wanted && watchesQ.isSuccess && !inList });
+  const fetched =
+    wanted && !inList && wantedQ.data && sameResourceId(wantedQ.data.id, wanted) ? wantedQ.data : undefined;
+  const watches = useMemo<WatchView[]>(() => (fetched ? [...listed, fetched] : listed), [listed, fetched]);
+  const groups = useMemo(() => groupWatches(watches), [watches]);
+  const focused = inList ?? fetched;
   const focusedId = focused?.id;
   const tabParam = params.get('tab');
   const tab: WatchBucket = isBucket(tabParam) ? tabParam : focused ? watchBucket(focused) : 'active';
   const current = TABS.find((t) => t.key === tab)!;
+  const liveCapped = LIVE_STATES.some(
+    (state) => listed.filter((w) => w.state === state).length >= FOLLOWING_LIST_LIMIT,
+  );
 
   useEffect(() => {
     if (!focusedId) return;
@@ -89,10 +101,8 @@ export function FollowingPage() {
           </button>
         ))}
       </div>
-      {wanted && watchesQ.isSuccess && !focused && (
-        <div className="following-note">
-          That watch isn’t in this list, which holds the {FOLLOWING_LIST_LIMIT} most recent watches.
-        </div>
+      {wanted && !focused && wantedQ.isError && (
+        <div className="following-note">That watch couldn’t be opened: {watchErrorMessage(wantedQ.error)}</div>
       )}
       <div role="tabpanel" className="following-panel">
         {watchesQ.isPending ? (
@@ -117,9 +127,15 @@ export function FollowingPage() {
           </div>
         )}
       </div>
-      {watches.length >= FOLLOWING_LIST_LIMIT && (
-        <div className="following-note">Showing the {FOLLOWING_LIST_LIMIT} most recent watches.</div>
-      )}
+      {tab === 'active'
+        ? liveCapped && (
+            <div className="following-note">
+              Showing the {FOLLOWING_LIST_LIMIT} newest active watches and the {FOLLOWING_LIST_LIMIT} newest paused ones.
+            </div>
+          )
+        : listed.length >= FOLLOWING_LIST_LIMIT && (
+            <div className="following-note">Ended watches are shown from the {FOLLOWING_LIST_LIMIT} most recent.</div>
+          )}
     </div>
   );
 }

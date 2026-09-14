@@ -28,6 +28,7 @@ import {
   type LabelSummary,
   type TaskCounts,
 } from './taskPages';
+import { mergeWatches } from './watches';
 
 export type { ConfiguredProvider };
 
@@ -573,17 +574,37 @@ export const pendingCriteriaDecisionsQuery = (projectId: string) =>
   });
 
 /**
- * The owner's watches, newest first — `GET /watches`, which answers with at most 100. The Following
- * page, every watch card and the Following / Followed by relations on sessions and tasks are all drawn
- * from this one read, so a watch reads the same wherever it is shown. The control-plane stream nudges
- * it on the session, approval and task events that can move a watch (useControlPlane); the slow poll
- * is for what no event reports — a deadline passing, or a delivery settling in a server worker.
+ * The owner's watches, newest first, as one list. `GET /watches` answers with the 100 newest of any
+ * state, so a long history would push a live watch out of it: the two live states are read on their
+ * own beside it — at most 100 each, as the Mac app reads them — and each watch is kept once. The
+ * Following page, every watch card and the Following / Followed by relations on sessions and tasks are
+ * all drawn from this one read, so a watch reads the same wherever it is shown. The control-plane
+ * stream nudges it on the session, approval and task events that can move a watch (useControlPlane);
+ * the slow poll is for what no event reports — a deadline passing, or a delivery settling in a server
+ * worker.
  */
 export const watchesQuery = () =>
   queryOptions({
     queryKey: ['watches'] as const,
-    queryFn: () => api<WatchView[]>('/watches'),
+    queryFn: async () =>
+      mergeWatches(
+        await Promise.all([
+          api<WatchView[]>('/watches'),
+          api<WatchView[]>('/watches?state=ACTIVE'),
+          api<WatchView[]>('/watches?state=PAUSED'),
+        ]),
+      ),
     refetchInterval: 60_000,
+  });
+
+/**
+ * One watch by id, for a link to one no list above holds — a wake card names the watch that queued
+ * it, however old. Under the `['watches']` prefix, so whatever re-reads the list re-reads it too.
+ */
+export const watchQuery = (watchId: string) =>
+  queryOptions({
+    queryKey: ['watches', 'one', watchId] as const,
+    queryFn: () => api<WatchView>(`/watches/${encodeURIComponent(watchId)}`),
   });
 
 /**

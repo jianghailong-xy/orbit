@@ -227,13 +227,33 @@ final class WatchProjectionTests: XCTestCase {
     // MARK: history and stopping
 
     func testHistoryNamesEachDeliveryAndHowAnUnmatchedWatchEnded() {
-        let delivery = F.watch(state: "MATCHED",
-                               matches: [F.match(deliveries: [F.delivery("DEAD_LETTER", lastError: "WAKE_WITHDRAWN: x")])])
-            .matches[0].deliveries[0]
-        XCTAssertEqual(WatchProjection.deliveryStatus(delivery), "Delivery failed: WAKE_WITHDRAWN: x")
+        func deadLetter(_ lastError: String) -> WatchDelivery {
+            F.watch(state: "MATCHED", matches: [F.match(deliveries: [F.delivery("DEAD_LETTER", lastError: lastError)])])
+                .matches[0].deliveries[0]
+        }
+        // A wake taken back before it ran says so; one an interrupt swept off the queue never reached anybody.
+        XCTAssertEqual(WatchProjection.deliveryStatus(deadLetter("WAKE_WITHDRAWN: x")), "Wake withdrawn")
+        XCTAssertEqual(WatchProjection.deliveryStatus(deadLetter("OBSERVER_TURN_INTERRUPTED: x")),
+                       "Delivery failed: OBSERVER_TURN_INTERRUPTED: x")
         XCTAssertEqual(WatchProjection.endTitle(.expiry), "Expired before it matched")
         XCTAssertEqual(WatchProjection.endTitle(.revoked), "Stopped: access to its targets was revoked")
         XCTAssertEqual(WatchProjection.endTitle(.unresolvable), "Stopped: every target was deleted")
+    }
+
+    /// Two rows a real apiserver sent: a Match whose queued wake was withdrawn before it ran, and one whose wake was
+    /// refused because its observer changed owner. Only the second is somebody's to look at.
+    func testAWithdrawnWakeIsHistoryWhileADeadLetterThatFailedStillNeedsAttention() {
+        let withdrawn = F.server(F.withdrawnWakeJSON)
+        XCTAssertEqual(WatchProjection.attention(for: withdrawn, now: now), [])
+        XCTAssertEqual(WatchProjection.group(of: withdrawn, now: now), .history)
+        // Still shown, in plain words.
+        XCTAssertEqual(WatchProjection.deliveryStatus(for: withdrawn), "Wake withdrawn")
+
+        let revoked = F.server(F.permissionRevokedJSON)
+        XCTAssertEqual(WatchProjection.attention(for: revoked, now: now), [.deliveryFailed(
+            "PERMISSION_REVOKED: the observer session no longer belongs to the watch's owner, so it was not woken")])
+        XCTAssertEqual(WatchProjection.sections([withdrawn, revoked], now: now).map { $0.watches.map(\.id) },
+                       [[revoked.id], [withdrawn.id]])
     }
 
     /// Stop is the one end nobody is told about (contract §3), so the confirmation says so first.

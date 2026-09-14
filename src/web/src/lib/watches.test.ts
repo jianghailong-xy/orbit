@@ -23,12 +23,14 @@ import {
   formatSpan,
   groupWatches,
   lastChangedAt,
+  mergeWatches,
   parseWatchWake,
   pauseWatch,
   predicateFor,
   progressOf,
   resumeWatch,
   updateWatch,
+  wakeWithdrawn,
   watchBucket,
   watchErrorMessage,
   watchProblem,
@@ -276,6 +278,27 @@ describe('what needs attention', () => {
     ]) {
       expect(watchBucket(w)).toBe('attention');
     }
+  });
+
+  it('files a wake withdrawn before it ran as history, and still raises one that never reached the session', () => {
+    const dead = (lastError: string) =>
+      watch({
+        action: 'RESUME_SESSION',
+        observerSessionId: 's1',
+        ...matched([delivery({ action: 'RESUME_SESSION', state: 'DEAD_LETTER', attempts: 0, deliveredAt: null, lastError })]),
+      });
+    // As a real server wrote it: the wake left the observer's queue unrun because it was withdrawn.
+    const withdrawn = dead("WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it");
+    expect(watchProblem(withdrawn)).toBeNull();
+    expect(watchBucket(withdrawn)).toBe('history');
+    expect(wakeWithdrawn(withdrawn.matches[0].deliveries[0])).toBe(true);
+    // An interrupt drops the wake with everything queued behind the turn it stops, so its answer reached nobody.
+    const interrupted = dead(
+      'OBSERVER_TURN_INTERRUPTED: the observer session was interrupted before a runner took its queued wake',
+    );
+    expect(watchProblem(interrupted)).toMatchObject({ tone: 'error', title: 'The session was not woken' });
+    expect(watchBucket(interrupted)).toBe('attention');
+    expect(wakeWithdrawn(interrupted.matches[0].deliveries[0])).toBe(false);
   });
 
   it('orders history by when each watch ended, newest first', () => {

@@ -207,6 +207,12 @@ stop，唤醒若留在队列里或被重投，刚被叫停的观察者马上又�
 turn 行后键虽然空了出来，但死信不会再被任何 worker 领取，不会有第二个唤醒。所以交付的终态只有 `DEAD_LETTER`；
 `DELIVERED` 只对 `NOTIFY_USER` 和已被 runner 取走的唤醒是最终的——runner 取走的唤醒不会被打断删掉，也撤回不了。
 
+**哪些死信要人处理**（码表里的 `needsAttention`，说明在 `deliveryGuards.attention`）：只有 `WAKE_WITHDRAWN` 不需要。
+它表示唤醒在跑之前被有意收回，没有丢任何东西：要么 owner 点名撤回了这一个 turn，要么调用方已经内联拿到答案，把它
+release 掉了（§13.3）。客户端仍然显示它，写成「唤醒已撤回」；Watch 按自己的状态归档，不进 Needs attention，也不用错误色。
+打断和 run 结束会把排队的唤醒和其他排队内容一起收掉，唤醒要说的话没有送到任何人，所以 `OBSERVER_TURN_INTERRUPTED`、
+`OBSERVER_SESSION_ENDED` 仍进 Needs attention，其余死信码也一样。能重投的死信一定进，因为还有人可以去重投。
+
 ---
 
 ## 4. 目标集合：创建时快照

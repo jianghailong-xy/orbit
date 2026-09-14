@@ -2,6 +2,7 @@ import {
   WATCH_LEAF_SINCE_VERSION,
   WATCH_LEAVES,
   WATCH_LIMITS,
+  watchDeadLetterNeedsAttention,
   type CreateWatchRequest,
   type UpdateWatchRequest,
   type WatchAction,
@@ -312,12 +313,17 @@ const errorProse = (lastError: string | null): string | undefined => {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : undefined;
 };
 
+/** A dead letter nobody has to act on: the wake was withdrawn before it ran (contract `deliveryGuards.attention`). */
+export const wakeWithdrawn = (d: WatchDeliveryView): boolean =>
+  d.state === 'DEAD_LETTER' && !watchDeadLetterNeedsAttention(d);
+
 /**
  * Why a watch needs somebody to look at it, or null. These are the ends nobody would otherwise
  * hear about: a watch that stopped because it lost access or every target (contract §3 — "stopping
  * quietly is the failure mode being designed out"), a delivery that dead-lettered or keeps failing
- * (§3: dead letters must be visible), a notify watch that expired with nobody told (§3 delivers an
- * end only to a waiting session), and a live watch that is losing its targets.
+ * (§3: dead letters must be visible — all but a wake withdrawn before it ran, which the card names
+ * instead), a notify watch that expired with nobody told (§3 delivers an end only to a waiting
+ * session), and a live watch that is losing its targets.
  */
 export function watchProblem(w: WatchView): WatchProblem | null {
   if (w.state === 'REVOKED') {
@@ -335,7 +341,7 @@ export function watchProblem(w: WatchView): WatchProblem | null {
     };
   }
   const deliveries = deliveriesOf(w);
-  const dead = deliveries.find((d) => d.state === 'DEAD_LETTER');
+  const dead = deliveries.find(watchDeadLetterNeedsAttention);
   if (dead) {
     return {
       tone: 'error',
@@ -388,6 +394,21 @@ export function groupWatches(watches: readonly WatchView[]): Record<WatchBucket,
   for (const w of watches) groups[watchBucket(w)].push(w);
   groups.history.sort((a, b) => Date.parse(endedAt(b)) - Date.parse(endedAt(a)));
   return groups;
+}
+
+/**
+ * Several reads of the owner's watches as one list: each watch once, in the order first read. Given the
+ * newest 100 first (lib/queries `watchesQuery`), a live watch only its own state's read found comes after
+ * them, older than all of them.
+ */
+export function mergeWatches(lists: readonly (readonly WatchView[])[]): WatchView[] {
+  const seen = new Set<string>();
+  return lists.flat().filter((w) => {
+    const key = normId(w.id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export type WatchTone = 'live' | 'paused' | 'met' | 'ended' | 'failed';

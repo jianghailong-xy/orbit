@@ -112,7 +112,7 @@ public enum WatchProjection {
     public static func attention(for watch: Watch, now: Date = Date()) -> [WatchAttention] {
         let all = deliveries(of: watch)
         var reasons: [WatchAttention] = []
-        if let failed = all.last(where: { $0.state == .deadLetter }) {
+        if let failed = all.last(where: WatchDeadLetter.needsAttention) {
             reasons.append(.deliveryFailed(failed.lastError))
         }
         if let retrying = all.last(where: { ($0.state == .pending || $0.state == .inFlight) && $0.attempts > 0 }) {
@@ -300,6 +300,8 @@ public enum WatchProjection {
         case .delivered:
             return delivery.action == .notifyUser ? "Notification sent" : "Resume queued"
         case .deadLetter:
+            // Taken back on purpose before it ran, which is no failure (`WatchDeadLetter.quietCodes`).
+            guard WatchDeadLetter.needsAttention(delivery) else { return "Wake withdrawn" }
             return WatchAttention.deliveryFailed(delivery.lastError).text
         case .unknown:
             return nil

@@ -285,6 +285,23 @@ public struct WatchDelivery: Codable, Equatable, Sendable, Identifiable {
     public let updatedAt: String
 }
 
+/// Why a delivery is a dead letter: the code heading its `lastError`, as in `WAKE_WITHDRAWN: …` (contract
+/// `deliveryGuards.deadLetterCodes`). `WatchContractTests` holds `quietCodes` to that table, which the web reads
+/// through `@orbit/shared`, so both raise the same dead letters.
+public enum WatchDeadLetter {
+    /// The codes whose dead letter nobody has to act on (`needsAttention: false`): the wake was taken back on
+    /// purpose before it ran — its owner withdrew that one turn, or a caller that already had its answer inline
+    /// released it. Still shown, as withdrawn; never a reason to file the watch under Needs attention.
+    public static let quietCodes: Set<String> = ["WAKE_WITHDRAWN"]
+
+    /// Whether `delivery` is a dead letter somebody has to look at: every one but a quiet one.
+    public static func needsAttention(_ delivery: WatchDelivery) -> Bool {
+        guard delivery.state == .deadLetter else { return false }
+        let error = delivery.lastError ?? ""
+        return !quietCodes.contains { error.hasPrefix("\($0):") }
+    }
+}
+
 /// A Match: the condition held at one moment (contract §1). Immutable — a fact, not a notification.
 public struct WatchMatch: Codable, Equatable, Sendable, Identifiable {
     public let id: String

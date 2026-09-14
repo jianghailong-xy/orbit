@@ -88,6 +88,12 @@ function serve(routes: Record<string, (init?: Init) => unknown>, titles: Record<
   vi.mocked(api).mockImplementation((async (path: string, init?: Init) => {
     const row = /^\/tasks\/([^/]+)\/row$/.exec(path);
     if (row) return { id: row[1], title: titles[row[1]] ?? row[1], status: 'OPEN' };
+    // The live states are read on their own beside the list, and answered from its rows as the server would.
+    const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
+    const list = routes['GET /watches'];
+    if (state && list && (init?.method ?? 'GET') === 'GET') {
+      return (list() as WatchView[]).filter((w) => w.state === state[1]);
+    }
     const handler = routes[`${init?.method ?? 'GET'} ${path}`];
     if (!handler) throw new Error(`unstubbed ${init?.method ?? 'GET'} ${path}`);
     return handler(init);
@@ -350,6 +356,45 @@ describe('a watch card', { timeout: 30_000 }, () => {
     expect(facts.Then).toBe('Resume Nightly sweep · not delivered');
     expect(card.querySelector('.watch-age')?.textContent).toMatch(/^triggered /);
     expect(button('Pause', card)).toBeUndefined();
+  });
+
+  it('says a wake withdrawn before it ran plainly, and raises nothing about it', async () => {
+    serve({}, { T1: 'Spawned session settled', OBS: 'Coordinator' });
+    await mount(
+      <WatchCard
+        watch={watch({
+          state: 'MATCHED',
+          generation: 1,
+          action: 'RESUME_SESSION',
+          observerType: 'SESSION',
+          observerSessionId: 'OBS',
+          targets: [target('T1', { state: 'SATISFIED' })],
+          matches: [
+            match([
+              delivery({
+                action: 'RESUME_SESSION',
+                state: 'DEAD_LETTER',
+                attempts: 0,
+                deliveredAt: null,
+                lastError: "WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it",
+              }),
+            ]),
+          ],
+        })}
+      />,
+    );
+    const card = container!.querySelector('.watch-card')!;
+    expect(card.classList.contains('tone-error')).toBe(false);
+    expect(card.querySelector('.watch-problem')).toBeNull();
+    expect(factsOf(card).Then).toBe('Resume Coordinator · wake withdrawn');
+    expect(card.querySelector('.watch-delivery-state')?.classList.contains('is-withdrawn')).toBe(true);
+
+    await click(button('Details', card), 'Details');
+    const row = card.querySelector('.watch-delivery')!;
+    expect(row.textContent).toContain('Resume the session · withdrawn');
+    // The server's own account stays readable, in no error color.
+    expect(row.querySelector('.watch-delivery-error')).toBeNull();
+    expect(row.textContent).toContain('before a runner took it');
   });
 
   it('opens every target, the snapshot its trigger recorded and each delivery under Details', async () => {

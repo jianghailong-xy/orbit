@@ -73,7 +73,8 @@ async function mount(events: RunEvent[]) {
   });
 }
 
-describe('a turn a watch queued', () => {
+// Budgeted like the other watch specs: the first Transcript mount alone ran 7.8s on a loaded host, past the 5s default.
+describe('a turn a watch queued', { timeout: 30_000 }, () => {
   it('is drawn as the watch’s card, not as a message the user typed', async () => {
     await mount([userEvent(WAKE)]);
 

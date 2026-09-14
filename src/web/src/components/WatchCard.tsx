@@ -19,6 +19,7 @@ import {
   pauseWatch,
   progressOf,
   resumeWatch,
+  wakeWithdrawn,
   watchErrorMessage,
   watchProblem,
 } from '../lib/watches';
@@ -164,7 +165,7 @@ function ThenLine({ watch, now }: { watch: WatchView; now: number }) {
         </>
       )}
       {latest && (
-        <span className={`watch-delivery-state is-${latest.state.toLowerCase()}`}>
+        <span className={`watch-delivery-state is-${deliveryMark(latest)}`}>
           {' '}
           · {deliveryWords(latest, now)}
         </span>
@@ -177,8 +178,13 @@ function deliveryWords(d: WatchDeliveryView, now: number): string {
   if (d.state === 'DELIVERED') {
     return `${d.action === 'NOTIFY_USER' ? 'sent' : 'turn queued'} ${ago(d.deliveredAt, now)}`;
   }
-  if (d.state === 'DEAD_LETTER') return 'not delivered';
+  if (d.state === 'DEAD_LETTER') return wakeWithdrawn(d) ? 'wake withdrawn' : 'not delivered';
   return d.attempts > 0 ? 'retrying' : 'delivering';
+}
+
+/** The class a delivery reads in. A withdrawn wake has its own, so it never takes a dead letter's error color. */
+function deliveryMark(d: WatchDeliveryView): string {
+  return wakeWithdrawn(d) ? 'withdrawn' : d.state.toLowerCase();
 }
 
 type ControlVerb = 'pause' | 'resume' | 'cancel';
@@ -289,16 +295,18 @@ function WatchDetails({ watch, now }: { watch: WatchView; now: number }) {
           <h4>Deliveries</h4>
           <ul className="watch-details-list">
             {deliveries.map((d) => (
-              <li key={d.id} className={`watch-delivery is-${d.state.toLowerCase()}`}>
+              <li key={d.id} className={`watch-delivery is-${deliveryMark(d)}`}>
                 {'kind' in d && typeof d.kind === 'string'
                   ? (END_DELIVERY[d.kind] ?? d.kind)
                   : d.action === 'NOTIFY_USER'
                     ? 'Notify you'
                     : 'Resume the session'}
-                {` · ${d.state.replace('_', ' ').toLowerCase()}`}
+                {` · ${wakeWithdrawn(d) ? 'withdrawn' : d.state.replace('_', ' ').toLowerCase()}`}
                 {d.attempts > 0 ? ` · ${d.attempts} failed attempt${d.attempts === 1 ? '' : 's'}` : ''}
                 {d.deliveredAt ? ` · ${absTime(d.deliveredAt)}` : ''}
-                {d.lastError && <div className="watch-delivery-error">{d.lastError}</div>}
+                {d.lastError && (
+                  <div className={wakeWithdrawn(d) ? 'watch-muted' : 'watch-delivery-error'}>{d.lastError}</div>
+                )}
               </li>
             ))}
           </ul>

@@ -259,6 +259,22 @@ export function watchDeadLetterCodeOf(lastError: string | null, attempts: number
 }
 
 /**
+ * The dead letters nobody has to act on, transcribed from the contract's `needsAttention: false` codes
+ * (`deliveryGuards.attention`): the wake was taken back on purpose before it ran, by its owner withdrawing that one
+ * queued turn or by a caller that already had its answer inline. A client still shows one, as withdrawn, and files
+ * its watch by state. Every other dead letter puts its watch under Needs attention.
+ */
+export const WATCH_QUIET_DEAD_LETTER_CODES: readonly WatchDeadLetterCode[] = ['WAKE_WITHDRAWN'];
+
+/** Whether a delivery is a dead letter somebody has to look at: one whose code is not in {@link WATCH_QUIET_DEAD_LETTER_CODES}. */
+export function watchDeadLetterNeedsAttention(
+  delivery: Pick<WatchDeliveryView, 'state' | 'lastError' | 'attempts'>,
+): boolean {
+  return delivery.state === 'DEAD_LETTER'
+    && !WATCH_QUIET_DEAD_LETTER_CODES.includes(watchDeadLetterCodeOf(delivery.lastError, delivery.attempts));
+}
+
+/**
  * What a Match caused, and whether it worked. `attempts` counts the attempts that failed; the one that
  * reaches `WATCH_LIMITS.maxDeliveryAttempts` leaves a `DEAD_LETTER`, which keeps its `lastError`.
  */

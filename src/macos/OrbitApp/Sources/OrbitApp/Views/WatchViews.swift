@@ -153,7 +153,7 @@ struct WatchDetailContent: View {
                             if let status = WatchProjection.deliveryStatus(delivery) {
                                 Text(status)
                                     .font(.orbitMeta)
-                                    .foregroundStyle(delivery.state == .deadLetter ? Color.orange : Color.secondary)
+                                    .foregroundStyle(WatchDeadLetter.needsAttention(delivery) ? Color.orange : Color.secondary)
                             }
                         }
                     }
@@ -165,7 +165,7 @@ struct WatchDetailContent: View {
                         if let status = WatchProjection.deliveryStatus(end.delivery) {
                             Text(status)
                                 .font(.orbitMeta)
-                                .foregroundStyle(end.delivery.state == .deadLetter ? Color.orange : Color.secondary)
+                                .foregroundStyle(WatchDeadLetter.needsAttention(end.delivery) ? Color.orange : Color.secondary)
                         }
                     }
                 }

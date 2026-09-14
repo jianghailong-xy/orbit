@@ -82,9 +82,24 @@ const WATCHES: WatchView[] = [
   watch('C1', { state: 'CANCELLED', updatedAt: at(-3 * HOUR) }),
 ];
 
+/** A hundred watches newer than any other, every one of them ended: what a busy account's latest reads hold. */
+const HUNDRED_ENDED: WatchView[] = Array.from({ length: 100 }, (_, i) => matched(`E${i}`, at(-MINUTE), [delivery()]));
+
+/**
+ * Answers as WatchesService does, from `watches` listed newest first: `GET /watches` is the newest 100 of
+ * every state, `?state=` the newest 100 in that state, and `GET /watches/:id` any one of them.
+ */
 function serve(watches: () => WatchView[]) {
   vi.mocked(api).mockImplementation((async (path: string) => {
-    if (path === '/watches') return watches();
+    if (path === '/watches') return watches().slice(0, 100);
+    const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
+    if (state) return watches().filter((w) => w.state === state[1]).slice(0, 100);
+    const one = /^\/watches\/([^/?]+)$/.exec(path);
+    if (one) {
+      const found = watches().find((w) => w.id === decodeURIComponent(one[1]));
+      if (!found) throw Object.assign(new Error('watch not found'), { status: 404 });
+      return found;
+    }
     if (/^\/tasks\/[^/]+\/row$/.test(path)) return { title: 'A task', status: 'OPEN' };
     throw new Error(`unstubbed ${path}`);
   }) as never);
@@ -191,6 +206,53 @@ describe('the Following page', { timeout: 30_000 }, () => {
     expect(tab('Triggered history')?.getAttribute('aria-selected')).toBe('true');
   });
 
+  it('files a wake withdrawn before it ran under Triggered history, and one an interrupt swept away under Needs attention', async () => {
+    const resumed = (id: string, lastError: string): WatchView => ({
+      ...matched(id, at(-5 * MINUTE), [
+        delivery({ action: 'RESUME_SESSION', state: 'DEAD_LETTER', attempts: 0, deliveredAt: null, lastError }),
+      ]),
+      action: 'RESUME_SESSION',
+      observerType: 'SESSION',
+      observerSessionId: 'S1',
+    });
+    serve(() => [
+      // As the server writes it when a session_create(wait) that got its answer inline releases the wake.
+      resumed('WITHDRAWN', "WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it"),
+      resumed(
+        'INTERRUPTED',
+        'OBSERVER_TURN_INTERRUPTED: the observer session was interrupted before a runner took its queued wake, and an interrupt drops what is queued behind the turn it stops',
+      ),
+    ]);
+    await visit('/following?tab=history');
+
+    expect(tabs().map((t) => t.textContent)).toEqual(['Active0', 'Needs attention1', 'Triggered history1']);
+    expect(shownIds()).toEqual(['WITHDRAWN']);
+    const card = container!.querySelector<HTMLElement>('[data-watch-id="WITHDRAWN"]')!;
+    expect(card.classList.contains('tone-error')).toBe(false);
+    expect(card.querySelector('.watch-problem')).toBeNull();
+    // Still visible: the card says what became of the wake, in no error color.
+    const state = card.querySelector('.watch-delivery-state')!;
+    expect(state.textContent).toContain('wake withdrawn');
+    expect(state.classList.contains('is-dead_letter')).toBe(false);
+
+    await press('Needs attention');
+    expect(shownIds()).toEqual(['INTERRUPTED']);
+    expect(container!.querySelector('.following-panel .watch-problem strong')?.textContent).toBe('The session was not woken');
+  });
+
+  it('keeps every live watch on Active when a hundred newer watches have ended', async () => {
+    serve(() => [
+      ...HUNDRED_ENDED,
+      watch('OLD_ACTIVE', { createdAt: at(-30 * HOUR) }),
+      watch('OLD_PAUSED', { state: 'PAUSED', createdAt: at(-40 * HOUR) }),
+    ]);
+    await visit('/following');
+
+    expect(tabs().map((t) => t.textContent)).toEqual(['Active2', 'Needs attention0', 'Triggered history100']);
+    expect(shownIds()).toEqual(['OLD_ACTIVE', 'OLD_PAUSED']);
+    expect(container!.textContent).not.toContain('Nothing is being followed right now');
+  });
+
   it('lands a link to one watch on its own tab, with its card opened', async () => {
     serve(() => WATCHES);
     await visit('/following?watch=D1');
@@ -199,6 +261,32 @@ describe('the Following page', { timeout: 30_000 }, () => {
     const card = container!.querySelector<HTMLElement>('[data-watch-id="D1"]')!;
     expect(card.classList.contains('is-focused')).toBe(true);
     expect(card.querySelector('.watch-details')?.textContent).toContain('BOOM: it broke');
+  });
+
+  it('opens a link to a watch no list holds by reading that watch on its own', async () => {
+    const old = matched('OLD', at(-30 * HOUR), [
+      delivery({ state: 'DEAD_LETTER', attempts: 8, deliveredAt: null, lastError: 'TURN_REFUSED: the queue refused it' }),
+    ]);
+    serve(() => [...HUNDRED_ENDED, old]);
+    await visit('/following?watch=OLD');
+    await settle();
+
+    expect(vi.mocked(api)).toHaveBeenCalledWith('/watches/OLD');
+    expect(tab('Needs attention')?.getAttribute('aria-selected')).toBe('true');
+    const card = container!.querySelector<HTMLElement>('[data-watch-id="OLD"]');
+    expect(card, 'the linked card is on screen').toBeTruthy();
+    expect(card!.classList.contains('is-focused')).toBe(true);
+    expect(card!.querySelector('.watch-details')?.textContent).toContain('TURN_REFUSED: the queue refused it');
+    expect(container!.textContent).not.toContain('couldn’t be opened');
+  });
+
+  it('says so when a linked watch cannot be read', async () => {
+    serve(() => WATCHES);
+    await visit('/following?watch=GONE');
+    await settle();
+
+    expect(container!.querySelector('.following-note')?.textContent).toBe('That watch couldn’t be opened: watch not found');
+    expect(shownIds()).toEqual(['A1', 'A2']);
   });
 
   it('says why a tab is empty', async () => {

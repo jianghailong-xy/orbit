@@ -55,9 +55,12 @@ const watch = (id: string, over: Partial<WatchView> = {}): WatchView => ({
 const resumes = (observer: string) =>
   ({ action: 'RESUME_SESSION', observerType: 'SESSION', observerSessionId: observer }) as const;
 
+/** Answers as WatchesService does, from `watches` listed newest first: the newest 100 of every state, or of one. */
 function serve(watches: WatchView[]) {
   vi.mocked(api).mockImplementation((async (path: string) => {
-    if (path === '/watches') return watches;
+    if (path === '/watches') return watches.slice(0, 100);
+    const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
+    if (state) return watches.filter((w) => w.state === state[1]).slice(0, 100);
     if (/^\/tasks\/[^/]+\/row$/.test(path)) return { title: 'A task', status: 'OPEN' };
     throw new Error(`unstubbed ${path}`);
   }) as never);
@@ -219,5 +222,36 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     serve(watches().filter((w) => w.id !== 'WAITING'));
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     expect(container!.innerHTML).toBe('');
+  });
+});
+
+describe('a live watch older than the newest 100', { timeout: 30_000 }, () => {
+  // The session's own settled waits, each one ended: what every session_create(wait) it made leaves behind.
+  const ended = Array.from({ length: 100 }, (_, i) =>
+    watch(`ENDED_${i}`, { state: 'MATCHED', targets: [target('TASK', `T_DONE_${i}`)], ...resumes('S_ME') }),
+  );
+  const older = watch('OLD_WAIT', {
+    createdAt: at(-30 * HOUR),
+    targets: [target('TASK', 'T_OLD'), target('TASK', 'T_OLD_2')],
+    ...resumes('S_ME'),
+  });
+
+  it('still keeps the session’s strip and Following, and the task’s Followed by', async () => {
+    serve([...ended, older]);
+    await mount(
+      <>
+        <SessionWatchBadges sessionId="S_ME" />
+        <SessionWatchStrip sessionId="S_ME" />
+        <TaskFollowedBy taskId="T_OLD" />
+      </>,
+    );
+
+    expect(container!.querySelector('.watch-strip-title')?.textContent).toBe('Waiting on a watch');
+    expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Following 2 tasks', 'Follow']);
+    const followedBy = container!.querySelector('section')!;
+    expect(followedBy.querySelector('.tdp-section-title span')?.textContent).toBe('Followed by (1)');
+    expect([...followedBy.querySelectorAll<HTMLElement>('.watch-row')].map((r) => r.dataset.watchId)).toEqual([
+      'OLD_WAIT',
+    ]);
   });
 });

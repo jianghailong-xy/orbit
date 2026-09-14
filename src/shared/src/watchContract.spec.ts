@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { WATCH_DEAD_LETTER_CODES, WATCH_QUIET_DEAD_LETTER_CODES, watchDeadLetterNeedsAttention } from './watch';
 
 /**
  * The executable half of docs/watch-contract.md: it holds the frozen contract to its own rules so
@@ -188,5 +189,38 @@ describe('watch contract', () => {
       );
       expect(pinned, `no vector pins whether ${state} tells the waiting session`).toBe(true);
     }
+  });
+
+  it('says of every dead-letter code whether it needs attention, and shared raises exactly those', () => {
+    const codes: Record<string, { retryable: boolean; needsAttention: unknown }> = CONTRACT.deliveryGuards.deadLetterCodes;
+    expect(Object.keys(codes)).toEqual([...WATCH_DEAD_LETTER_CODES]);
+    for (const [code, entry] of Object.entries(codes)) {
+      expect(typeof entry.needsAttention, `${code} does not say whether it needs attention`).toBe('boolean');
+    }
+    // The web raises through this constant, and OrbitKit's WatchContractTests reads the same table.
+    expect(Object.keys(codes).filter((code) => codes[code].needsAttention === false)).toEqual([
+      ...WATCH_QUIET_DEAD_LETTER_CODES,
+    ]);
+    // A dead letter somebody could still redrive is never a quiet one.
+    for (const code of WATCH_QUIET_DEAD_LETTER_CODES) expect(codes[code].retryable, code).toBe(false);
+  });
+
+  it('raises a dead letter by the code heading its lastError', () => {
+    const dead = (lastError: string | null, attempts = 1) => ({ state: 'DEAD_LETTER' as const, lastError, attempts });
+    // As a real server wrote it: the wake left the observer's queue unrun because it was withdrawn.
+    expect(
+      watchDeadLetterNeedsAttention(
+        dead("WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it", 0),
+      ),
+    ).toBe(false);
+    expect(
+      watchDeadLetterNeedsAttention(
+        dead('OBSERVER_TURN_INTERRUPTED: the observer session was interrupted before a runner took its queued wake'),
+      ),
+    ).toBe(true);
+    // A code counts only where it heads the error; the same word further along is prose.
+    expect(watchDeadLetterNeedsAttention(dead('TURN_REFUSED: WAKE_WITHDRAWN: no'))).toBe(true);
+    expect(watchDeadLetterNeedsAttention(dead(null, 8))).toBe(true);
+    expect(watchDeadLetterNeedsAttention({ state: 'DELIVERED', lastError: null, attempts: 0 })).toBe(false);
   });
 });

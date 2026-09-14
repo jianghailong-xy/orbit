@@ -155,6 +155,25 @@ final class WatchContractTests: XCTestCase {
         XCTAssertEqual(back as? NSDictionary, raw as? NSDictionary)
     }
 
+    // MARK: dead letters
+
+    /// The dead letters shown without being raised are the contract's `needsAttention: false` codes: the table the
+    /// web reads through `@orbit/shared` (held there by `watchContract.spec.ts`), so both raise the same ones.
+    func testQuietDeadLetterCodesMatchTheContract() throws {
+        let guards = try object(contract()["deliveryGuards"], "deliveryGuards")
+        let codes = try object(guards["deadLetterCodes"], "deliveryGuards.deadLetterCodes")
+        var quiet = Set<String>()
+        for (code, value) in codes {
+            let entry = try object(value, "deliveryGuards.deadLetterCodes.\(code)")
+            let needsAttention = try XCTUnwrap(entry["needsAttention"] as? Bool,
+                                               "\(code) does not say whether it needs attention")
+            guard !needsAttention else { continue }
+            quiet.insert(code)
+            XCTAssertEqual(entry["retryable"] as? Bool, false, "\(code) can be redriven, so somebody has to see it")
+        }
+        XCTAssertEqual(quiet, WatchDeadLetter.quietCodes)
+    }
+
     // MARK: limits
 
     func testLimitsMatchTheContract() throws {
