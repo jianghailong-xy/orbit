@@ -1090,7 +1090,7 @@ struct AgentSessionRow: View {
 
     private func lineColor(_ tone: SessionLine.Tone) -> Color {
         switch tone {
-        case .preview, .queued, .background: return .secondary
+        case .preview, .queued, .background, .watching: return .secondary
         case .running:                       return .blue
         case .approval:                      return .orange
         }
