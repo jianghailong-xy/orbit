@@ -19,7 +19,7 @@ import { encodeId } from '../lib/idCodec';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
-import { providersQuery, runnersQuery } from '../lib/queries';
+import { ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -46,6 +46,12 @@ import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
 import { TaskFollowedBy } from './WatchRelations';
+import {
+  OWNER_CONFIRM_ACTION,
+  WAITING_FOR_CONFIRMATION,
+  refreshOwnerConfirmationViews,
+  sendOwnerDecision,
+} from './OwnerConfirmationCard';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -179,6 +185,16 @@ function verificationSubjectAction(
     && (verificationState == null || verificationState === 'PASSED' || verificationState === 'PENDING');
   if (passedAndDone) return { label: 'Verification passed', hint: 'Verification passed — this task is done' };
   return VERIFICATION_SUBJECT_ACTION[verificationState ?? 'PENDING'] ?? VERIFICATION_SUBJECT_ACTION.PENDING;
+}
+
+/** The statuses an OWNER_CONFIRMED task can still be confirmed from: the door's own two. */
+export const OWNER_CONFIRMABLE_STATUSES: readonly string[] = ['OPEN', 'IN_PROGRESS'];
+
+/** Whether this task is settled by its owner's own confirmation rather than by a run or a verdict. */
+export function ownerConfirmedTask(
+  task: { completionCriterion?: string | null } | null | undefined,
+): boolean {
+  return task?.completionCriterion === 'OWNER_CONFIRMED';
 }
 
 /**
@@ -796,6 +812,25 @@ export function TaskDetailPanel({
     running,
     scheduledLocal: scheduled?.local,
   });
+  // OWNER_CONFIRMED: the account owner settles this task, and it has one place to do that at a
+  // time. While a run of it is waiting on them, that place is the confirmation card in the run's own
+  // session, so the header only points there. With no run waiting — above all a task that never
+  // ran and is only a record — Confirm done is here instead.
+  const ownerConfirmed = ownerConfirmedTask(q.data);
+  const ownerRead = useQuery({ ...ownerConfirmationQuery(taskId), enabled: ownerConfirmed });
+  const ownerWaiting = ownerRead.data?.waiting ?? null;
+  const confirmHere = ownerConfirmed
+    && OWNER_CONFIRMABLE_STATUSES.includes(q.data?.status)
+    && ownerWaiting === null
+    && (ownerRead.data != null || sessions.length === 0);
+  const confirmDone = useMutation({
+    mutationFn: () => sendOwnerDecision(taskId, null, 'CONFIRM'),
+    onSuccess: () => {
+      message.success('Confirmed done');
+      return refreshOwnerConfirmationViews(qc, taskId);
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
 
   // Drag the panel's left edge to resize; it sits on the right, so dragging left widens it.
   // Listeners live on document so a fast drag keeps tracking past the 1px handle.
@@ -851,6 +886,21 @@ export function TaskDetailPanel({
           </div>
         </div>
         <div className="tdp-head-actions">
+          {ownerWaiting ? (
+            // A run is waiting on the owner: its card in that session is where this is answered,
+            // so the panel only takes the reader there.
+            <Link
+              className="tdp-owner-confirmation-pointer"
+              to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
+              state={{ revealOwnerConfirmation: true }}
+            >
+              {WAITING_FOR_CONFIRMATION}
+            </Link>
+          ) : confirmHere ? (
+            <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
+              {OWNER_CONFIRM_ACTION}
+            </Button>
+          ) : null}
           <Tooltip title={executeHint}>
             <span style={{ display: 'inline-flex' }}>
               <Button

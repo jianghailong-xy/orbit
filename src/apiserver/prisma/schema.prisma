@@ -227,10 +227,16 @@ enum TaskVerdict {
 /// evidence revision that decision references, and it settles the task only while that referenced
 /// revision is still this task's latest. The account owner is not required to be the one who makes
 /// it.
+///
+/// OWNER_CONFIRMED (migration 0267) is the opposite choice: the account owner is the ONLY one who
+/// can settle it, from the app with no session behind the request, and what settles it is their
+/// newest `TaskOwnerDecision` being a CONFIRM. It needs no run and no evidence, and it is declarable
+/// inside a project or outside one.
 enum TaskCompletionCriterion {
   EXECUTABLE
   VERIFICATION
   EVIDENCE_JUDGMENT
+  OWNER_CONFIRMED
 
   @@map("task_completion_criterion")
 }
@@ -249,6 +255,16 @@ enum TaskEvidenceDecisionValue {
   SEND_BACK
 
   @@map("task_evidence_decision_value")
+}
+
+/// What the account owner said about an OWNER_CONFIRMED task (migration 0267). CONFIRM is the fact
+/// DONE is derived from. SEND_BACK carries the owner's reason, which is delivered to the task's
+/// session as their next message; the task itself is not written and stays open.
+enum TaskOwnerDecisionValue {
+  CONFIRM
+  SEND_BACK
+
+  @@map("task_owner_decision_value")
 }
 
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
@@ -3413,6 +3429,10 @@ model Task {
   completionEvidence TaskCompletionEvidence[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]
+  /// OWNER_CONFIRMED (0267): the times a run of this task ended a turn successfully and asked its
+  /// owner, and what the owner decided.
+  ownerConfirmationRequests TaskOwnerConfirmationRequest[]
+  ownerDecisions TaskOwnerDecision[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -3603,6 +3623,64 @@ model TaskEvidenceDecision {
   @@index([taskId, decidedAt], map: "task_evidence_decision_task_decided_idx")
   @@index([decidingSessionId], map: "task_evidence_decision_session_idx")
   @@map("task_evidence_decision")
+}
+
+/// One time a run of an OWNER_CONFIRMED task ended a turn successfully and so asked its owner
+/// (migration 0267). Written only by `runnerApi.turnComplete`, the one place that knows a turn
+/// succeeded; the task is waiting on its owner while its newest request has no decision.
+///
+/// `sessionId` and `turnId` are provenance snapshots with no foreign key, like
+/// `TaskEvidenceDecision.decidingSessionId`: which run asked, and in which turn, stays true after the
+/// session is cleaned up.
+model TaskOwnerConfirmationRequest {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_owner_confirmation_request_task_fkey")
+
+  sessionId   String   @map("session_id") @db.Uuid
+  turnId      String   @map("turn_id") @db.Uuid
+  requestedAt DateTime @default(now()) @map("requested_at")
+
+  decisions TaskOwnerDecision[]
+
+  @@unique([id, taskId], map: "task_owner_confirmation_request_id_task_key")
+  /// One request per turn: a retried completion never asks twice.
+  @@unique([sessionId, turnId], map: "task_owner_confirmation_request_turn_key")
+  @@index([taskId, requestedAt], map: "task_owner_confirmation_request_task_idx")
+  @@map("task_owner_confirmation_request")
+}
+
+/// What the account owner decided about an OWNER_CONFIRMED task (migration 0267): one immutable row
+/// per decision, recorded only from the app by the owner themselves (`decidedByType` USER, and
+/// `decidedById` equal to `ownerId`, both CHECKed). The newest one being a CONFIRM is what DONE is
+/// derived from.
+///
+/// `requestId` is the run report the decision answers — compared at the door with the one waiting,
+/// so an answer to a report a later turn replaced is refused — and null for a confirmation pressed
+/// while no run was waiting. A SEND_BACK always answers one, carries the owner's reason, and is
+/// delivered to that request's session as their next message.
+model TaskOwnerDecision {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_owner_decision_task_fkey")
+
+  requestId String?                       @map("request_id") @db.Uuid
+  request   TaskOwnerConfirmationRequest? @relation(fields: [requestId, taskId], references: [id, taskId], onDelete: Restrict, map: "task_owner_decision_request_fkey")
+
+  decision TaskOwnerDecisionValue
+  /// The owner's reason. Required on SEND_BACK, optional on CONFIRM, never blank.
+  note     String?
+
+  decidedAt     DateTime    @default(now()) @map("decided_at")
+  decidedByType CreatorType @map("decided_by_type")
+  decidedById   String      @map("decided_by_id") @db.Uuid
+
+  /// One decision per run report.
+  @@unique([requestId], map: "task_owner_decision_request_key")
+  @@index([taskId, decidedAt], map: "task_owner_decision_task_decided_idx")
+  @@map("task_owner_decision")
 }
 
 /// The audit receipt for an explicit conversion of one historical TaskComment into one structured

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { countPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
+import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
 
@@ -47,35 +48,44 @@ import { stillUnanswered } from './criteria-pending-decisions';
  * (`criteria-pending-decisions.ts`, `pending-evidence-judgments.ts`), still returned by its own
  * read, and this only decides where the badge points.
  *
- * Two kinds today: a held criteria proposal, and a task's evidence revision waiting on a CONFIRM or
- * a SEND_BACK. The second counts exactly the rows the evidence card draws — decidable, decidable
- * FROM the coordinator, and in the coordinator's own project (`countPendingEvidenceJudgments`) —
- * because a revision the door would refuse from anyone is the submitter's to refile and puts no card
- * here. The shape is a list of counts per conversation rather than one number so each kind adds a
- * source here and changes nothing at either call site.
+ * Two kinds land there: a held criteria proposal, and a task's evidence revision waiting on a
+ * CONFIRM or a SEND_BACK. The second counts exactly the rows the evidence card draws — decidable,
+ * decidable FROM the coordinator, and in the coordinator's own project
+ * (`countPendingEvidenceJudgments`) — because a revision the door would refuse from anyone is the
+ * submitter's to refile and puts no card here. The shape is a list of counts per conversation rather
+ * than one number so each kind adds a source here and changes nothing at either call site.
+ *
+ * A third kind lands somewhere else, for the same reason: an OWNER_CONFIRMED task whose run is
+ * waiting for its owner to confirm it done is counted on the task's OWN session, because that is
+ * where its confirmation card is drawn — in any project or none. It carries its kind, so the row
+ * can say "Waiting for your confirmation" instead of the word an approval gets.
  */
+/**
+ * Which kind of question a signal counts. `PROJECT_DECISION` is a coordinator's: a held criteria
+ * proposal or an evidence revision. `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting
+ * for its owner to confirm it done or send it back, counted on the task's own session.
+ */
+export type OwnerDecisionKind = 'PROJECT_DECISION' | 'OWNER_CONFIRMATION';
+
 export interface OwnerDecisionSignal {
-  /** The conversation to open — the project's bound coordinator. This is the whole "where". */
+  /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
+   *  This is the whole "where". */
   sessionId: string;
-  /** The project whose ruler or task is being decided; the coordinator's own payload names it too. */
-  projectId: string;
+  /** The project whose ruler or task is being decided; null for a task filed under no project. */
+  projectId: string | null;
   /** How many owner decisions are waiting there. Always ≥ 1; a zero is simply not a row. */
   count: number;
+  kind: OwnerDecisionKind;
 }
 
 /**
- * The owner decisions waiting on each of this owner's coordinator conversations.
+ * The owner decisions waiting on each of this owner's conversations: their coordinators' project
+ * decisions, and the task sessions an owner confirmation is waiting on (`owner-confirmation-read.ts`,
+ * which counts exactly the question the confirmation card in that session is drawn for).
  *
- * `sessionIds` narrows it to a page of the session list; omitting it asks about every project this
- * owner has a coordinator for, which is what the per-workspace tallies need. An empty array is a
- * question with an empty answer, and is answered without touching the database.
- *
- * Three queries for proposals whatever the number of projects: the coordinators, their filed
- * proposals, and the one that says which of those were answered. The per-project read next door
- * additionally computes a seal per project in order to say whether each proposal can be DECIDED
- * today; a count has no use for that — an undecidable proposal is still a question waiting on the
- * owner — so it is not paid for here. Evidence is the opposite case, as the header says, so its
- * count does ask the door's two checks of each unanswered revision; those are a handful at most.
+ * `sessionIds` narrows it to a page of the session list; omitting it asks about every conversation,
+ * which is what the per-workspace tallies need. An empty array is a question with an empty answer,
+ * and is answered without touching the database.
  */
 export async function readOwnerDecisionSignals(
   tx: Prisma.TransactionClient,
@@ -84,6 +94,33 @@ export async function readOwnerDecisionSignals(
 ): Promise<OwnerDecisionSignal[]> {
   const sessionIds = scope?.sessionIds;
   if (sessionIds && sessionIds.length === 0) return [];
+  const confirmations = await readWaitingOwnerConfirmations(tx, ownerId, scope);
+  return [
+    ...(await readProjectDecisionSignals(tx, ownerId, sessionIds)),
+    ...confirmations.map((waiting) => ({
+      sessionId: waiting.sessionId,
+      projectId: waiting.projectId,
+      count: 1,
+      kind: 'OWNER_CONFIRMATION' as const,
+    })),
+  ];
+}
+
+/**
+ * The project decisions waiting on each of this owner's coordinator conversations.
+ *
+ * Three queries for proposals whatever the number of projects: the coordinators, their filed
+ * proposals, and the one that says which of those were answered. The per-project read next door
+ * additionally computes a seal per project in order to say whether each proposal can be DECIDED
+ * today; a count has no use for that — an undecidable proposal is still a question waiting on the
+ * owner — so it is not paid for here. Evidence is the opposite case, as the header says, so its
+ * count does ask the door's two checks of each unanswered revision; those are a handful at most.
+ */
+async function readProjectDecisionSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
   const coordinated = await tx.project.findMany({
     where: {
       ownerId,
@@ -130,18 +167,65 @@ export async function readOwnerDecisionSignals(
     // The `!` the filter above already proved: a project reached by `coordinatorSessionId: in/not
     // null` has one. Spelled as a guard so the claim is checked rather than asserted.
     if (count > 0 && project.coordinatorSessionId != null) {
-      signals.push({ sessionId: project.coordinatorSessionId, projectId: project.id, count });
+      signals.push({
+        sessionId: project.coordinatorSessionId,
+        projectId: project.id,
+        count,
+        kind: 'PROJECT_DECISION',
+      });
     }
   }
   return signals;
 }
 
-/** The same answer folded to `sessionId → count`, which is what the two counting reads want. */
+/** What is waiting on the owner on one conversation: how many, and of which kinds. */
+export interface OwnerDecisionsOnSession {
+  count: number;
+  kinds: ReadonlySet<OwnerDecisionKind>;
+}
+
+/** The same answer folded per conversation, which is what a session row wants. */
+export async function readOwnerDecisionsBySession(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  scope?: { sessionIds?: readonly string[] },
+): Promise<Map<string, OwnerDecisionsOnSession>> {
+  const folded = new Map<string, { count: number; kinds: Set<OwnerDecisionKind> }>();
+  for (const signal of await readOwnerDecisionSignals(tx, ownerId, scope)) {
+    const entry = folded.get(signal.sessionId) ?? { count: 0, kinds: new Set<OwnerDecisionKind>() };
+    entry.count += signal.count;
+    entry.kinds.add(signal.kind);
+    folded.set(signal.sessionId, entry);
+  }
+  return folded;
+}
+
+/** The same answer folded to `sessionId → count`, which is what the counting reads want. */
 export async function countOwnerDecisionsBySession(
   tx: Prisma.TransactionClient,
   ownerId: string,
   scope?: { sessionIds?: readonly string[] },
 ): Promise<Map<string, number>> {
-  const signals = await readOwnerDecisionSignals(tx, ownerId, scope);
-  return new Map(signals.map((signal) => [signal.sessionId, signal.count]));
+  const folded = await readOwnerDecisionsBySession(tx, ownerId, scope);
+  return new Map([...folded].map(([sessionId, entry]) => [sessionId, entry.count]));
+}
+
+/** The one waiting kind a session row names in words of its own. */
+export type SessionWaitingKind = 'OWNER_CONFIRMATION';
+
+/**
+ * What a session row's `pendingApprovals` is counting, when one word says it better than
+ * "approval": `OWNER_CONFIRMATION` when everything counted is an owner confirmation, so the row can
+ * say "Waiting for your confirmation". Null otherwise — including when a tool call is blocked on the
+ * same row, which is holding a turn open and is the more urgent thing to say.
+ */
+export function sessionWaitingKind(
+  approvals: number,
+  decisions: OwnerDecisionsOnSession | undefined,
+): SessionWaitingKind | null {
+  if (approvals > 0 || !decisions || decisions.count === 0) return null;
+  for (const kind of decisions.kinds) {
+    if (kind !== 'OWNER_CONFIRMATION') return null;
+  }
+  return 'OWNER_CONFIRMATION';
 }

@@ -394,7 +394,7 @@ export function refuseSessionAuthoredCriteriaDecision(
 /** What `refuseTaskOpening` is decided over. Every field is server-read except the declared key. */
 export interface TaskOpeningFacts {
   /** The already-validated declaration on the Task this call would open. */
-  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | null;
+  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED' | null;
   /** The criterion the caller says this work serves — `CreateTaskDto.criterionKey`, verbatim. */
   declaredCriterionKey: string | null | undefined;
   /** The keys of the project's currently stated criteria — each criterion's own id, as

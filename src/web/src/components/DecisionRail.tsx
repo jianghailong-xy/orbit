@@ -226,6 +226,27 @@ export function revealCriteriaCard(intentId: string, scope: Document = document)
   return true;
 }
 
+/**
+ * What the line says for an OWNER_CONFIRMED task whose run is waiting on its owner: the card's own
+ * words and the task it is about, never a number first.
+ */
+export function ownerConfirmationPointer(title: string): string {
+  return `Confirm done: ${title}`;
+}
+
+/**
+ * Take the reader to the owner-confirmation card (`OwnerConfirmationCard.tsx`). A conversation draws
+ * at most one — it is the task session whose run is waiting — so its attribute is the handle.
+ * Returns whether it arrived, as `revealDecisionCard` does.
+ */
+export function revealOwnerConfirmationCard(scope: ParentNode = document): boolean {
+  const card = scope.querySelector<HTMLElement>('[data-owner-confirmation]');
+  if (!card) return false;
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  markReached(card);
+  return true;
+}
+
 /** How long the mark takes to fade once the card it is on has stopped moving. */
 const REACHED_FADE_MS = 1400;
 /** Frames the card must hold still after it has moved to count as arrived; frames it may sit
@@ -449,6 +470,7 @@ export function DecisionStrip({
   queue,
   criteria = null,
   confirmation = false,
+  ownerConfirmation = null,
   open,
   phone = false,
   hasCard = () => false,
@@ -456,6 +478,7 @@ export function DecisionStrip({
   onReveal = () => {},
   onOpenCriteria,
   onRevealConfirmation = () => {},
+  onRevealOwnerConfirmation = () => {},
 }: {
   queue: PendingDecisionQueue;
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
@@ -464,6 +487,11 @@ export function DecisionStrip({
   /** Whether this conversation's settlement card is on screen and still a question: the card's own
    *  report, passed on by the page. False wherever no such card is drawn. */
   confirmation?: boolean;
+  /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, when the page draws
+   *  its confirmation card here: the task's title and how long the run has waited. */
+  ownerConfirmation?: { title: string; ageSeconds: number | null } | null;
+  /** Where the reader goes to confirm it: its card. */
+  onRevealOwnerConfirmation?: () => void;
   /** Whether the WAITING ON YOU rows are unfolded: the one fold left, and a deliberate act. */
   open: boolean;
   /** A phone, which has no line for the WAITING ON YOU sentence (ONE LINE, above). */
@@ -504,6 +532,16 @@ export function DecisionStrip({
       ageSeconds: row.ageSeconds,
       go: () => onReveal(row),
     })),
+    // An OWNER_CONFIRMED task's run waiting on its owner: at most one per conversation, and only in
+    // the task's own session, where its card is drawn.
+    ...(ownerConfirmation
+      ? [{
+        key: 'owner-confirmation',
+        label: ownerConfirmationPointer(ownerConfirmation.title),
+        ageSeconds: ownerConfirmation.ageSeconds,
+        go: onRevealOwnerConfirmation,
+      }]
+      : []),
     ...(confirmation
       ? [{ key: 'settlement', label: ACCEPTANCE_CONFIRMATION_TITLE, ageSeconds: null, go: onRevealConfirmation }]
       : []),
@@ -593,6 +631,7 @@ export function SessionDecisionStrip({
   projectId,
   cards,
   confirmation = false,
+  ownerConfirmation = null,
   onOpenCriteria,
 }: {
   sessionId: string;
@@ -605,6 +644,9 @@ export function SessionDecisionStrip({
   /** Whether this conversation's settlement card is on screen and still a question, as the card
    *  reported it to the page that mounts both (`SessionAcceptanceConfirmationCard`). */
   confirmation?: boolean;
+  /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, as the page that
+   *  draws its confirmation card read it. Null wherever no such card is drawn. */
+  ownerConfirmation?: { title: string; ageSeconds: number | null } | null;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -645,6 +687,8 @@ export function SessionDecisionStrip({
       onToggle={setOpen}
       onReveal={(row) => revealDecisionCard(row)}
       onRevealConfirmation={() => revealSettlementCard()}
+      ownerConfirmation={ownerConfirmation}
+      onRevealOwnerConfirmation={() => revealOwnerConfirmationCard()}
     />
   );
 }

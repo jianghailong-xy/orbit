@@ -9,6 +9,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from './runner-task-completion-evidence.controller';
+import { RunnerTaskOwnerConfirmationController } from './runner-task-owner-confirmation.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
@@ -58,6 +59,7 @@ import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconcile
     RunnerApiController,
     RunnerTasksController,
     RunnerTaskCompletionEvidenceController,
+    RunnerTaskOwnerConfirmationController,
     RunnerServiceTokensController,
     RunnerSessionsController,
     RunnerAgentsController,

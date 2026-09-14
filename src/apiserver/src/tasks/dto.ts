@@ -12,6 +12,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Matches,
@@ -23,6 +24,11 @@ import {
 import { TaskStatus } from '@orbit/shared';
 import type { CreatorType } from '@prisma/client';
 import { IsPublicId } from '../common/public-id';
+import {
+  MAX_OWNER_DECISION_NOTE_CHARS,
+  OWNER_DECISIONS,
+  type OwnerDecisionValue,
+} from './task-owner-confirmation';
 import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
   TASK_COMPLETION_POLICIES,
@@ -232,6 +238,30 @@ export class DecideRunnerTaskEvidenceDto {
 export class DecideTaskEvidenceDto extends DecideRunnerTaskEvidenceDto {
   @IsPublicId()
   decidingSessionId!: string;
+}
+
+/**
+ * The account owner's decision about an OWNER_CONFIRMED task: Confirm done, or Send back with the
+ * reason that is delivered to the run's session as their next message. The same body reaches the
+ * runner protocol's route only to be refused there (`task-owner-confirmation.ts`).
+ */
+export class DecideOwnerConfirmationDto {
+  @IsIn([...OWNER_DECISIONS])
+  decision!: OwnerDecisionValue;
+
+  /**
+   * The confirmation request the card was drawn for, exactly as `GET .../owner-confirmation`
+   * returned it; omitted or null for a press that answers no run. Compared at the door with the
+   * request waiting now. A raw UUID, as every `requestId` on this API is.
+   */
+  @IsOptional()
+  @IsUUID('all')
+  requestId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_OWNER_DECISION_NOTE_CHARS)
+  note?: string;
 }
 
 /** The shared read shape of one recorded decision. */

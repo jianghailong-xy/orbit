@@ -1,18 +1,20 @@
 import type { TaskCompletionPolicyValue, TaskVerdictValue } from '../projects/task-aggregation';
 
 /**
- * The three peer ways a task may declare how its work is proved complete.
+ * The four peer ways a task may declare how its work is proved complete.
  *
- * All three have an implementation. EXECUTABLE compares one exit code and VERIFICATION reads an
+ * All four have an implementation. EXECUTABLE compares one exit code and VERIFICATION reads an
  * independent verdict; EVIDENCE_JUDGMENT, whose machinery the account owner had removed on
  * 2026-09-02, reads one CONFIRM decision made against the current revision of the task's
- * completion evidence by a session that did not do the work. `evaluateTaskCompletion` is where
- * each of those answers is stated.
+ * completion evidence by a session that did not do the work. OWNER_CONFIRMED reads the newest
+ * decision the account owner recorded about the task from the app, which no session can record.
+ * `evaluateTaskCompletion` is where each of those answers is stated.
  */
 export const TASK_COMPLETION_CRITERIA = [
   'EXECUTABLE',
   'VERIFICATION',
   'EVIDENCE_JUDGMENT',
+  'OWNER_CONFIRMED',
 ] as const;
 
 export type TaskCompletionCriterionValue = (typeof TASK_COMPLETION_CRITERIA)[number];
@@ -120,6 +122,17 @@ export function taskCompletionDeclarationError(
       }
       if (policy === 'VERIFICATION_PASSED') {
         return 'EVIDENCE_JUDGMENT cannot use completionPolicy VERIFICATION_PASSED';
+      }
+      if (declaration.verifiesTaskId != null) {
+        return 'A verification task must use VERIFICATION completion';
+      }
+      return null;
+    case 'OWNER_CONFIRMED':
+      if (command != null) {
+        return 'OWNER_CONFIRMED cannot also declare executable acceptance';
+      }
+      if (policy !== 'MANUAL') {
+        return 'OWNER_CONFIRMED requires completionPolicy MANUAL';
       }
       if (declaration.verifiesTaskId != null) {
         return 'A verification task must use VERIFICATION completion';
@@ -242,6 +255,14 @@ export interface TaskCompletionFacts {
   latestEvidenceRevision?: bigint | null;
   /** The evidence revision an independent session's CONFIRM decision answers, when one exists. */
   confirmedEvidenceRevision?: bigint | null;
+  /**
+   * The newest decision the account owner recorded about this task, or null when there is none.
+   *
+   * Only the owner's own app credential, with no session behind the request, can record one
+   * (`task-owner-confirmation.ts`), so a CONFIRM here is the owner saying the work is done and not
+   * a run reporting that about itself.
+   */
+  ownerDecision?: 'CONFIRM' | 'SEND_BACK' | null;
 }
 
 export interface TaskCompletionEvaluation {
@@ -291,6 +312,10 @@ export type TaskLifecycleStatusValue =
  * the decision is written, against this task's whole session history and the authorship of its
  * evidence; this function reads the row that check produced.
  *
+ * OWNER_CONFIRMED is the account owner's newest decision about the task being a CONFIRM. Who may
+ * record one is checked at its door for the same reason independence is checked at the evidence
+ * door: this function is handed the decision, never the credential that made it.
+ *
  * Every criterion keeps its own explicit arm and the switch has no default, which is what makes a
  * fourth criterion unable to silently inherit somebody else's answer.
  */
@@ -322,6 +347,12 @@ export function evaluateTaskCompletion(
         && facts.confirmedEvidenceRevision === facts.latestEvidenceRevision)
         ? 'SATISFIED'
         : 'UNSATISFIED';
+      break;
+    case 'OWNER_CONFIRMED':
+      // The owner's newest word about the task, and nothing else. No decision, a SEND_BACK, and
+      // every other criterion's satisfied fact are one answer: a run that reports success is not
+      // the owner saying so, which is the whole of what separates this criterion from the others.
+      state = facts.ownerDecision === 'CONFIRM' ? 'SATISFIED' : 'UNSATISFIED';
       break;
   }
   return { criterion, state, satisfied: state === 'SATISFIED' };
@@ -430,6 +461,17 @@ export function taskCompletionRequiredAction(
           'submit this task\'s completion evidence, then let a session that did not do the work ' +
           'decide the revision you submitted; Orbit derives DONE from a CONFIRM of the revision ' +
           'that is current when it is made, and a SEND_BACK leaves the task open for the next one',
+      };
+    case 'OWNER_CONFIRMED':
+      return {
+        requiredAction: 'HAVE_THE_ACCOUNT_OWNER_CONFIRM_IN_THE_APP',
+        instruction:
+          'only the account owner can settle this task, by pressing Confirm done in the Orbit app — ' +
+          'on the confirmation card in the task\'s own session once a run of it has ended its turn, ' +
+          'or in the task\'s detail panel when no run is waiting — and Orbit derives DONE from that ' +
+          'recorded decision. No agent session can record it, a coordinator included: finish the ' +
+          'work, say in the session what was done, and end the turn. A Send back from the owner ' +
+          'arrives in that same session as their next message and leaves the task open',
       };
   }
 }

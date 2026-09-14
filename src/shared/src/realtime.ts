@@ -128,6 +128,10 @@ export interface ControlSessionSummary {
     observationCount: number;
   }>;
   pendingApprovals: number;
+  /** What `pendingApprovals` is counting, when one word says it better than "approval":
+   *  `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
+   *  owner to confirm it done. Null otherwise; absent from an older control plane. */
+  waitingKind?: 'OWNER_CONFIRMATION' | null;
   lastTurnAt: string | null;
   /** When the server will re-send the message this run's failure killed, or null if nothing is
    *  armed. Part of the summary because it is part of what `runState: FAILED` means here: a
@@ -188,6 +192,8 @@ export interface ControlSessionError {
 export interface ControlApproval {
   approvalId: string;
   pendingApprovals: number;
+  /** Overwritten together with `pendingApprovals`; see `ControlSessionSummary.waitingKind`. */
+  waitingKind?: 'OWNER_CONFIRMATION' | null;
 }
 
 /** `data` for `background.task`. */

@@ -154,10 +154,15 @@ export interface CriterionWithSettlementFacts {
  *    the same evaluator rather than compared here. Until 2026-09-04 this arm could not be
  *    satisfied at all, so a criterion any such task served was held up by it forever, whatever
  *    the work had done — which is why the arm is written as facts read rather than as a constant.
+ *  - OWNER_CONFIRMED: `status = 'DONE'`, for EXECUTABLE's reason. The account owner's CONFIRM is
+ *    the only thing that writes it (`TaskOwnerConfirmationService`), and 0267's lane in the DONE
+ *    fence admits the write only while the owner's newest decision about the task is that CONFIRM,
+ *    so DONE here is the trace of the owner's own word.
  */
 export function servingTaskSettled(task: ServingTaskFacts): boolean {
   switch (task.completionCriterion) {
     case 'EXECUTABLE':
+    case 'OWNER_CONFIRMED':
       return task.status === 'DONE';
     case 'VERIFICATION':
       return evaluateTaskCompletion({

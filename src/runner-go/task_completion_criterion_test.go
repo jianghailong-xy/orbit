@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var completionCriteria = []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"}
+var completionCriteria = []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"}
 
 func stringEnum(t *testing.T, property map[string]interface{}) []string {
 	t.Helper()

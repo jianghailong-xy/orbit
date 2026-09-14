@@ -170,6 +170,8 @@ import {
   scheduleWakeup,
 } from './scheduled-wakeup';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { recordOwnerConfirmationRequest } from '../tasks/owner-confirmation-read';
+import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import { withControlPlaneNote } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
@@ -3399,6 +3401,22 @@ export class RunnerApiController {
               content: executable.acceptanceCommand,
               status: 'PENDING',
             },
+          });
+        }
+        // OWNER_CONFIRMED: a run of the task ended a turn successfully, so its owner is asked. This
+        // is the only place that knows the turn succeeded — the runner's turn_end event carries no
+        // outcome — so the question is recorded here, in the same transaction as the acknowledgement
+        // that makes it happen once. Nothing is concluded: the owner's own decision is.
+        if (
+          executable != null
+          && executable.completionCriterion === 'OWNER_CONFIRMED'
+          && (OWNER_CONFIRMATION_UNSETTLED_STATUSES as readonly string[]).includes(executable.status)
+        ) {
+          await recordOwnerConfirmationRequest(tx, {
+            taskId: current.taskId,
+            ownerId: current.ownerId,
+            sessionId,
+            turnId: completedTurn.id,
           });
         }
       }

@@ -186,18 +186,22 @@ test('every criterion answers rather than throws, and stays out of the default a
   // evaluates one has asked a legitimate question about a legitimate declaration.
   assert.doesNotThrow(() => evaluateTaskCompletion({ completionCriterion: 'EXECUTABLE' }));
   assert.doesNotThrow(() => evaluateTaskCompletion({ completionCriterion: 'EVIDENCE_JUDGMENT' }));
+  assert.doesNotThrow(() => evaluateTaskCompletion({ completionCriterion: 'OWNER_CONFIRMED' }));
   const source = readFileSync(
     path.resolve(__dirname, '../../src/tasks/task-completion-criterion.ts'), 'utf8',
   );
   const evaluator = source.slice(source.indexOf('export function evaluateTaskCompletion'));
-  assert.match(evaluator, /case 'EXECUTABLE':/u, 'EXECUTABLE keeps its own explicit arm');
-  assert.match(evaluator, /case 'EVIDENCE_JUDGMENT':/u);
-  assert.doesNotMatch(evaluator.slice(0, evaluator.indexOf('\n}')), /default:/u,
-    'no default arm: a fourth criterion must not inherit an answer');
-  // The three labels are still declarable. Deleting one would have been the other removal.
+  const body = evaluator.slice(0, evaluator.indexOf('\n}'));
+  assert.match(body, /case 'EXECUTABLE':/u, 'EXECUTABLE keeps its own explicit arm');
+  assert.match(body, /case 'EVIDENCE_JUDGMENT':/u);
+  assert.match(body, /case 'OWNER_CONFIRMED':/u,
+    'the fourth criterion answers in an arm of its own, not in somebody else\'s');
+  assert.doesNotMatch(body, /default:/u,
+    'no default arm: a fifth criterion must not inherit an answer');
+  // The four labels are declarable. Deleting one would have been a removal.
   assert.deepEqual(
     [...TASK_COMPLETION_CRITERIA],
-    ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'],
+    ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT', 'OWNER_CONFIRMED'],
   );
 });
 
@@ -421,4 +425,98 @@ test('the EVIDENCE_JUDGMENT refusal no longer sends a project-less task to VERIF
   assert.match(refusal.message, /EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode/u);
   assert.doesNotMatch(refusal.message, /VERIFICATION/u,
     'that way out would only lead to VERIFICATION_SUBJECT_REQUIRES_PROJECT');
+});
+
+/**
+ * The fourth criterion. What satisfies it is one fact — the account owner's newest decision about
+ * the task is a CONFIRM — and every other shape, including the facts that satisfy its three peers,
+ * is UNSATISFIED. Who may record that decision is its door's question
+ * (`task-owner-confirmation.spec.ts`), not this evaluator's.
+ */
+test('OWNER_CONFIRMED is the owner\'s newest decision being a CONFIRM, and nothing else', () => {
+  for (const facts of [
+    { completionCriterion: 'OWNER_CONFIRMED' as const },
+    { completionCriterion: 'OWNER_CONFIRMED' as const, ownerDecision: null },
+    // Sent back: the owner's newest word says the task is still open.
+    { completionCriterion: 'OWNER_CONFIRMED' as const, ownerDecision: 'SEND_BACK' as const },
+    // A run that reports success is not its owner confirming it.
+    { completionCriterion: 'OWNER_CONFIRMED' as const, acceptanceExpectedExitCode: 0, executableExitCode: 0 },
+    { completionCriterion: 'OWNER_CONFIRMED' as const, verificationVerdict: 'PASS' as const },
+    { completionCriterion: 'OWNER_CONFIRMED' as const, ownVerdict: 'PASS' as const, verifiesTaskId: 'x' },
+    {
+      completionCriterion: 'OWNER_CONFIRMED' as const,
+      latestEvidenceRevision: 2n,
+      confirmedEvidenceRevision: 2n,
+    },
+  ]) {
+    assert.deepEqual(
+      evaluateTaskCompletion(facts),
+      { criterion: 'OWNER_CONFIRMED', state: 'UNSATISFIED', satisfied: false },
+      `OWNER_CONFIRMED must not be satisfied by ${JSON.stringify(facts, (_k, v) => (typeof v === 'bigint' ? `${v}n` : v))}`,
+    );
+    assert.equal(deriveTaskCompletionStatus(facts), null);
+  }
+
+  const confirmed = { completionCriterion: 'OWNER_CONFIRMED' as const, ownerDecision: 'CONFIRM' as const };
+  assert.deepEqual(evaluateTaskCompletion(confirmed),
+    { criterion: 'OWNER_CONFIRMED', state: 'SATISFIED', satisfied: true });
+  assert.equal(deriveTaskCompletionStatus(confirmed), 'DONE');
+
+  // And its fact settles no other criterion: an owner's CONFIRM is not an exit code, a verdict or a
+  // judgment of evidence.
+  for (const completionCriterion of ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'] as const) {
+    assert.equal(
+      evaluateTaskCompletion({ completionCriterion, ownerDecision: 'CONFIRM' }).satisfied,
+      false,
+      `${completionCriterion} must not borrow the owner's confirmation`,
+    );
+  }
+});
+
+test('OWNER_CONFIRMED is declared with MANUAL and nothing else, in a project or in none', () => {
+  assert.equal(taskCompletionDeclarationError({ completionCriterion: 'OWNER_CONFIRMED' }), null);
+  assert.equal(taskCompletionDeclarationError({
+    completionCriterion: 'OWNER_CONFIRMED', completionPolicy: 'MANUAL',
+  }), null);
+  assert.equal(resolveTaskCompletionCriterion({ completionCriterion: 'OWNER_CONFIRMED' }), 'OWNER_CONFIRMED');
+  assert.notEqual(resolveTaskCompletionCriterion({}), 'OWNER_CONFIRMED',
+    'omission never selects it: the owner is asked only by a task that declared it');
+
+  assert.match(taskCompletionDeclarationError({
+    completionCriterion: 'OWNER_CONFIRMED', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
+  })!, /OWNER_CONFIRMED cannot also declare executable acceptance/u);
+  for (const completionPolicy of ['ALL_CHILDREN_DONE', 'VERIFICATION_PASSED'] as const) {
+    assert.match(taskCompletionDeclarationError({
+      completionCriterion: 'OWNER_CONFIRMED', completionPolicy,
+    })!, /OWNER_CONFIRMED requires completionPolicy MANUAL/u, completionPolicy);
+  }
+  assert.match(taskCompletionDeclarationError({
+    completionCriterion: 'OWNER_CONFIRMED', verifiesTaskId: 'subject',
+  })!, /must use VERIFICATION/u);
+
+  // Neither refusal about work in no project applies: the owner can confirm a task wherever it is
+  // filed, so there is no stranded state to refuse.
+  for (const projectId of [null, undefined, 'project']) {
+    assert.equal(criterionNeedsProjectRefusal({ completionCriterion: 'OWNER_CONFIRMED', projectId }), null);
+    assert.equal(
+      verificationSubjectNeedsProjectRefusal({ completionCriterion: 'OWNER_CONFIRMED', projectId }),
+      null,
+    );
+  }
+});
+
+test('a direct DONE on an OWNER_CONFIRMED task is told the owner confirms it in the app', () => {
+  const remedy = taskCompletionRequiredAction('OWNER_CONFIRMED');
+  assert.equal(remedy.requiredAction, 'HAVE_THE_ACCOUNT_OWNER_CONFIRM_IN_THE_APP');
+  assert.match(remedy.instruction, /only the account owner can settle this task/u);
+  assert.match(remedy.instruction, /Confirm done/u, 'names the press that settles it');
+  assert.match(remedy.instruction, /detail panel when no run is waiting/u,
+    'and where it is pressed for a task no run is waiting on');
+  assert.match(remedy.instruction, /No agent session can record it, a coordinator included/u);
+  assert.match(remedy.instruction, /Send back/u);
+  assert.doesNotMatch(remedy.instruction, /rebuil|removed|not implemented/u);
+  // Its own remedy, not a peer's.
+  for (const peer of ['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT'] as const) {
+    assert.notEqual(taskCompletionRequiredAction(peer).requiredAction, remedy.requiredAction, peer);
+  }
 });

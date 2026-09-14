@@ -117,6 +117,108 @@ function primaryAction(html: string): { label: string; disabled: boolean } | nul
   };
 }
 
+/**
+ * OWNER_CONFIRMED in the panel: one place to confirm at a time. A task no run is waiting on — above
+ * all one that never ran and is only a record — gets Confirm done beside Run now. While a run is
+ * waiting on its owner, the answer is the card in that run's session, so the panel only points there
+ * and offers no button of its own.
+ */
+describe('an OWNER_CONFIRMED task in the panel', () => {
+  const OWNER_CONFIRMED = { completionCriterion: 'OWNER_CONFIRMED', completionPolicy: 'MANUAL' };
+  const RUN_SESSION = '34MOJw69NzKSq2X0exxf9';
+
+  /** The panel over a task and, when given, the confirmation read the server returned for it. */
+  function renderWithConfirmation(
+    data: Record<string, unknown>,
+    confirmation?: Record<string, unknown>,
+  ): string {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } },
+    });
+    qc.setQueryData(['task', TASK_ID], data);
+    if (confirmation) qc.setQueryData(['task', TASK_ID, 'owner-confirmation'], confirmation);
+    return renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <TaskDetailPanel
+            taskId={TASK_ID}
+            onOpenTask={() => {}}
+            onClose={() => {}}
+            onDelete={() => {}}
+            deleting={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  const head = (html: string): string =>
+    /<div class="tdp-head-actions">([\s\S]*?)<\/div><\/div>/.exec(html)?.[1] ?? '';
+  const buttonLabels = (html: string): string[] =>
+    [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/gu)].map((m) => m[1].replace(/<[^>]*>/gu, ''));
+  const confirmation = (over: Record<string, unknown> = {}) => ({
+    taskId: TASK_ID,
+    title: 'Run the nightly ingest',
+    status: 'OPEN',
+    projectId: null,
+    completionCriterion: 'OWNER_CONFIRMED',
+    acceptanceCriteria: null,
+    waiting: null,
+    decisions: [],
+    ...over,
+  });
+
+  it('offers Confirm done beside Run now on a task that never ran', () => {
+    const actions = head(renderWithConfirmation(task(OWNER_CONFIRMED)));
+    expect(buttonLabels(actions)).toContain('Confirm done');
+    // Beside, not instead: the task can still be run.
+    expect(buttonLabels(actions)).toContain('Run now');
+  });
+
+  it('only points at the card while a run of the task is waiting on its owner', () => {
+    const html = renderWithConfirmation(
+      task({ ...OWNER_CONFIRMED, sessions: [{ id: RUN_SESSION, status: 'AWAITING_INPUT' }] }),
+      confirmation({
+        waiting: {
+          requestId: '01920000-0000-7000-8000-0000000000f1',
+          sessionId: RUN_SESSION,
+          requestedAt: '2026-09-13T10:39:00.000Z',
+          report: { text: 'Done.', reportedAt: '2026-09-13T10:39:00.000Z' },
+        },
+      }),
+    );
+    const actions = head(html);
+    expect(buttonLabels(actions)).not.toContain('Confirm done');
+    expect(buttonLabels(actions)).not.toContain('Send back…');
+    expect(actions).toMatch(
+      new RegExp(`<a[^>]*href="/sessions/${RUN_SESSION}"[^>]*>Waiting for your confirmation</a>`, 'u'),
+    );
+  });
+
+  it('offers Confirm done again once nothing is waiting, as the read says', () => {
+    const actions = head(renderWithConfirmation(
+      task({ ...OWNER_CONFIRMED, sessions: [{ id: RUN_SESSION, status: 'AWAITING_INPUT' }] }),
+      confirmation(),
+    ));
+    expect(buttonLabels(actions)).toContain('Confirm done');
+    expect(actions).not.toContain('Waiting for your confirmation');
+  });
+
+  it('offers nothing it cannot stand behind', () => {
+    // A task that has run, before the read says whether a run is waiting: a button here could be
+    // a second place to answer the card.
+    expect(buttonLabels(head(renderWithConfirmation(
+      task({ ...OWNER_CONFIRMED, sessions: [{ id: RUN_SESSION, status: 'AWAITING_INPUT' }] }),
+    )))).not.toContain('Confirm done');
+    // A settled task.
+    expect(buttonLabels(head(renderWithConfirmation(task({ ...OWNER_CONFIRMED, status: 'DONE' })))))
+      .not.toContain('Confirm done');
+    // Another criterion: the owner's confirmation settles nothing there.
+    expect(buttonLabels(head(renderWithConfirmation(task({ completionCriterion: 'EXECUTABLE' })))))
+      .not.toContain('Confirm done');
+  });
+});
+
 describe('the task panel’s delete', () => {
   /** The header's delete button's opening tag, or null when the header has none. */
   const deleteButton = (html: string) =>

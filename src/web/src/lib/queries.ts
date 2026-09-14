@@ -17,6 +17,7 @@ import type { ProviderModelRow } from './providerAdmin';
 import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
+import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard';
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
 import {
@@ -536,6 +537,19 @@ export const taskEvidenceQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task-evidence', taskId] as const,
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${encodeURIComponent(taskId)}/evidence`),
+  });
+
+/**
+ * What an OWNER_CONFIRMED task is waiting on, and what its owner has decided — re-derived by the
+ * server on every read. Under `['task', taskId]` on purpose: every `task.*` event re-reads that
+ * prefix, so a decision made in another window reaches the card, the pinned line and the task panel
+ * through the one key the three of them share.
+ */
+export const ownerConfirmationQuery = (taskId: string) =>
+  queryOptions({
+    queryKey: ['task', taskId, 'owner-confirmation'] as const,
+    queryFn: () =>
+      api<OwnerConfirmationView>(`/tasks/${encodeURIComponent(taskId)}/owner-confirmation`),
   });
 
 /**

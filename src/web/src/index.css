@@ -7052,6 +7052,46 @@ button.composer-usage:focus-visible {
 .evidence-decision-receipt-mark {
   color: var(--success-solid);
 }
+/* ── The owner-confirmation card ──────────────────────────────────────────────────────────
+   `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
+   asked to confirm it done or send it back. The evidence card's frame, with the two facts a person
+   decides from — what settles the task, and what the run reported — each in a box of its own. */
+.owner-confirmation-lead {
+  margin-top: 8px;
+}
+.owner-confirmation-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.owner-confirmation-key {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+}
+.owner-confirmation-value {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.owner-confirmation-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+/* The task panel's pointer to that card while a run is waiting on it: a way there, not a button. */
+.tdp-owner-confirmation-pointer {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--warning-solid);
+  white-space: nowrap;
+}
 /* ── The settlement confirmation card ─────────────────────────────────────────────────────
    `AcceptanceConfirmationCard.tsx`: whether the stated criteria, together, are what "done" means.
    The approval card's own tone rather than the warning one — it is a question about meaning, like

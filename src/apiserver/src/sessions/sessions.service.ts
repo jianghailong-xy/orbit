@@ -75,8 +75,9 @@ import {
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
-  countOwnerDecisionsBySession,
   readOwnerDecisionSignals,
+  readOwnerDecisionsBySession,
+  sessionWaitingKind,
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import {
@@ -2329,13 +2330,20 @@ export class SessionsService {
     // criteria decision are one question to the reader of this list — "is somebody waiting on me
     // here" — so they are one number, and the row's own `projectId` is where the second kind leads.
     // The count is a signal and grants nothing; the decision door re-reads every fact it needs.
-    const decisions = await countOwnerDecisionsBySession(this.prisma, ownerId, {
+    // A row whose only question is an owner confirmation also says which, so it can read "Waiting
+    // for your confirmation" rather than "Waiting for approval" (`sessionWaitingKind`).
+    const decisions = await readOwnerDecisionsBySession(this.prisma, ownerId, {
       sessionIds: sessions.map((s) => s.id),
     });
-    return sessions.map((s) => ({
-      ...s,
-      pendingApprovals: (byId.get(s.id) ?? 0) + (decisions.get(s.id) ?? 0),
-    }));
+    return sessions.map((s) => {
+      const approvals = byId.get(s.id) ?? 0;
+      const waiting = decisions.get(s.id);
+      return {
+        ...s,
+        pendingApprovals: approvals + (waiting?.count ?? 0),
+        waitingKind: sessionWaitingKind(approvals, waiting),
+      };
+    });
   }
 
   async get(ownerId: string, id: string) {

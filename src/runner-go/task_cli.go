@@ -162,8 +162,9 @@ Options:
   --criterion-key KEY         Which of the PROJECT's acceptance criteria this work serves — a
                               key from project_get. Required of a project's judgment session,
                               optional for everybody else
-  --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT
-				              Required for every runner-created task; EVIDENCE_JUDGMENT must be explicit
+  --completion-criterion EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT|OWNER_CONFIRMED
+				              Required for every runner-created task; EVIDENCE_JUDGMENT must be explicit.
+				              OWNER_CONFIRMED is confirmed only by the account owner in the app, never by an agent
   --completion-criterion-override-reason TEXT
                               Why this task keeps a criterion after the server questions its shape
   --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
@@ -230,10 +231,12 @@ accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin, 
 '-'; since --description-file reads the same stdin, the two file flags cannot be used together,
 but passing one field inline and the other on stdin is fine.
 
---completion-criterion declares one of three peer outcomes, never an escalation order:
+--completion-criterion declares one of four peer outcomes, never an escalation order:
 EXECUTABLE compares one command's exit code, VERIFICATION reads the verdict of an independent
-verification task (with --completion-policy VERIFICATION_PASSED), and EVIDENCE_JUDGMENT waits for one
-an evidence judgment. Runner task creation never infers EVIDENCE_JUDGMENT: every task must pass the flag.
+verification task (with --completion-policy VERIFICATION_PASSED), EVIDENCE_JUDGMENT waits for one
+an evidence judgment, and OWNER_CONFIRMED waits for the account owner to confirm the task in the
+Orbit app. An agent cannot confirm an OWNER_CONFIRMED task, a coordinator included: only the owner
+can. Runner task creation never infers EVIDENCE_JUDGMENT: every task must pass the flag.
 Related verifier, executable, and completion-policy flags do not replace that declaration.
 
 Orbit conservatively compares acceptance-criteria wording with that choice. A mismatch returns
@@ -854,10 +857,10 @@ func validateTaskCLICompletionPolicy(policy string) error {
 
 func validateTaskCLICompletionCriterion(criterion string) error {
 	switch criterion {
-	case "EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT":
+	case "EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED":
 		return nil
 	default:
-		return fmt.Errorf("completion-criterion must be one of EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT")
+		return fmt.Errorf("completion-criterion must be one of EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, OWNER_CONFIRMED")
 	}
 }
 

@@ -1706,8 +1706,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"criterionKey":       criterionKeyProp,
 			"completionCriterion": map[string]interface{}{
 				"type":        "string",
-				"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
-				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; EVIDENCE_JUDGMENT uses one decision on the task's own submitted evidence. They are peer choices, not a fallback chain. Runner task creation always requires this explicit field; related command, policy, and verifier fields do not replace it.",
+				"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
+				"description": "The task's one normal completion criterion. EXECUTABLE uses acceptanceCommand plus acceptanceExpectedExitCode; VERIFICATION uses an independent task's verdict with completionPolicy VERIFICATION_PASSED; EVIDENCE_JUDGMENT uses one decision on the task's own submitted evidence; OWNER_CONFIRMED (completionPolicy MANUAL, no acceptanceCommand, no verifiesTaskId) is settled only by the account owner confirming it in the Orbit app — no agent session can confirm it, a coordinator included, so a run of it finishes the work, says what it did, and ends its turn. They are peer choices, not a fallback chain. Runner task creation always requires this explicit field; related command, policy, and verifier fields do not replace it.",
 			},
 			"completionCriterionOverrideReason": criterionOverrideReasonProp,
 			"acceptanceCommand": map[string]interface{}{
@@ -2210,8 +2210,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"criterionKey":       updateCriterionKeyProp,
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
-					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT"},
-					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION and EVIDENCE_JUDGMENT are peers, not an escalation order. Changing it to a different value requires completionCriterionOverrideReason in the same call.",
+					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
+					"description": "Replace the task's one normal completion criterion. Omit to preserve it; a criterion cannot be cleared. EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT and OWNER_CONFIRMED are peers, not an escalation order. OWNER_CONFIRMED is settled only by the account owner confirming the task in the Orbit app: no agent session can confirm it, a coordinator included. Changing it to a different value requires completionCriterionOverrideReason in the same call.",
 				},
 				"completionCriterionOverrideReason": criterionChangeReasonProp,
 				"acceptanceCommand": map[string]interface{}{

@@ -78,6 +78,7 @@ import {
   type SessionListView,
   sessionsQuery,
   sessionTagsQuery,
+  ownerConfirmationQuery,
   pendingDecisionsQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -182,6 +183,13 @@ import {
   evidenceDecisionCardRows,
 } from './EvidenceDecisionCard';
 import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
+import {
+  OwnerDecisionReceipt,
+  SessionOwnerConfirmationCard,
+  WAITING_FOR_CONFIRMATION,
+  ownerConfirmationWaitingIn,
+  ownerDecisionReceiptsIn,
+} from './OwnerConfirmationCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -696,6 +704,13 @@ const sentLine = (text: string): SessionLine => ({
   tone: 'preview',
 });
 
+// What a row that is waiting on you says. The server names the kind when everything it counted is
+// an OWNER_CONFIRMED task's run waiting to be confirmed (`waitingKind`), and that row says so in the
+// confirmation card's words; anything else waiting on you keeps the approval wording. Only the words
+// change — the row still carries no button: the one place to answer is the card in the session.
+const waitingLabel = (s: any): string =>
+  s.waitingKind === 'OWNER_CONFIRMATION' ? WAITING_FOR_CONFIRMATION : 'Waiting for approval';
+
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
@@ -707,7 +722,7 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // delivered their card and sit on a PARKED conversation. Inside the gate, a real criteria
   // decision waiting for an answer left this row reading as an idle reply preview.
   if (live && (s.pendingApprovals ?? 0) > 0)
-    return { text: 'Waiting for approval', tone: 'approval' };
+    return { text: waitingLabel(s), tone: 'approval' };
   // Outranks the generating preview below. While the engine is starting, or compacting, it has
   // produced nothing since the wait began, so that preview would echo the message back as though it
   // were being answered (see waitingNoticeFor). Blue, because this is progress — just not the
@@ -844,7 +859,7 @@ export function statusLabel(session: any): string {
   const state = sessionRunStateOf(session);
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
-  if ((session.pendingApprovals ?? 0) > 0) return 'Waiting for approval';
+  if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
@@ -872,7 +887,7 @@ export function StatusIcon({ session }: { session: any }) {
   // the same order on purpose: they are read together on one row.
   if ((session.pendingApprovals ?? 0) > 0)
     return (
-      <Tooltip title="Waiting for approval">
+      <Tooltip title={waitingLabel(session)}>
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
       </Tooltip>
     );
@@ -3160,12 +3175,31 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       .map(decisionRowKey),
   );
 
+  // The confirmation of the OWNER_CONFIRMED task this session runs, through the key the card below
+  // and the task panel read too, so this adds no request. It says whether a run of THIS session is
+  // waiting on its owner — the card is drawn and the pinned line points at it — and which decisions
+  // answered this session's runs, for their receipts.
+  const selectedTaskId: string | null = selectedSession?.taskId ?? null;
+  const ownerConfirmation = useQuery({
+    ...ownerConfirmationQuery(selectedTaskId ?? ''),
+    enabled: Boolean(selectedTaskId) && !selectedTrashed,
+  });
+  const ownerWaiting = ownerConfirmationWaitingIn(ownerConfirmation.data, selectedId);
+  // A run ending its turn moves this session's row, not the task, so no task event re-reads the
+  // confirmation. Re-read it when the row moves, and the card arrives with the report rather than
+  // on the card's next poll.
+  const selectedRunMoment = `${selectedSession?.runState ?? ''}|${selectedSession?.lastTurnAt ?? ''}`;
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    void qc.invalidateQueries({ queryKey: ownerConfirmationQuery(selectedTaskId).queryKey });
+  }, [qc, selectedTaskId, selectedRunMoment]);
+
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
-  // made (`EvidenceDecisionReceipt`). Memoized because `Transcript` is: a fresh array on every
-  // render would rebuild the whole conversation with it.
+  // made (`EvidenceDecisionReceipt`, `OwnerDecisionReceipt`). Memoized because `Transcript` is: a
+  // fresh array on every render would rebuild the whole conversation with it.
   const decisionReceipts = useMemo(
-    () =>
-      (pendingDecisions.data?.decided ?? []).flatMap((decided) => {
+    () => [
+      ...(pendingDecisions.data?.decided ?? []).flatMap((decided) => {
         const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
         return afterSeq === null
           ? []
@@ -3175,7 +3209,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               element: <EvidenceDecisionReceipt decided={decided} />,
             }];
       }),
-    [pendingDecisions.data, transcriptEvents],
+      ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
+        const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        return afterSeq === null || !ownerConfirmation.data
+          ? []
+          : [{
+              afterSeq,
+              key: `owner-decision-receipt:${decided.id}`,
+              element: <OwnerDecisionReceipt view={ownerConfirmation.data} decided={decided} />,
+            }];
+      }),
+    ],
+    [pendingDecisions.data, ownerConfirmation.data, selectedId, transcriptEvents],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -5603,6 +5648,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             projectId={selectedSession?.projectId ?? null}
             cards={decisionCards}
             confirmation={openSettlementIn === selectedId}
+            // Named in the card's own words, with how long the run has waited — never a number
+            // first. Only when the card below is drawn in this session, so a press always arrives.
+            ownerConfirmation={
+              ownerWaiting && ownerConfirmation.data
+                ? {
+                    title: ownerConfirmation.data.title,
+                    ageSeconds: Math.max(
+                      0,
+                      Math.floor((Date.now() - Date.parse(ownerWaiting.requestedAt)) / 1000),
+                    ),
+                  }
+                : null
+            }
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
@@ -5714,6 +5772,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
+                />
+              )}
+              {/* An OWNER_CONFIRMED task's confirmation card, in the task's own session — in any
+                  project or none — once a run of it has ended its turn: the one place the owner
+                  confirms it done or sends it back. The list row only lights and the pinned line
+                  only points here. Keyed apart from its siblings for the reason the evidence card's
+                  note gives. */}
+              {selected && selectedId && !selectedTrashed && (
+                <SessionOwnerConfirmationCard
+                  key={`owner-confirmation:${selectedId}`}
+                  sessionId={selectedId}
+                  taskId={selectedSession?.taskId ?? null}
                 />
               )}
               {/* The settlement question — whether this project's criteria, together, are what
