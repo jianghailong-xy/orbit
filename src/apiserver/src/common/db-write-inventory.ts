@@ -499,13 +499,13 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'watches/watches.service.ts#create',
     shape: 'TX_RETRIED',
-    locks: 'Unlocked reads of the named task (with its progress row), session and approval rows first — the permission check and the snapshot are the same read — then the new watch row, whose foreign keys take FOR KEY SHARE on the owner user (rank 10) and, for a SESSION observer, on that session (rank 30), in that order, and whose idempotency key is where two creates with one key meet; then a transaction-scoped advisory lock on the owner (assertCapacity), taken by nothing else and held by no create that waits on another, and unlocked reads of the live watches of that owner and of their targets; then watch_target, watch_match and watch_delivery rows only this transaction can see. Monotone, and no row another transaction can see is written.',
+    locks: 'Unlocked reads of the named task (with its progress row), session and approval rows first — the permission check and the snapshot are the same read — then the new watch row, whose foreign keys take FOR KEY SHARE on the owner user (rank 10) and, for a SESSION observer, on that session (rank 30), in that order, and whose idempotency key is where two creates with one key meet; then the owner\'s transaction-scoped advisory lock (assertCapacity), taken by nothing else and never waited for: it is `pg_try_advisory_xact_lock`, and a create that finds it held rolls back and asks again between attempts, outside any transaction (awaitOwnerTurn), so no create waits on that lock while it holds a row or a connection; then unlocked reads of the live watches of that owner and of their targets; then watch_target, watch_match and watch_delivery rows only this transaction can see. Monotone, and no row another transaction can see is written.',
     identity: 'The account-scoped `idempotencyKey` when the request carries one, enforced by `watch_owner_idempotency_key`: a concurrent twin that loses the insert, and a later retry, both read the committed watch back instead of making a second. Without a key every request is a new watch.',
     isolation: '',
     attempts: 4,
-    replay: 'Every attempt re-reads the targets and decides the predicate again inside the closure, and writes only rows it creates, so a rolled-back attempt leaves nothing for the next one to meet.',
+    replay: 'Every attempt re-reads the targets and decides the predicate again inside the closure, and writes only rows it creates, so a rolled-back attempt leaves nothing for the next one to meet. The same argument covers the runs outside the retry: a unit rolled back because another create of the account held its turn, or ended by a P2028 that wrote nothing (it could not start in time, or its timeout rolled it back before the commit), runs again whole once the turn is free.',
     effects: 'None inside. The delivery it records is a PENDING row for the delivery worker; the response is read after commit.',
-    answer: 'Typed 503; the client re-sends, and a key makes the re-send the same watch.',
+    answer: 'Typed 503; the client re-sends, and a key makes the re-send the same watch. A create that has not had its turn when its wait runs out (10s by default) answers the same TRANSIENT_DB_CONFLICT body itself, having written nothing.',
   },
   {
     at: 'tasks/task-progress.service.ts#report',
@@ -958,9 +958,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // the session, and nothing holding a delivery row waits on a session.
   { at: 'watches/watch-wake-drain.ts#deadLetterQueuedWatchWakes', under: 'runnerApi turn-complete/finalize, sessions end/interrupt/cancelQueuedTurn and realtime reaper — each caller already owns the rank-30 Session transaction that takes the wake off the queue unrun' },
   { at: 'watches/watch-evaluator.service.ts#land', under: 'watchEvaluator.evaluate' },
-  // A Watch create's capacity checks. Its one write-shaped statement is `pg_advisory_xact_lock` on the owner, taken
-  // after the create's watch row and before its targets; the rest are unlocked reads of that owner's live watches, so
-  // two creates of one account decide one after the other and nothing else waits on that lock.
+  // A Watch create's capacity checks. Its one lock-shaped statement is `pg_try_advisory_xact_lock` on the owner, taken
+  // after the create's watch row and before its targets, and never waited for: a create that finds it held rolls back
+  // and asks again outside its transaction. The rest are unlocked reads of that owner's live watches, so two creates of
+  // one account decide one after the other and nothing waits on that lock.
   { at: 'watches/watches.service.ts#assertCapacity', under: 'watches.create' },
   // Test-only, and reachable only from the harness's own transaction.
 ];
@@ -1191,6 +1192,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "watches/watch-delivery.service.ts#reclaimExpired", class: "MANY_ROWS", statements: 1, note: "The lease-expiry sweep: in-flight deliveries whose lease ran out go back to PENDING with the lost attempt counted, or become dead letters. `FOR UPDATE SKIP LOCKED`, so a row whose worker is still settling it is left to that worker's CAS." },
   { at: "watches/watch-evaluator.service.ts#claimDueWithDelay", class: "MANY_ROWS", statements: 1, note: "The evaluation lease: a batch of due watches, each moved forward by the lease. `FOR UPDATE SKIP LOCKED` passes over any row a claim, hint or landing holds instead of waiting for it, so the statement has no wait edge and cannot be a deadlock victim; a watch it skips is still due on the next pass." },
   { at: "watches/watch-evaluator.service.ts#markDue", class: "MANY_ROWS", statements: 1, note: "A hint: the live watches targeting a few rows are made due now. `FOR UPDATE SKIP LOCKED` passes over a row a landing, claim, transition or other hint holds instead of waiting for it, so the statement has no wait edge, cannot be a deadlock victim, and holds its pooled connection no longer than itself. A watch it passed over is asked about again by the same statement after a pause, until it is found free or a reconciliation period has passed, and is then made due only if a landing that began before the first ask has moved its `last_evaluated_at` since. A conflict it loses is a lost hint, which the reconciliation sweep already absorbs." },
+  { at: "watches/watches.service.ts#awaitOwnerTurn", class: "NOT_A_ROW_WRITE", statements: 1, note: "A create's ask whether its account's turn is free, made between two attempts and outside any transaction: `pg_try_advisory_xact_lock` on the owner, which never waits and is let go as its own statement ends. It locks no row and waits on nothing, so nothing waits on it for longer than the statement." },
   { at: "watches/watches.service.ts#retryDelivery", class: "ONE_ROW_CAS", statements: 1, note: "An owner's redrive of one dead letter: back to PENDING, due at once, its attempts from zero, only while the row is still the DEAD_LETTER with the last_error the decision read. A lost CAS answers 409." },
   { at: "watches/watches.service.ts#transition", class: "ONE_ROW_CAS", statements: 1, note: "One compare-and-set per attempt, on the state and expiry the decision was read from. A lost CAS re-reads and decides again, at most three times, then answers 409." },
   { at: "workspaces/workspaces.service.ts#create", class: "INSERT", statements: 1 },

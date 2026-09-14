@@ -41,7 +41,7 @@ const NOT_A_METHOD = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'return', 'constructor', 'do', 'else', 'try',
 ]);
 /** A `$queryRaw` that takes a row or advisory lock — the reads that are really writes' neighbours. */
-const TAKES_LOCK = /FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE|pg_advisory/;
+const TAKES_LOCK = /FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE|pg_(?:try_)?advisory/;
 /**
  * A `$queryRaw` whose statement changes rows or schema.
  *

@@ -36,6 +36,7 @@
 | TTL | 创建与编辑 | `[60s, 30d]`，默认 24h | 400 `TTL_OUT_OF_RANGE`；到期 → Watch `EXPIRED` |
 | 每账号 live Watch 上限 | 创建（条件还未成立） | 500 | 400 `WATCH_QUOTA_EXCEEDED`，什么都不写 |
 | 每目标 live Watch 上限 | 创建（条件还未成立） | 50 | 400 `WATCH_QUOTA_EXCEEDED` |
+| 同账号并发创建 | 创建，逐个轮流通过上面几项检查 | 等轮次最多 10 秒；等待期间不占事务，也不占连接 | 503 `TRANSIENT_DB_CONFLICT`（`retryable: true`），什么都不写 |
 | 自唤醒 | 创建 | — | 400 `SELF_WATCH_LOOP` |
 | 唤醒环 | 创建（`RESUME_SESSION`，条件已成立的也查） | 链深 32 | 400 `WAKE_LOOP` |
 | 唤醒风暴 | 交付，在观察者会话行锁下 | 每个观察者每小时 60 次 | 死信 `WAKE_STORM_SUPPRESSED`，可重投 |
@@ -358,3 +359,4 @@ WATCH_SECURITY_ONLY=S-05,S-06 bash scripts/run-pg-spec.sh src/apiserver/src/watc
 | S-09 | 持续交付失败 → 死信 → 列出 → 重投 → 恰好送达一次；重投规则 |
 | S-10 | 运维入口、配额拒绝和指标走真实 HTTP |
 | S-11 | 仪表与行一致、评估与交付滞后、租约停滞、重复抑制、对账修复、每次有效唤醒成本、每条告警的触发与熄灭 |
+| S-12 | 同账号 16 个并发创建排在每次放慢 1 秒的容量检查后面：全部 201；同样竞态下账号、目标配额都精确；等不到轮次时返回可重试的 503，什么都不写 |

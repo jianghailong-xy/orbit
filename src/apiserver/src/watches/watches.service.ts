@@ -1,10 +1,21 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { setTimeout as delay } from 'node:timers/promises';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   WATCH_DELIVERY_STATES,
   WATCH_LIMITS,
   WATCH_STATES,
   WATCH_UNRETRYABLE_DEAD_LETTER_CODES,
+  transientDbConflictBody,
   watchDeadLetterCodeOf,
   type WatchAction,
   type WatchMode,
@@ -13,7 +24,7 @@ import {
   type WatchState,
   type WatchTargetKind,
 } from '@orbit/shared';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive } from './watch-metrics';
@@ -113,12 +124,23 @@ type DeliveryOpsRow = Prisma.WatchDeliveryGetPayload<{ select: typeof DELIVERY_O
 /** How far the wake-loop check follows a chain of watches. A longer cycle is left to the observer's storm limit. */
 const WAKE_LOOP_SEARCH_DEPTH = 32;
 
+/**
+ * How long a create waits for its account's turn at the capacity checks, and runs again a transaction that lapsed
+ * without writing, before it answers the retryable 503. Under the 20s an agent's `watch_create` gives its request, so
+ * a create that cannot be decided in time is told so instead of timing out unanswered.
+ */
+const CREATE_WAIT_MS = 10_000;
+
+/** The pause before asking again whether an account's turn is free: doubling from 10ms to at most 200ms, jittered. */
+const TURN_ASK_PACING = { baseDelayMs: 10, maxDelayMs: 200 };
+
 export const WATCHES_OPTIONS = Symbol('WATCHES_OPTIONS');
 
-/** The live-watch quotas, defaulting to the contract's limits. */
+/** The live-watch quotas, defaulting to the contract's limits, and how long a create waits for its account's turn. */
 export interface WatchesOptions {
   maxLiveWatchesPerOwner?: number;
   maxLiveWatchesPerTarget?: number;
+  maxCreateWaitMs?: number;
 }
 
 const TRANSITION_SELECT = {
@@ -174,6 +196,7 @@ export class WatchesService {
   private readonly logger = new Logger(WatchesService.name);
   private readonly maxLiveWatchesPerOwner: number;
   private readonly maxLiveWatchesPerTarget: number;
+  private readonly maxCreateWaitMs: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -181,6 +204,7 @@ export class WatchesService {
   ) {
     this.maxLiveWatchesPerOwner = options.maxLiveWatchesPerOwner ?? WATCH_LIMITS.maxLiveWatchesPerOwner;
     this.maxLiveWatchesPerTarget = options.maxLiveWatchesPerTarget ?? WATCH_LIMITS.maxLiveWatchesPerTarget;
+    this.maxCreateWaitMs = options.maxCreateWaitMs ?? CREATE_WAIT_MS;
   }
 
   /**
@@ -200,6 +224,11 @@ export class WatchesService {
    * A CONTINUOUS watch is never matched here. It matches at crossings, coalesced by the evaluator, so it
    * starts ACTIVE, due at once and not yet holding: a condition already true is the first crossing its
    * first evaluation sees.
+   *
+   * The account's creates take turns at `assertCapacity`, and none waits for its turn inside its transaction, where the
+   * wait would spend the transaction's five seconds and hold a pooled connection: a create that finds the turn taken
+   * rolls back and asks again once the turn is free (`untilOwnerTurn`), and so does one whose transaction lapsed without
+   * writing. A create still waiting after `maxCreateWaitMs` answers the retryable 503, having written nothing.
    */
   async create(ownerId: string, dto: CreateWatchDto): Promise<WatchRow> {
     const request = this.createRequest(dto);
@@ -211,7 +240,7 @@ export class WatchesService {
     }
     let watchId: string;
     try {
-      watchId = await withTransactionRetry(
+      watchId = await this.untilOwnerTurn(ownerId, () => withTransactionRetry(
         this.prisma,
         async (tx) => {
           const observed = await this.readTargets(tx, ownerId, request);
@@ -273,7 +302,7 @@ export class WatchesService {
           return watch.id;
         },
         loggedRetry(this.logger, 'watches.create'),
-      );
+      ));
     } catch (error) {
       // Two creates with one key both found nothing above, and `watch_owner_idempotency_key` let one
       // of them insert. The other gets the answer a later retry would get.
@@ -550,6 +579,43 @@ export class WatchesService {
   }
 
   /**
+   * Runs `attempt`, one create's whole transaction, until it is not turned back for its account's turn. An attempt that
+   * found the turn taken, or whose transaction lapsed without writing, has rolled back and let its connection go by the
+   * time it arrives here, so the wait between attempts holds nothing.
+   */
+  private async untilOwnerTurn<T>(ownerId: string, attempt: () => Promise<T>): Promise<T> {
+    const deadline = Date.now() + this.maxCreateWaitMs;
+    for (;;) {
+      try {
+        return await attempt();
+      } catch (error) {
+        if (!(error instanceof OwnerTurnTaken) && !isLapsedTransaction(error)) throw error;
+        await this.awaitOwnerTurn(ownerId, deadline);
+      }
+    }
+  }
+
+  /**
+   * Pauses, then asks whether anybody holds the account's turn, until nobody does. The ask takes the owner's lock and lets
+   * it go within its own statement, outside any transaction, so it never waits on the lock and no holder waits on it. A
+   * pause that would end past `deadline` answers the retryable 503 instead: the create wrote nothing, and the same
+   * request can be sent again.
+   */
+  private async awaitOwnerTurn(ownerId: string, deadline: number): Promise<void> {
+    for (let ask = 1; ; ask += 1) {
+      const pause = transactionRetryDelayMs(ask, TURN_ASK_PACING);
+      if (Date.now() + pause > deadline) {
+        this.logger.warn(`operation=watches.create outcome=TURN_NOT_REACHED waitMs=${this.maxCreateWaitMs}`);
+        throw new ServiceUnavailableException(transientDbConflictBody());
+      }
+      await delay(pause);
+      const [{ free }] = await this.prisma.$queryRaw<Array<{ free: boolean }>>`
+        SELECT pg_try_advisory_xact_lock(hashtextextended(${ownerLock(ownerId)}, 0)) AS "free"`;
+      if (free) return;
+    }
+  }
+
+  /**
    * What a create has to pass beyond permission (contract `refusals`). A RESUME_SESSION watch may not close a wake
    * loop, even one that holds at once: re-arming a wait that already holds is how two sessions ping-pong one
    * immediate wake at a time. A watch that stays live (`holds` false) may not take the account or any of its
@@ -559,9 +625,14 @@ export class WatchesService {
    * a watch names only targets its owner can read. The lock is taken once the new watch row is written and before its
    * targets are, so that row (`watchId`) is left out of the account's count, and is not yet part of a loop or of a
    * target's count.
+   *
+   * The lock is taken without waiting. When another create holds it, this throws `OwnerTurnTaken` before reading
+   * anything, the transaction rolls back, and the create asks again once the turn is free (`untilOwnerTurn`).
    */
   private async assertCapacity(tx: Prisma.TransactionClient, ownerId: string, request: CreateRequest, holds: boolean, watchId: string): Promise<void> {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`watch-owner:${ownerId}`}, 0))`;
+    const [{ turn }] = await tx.$queryRaw<Array<{ turn: boolean }>>`
+      SELECT pg_try_advisory_xact_lock(hashtextextended(${ownerLock(ownerId)}, 0)) AS "turn"`;
+    if (!turn) throw new OwnerTurnTaken();
     const sessionTargets = request.targets.filter((target) => target.kind === 'SESSION').map((target) => target.id);
     if (request.action === 'RESUME_SESSION' && sessionTargets.length > 0) {
       // The sessions a turn settling on the observer already wakes, and the sessions those wake in turn. A session
@@ -716,6 +787,27 @@ function earlier(left: Date, right: Date): Date {
 
 function isUniqueViolation(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+/** Thrown inside a create's transaction when another create of the account holds its turn, so that the transaction rolls back. */
+class OwnerTurnTaken extends Error {}
+
+/**
+ * Prisma's P2028 for a transaction that wrote nothing: it could not start in time, or its timeout rolled it back before
+ * the statement or the commit that failed. Prisma runs a timeout's rollback and a commit through one queue, so an expired
+ * transaction is one whose commit never ran, and either kind is safe to run again whole.
+ */
+function isLapsedTransaction(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError
+    && error.code === 'P2028'
+    && /Unable to start a transaction in the given time|cannot be executed on an expired transaction/.test(error.message)
+  );
+}
+
+/** The advisory lock an account's creates take turns under. */
+function ownerLock(ownerId: string): string {
+  return `watch-owner:${ownerId}`;
 }
 
 /** A create answered with the watch its idempotency key already made, counted as the repeat it is. */

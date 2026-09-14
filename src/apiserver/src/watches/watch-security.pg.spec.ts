@@ -18,6 +18,8 @@
  *   S-10 the operations entry, a quota refusal and the metrics, over HTTP
  *   S-11 the gauges against the rows, evaluation and delivery lag, stalled leases, repeats suppressed, repairs, cost per
  *        effective wake, and every alert firing and clearing
+ *   S-12 sixteen creates of one account queued for its turn behind a capacity check slowed to a second each: every one
+ *        is a 201, the quotas stay exact under the same race, and a turn that never comes is a retryable 503
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts
  *     WATCH_SECURITY_ONLY=S-05,S-06 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts
@@ -32,8 +34,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { after, before, beforeEach, test } from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 
-import { ConflictException, type INestApplication, Module, NotFoundException, ValidationPipe } from '@nestjs/common';
+import { ConflictException, HttpException, type INestApplication, Module, NotFoundException, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
@@ -43,6 +46,7 @@ import {
   WATCH_REFUSAL_CODES,
   WATCH_UNRETRYABLE_DEAD_LETTER_CODES,
   toUuid,
+  transientDbConflictBody,
 } from '@orbit/shared';
 import { Client } from 'pg';
 import { EMPTY } from 'rxjs';
@@ -71,7 +75,7 @@ import {
 } from './watch-metrics';
 import { REDACTED } from './watch-redaction';
 import { WatchesController } from './watches.controller';
-import { WatchesService } from './watches.service';
+import { type WatchesOptions, WatchesService } from './watches.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -174,13 +178,19 @@ const outcomes = (results: WatchDeliveryResult[]): string[] => results.map((resu
 
 /** The Watch API with a small live-watch quota, and the metrics endpoint, behind the ordinary bearer check. */
 function boot(): Promise<Http> {
-  http ??= (async () => {
+  http ??= serve(new WatchesService(prisma as unknown as PrismaService, { maxLiveWatchesPerOwner: 1 }));
+  return http;
+}
+
+/** The Watch API over `service`, and the metrics endpoint, behind the ordinary bearer check. */
+function serve(service: WatchesService): Promise<Http> {
+  return (async () => {
     const bearers = new Map<string, string>();
 
     @Module({
       controllers: [WatchesController, MetricsController],
       providers: [
-        { provide: WatchesService, useValue: new WatchesService(prisma as unknown as PrismaService, { maxLiveWatchesPerOwner: 1 }) },
+        { provide: WatchesService, useValue: service },
         { provide: PrismaService, useValue: prisma },
         JwtAuthGuard,
         Reflector,
@@ -205,12 +215,11 @@ function boot(): Promise<Http> {
     await app.listen(0, '127.0.0.1');
     return { base: await app.getUrl(), app, bearers };
   })();
-  return http;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function call(bearer: string | null, method: string, route: string, body?: unknown): Promise<{ status: number; body: any; text: string }> {
-  const { base } = await boot();
+async function call(bearer: string | null, method: string, route: string, body?: unknown, on: Promise<Http> = boot()): Promise<{ status: number; body: any; text: string }> {
+  const { base } = await on;
   const response = await fetch(`${base}/api${route}`, {
     method,
     headers: { 'content-type': 'application/json', ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
@@ -1094,3 +1103,123 @@ security('S-11', 'the gauges say what the rows say, lag, stalls, repeats, repair
   assert.match(unreadable, /^orbit_watch_gauges_up 0$/m);
   assert.match(unreadable, /^# TYPE orbit_watch_creates_total counter$/m, 'the counters are still served');
 });
+
+security('S-12', 'sixteen creates of one account queued behind a capacity check slowed to a second each are all 201, the quotas stay exact under the same race, and a turn that never comes is a retryable 503', async () => {
+  const RACERS = 16;
+  const CHECK_MS = 1_000;
+  const apps: Array<Promise<Http>> = [];
+  const liveBody = (task: string) => ({ predicateVersion: 1, predicate: ALL_TERMINAL, targets: onTask(task), action: 'NOTIFY_USER', ttlSeconds: 60 });
+  const watchesOf = async (owner: string) =>
+    (await sql.query<{ all: number; live: number }>(
+      `SELECT count(*)::int AS "all", (count(*) FILTER (WHERE "state" IN ('ACTIVE', 'PAUSED')))::int AS "live" FROM "watch" WHERE "owner_id" = $1`,
+      [owner],
+    )).rows[0];
+  const statuses = (answers: Array<{ status: number }>) => answers.map((answer) => answer.status).sort();
+
+  /**
+   * The Watch API over a service whose capacity check, once it has decided, keeps the account's turn a second longer. The
+   * second is spent inside `assertCapacity`, after its lock, so the account's creates queue behind one another: the last
+   * of sixteen waits at least fifteen seconds, three times what an interactive transaction may stay open. A create that
+   * did not get the turn decided nothing, and is not slowed.
+   */
+  const slowed = (options: WatchesOptions) => {
+    const service = new WatchesService(prisma as unknown as PrismaService, { maxCreateWaitMs: 120_000, ...options });
+    const seam = service as unknown as { assertCapacity: (...args: unknown[]) => Promise<void> };
+    const check = seam.assertCapacity.bind(service);
+    const turns: Array<{ from: number; to: number }> = [];
+    seam.assertCapacity = async (...args: unknown[]) => {
+      let refusal: unknown;
+      try {
+        await check(...args);
+      } catch (error) {
+        if (!(error instanceof HttpException)) throw error;
+        refusal = error;
+      }
+      const from = performance.now();
+      await sleep(CHECK_MS);
+      turns.push({ from, to: performance.now() });
+      if (refusal !== undefined) throw refusal;
+    };
+    const app = serve(service);
+    apps.push(app);
+    return { app, turns };
+  };
+
+  /** One create per body, all sent at once by the account, each answered with how long it took from that moment. */
+  const race = async (on: ReturnType<typeof slowed>, owner: string, bodies: unknown[]) => {
+    const bearer = `bearer-${owner}`;
+    (await on.app).bearers.set(bearer, owner);
+    const sent = performance.now();
+    return Promise.all(
+      bodies.map(async (body) => ({ ...(await call(bearer, 'POST', '/watches', body, on.app)), ms: performance.now() - sent })),
+    );
+  };
+
+  /** The race was run: every create decided in a turn of its own, one after another, and the slowest waited for them all. */
+  const assertQueued = (on: ReturnType<typeof slowed>, answers: Array<{ ms: number }>) => {
+    const turns = [...on.turns].sort((left, right) => left.from - right.from);
+    assert.ok(turns.length >= answers.length, `only ${turns.length} of ${answers.length} creates decided`);
+    for (let i = 1; i < turns.length; i += 1) {
+      assert.ok(turns[i].from >= turns[i - 1].to, `two creates of one account held its turn at once: ${JSON.stringify(turns)}`);
+    }
+    const slowest = Math.max(...answers.map((answer) => answer.ms));
+    assert.ok(slowest >= answers.length * CHECK_MS, `the slowest create answered after ${Math.round(slowest)}ms, so the creates did not queue`);
+  };
+
+  try {
+    // 1. Room for every one of them: each create lands, however long it queued for its turn.
+    const owner = await insertUser();
+    const tasks: string[] = [];
+    for (let i = 0; i < RACERS; i += 1) tasks.push(await insertTask(owner, 'OPEN'));
+    const roomy = slowed({});
+    const landed = await race(roomy, owner, tasks.map(liveBody));
+    assert.deepEqual(landed.map((answer) => answer.status), Array(RACERS).fill(201), landed.map((answer) => answer.text).join('\n'));
+    assert.equal(new Set(landed.map((answer) => answer.body.id)).size, RACERS, 'each create made its own watch');
+    assert.deepEqual(await watchesOf(owner), { all: RACERS, live: RACERS });
+    assertQueued(roomy, landed);
+
+    // 2. The account's quota under the same race: ten land, and the other six are refused with the contract code and write nothing.
+    const crowded = await insertUser();
+    const crowdedTasks: string[] = [];
+    for (let i = 0; i < RACERS; i += 1) crowdedTasks.push(await insertTask(crowded, 'OPEN'));
+    const accountLimited = slowed({ maxLiveWatchesPerOwner: 10 });
+    const accountRace = await race(accountLimited, crowded, crowdedTasks.map(liveBody));
+    assert.deepEqual(statuses(accountRace), [...Array(10).fill(201), ...Array(RACERS - 10).fill(400)], accountRace.map((answer) => answer.text).join('\n'));
+    for (const answer of accountRace.filter((answer) => answer.status === 400)) assert.equal(answer.body?.code, 'WATCH_QUOTA_EXCEEDED', answer.text);
+    assert.deepEqual(await watchesOf(crowded), { all: 10, live: 10 });
+    assertQueued(accountLimited, accountRace);
+
+    // 3. A target's quota under the same race: sixteen creates on one task, and four land.
+    const sharing = await insertUser();
+    const shared = await insertTask(sharing, 'OPEN');
+    const targetLimited = slowed({ maxLiveWatchesPerTarget: 4 });
+    const targetRace = await race(targetLimited, sharing, Array.from({ length: RACERS }, () => liveBody(shared)));
+    assert.deepEqual(statuses(targetRace), [...Array(4).fill(201), ...Array(RACERS - 4).fill(400)], targetRace.map((answer) => answer.text).join('\n'));
+    for (const answer of targetRace.filter((answer) => answer.status === 400)) assert.equal(answer.body?.code, 'WATCH_QUOTA_EXCEEDED', answer.text);
+    assert.deepEqual(await watchesOf(sharing), { all: 4, live: 4 });
+    assertQueued(targetLimited, targetRace);
+    assert.equal(counted('orbit_watch_refusals_total', { code: 'WATCH_QUOTA_EXCEEDED' }), (RACERS - 10) + (RACERS - 4));
+
+    // 4. A turn that never comes: another connection holds the account's lock for longer than a create may wait. The create
+    //    answers the shared retryable 503 having written nothing, and the same request lands once the lock is let go.
+    const stuck = await insertUser();
+    const stuckTask = await insertTask(stuck, 'OPEN');
+    const impatient = serve(new WatchesService(prisma as unknown as PrismaService, { maxCreateWaitMs: 1_000 }));
+    apps.push(impatient);
+    (await impatient).bearers.set(`bearer-${stuck}`, stuck);
+    const holder = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
+    await holder.connect();
+    try {
+      await holder.query(`SELECT pg_advisory_lock(hashtextextended($1, 0))`, [`watch-owner:${stuck}`]);
+      const refused = await call(`bearer-${stuck}`, 'POST', '/watches', liveBody(stuckTask), impatient);
+      assert.deepEqual([refused.status, refused.body], [503, transientDbConflictBody()], refused.text);
+      assert.deepEqual(await watchesOf(stuck), { all: 0, live: 0 }, 'the create that never had its turn wrote nothing');
+    } finally {
+      await holder.end().catch(() => undefined);
+    }
+    const retried = await call(`bearer-${stuck}`, 'POST', '/watches', liveBody(stuckTask), impatient);
+    assert.equal(retried.status, 201, retried.text);
+  } finally {
+    for (const app of apps) await (await app).app.close().catch(() => undefined);
+  }
+}, 600_000);
