@@ -145,6 +145,12 @@ SELECT name, count(*) FROM tool_call
  WHERE started_at > now() - interval '7 days'
    AND name IN ('mcp__orbit__task_await', 'mcp__orbit__session_await', 'mcp__orbit__watch_create')
  GROUP BY 1;
+
+-- 最近 7 天：被 bg-guard 拒绝的轮询（被拒的调用记为 is_error，output 里是拒绝文案；演练 G2 实测）
+SELECT name, count(*) FROM tool_call
+ WHERE started_at > now() - interval '7 days' AND is_error
+   AND output::text LIKE '%Orbit holds that wait on its server%'
+ GROUP BY 1;
 ```
 
 ## 5. 指标门槛
@@ -284,7 +290,49 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ORBIT/api/metrics" \
 
 ## 9. 演练记录
 
-（演练完成后填写：环境、被测提交、各步结果与产物位置。）
+**2026-09-14，隔离环境，不碰线上**：一次性 postgres:16 容器；生产构建的 apiserver（`node dist/main.js`）与 web 包；真实的 `orbit` runner
+和真实的 Claude 引擎（内置运行时，默认模型）。宿主负载 16–42（8 核），下面的时延都是在这个负载下测的。
+
+| 被测部件 | 提交 |
+| --- | --- |
+| apiserver、web、「新」runner | `3417c261f`（本任务的产品代码；之后的提交只加测试和文档） |
+| 「0.1.159」runner、回滚用的旧镜像 | `1471214ac` |
+| 「Watch 之前」的 runner | `1f42ef54`（`b84e0fc00^`） |
+
+账号 A（bootstrap 管理员）挂 `an`（新）和 `ao`（0.1.159）；账号 B 挂 `bn`（新）、`bo`（0.1.159）、`bp`（Watch 之前）。五个 runner 同时连在一个 apiserver 上。
+按第 6、7 节的顺序执行，每一步都用本手册写的检查项核对：
+
+| # | 步骤 | 结果 |
+| --- | --- | --- |
+| 1 | 基线 `on`：`an`、`ao` 的兼容矩阵 | 两代都列出 watch 工具；`task_await` 记下 watch；`session_create(wait)` 内联拿到答案，并由 watch 托底（驱动方式带来的 ALREADY_WOKEN，见下面的说明） |
+| 2 | 切 `canary`，只列 A；重启 5.1s | `orbit_watch_rollout{mode="canary"}` 为 1、名单数为 1；日志 `Watch is canary for 1 account(s)`；迁移数 276 不变 |
+| 3 | canary 兼容矩阵，五个 runner | 25/25。A 的两代照常；`bn` 引擎 `ORBIT_WATCHES=off`，不列工具，内联等待不建 watch；`bo` 仍列出工具，调用得到「no watch door」，内联等待不建 watch；`bp` 一切如旧；五个都没有多余的唤醒 |
+| 4 | canary 下的用户接口 | 5/5。A 建 watch 得到 201；B 得到 404 `WATCHES_DISABLED`，没有任何写入；B 读 watch 和死信都是 200；拒绝计数器增长 |
+| 5 | canary 下的真实 agent | `an`：让它「帮我盯着两个 task」，它调 `task_await` 建了 watch，没有任何轮询；task 失败后恰好唤醒一次，回话给出 FAILED。`an`：让它跑 `for … orbit task get …; sleep 5`，hook 拒绝，命令没有执行；同一会话里用 `bg_run` 起的 http.server 正常应答。`bn`（B，Watch 没开）：引擎 `ORBIT_WATCHES=off`，没有建 watch，turn 正常结束，同一条轮询命令照旧执行。`ao`（0.1.159）：轮询命令照旧执行，旧 hook 没有这条规则 |
+| 6 | 建演练用的 watch（W1、W2 由新 runner 建，W3 由 0.1.159 建，TTL 300s），随即切 `off`；重启 10.9s | 日志两行 `this replica evaluates no watch` 与 `this replica delivers no watch wake or notification` |
+| 7 | `off` 下的检查 | 16/16。用户接口和两代 runner 的 `task_await` 都被拒且说明了原因，没有写入；新 spawn 的引擎 `ORBIT_WATCHES=off`，内联等待正常；任务照常建、评论、取消；web 同源的 `/api/watches` 对 A、B 都是 200。T2 置 FAILED 之后的 4 分 36 秒里（28 次采样，跨过 W3 的到期时刻），W2、W3 一直是 ACTIVE，零唤醒；`orbit_watch_evaluation_lag_seconds` 超过 60，`WatchEvaluationLagging` 在响 |
+| 8 | `off` 兼容矩阵（`an`、`ao`、`bp`） | 15/15 |
+| 9 | 切回 `on`；重启 23.3s | 第一轮 2.1s 内：W2 MATCHED，唤醒 P2 一次；W3 EXPIRED，唤醒 P3（0.1.159 runner）一次；两个 turn 都被回答；30s 后仍然各一次；两个滞后仪表回到 0 |
+| 10 | 切 `drain`；重启 13.8s | 14/14。T1 置 FAILED，W1（Watch 开着时建的）MATCHED 并唤醒 P1 恰好一次；所有写入被拒；新引擎为 `off`；内联等待、任务、web 读取照常 |
+| 11 | 回滚到旧镜像 `1471214ac`；重启 13.4s | 4/4。迁移数不变，没有迁移可跑；旧镜像读出了新镜像写的全部 watch 以及 W1 的交付；建 watch 恢复为 201（旧镜像没有开关）；新 runner 在旧镜像下 spawn 的引擎为 `ORBIT_WATCHES=on` |
+| 12 | 旧镜像兼容矩阵（`an`、`ao`） | 10/10 |
+| 13 | 回到新镜像 `on`；重启 9.8s | 2/2，矩阵 10/10。B 建 watch 得到 201；第 10 步之前启动的旧式轮询作业跨过旧镜像、新镜像两次重启一直在跑：重启期间有几次读不到，之后接着读，没有被停掉或改写 |
+
+bg-guard 的真实二进制探测（`hook-probe.txt`：3 代 runner × 3 种 `ORBIT_WATCHES` × 9 种命令形状）：新 runner 在 `on` 或未设置时拒绝 4 种轮询，
+放行其余 5 种（单次读取、await、等 CI、dev server、按路径运行的脚本），`off` 下全部放行；0.1.159 和 Watch 之前的 runner 在任何取值下都放行轮询。
+
+说明：
+
+- 兼容矩阵是从引擎外面，用那个引擎的真实环境去驱动它那一代的 `orbit mcp`。这时父会话是空闲的，watch 成立后唤醒先于 release 被 runner 取走
+  （`ALREADY_WOKEN`），所以输出里多一句「可能还会到一个内容相同的 turn」，会话上也多一个唤醒 turn。agent 在自己的 turn 里调用时，唤醒排在队里并被撤回
+  （`WAKE_WITHDRAWN`），产品 QA 的 B2 已经验证过。矩阵的判据只看「是否由 watch 托底」以及「没开时一个 watch 都不建」。
+- 第一次建演练 watch 时旧式轮询作业没有起来（`bg_run` 的 cwd 必须在会话自己的 checkout 里，是演练脚本写错了），修正后在第 10 步之前补起。
+  两条 agent 判据第一次误判为失败，是脚本在 JSON 转义后的输出里找 `"status"`；按修正后的判据复核，见 `agents-recheck.json`。
+- 演练期间 apiserver 日志里有 338 条 `P2028`，全部是 runner 认领长轮询和事件写入的事务等不到连接，分布在每个阶段，包括没有开关代码的旧镜像阶段（56 条），
+  速率随宿主负载上升。它与开关无关，各项检查也照常通过；线上放量时照门槛 G6 看。
+
+脚本在 `/root/.orbit/uploads/a4bf0f1e-992d-5b73-86b6-1ad0eaa4a7c7/drill/`，产物在它的 `artifacts/`：每一步的 JSON、`timeline.log`、`drill-summary.json`、
+`hook-probe.txt`、`agents-recheck.json`、`legacy-watch.log`、`stack-logs/`。
 
 ## 10. 已知限制
 
