@@ -144,13 +144,12 @@ async function main(): Promise<void> {
       assert.equal(survivor.runEvents, 1);
       assert.equal(survivor.telemetryLastTurnAt, ids.survivorTurnAt.toISOString());
 
-      // 4. The victim rolled back whole — no partial Task, dependency, project_event or dispatch.
+      // 4. The victim rolled back whole — no partial Task, dependency or project_event.
       const rollback = await inspectVictimRollback(admin, ids);
       assert.deepEqual(rollback, {
         tasks: 0,
         dependencies: 0,
         projectEvents: 0,
-        dispatchActions: 0,
         prerequisiteTouched: false,
       });
 

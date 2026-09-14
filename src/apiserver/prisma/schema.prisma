@@ -100,32 +100,6 @@ enum ProjectRunState {
   @@map("project_run_state")
 }
 
-/// A durable action is first claimed and then published into exactly one terminal state.
-enum ProjectActionStatus {
-  CLAIMED
-  APPLIED
-  REFUSED
-  SUPERSEDED
-
-  @@map("project_action_status")
-}
-
-/// Closed set of side-effecting orchestration actions. SCHEDULE_WAKE, NOOP and parent aggregation
-/// are current-state writes/audit outcomes rather than permanent-ledger entries.
-enum ProjectActionType {
-  DISPATCH_TASK
-  OPEN_COORDINATOR_TURN
-  ROTATE_COORDINATOR_SESSION
-  RAISE_BLOCKER
-  CLEAR_BLOCKER
-  APPLY_VERIFICATION_VERDICT
-  REQUEST_APPROVAL
-  RUN_PROJECT_ACCEPTANCE
-  FILE_VERIFICATION_TASK
-
-  @@map("project_action_type")
-}
-
 /// Which scheduler is currently authorized to create a task-bound Session. This is a database-
 /// maintained projection of Project.coordinatorEnabled, not a second policy setting.
 enum TaskDispatchAuthority {
@@ -916,10 +890,6 @@ model Session {
   // Optional parent work item; deleting the Task detaches but keeps the session.
   taskId               String?   @map("task_id") @db.Uuid
   task                 Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
-  // Project Coordinator dispatch lineage. USER and legacy sweep sessions carry NULL; a
-  // PROJECT_COORDINATOR row is inserted in the same transaction as the referenced action.
-  projectActionId      String?   @unique @map("project_action_id") @db.Uuid
-  projectAction        ProjectAction? @relation("ProjectActionSession", fields: [projectActionId], references: [id], onDelete: NoAction)
   dispatchOrigin       SessionDispatchOrigin @default(LEGACY_SWEEP) @map("dispatch_origin")
   runSource            SessionRunSource @default(MANUAL) @map("run_source")
   /// Whether this Session was opened to DO the task's work (Run Now, a sweep, the Project
@@ -1304,7 +1274,6 @@ model Session {
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
   tagLinks              SessionTagLink[]
-  resultOfProjectAction ProjectAction? @relation("ProjectActionResultSession")
   // Append-only record of every merge attempted for this session's branch, however it was made.
   mergeReceipts         SessionMergeReceipt[]
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
@@ -1918,7 +1887,6 @@ model Project {
   discoveredTasks Task[] @relation("TaskDiscoveredFrom")
   members ProjectMember[]
   runtime ProjectRuntime?
-  actions ProjectAction[]
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
   acceptanceCriterionDefinitions ProjectAcceptanceCriterionDefinition[]
@@ -2407,41 +2375,6 @@ model ProjectRuntime {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("project_runtime")
-}
-
-/// Permanent idempotency ledger for orchestration side effects. The unique key is claimed before
-/// the effect and both are committed in one transaction, so a retry observes the existing row and
-/// skips the effect. Rows are never deleted independently; the Project cascade is the only exit.
-model ProjectAction {
-  id             String              @id @default(uuid(7)) @db.Uuid
-  projectId      String              @map("project_id") @db.Uuid
-  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  idempotencyKey String              @unique @map("idempotency_key")
-  type           ProjectActionType
-  status         ProjectActionStatus @default(CLAIMED)
-  subjectType    String              @map("subject_type")
-  subjectId      String?             @map("subject_id") @db.Uuid
-  fencingToken   BigInt              @map("fencing_token")
-
-  /// Result-session lineage is bidirectional and commit-time checked by the Project dispatch
-  /// boundary (migration 0122).
-  resultSessionId String? @unique @map("result_session_id") @db.Uuid
-  resultSession   Session? @relation("ProjectActionResultSession", fields: [resultSessionId], references: [id], onDelete: NoAction)
-  dispatchedSession Session? @relation("ProjectActionSession")
-  verdictFailures   TaskVerificationFailure[] @relation("VerificationFailureAction")
-  refusalCode     String? @map("refusal_code")
-  detail          Json    @default("{}")
-  executionContext       Json?   @map("execution_context")
-  executionContextDigest String? @map("execution_context_digest") @db.Char(64)
-  executionResultDigest  String? @map("execution_result_digest") @db.Char(64)
-  reasonCode             String? @map("reason_code")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@index([projectId, createdAt])
-  @@index([projectId, type, status])
-  @@map("project_action")
 }
 
 /// One committed fact that woke — or was refused the right to wake — this project's coordinator
@@ -4273,8 +4206,6 @@ model TaskVerificationFailure {
   /// the work item that was going to resolve it.
   defectTaskId     String? @map("defect_task_id") @db.Uuid
   defect           Task?   @relation("VerificationFailureDefect", fields: [defectTaskId], references: [id], onDelete: SetNull)
-  raisedByActionId String? @map("raised_by_action_id") @db.Uuid
-  raisedByAction   ProjectAction? @relation("VerificationFailureAction", fields: [raisedByActionId], references: [id], onDelete: SetNull)
 
   /// Base62 throughout, in Base62: this is read back over the audit API
   /// and an id spelled as a UUID here is one no caller could hand to any other endpoint.

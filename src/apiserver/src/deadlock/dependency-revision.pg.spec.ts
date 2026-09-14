@@ -7,7 +7,6 @@ import test from 'node:test';
 import { Client } from 'pg';
 
 import {
-  APPLY_DISPATCH_ACTION,
   COUNT_INCOMPLETE_PREREQUISITES,
   DELETE_EDGE,
   INSERT_COORDINATOR_SESSION,
@@ -15,7 +14,6 @@ import {
   LOCK_DEPENDENCY_REVISION,
   LOCK_OWNER_GRAPH,
   ROLLBACK_0132,
-  claimDispatchAction,
   dispatchSteps,
   insertTask,
   liveSessionCount,
@@ -268,7 +266,6 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
   await t.test('dispatch first: the edge waits on the revision and lands after the Session', async () => {
     const ids = newRevisionIds('rev-dispatch-first');
     await seedRevisionFixture(admin, ids);
-    await claimDispatchAction(admin, ids);
     const dispatch = new Client({ connectionString: url });
     const mutation = new Client({ connectionString: url });
     await Promise.all([dispatch.connect(), mutation.connect()]);
@@ -295,9 +292,8 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
       assert.deepEqual(waiting, ['task_dependency_revision']);
 
       await dispatch.query(INSERT_COORDINATOR_SESSION, [
-        ids.sessionId, ids.ownerId, ids.dependentTaskId, ids.workspaceId, ids.runnerId, ids.actionId,
+        ids.sessionId, ids.ownerId, ids.dependentTaskId, ids.workspaceId, ids.runnerId,
       ]);
-      await dispatch.query(APPLY_DISPATCH_ACTION, [ids.actionId, ids.sessionId]);
       // Including `session_dispatch_dependency_check`, which sees the edge set as it stands: the
       // mutation cannot have committed, because it is still queued behind this transaction.
       await dispatch.query('COMMIT');
@@ -316,7 +312,6 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
   await t.test('dependency first: the decision waits and then refuses', async () => {
     const ids = newRevisionIds('rev-dependency-first');
     await seedRevisionFixture(admin, ids);
-    await claimDispatchAction(admin, ids);
     const dispatch = new Client({ connectionString: url });
     const mutation = new Client({ connectionString: url });
     await Promise.all([dispatch.connect(), mutation.connect()]);
@@ -362,7 +357,6 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     // 40P01 the fix is measured against, not an argument about the SQL's shape.
     const ids = newRevisionIds('rev-no-prelock');
     await seedRevisionFixture(admin, ids);
-    await claimDispatchAction(admin, ids);
     const dispatch = new Client({ connectionString: url });
     const mutation = new Client({ connectionString: url });
     await Promise.all([dispatch.connect(), mutation.connect()]);
@@ -385,7 +379,7 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
 
       // Closing the ring: the Session insert asks for the owner row the edge writer is holding.
       const victim = await dispatch.query(INSERT_COORDINATOR_SESSION, [
-        ids.sessionId, ids.ownerId, ids.dependentTaskId, ids.workspaceId, ids.runnerId, ids.actionId,
+        ids.sessionId, ids.ownerId, ids.dependentTaskId, ids.workspaceId, ids.runnerId,
       ]).then(() => null, (e: { code?: string }) => e.code ?? 'unknown');
       assert.equal(victim, '40P01',
         'without the rank-10 pre-lock this pair is supposed to deadlock — it did not');
@@ -402,7 +396,6 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
   await t.test('an old replica that skips the revision is refused at COMMIT', async () => {
     const ids = newRevisionIds('rev-old-binary');
     await seedRevisionFixture(admin, ids);
-    await claimDispatchAction(admin, ids);
     const dispatch = new Client({ connectionString: url });
     const mutation = new Client({ connectionString: url });
     await Promise.all([dispatch.connect(), mutation.connect()]);
@@ -424,21 +417,16 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
       await mutation.query('COMMIT');
 
       await dispatch.query(INSERT_COORDINATOR_SESSION, [
-        ids.sessionId, ids.ownerId, ids.dependentTaskId, ids.workspaceId, ids.runnerId, ids.actionId,
+        ids.sessionId, ids.ownerId, ids.dependentTaskId, ids.workspaceId, ids.runnerId,
       ]);
-      await dispatch.query(APPLY_DISPATCH_ACTION, [ids.actionId, ids.sessionId]);
       await assert.rejects(
         () => dispatch.query('COMMIT'),
         /DISPATCH_DEPENDENCY_CHANGED/,
         'the stale dispatch was allowed to commit',
       );
-      // Rolled back whole — Session, action transition and all. The reconciler retries against
-      // the state that actually exists, which is the "safe retry" half of the guarantee.
+      // Rolled back whole, Session and all. The reconciler retries against the state that actually
+      // exists, which is the "safe retry" half of the guarantee.
       assert.equal(await liveSessionCount(admin, ids.dependentTaskId), 0);
-      const { rows: action } = await admin.query<{ status: string }>(
-        `SELECT "status"::text AS status FROM "project_action" WHERE "id" = $1::uuid`, [ids.actionId],
-      );
-      assert.equal(action[0].status, 'CLAIMED', 'the action was left APPLIED by a rolled-back dispatch');
     } finally {
       await Promise.all([dispatch, mutation].map((c) =>
         c.query('ROLLBACK').catch(() => undefined).then(() => c.end().catch(() => undefined))));
@@ -449,17 +437,14 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     // Control 1: a Coordinator dispatch whose prerequisites are all DONE commits.
     const ready = newRevisionIds('rev-guard-ready');
     await seedRevisionFixture(admin, ready);
-    await claimDispatchAction(admin, ready);
     await admin.query(INSERT_EDGE, [ready.dependentTaskId, ready.doneTaskId]);
     const client = new Client({ connectionString: url });
     await client.connect();
     try {
       await client.query('BEGIN');
       await client.query(INSERT_COORDINATOR_SESSION, [
-        ready.sessionId, ready.ownerId, ready.dependentTaskId, ready.workspaceId,
-        ready.runnerId, ready.actionId,
+        ready.sessionId, ready.ownerId, ready.dependentTaskId, ready.workspaceId, ready.runnerId,
       ]);
-      await client.query(APPLY_DISPATCH_ACTION, [ready.actionId, ready.sessionId]);
       await client.query('COMMIT');
       assert.equal(await liveSessionCount(admin, ready.dependentTaskId), 1);
     } finally {

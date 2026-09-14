@@ -380,20 +380,6 @@ export function verificationSubjectPassedSql(subject: string): string {
     )`;
 }
 
-/**
- * §8.2's permanent key for one conclusion's consequences, as
- * `projects/task-verification-verdict.ts` builds it for the ledger. Internal UUIDs throughout,
- * because that is what the ledger's unique index is declared on. No dependency gate reads it back
- * any more; see "The three facts beyond the verdict value" above.
- */
-export function verificationVerdictActionKeyOf(
-  projectId: string,
-  verifierTaskId: string,
-  verdictRevision: string | bigint | number,
-): string {
-  return `pc:v1:${projectId}:verdict:${verifierTaskId}:${verdictRevision}`;
-}
-
 /** One task row as the batch gate builder reads it — a check, a subject, or neither. */
 export interface VerificationEpochTaskRow {
   id: string;

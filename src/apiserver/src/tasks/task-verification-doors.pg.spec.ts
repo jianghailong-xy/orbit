@@ -108,7 +108,7 @@ async function emptyWorld(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
   published.length = 0;
   await client.query(`
-    TRUNCATE "project_action", "project_runtime",
+    TRUNCATE "project_runtime",
              "task", "session", "workspace", "runner", "project", "user"
     RESTART IDENTITY CASCADE
   `);

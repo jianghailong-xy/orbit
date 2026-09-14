@@ -349,7 +349,7 @@ Section names are the deleted implementation's own
 | Dropped | Why |
 | --- | --- |
 | `decisions[]`, `decisionsEmptyReason` | reads `project_decision`, a table that **no longer exists** — dropped in migration `0163_drop_control_loop_tables/migration.sql:60`. |
-| `pendingActions[]`, `pendingActionsEmptyReason` | reads `project_action`, which survives (`schema.prisma:1744`) but lost `decision_id` (`0163_drop_control_loop_tables/migration.sql:54`) and has no writer left — its one remaining reader is `src/apiserver/src/tasks/verification-epoch-read.ts:153`. |
+| `pendingActions[]`, `pendingActionsEmptyReason` | reads `project_action`, which lost `decision_id` (`0163_drop_control_loop_tables/migration.sql:54`) and its writer with the loop, then its last reader in `9135ae64`; the table **no longer exists** — dropped in migration `0272_drop_project_action`, after its rows were archived. |
 | `events{pending,recent}` | reads `project_event`, a table that **no longer exists** — dropped in migration `0164_drop_project_event_outbox/migration.sql:50`. |
 | `nextWake{at,reason,candidates,flooredBy,decisionId}` | the scheduled-wake timer was the loop; nothing fires now, and the candidates were read back out of `project_decision.outcome`, whose table is gone. |
 | the whole activity feed (`GET :id/panorama/activity`) | deleted with its module in `68a58d93`; a card frozen for good reads worse than no card. |

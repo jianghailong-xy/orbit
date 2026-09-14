@@ -230,12 +230,11 @@ export interface VictimRollback {
   tasks: number;
   dependencies: number;
   projectEvents: number;
-  dispatchActions: number;
   prerequisiteTouched: boolean;
 }
 
 /** Nothing the victim wrote may survive: not the task rows, not the dependency edge, not the
- *  project_event rows their triggers enqueued, not a dispatch action, and not the
+ *  project_event rows their triggers enqueued, and not the
  *  `task_dependency_dispatch_touch` bump of an unrelated task's updated_at. */
 export async function inspectVictimRollback(client: Client, ids: FixtureIds): Promise<VictimRollback> {
   const doomed = [ids.batchTaskId, ids.victimTaskId];
@@ -258,10 +257,6 @@ export async function inspectVictimRollback(client: Client, ids: FixtureIds): Pr
     ),
     projectEvents: await one(
       `SELECT count(*) AS n FROM "project_event" WHERE "source_id" = ANY($1::uuid[])`,
-      [doomed],
-    ),
-    dispatchActions: await one(
-      `SELECT count(*) AS n FROM "project_action" WHERE "subject_id" = ANY($1::uuid[])`,
       [doomed],
     ),
     prerequisiteTouched: prereq[0]?.touched ?? true,
@@ -438,8 +433,6 @@ export interface ThreePartyRollback {
   dependencies: number;
   /** project_event rows the victim's own writes would have enqueued. */
   projectEvents: number;
-  /** project_action rows naming the dependent task as their subject. */
-  dispatchActions: number;
   /** The dependent Task, which existed before the round and must be untouched by it. */
   dependentTaskStatus: string | null;
   dependentTaskTouched: boolean;
@@ -484,10 +477,6 @@ export async function inspectThreePartyRollback(client: Client, ids: FixtureIds)
       `SELECT count(*) AS n FROM "project_event"
         WHERE "source_id" = $1::uuid
           AND "kind" IN ('task.status_changed', 'task.dependency_changed', 'task.updated')`,
-      [ids.dependentTaskId],
-    ),
-    dispatchActions: await one(
-      `SELECT count(*) AS n FROM "project_action" WHERE "subject_id" = $1::uuid`,
       [ids.dependentTaskId],
     ),
     dependentTaskStatus: task[0]?.status ?? null,

@@ -16,7 +16,6 @@ import {
   verificationEpochGate,
   verificationEpochGates,
   verificationRunSettled,
-  verificationVerdictActionKeyOf,
 } from './verification-dependency';
 import { computeDependencyState, dependencySatisfied, statusPrerequisites } from './task-dependencies';
 
@@ -374,16 +373,5 @@ test('the gate rides §13.6 SU9 to the chain tail, not only to the row the edge 
       ['new', { subjectTaskId: 'new', gate: null }],
     ])),
     true,
-  );
-});
-
-// ---------------------------------------------------------------------------
-// The §8.2 ledger key, as task-verification-verdict.ts mints it
-// ---------------------------------------------------------------------------
-
-test('the ledger key is the §8.2 one, built from internal ids and the exact revision', () => {
-  assert.equal(
-    verificationVerdictActionKeyOf('11111111-1111-7111-8111-111111111111', 'v', 3n),
-    'pc:v1:11111111-1111-7111-8111-111111111111:verdict:v:3',
   );
 });

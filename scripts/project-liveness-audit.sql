@@ -7,10 +7,13 @@
 -- here is AC3's silent-idling defect: a project that is OPEN, switched on, not waiting on a person
 -- and not settled, for which none of §10.3's four clauses holds —
 --
---   (a) a LIVE session of one of its tasks that is attributable: either the `result_session` of an
---       APPLIED `DISPATCH_TASK`, or one a person started (`dispatch_origin = 'USER'`). A user's
---       explicit action is evidence the project is moving, not a hole (PC-CX-14);
---   (b) a coordinator turn in flight — a CLAIMED `OPEN_COORDINATOR_TURN` that has not published;
+--   (a) a LIVE session of one of its tasks that a person started (`dispatch_origin = 'USER'`). A
+--       user's explicit action is evidence the project is moving, not a hole (PC-CX-14). The other
+--       attributable session, the `result_session` of an APPLIED `DISPATCH_TASK`, went with the
+--       `project_action` ledger in 0272;
+--   (b) a coordinator turn in flight — a CLAIMED `OPEN_COORDINATOR_TURN` that has not published.
+--       That ledger is gone too, and nothing had written a turn to it since the control loop was
+--       removed (6418a1e5), so the clause is constant false; it stays so the output keeps its shape;
 --   (c) at least one open blocker with all five of §11.1's fields present, so somebody can act;
 --   (d) a `next_wake_at` in the future with a reason.
 --
@@ -43,23 +46,9 @@ WITH in_loop AS (
             WHERE t."project_id" = l."id"
               AND s."deleted_at" IS NULL
               AND s."status"::text IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
-              AND (
-                s."dispatch_origin"::text = 'USER'
-                OR EXISTS (
-                  SELECT 1 FROM "project_action" a
-                   WHERE a."project_id" = l."id"
-                     AND a."type" = 'DISPATCH_TASK'
-                     AND a."status" = 'APPLIED'
-                     AND a."result_session_id" = s."id"
-                )
-              )
+              AND s."dispatch_origin"::text = 'USER'
          ) AS clause_a_live_session,
-         EXISTS (
-           SELECT 1 FROM "project_action" a
-            WHERE a."project_id" = l."id"
-              AND a."type" = 'OPEN_COORDINATOR_TURN'
-              AND a."status" = 'CLAIMED'
-         ) AS clause_b_turn_in_flight,
+         false AS clause_b_turn_in_flight,
          EXISTS (
            SELECT 1 FROM "project_blocker" b
             WHERE b."project_id" = l."id"

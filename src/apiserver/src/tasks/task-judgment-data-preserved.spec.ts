@@ -625,6 +625,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        function's body, which runs only on a later reopen: applying the migration reads and writes no
   //        stored row. Nothing reads progress to allow or refuse a status: it is what a reporter states,
   //        and a Watch reads it to decide when to tell somebody, never whether a task is done.
+  //   0272 dropped `project_action`, the control loop's dispatch ledger, by account-owner decision:
+  //        the loop that wrote it went in 6418a1e5 and DEP's last read of it in 9135ae64. Read against
+  //        every claim above: it drops that table with its two triggers, their two functions and its
+  //        two enums, `project_action_type` and `project_action_status`. Those are its only
+  //        `DROP TYPE`s and it has no `ALTER TYPE`, so the three `task_completion_criterion` labels
+  //        this file keeps survive, with 0267's fourth beside them. It ALTERs `session`, a preserved
+  //        relation, by exactly one `DROP COLUMN "project_action_id"`, and
+  //        `task_verification_failure` by one `DROP COLUMN "raised_by_action_id"`: no other column of
+  //        either is named, no row is rewritten, and the values that go were archived before the
+  //        migration was written. It narrows `project_blocker_kind_chk` by the one kind only the
+  //        deleted verdict-apply retry could raise, and names neither of 0269's `project_blocker`
+  //        columns nor the `project_blocker_resolution_final` function 0269 restated. It does not
+  //        touch `task`, `project` or `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored task and criterion row are out of its
+  //        reach, and no criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it creates
+  //        no table, enum, type, function or trigger, so it is not another writer of the DONE fence.
+  //        It has no INSERT, UPDATE or DELETE: putting the CHECK back reads `project_blocker` to
+  //        validate it and writes nothing. Nothing it removes was still read to allow or refuse a
+  //        status when it ran.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -660,7 +680,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0266_coordinator_no_progress_retirement',
       '0267_task_owner_confirmation',
       '0269_project_blocker_resolution_note',
-      '0271_watch_progress_continuous'],
+      '0271_watch_progress_continuous',
+      '0272_drop_project_action'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

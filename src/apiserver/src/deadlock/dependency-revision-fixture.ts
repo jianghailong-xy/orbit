@@ -16,9 +16,8 @@ import { historicalTouchSql } from './pre-0132-dispatch-touch';
  * `dependency-revision.pg.spec.ts` asserts each of those sources still contains its half, so the
  * fixture cannot quietly drift into replaying a dispatch this repo no longer performs.
  *
- * The Session insert goes through every guard 0122 installed — the authority gate, the frozen
- * snapshot check, and both deferred attribution triggers — because a fixture that bypassed them
- * would prove nothing about the one 0132 adds beside them.
+ * The Session insert goes through every guard still installed on `session`, because a fixture that
+ * bypassed them would prove nothing about the one 0132 adds beside them.
  */
 
 export interface RevisionIds {
@@ -33,7 +32,6 @@ export interface RevisionIds {
   doneTaskId: string;
   /** A prerequisite that is OPEN: an edge onto it does. */
   openTaskId: string;
-  actionId: string;
   sessionId: string;
 }
 
@@ -47,7 +45,6 @@ export function newRevisionIds(label: string): RevisionIds {
     dependentTaskId: randomUUID(),
     doneTaskId: randomUUID(),
     openTaskId: randomUUID(),
-    actionId: randomUUID(),
     sessionId: randomUUID(),
   };
 }
@@ -142,45 +139,6 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
 }
 
 /**
- * The CLAIMED dispatch action a Session is minted against, with the frozen execution context
- * `session_coordinator_snapshot_guard` verifies.
- *
- * Both digests are computed by `coordinator_json_digest` — the database's own function, which is
- * deliberately also the application's oracle — so the fixture cannot disagree with the guard about
- * what the canonical serialisation of a context is.
- */
-export async function claimDispatchAction(client: Client, ids: RevisionIds): Promise<void> {
-  await client.query(
-    `INSERT INTO "project_action" ("id", "project_id", "idempotency_key", "type", "status",
-       "subject_type", "subject_id", "fencing_token", "detail", "execution_context",
-       "execution_context_digest", "execution_result_digest", "updated_at")
-     SELECT $1::uuid, $2::uuid, $3, 'DISPATCH_TASK', 'CLAIMED', 'TASK', $4::uuid, 1, '{}'::jsonb,
-            ctx,
-            "coordinator_json_digest"(ctx -> 'authorization'),
-            "coordinator_json_digest"(ctx - 'authorization'),
-            CURRENT_TIMESTAMP
-       FROM (SELECT jsonb_build_object(
-               'authorization', jsonb_build_object('decision', 'ALLOW'),
-               'result', jsonb_build_object(
-                 'provider', 'claude',
-                 'model', NULL,
-                 'workspaceId', $5::text,
-                 'runnerId', $6::text,
-                 'permissionMode', NULL,
-                 'requiredCapabilities', '[]'::jsonb,
-                 'resolution', jsonb_build_object('v', 1))) AS ctx) frozen`,
-    [
-      ids.actionId,
-      ids.projectId,
-      `pc:v1:${ids.projectId}:${ids.label}`,
-      ids.dependentTaskId,
-      ids.workspaceId,
-      ids.runnerId,
-    ],
-  );
-}
-
-/**
  * `ProjectTaskDispatcherService.dispatchInTransaction`, first statement: rank 10 and rank 50 in
  * one go. The owner row is taken at exactly the mode this transaction's Session insert will take
  * it at later (I2), so a dispatch is never caught holding rank 70 while it asks for rank 10.
@@ -230,24 +188,18 @@ export const DELETE_EDGE =
   'DELETE FROM "task_dependency" WHERE "task_id" = $1::uuid AND "depends_on_task_id" = $2::uuid';
 
 /**
- * The Session insert and the action's APPLIED transition, as one dispatch performs them: the
- * insert first (the authority gate and the snapshot guard run BEFORE it), then the link that both
- * deferred attribution triggers verify at COMMIT — where `session_dispatch_dependency_check` also
- * runs.
+ * The Session insert, as one dispatch performs it. `session_dispatch_dependency_check` verifies it
+ * at COMMIT.
  */
 export const INSERT_COORDINATOR_SESSION = `
   INSERT INTO "session" ("id", "title", "prompt", "status", "provider", "provider_builtin",
     "uses_runtime_default_model", "source", "creator_id", "owner_id", "task_id", "workspace_id",
-    "assigned_runner_id", "project_action_id", "dispatch_origin", "run_source", "resolution",
+    "assigned_runner_id", "dispatch_origin", "run_source", "resolution",
     "snapshot_frozen_at", "updated_at")
   VALUES ($1::uuid, 'dispatch', 'dispatch', 'PENDING', 'claude', true, true, 'user',
-    $2::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid,
+    $2::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
     'PROJECT_COORDINATOR', 'PROJECT_COORDINATOR', '{"v": 1}'::jsonb,
     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
-export const APPLY_DISPATCH_ACTION = `
-  UPDATE "project_action"
-     SET "status" = 'APPLIED', "result_session_id" = $2::uuid, "updated_at" = CURRENT_TIMESTAMP
-   WHERE "id" = $1::uuid`;
 
 /** Every statement a dispatch issues against one task, in the order it issues them. */
 export function dispatchSteps(

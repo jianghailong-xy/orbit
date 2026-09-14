@@ -512,8 +512,8 @@ test('a wake with nowhere to open releases its key, and the same fact wakes once
  *
  * That value had five trigger guards and three CHECKs over it, dropped on the stated grounds that
  * "no new PROJECT_COORDINATOR session can be created". This unit creates them again, so what is
- * left has to be looked at rather than assumed. The current survivors guard only durable
- * obligation/receipt/action tables; no Session trigger can resurrect the removed control loop.
+ * left has to be looked at rather than assumed. Nothing that survives names the dispatch origin, so
+ * no Session trigger can resurrect the removed control loop.
  */
 test('nothing left over from the control loop fires on a judgment session',
   { skip, timeout: 120_000 }, async () => {
@@ -537,10 +537,10 @@ test('nothing left over from the control loop fires on a judgment session',
          ORDER BY 1, 2`);
       assert.deepEqual(
         triggers.rows.map((r) => r.on_table),
-        ['project_action'],
-        // 0220 removed the completion-ACK terminal guard, which was the only other trigger that
-        // named the dispatch origin; the append-only action guard is what is left.
-        'only the append-only action guard may name the dispatch origin',
+        [],
+        // 0220 removed the completion-ACK terminal guard and 0272 the append-only dispatch-action
+        // guard, with its table; those were the last two triggers that named the dispatch origin.
+        'no trigger may name the dispatch origin',
       );
     } finally {
       await client.end();

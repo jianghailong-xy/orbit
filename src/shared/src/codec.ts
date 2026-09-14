@@ -134,7 +134,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'subjectTaskId',
   'defectTaskId',
   'resolvedByTaskId',
-  'raisedByActionId',
   // The acceptance record: the authored criterion, and the rows it cites as its evidence. Every
   // one of them is an address somebody hands straight back — `project_get`, `task_get`, a session
   // link. `runId` and `acceptedRunId` stood here until migration 0229 removed the project
@@ -220,7 +219,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // (not a delivery fence), so it must use the same public spelling as turnId.
   'targetTurnId',
   'approvalId',
-  'projectActionId',
   'decisionId',
   // Owner Ratification's durable decision, reusable authority and two-phase action ledgers. These
   // all name rows a caller can inspect or hand back; whether the named authority is still valid is
@@ -298,8 +296,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'reporterSessionId',
   'effectTaskId',
   'resultSessionId',
-  // ProjectAction subjects are currently tasks. Keep the generic wire name classified so an
-  // action returned by the coordinator API can be handed back in either public-id spelling.
+  // What a blocker or a coordinator wake is about — a task or project row — under its generic wire
+  // name, classified so it can be handed back in either public-id spelling.
   'subjectId',
   'assigneeId',
   // The project's coordinator, and any agent on its team. An Agent is a `workspace` row today, so

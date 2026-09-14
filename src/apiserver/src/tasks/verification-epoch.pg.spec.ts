@@ -327,14 +327,6 @@ async function agreedGate(
   return gate;
 }
 
-/** `project_action` rows naming this check — what DEP used to wait for, and what nothing writes. */
-async function ledgerRows(db: Db, checkId: string): Promise<number> {
-  const rows = await db.$queryRawUnsafe<Array<{ n: bigint }>>(
-    `SELECT count(*) AS n FROM "project_action" WHERE "subject_id" = $1::uuid`, checkId,
-  );
-  return Number(rows[0].n);
-}
-
 /**
  * The dependency state each downstream task reports — `computeDependencyState` over the gate and
  * the stall `TasksService.dependencyFactsFor` derives for its one prerequisite — held against the
@@ -401,11 +393,10 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
   });
 
   await t.test('a settled PASS releases its downstream with no ledger row behind it', async () => {
-    // A natural `task_done` run, nothing live on the check, the subject still DONE — and not one
-    // `project_action` row, which is every PASS since the control loop that wrote them was removed
-    // (6418a1e5). DEP used to answer this world `VERDICT_NOT_APPLIED`, for good.
+    // A natural `task_done` run, nothing live on the check, the subject still DONE — and no ledger
+    // row, which is every PASS since the control loop that wrote them was removed (6418a1e5); 0272
+    // dropped the ledger itself. DEP used to answer this world `VERDICT_NOT_APPLIED`, for good.
     const w = await world(db, { verdict: 'PASS' });
-    assert.equal(await ledgerRows(db, w.checkId), 0, 'no ledger row stands behind this PASS');
     assert.equal(await agreedGate(db, w), null);
     assert.deepEqual(await downstreamStates(db, w), { check: 'READY', subject: 'READY' });
   });

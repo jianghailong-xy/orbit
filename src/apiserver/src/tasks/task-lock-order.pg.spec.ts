@@ -81,7 +81,7 @@ async function emptyWorld(client: Client): Promise<void> {
   // the one that leaked. Bounded, so a leak is named where it happened.
   await client.query(`SET lock_timeout = '10s'`);
   await client.query(`
-    TRUNCATE "project_action", "project_runtime",
+    TRUNCATE "project_runtime",
              "task_dependency", "task", "session", "workspace", "runner", "project", "user"
     RESTART IDENTITY CASCADE
   `);

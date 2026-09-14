@@ -136,16 +136,16 @@ test('SR50/SR51 blocker kind 恰好一个，且确实是新增的', () => {
   // 覆盖的集合 —— 并据此断言"现行"，那时 `COMPLETION_ACK_STALE`（0220 明确保留的成员）会在这里凭空消失。
   // 同一个文件里改写两次时取**最后**一次：留在库里生效的是它。
   const dirs = readdirSync(MIGRATIONS).filter((d) => /^\d{4}_/.test(d)).sort();
-  const closedSetsByMigration: string[][] = [];
+  const rewrites: Array<{ dir: string; kinds: string[] }> = [];
   for (const d of dirs) {
     let sql = '';
     try { sql = readFileSync(path.join(MIGRATIONS, d, 'migration.sql'), 'utf8'); } catch { continue; }
-    const rewrites = [...sql.matchAll(
+    const found = [...sql.matchAll(
       /ADD CONSTRAINT "?project_blocker_kind_chk"?[\s\S]*?CHECK \("?kind"? IN \(([\s\S]*?)\)\)/g)];
-    const last = rewrites.at(-1);
-    if (last) closedSetsByMigration.push([...last[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]));
+    const last = found.at(-1);
+    if (last) rewrites.push({ dir: d, kinds: [...last[1].matchAll(/'([A-Z_]+)'/g)].map((x) => x[1]) });
   }
-  const closed = closedSetsByMigration.at(-1) ?? [];
+  const closed = rewrites.at(-1)?.kinds ?? [];
   assert.ok(closed.length > 0, '读不到 project_blocker_kind_chk 的封闭集合');
   // 0231 之前这里断言的是它的**缺席**（SR51 那时读作"尚未落地"）。0231 落地后断言翻面，守的仍是
   // 同一句话：契约与迁移对这个 kind 的说法必须一致。
@@ -153,24 +153,33 @@ test('SR50/SR51 blocker kind 恰好一个，且确实是新增的', () => {
     closed.includes('SOURCE_UNRESOLVED'),
     'SOURCE_UNRESOLVED 不在封闭集合内 —— 一个写不进去的拒绝码，等于一次静默跳过的派发',
   );
-  // 而且它是**这一次**加进去的：读到最后一次改写该 CHECK 的迁移的上一次，断言那时它还不在。
-  // 只断言"现在在"会让一次把它挪进更早迁移的改动悄悄通过，SR51 声称的落地位置就此失真。
-  const before = closedSetsByMigration.at(-2);
+  // 而且它是在 SR51 声明的那一次加进去的：第一次含它的改写必须是 0231，且那之前的一次改写里它还不在。
+  // 只断言"现在在"会让一次把它挪进别的迁移的改动悄悄通过，SR51 声称的落地位置就此失真。这里曾经读的是
+  // "最后一次改写"，0231 还是最后一次时两者等价；0272 又改写了一次，那个读法就不再指向 0231。
+  const landed = rewrites.findIndex((rewrite) => rewrite.kinds.includes('SOURCE_UNRESOLVED'));
+  assert.match(rewrites[landed].dir, /^0231_/,
+    `SOURCE_UNRESOLVED 落在 ${rewrites[landed].dir}，而 SR51 声明的落地位置是 0231`);
+  const before = rewrites[landed - 1];
   assert.ok(before, '至少要有两次对 project_blocker_kind_chk 的改写才谈得上"新增"');
   assert.deepEqual(
-    closed.filter((k) => !before.includes(k)),
+    rewrites[landed].kinds.filter((k) => !before.kinds.includes(k)),
     ['SOURCE_UNRESOLVED'],
-    '本契约只贡献一个 blocker kind，且它必须是最后一次改写新增的那一个',
+    '本契约只贡献一个 blocker kind，且它必须是 0231 那一次改写新增的那一个',
   );
   // 反方向同样要断言：整体重写是这条 CHECK 唯一的修改方式（PostgreSQL 没有"加一个值"的语法），所以
   // 一次疏忽就会**收窄**集合。`COMPLETION_ACK_STALE` 是 0220 明确保留的成员（线上有一条 RESOLVED 的
   // project_blocker 行带着它），漏掉它这条 ADD CONSTRAINT 会在真实数据上当场失败，而在空 schema 上
-  // 照样通过。只断言"新增了什么"看不见这个。
-  assert.deepEqual(
-    before.filter((k) => !closed.includes(k)),
-    [],
-    '最后一次改写收窄了封闭集合 —— 整体重写必须写在当前生效的集合之上',
-  );
+  // 照样通过。只断言"新增了什么"看不见这个。所以从 0231 起，每一次改写都必须写在上一次生效的集合之上，
+  // 有意退役的 kind 在这里逐个点名：0272 随 `project_action` 退役了 `VERDICT_APPLY_EXHAUSTED`，那是只有
+  // 已删的 verdict-apply 重试才会发的 kind。
+  const RETIRED: Record<string, string[]> = { '0272_drop_project_action': ['VERDICT_APPLY_EXHAUSTED'] };
+  for (let index = landed; index < rewrites.length; index += 1) {
+    assert.deepEqual(
+      rewrites[index - 1].kinds.filter((k) => !rewrites[index].kinds.includes(k)),
+      RETIRED[rewrites[index].dir] ?? [],
+      `${rewrites[index].dir} 收窄了封闭集合 —— 整体重写必须写在当前生效的集合之上`,
+    );
+  }
   // 落地位置有且只有一条声明。
   // 数**出现次数**而不是行数：同一行里写第二处落地，按行数看仍然是一行。
   const landings = DOC.split('ALTER TABLE "project_blocker"').length - 1;

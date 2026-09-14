@@ -362,15 +362,10 @@ Both migrations are safe with mixed replica versions, in both directions but **n
 The consequence for procedure: **the database may lead the application, never the other way round.**
 The image's boot sequence enforces that on the way up. On the way down it is a decision — see below.
 
-During a rolling upgrade, one number is expected to be briefly non-zero and must return to zero:
-
-```sql
--- old replicas being refused at the commit boundary. Non-zero during the window is the guard
--- working; non-zero afterwards means a dispatch path is not going through the fencing transaction.
-SELECT count(*) FROM "project_action"
- WHERE "type" = 'DISPATCH_TASK' AND "status" = 'CLAIMED'
-   AND "created_at" < now() - interval '10 minutes';
-```
+During a rolling upgrade, an old replica being refused at the commit boundary shows up as
+`DISPATCH_DEPENDENCY_CHANGED` on the request it fails. This section used to also count the
+`DISPATCH_TASK` claims such a refusal left CLAIMED in `project_action`; that ledger lost its writer
+with the control loop (6418a1e5) and was dropped in migration 0272.
 
 ## Rolling the application back
 
@@ -426,12 +421,8 @@ SELECT tgname, pg_get_triggerdef(oid)
    AND tgname LIKE 'project_session_event_source%'
  ORDER BY tgname;
 
--- 3. Dispatch claims a refused or aborted commit left behind. Expected zero outside an upgrade
---    window; see "Old and new schema together".
-SELECT count(*) AS stuck_dispatch_claims
-  FROM "project_action"
- WHERE "type" = 'DISPATCH_TASK' AND "status" = 'CLAIMED'
-   AND "created_at" < now() - interval '10 minutes';
+-- 3. Retired. It counted the dispatch claims a refused or aborted commit left behind in
+--    `project_action`, which lost its writer with the control loop and was dropped in 0272.
 
 -- 4. The server's own conflict tally, to compare with the application counters.
 SELECT datname, deadlocks, xact_rollback, stats_reset

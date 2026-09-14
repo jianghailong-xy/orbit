@@ -469,7 +469,6 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
     sql,
     /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
-  assert.doesNotMatch(sql, /"project_action"|APPLY_VERIFICATION_VERDICT/);
   // Load-bearing despite being logically implied by the two clauses around it: it is the only
   // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
   // hash-joining every dependency edge in the deployment (32ms -> 264ms on a 55k-edge database).

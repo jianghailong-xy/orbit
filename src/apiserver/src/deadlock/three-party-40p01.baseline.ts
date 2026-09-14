@@ -226,7 +226,6 @@ async function main(): Promise<void> {
       assert.deepEqual(rollback, {
         dependencies: 0,
         projectEvents: 0,
-        dispatchActions: 0,
         dependentTaskStatus: 'OPEN',
         dependentTaskTouched: false,
         dependentTaskDispatchAttempt: '0',

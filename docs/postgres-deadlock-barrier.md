@@ -127,8 +127,8 @@ A5 阻塞瞬间的 `pg_locks`（已滤掉索引噪声；`WAITING` = `granted = f
 3. 两条等待边的 `pg_blocking_pids` 恰好是对方，`wait_event_type = Lock`；
    受害者唯一的未授予锁是 `transactionid/ShareLock`；幸存者持有 `session` 的 `RowShareLock`；
    受害者持有 `"user"/RowShareLock` 与 `task`、`task_dependency`、`project_event` 的 `RowExclusiveLock`；
-4. **回滚整体性**：`task`、`task_dependency`、`project_event`(`source_id`)、`project_action`(`subject_id`)
-   四张表里与两个夭折 task 相关的行数全为 0，且 `task_dependency_dispatch_touch` 没有在无关的前置 task 上
+4. **回滚整体性**：`task`、`task_dependency`、`project_event`(`source_id`)
+   三张表里与两个夭折 task 相关的行数全为 0，且 `task_dependency_dispatch_touch` 没有在无关的前置 task 上
    留下 `updated_at` 抖动；
 5. **幸存者结果明确**：`runner-events` COMMIT，`run_event` 落库 1 条，telemetry Session 的
    `last_turn_at` 是幸存者写的那个值（不是受害者的）——两个写入者用可区分的时间戳，所以"谁赢了"没有歧义。
@@ -306,7 +306,7 @@ D3 阻塞瞬间的 `pg_locks`（已滤掉索引噪声；`WAITING` = `granted = f
    （`task_dependency_dispatch_touch` 的抖动没留下）、`dispatch_attempt` 仍是 `0`；
    `project_event` 里属于本轮受害者的三种 kind（`task.status_changed` / `task.dependency_changed` /
    `task.updated`）全为 0（种子提交的 `task.created` 必须还在——所以这里按 kind 数而不是按 source 数）；
-   `project_action`（dispatch）0 行；无关的前置 task 也没有被 touch；
+   无关的前置 task 也没有被 touch；
 6. **两个幸存者结果都明确**：都 COMMIT；`run_event` 落库 1 条；telemetry Session 的 `last_turn_at` 是
    `runner-inbox` 写的那个值（它最后提交），`last_assistant_text` 是 `telemetry` 写的那个值——两位幸存者
    各留一处只有自己能写的痕迹，所以"谁赢了"没有歧义；`project_session_event_source` 对这两次 telemetry-only

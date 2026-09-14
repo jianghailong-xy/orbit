@@ -176,12 +176,6 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
   },
   {
     family: 'PROJECT_BLOCKER',
-    type: 'VERDICT_APPLY_EXHAUSTED',
-    resolveWhen:
-      'The refusal named by the exhausted apply is fixed and a fresh verdict revision applies successfully, or the affected check is retired or superseded.',
-  },
-  {
-    family: 'PROJECT_BLOCKER',
     type: 'COMPLETION_ACK_STALE',
     resolveWhen:
       'The exact legacy v1 turn is ACKed and a matching DECIDED EXECUTABLE request/result canonically projects its PASS or FAIL outcome; the append-only incident and repair facts remain after the active projection and blocker close.',

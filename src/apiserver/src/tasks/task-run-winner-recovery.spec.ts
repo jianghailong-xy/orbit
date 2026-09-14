@@ -359,9 +359,9 @@ test('the execution claim as prisma 7.10 reports it — index name, no column li
 
 test('and a foreign unique key in 7.10\'s shape is still not classified', async () => {
   // The negative control has to be re-run in this shape too: matching on index NAMES is a wider
-  // net than matching on `task_id`, and a net that also caught `session_project_action_id_key`
+  // net than matching on `task_id`, and a net that also caught `session_share_token_key`
   // would answer somebody else's duplicate with a sentence about running a task.
-  const foreign = adapterConflict710('session_project_action_id_key', 'session');
+  const foreign = adapterConflict710('session_share_token_key', 'session');
   const f = fixture({ conflict: foreign, atDesiredId: null, holder: null });
 
   await assert.rejects(() => f.service.execute(OWNER_ID, TASK_ID, undefined, f.requestToken), (error: Error) => {
@@ -371,7 +371,7 @@ test('and a foreign unique key in 7.10\'s shape is still not classified', async 
 });
 
 test('and a unique key this unit does not own is still not classified in that shape either', async () => {
-  const foreign = adapterConflict('session_project_action_id_key', ['project_action_id']);
+  const foreign = adapterConflict('session_share_token_key', ['share_token']);
   const f = fixture({ conflict: foreign, atDesiredId: null, holder: null });
 
   await assert.rejects(() => f.service.execute(OWNER_ID, TASK_ID, undefined, f.requestToken), (error: Error) => {

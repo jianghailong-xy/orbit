@@ -164,12 +164,8 @@ migration）一致。
 `FOR KEY SHARE` 等待应基本消失；`DISPATCH_DEPENDENCY_CHANGED` 应为 0——升级期间偶发是预期的（那正是旧
 副本被挡下），稳定期非零说明有一条 dispatch 路径没走 fencing transaction。
 
-```sql
--- 升级期间盯这一条
-SELECT count(*) FROM "project_action"
- WHERE "type" = 'DISPATCH_TASK' AND "status" = 'CLAIMED'
-   AND "created_at" < now() - interval '10 minutes';   -- 被回滚后卡住不动的认领
-```
+升级期间原先还要盯 `project_action` 里被回滚后卡住不动的 `DISPATCH_TASK` 认领。那张表随控制环
+（6418a1e5）失去了写入方，已在迁移 0272 删除，现在只看上面的 `DISPATCH_DEPENDENCY_CHANGED`。
 
 ## 6. 验证
 

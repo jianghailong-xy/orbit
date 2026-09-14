@@ -75,7 +75,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
 async function emptyWorld(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
   await client.query(`
-    TRUNCATE "session_merge_receipt", "project_action",
+    TRUNCATE "session_merge_receipt",
              "project_runtime", "task", "session", "workspace", "runner", "project", "user"
     RESTART IDENTITY CASCADE
   `);

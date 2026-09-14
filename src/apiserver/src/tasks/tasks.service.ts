@@ -666,8 +666,8 @@ export const TASK_LIST_SELECT = {
  *
  * Two are in range and no others: `session_task_execution_claim_idx` (`task_id`), and — since the
  * id is now derived from the request (`taskRunDesiredSessionId`) rather than drawn at random — the
- * PRIMARY KEY. `project_action_id` and `share_token` are the table's only other unique keys, and a
- * legacy task run leaves both NULL, which PostgreSQL treats as distinct.
+ * PRIMARY KEY. `share_token` is the table's only other unique key, and a legacy task run leaves it
+ * NULL, which PostgreSQL treats as distinct.
  *
  * Still narrowed, for the reason it always was: a collision outside this pair is a different fact
  * entirely, and the recovery below would answer it with a sentence about running a task.

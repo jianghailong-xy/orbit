@@ -55,8 +55,6 @@ test('the verification epoch is decided from the check itself, with no request l
   }
   assert.doesNotMatch(body, /VERDICT_NOT_APPLIED|verdictApplied/u,
     'the epoch gate still waits for a ledger action nothing writes');
-  assert.doesNotMatch(EPOCH_READ, /projectAction|project_action|VERDICT_APPLY_EXHAUSTED/u,
-    'verification-epoch-read.ts still reads the ledger');
   // Chronology is the check's own creation time again, not a request's.
   const newest = DEPENDENCY.slice(DEPENDENCY.indexOf('export function newestLiveCheck'));
   assert.match(newest.slice(0, newest.indexOf('\n}\n')), /const aTime = a\.createdAt;/u);
@@ -70,8 +68,6 @@ test('the SQL fragments select and pass a check on its own facts', () => {
     'passed_live', 'passed_run']) {
     assert.ok(fragment.includes(clause), `the PASS predicate lost ${clause}`);
   }
-  assert.doesNotMatch(fragment, /project_action|APPLY_VERIFICATION_VERDICT/u,
-    'the PASS predicate still waits for a ledger action nothing writes');
 
   const newest = DEPENDENCY.slice(DEPENDENCY.indexOf('export function latestLiveVerificationCheckIdSql'));
   const selector = newest.slice(0, newest.indexOf('\n}\n'));
