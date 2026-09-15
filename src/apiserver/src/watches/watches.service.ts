@@ -378,7 +378,7 @@ export class WatchesService {
     assertListState(state);
     const needsLooking = Prisma.sql`(
           (d."state" = 'DEAD_LETTER'
-            AND COALESCE(substring(d."last_error" FROM '^([A-Z][A-Z0-9_]*):'), '') <> ALL(${textArray(WATCH_QUIET_DEAD_LETTER_CODES.slice(0, 0))}))
+            AND COALESCE(substring(d."last_error" FROM '^([A-Z][A-Z0-9_]*):'), '') <> ALL(${textArray(WATCH_QUIET_DEAD_LETTER_CODES)}))
           OR (d."state" IN ('PENDING', 'IN_FLIGHT') AND d."attempts" > 0))`;
     const picked = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT w."id"

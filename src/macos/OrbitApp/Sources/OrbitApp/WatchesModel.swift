@@ -41,10 +41,7 @@ final class WatchesModel {
         guard !unsupported else { return }
         loadState.begin()
         do {
-            let active = try await api.watches(state: .active)
-            let paused = try await api.watches(state: .paused)
-            let recent = try await api.watches()
-            adopt(WatchIndex.merge([active, paused, recent]))
+            adopt(try await api.followedWatches())
             loadState.succeed()
         } catch APIError.http(let status, _) where status == 404 {
             unsupported = true
