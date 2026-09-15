@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   DownOutlined,
   EditOutlined,
+  ImportOutlined,
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
@@ -33,6 +34,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api, revokeWorkspacePermissionRule } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { meQuery, providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
+import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
@@ -148,6 +150,9 @@ export function RunnerDetailPage() {
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
+  // The Claude session id the Import section carries (edit mode only — importing needs the
+  // workspace to exist). Reset with the rest of the form so a stale id can't leak across picks.
+  const [importId, setImportId] = useState('');
   // The long tail (orchestration / env / instructions) stays folded until asked for, and
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
@@ -220,6 +225,26 @@ export function RunnerDetailPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
   });
+  // Import a local Claude Code transcript as this workspace's session — the same door
+  // `orbit session import` uses, so the refusals read identically. The button stays busy while
+  // the wait inside watches the runner replay the transcript (or settle the import as FAILED),
+  // mirroring the CLI's own wait before it reports.
+  const importMut = useMutation({
+    mutationFn: async () => {
+      if (!editing) throw new Error('pick a workspace first');
+      const id = importId.trim();
+      if (!CLAUDE_SESSION_ID_RE.test(id)) {
+        throw new Error('claude session id must be a UUID, e.g. 4e453ab7-f37c-494d-8017-bb4e9beffeef');
+      }
+      return importClaudeSessionAndWait(id, editing.id);
+    },
+    onSuccess: (id) => {
+      setImportId('');
+      message.success('Imported — opening the session.');
+      navigate(`/sessions/${encodeId(id)}`);
+    },
+    onError: (e: Error) => message.error(e.message || 'Import failed'),
+  });
 
   // Shared reset for both entry points — every field the form owns is set here, so a stale
   // value from the previous workspace can never leak into the next one.
@@ -231,6 +256,7 @@ export function RunnerDetailPage() {
     setFEnableWorktree(a?.enableWorktree ?? false);
     setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
+    setImportId('');
     setAdvOpen(false);
     setDirty(false);
     setFormOpen(true);
@@ -389,6 +415,43 @@ export function RunnerDetailPage() {
         Model <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this
         runner. Pick a different one from the session composer.
       </div>
+
+      {/* Import needs the workspace to exist — it creates a session OF it. The create form only
+          promises it: the section lives in the settings of a saved workspace. */}
+      {mode === 'edit' && editing && (
+        <>
+          <div className="rd-form-section">Import</div>
+          <div className="rd-form-field">
+            <div className="rd-form-label">Claude Code session id</div>
+            <div className="rd-import-row">
+              <Input
+                value={importId}
+                onChange={(e) => setImportId(e.target.value)}
+                onPressEnter={() => importMut.mutate()}
+                placeholder="4e453ab7-f37c-494d-8017-bb4e9beffeef"
+                disabled={importMut.isPending}
+              />
+              <Button
+                icon={<ImportOutlined />}
+                onClick={() => importMut.mutate()}
+                loading={importMut.isPending}
+              >
+                Import
+              </Button>
+            </div>
+            <div className="rd-path-hint rd-path-muted">
+              Imports the local Claude transcript as this workspace's session — readable,
+              searchable, and the next message continues it with its original context.
+            </div>
+          </div>
+        </>
+      )}
+      {mode === 'create' && (
+        <div className="rd-form-derived">
+          Have a Claude Code session on this runner? You can import it later from workspace
+          settings.
+        </div>
+      )}
 
       <div
         className={`rd-adv-toggle${advOpen ? ' open' : ''}`}

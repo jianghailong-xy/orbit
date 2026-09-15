@@ -324,6 +324,16 @@ export const createInteractiveSession = (body: {
     },
   });
 
+/** Import a local Claude Code transcript as a session of a workspace — the workspace-settings
+ *  entry for `orbit session import`. The runner locates the transcript on its own disk, replays
+ *  it into Orbit, and resumes the conversation when the next message is sent. The create answers
+ *  before any of that happened, so callers poll for the replay (events) or the failure. */
+export const importClaudeSession = (body: { claudeSessionId: string; workspaceId: string }) =>
+  api<{ id: string; status?: string; title?: string }>('/sessions/import', {
+    method: 'POST',
+    body,
+  });
+
 /** Send the next user message to a live interactive session. The returned turnId identifies
  *  it, e.g. to withdraw it with cancelQueuedTurn. `attachmentIds` are ids of images already
  *  uploaded via uploadAttachment, sent alongside the text.

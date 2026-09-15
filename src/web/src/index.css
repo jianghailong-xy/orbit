@@ -2038,6 +2038,16 @@ body {
 .rd-env-row > .ant-input:first-child {
   flex: 0 0 38%;
 }
+/* Import-a-Claude-session row: uuid input | Import button. */
+.rd-import-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rd-import-row .ant-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
 /* Standing "always allow" grants: a monospace token per grant, with revoke on the right. */
 .rd-rule-row {
   display: flex;
