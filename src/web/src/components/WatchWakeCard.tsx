@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { EyeOutlined } from '@ant-design/icons';
 import { ago, describeReason, linkId, targetHref, watchHref, type WatchWake } from '../lib/watches';
 import { SameOriginLink } from './SameOriginLink';
@@ -23,6 +24,9 @@ const WHY: Record<Exclude<WatchWake['kind'], 'MATCHED'>, string> = {
  * than as a message the user typed: what happened, what changed, and a way to the watch. The words the
  * agent read stay one click away exactly as it read them — a native disclosure, so they still open in
  * a static export.
+ *
+ * The queued tail draws the same card while the wake still waits behind the running turn, with the
+ * queue's status line at its foot, so it keeps its shape when a runner takes it.
  */
 export function WatchWakeCard({
   wake,
@@ -31,21 +35,25 @@ export function WatchWakeCard({
   ts,
   linkable,
   undelivered,
+  queued,
 }: {
   wake: WatchWake;
   text: string;
-  seq: number;
+  /** Unset while the wake is still queued: it is no event yet, so ⌘F has nothing to land on. */
+  seq?: number;
   ts?: string;
   /** False where the Following page is out of reach: a static export. */
   linkable: boolean;
   /** The runner has not confirmed the engine received the turn. */
   undelivered: boolean;
+  /** The queued tail's status line, while the wake still waits for its turn. */
+  queued?: ReactNode;
 }) {
   const changed = wake.changedTargets.slice(0, SHOWN_CHANGES);
   const more = wake.changedTargets.length - changed.length;
   return (
     <div className="watch-wake-wrap">
-      <div className={`watch-wake is-${wake.kind.toLowerCase()}`} data-seq={seq}>
+      <div className={`watch-wake is-${wake.kind.toLowerCase()}${queued ? ' is-queued' : ''}`} data-seq={seq}>
         <div className="watch-wake-title">
           <EyeOutlined /> {TITLE[wake.kind]}
         </div>
@@ -85,6 +93,7 @@ export function WatchWakeCard({
           <summary>What the agent received</summary>
           <pre>{text}</pre>
         </details>
+        {queued && <div className="watch-wake-queued">{queued}</div>}
       </div>
     </div>
   );

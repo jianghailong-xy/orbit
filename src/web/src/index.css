@@ -12207,6 +12207,25 @@ button.composer-usage:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* A wake still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
+   message, with the queue's status line at its foot. What withdrawing it costs takes a line of its
+   own under the state and the action, rather than the one-line ellipsis a delivery failure gets. */
+.watch-wake.is-queued {
+  border-style: dashed;
+}
+.watch-wake-queued {
+  margin-top: 6px;
+}
+.watch-wake-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.watch-wake-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
 .watch-editor {
   display: flex;
   flex-direction: column;
