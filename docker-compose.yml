@@ -25,6 +25,22 @@ services:
       - archive_timeout=300
       - -c
       - wal_compression=on
+      # SQL-level observability. pg_stat_statements has to be preloaded, so it belongs on
+      # this command line: ALTER SYSTEM writes postgresql.auto.conf, which neither survives
+      # a container rebuild from this file nor runs inside a transaction block. track=top
+      # keeps the totals addable — a statement's time already includes the triggers and
+      # functions it fires, so tracking nested ones too would double-count them.
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - pg_stat_statements.track=top
+      # Name the queries behind pg_stat_database's temp_bytes. 1MB passes over trivial
+      # spills but still catches a query that writes many small files, which a threshold
+      # set at work_mem would hide.
+      - -c
+      - log_temp_files=1024
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
