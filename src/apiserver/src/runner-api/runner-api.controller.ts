@@ -244,6 +244,21 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself. maxWait uses the same value: a batch that already burned its compile should queue for
 // a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
+// The WASM query compiler and the wire bind cost grow super-linearly with the row count, and a
+// backlogged batch holds thousands: one 32k-parameter createMany compiles for minutes, while 256
+// rows stay in the milliseconds. Chunked inside the same transaction, so the retry-idempotency
+// the whole batch relies on is unchanged.
+const CREATE_MANY_CHUNK_ROWS = 256;
+
+/** Run one createMany in bounded chunks so no single compile can stall the event loop. */
+async function chunkedCreateMany(
+  insert: (data: never[]) => Promise<unknown>,
+  data: never[],
+): Promise<void> {
+  for (let offset = 0; offset < data.length; offset += CREATE_MANY_CHUNK_ROWS) {
+    await insert(data.slice(offset, offset + CREATE_MANY_CHUNK_ROWS));
+  }
+}
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -3741,8 +3756,9 @@ export class RunnerApiController {
         );
       }
       if (durable.length > 0) {
-        await tx.runEvent.createMany({
-          data: durable.map((e) => ({
+        await chunkedCreateMany(
+          (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
+          durable.map((e) => ({
             sessionId,
             seq: e.seq,
             type: e.type,
@@ -3751,9 +3767,8 @@ export class RunnerApiController {
             createdAt: new Date(e.ts),
             ingestedByRunnerId: runner.id,
             ingestedUnderLeaseGeneration: leaseOwner,
-          })),
-          skipDuplicates: true,
-        });
+          })) as never[],
+        );
         // Persisted conversation/background activity is liveness. Session-level system events
         // are different: every reclaimed idle session emits init/resumed when its runner restarts,
         // and counting that handshake would move every waiting session to "now" and scramble the
@@ -3931,15 +3946,16 @@ export class RunnerApiController {
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
       if (toolUses.length > 0) {
-        await tx.toolCall.createMany({
-          data: toolUses.map((e) => ({
+        await chunkedCreateMany(
+          (data) => tx.toolCall.createMany({ data }),
+          toolUses.map((e) => ({
             sessionId,
             name: String((e.payload as Record<string, unknown>).name ?? 'unknown'),
             toolUseId: String((e.payload as { id?: unknown }).id ?? '') || null,
             input: ((e.payload as Record<string, unknown>).input ?? Prisma.JsonNull) as Prisma.InputJsonValue,
             startedAt: new Date(e.ts),
-          })),
-        });
+          })) as never[],
+        );
       }
 
       // Pair each tool_result back to the row its tool_use created, so the outcome columns
