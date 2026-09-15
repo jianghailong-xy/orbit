@@ -712,7 +712,13 @@ qa('FG-HTTP', 'through the production apiserver and its public routes with an ow
     body: { clientTurnId: key, content: 'a note from the owner, not a wake', intent: 'NEXT_TURN' },
   });
   facts.squatReply = [squat.status, squat.text.slice(0, 200)];
-  assert.ok(squat.status === 200 || squat.status === 201, `the public turn route refused a watch: key: ${squat.status} ${squat.text}`);
+  // Owner-approved revision (task 34OUbBLHHh9yjfJL0qVvT): the public turn route now refuses the wake
+  // namespace outright — a caller's `clientTurnId` may not start with `watch:` — so the squat this case
+  // performs is a 400 and the key stays free for the worker. What the case was written to prove is
+  // unchanged, and reached from the other side: the REVOKED end wake is queued and reads DELIVERED.
+  assert.equal(squat.status, 400, `the public turn route must refuse a watch: clientTurnId: ${squat.status} ${squat.text}`);
+  assert.match(squat.text, /watch:/, `the refusal does not name the reserved prefix: ${squat.text}`);
+  assert.deepEqual(await turnsKeyed(observer, key), [], 'the refused squat still queued a turn under the wake key');
   // No event: the apiserver's own reconciliation (60s) finds the revocation, and its delivery loop settles the end.
   await bringAbout('REVOKED', task);
   const settledStates = await eventually(
@@ -730,6 +736,8 @@ qa('FG-HTTP', 'through the production apiserver and its public routes with an ow
     wakeQueued,
   };
   if (settledStates[0] === 'DELIVERED' && !wakeQueued) failures.push('HTTP squat: the REVOKED end delivery reads DELIVERED, and no turn carries its wake');
+  if (settledStates[0] !== 'DELIVERED') failures.push(`HTTP squat: the REVOKED end delivery reads ${settledStates[0]} although nothing ever took its key`);
+  if (!wakeQueued) failures.push('HTTP squat: no turn carries the REVOKED end wake although nothing ever took its key');
 
   // 2. A numeric alias withdrawn over DELETE /api/sessions/:id/turns/:turnId while the real Match wake is still queued.
   const observer2 = await insertSession(owner, 'AWAITING_INPUT', runner);
@@ -743,14 +751,17 @@ qa('FG-HTTP', 'through the production apiserver and its public routes with an ow
     token,
     body: { clientTurnId: alias, content: 'an owner message under a numeric alias', intent: 'NEXT_TURN' },
   });
-  const [forgedTurn] = await turnsKeyed(observer2, alias);
-  assert.ok(forgedTurn, `the alias turn was not queued: ${forged.status} ${forged.text}`);
-  const withdrawn = await request(server, 'DELETE', `/api/sessions/${uuidToBase62(observer2)}/turns/${forgedTurn.id}`, { token });
+  // Owner-approved revision (task 34OUbBLHHh9yjfJL0qVvT), as above: a numeric alias of a generation key
+  // is in the same reserved namespace, so it is refused at the door and no forged turn is left to
+  // withdraw over DELETE. The Match whose wake is still queued must still read DELIVERED.
+  assert.equal(forged.status, 400, `the public turn route must refuse a numeric alias of a wake key: ${forged.status} ${forged.text}`);
+  assert.match(forged.text, /watch:/, `the refusal does not name the reserved prefix: ${forged.text}`);
+  assert.deepEqual(await turnsKeyed(observer2, alias), [], 'the refused alias still queued a turn under the wake key');
   const [matchDelivery] = await deliveriesOf(matched.id);
   const [realWake] = await turnsKeyed(observer2, realKey);
+  assert.ok(realWake, 'the real Match wake is no longer on the observer queue');
   facts.alias = {
-    forgedReply: forged.status,
-    withdrawReply: [withdrawn.status, withdrawn.text.slice(0, 200)],
+    forgedReply: [forged.status, forged.text.slice(0, 200)],
     realWake: realWake?.status,
     delivery: [matchDelivery.state, matchDelivery.lastError],
   };

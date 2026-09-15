@@ -16,6 +16,7 @@ import { Prisma, Runner, RunStatus } from '@prisma/client';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
+import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { SessionLifecycleActor } from '../projects/attempt-budget';
 import { CurrentRunner } from './current-runner.decorator';
@@ -301,7 +302,11 @@ export class RunnerSessionsController {
     // never saw the answer to (the MCP tool, the CLI, a script) can repeat the key and get the
     // turn it already filed back, instead of a second copy of the message. Minting one here
     // when none is given keeps the historical behaviour for callers that don't care.
-    const clientTurnId = dto.clientTurnId?.trim() || randomUUID();
+    // Judged on the trimmed value, because that is the key this door would file: `watch:` is the
+    // delivery worker's own namespace and no caller may reach into it (watch-turn-key.ts).
+    const provided = dto.clientTurnId?.trim();
+    assertClientTurnIdNotReserved(provided);
+    const clientTurnId = provided || randomUUID();
     // Deliberately NO explicit `intent`: this endpoint sends the same unqualified message every
     // other client sends, and the server decides from the live turn whether it joins the turn now
     // running or queues as the next one. Naming CURRENT_WORK here made the verb useless against
@@ -352,7 +357,9 @@ export class RunnerSessionsController {
     // and writes no outcome, so it cannot overwrite one; an interrupt CARRYING a message is a steer
     // with more force behind it, and an unbounded loop of those is the same unbounded verb.
     const actor = RunnerSessionsController.actor(callingSessionId);
-    const clientTurnId = dto?.clientTurnId?.trim() || randomUUID();
+    const provided = dto?.clientTurnId?.trim();
+    assertClientTurnIdNotReserved(provided);
+    const clientTurnId = provided || randomUUID();
     return this.sessions.interrupt(
       runner.ownerId,
       id,

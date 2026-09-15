@@ -40,6 +40,7 @@ import {
 } from './dto';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
+import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
 
@@ -372,6 +373,7 @@ export class SessionsController {
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
   ) {
+    assertClientTurnIdNotReserved(dto.clientTurnId);
     return this.sessions.createTurn(user.userId, id, dto);
   }
 
@@ -383,6 +385,7 @@ export class SessionsController {
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
   ) {
+    assertClientTurnIdNotReserved(dto.clientTurnId);
     return this.sessions.createTurn(user.userId, id, dto);
   }
 
@@ -415,6 +418,7 @@ export class SessionsController {
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionResumeDto,
   ) {
+    assertClientTurnIdNotReserved(dto.clientTurnId);
     return this.sessions.resume(user.userId, id, dto);
   }
 
@@ -447,6 +451,7 @@ export class SessionsController {
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
   ) {
+    assertClientTurnIdNotReserved(dto?.clientTurnId);
     return this.sessions.interrupt(user.userId, id, dto);
   }
 
