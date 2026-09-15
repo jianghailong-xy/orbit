@@ -229,7 +229,7 @@ test('a background job wakes its session through the runner door', {
       `the inbox handed out something else: ${delivered.text}`,
     );
     const content = String(delivered.json.content ?? '');
-    for (const fact of [job, '退出码 3', `/root/.orbit/runs/wake-spec/${job}.output`, 'FAIL src/widget.test.ts']) {
+    for (const fact of [job, 'exit code 3', `/root/.orbit/runs/wake-spec/${job}.output`, 'FAIL src/widget.test.ts']) {
       assert.ok(content.includes(fact), `the delivered turn does not say ${fact}:\n${content}`);
     }
 

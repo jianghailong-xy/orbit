@@ -141,16 +141,16 @@ type DeliveredWakeup = {
 
 /** The block a wake turn delivers for the wakeups filed onto it. */
 export function buildScheduledWakeupBlock(wakeups: DeliveredWakeup[]): string {
-  const lines = ['<scheduled-wakeup>', '  你用 schedule_wakeup 约的唤醒到点了，控制面为此给你开了这一轮：'];
+  const lines = ['<scheduled-wakeup>', '  The wakeup you asked for with schedule_wakeup is due; the control plane opened this turn for it:'];
   for (const wakeup of wakeups) {
-    lines.push(`    ${wakeup.createdAt.toISOString()} 约在 ${wakeup.delaySeconds} 秒后，${wakeup.dueAt.toISOString()} 到点`);
-    lines.push(`    理由：${wakeup.reason}`);
+    lines.push(`    ${wakeup.createdAt.toISOString()} scheduled ${wakeup.delaySeconds} seconds out, due ${wakeup.dueAt.toISOString()}`);
+    lines.push(`    reason: ${wakeup.reason}`);
     const prompt = (wakeup.prompt ?? '').replace(/\r\n?/g, '\n').replace(/\s+$/, '');
     if (!prompt) continue;
-    lines.push('    你留给这一轮的话：');
+    lines.push('    what you left for this turn:');
     for (const line of prompt.split('\n')) lines.push(`      ${line}`);
   }
-  lines.push('  这是控制面替你记下的，不是用户说的。还要再等，就再调一次 mcp__orbit__schedule_wakeup。');
+  lines.push('  The control plane recorded this for you; the user did not say it. To wait again, call mcp__orbit__schedule_wakeup again.');
   lines.push('</scheduled-wakeup>');
   return lines.join('\n');
 }

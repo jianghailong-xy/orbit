@@ -564,7 +564,7 @@ test('an armed failed retry follows the latest CURRENT_WORK USER back to its tar
 test('a failed background job wake re-sends nothing, least of all the message before it', async () => {
   // The wake turn carries no words (runner-api/background-job-wake.ts); its echo is the control
   // plane's note. The only thing that tells it from a turn the person sent with no words is its id.
-  const block = '<background-job-wake>\n  bgj_0123456789ab｜watch｜gh run watch 42｜已结束｜failed｜退出码 1\n</background-job-wake>';
+  const block = '<background-job-wake>\n  bgj_0123456789ab｜watch｜gh run watch 42｜ended｜failed｜exit code 1\n</background-job-wake>';
   const failedAfter = (newestClientTurnId: string) => makeService([row({ status: RunStatus.FAILED })], {
     events: [
       { type: 'user', payload: { text: 'run the deploy' }, turnId: 'message-4' },
