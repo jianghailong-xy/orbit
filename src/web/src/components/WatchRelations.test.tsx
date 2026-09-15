@@ -230,7 +230,10 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
       }),
       watch('W2', {
         targets: [target('TASK', 'T2')],
-        expiresAt: at(30 * MINUTE),
+        // Held off the whole-minute line: the strip floors what remains, and a deadline exactly
+        // 30 minutes out renders 29m only while the clock never steps backward between building
+        // this fixture and drawing it — on CI it does, and this test failed there for it (twice).
+        expiresAt: at(30 * MINUTE - 30 * 1000),
         ...resumes('S_ME'),
       }),
     ]);
