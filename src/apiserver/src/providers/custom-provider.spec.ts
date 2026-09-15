@@ -400,6 +400,32 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.ENABLE_CLAUDEAI_MCP_SERVERS, '0');
   });
 
+  // The CLI assumes 200k for a model id its own catalog doesn't describe and auto-compacts the
+  // session inside that; DeepSeek's shim serves no /v1/models for it to learn the real window from.
+  // The preset's declared window is the one authoritative number, so it rides in the env the CLI
+  // reads for exactly this purpose.
+  await t.test('a preset-declared window reaches the CLI as CLAUDE_CODE_MAX_CONTEXT_TOKENS', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row({ presetSlug: 'deepseek', followsPreset: true }),
+      sessionModel: 'deepseek-v4-pro',
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
+  });
+
+  await t.test('no window is invented for a model the preset does not describe', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row({ presetSlug: 'deepseek', followsPreset: true }),
+      sessionModel: 'deepseek-chat',
+      workspaceModel: null,
+      workspaceEnv: null,
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, undefined);
+  });
+
   // A codex-runtime provider never launches the claude CLI, so the flag has nothing to say there.
   await t.test('codex-runtime provider gets only the OpenAI-compatible vars', () => {
     const exec = resolveProviderExec({

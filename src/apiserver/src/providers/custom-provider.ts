@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   isRetiredModel,
   modelForProvider,
+  providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
 import { decryptSecret } from './provider-crypto';
@@ -114,7 +115,7 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
       KIMI_MODEL_BASE_URL: row.baseUrl,
     };
   }
-  return {
+  const claudeEnv: Record<string, string> = {
     ANTHROPIC_BASE_URL: row.baseUrl,
     ANTHROPIC_AUTH_TOKEN: apiKey,
     // Claude Code disables claude.ai connectors on its own once an auth token is set — the
@@ -123,6 +124,15 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
     // turn the feature off explicitly: same outcome, no advice that would break the session.
     ENABLE_CLAUDEAI_MCP_SERVERS: '0',
   };
+  // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
+  // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
+  // shim like DeepSeek's serves no /v1/models for it to ask — so the preset's declared window
+  // travels as CLAUDE_CODE_MAX_CONTEXT_TOKENS, which the CLI reads as the model's real window.
+  const window = providerPreset(row.presetSlug)?.models?.find((m) => m.value === model)?.contextWindow;
+  if (typeof window === 'number' && window > 0) {
+    claudeEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(window);
+  }
+  return claudeEnv;
 }
 
 /**

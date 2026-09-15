@@ -147,8 +147,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/anthropic',
     models: [
-      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', contextWindow: 1_000_000 },
+      { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', contextWindow: 1_000_000 },
     ],
     defaultModel: 'deepseek-v4-pro',
     catalog: { source: 'deepseek', match: /^deepseek-/ },
