@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WatchDeliveryView, WatchMatchView, WatchTargetView, WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
+import { watchProblem } from '../lib/watches';
 import { WatchCard } from './WatchCard';
 
 /**
@@ -88,11 +89,15 @@ function serve(routes: Record<string, (init?: Init) => unknown>, titles: Record<
   vi.mocked(api).mockImplementation((async (path: string, init?: Init) => {
     const row = /^\/tasks\/([^/]+)\/row$/.exec(path);
     if (row) return { id: row[1], title: titles[row[1]] ?? row[1], status: 'OPEN' };
-    // The live states are read on their own beside the list, and answered from its rows as the server would.
+    // The live states and the watches that need attention are read on their own beside the list, and answered from
+    // its rows as the server would.
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
     const list = routes['GET /watches'];
     if (state && list && (init?.method ?? 'GET') === 'GET') {
       return (list() as WatchView[]).filter((w) => w.state === state[1]);
+    }
+    if (path === '/watches?needsAttention=true' && (init?.method ?? 'GET') === 'GET') {
+      return list ? (list() as WatchView[]).filter((w) => watchProblem(w)) : [];
     }
     const handler = routes[`${init?.method ?? 'GET'} ${path}`];
     if (!handler) throw new Error(`unstubbed ${init?.method ?? 'GET'} ${path}`);

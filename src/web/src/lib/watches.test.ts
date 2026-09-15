@@ -2,7 +2,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  WATCH_ACTIONS,
+  WATCH_ATTENTION_EXPIRED_ACTIONS,
+  WATCH_ATTENTION_STATES,
   WATCH_LIMITS,
+  WATCH_STATES,
   uuidToBase62,
   type WatchDeliveryView,
   type WatchPredicate,
@@ -362,6 +366,22 @@ describe('what needs attention', () => {
     expect(watchProblem(interrupted)).toMatchObject({ tone: 'error', title: 'The session was not woken' });
     expect(watchBucket(interrupted)).toBe('attention');
     expect(wakeWithdrawn(interrupted.matches[0].deliveries[0])).toBe(false);
+  });
+
+  it('files an ended watch where the contract says it belongs', () => {
+    // `GET /watches?needsAttention=true` reads by the contract's `attention` rule, which shared transcribes: a page
+    // that filed these anywhere else would hold watches its own Needs attention tab never raises, and miss ones it does.
+    for (const state of WATCH_STATES.filter((value) => value !== 'ACTIVE' && value !== 'PAUSED')) {
+      for (const action of WATCH_ACTIONS) {
+        const observing = action === 'RESUME_SESSION' ? { observerType: 'SESSION' as const, observerSessionId: 's1' } : {};
+        const needed =
+          WATCH_ATTENTION_STATES.includes(state)
+          || (state === 'EXPIRED' && WATCH_ATTENTION_EXPIRED_ACTIONS.includes(action));
+        expect(watchBucket(watch({ state, action, ...observing })), `${state} ${action}`).toBe(
+          needed ? 'attention' : 'history',
+        );
+      }
+    }
   });
 
   it('orders history by when each watch ended, newest first', () => {

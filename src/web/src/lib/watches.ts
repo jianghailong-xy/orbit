@@ -470,7 +470,7 @@ export function groupWatches(watches: readonly WatchView[]): Record<WatchBucket,
 /**
  * Several reads of the owner's watches as one list: each watch once, in the order first read. Given the
  * newest 100 first (lib/queries `watchesQuery`), a live watch only its own state's read found comes after
- * them, older than all of them.
+ * them, older than all of them, and so does one only the Needs attention read found.
  */
 export function mergeWatches(lists: readonly (readonly WatchView[])[]): WatchView[] {
   const seen = new Set<string>();

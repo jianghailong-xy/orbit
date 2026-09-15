@@ -138,6 +138,7 @@ test('under drain every write that adds a wait or a wake is refused before the d
     ['pause', () => watches.pause(A, id)],
     ['cancel', () => watches.cancel(A, id)],
     ['listDeliveries', () => watches.listDeliveries(A)],
+    ['listNeedingAttention', () => watches.listNeedingAttention(A)],
   ] as Array<[string, () => Promise<unknown>]>) {
     const error = await refusal(attempt);
     assert.match(String(error), /the database was reached/, `${what} was refused by the flag: ${String(error)}`);

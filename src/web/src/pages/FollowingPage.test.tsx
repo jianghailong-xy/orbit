@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WatchDeliveryView, WatchView } from '@orbit/shared';
+import { watchProblem } from '../lib/watches';
 import { FollowingPage } from './FollowingPage';
 
 /**
@@ -87,11 +88,14 @@ const HUNDRED_ENDED: WatchView[] = Array.from({ length: 100 }, (_, i) => matched
 
 /**
  * Answers as WatchesService does, from `watches` listed newest first: `GET /watches` is the newest 100 of
- * every state, `?state=` the newest 100 in that state, and `GET /watches/:id` any one of them.
+ * every state, `?state=` the newest 100 in that state, `?needsAttention=true` the newest 100 that need
+ * attention — which the server picks by the contract's `attention` rule, the one `watchProblem` files an ended
+ * watch by (lib/watches.test) — and `GET /watches/:id` any one of them.
  */
 function serve(watches: () => WatchView[]) {
   vi.mocked(api).mockImplementation((async (path: string) => {
     if (path === '/watches') return watches().slice(0, 100);
+    if (path === '/watches?needsAttention=true') return watches().filter((w) => watchProblem(w)).slice(0, 100);
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
     if (state) return watches().filter((w) => w.state === state[1]).slice(0, 100);
     const one = /^\/watches\/([^/?]+)$/.exec(path);
@@ -264,19 +268,27 @@ describe('the Following page', { timeout: 30_000 }, () => {
   });
 
   it('opens a link to a watch no list holds by reading that watch on its own', async () => {
+    // One nobody has to act on: a watch that needs attention is read by a list of its own however old it is, so the
+    // one no list holds is an end that asks nothing of anybody — here a wake taken back before it ran.
     const old = matched('OLD', at(-30 * HOUR), [
-      delivery({ state: 'DEAD_LETTER', attempts: 8, deliveredAt: null, lastError: 'TURN_REFUSED: the queue refused it' }),
+      delivery({
+        action: 'RESUME_SESSION',
+        state: 'DEAD_LETTER',
+        attempts: 0,
+        deliveredAt: null,
+        lastError: "WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it",
+      }),
     ]);
     serve(() => [...HUNDRED_ENDED, old]);
     await visit('/following?watch=OLD');
     await settle();
 
     expect(vi.mocked(api)).toHaveBeenCalledWith('/watches/OLD');
-    expect(tab('Needs attention')?.getAttribute('aria-selected')).toBe('true');
+    expect(tab('Triggered history')?.getAttribute('aria-selected')).toBe('true');
     const card = container!.querySelector<HTMLElement>('[data-watch-id="OLD"]');
     expect(card, 'the linked card is on screen').toBeTruthy();
     expect(card!.classList.contains('is-focused')).toBe(true);
-    expect(card!.querySelector('.watch-details')?.textContent).toContain('TURN_REFUSED: the queue refused it');
+    expect(card!.querySelector('.watch-details')?.textContent).toContain('WAKE_WITHDRAWN: the wake was withdrawn');
     expect(container!.textContent).not.toContain('couldn’t be opened');
   });
 
@@ -295,6 +307,55 @@ describe('the Following page', { timeout: 30_000 }, () => {
     expect(container!.querySelector('.following-empty')?.textContent).toContain('Nothing is being followed right now');
     await press('Needs attention');
     expect(container!.querySelector('.following-empty')?.textContent).toContain('Nothing needs attention');
+  });
+
+  it('keeps every watch that needs attention when a hundred newer ones have ended', async () => {
+    const OLD = -30 * HOUR;
+    const revoked = watch('R_OLD', { state: 'REVOKED', createdAt: at(OLD) });
+    const unresolvable = watch('U_OLD', { state: 'UNRESOLVABLE', createdAt: at(OLD) });
+    // A notify watch has no waiting session, so nothing was delivered to say it ran out.
+    const expired = watch('X_OLD', { state: 'EXPIRED', expiresAt: at(-2 * HOUR), createdAt: at(OLD) });
+    const failed = {
+      ...matched('D_OLD', at(-25 * HOUR), [
+        delivery({ state: 'DEAD_LETTER', attempts: 8, deliveredAt: null, lastError: 'TURN_REFUSED: the queue refused it' }),
+      ]),
+      createdAt: at(OLD),
+    };
+    // Ended just as long ago and nobody's to act on: the read that finds the four above must not find these.
+    const withdrawn = {
+      ...matched('W_OLD', at(-26 * HOUR), [
+        delivery({
+          action: 'RESUME_SESSION',
+          state: 'DEAD_LETTER',
+          attempts: 0,
+          deliveredAt: null,
+          lastError: "WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it",
+        }),
+      ]),
+      createdAt: at(OLD),
+    };
+    const stopped = watch('C_OLD', { state: 'CANCELLED', createdAt: at(OLD), updatedAt: at(-27 * HOUR) });
+    serve(() => [...HUNDRED_ENDED, revoked, unresolvable, expired, failed, withdrawn, stopped]);
+    await visit('/following?tab=attention');
+
+    expect(tabs().map((t) => t.textContent)).toEqual(['Active0', 'Needs attention4', 'Triggered history100']);
+    expect(shownIds()).toEqual(['R_OLD', 'U_OLD', 'X_OLD', 'D_OLD']);
+    expect(container!.textContent).not.toContain('Nothing needs attention');
+    // Nothing is missing from this tab, so it promises nothing about a cap.
+    expect(container!.querySelector('.following-note')).toBeNull();
+  });
+
+  it('says so when more watches need attention than one read answers with', async () => {
+    const needy = Array.from({ length: 100 }, (_, i) =>
+      watch(`N${i}`, { state: 'REVOKED', createdAt: at(-30 * HOUR) }),
+    );
+    serve(() => [...HUNDRED_ENDED, ...needy]);
+    await visit('/following?tab=attention');
+
+    expect(tab('Needs attention')?.textContent).toBe('Needs attention100');
+    expect(container!.querySelector('.following-note')?.textContent).toBe(
+      'Showing the 100 newest watches that need attention.',
+    );
   });
 
   it('says so when the watches could not be read', async () => {

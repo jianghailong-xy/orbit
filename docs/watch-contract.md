@@ -218,6 +218,20 @@ release 掉了（§13.3）。客户端仍然显示它，写成「唤醒已撤回
 打断和 run 结束会把排队的唤醒和其他排队内容一起收掉，唤醒要说的话没有送到任何人，所以 `OBSERVER_TURN_INTERRUPTED`、
 `OBSERVER_SESSION_ENDED` 仍进 Needs attention，其余死信码也一样。能重投的死信一定进，因为还有人可以去重投。
 
+**哪些 Watch 要人处理**（契约 `attention`）：状态是 `REVOKED` 或 `UNRESOLVABLE`；`NOTIFY_USER` 的 Watch 进了 `EXPIRED`
+（它没有在等的会话，任何终态都不交付，见 §6 的 `endTurns`，所以没人会知道它到期了）；或者它的任一交付——Match 的或终态的——
+是上表里 `needsAttention` 为 true 的死信，或者是 `attempts > 0` 的 `PENDING` / `IN_FLIGHT`（失败过、正在重试）。
+客户端把这样的 Watch 放进 Needs attention。live Watch 另说：它按自己的状态被完整读到，客户端为它额外加的提示
+（目标被删、求值跟不上）是客户端自己的读法，不在下面这条读法里。
+
+**能不能看到它们，不该取决于它之后又建了多少 Watch。** 这些情况都不会自己消失（死信只有重投成功才算清掉），
+而 `GET /api/watches` 和 `?state=` 都是按创建时间倒序、最多 100 条——agent 每等一次就留下一个已结束的 Watch，
+一条失败提示会在被看到之前被挤出去。所以另有一条读法：`GET /api/watches?needsAttention=true` 只返回要人处理的 Watch，
+不论状态，同样按创建时间倒序、最多 100 条（`attention.read.limit`），可以再用 `?state=` 收窄；`needsAttention`
+只接受 `true`，其他值 400。挑选在 SQL 里按上面的规则做，死信码取 `last_error` 的开头码（与 `watchDeadLetterCodeOf`
+同一读法），所以 `WAKE_WITHDRAWN` 这类不需要处理的死信不会占掉名额。客户端把这一路与最新 100 条、
+`?state=ACTIVE`、`?state=PAUSED` 合并，每个 Watch 只留一份。
+
 ---
 
 ## 4. 目标集合：创建时快照
@@ -637,6 +651,7 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 
 ```bash
 npm run test -w @orbit/shared     # 含 src/watchContract.spec.ts
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-api.pg.spec.ts        # 用户接口：创建、生命周期、§3 的 needsAttention 读法
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
 bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-task-progress.pg.spec.ts   # §12.1 runner 门：owner 隔离、revision 冲突、终态拒绝

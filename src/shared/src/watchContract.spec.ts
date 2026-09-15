@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { WATCH_DEAD_LETTER_CODES, WATCH_QUIET_DEAD_LETTER_CODES, watchDeadLetterNeedsAttention } from './watch';
+import {
+  WATCH_ATTENTION_EXPIRED_ACTIONS,
+  WATCH_ATTENTION_STATES,
+  WATCH_DEAD_LETTER_CODES,
+  WATCH_QUIET_DEAD_LETTER_CODES,
+  watchDeadLetterNeedsAttention,
+} from './watch';
 
 /**
  * The executable half of docs/watch-contract.md: it holds the frozen contract to its own rules so
@@ -222,5 +228,24 @@ describe('watch contract', () => {
     expect(watchDeadLetterNeedsAttention(dead('TURN_REFUSED: WAKE_WITHDRAWN: no'))).toBe(true);
     expect(watchDeadLetterNeedsAttention(dead(null, 8))).toBe(true);
     expect(watchDeadLetterNeedsAttention({ state: 'DELIVERED', lastError: null, attempts: 0 })).toBe(false);
+  });
+
+  it('says which watches need attention, and shared transcribes exactly those', () => {
+    const attention = CONTRACT.attention;
+    expect(attention.states).toEqual([...WATCH_ATTENTION_STATES]);
+    expect(attention.expiredActions).toEqual([...WATCH_ATTENTION_EXPIRED_ACTIONS]);
+    // Filed by its state only once the watch has ended: a live one is read whole by its own state instead.
+    for (const state of attention.states) expect(CONTRACT.states.watch.terminal, state).toContain(state);
+    // An expiry needs attention exactly for an action whose end reaches nobody: RESUME_SESSION is told under its own
+    // turn key, and NOTIFY_USER has no waiting session to tell (actions RESUME_SESSION endTurns).
+    const told: string[] = CONTRACT.actions
+      .filter((action: any) => action.endTurns?.delivered?.EXPIRED)
+      .map((action: any) => action.kind);
+    expect(attention.expiredActions).toEqual(
+      CONTRACT.actions.map((action: any) => action.kind).filter((kind: string) => !told.includes(kind)),
+    );
+    // A read of them all, with a cap written down: the point of it is not depending on the newest list.
+    expect(attention.read.route).toBe('GET /api/watches?needsAttention=true');
+    expect(attention.read.limit).toBeGreaterThan(0);
   });
 });

@@ -956,3 +956,214 @@ test('concurrent creates without a key each make their own watch, with exactly o
   assert.deepEqual(rows.map((row) => row.matches), Array(racers).fill(1));
   assert.deepEqual(await rowsOf(h, owner.id), { watches: racers, targets: racers, matches: racers, deliveries: racers });
 });
+
+// ── what needs attention ────────────────────────────────────────────────────────────────────────
+
+/**
+ * The read a client's Needs attention list is drawn from (contract `attention`). What makes it necessary is what a
+ * busy account does to the newest list: every wait an agent finishes leaves an ended watch behind, so an end nobody
+ * was told about — or a delivery that failed — is pushed out of `GET /watches` long before anybody looks.
+ *
+ * Every fixture here is older than a hundred and five watches that ended after it, and the case is a `deepEqual` on
+ * ids: the watches that need attention are all read, newest first, and no other watch is.
+ */
+test('every watch that needs attention is read however many newer ones ended, and no other watch is', { skip, timeout: 300_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'attention');
+  const stranger = await account(h, 'attention-stranger');
+  const observer = await session(h, owner.id, { status: 'AWAITING_INPUT' });
+  const open = await task(h, owner.id, 'OPEN');
+  const done = await task(h, owner.id, 'DONE');
+  const resumes = { action: 'RESUME_SESSION', observerSessionId: observer };
+
+  // Neither the evaluator nor the delivery worker runs in this harness, so each watch is made through the API and
+  // then moved by SQL to the end a worker would have left it at. `age` puts every fixture before the newer ends
+  // below, a minute apart, so the order the read answers in is decided rather than a matter of how fast this ran.
+  let age = 0;
+  const made = async (body: Record<string, unknown>, why: string): Promise<string> => {
+    const watch = await create(h, owner, body, why);
+    age += 1;
+    await h.sql.query(
+      `UPDATE "watch" SET "created_at" = now() - $2::int * interval '1 minute' WHERE "id" = $1`,
+      [toUuid(watch.id), age],
+    );
+    return watch.id as string;
+  };
+  const ended = async (watchId: string, state: string): Promise<void> => {
+    await h.sql.query(`UPDATE "watch" SET "state" = $2, "next_evaluate_at" = NULL WHERE "id" = $1`, [toUuid(watchId), state]);
+  };
+  const deliveryOf = async (watchId: string): Promise<string> => {
+    const { rows } = await h.sql.query<{ id: string }>(
+      `SELECT d."id" FROM "watch_delivery" d JOIN "watch_match" m ON m."id" = d."match_id" WHERE m."watch_id" = $1`,
+      [toUuid(watchId)],
+    );
+    assert.equal(rows.length, 1, 'a watch matched at create has exactly one delivery');
+    return rows[0].id;
+  };
+  const deadLetter = async (watchId: string, lastError: string | null, attempts = 1): Promise<void> => {
+    await h.sql.query(
+      `UPDATE "watch_delivery" SET "state" = 'DEAD_LETTER', "attempts" = $2::int, "last_error" = $3,
+              "dead_lettered_at" = now(), "delivered_at" = NULL WHERE "id" = $1`,
+      [await deliveryOf(watchId), attempts, lastError],
+    );
+  };
+  /** The turn a RESUME_SESSION watch's own end owed its observer: a delivery that hangs off the watch, not a Match. */
+  const endDelivery = async (watchId: string, state: string, lastError: string | null = null): Promise<void> => {
+    await h.sql.query(
+      `INSERT INTO "watch_delivery"("id","kind","watch_id","action","expiry_snapshot","state","attempts","last_error",
+                                    "delivered_at","dead_lettered_at")
+       VALUES (gen_random_uuid(), 'EXPIRY', $1, 'RESUME_SESSION',
+               '{"evaluatedAt":"2026-01-01T00:00:00.000Z","targets":[]}'::jsonb, $2::text, $3::int, $4,
+               CASE WHEN $2::text = 'DELIVERED' THEN now() END, CASE WHEN $2::text = 'DEAD_LETTER' THEN now() END)`,
+      [toUuid(watchId), state, lastError === null ? 0 : 1, lastError],
+    );
+  };
+
+  // What somebody has to look at, made newest first.
+  const needing: string[] = [];
+  const revoked = await made(watchBody(tasks([open])), 'a watch that lost access to a target');
+  await ended(revoked, 'REVOKED');
+  needing.push(revoked);
+
+  const unresolvable = await made(watchBody(tasks([open])), 'a watch whose targets were all deleted');
+  await ended(unresolvable, 'UNRESOLVABLE');
+  needing.push(unresolvable);
+
+  // A NOTIFY_USER watch has no waiting session, so no end of it is delivered: nothing else would say it ran out.
+  const expiredNotify = await made(watchBody(tasks([open])), 'a notify watch that ran out');
+  await ended(expiredNotify, 'EXPIRED');
+  needing.push(expiredNotify);
+
+  const refusedWake = await made(watchBody(tasks([done]), resumes), 'a wake the permission recheck refused');
+  await deadLetter(refusedWake, "PERMISSION_REVOKED: the observer session no longer belongs to the watch's owner, so it was not woken");
+  needing.push(refusedWake);
+
+  // Retryable failures that ran out of attempts head no code at all (ATTEMPTS_EXHAUSTED): there is no heading to read.
+  const exhausted = await made(watchBody(tasks([done])), 'a delivery that ran out of attempts');
+  await deadLetter(exhausted, null, WATCH_LIMITS.maxDeliveryAttempts);
+  needing.push(exhausted);
+
+  // A quiet code counts only where it heads the error; further along it is prose (shared `watchDeadLetterCodeOf`).
+  const prose = await made(watchBody(tasks([done])), 'a dead letter that only mentions a quiet code');
+  await deadLetter(prose, 'TURN_REFUSED: the queue refused the turn, and no WAKE_WITHDRAWN was involved');
+  needing.push(prose);
+
+  // `_` is a LIKE wildcard, so a pattern match — rather than the heading — would take this for the quiet code.
+  const lookalike = await made(watchBody(tasks([done])), 'a code a LIKE pattern would mistake for the quiet one');
+  await deadLetter(lookalike, 'WAKEXWITHDRAWN: a code this build does not know');
+  needing.push(lookalike);
+
+  const retrying = await made(watchBody(tasks([done])), 'a delivery whose attempts keep failing');
+  await h.sql.query(
+    `UPDATE "watch_delivery" SET "state" = 'PENDING', "attempts" = 3, "last_error" = 'LEASE_EXPIRED: the worker stopped',
+            "next_attempt_at" = now() + interval '1 minute' WHERE "id" = $1`,
+    [await deliveryOf(retrying)],
+  );
+  needing.push(retrying);
+
+  const endUndelivered = await made(watchBody(tasks([open]), resumes), 'a resume watch whose expiry never reached its session');
+  await ended(endUndelivered, 'EXPIRED');
+  await endDelivery(endUndelivered, 'DEAD_LETTER', "OBSERVER_SESSION_ENDED: the observer session's run is over (ENDED), and a watch does not revive it");
+  needing.push(endUndelivered);
+
+  // Ends nobody has to act on, made among them.
+  const quiet: string[] = [];
+  // Taken back on purpose before it ran: the one dead letter that is nobody's to look at.
+  const withdrawn = await made(watchBody(tasks([done]), resumes), 'a wake withdrawn before it ran');
+  await deadLetter(withdrawn, "WAKE_WITHDRAWN: the wake was withdrawn from the observer session's queue before a runner took it", 0);
+  quiet.push(withdrawn);
+
+  const expiredResume = await made(watchBody(tasks([open]), resumes), 'a resume watch whose expiry was delivered');
+  await ended(expiredResume, 'EXPIRED');
+  await endDelivery(expiredResume, 'DELIVERED');
+  quiet.push(expiredResume);
+
+  const delivered = await made(watchBody(tasks([done])), 'a match that was delivered');
+  await h.sql.query(
+    `UPDATE "watch_delivery" SET "state" = 'DELIVERED', "delivered_at" = now() WHERE "id" = $1`,
+    [await deliveryOf(delivered)],
+  );
+  quiet.push(delivered);
+
+  const stopped = await made(watchBody(tasks([open])), 'a watch its owner stopped');
+  expectStatus(await call(h, owner.bearer, 'POST', `/watches/${stopped}/cancel`), 200, 'cancel');
+  quiet.push(stopped);
+
+  // A first attempt that has not failed is not a retry, and a watch still watching is read by its own state.
+  quiet.push(await made(watchBody(tasks([done])), 'a delivery whose first attempt is still due'));
+  quiet.push(await made(watchBody(tasks([open])), 'a watch that is still watching'));
+
+  // What a busy account puts in front of them: more ends than one read answers with, every one of them newer.
+  await h.sql.query(
+    `INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at","next_evaluate_at")
+     SELECT gen_random_uuid(), $1, 'USER', '{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_TERMINAL"}'::jsonb,
+            'ONE_SHOT', 'NOTIFY_USER', 'CANCELLED', now() + interval '1 day', NULL
+       FROM generate_series(1, $2::int)`,
+    [owner.id, 105],
+  );
+  const strangers = await create(h, stranger, watchBody(tasks([await task(h, stranger.id, 'OPEN')])), "a stranger's watch");
+  await ended(strangers.id, 'REVOKED');
+
+  const limit: number = CONTRACT.attention.read.limit;
+  const newest = await call(h, owner.bearer, 'GET', '/watches');
+  expectStatus(newest, 200, 'the newest watches');
+  assert.equal(newest.body.length, limit, 'the newest list is full');
+  const inNewest = new Set(newest.body.map((watch: { id: string }) => watch.id));
+  assert.deepEqual([...needing, ...quiet].filter((id) => inNewest.has(id)), [], 'every fixture is past the newest list');
+
+  const answered = await call(h, owner.bearer, 'GET', '/watches?needsAttention=true');
+  expectStatus(answered, 200, 'the watches that need attention');
+  assert.deepEqual(
+    answered.body.map((watch: { id: string }) => watch.id),
+    needing,
+    'every watch that needs attention, newest first, and nothing else',
+  );
+
+  // What each was picked for reads back whole, through the view every other list answers with.
+  const read = answered.body.find((watch: { id: string }) => watch.id === refusedWake);
+  assert.equal(read.targets.length, 1, 'the read carries the watch, not an id');
+  assert.match(read.matches[0].deliveries[0].lastError, /^PERMISSION_REVOKED:/);
+
+  // Narrowed further, refused for anything but true, and one account's own.
+  const onlyRevoked = await call(h, owner.bearer, 'GET', '/watches?needsAttention=true&state=REVOKED');
+  assert.deepEqual(onlyRevoked.body.map((watch: { id: string }) => watch.id), [revoked]);
+  for (const value of ['false', '1', '']) {
+    expectStatus(await call(h, owner.bearer, 'GET', `/watches?needsAttention=${value}`), 400, `needsAttention=${value}`);
+  }
+  expectStatus(
+    await call(h, owner.bearer, 'GET', '/watches?needsAttention=true&state=SOMETIMES'),
+    400,
+    'a state the contract does not have',
+  );
+  const strangersRead = await call(h, stranger.bearer, 'GET', '/watches?needsAttention=true');
+  assert.deepEqual(strangersRead.body.map((watch: { id: string }) => watch.id), [strangers.id], "one account's read is its own");
+});
+
+test('the read of what needs attention is capped, and what it keeps is the newest', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'attention-cap');
+  const limit: number = CONTRACT.attention.read.limit;
+  // One more than it can answer with, each a minute older than the last. A cap is only honest if it is written down
+  // (contract `attention.read.limit`) and if what it keeps is the newest rather than whatever the planner reached first.
+  await h.sql.query(
+    `INSERT INTO "watch"("id","owner_id","observer_type","predicate","mode","action","state","expires_at",
+                         "next_evaluate_at","created_at")
+     SELECT gen_random_uuid(), $1, 'USER', '{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_TERMINAL"}'::jsonb,
+            'ONE_SHOT', 'NOTIFY_USER', 'REVOKED', now() + interval '1 day', NULL, now() - "n" * interval '1 minute'
+       FROM generate_series(1, $2::int) AS "n"`,
+    [owner.id, limit + 1],
+  );
+
+  const answered = await call(h, owner.bearer, 'GET', '/watches?needsAttention=true');
+  expectStatus(answered, 200, 'the watches that need attention');
+  const { rows } = await h.sql.query<{ id: string }>(
+    `SELECT "id" FROM "watch" WHERE "owner_id" = $1 ORDER BY "created_at" DESC, "id" DESC`,
+    [owner.id],
+  );
+  assert.equal(rows.length, limit + 1, 'the fixture wrote one more than the cap');
+  assert.deepEqual(
+    answered.body.map((watch: { id: string }) => toUuid(watch.id)),
+    rows.slice(0, limit).map((row) => row.id),
+    `the ${limit} newest of them, and the oldest left out`,
+  );
+});

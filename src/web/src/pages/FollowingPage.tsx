@@ -13,7 +13,10 @@ import {
   type WatchBucket,
 } from '../lib/watches';
 
-/** The most rows one `GET /watches` read answers with (WatchesService LIST_LIMIT), of every state or of one. */
+/**
+ * The most rows one `GET /watches` read answers with (WatchesService LIST_LIMIT), of every state, of one, or of
+ * those that need attention.
+ */
 export const FOLLOWING_LIST_LIMIT = 100;
 
 /** The states read on their own (lib/queries `watchesQuery`), each up to FOLLOWING_LIST_LIMIT. */
@@ -64,6 +67,19 @@ export function FollowingPage() {
   const liveCapped = LIVE_STATES.some(
     (state) => listed.filter((w) => w.state === state).length >= FOLLOWING_LIST_LIMIT,
   );
+
+  // What this tab cannot promise to hold whole. Each read answers with at most FOLLOWING_LIST_LIMIT watches: the
+  // live states and the watches that need attention are read on their own, so only the ended ones nobody has to
+  // act on are shown from the newest list alone.
+  const capNote =
+    tab === 'active'
+      ? liveCapped &&
+        `Showing the ${FOLLOWING_LIST_LIMIT} newest active watches and the ${FOLLOWING_LIST_LIMIT} newest paused ones.`
+      : tab === 'attention'
+        ? groups.attention.length >= FOLLOWING_LIST_LIMIT &&
+          `Showing the ${FOLLOWING_LIST_LIMIT} newest watches that need attention.`
+        : listed.length >= FOLLOWING_LIST_LIMIT &&
+          `Ended watches are shown from the ${FOLLOWING_LIST_LIMIT} most recent.`;
 
   useEffect(() => {
     if (!focusedId) return;
@@ -127,15 +143,7 @@ export function FollowingPage() {
           </div>
         )}
       </div>
-      {tab === 'active'
-        ? liveCapped && (
-            <div className="following-note">
-              Showing the {FOLLOWING_LIST_LIMIT} newest active watches and the {FOLLOWING_LIST_LIMIT} newest paused ones.
-            </div>
-          )
-        : listed.length >= FOLLOWING_LIST_LIMIT && (
-            <div className="following-note">Ended watches are shown from the {FOLLOWING_LIST_LIMIT} most recent.</div>
-          )}
+      {capNote && <div className="following-note">{capNote}</div>}
     </div>
   );
 }

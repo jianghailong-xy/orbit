@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WatchTargetView, WatchView } from '@orbit/shared';
+import { watchProblem } from '../lib/watches';
 import { SessionWatchBadges, SessionWatchStrip, TaskFollowedBy } from './WatchRelations';
 
 /**
@@ -65,10 +66,15 @@ const resumes = (observer: string) =>
 /** What a target's own row says, by target id, for the cases where the targets differ. */
 type TaskRow = { title?: string; status?: string; terminalReason?: string };
 
-/** Answers as WatchesService does, from `watches` listed newest first: the newest 100 of every state, or of one. */
+/**
+ * Answers as WatchesService does, from `watches` listed newest first: the newest 100 of every state, of one, or of
+ * those that need attention — which the server picks by the contract's `attention` rule, the one `watchProblem`
+ * files by (lib/watches.test).
+ */
 function serve(watches: WatchView[], rows: Record<string, TaskRow> = {}) {
   vi.mocked(api).mockImplementation((async (path: string) => {
     if (path === '/watches') return watches.slice(0, 100);
+    if (path === '/watches?needsAttention=true') return watches.filter((w) => watchProblem(w)).slice(0, 100);
     const state = /^\/watches\?state=([A-Z]+)$/.exec(path);
     if (state) return watches.filter((w) => w.state === state[1]).slice(0, 100);
     const row = /^\/tasks\/([^/]+)\/row$/.exec(path);

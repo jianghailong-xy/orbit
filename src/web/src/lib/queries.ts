@@ -575,10 +575,12 @@ export const pendingCriteriaDecisionsQuery = (projectId: string) =>
 
 /**
  * The owner's watches, newest first, as one list. `GET /watches` answers with the 100 newest of any
- * state, so a long history would push a live watch out of it: the two live states are read on their
- * own beside it — at most 100 each, as the Mac app reads them — and each watch is kept once. The
- * Following page, every watch card and the Following / Followed by relations on sessions and tasks are
- * all drawn from this one read, so a watch reads the same wherever it is shown. The control-plane
+ * state, so a long history would push a live watch out of it, and a failure nobody has seen yet with
+ * it: the two live states are read on their own beside it, and so are the watches that need attention
+ * (`?needsAttention=true`, contract `attention`) — at most 100 each, as the Mac app reads them — and
+ * each watch is kept once. The Following page, every watch card and the Following / Followed by
+ * relations on sessions and tasks are all drawn from this one read, so a watch reads the same
+ * wherever it is shown. The control-plane
  * stream nudges it on the session, approval and task events that can move a watch (useControlPlane);
  * the slow poll is for what no event reports — a deadline passing, or a delivery settling in a server
  * worker.
@@ -592,6 +594,7 @@ export const watchesQuery = () =>
           api<WatchView[]>('/watches'),
           api<WatchView[]>('/watches?state=ACTIVE'),
           api<WatchView[]>('/watches?state=PAUSED'),
+          api<WatchView[]>('/watches?needsAttention=true'),
         ]),
       ),
     refetchInterval: 60_000,

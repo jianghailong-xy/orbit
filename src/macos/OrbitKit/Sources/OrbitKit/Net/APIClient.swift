@@ -521,6 +521,22 @@ public final class APIClient: @unchecked Sendable {
     public func watches(state: WatchState? = nil) async throws -> [Watch] {
         try await get("watches", query: state.map { [URLQueryItem(name: "state", value: $0.rawValue)] } ?? [])
     }
+    /// `GET /watches?needsAttention=true`: the newest 100 watches that need attention (contract `attention`) — an
+    /// end nobody was told about, or a delivery that failed — whatever state each is in.
+    public func watchesNeedingAttention() async throws -> [Watch] {
+        try await get("watches", query: [URLQueryItem(name: "needsAttention", value: "true")])
+    }
+    /// Everything the Following page, the Watching card and the session rows draw from, as one list. Each read
+    /// answers with at most 100 watches, so the live states and the ones that need attention are read on their own
+    /// beside the newest of every state: neither a live watch nor a failure waiting to be seen is pushed out by
+    /// however many watches ended after it. `WatchIndex.merge` keeps each watch once, newest first.
+    public func followedWatches() async throws -> [Watch] {
+        let active = try await watches(state: .active)
+        let paused = try await watches(state: .paused)
+        let recent = try await watches()
+        let attention = try await watchesNeedingAttention()
+        return WatchIndex.merge([active, paused, recent, attention])
+    }
     public func watch(_ id: String) async throws -> Watch { try await get("watches/\(id)") }
     /// Edit the condition and/or the deadline of a live watch; answers with the watch as it now stands.
     public func updateWatch(_ id: String, _ req: UpdateWatchRequest) async throws -> Watch { try await patch("watches/\(id)", body: req) }

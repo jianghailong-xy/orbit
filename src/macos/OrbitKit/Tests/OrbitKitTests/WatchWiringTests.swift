@@ -107,6 +107,16 @@ final class WatchWiringTests: XCTestCase {
         XCTAssertTrue(compact.contains("case .watchDetail(let watchID): WatchDetailView(watchID: watchID)"))
     }
 
+    /// The model reads through OrbitKit's `followedWatches` — the live states, the newest of every state and the
+    /// watches that need attention — instead of keeping its own list of requests that could fall behind it.
+    func testTheWatchesModelReadsThroughTheOrbitKitRead() throws {
+        let load = try slice(source("WatchesModel.swift"),
+                             from: "func load() async {", to: "/// One watch the list doesn't hold")
+        XCTAssertTrue(code(load).contains("api.followedWatches()"), load)
+        XCTAssertFalse(code(load).contains("api.watches("),
+                       "the model reads every list through followedWatches, not one request at a time")
+    }
+
     func testAWatchRouteOpensTheWatchAndEventsNudgeTheList() throws {
         let app = try source("AppModel.swift")
         let route = try slice(app, from: "func route(to route: Route) {", to: "private func openSession(")

@@ -307,6 +307,21 @@
     }
   },
 
+  "attention": {
+    "why": "Section 3: a watch that stopped without anybody being told, or whose delivery failed, is what Watch exists to say out loud. None of these goes away by itself (only a redrive that delivers clears a dead letter), so whether a client can show one must not depend on how many watches were made after it.",
+    "states": ["REVOKED", "UNRESOLVABLE"],
+    "expiredActions": ["NOTIFY_USER"],
+    "deliveries": "A delivery of the watch, a Match's or its end's, that is a DEAD_LETTER whose code says needsAttention: true (deliveryGuards.deadLetterCodes), or that is PENDING or IN_FLIGHT with attempts above 0: a failed delivery being retried.",
+    "rule": "A watch needs attention when its state is one of states; when it EXPIRED and its action is one of expiredActions, the actions whose end nobody is told about (actions RESUME_SESSION endTurns.notifyUser); or when one of its deliveries is as deliveries says. Every client files such a watch under Needs attention.",
+    "live": "A live watch is read whole by its own state, so what a client adds under Needs attention for one, such as a deleted target or an evaluation that is not keeping up, is that client's own reading and not part of the read below.",
+    "read": {
+      "route": "GET /api/watches?needsAttention=true",
+      "limit": 100,
+      "answers": "The owner's watches that need attention, in any state, newest created first, at most limit: the cap every GET /api/watches read has. ?state= narrows it to one state. needsAttention takes no other value: anything but true is a 400.",
+      "clients": "Read beside GET /api/watches (the newest watches of every state), ?state=ACTIVE and ?state=PAUSED, each watch kept once, so a watch that needs attention stays under Needs attention however many watches were made after it."
+    }
+  },
+
   "progress": {
     "relation": "task_progress (migration 0271): one row per task, absent until the task first reports progress or is reopened",
     "fields": ["phase", "current", "total", "message", "revision", "lastProgressAt", "lifecycleEpoch", "epochStartedAt"],

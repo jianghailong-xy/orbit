@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
@@ -16,10 +16,22 @@ export class WatchesController {
     return this.watches.create(user.userId, dto);
   }
 
-  /** The caller's watches, newest first; `?state=ACTIVE` narrows the list to one state. */
+  /**
+   * The caller's watches, newest first; `?state=ACTIVE` narrows the list to one state. `?needsAttention=true`
+   * answers instead with the watches that need attention (contract `attention`) — an end nobody was told about,
+   * or a delivery that failed — however many watches were made after them.
+   */
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('state') state?: string) {
-    return this.watches.list(user.userId, state);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('state') state?: string,
+    @Query('needsAttention') needsAttention?: string,
+  ) {
+    if (needsAttention === undefined) return this.watches.list(user.userId, state);
+    if (needsAttention !== 'true') {
+      throw new BadRequestException('needsAttention is true or left out: there is no read of the watches nobody has to look at');
+    }
+    return this.watches.listNeedingAttention(user.userId, state);
   }
 
   /** The account's deliveries in one state, dead letters unless `?state=` names another: the operations entry. */

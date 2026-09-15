@@ -11,8 +11,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  WATCH_ATTENTION_EXPIRED_ACTIONS,
+  WATCH_ATTENTION_STATES,
   WATCH_DELIVERY_STATES,
   WATCH_LIMITS,
+  WATCH_QUIET_DEAD_LETTER_CODES,
   WATCH_STATES,
   WATCH_UNRETRYABLE_DEAD_LETTER_CODES,
   transientDbConflictBody,
@@ -350,13 +353,49 @@ export class WatchesService {
   }
 
   async list(ownerId: string, state?: string, scope: WatchScope = {}): Promise<WatchRow[]> {
-    if (state !== undefined && !(WATCH_STATES as readonly string[]).includes(state)) {
-      throw new BadRequestException(`state is one of ${WATCH_STATES.join(', ')}`);
-    }
+    assertListState(state);
     return this.prisma.watch.findMany({
       where: { ownerId, ...(state !== undefined ? { state } : {}), ...scopeWhere(scope) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: LIST_LIMIT,
+      select: WATCH_VIEW_SELECT,
+    });
+  }
+
+  /**
+   * The owner's watches that need attention (contract `attention`), newest first and at most LIST_LIMIT, in whatever
+   * state each is in and narrowed to one state when `state` is given: one that stopped REVOKED or UNRESOLVABLE, a
+   * NOTIFY_USER watch that expired with no session waiting to be told, and any watch with a delivery that
+   * dead-lettered under a code somebody has to look at or that is being retried after a failed attempt.
+   *
+   * None of those clears itself, so this is the read that does not depend on the watch still being among the newest
+   * LIST_LIMIT `list` answers with — an account that ends watches all day would otherwise push a failure off the
+   * list before anybody saw it. The rule is the contract's as shared transcribes it, and the picking is SQL so a
+   * dead letter nobody has to act on never takes a place in the answer: its code is the heading of `last_error`,
+   * read here as `watchDeadLetterCodeOf` reads it (and as the gauges in watch-metrics.ts already read it).
+   */
+  async listNeedingAttention(ownerId: string, state?: string): Promise<WatchRow[]> {
+    assertListState(state);
+    const needsLooking = Prisma.sql`(
+          (d."state" = 'DEAD_LETTER'
+            AND COALESCE(substring(d."last_error" FROM '^([A-Z][A-Z0-9_]*):'), '') <> ALL(${textArray(WATCH_QUIET_DEAD_LETTER_CODES.slice(0, 0))}))
+          OR (d."state" IN ('PENDING', 'IN_FLIGHT') AND d."attempts" > 0))`;
+    const picked = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT w."id"
+        FROM "watch" w
+       WHERE w."owner_id" = ${ownerId}::uuid
+         AND (${state ?? null}::text IS NULL OR w."state" = ${state ?? null}::text)
+         AND (w."state" = ANY(${textArray(WATCH_ATTENTION_STATES)})
+           OR (w."state" = 'EXPIRED' AND w."action" = ANY(${textArray(WATCH_ATTENTION_EXPIRED_ACTIONS)}))
+           OR EXISTS (SELECT 1 FROM "watch_match" m JOIN "watch_delivery" d ON d."match_id" = m."id"
+                       WHERE m."watch_id" = w."id" AND ${needsLooking})
+           OR EXISTS (SELECT 1 FROM "watch_delivery" d WHERE d."watch_id" = w."id" AND ${needsLooking}))
+       ORDER BY w."created_at" DESC, w."id" DESC
+       LIMIT ${LIST_LIMIT}::int`);
+    // Read back through the view every other list answers with, so one watch reads the same wherever it is shown.
+    return this.prisma.watch.findMany({
+      where: { ownerId, id: { in: picked.map((row) => row.id) } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: WATCH_VIEW_SELECT,
     });
   }
@@ -829,6 +868,21 @@ function isLapsedTransaction(error: unknown): boolean {
     && error.code === 'P2028'
     && /Unable to start a transaction in the given time|cannot be executed on an expired transaction/.test(error.message)
   );
+}
+
+/** The state a list read may narrow to, or the refusal that names the states there are. */
+function assertListState(state: string | undefined): void {
+  if (state !== undefined && !(WATCH_STATES as readonly string[]).includes(state)) {
+    throw new BadRequestException(`state is one of ${WATCH_STATES.join(', ')}`);
+  }
+}
+
+/**
+ * `ARRAY[…]::text[]` of a list the contract states, the empty list included: `IN ()` is a syntax error, and a
+ * contract list can legitimately go empty — no action whose expiry needs attention, say — without leaving invalid SQL.
+ */
+function textArray(values: readonly string[]): Prisma.Sql {
+  return values.length === 0 ? Prisma.sql`ARRAY[]::text[]` : Prisma.sql`ARRAY[${Prisma.join([...values])}]::text[]`;
 }
 
 /** The advisory lock an account's creates take turns under. */

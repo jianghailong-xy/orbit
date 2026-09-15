@@ -275,6 +275,19 @@ export function watchDeadLetterNeedsAttention(
 }
 
 /**
+ * The ends a watch needs attention for by its state alone, transcribed from the contract's `attention.states`: it
+ * stopped because it lost a target it could no longer read, or because every target was deleted, and either way it
+ * could not go on watching (contract §3). `GET /api/watches?needsAttention=true` reads by this and the two below.
+ */
+export const WATCH_ATTENTION_STATES: readonly WatchState[] = ['REVOKED', 'UNRESOLVABLE'];
+
+/**
+ * The actions whose watch needs attention once it EXPIRED, transcribed from the contract's `attention.expiredActions`:
+ * nobody waits on a NOTIFY_USER watch, so no end of it is delivered to anyone and nothing would say it ran out.
+ */
+export const WATCH_ATTENTION_EXPIRED_ACTIONS: readonly WatchAction[] = ['NOTIFY_USER'];
+
+/**
  * What a Match caused, and whether it worked. `attempts` counts the attempts that failed; the one that
  * reaches `WATCH_LIMITS.maxDeliveryAttempts` leaves a `DEAD_LETTER`, which keeps its `lastError`.
  */

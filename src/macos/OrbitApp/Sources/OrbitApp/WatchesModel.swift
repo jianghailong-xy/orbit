@@ -11,8 +11,9 @@ import OrbitKit
 @MainActor
 @Observable
 final class WatchesModel {
-    /// Newest first. The live states are fetched on their own so a long history can't push a live
-    /// watch out of the server's newest 100 (`WatchIndex.merge`).
+    /// Newest first. The live states and the watches that need attention are fetched on their own, so neither a
+    /// live watch nor a failure nobody has seen yet can be pushed out of the server's newest 100
+    /// (`APIClient.followedWatches`).
     private(set) var watches: [Watch] = []
     /// Observed session → its live watches, rebuilt with the list so a row finds its own in one lookup.
     private(set) var summaries: [String: WatchSessionSummary] = [:]
