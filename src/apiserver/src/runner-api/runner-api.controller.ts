@@ -234,6 +234,15 @@ const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
 // The checkout repair is seconds of local git, so this window only has to cover a runner that
 // went away between the click and picking the request up.
 const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
+// The durable event batch is the one transaction whose size grows with what the runner queued
+// while it could not reach us: a runner treats 5xx as retryable without a ceiling and flushes its
+// whole backlog per POST, so a long outage backlogs thousands of events into a single batch whose
+// compile, serialize and insert outlast the 5s interactive default long before the statement
+// itself would. Expired means the batch can never commit, the runner retries the same giant
+// batch, and the queue never drains — the 2026-09-15 wedge. Every write in this transaction is
+// retry-idempotent (see the events() comment), so a long timeout costs nothing but the timeout
+// itself.
+const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -4090,7 +4099,7 @@ export class RunnerApiController {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
       return { session, currentWorkAcknowledged };
-    }, loggedRetry(this.logger, 'runnerApi.events'));
+    }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
 
     // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they
