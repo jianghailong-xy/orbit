@@ -1,0 +1,134 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { navigateWithPaneSlide } from './paneTransition';
+import { MOBILE_QUERY } from './useMediaQuery';
+
+/**
+ * Which navigations get the push/pop slide, and what the stylesheet is handed to aim it with.
+ * The keyframes themselves live in index.css; this pins that the direction reaches them, that
+ * the route actually changes inside the transition's callback (an "after" snapshot of the old
+ * route would animate one screen to itself), and that every unsupported case still navigates.
+ */
+
+/** A phone, unless `reducedMotion` — the two queries paneTransition asks about. */
+const stubMedia = (opts: { phone: boolean; reducedMotion?: boolean }): void => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches:
+      query === MOBILE_QUERY
+        ? opts.phone
+        : query === '(prefers-reduced-motion: reduce)'
+          ? !!opts.reducedMotion
+          : false,
+    media: query,
+  }));
+};
+
+/** Stands in for the real API: runs the callback, and lets the test settle `finished` by hand. */
+const stubViewTransitions = (): { calls: number; finish: () => void } => {
+  const state = { calls: 0, finish: () => {} };
+  const finished = new Promise<void>((resolve) => {
+    state.finish = resolve;
+  });
+  Object.defineProperty(document, 'startViewTransition', {
+    configurable: true,
+    writable: true,
+    value: (callback: () => void) => {
+      state.calls += 1;
+      callback();
+      return { finished } as ViewTransition;
+    },
+  });
+  return state;
+};
+
+beforeEach(() => {
+  delete document.documentElement.dataset.paneNav;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete (document as { startViewTransition?: unknown }).startViewTransition;
+  delete document.documentElement.dataset.paneNav;
+});
+
+describe('navigateWithPaneSlide', () => {
+  it('marks the direction while the transition runs, and clears it once it finishes', async () => {
+    stubMedia({ phone: true });
+    const transition = stubViewTransitions();
+    const navigate = vi.fn(() => {
+      expect(
+        document.documentElement.dataset.paneNav,
+        'the stylesheet needs the direction before the "after" snapshot is taken',
+      ).toBe('push');
+    });
+
+    navigateWithPaneSlide('push', navigate);
+
+    expect(transition.calls).toBe(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.dataset.paneNav).toBe('push');
+
+    transition.finish();
+    await vi.waitFor(() => expect(document.documentElement.dataset.paneNav).toBeUndefined());
+  });
+
+  it('puts the destination pane on screen before the snapshot, in both directions', () => {
+    stubMedia({ phone: true });
+    stubViewTransitions();
+    const split = document.createElement('div');
+    split.className = 'workspace-split show-conversation';
+    document.body.append(split);
+    try {
+      // Which pane shows is one class, and the browser photographs the "after" state from this
+      // DOM. The router's own commit lands later — rendering is suspended inside the callback —
+      // so without this, going back animated the conversation sliding off a copy of itself.
+      navigateWithPaneSlide('pop', () => {
+        expect(split.className, 'the list must be showing when the snapshot is taken').toBe(
+          'workspace-split',
+        );
+      });
+      expect(split.className).toBe('workspace-split');
+
+      navigateWithPaneSlide('push', () => {
+        expect(split.className, 'the conversation must be showing by then').toBe(
+          'workspace-split show-conversation',
+        );
+      });
+      expect(split.className).toBe('workspace-split show-conversation');
+    } finally {
+      split.remove();
+    }
+  });
+
+  it('going back runs the same machinery in the pop direction', () => {
+    stubMedia({ phone: true });
+    stubViewTransitions();
+    navigateWithPaneSlide('pop', vi.fn());
+    expect(document.documentElement.dataset.paneNav).toBe('pop');
+  });
+
+  it.each([
+    ['on desktop, where both panes are on screen at once', { phone: false }],
+    ['when the reader asked for reduced motion', { phone: true, reducedMotion: true }],
+  ])('navigates without a transition %s', (_case, media) => {
+    stubMedia(media);
+    const transition = stubViewTransitions();
+    const navigate = vi.fn();
+
+    navigateWithPaneSlide('push', navigate);
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(transition.calls, 'nothing should animate here').toBe(0);
+    expect(document.documentElement.dataset.paneNav).toBeUndefined();
+  });
+
+  it('still navigates in a browser without the View Transition API', () => {
+    stubMedia({ phone: true });
+    const navigate = vi.fn();
+
+    navigateWithPaneSlide('push', navigate);
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.dataset.paneNav).toBeUndefined();
+  });
+});

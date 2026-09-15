@@ -9308,6 +9308,64 @@ button.composer-usage:focus-visible {
     color: var(--text-1);
   }
 
+  /* Session list <-> conversation: push and pop, instead of the bare display flip above.
+     There is nothing in the DOM to tween between those two states, so what animates is the
+     pair of full-viewport snapshots the View Transition API takes; lib/paneTransition.ts
+     starts it and puts the direction on <html> for the duration. Snapshots are also why the
+     vanishing top bar behaves: the outgoing image still carries its 48px band and the
+     incoming one never had it, so each screen travels as the thing the reader was looking at.
+     Reduced motion never gets here — paneTransition.ts declines to start a transition, which
+     leaves the instant swap. */
+  @keyframes pane-enter-from-right {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes pane-exit-to-left {
+    to {
+      transform: translateX(-25%);
+      filter: brightness(0.82);
+    }
+  }
+  @keyframes pane-enter-from-left {
+    from {
+      transform: translateX(-25%);
+      filter: brightness(0.82);
+    }
+  }
+  @keyframes pane-exit-to-right {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  /* The UA cross-fades the two snapshots and blends them additively; these are opaque screens
+     sliding over one another, so both of those defaults have to go. */
+  html[data-pane-nav]::view-transition-old(root),
+  html[data-pane-nav]::view-transition-new(root) {
+    animation-duration: 260ms;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+    animation-fill-mode: both;
+    mix-blend-mode: normal;
+  }
+  html[data-pane-nav='push']::view-transition-old(root) {
+    animation-name: pane-exit-to-left;
+  }
+  html[data-pane-nav='push']::view-transition-new(root) {
+    animation-name: pane-enter-from-right;
+    box-shadow: -10px 0 28px rgba(0, 0, 0, 0.12);
+  }
+  /* Going back, the conversation is the screen that moves, so it has to stay on top — the list
+     underneath merely eases out of the parallax offset it was pushed to. */
+  html[data-pane-nav='pop']::view-transition-old(root) {
+    z-index: 2;
+    animation-name: pane-exit-to-right;
+    box-shadow: -10px 0 28px rgba(0, 0, 0, 0.12);
+  }
+  html[data-pane-nav='pop']::view-transition-new(root) {
+    z-index: 1;
+    animation-name: pane-enter-from-left;
+  }
+
   /* Task detail: full-screen overlay instead of a side column. */
   .task-detail-panel {
     position: fixed;

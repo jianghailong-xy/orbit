@@ -38,6 +38,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { navigateWithPaneSlide } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
@@ -4373,7 +4374,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // workspace, so resolve it from the open session (scopeWorkspaceId), then the first workspace.
   const goNew = (): void => {
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`);
+    navigateWithPaneSlide('push', () =>
+      navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`),
+    );
     // No setText here: the per-target switch effect restores the saved 'new' draft, and
     // blanking would instead clobber the *outgoing* session's draft (text hasn't moved yet).
     // Drop the caret into the composer so the task can be typed straight away — both the
@@ -5267,7 +5270,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         setSwipeOpen(null); // a tap anywhere on an open row just closes it
                         return;
                       }
-                      if (openable) navigate(`/sessions/${encodeId(s.id)}`);
+                      if (openable)
+                        navigateWithPaneSlide('push', () =>
+                          navigate(`/sessions/${encodeId(s.id)}`),
+                        );
                     }}
                     onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
                     onTouchMove={onRowTouchMove}
@@ -5434,7 +5440,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               aria-label="Back to sessions"
               onClick={() => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+                navigateWithPaneSlide('pop', () =>
+                  navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`),
+                );
               }}
             >
               <ArrowLeftOutlined />
