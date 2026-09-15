@@ -742,6 +742,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        at all, so it is not another writer of the DONE fence. The production catalog was read
   //        before the drop: the index had never been scanned (`idx_scan = 0`) while its unique
   //        twin carried 13.7M.
+  //   0278 added `project_open_item` and `project_open_item_delivery` — the exception items of the
+  //        integration-line contract, and where each was queued — plus one constant-default column on
+  //        `project`, `exception_escalation_seconds`. Read against every claim above: the two tables
+  //        are its own, and the only preserved relations it names are `project` and `task`, which it
+  //        reaches by ADDing that one column and by pointing two foreign keys at unique keys they
+  //        already had. No column of either is dropped or rewritten, and a referential action is not
+  //        a write. It carries no DML of any kind — no `INSERT INTO`, no `UPDATE ... SET`, no
+  //        `DELETE FROM` — so no stored task, criterion or acceptance row can move by one byte, and
+  //        the 0177 pair and the `task_completion_criterion` labels are out of its reach (it creates
+  //        no type and alters none). Its one function and trigger, `project_open_item_terminal_guard`,
+  //        is BEFORE UPDATE on its own new table and refuses rewrites of a resolved item: it writes
+  //        nothing, names none of the six preserved triggers or functions, and is not a second writer
+  //        of the DONE fence. Nothing it creates uses the `project_acceptance_` prefix or the word
+  //        `judgment`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -784,7 +798,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0274_session_import_source',
       '0275_claude_history_import',
       '0276_task_list_pause_epoch',
-      '0277_drop_run_event_duplicate_index'],
+      '0277_drop_run_event_duplicate_index',
+      '0278_project_open_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

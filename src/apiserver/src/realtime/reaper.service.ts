@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { RunStatus, TaskStatus } from '@prisma/client';
 import {
   AgentProvider,
@@ -28,6 +28,8 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
+import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -104,6 +106,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    /** Hands the exception items this sweep opens to whoever is responsible for them (§4.4). */
+    @Optional() private readonly openItems?: ProjectOpenItemService,
   ) {}
 
   onModuleInit(): void {
@@ -274,6 +278,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               // session id, and therefore a new worktree and a new branch, with the uncommitted
               // work left behind in the old one.
               armRetry: !s.taskId || !s.task?.autoRunWhenReady,
+              taskFailure: 'ATTEMPT_LOST_RUNNER_OFFLINE',
             });
           }
           continue;
@@ -297,7 +302,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             s.assignedRunnerId,
             s.taskId,
             `${provider} runtime not initialized`,
-            { expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true },
+            {
+              expectedStatuses: [RunStatus.RUNNING],
+              onlyIfNotCancelling: true,
+              taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
+            },
           );
           continue;
         }
@@ -322,6 +331,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               failureDetail: text,
               expectedStatuses: [RunStatus.AWAITING_INPUT],
               onlyIfNotCancelling: true,
+              taskFailure: 'REAPED_API_ERROR',
             });
             continue;
           }
@@ -378,6 +388,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       /** Hand this session to AutoRetryService instead of leaving it for the user to
        *  re-send by hand. Only for a finalize that says nothing about the work itself. */
       armRetry?: boolean;
+      /**
+       * How this attempt ended, for the project's exception item (contract §4.3 D). Present on every
+       * branch that ends a run badly — including the two that put the task back in the pool rather
+       * than writing FAILED, because an attempt that was lost is still an attempt that failed and
+       * the task going quiet is exactly what nobody hears about. Absent for a cancel somebody asked
+       * for: that ending says nothing about the work.
+       */
+      taskFailure?: TaskFailureHow;
     } = {},
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -444,13 +462,22 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         code: 'OBSERVER_SESSION_ENDED',
         ending: `reaped as ${status}: ${reason}`,
       });
+      // And an exception item queued for this conversation (projects/project-open-item.ts).
+      await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
       const taskReclaimed = taskId && status !== RunStatus.SUCCEEDED
-        ? await reclaimStalledTask(tx, taskId, resetTaskTo)
+        ? await reclaimStalledTask(
+            tx,
+            taskId,
+            resetTaskTo,
+            opts.taskFailure
+              ? { sessionId, how: opts.taskFailure, error: opts.failureDetail ?? reason }
+              : undefined,
+          )
         : false;
       // For a genuine failure, record it on the task timeline (independent of whether
       // the task was IN_PROGRESS, so a run that never reached IN_PROGRESS is covered).
@@ -468,7 +495,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.
-    if (outcome.taskReclaimed && taskId) this.realtime.publishTaskChanged(sessionId, taskId);
+    if (outcome.taskReclaimed && taskId) {
+      this.realtime.publishTaskChanged(sessionId, taskId);
+      // And the exception item this sweep opened goes to whoever is responsible for it (§4.4 X-D4 1).
+      await this.openItems?.deliverForTasks([taskId]);
+    }
     if (outcome.currentWorkTerminalized > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);
     }

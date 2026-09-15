@@ -129,6 +129,7 @@ import {
   resolveProjectBlocker,
   type BlockerResolver,
 } from './project-blocker-resolution';
+import { ProjectOpenItemService } from './project-open-item.service';
 import {
   readCriterionIndependence,
   type CriterionIndependenceAnswer,
@@ -807,6 +808,10 @@ export class ProjectsService {
     // and it is defaulted for the same reason again. `RealtimeModule` is global, so Nest injects it
     // by type without a new import.
     private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
+    // Only `coordinator` needs it, for the same reason and with the same default: when a project's
+    // coordinator conversation is replaced, whatever its exceptions were owed to the previous one is
+    // owed to this one (contract §4.4 X-D4 2).
+    private readonly openItems: ProjectOpenItemService = undefined as unknown as ProjectOpenItemService,
   ) {}
 
   /**
@@ -3646,6 +3651,9 @@ export class ProjectsService {
       this.sessions?.announceProjectSessionChanged?.(project.coordinatorSessionId);
     }
     this.sessions?.announceProjectSessionChanged?.(session.id);
+    // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
+    // everything still waiting is handed over rather than left addressed to the conversation before.
+    await this.openItems?.deliverOwed(id);
     return { sessionId: session.id, created: true, workspaceId: runIn };
   }
 

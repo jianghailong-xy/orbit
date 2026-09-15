@@ -8,6 +8,7 @@ import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
@@ -53,6 +54,7 @@ import { WakeDispositionService } from './wake-disposition.service';
   providers: [
     CoordinatorWakeService,
     CompletionInputRouter,
+    ProjectOpenItemService,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
     CoordinatorDeliveryService,
@@ -65,6 +67,7 @@ import { WakeDispositionService } from './wake-disposition.service';
   exports: [
     CoordinatorWakeService,
     CompletionInputRouter,
+    ProjectOpenItemService,
     CoordinatorConvergenceService,
     CoordinatorJudgmentService,
     CoordinatorDeliveryService,

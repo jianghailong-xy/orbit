@@ -58,6 +58,8 @@ import {
   applyTaskAggregations,
   collectAggregationScope,
 } from '../projects/task-aggregation-writer';
+import { recordTaskFailure } from '../projects/project-open-item';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -1500,15 +1502,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * wants a projection builds one and drives it.
      */
     pauseProjector?: TaskListPauseProjectorService,
+    /**
+     * A project's exception items (contract §4): this door opens one when a run files its own FAILED,
+     * and closes the ones whose task has moved on. Optional in the signature for the same reason as
+     * the two above — the specs and harnesses that build this service by hand pass what they test.
+     */
+    openItems?: ProjectOpenItemService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
+    this.openItems = openItems;
   }
 
   private readonly handoffs: ProjectHandoffService;
   private readonly completionInputs?: CompletionInputRouter;
   private readonly pauseProjector?: TaskListPauseProjectorService;
+  private readonly openItems?: ProjectOpenItemService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -3379,6 +3389,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       [task.id, task.parentTaskId, dto.supersedesTaskId],
       [dto.supersedesTaskId, task.verifiesTaskId],
     );
+    // A successor is what answers the failure of the attempt it replaces (contract §4.2).
+    if (dto.supersedesTaskId) await this.openItems?.resolveByFact([dto.supersedesTaskId]);
     return task;
   }
 
@@ -8307,6 +8319,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
             }
+            // A run's conservative self-report is a failure like any other, and the project hears
+            // about it through the same item as every other door (contract §4.3 E). The attempt it is
+            // about is the session that wrote it, when that session is a run of this task.
+            if (dto.status === TaskStatus.FAILED && before.status !== TaskStatus.FAILED) {
+              const attempt = actingSessionId
+                ? await tx.session.findFirst({
+                    where: { id: actingSessionId, taskId: id },
+                    select: { id: true },
+                  })
+                : null;
+              await recordTaskFailure(tx, {
+                taskId: id,
+                sessionId: attempt?.id ?? null,
+                how: 'REPORTED_FAILED',
+              });
+            }
             if (dependsOnTaskIds !== undefined) {
               await tx.taskDependency.deleteMany({ where: { taskId: id } });
               if (dependsOnTaskIds.length) {
@@ -8423,6 +8451,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // And the exception half of the same committed write: this door is where a run files its own
     // conservative FAILED, and where a task whose attempt already ended is edited again.
     await this.deliverTaskExceptions([id]);
+    // The same committed write, read as the project's exceptions: a task that moved on — done,
+    // cancelled, replaced, being attempted again — answers whatever was open about it, and a FAILED
+    // this door just filed is handed to whoever is responsible for it (contract §4.2, §4.4).
+    await this.openItems?.resolveByFact([id]);
+    await this.openItems?.deliverForTasks([id]);
     const changedFields = Object.keys(dto).sort();
     const updateIdentity = createHash('sha256')
       .update(JSON.stringify(changedFields.map((field) => [
@@ -12037,6 +12070,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.clearFailedForRetry(ownerId, target.taskId).catch((e) =>
         this.logger.warn(`clearFailedForRetry for task ${target.taskId} failed: ${e?.message ?? e}`));
     }
+    // A run is away on this task, which answers the exception its last failure opened (§4.2 RETRIED).
+    await this.openItems?.resolveByFact([target.taskId]);
     // The run is away, so the appointment has been kept — including when this call IS the button
     // that superseded it. A future run_at is deliberately not a veto on this path: "the earliest
     // time it starts by itself" says nothing about a person deciding to start it now, and a Run

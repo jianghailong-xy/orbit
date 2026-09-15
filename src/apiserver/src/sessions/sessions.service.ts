@@ -155,6 +155,7 @@ import {
   terminalizePendingCurrentWorkSteers,
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
+import { returnQueuedTurns } from '../projects/project-open-item';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -4298,6 +4299,9 @@ export class SessionsService {
       // here — every one of them, because an interrupt drops the whole queue and not one named turn
       // (runner-api/wake-turn-withdraw.ts). A refusal below rolls this back too.
       await settleUnrunWakeTurns(tx, id, { interrupted: true });
+      // An exception item queued behind the interrupted turn is taken back unrun. The conversation
+      // lives on, so the item stays the coordinator's and is delivered again when its next turn ends.
+      await returnQueuedTurns(tx, id, { code: 'TURN_INTERRUPTED' });
       if (protectedTargetIds.length > 0) {
         // Target FKs intentionally prevent individual deletion. Retire an undelivered seed in
         // place so its attachments and clientTurnId receipt remain auditable.
@@ -4630,6 +4634,8 @@ export class SessionsService {
       // the job wakes and the due wakeup settled onto it, which the delete alone would leave pointing
       // at a turn that is gone (runner-api/wake-turn-withdraw.ts). Refusals below roll this back too.
       await settleUnrunWakeTurns(tx, id, { turnId });
+      // Same for an exception item's turn withdrawn from the queue: taken back unrun, still owed.
+      await returnQueuedTurns(tx, id, { code: 'TURN_WITHDRAWN', turnId });
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {
@@ -5332,6 +5338,9 @@ export class SessionsService {
         code: 'OBSERVER_SESSION_ENDED',
         ending: `an end was requested: ${reason}`,
       });
+      // An exception item queued for this project's coordinator goes back to being owed, and to the
+      // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
+      await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },

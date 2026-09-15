@@ -1,5 +1,7 @@
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 
+import { TaskFailureHow, recordTaskFailure } from '../projects/project-open-item';
+
 /** Durable task-timeline signal emitted when a reserved L0 turn cannot yield a comparison. */
 export const EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE =
   'EXECUTABLE_ACCEPTANCE_UNAVAILABLE';
@@ -33,11 +35,18 @@ export const TASK_OCCUPYING: RunStatus[] = [
  * counted as occupying. Returns whether the Task status actually moved, so the caller can publish
  * a post-commit dependent-row invalidation without announcing a no-op or publishing in a retrying
  * transaction.
+ *
+ * `failure` is how this attempt ended, when it ended badly. Passing it opens the project's exception
+ * item for the failure in this same transaction (`projects/project-open-item.ts`, contract §4.3) —
+ * the three doors that reclaim a task through here (turn completion, runner finalize, the reaper)
+ * therefore cannot record one and forget the other. It is omitted where the ending says nothing
+ * about the work: a cancel somebody asked for, or a task nobody's project owns.
  */
 export async function reclaimStalledTask(
   tx: Prisma.TransactionClient,
   taskId: string,
   resetTo: TaskStatus = TaskStatus.OPEN,
+  failure?: { sessionId: string | null; how: TaskFailureHow; error?: string | null },
 ): Promise<boolean> {
   const occupied = await tx.session.count({
     where: { taskId, status: { in: TASK_OCCUPYING } },
@@ -47,6 +56,14 @@ export async function reclaimStalledTask(
     where: { id: taskId, status: 'IN_PROGRESS' },
     data: { status: resetTo },
   });
+  if (changed.count > 0 && failure) {
+    await recordTaskFailure(tx, {
+      taskId,
+      sessionId: failure.sessionId,
+      how: failure.how,
+      error: failure.error,
+    });
+  }
   return changed.count > 0;
 }
 

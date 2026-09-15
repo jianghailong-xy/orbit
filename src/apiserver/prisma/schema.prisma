@@ -1283,6 +1283,8 @@ model Session {
   tagLinks              SessionTagLink[]
   // Append-only record of every merge attempted for this session's branch, however it was made.
   mergeReceipts         SessionMergeReceipt[]
+  /// Exception items queued on this conversation (migration 0278).
+  openItemDeliveries    ProjectOpenItemDelivery[]
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
@@ -1886,6 +1888,11 @@ model Project {
   /// cannot switch the breaker off for every project at once.
   unboundedAuthorizedBy Json? @map("unbounded_authorized_by")
 
+  /// How long an exception item may wait on this project's coordinator before it goes to the account
+  /// owner (docs/project-integration-line-contract.md §4.1, migration 0278). Frozen into each item's
+  /// `escalateAt` when it is created, so changing it moves only items created afterwards.
+  exceptionEscalationSeconds Int @default(7200) @map("exception_escalation_seconds")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -1920,6 +1927,10 @@ model Project {
   /// design: a project with no binding is not a project with a broken one — its tasks resolve no
   /// SOURCE at all and keep the pre-0231 behaviour exactly (`docs/project-source-contract.md` SR5).
   codebases ProjectCodebase[]
+
+  /// The exceptions somebody has to act on, and where they were queued (migration 0278).
+  openItems          ProjectOpenItem[]
+  openItemDeliveries ProjectOpenItemDelivery[]
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off, cf. `task_id_owner_id_key`.
@@ -2032,6 +2043,92 @@ model ProjectCodebase {
   @@index([projectId], map: "project_codebase_project_idx")
   @@index([authorityRunnerId], map: "project_codebase_authority_runner_idx")
   @@map("project_codebase")
+}
+
+/// An exception somebody has to act on (docs/project-integration-line-contract.md §4.1, migration
+/// 0278): a task that failed, an integration that conflicted or failed its checks, a promotion waiting
+/// for the owner, a question from the coordinator, a pause of the spend fuse.
+///
+/// `assignee` is who acts — the project's coordinator, for what needs judgment, or the account owner,
+/// for what needs authority or what nobody else can take — and `assigneeReason` says why. `kind`,
+/// `state`, `assignee`, `assigneeReason`, `resolution` and `resolvedBy` are closed sets held by CHECKs in
+/// the migration and spelled in `projects/project-open-item.ts`. A resolved or superseded row is final
+/// (`project_open_item_terminal_guard`). At most one OPEN item of a project holds a `dedupeKey`, and the
+/// task lookup index is `WHERE task_id IS NOT NULL`: both partial, which this schema cannot spell.
+model ProjectOpenItem {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  ownerId   String  @map("owner_id") @db.Uuid
+  project   Project @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+
+  kind           String
+  state          String @default("OPEN")
+  assignee       String
+  assigneeReason String @map("assignee_reason")
+
+  taskId String? @map("task_id") @db.Uuid
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// The attempt the item came from. History rather than a foreign key: a session purged from Trash
+  /// leaves its items as they were.
+  sessionId        String? @map("session_id") @db.Uuid
+  integrationJobId String? @map("integration_job_id") @db.Uuid
+  promotionId      String? @map("promotion_id") @db.Uuid
+  fuseEpisodeId    String? @map("fuse_episode_id") @db.Uuid
+  askedBySessionId String? @map("asked_by_session_id") @db.Uuid
+
+  dedupeKey String @map("dedupe_key")
+  /// Written once from rows that do not change, so a delivery built from them reads the same on replay.
+  title     String
+  payload   Json
+
+  waitingSince DateTime  @map("waiting_since") @db.Timestamptz(3)
+  /// Millisecond precision on purpose: a delivery's turn key carries this instant.
+  assignedAt   DateTime  @map("assigned_at") @db.Timestamptz(3)
+  escalateAt   DateTime? @map("escalate_at") @db.Timestamptz(3)
+  escalatedAt  DateTime? @map("escalated_at") @db.Timestamptz(3)
+  remindAt     DateTime? @map("remind_at") @db.Timestamptz(3)
+  remindedAt   DateTime? @map("reminded_at") @db.Timestamptz(3)
+
+  resolution          String?
+  resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolvedBy          String?   @map("resolved_by")
+  resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
+  resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  resolutionNote      String?   @map("resolution_note")
+  answer              Json?
+  supersededByItemId  String?   @map("superseded_by_item_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  deliveries ProjectOpenItemDelivery[]
+
+  @@index([projectId, state, waitingSince], map: "project_open_item_project_state_idx")
+  @@map("project_open_item")
+}
+
+/// One queueing of an exception item on a conversation (migration 0278). The turn it wrote is the one
+/// keyed `clientTurnId` on `sessionId`; "delivered" is that turn's `deliveredAt`, and `returnedAt` says
+/// the turn was taken off the queue before a runner took it (`returnQueuedTurns`).
+model ProjectOpenItemDelivery {
+  id        String          @id @default(uuid(7)) @db.Uuid
+  itemId    String          @map("item_id") @db.Uuid
+  item      ProjectOpenItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  projectId String          @map("project_id") @db.Uuid
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sessionId String          @map("session_id") @db.Uuid
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// ITEM for the item itself; ANSWER for an owner's answer to the coordinator's question.
+  purpose      String
+  clientTurnId String    @map("client_turn_id")
+  turnId       String?   @map("turn_id") @db.Uuid
+  returnedAt   DateTime? @map("returned_at") @db.Timestamptz(3)
+  returnCode   String?   @map("return_code")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([itemId, sessionId, purpose], map: "project_open_item_delivery_item_session_purpose_key")
+  @@index([sessionId, clientTurnId], map: "project_open_item_delivery_session_turn_idx")
+  @@map("project_open_item_delivery")
 }
 
 /// One CURRENT, authored project acceptance criterion.
@@ -3510,6 +3607,9 @@ model Task {
   /// same trade `session_quota_retry_at_idx` and 0108's pair already carry. It is what keeps the
   /// index sized to the scheduled tasks rather than to the six figures of tasks that are not.
   @@index([runAt], map: "task_run_at_idx")
+  /// The exception items about this task (migration 0278).
+  openItems ProjectOpenItem[]
+
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this
   /// subject" and "how many has it had" — key on this column.

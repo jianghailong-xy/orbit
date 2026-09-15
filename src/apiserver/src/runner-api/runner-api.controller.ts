@@ -145,6 +145,8 @@ import {
 } from '../sessions/current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
+import { recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
   executableAcceptanceFailureReason,
@@ -541,6 +543,12 @@ export class RunnerApiController {
      * through Nest without one; RunnerApiModule imports SessionsModule, so production always has it.
      */
     @Optional() private readonly sessions?: SessionsService,
+    /**
+     * Hands a project's exception items to the conversation that coordinates it, after the
+     * transaction that opened them (contract §4.4). `@Optional()` for the same reason as the rest of
+     * this list: the specs that build this controller by hand pass what their case is about.
+     */
+    @Optional() private readonly openItems?: ProjectOpenItemService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -3387,6 +3395,15 @@ export class RunnerApiController {
             // outcome rather than a record about the task. Diagnosis is reading the session.
             acceptanceFailureReason =
               executableAcceptanceFailureReason(actualExitCode, expectedExitCode);
+            // And the project's own record of it: an exception with an assignee, opened in the
+            // transaction that wrote the FAILED (contract §4.3 A).
+            await recordTaskFailure(tx, {
+              taskId: lockedAcceptanceTask.id,
+              sessionId,
+              how: 'ACCEPTANCE_EXIT_MISMATCH',
+              exitCode: actualExitCode,
+              expectedExitCode,
+            });
           }
         }
       }
@@ -3649,6 +3666,9 @@ export class RunnerApiController {
           code: 'OBSERVER_SESSION_ENDED',
           ending: 'its running turn failed',
         });
+        // An exception item queued for this conversation goes the same way: taken back unrun, and —
+        // because this run is over — to the account owner (projects/project-open-item.ts).
+        await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -3657,8 +3677,13 @@ export class RunnerApiController {
       }
       let taskReclaimed = false;
       if (failTask) {
-        // Surface the abandoned task for a human.
-        taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
+        // Surface the abandoned task for a human, and open its project's exception item in this same
+        // transaction (contract §4.3 B).
+        taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED, {
+          sessionId,
+          how: 'RUN_FAILED',
+          error: dto.result || 'run failed',
+        });
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
@@ -3699,6 +3724,8 @@ export class RunnerApiController {
         `successor dispatch after executable completion ${finalized.taskId} failed: `
         + `${error instanceof Error ? error.message : error}`,
       ));
+      // A task that is done answers whatever exception was open about it (contract §4.2).
+      await this.openItems?.resolveByFact([finalized.taskId]);
     }
     // The exception half of that same edge. `taskCompleted` is true only for a DERIVED DONE, so
     // three real endings reach nothing above: an acceptance code that disagreed and derived FAILED,
@@ -3720,11 +3747,18 @@ export class RunnerApiController {
           `task exception delivery after turn completion ${finalized.taskId} failed: `
           + `${error instanceof Error ? error.message : error}`,
         ));
+      // The exception item that same transaction opened, handed to whoever is responsible for it
+      // (contract §4.4 X-D4 1).
+      await this.openItems?.deliverForTasks([finalized.taskId]);
     }
     // TURN_END events are flushed before /turn-complete, so their control summary can still see
     // RUNNING. Publish the committed row for every applied non-steer completion; task-bound
     // summaries carry taskId and clear the running overlay without waiting for reconciliation.
     if (finalized.applied && !finalized.steer) {
+      // A turn of this conversation has ended, which is where anything a project still owes it is
+      // handed over — including what was recorded while it was busy, and what the door that recorded
+      // it never got to deliver (contract §4.4 X-D4 3).
+      await this.openItems?.deliverOwedTo(sessionId);
       this.realtime.publishSessionUpdated(sessionId);
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
@@ -4431,6 +4465,8 @@ export class RunnerApiController {
         code: 'OBSERVER_SESSION_ENDED',
         ending: `the runner finalized it as ${effectiveStatus}`,
       });
+      // And an exception item queued for this conversation (projects/project-open-item.ts).
+      await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4451,6 +4487,15 @@ export class RunnerApiController {
           tx,
           current.taskId,
           effectiveStatus === RunStatus.FAILED ? TaskStatus.FAILED : TaskStatus.OPEN,
+          // A genuine failure also opens the project's exception item, in this transaction (contract
+          // §4.3 C). A cancel does not: nobody's judgment is owed about work somebody stopped.
+          effectiveStatus === RunStatus.FAILED
+            ? {
+                sessionId,
+                how: 'RUNNER_FINALIZED_FAILED',
+                error: dto.error || dto.result || 'run failed',
+              }
+            : undefined,
         );
         // Genuine failure (not a user cancel): leave a note on the task explaining it.
         if (effectiveStatus === RunStatus.FAILED) {
@@ -4487,6 +4532,9 @@ export class RunnerApiController {
       && outcome.taskId
     ) {
       this.realtime.publishTaskChanged(sessionId, outcome.taskId);
+      // The exception item this finalize opened, handed over (contract §4.4 X-D4 1). Before today
+      // this door reclaimed the task and told nobody at all.
+      await this.openItems?.deliverForTasks([outcome.taskId]);
     }
     if ('currentWorkTerminalized' in outcome && (outcome.currentWorkTerminalized ?? 0) > 0) {
       this.realtime.publishQueuedTurnsChanged(sessionId);

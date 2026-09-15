@@ -32,6 +32,7 @@ import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
 import { HANDOFF_STORED_STATES, type HandoffStoredState } from './project-handoff';
 
@@ -46,6 +47,9 @@ export class ProjectsController {
     private readonly handoffs: ProjectHandoffService,
     private readonly attempts: SessionAttemptService,
     private readonly checkpoints: TaskCheckpointService,
+    /** What this project owes somebody a decision about (contract §4.8). Last in the list, so the
+     *  specs that build this controller by hand keep constructing it exactly as they did. */
+    private readonly openItems: ProjectOpenItemService,
   ) {}
 
   /**
@@ -413,6 +417,17 @@ export class ProjectsController {
    * `BLOCKER_ALREADY_RESOLVED` and keeps the resolution it has — 0125's trigger, widened by 0269,
    * refuses any rewrite of it as well.
    */
+  /**
+   * What this project owes somebody a decision about (contract §4.8), in the two groups that say who
+   * acts: `needsYou` is the account owner's — escalations, and everything no coordinator can take —
+   * and `withCoordinator` is what its coordinator conversation is handling. Oldest first in both,
+   * each row carrying how long it has waited and, while it is the coordinator's, when it stops being.
+   */
+  @Get(':id/open-items')
+  openItemsOf(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.openItems.list(user.userId, id);
+  }
+
   @Post(':id/blockers/:blockerId/resolve')
   resolveBlocker(
     @CurrentUser() user: AuthUser,

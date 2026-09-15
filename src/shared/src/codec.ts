@@ -73,6 +73,16 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'rootSessionId',
   'creatorSessionId',
   'authorSessionId',
+  // An exception item, the work it is about and the rows other tasks of the integration-line contract
+  // attach to it (migration 0273). Every one of them addresses a row a caller may be handed and hand
+  // back: the item in `GET /projects/:id/open-items`, and the job, promotion or pause behind it.
+  'itemId',
+  'askedBySessionId',
+  'resolvedBySessionId',
+  'supersededByItemId',
+  'integrationJobId',
+  'promotionId',
+  'fuseEpisodeId',
   'ownerSessionId',
   // The person whose EVIDENCE_JUDGMENT event supplied a task's completion judgment. It is returned
   // beside the event and names the user row exactly as ownerId/userId do.
