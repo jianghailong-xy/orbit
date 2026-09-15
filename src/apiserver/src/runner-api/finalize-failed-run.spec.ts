@@ -64,6 +64,13 @@ function makeController(
     // Only read when the terminal message is a quota refusal; this runner reports no snapshot,
     // so the reset moment has to come from the message itself.
     runner: { findUnique: async () => ({ planUsage: null }) },
+    // The drain returns any item turn still queued on the conversation it is ending; this one has
+    // none, so it writes nothing (contract §4.4 X-D5).
+    projectOpenItemDelivery: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
+    },
+    projectOpenItem: { updateMany: async () => ({ count: 0 }) },
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {

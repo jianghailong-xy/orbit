@@ -103,6 +103,9 @@ function fixture(
       findFirst: async () => ({ ...task }),
       findMany: async () => [],
       count: async () => 0,
+      // The open-item lookup the FAILED write makes: no row here, so no exception item is opened
+      // and this fixture stays about the status write it is named for (contract §4.3 E).
+      findUnique: async () => null,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);
         return { ...task, ...data };

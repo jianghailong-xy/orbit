@@ -145,7 +145,7 @@ import {
 } from '../sessions/current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
-import { recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
+import { type TaskFailure, recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
@@ -3336,6 +3336,7 @@ export class RunnerApiController {
       let acceptanceTaskChanged = false;
       let acceptanceTaskCompleted = false;
       let acceptanceFailureReason: string | null = null;
+      let acceptanceFailure: TaskFailure | null = null;
       // The whole EXECUTABLE decision, restored on 2026-09-03 at the account owner's direction:
       // one comparison between the code this callback reports and the code the declaration asks
       // for. Every input is already in hand under the rank-50 task lock taken above, so this
@@ -3395,15 +3396,18 @@ export class RunnerApiController {
             // outcome rather than a record about the task. Diagnosis is reading the session.
             acceptanceFailureReason =
               executableAcceptanceFailureReason(actualExitCode, expectedExitCode);
-            // And the project's own record of it: an exception with an assignee, opened in the
-            // transaction that wrote the FAILED (contract §4.3 A).
-            await recordTaskFailure(tx, {
+            // And the project's own record of it: an exception with an assignee. Captured here but
+            // opened below, past the end of this block: the comparison stays one status write and
+            // no other database touch (executable-exit-code-judgment.spec.ts holds it to that, at
+            // the account owner's direction), while the item is still opened in the transaction
+            // that wrote the FAILED (contract §4.3 A).
+            acceptanceFailure = {
               taskId: lockedAcceptanceTask.id,
               sessionId,
               how: 'ACCEPTANCE_EXIT_MISMATCH',
               exitCode: actualExitCode,
               expectedExitCode,
-            });
+            };
           }
         }
       }
@@ -3428,6 +3432,10 @@ export class RunnerApiController {
           acceptanceFailureReason,
         );
       }
+      // The exception the comparison above decided on, opened here so that block reaches the
+      // database exactly once. Still this transaction, so the FAILED and the project's record of
+      // it commit together or not at all (contract §4.3 A).
+      if (acceptanceFailure) await recordTaskFailure(tx, acceptanceFailure);
       // A successful model turn on a task with L0 acceptance queues exactly one existing shell
       // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
       // boundary: either both commit or neither does, so retrying /turn-complete cannot run the

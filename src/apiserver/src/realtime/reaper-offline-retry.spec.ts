@@ -34,12 +34,21 @@ function sweepWithOfflineRunner(task: { autoRunWhenReady: boolean } | null) {
         lastHeartbeatAt: new Date(Date.now() - 120_000),
       }),
     },
-    task: { updateMany: async () => ({ count: 1 }) },
+    // `findUnique` is the open-item lookup the failure path makes: this fixture's task is under no
+    // project, so no exception item is opened and nothing further is read (contract §4.3).
+    task: { updateMany: async () => ({ count: 1 }), findUnique: async () => null },
     $executeRaw: async () => 1,
     conversationTurn: { updateMany: async () => ({ count: 1 }),
       findFirst: async () => null,
       findMany: async () => [],
     },
+    // The drain returns any item turn still queued on the conversation it is ending; this one has
+    // none (contract §4.4 X-D5).
+    projectOpenItemDelivery: {
+      findMany: async () => [],
+      updateMany: async () => ({ count: 0 }),
+    },
+    projectOpenItem: { updateMany: async () => ({ count: 0 }) },
   };
   const prisma = {
     session: {

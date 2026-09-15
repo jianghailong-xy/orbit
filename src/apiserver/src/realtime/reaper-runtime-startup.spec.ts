@@ -45,7 +45,12 @@ test('reaper applies the startup watchdog to OpenCode sessions', async () => {
       '22222222-2222-4222-8222-222222222222',
       null,
       'opencode runtime not initialized',
-      { expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true },
+      {
+        expectedStatuses: [RunStatus.RUNNING],
+        onlyIfNotCancelling: true,
+        // The attempt was lost rather than judged, and that is what the project's item records.
+        taskFailure: 'ATTEMPT_LOST_RUNTIME_NOT_INITIALIZED',
+      },
     ],
   ]);
 });
