@@ -765,6 +765,65 @@ func TestMergeWaitsForASupervisorTakeoverAndNoLonger(t *testing.T) {
 	}
 }
 
+// The warm-reuse takeover is the shape that leaves a live supervisor behind: the lease owner
+// still matches this process, so there is nothing to detach and the supervisor stays active and
+// parkable while the takeover holds the fence. When its turn ends inside that window — the
+// server committed AWAITING_INPUT and a claim was already on its way, both of which happen
+// before the turn-complete response reaches the supervisor — park lowered a fence it did not
+// raise and deleted the worktreeOps entry the takeover's count lived in. The takeover's release
+// then found no entry to lower and no way to re-raise one, so a merge delivered on a heartbeat
+// that advertised the epoch the turn was running under crossed the checkout mid-handover.
+func TestMergeDoesNotCrossATakeoverItsSupervisorParkedDuring(t *testing.T) {
+	const (
+		sessionID   = "handed-over-while-parking"
+		branch      = "orbit/handed-over-while-parking"
+		operationID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+		leaseOwner  = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	)
+	pool := newSessionPool(1)
+	live, added := pool.register(manualWorktreePoolJob(sessionID, branch), func() {}, true)
+	if !added {
+		t.Fatal("failed to register a running supervisor")
+	}
+	// The heartbeat that will carry the merge advertised this epoch: the running turn's.
+	advertised, _ := pool.heartbeatSnapshot()
+	command := MergeCommand{SessionID: sessionID, OperationID: operationID, LeaseOwner: leaseOwner, Branch: branch}
+
+	endTakeover, err := prepareLocalSupervisorTakeover(
+		context.Background(),
+		pool,
+		&ClaimedSession{SessionID: sessionID, LeaseOwner: "process-owner"},
+		"process-owner",
+	)
+	if err != nil {
+		t.Fatalf("prepare takeover: %v", err)
+	}
+	if pool.isDetaching(live) {
+		t.Fatal("a takeover matching the process owner detached the supervisor it reused")
+	}
+	// The turn ends while the takeover is still in flight.
+	pool.park(live, pool.permitGeneration(live))
+	if pool.isActive(live) {
+		t.Fatal("park did not release the turn permit")
+	}
+
+	ran := false
+	merge := func(MergeCommand) mergeOutcome {
+		ran = true
+		return mergeOutcome{Status: "merged", MergedSha: "merged-sha", SourceSha: "source-sha", TargetBranch: "main"}
+	}
+	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); ran {
+		t.Fatalf("merge crossed a takeover its supervisor parked under: status=%q", got.Status)
+	}
+
+	// The takeover ends with a parked supervisor and no active turn: nothing else holds the
+	// checkout, so the fence has to come down rather than refuse every merge until eviction.
+	endTakeover()
+	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); !ran || got.Status != "merged" {
+		t.Fatalf("merge after the takeover ended: ran=%v status=%q message=%q", ran, got.Status, got.Message)
+	}
+}
+
 // The literal shape of that incident's headline: the session had already ended when the runner
 // restarted under it. A self-update re-exec reclaims it anyway — the row is still in the reclaim
 // snapshot — and the takeover fences its checkout before the takeover-leases answer says the

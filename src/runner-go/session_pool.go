@@ -126,10 +126,13 @@ type worktreeOperationState struct {
 	fenced  bool
 	running bool
 	done    chan struct{}
-	// takeovers counts the supervisor takeovers holding the fence open across the gap where
-	// this session has no supervisor at all — from the predecessor's cleanup to the
-	// replacement's registration. Every other fence belongs to a supervisor and goes when it
-	// does; this one has no supervisor to belong to, so each takeover releases its own hold.
+	// takeovers counts the supervisor takeovers holding the fence open. A takeover that meets a
+	// detaching predecessor holds it across the gap where this session has no supervisor at all —
+	// from the predecessor's cleanup to the replacement's registration — and that one has no
+	// supervisor to belong to, so each takeover releases its own hold. A takeover that reuses a
+	// live supervisor holds it with that supervisor still active and parkable, which is why no
+	// supervisor's lifecycle may lower the fence while this is non-zero: the count lives in this
+	// entry, and the park that lowered the fence would take the entry — and the hold — with it.
 	takeovers int
 }
 
@@ -434,11 +437,13 @@ func (p *sessionPool) fenceWorktreeOperationLocked(id string) <-chan struct{} {
 // in-flight operation's completion barrier, if any, and the release that ends the takeover.
 //
 // The release is what keeps this fence from outliving its reason. A fence a supervisor
-// raises is lowered by that same supervisor's lifecycle (park, register, finish); a takeover
-// raises one precisely where no supervisor exists, so nothing in that lifecycle can ever
-// lower it and the takeover itself must. Callers release once they have started the
-// replacement supervisor or given the row up — both, because a row given up is exactly the
-// case that used to leave a checkout fenced for the life of the process.
+// raises is lowered by that same supervisor's lifecycle (park, register, finish); this one is
+// not a supervisor's — it is raised for a row whose supervisor is being replaced, and for as
+// long as it is held even a live supervisor may not lower it (releaseWorktreeFenceLocked) —
+// so the takeover lowers its own, for whatever supervisor the map holds by then or for none.
+// Callers release once they have started the replacement supervisor or given the row up —
+// both, because a row given up is exactly the case that used to leave a checkout fenced for
+// the life of the process.
 func (p *sessionPool) beginWorktreeTakeover(id string) (<-chan struct{}, func()) {
 	p.mu.Lock()
 	done := p.fenceWorktreeOperationLocked(id)
@@ -452,10 +457,16 @@ func (p *sessionPool) beginWorktreeTakeover(id string) (<-chan struct{}, func())
 			p.mu.Lock()
 			if current := p.worktreeOps[id]; current == state && state.takeovers > 0 {
 				state.takeovers--
-				// A supervisor that registered meanwhile owns the fence under its own rules;
-				// releaseWorktreeFenceLocked lowers it only for an id nobody took.
+				// A supervisor that is ACTIVE meanwhile owns the fence under its own rules and
+				// lowers it in its own lifecycle; releaseWorktreeFenceLocked lowers it for an id
+				// nobody took. A parked or cold one took nothing: it already lowered the fence it
+				// raised, and it will not run another park until a turn gives it one, so this hold
+				// has to come down here or it stays up until that turn ends or the engine is
+				// evicted — the fence-outliving-its-reason shape of the 2026-09-15 incident.
 				if state.takeovers == 0 {
-					p.releaseWorktreeFenceLocked(id, nil)
+					if supervisor := p.sessions[id]; supervisor == nil || !supervisor.active {
+						p.releaseWorktreeFenceLocked(id, supervisor)
+					}
 				}
 			}
 			p.mu.Unlock()
@@ -469,6 +480,15 @@ func (p *sessionPool) releaseWorktreeFenceLocked(id string, expected *liveSessio
 	}
 	state := p.worktreeOps[id]
 	if state == nil {
+		return
+	}
+	// A takeover is holding this fence open, and only that takeover's own release ends it. A
+	// supervisor's lifecycle runs inside the same window — a takeover that matches the process
+	// owner leaves its supervisor alive, so the turn that was already ending when the claim
+	// arrived still parks — and lowering here takes the takeover's hold down with it: the count
+	// lives in this entry, so the delete below loses it, and the release that was going to
+	// lower the fence finds no entry to lower and no way to raise another.
+	if state.takeovers > 0 {
 		return
 	}
 	state.fenced = false
