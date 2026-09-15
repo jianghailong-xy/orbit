@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { encryptSecret } from './provider-crypto';
 import { AgentProvider, providerPreset } from '@orbit/shared';
 import { isBuiltinProvider, resolveProviderExec } from './custom-provider';
+import { setModelCatalog } from './model-catalog';
 
 const row = (over: Partial<Parameters<typeof resolveProviderExec>[0]['customRow'] & object> = {}) => ({
   runtime: 'claude',
@@ -413,6 +414,28 @@ test('custom-provider', async (t) => {
       workspaceEnv: null,
     });
     assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
+  });
+
+  // A models.dev refresh merges newer models into the offered list; those carry their own windows,
+  // and a session pinned to one must get the same injection the shipped floor gets.
+  await t.test('a catalog-merged model window also reaches the CLI', () => {
+    setModelCatalog(
+      new Map([
+        ['deepseek', [{ value: 'deepseek-flash', label: 'DeepSeek V4.1 Flash', contextWindow: 1_000_000 }]],
+      ]),
+    );
+    try {
+      const exec = resolveProviderExec({
+        declaredProvider: 'deepseek',
+        customRow: row({ presetSlug: 'deepseek', followsPreset: true }),
+        sessionModel: 'deepseek-flash',
+        workspaceModel: null,
+        workspaceEnv: null,
+      });
+      assert.equal(exec.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1000000');
+    } finally {
+      setModelCatalog(new Map());
+    }
   });
 
   await t.test('no window is invented for a model the preset does not describe', () => {

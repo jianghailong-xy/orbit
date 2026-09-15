@@ -6,6 +6,7 @@ import {
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+import { catalogModels } from './model-catalog';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
@@ -126,9 +127,14 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
   };
   // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
   // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
-  // shim like DeepSeek's serves no /v1/models for it to ask — so the preset's declared window
-  // travels as CLAUDE_CODE_MAX_CONTEXT_TOKENS, which the CLI reads as the model's real window.
-  const window = providerPreset(row.presetSlug)?.models?.find((m) => m.value === model)?.contextWindow;
+  // shim like DeepSeek's serves no /v1/models for it to ask — so the declared window travels as
+  // CLAUDE_CODE_MAX_CONTEXT_TOKENS, which the CLI reads as the model's real window. Read from the
+  // merged catalog rather than the shipped list: a models.dev refresh adds newer models that carry
+  // their own windows (e.g. deepseek-flash), and a preset-backed session may pin one.
+  const preset = providerPreset(row.presetSlug);
+  const window = preset
+    ? catalogModels(preset).find((m) => m.value === model)?.contextWindow
+    : undefined;
   if (typeof window === 'number' && window > 0) {
     claudeEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(window);
   }
