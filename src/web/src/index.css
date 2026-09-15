@@ -6476,13 +6476,43 @@ button.composer-usage:focus-visible {
   font-size: 13px;
   font-style: italic;
 }
+/* Only ever drawn inside the viewport below, so it carries that spacing itself rather than
+   through a descendant rule. */
 .chat-think-stream {
   color: var(--text-3);
   font-style: italic;
   font-size: 13px;
-  margin: 6px 0;
+  margin: 4px 0 0;
   white-space: pre-wrap;
   word-break: break-word;
+}
+/* Reasoning as it streams, held to about ten lines that scroll themselves. Unbounded, it pushed
+   the answer — and the tool calls on the way to it — clean out of the viewport: DeepSeek writes
+   23k characters of reasoning per turn at the median, 122k at p90. Bounding it also shrinks what
+   the fold at the end costs: the block gives back ~130px instead of a page. */
+.chat-think-live {
+  margin: 6px 0;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+.chat-think-live-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.chat-think-port {
+  max-height: 11em;
+  overflow-y: auto;
+  /* The transcript is itself a scroller pinned to the tail; a wheel that reaches the end of this
+     one must not chain up into it and fight that pin. */
+  overscroll-behavior: contain;
+  padding-right: 8px;
+}
+.chat-think-meta {
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
 }
 
 /* tool cards — folded one-line rows that expand on click */

@@ -169,8 +169,8 @@ public struct TranscriptReducer: Sendable, Codable {
         switch ev.type {
         case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "")
         case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq, turnId: ev.turnId)
-        case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "")
-        case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq)
+        case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
+        case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts)
         case .toolUse:        openTool(ev)
         case .toolOutput:     applyToolOutput(ev)
         case .toolResult:     closeTool(ev)
@@ -564,27 +564,59 @@ public struct TranscriptReducer: Sendable, Codable {
         openAssistant = nil
     }
 
-    private mutating func appendThinkingDelta(_ delta: String) {
+    private mutating func appendThinkingDelta(_ delta: String, ts: String? = nil) {
         guard !delta.isEmpty else { return }
         if let i = openThinking, case .thinking(var b) = state.items[i] {
             b.streamingText += delta
             state.items[i] = .thinking(b)
         } else {
-            state.items.append(.thinking(ThinkingBlock(id: nextID(), text: "", streamingText: delta, seq: nil)))
+            state.items.append(.thinking(ThinkingBlock(id: nextID(), text: "", streamingText: delta,
+                                                       seq: nil, startedTs: ts)))
             openThinking = state.items.count - 1
         }
     }
 
-    private mutating func finalizeThinking(_ full: String, seq: Int) {
+    /// Close the open stretch of reasoning — and fold it into the row above when that row is a
+    /// settled stretch too.
+    ///
+    /// A provider closes a block per tool call, so one turn's reasoning arrives as many blocks (a
+    /// DeepSeek turn: 10 at the median, 51 at p90). A row each was a stack of identical "Thinking"
+    /// lines. Only ADJACENT blocks merge — one either side of a tool call keeps its own row, where
+    /// it is what explains that call. Web twin: the `thinking` case in `buildNodes`.
+    private mutating func finalizeThinking(_ full: String, seq: Int, ts: String? = nil) {
         if let i = openThinking, case .thinking(var b) = state.items[i] {
             b.text = full.isEmpty ? b.streamingText : full
             b.streamingText = ""
             b.seq = seq
+            b.finishedTs = ts
             state.items[i] = .thinking(b)
+            foldIntoPrecedingThinking(at: i)
         } else if !full.isEmpty {
-            state.items.append(.thinking(ThinkingBlock(id: nextID(), text: full, streamingText: "", seq: seq)))
+            state.items.append(.thinking(ThinkingBlock(id: nextID(), text: full, streamingText: "",
+                                                       seq: seq, startedTs: ts, finishedTs: ts)))
+            foldIntoPrecedingThinking(at: state.items.count - 1)
         }
         openThinking = nil
+    }
+
+    /// Fold the just-settled block at `i` into the settled block directly above it. Keeps the
+    /// earlier row's identity (so the list doesn't re-key a row the reader may have opened) and
+    /// takes the later block's seq and finish time, which is what the merged row now covers.
+    private mutating func foldIntoPrecedingThinking(at i: Int) {
+        guard i > 0, i == state.items.count - 1,
+              case .thinking(let settled) = state.items[i],
+              case .thinking(var previous) = state.items[i - 1],
+              previous.isFinalized else { return }
+        previous.text += "\n\n" + settled.text
+        previous.blocks += settled.blocks
+        previous.seq = settled.seq
+        previous.finishedTs = settled.finishedTs ?? previous.finishedTs
+        state.items[i - 1] = .thinking(previous)
+        state.items.remove(at: i)
+        // The open-bubble cursors are item INDICES — close the gap left behind, the same hazard
+        // `removeOptimisticUser` guards against.
+        if let o = openAssistant, o > i { openAssistant = o - 1 }
+        if let o = openThinking, o > i { openThinking = o - 1 }
     }
 
     /// Close any dangling streaming bubble before a structural boundary (tool/user/turn end).

@@ -29,7 +29,8 @@ import {
 import { Image } from 'antd';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
-import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
+import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   apiErrorRetryAt,
@@ -254,6 +255,11 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
+  // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
+  // so the row states its size alone.
+  thinkingMs?: number;
+  blocks?: number;
   // Wall-clock of the source event — carried for user turns to show a relative
   // timestamp ("1w ago") under the bubble.
   ts?: string;
@@ -531,9 +537,27 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
         }
         break;
-      case 'thinking':
-        if (p.text) into(parent).push({ kind: 'thinking', seq: ev.seq, text: String(p.text) });
+      case 'thinking': {
+        // A run of blocks folds into one row. A provider closes a block per tool call — DeepSeek
+        // writes 10 per turn at the median, 51 at p90, 115 at the worst — and folded, those were
+        // that many identical "Thinking" lines, which is noise rather than a record. Only
+        // ADJACENT blocks merge: one either side of a tool call stays its own row, where it is
+        // what explains that call. ⌘F still resolves a hit inside a merged row, because a lookup
+        // takes the last `data-seq` at or before the target (see SessionFind's elementForSeq).
+        if (!p.text) break;
+        const text = String(p.text);
+        const ms = typeof p.thinkingMs === 'number' ? p.thinkingMs : undefined;
+        const siblings = into(parent);
+        const prev = siblings[siblings.length - 1];
+        if (prev && prev.kind === 'thinking') {
+          prev.text += `\n\n${text}`;
+          prev.blocks = (prev.blocks ?? 1) + 1;
+          if (ms !== undefined) prev.thinkingMs = (prev.thinkingMs ?? 0) + ms;
+        } else {
+          siblings.push({ kind: 'thinking', seq: ev.seq, text, thinkingMs: ms });
+        }
         break;
+      }
       case 'tool_use': {
         const node: ToolNode = {
           kind: 'tool',
@@ -623,7 +647,14 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
  * every few ms: a prop would rebuild the whole transcript on each one. A context re-renders only
  * `StreamingDrafts` itself, leaving the memo intact.
  */
-export const StreamingDraftsCtx = createContext<{ text: string; think: string } | null>(null);
+export const StreamingDraftsCtx = createContext<{
+  text: string;
+  think: string;
+  /** When this stretch of reasoning began, for the live row's clock. Absent on a page opened
+   *  mid-block: the deltas carry no time of their own, so a duration is knowable only from having
+   *  watched it arrive. */
+  thinkStartedAt?: number;
+} | null>(null);
 
 /**
  * Whole-output snapshots for user-run foreground shells. Like streaming drafts, these events are
@@ -637,10 +668,57 @@ function StreamingDrafts() {
   if (!drafts) return null;
   return (
     <>
-      {drafts.think && <div className="chat-think-stream chat-streaming">💭 {drafts.think}</div>}
+      {drafts.think && <ThinkingStream text={drafts.think} startedAt={drafts.thinkStartedAt} />}
       {drafts.text && <StreamingMessage text={drafts.text} />}
     </>
   );
+}
+
+/**
+ * Reasoning as it streams: a viewport about ten lines tall that keeps itself at the newest line,
+ * rather than an unbounded block. Unbounded, a stretch of it pushed the answer — and the tool
+ * calls on the way to it — out of a pane pinned to the tail, and the fold at the end then took
+ * back a page of height at once, moving whatever the reader was looking at.
+ *
+ * The follow is sticky, not forced: a reader who scrolls up inside it to re-read something stays
+ * where they put themselves until they return to the bottom.
+ */
+function ThinkingStream({ text, startedAt }: { text: string; startedAt?: number }) {
+  const port = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
+  useEffect(() => {
+    const el = port.current;
+    if (el && follow.current) el.scrollTop = el.scrollHeight;
+  }, [text]);
+  return (
+    <div className="chat-think-live">
+      <div className="chat-think-live-head">
+        💭 Thinking… <LiveSeconds startedAt={startedAt} />
+      </div>
+      <div
+        className="chat-think-port"
+        ref={port}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+        }}
+      >
+        <div className="chat-think-stream chat-streaming">{text}</div>
+      </div>
+    </div>
+  );
+}
+
+/** The running clock on a stretch still being written, ticking once a second. */
+function LiveSeconds({ startedAt }: { startedAt?: number }) {
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (startedAt === undefined) return;
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+  if (startedAt === undefined) return null;
+  return <span className="chat-think-meta">{formatThinkingDuration(Date.now() - startedAt)}</span>;
 }
 
 // `live` indicates the session is still streaming, so a tool_use without a
@@ -855,7 +933,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
     case 'thinking':
-      return <Thinking text={node.text} seq={node.seq} />;
+      return <Thinking text={node.text} seq={node.seq} ms={node.thinkingMs} blocks={node.blocks} />;
     case 'tool':
       return <ToolView node={node} live={live} />;
     case 'result':
@@ -1928,13 +2006,23 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   );
 }
 
-function Thinking({ text, seq }: { text: string; seq?: number }) {
+/**
+ * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
+ * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
+ * ten of them. The duration comes from having watched it stream (lib/thinkingDraft); a reloaded
+ * block has only its size, and states that rather than nothing.
+ */
+function Thinking({ text, seq, ms, blocks }: { text: string; seq?: number; ms?: number; blocks?: number }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
+  const meta = [blocks && blocks > 1 ? `${blocks} blocks` : null, formatThinkingSize(text.length)]
+    .filter(Boolean)
+    .join(' · ');
   return (
     <div className="chat-think" data-seq={seq}>
       <div className="chat-think-head" onClick={() => setOpen((o) => !o)}>
-        {open ? <DownOutlined /> : <RightOutlined />} 💭 Thinking
+        {open ? <DownOutlined /> : <RightOutlined />} 💭{' '}
+        {ms ? `Thought for ${formatThinkingDuration(ms)}` : 'Thought'} <span className="chat-think-meta">· {meta}</span>
       </div>
       {open && (
         <div className="chat-think-body">

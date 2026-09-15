@@ -38,6 +38,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { settleThinking } from '../lib/thinkingDraft';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
@@ -1292,6 +1293,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [replyTo, setReplyTo] = useState<{ id: string; question: string } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
+  // When the stretch of reasoning on screen began: the live row counts up from it, and the row it
+  // settles into states how long it took. Client-side only — `thinking_delta` is broadcast and
+  // never persisted, so a reload has no clock to recover this from (see lib/thinkingDraft).
+  const [thinkStartedAt, setThinkStartedAt] = useState<number | null>(null);
+  // Mirrors of both, for the SSE handler: it is registered once per session and would otherwise
+  // close over the values of the render that registered it.
+  const streamingThinkRef = useRef('');
+  const thinkStartedAtRef = useRef<number | null>(null);
   const [liveToolOutputState, setLiveToolOutputState] = useState<SessionLiveToolOutputs>({
     sessionId: selectedId,
     outputs: EMPTY_LIVE_TOOL_OUTPUTS,
@@ -2472,9 +2481,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Null when nothing is being generated, so the transcript can skip splitting itself in two
   // (and keep grouping runs of tool calls across the seam) whenever there are no drafts to place.
   const streamingDrafts = useMemo(
-    () => (streamingText || streamingThink ? { text: streamingText, think: streamingThink } : null),
-    [streamingText, streamingThink],
+    () =>
+      streamingText || streamingThink
+        ? { text: streamingText, think: streamingThink, thinkStartedAt: thinkStartedAt ?? undefined }
+        : null,
+    [streamingText, streamingThink, thinkStartedAt],
   );
+  // Mirror the live reasoning and its start into the refs the SSE handler reads, so a block that
+  // closes with no text of its own can be settled from what was streamed.
+  useEffect(() => {
+    streamingThinkRef.current = streamingThink;
+  }, [streamingThink]);
+  useEffect(() => {
+    thinkStartedAtRef.current = thinkStartedAt;
+  }, [thinkStartedAt]);
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
   // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
@@ -2791,6 +2811,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           setIdle(true);
           setStreamingText('');
           setStreamingThink('');
+          setThinkStartedAt(null);
           streamAnchorRef.current = null;
           // A snapshot started before this terminal signal must not resurrect an accepted/queued
           // fallback after the terminal cleanup below.
@@ -2820,6 +2841,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           if (typeof chunk === 'string') {
             streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
             setStreamingThink((p) => p + chunk);
+            // The first chunk of a stretch starts its clock; the rest ride the one already running.
+            setThinkStartedAt((at) => at ?? Date.now());
           }
           return;
         }
@@ -2845,7 +2868,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         }
         if (seen.current.has(ev.seq)) return;
         seen.current.add(ev.seq);
-        push(ev);
+        // A block the provider closes with no text of its own would otherwise take its reasoning
+        // with it: the draft is cleared just below, and an empty durable event renders nothing.
+        // Keep what was streamed — and how long it took — on this LOCAL copy of the event. It is
+        // never sent back, so a reload still reads the server's empty text and still renders
+        // nothing, which is deliberate (see lib/thinkingDraft).
+        if (ev.type === 'thinking') {
+          const patch = settleThinking(
+            ev.payload?.text,
+            streamingThinkRef.current,
+            thinkStartedAtRef.current,
+            Date.now(),
+          );
+          push(Object.keys(patch).length ? { ...ev, payload: { ...ev.payload, ...patch } } : ev);
+        } else {
+          push(ev);
+        }
         // The authoritative full text (or a turn/user/interrupt boundary) supersedes
         // the live drafts — clear them so streamed text isn't rendered twice. Text
         // implies thinking is done, so a text/turn boundary clears both; the durable
@@ -2860,11 +2898,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         if (supersedesLiveDrafts(ev)) {
           setStreamingText('');
           setStreamingThink('');
+          setThinkStartedAt(null);
         } else if (ev.type === 'thinking') {
           setStreamingThink('');
+          setThinkStartedAt(null);
         } else if (ev.type === 'system' && ev.payload?.subtype === 'resumed') {
           setStreamingText('');
           setStreamingThink('');
+          setThinkStartedAt(null);
         }
         streamAnchorRef.current = streamAnchorAfter(streamAnchorRef.current, ev, lastSeq);
         // Track turn boundaries live so the composer re-enables the instant a turn

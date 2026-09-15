@@ -194,8 +194,44 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
     public var text: String
     public var streamingText: String
     public var seq: Int?
+    /// How many adjacent blocks are folded into this one row. A provider closes a block per tool
+    /// call — a DeepSeek turn closes 10 at the median, 51 at p90 — and a row each was a stack of
+    /// identical lines rather than a record.
+    public var blocks: Int
+    /// The runner's clock on this stretch's first `thinking_delta` and on the durable event that
+    /// closed it, so the folded row can say how long it took (`ThinkingSummary`). Absent on a
+    /// stretch whose start this client never saw, and on transcripts recorded before these existed.
+    public var startedTs: String?
+    public var finishedTs: String?
     public var isFinalized: Bool { seq != nil }
     public var displayText: String { text.isEmpty ? streamingText : text }
+
+    public init(id: String, text: String, streamingText: String, seq: Int?,
+                blocks: Int = 1, startedTs: String? = nil, finishedTs: String? = nil) {
+        self.id = id
+        self.text = text
+        self.streamingText = streamingText
+        self.seq = seq
+        self.blocks = blocks
+        self.startedTs = startedTs
+        self.finishedTs = finishedTs
+    }
+
+    // Tolerant decode, like `UserBubble` above: a snapshot written before these keys existed still
+    // rehydrates (they default) instead of discarding the whole cached session.
+    enum CodingKeys: String, CodingKey {
+        case id, text, streamingText, seq, blocks, startedTs, finishedTs
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        text = try c.decode(String.self, forKey: .text)
+        streamingText = (try? c.decodeIfPresent(String.self, forKey: .streamingText)) ?? ""
+        seq = try? c.decodeIfPresent(Int.self, forKey: .seq)
+        blocks = (try? c.decodeIfPresent(Int.self, forKey: .blocks)) ?? 1
+        startedTs = try? c.decodeIfPresent(String.self, forKey: .startedTs)
+        finishedTs = try? c.decodeIfPresent(String.self, forKey: .finishedTs)
+    }
 }
 
 public enum ToolStatus: String, Equatable, Sendable, Codable {

@@ -341,9 +341,15 @@ private struct StreamingProse: View {
 
 struct ThinkingView: View {
     let block: ThinkingBlock
-    @State private var expanded = false
+    /// Nil until the reader says otherwise: a stretch still being written opens (watching it think
+    /// is the point of showing it at all) and a settled one folds (a turn stacks ten of them). A
+    /// tap pins it either way, and that pin survives the block settling underneath it.
+    @State private var pinnedOpen: Bool?
+    private static let tailAnchor = "thinking-tail"
+
     var body: some View {
-        DisclosureGroup(isExpanded: $expanded) {
+        DisclosureGroup(isExpanded: Binding(get: { pinnedOpen ?? !block.isFinalized },
+                                            set: { pinnedOpen = $0 })) {
             // Same progressive streaming as AssistantBubbleView: completed blocks render as Markdown
             // while the block grows, the trailing partial stays plain (this body only runs while
             // expanded). aside/secondary so the iOS selectable leaves read as the muted "thinking"
@@ -352,15 +358,38 @@ struct ThinkingView: View {
                 if block.isFinalized {
                     MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
                 } else {
-                    StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
+                    // While it streams, the reasoning is held to about ten lines that keep
+                    // themselves at the newest one. Unbounded it pushed the answer — and the tool
+                    // calls on the way to it — out of a transcript pinned to the tail: DeepSeek
+                    // writes 23k characters of reasoning per turn at the median, 122k at p90.
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .id(Self.tailAnchor)
+                        }
+                        .frame(maxHeight: 160)
+                        .onChange(of: block.displayText, initial: true) { _, _ in
+                            proxy.scrollTo(Self.tailAnchor, anchor: .bottom)
+                        }
+                    }
                 }
             }
             .font(.orbitProseAside).foregroundStyle(.secondary)
             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
             .environment(\.previewOwnerID, block.id)
         } label: {
-            Label("Thinking", systemImage: "brain").font(.orbitLabel).foregroundStyle(.secondary)
+            Label(rowLabel, systemImage: "brain").font(.orbitLabel).foregroundStyle(.secondary)
         }
+    }
+
+    /// What the row says while it is shut. A bare "Thinking" told a reader nothing about whether
+    /// opening it was worth it; this states how long the stretch took and how much it came to.
+    private var rowLabel: String {
+        block.isFinalized
+            ? ThinkingSummary.settledLabel(chars: block.text.count, blocks: block.blocks,
+                                           startedTs: block.startedTs, finishedTs: block.finishedTs)
+            : "Thinking…"
     }
 }
 
