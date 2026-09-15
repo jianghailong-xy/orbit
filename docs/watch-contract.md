@@ -182,6 +182,11 @@ Watch 只会进入一个终态，所以这样的 turn 最多一个。`REVOKED` �
 **`CANCELLED` 不交付**：取消是 owner 或观察者自己的动作，不会有谁不知情地一直等下去。`NOTIFY_USER` 的 Watch
 没有在等的会话，以上终态都不交付。
 
+**`update()` 也不交付**：改条件只写 `predicate` / `expiresAt` / `nextEvaluateAt` 并把 `holding` 置回
+false，全程不产生任何投递。给正在等的 agent 配上 Edit 意味着改写它等待的条件却不告诉它——它按新条件被唤醒，
+后续动作仍是按自己当初写下的前提规划的。要恢复 Edit 入口，服务端必须先给 `update()` 加一个「条件被改过」的
+唤醒投递；在那之前客户端不提供 Edit（组件代码保留，只摘入口）。
+
 **WatchTarget**：`OBSERVED → SATISFIED`（leaf 成立）、`→ GONE`（目标行被删）。continuous 允许
 `SATISFIED → OBSERVED`（条件又不成立了）。
 

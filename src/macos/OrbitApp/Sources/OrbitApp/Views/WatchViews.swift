@@ -1,8 +1,8 @@
 import SwiftUI
 import OrbitKit
 
-// A watch's own record and its controls, shared by the Following page's detail column and the sheet
-// the console's Watching card opens with View. The wording is all OrbitKit's `WatchProjection`.
+// A watch's own record and its controls, as the Following page's detail column reads them. The
+// wording is all OrbitKit's `WatchProjection`.
 
 /// The detail column (a pushed page on iPhone) for `AppModel.selectedWatchID`. A deep link or a push
 /// can name a watch the list doesn't hold — an older one — so a miss fetches it before saying so.
@@ -32,28 +32,6 @@ struct WatchDetailView: View {
     }
 }
 
-/// The Watching card's View: the same record in a sheet, so looking doesn't leave the console. It
-/// reads the store on every render, so a control used here shows its outcome here.
-struct WatchDetailSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let store: WatchesModel
-    let watch: Watch
-
-    var body: some View {
-        NavigationStack {
-            WatchDetailContent(store: store, watch: store.watch(watch.id) ?? watch, opensTargets: false)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
-        }
-        #if os(macOS)
-        .frame(minWidth: 480, minHeight: 520)
-        #endif
-    }
-}
-
 /// A watch's whole record: what it's doing and for what, where each target stands, how fresh that is,
 /// what happens when the condition holds, and every Match or end with what its delivery did.
 struct WatchDetailContent: View {
@@ -65,7 +43,6 @@ struct WatchDetailContent: View {
     let opensTargets: Bool
     @State private var busy = false
     @State private var errorText: String?
-    @State private var editing = false
     @State private var confirmingStop = false
 
     var body: some View {
@@ -90,14 +67,13 @@ struct WatchDetailContent: View {
         .navigationTitle(WatchProjection.headline(for: watch))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                ForEach(WatchStateMachine.controls(for: watch.state).filter { $0 != .view }, id: \.self) { control in
+                // No View here — the column IS the record — and no Edit until the server tells the
+                // agent when its wait's condition changed (docs/watch-contract.md).
+                ForEach(WatchStateMachine.controls(for: watch.state).filter { $0 != .view && $0 != .edit }, id: \.self) { control in
                     Button(control.title) { tap(control) }
                         .disabled(busy)
                 }
             }
-        }
-        .sheet(isPresented: $editing) {
-            WatchEditSheet(store: store, watch: watch)
         }
         .confirmationDialog("Stop watching?", isPresented: $confirmingStop, titleVisibility: .visible) {
             Button("Stop", role: .destructive) { run(.stop) }
@@ -185,8 +161,7 @@ struct WatchDetailContent: View {
 
     private func tap(_ control: WatchControl) {
         switch control {
-        case .view: break
-        case .edit: editing = true
+        case .view, .edit: break
         case .stop: confirmingStop = true
         case .pause, .resume: run(control)
         }
@@ -255,6 +230,11 @@ private struct WatchTargetRow: View {
 }
 
 /// Edit a live watch's condition and deadline. Its targets and what it does stay as created.
+///
+/// No screen presents it: editing is parked (docs/watch-contract.md) until the server delivers a
+/// "condition changed" wake on `update()` — today a human-edited condition reaches the waiting agent
+/// silently, and it keeps acting on the plan it wrote for the old one. The code stays so restoring
+/// the entry point is wiring, not rebuilding.
 struct WatchEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     let store: WatchesModel

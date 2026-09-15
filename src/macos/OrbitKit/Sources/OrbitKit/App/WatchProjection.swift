@@ -351,6 +351,22 @@ public enum WatchProjection {
         }
     }
 
+    /// The console strip's one line and its opened rows, in the web's words (`STRIP_*` in
+    /// lib/watches.ts, held to these by `WatchStripCopyParityTests`). "Watching" alone is the line's
+    /// fixed label — what is watched is named beside it, where the header's word counts it.
+    public static let stripLabel = "Watching"
+
+    /// What the strip's Then row says, on the first watch only: every strip watch resumes this
+    /// session, so the constant fact is said once.
+    public static let stripThen = "Resume this session"
+
+    /// The strip's way to the Following page, where Pause and Stop live.
+    public static let stripManage = "Manage in Watches ›"
+
+    /// How the strip prefixes the soonest deadline on the count line — a lone watch's own deadline
+    /// needs no qualifier.
+    public static let stripEarliest = "earliest "
+
     /// How many targets a card names before it stops counting them out, and that line. Web's
     /// `SHOWN_TARGETS` and the `+N more` beside it; the wake card counts its own changes the same way.
     public static let shownTargets = 3
@@ -406,41 +422,16 @@ public enum WatchProjection {
 }
 
 /// One labelled row on a watch's card, in the words the browser labels the same row with
-/// (`WatchCard.tsx`'s `<dl>`). Only the live spellings are here: the console's strip holds nothing
-/// else, so a watch never reads "Result" or "Expired" there.
+/// (`WatchCard.tsx`'s `<dl>`, and the strip's rows in `WatchRelations.tsx`). Only the live spellings
+/// are here: the console's strip holds nothing else, so a watch never reads "Result" or "Expired"
+/// there.
 public enum WatchRowLabel {
     public static let watching = "Watching"
+    public static let until = "Until"
     public static let progress = "Progress"
     public static let updated = "Updated"
     public static let then = "Then"
     public static let expires = "Expires"
-}
-
-public struct WatchFact: Equatable, Sendable, Identifiable {
-    public let label: String
-    public let value: String
-    public var id: String { label }
-
-    public init(label: String, value: String) {
-        self.label = label
-        self.value = value
-    }
-}
-
-extension WatchProjection {
-    /// The card's rows under WATCHING, which the view draws itself because its targets are links.
-    /// The order is the browser's, and so is each label: a watch read on two screens is one thing.
-    public static func facts(for watch: Watch, observerTitle: String?, now: Date = Date()) -> [WatchFact] {
-        var rows = [
-            WatchFact(label: WatchRowLabel.progress, value: progress(for: watch)),
-            WatchFact(label: WatchRowLabel.updated, value: checked(for: watch, now: now)),
-            WatchFact(label: WatchRowLabel.then, value: action(for: watch, observerTitle: observerTitle)),
-        ]
-        if let expires = expiresIn(for: watch, now: now) {
-            rows.append(WatchFact(label: WatchRowLabel.expires, value: expires))
-        }
-        return rows
-    }
 }
 
 /// A session as an observer: the live watches that resume it when they match. What its header,
@@ -479,21 +470,35 @@ public struct WatchSessionSummary: Equatable, Sendable {
         watches.count == 1 ? WatchProjection.progress(for: watches[0]) : "\(watches.count) watches"
     }
 
-    /// Several watches fold behind one line until it is opened; a single one is simply its card.
-    /// Web folds that one too, but there it is one card among a page of them — here it IS the strip
-    /// above the composer, and a fold over a single card hides the only thing the strip is for.
-    public var collapses: Bool { watches.count > 1 }
-
-    /// The line the closed strip reads as, web's `SessionWatchStrip` title.
-    public var waitingOn: String {
-        watches.count == 1 ? "Waiting on a watch" : "Waiting on \(watches.count) watches"
+    /// The strip line's middle: the one target a lone watch over one target that still exists
+    /// names, nil when the line counts instead — the web's `SessionWatchStrip` reads the same two
+    /// shapes, so the parity test holds them together.
+    public var lineTarget: WatchTarget? {
+        watches.count == 1 && lineTargets.count == 1 ? lineTargets[0] : nil
     }
 
-    /// What is being waited for, behind that line, so a closed strip still says it.
-    public var conditions: String {
-        watches
-            .map { WatchProjection.condition($0.predicate, targetCount: WatchProgress($0.targets).live) }
-            .joined(separator: " · ")
+    /// The distinct targets still in the set, each counted once across every watch — the line's
+    /// count branch, so two watches over the same task never read "2 targets".
+    public var lineTargetCount: Int { lineTargets.count }
+
+    private var lineTargets: [WatchTarget] {
+        var seen = Set<String>()
+        var targets: [WatchTarget] = []
+        for target in watches.flatMap(\.targets) where target.state != .gone {
+            let key = "\(target.targetKind.rawValue):\(PublicID.storageKey(target.targetResourceId))"
+            if seen.insert(key).inserted { targets.append(target) }
+        }
+        return targets
+    }
+
+    /// How long the soonest deadline has left, as the line reads it: "3h", "earliest 4h" — never
+    /// the sentence's "in" prefix. "earliest" only on the count line: a lone watch's own deadline
+    /// needs no qualifier. Nil when no deadline parses.
+    public func lineTime(now: Date = Date()) -> String? {
+        let lefts = watches.compactMap { RelativeTime.parse($0.expiresAt)?.timeIntervalSince(now) }
+        guard let earliest = lefts.min() else { return nil }
+        let span = earliest > 0 ? WatchProjection.duration(earliest) : "now"
+        return lineTarget == nil ? "\(WatchProjection.stripEarliest)\(span)" : span
     }
 
     /// The oldest last look among the ACTIVE watches — the least fresh reading is the one to show.

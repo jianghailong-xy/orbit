@@ -204,18 +204,76 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     expect(buttons(container!)).toEqual(['Follow']);
   });
 
-  it('keeps a strip above the composer while the session waits on a live watch, and opens it into cards', async () => {
-    serve(watches());
+  it('keeps one line above the composer naming the lone target a watch waits on', async () => {
+    serve([
+      watch('WAITING', {
+        targets: [target('TASK', 'T1')],
+        expiresAt: at(6 * HOUR + 10 * MINUTE),
+        ...resumes('S_ME'),
+      }),
+    ]);
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
-    expect(strip.querySelector('.watch-strip-title')?.textContent).toBe('Waiting on a watch');
-    expect(strip.querySelector('.watch-strip-summary')?.textContent).toBe(
-      'When both tasks finish · 0 of 2 met · checked 5m ago',
-    );
-    expect(strip.querySelector('.watch-card')).toBeNull();
+    expect(strip.querySelector('.watch-strip-title')?.textContent).toBe('Watching');
+    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('A task');
+    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('6h');
+    expect(strip.querySelector('.watch-strip-caret')?.textContent).toBe('›');
+    expect(strip.querySelector('.watch-strip-block')).toBeNull();
+  });
 
+  it('counts the distinct targets and the soonest deadline on one line for several watches', async () => {
+    serve([
+      watch('W1', {
+        targets: [target('TASK', 'T1'), target('TASK', 'T2')],
+        expiresAt: at(6 * HOUR + 10 * MINUTE),
+        ...resumes('S_ME'),
+      }),
+      watch('W2', {
+        targets: [target('TASK', 'T2')],
+        expiresAt: at(30 * MINUTE),
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    // T1 and T2, not T1, T2 and T2 again: each target is counted once.
+    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('2 targets');
+    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('earliest 29m');
+  });
+
+  it('opens into read-only facts, with no controls and a way to the Following page', async () => {
+    serve([
+      watch('W1', {
+        targets: [target('TASK', 'T1')],
+        expiresAt: at(6 * HOUR + 10 * MINUTE),
+        ...resumes('S_ME'),
+      }),
+      watch('W2', { targets: [target('TASK', 'T2')], ...resumes('S_ME') }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
     await click(strip.querySelector('.watch-strip-row'), 'the strip');
-    expect([...strip.querySelectorAll<HTMLElement>('.watch-card')].map((c) => c.dataset.watchId)).toEqual(['WAITING']);
+    expect(strip.querySelector('.watch-strip-caret')?.textContent).toBe('⌄');
+    const blocks = [...strip.querySelectorAll<HTMLElement>('.watch-strip-block')];
+    expect(blocks.map((b) => b.dataset.watchId)).toEqual(['W1', 'W2']);
+    // Read-only: the strip holds no View/Edit/Pause/Stop anywhere, and no button at all.
+    expect(buttons(strip.querySelector('.watch-strip-list')!)).toEqual([]);
+    for (const verb of ['View', 'Edit', 'Pause', 'Stop']) {
+      expect(strip.textContent, `no ${verb}`).not.toContain(verb);
+    }
+    const labels = (block: HTMLElement) => [...block.querySelectorAll('dt')].map((dt) => dt.textContent);
+    expect(labels(blocks[0])).toEqual(['Watching', 'Until', 'Progress', 'Then', 'Expires']);
+    expect(labels(blocks[1])).toEqual(['Watching', 'Until', 'Progress', 'Expires']);
+    // Until says the condition without the sentence's "When", which the label already is.
+    expect(blocks[0].querySelectorAll('dd')[1]?.textContent).toBe('The task finishes');
+    // Progress carries the evaluator's last look.
+    expect(blocks[0].querySelectorAll('dd')[2]?.textContent).toBe('0 of 1 met · checked 5m ago');
+    // Then is said once, on the first watch: every strip watch resumes this session.
+    expect(blocks[0].querySelectorAll('dd')[3]?.textContent).toBe('Resume this session');
+    expect(blocks[1].querySelectorAll('dd')[3]?.textContent).toBe('in 20h');
+    const manage = strip.querySelector('a.watch-strip-manage');
+    expect(manage?.textContent).toBe('Manage in Watches ›');
+    expect(manage?.getAttribute('href')).toBe('/following');
   });
 
   it('draws no strip when the session waits on nothing live', async () => {
@@ -246,7 +304,7 @@ describe('a live watch older than the newest 100', { timeout: 30_000 }, () => {
       </>,
     );
 
-    expect(container!.querySelector('.watch-strip-title')?.textContent).toBe('Waiting on a watch');
+    expect(container!.querySelector('.watch-strip-title')?.textContent).toBe('Watching');
     expect(buttons(container!.querySelector('.watch-badges')!)).toEqual(['Following 2 tasks', 'Follow']);
     const followedBy = container!.querySelector('section')!;
     expect(followedBy.querySelector('.tdp-section-title span')?.textContent).toBe('Followed by (1)');

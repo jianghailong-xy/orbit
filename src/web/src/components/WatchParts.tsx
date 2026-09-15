@@ -22,18 +22,20 @@ export function WatchStatePill({ state }: { state: string }) {
 /**
  * A watch target's name and live status. A watch row carries ids only, so both are read from the
  * target itself: the session's detail (the entry the console already caches) or the task's list row.
- * A target that no longer reads back is reported missing rather than retried.
+ * A target that no longer reads back is reported missing rather than retried. Both arguments may be
+ * null, which disables the reads — the strip calls it unconditionally and only names a target when
+ * its line has one to name.
  */
 export function useTargetName(
-  kind: string,
-  id: string,
+  kind: string | null,
+  id: string | null,
 ): { name: string | null; status: string | null; missing: boolean } {
   const session = useQuery({
     ...sessionQuery(kind === 'SESSION' ? id : null),
     retry: false,
     staleTime: 30_000,
   });
-  const task = useQuery({ ...taskRowQuery(id), enabled: kind === 'TASK', retry: false });
+  const task = useQuery({ ...taskRowQuery(id ?? ''), enabled: kind === 'TASK', retry: false });
   if (kind === 'SESSION') {
     return {
       name: session.data?.title ?? null,
