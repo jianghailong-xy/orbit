@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
@@ -123,6 +124,27 @@ export class RunnersController {
   @Post(':id/refresh-models')
   refreshModels(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.requestModelCatalogRefresh(user.userId, id);
+  }
+
+  // What Claude Code history already sits under a directory on this machine, asked while someone
+  // is typing that directory into the new-workspace form. Owner-scoped like the relays above: it
+  // reads that machine's own transcripts. The POST asks, the GET waits for the answer.
+  @Post(':id/claude-history')
+  askClaudeHistory(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: { workDir?: string },
+  ) {
+    return this.runners.requestClaudeHistory(user.userId, id, dto?.workDir ?? '');
+  }
+
+  @Get(':id/claude-history')
+  claudeHistory(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('workDir') workDir?: string,
+  ) {
+    return this.runners.getClaudeHistory(user.userId, id, workDir ?? '');
   }
 
   @Post(':id/rotate-token')

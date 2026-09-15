@@ -277,6 +277,11 @@ type HeartbeatResponse struct {
 	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
 	// later heartbeat is the only outcome there is. False/absent on older control planes.
 	RefreshModelCatalog bool `json:"refreshModelCatalog,omitempty"`
+	// A working directory to report local Claude Code history for, answered by POSTing
+	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
+	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
+	// nobody is asking.
+	ClaudeHistoryRequest *ClaudeHistoryCommand `json:"claudeHistoryRequest,omitempty"`
 	// This machine's free-space floor in MB (Runner.minFreeDiskMb), which the worktree sweep
 	// reclaims checkouts against. A POINTER because absence is a value, not silence: a machine
 	// with no floor configured sends null, an older control plane sends nothing, and both mean
@@ -405,6 +410,37 @@ type ImportResultResponse struct {
 	Applied   bool `json:"applied"`
 	Failed    bool `json:"failed"`
 	Announced bool `json:"announced"`
+}
+
+// ClaudeHistoryCommand mirrors @orbit/shared ClaudeHistoryCommand: one working directory to report
+// the local Claude Code transcripts of. Only this machine can answer — the control plane never
+// sees ~/.claude/projects — and it asks about a bare path rather than a workspace because the
+// new-workspace form asks while the directory is still being typed.
+type ClaudeHistoryCommand struct {
+	WorkDir     string `json:"workDir"`
+	RequestedAt string `json:"requestedAt,omitempty"`
+}
+
+// ClaudeHistoryTranscript mirrors @orbit/shared ClaudeHistoryTranscript: one local transcript, and
+// what the import offer says about it.
+type ClaudeHistoryTranscript struct {
+	ClaudeSessionID string `json:"claudeSessionId"`
+	Title           string `json:"title,omitempty"`
+	LastActiveAt    string `json:"lastActiveAt"`
+	Messages        int    `json:"messages"`
+}
+
+// RunnerClaudeHistoryResult mirrors @orbit/shared RunnerClaudeHistoryResult: what this machine
+// holds for one directory. Transcripts are newest first, so the first is the conversation the user
+// is in the middle of.
+type RunnerClaudeHistoryResult struct {
+	WorkDir       string                    `json:"workDir"`
+	WindowDays    int                       `json:"windowDays"`
+	Conversations int                       `json:"conversations"`
+	Bytes         int64                     `json:"bytes"`
+	Events        int                       `json:"events"`
+	Transcripts   []ClaudeHistoryTranscript `json:"transcripts"`
+	Error         string                    `json:"error,omitempty"`
 }
 
 // MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a

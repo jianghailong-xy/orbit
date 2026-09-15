@@ -26,6 +26,7 @@ import {
   ApprovalStatus,
   AgentProvider,
   type BgShell,
+  CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   deriveBackgroundShells,
   deriveSessionFilingState,
   deriveSessionLifecycleState,
@@ -1050,6 +1051,10 @@ export class SessionsService {
             runtimeSessionId: dto.claudeSessionId,
             // Non-null = import PENDING: the runner performs the import step and clears this.
             importSourceCwd: sourceCwd,
+            // Durable provenance, unlike the marker above: this is never cleared, so "remove the
+            // conversations this directory's history brought in" still has something to select on
+            // long after every replay has landed.
+            importedAt: new Date(),
             // No model pin: the claim resolves the runner's Runtime default, as a fresh session
             // without an explicit pick does.
             model: null,
@@ -1071,6 +1076,111 @@ export class SessionsService {
     this.queue.notifySessionQueued();
     this.realtime.publishSessionCreated(session.id);
     return withSessionState(session);
+  }
+
+  /**
+   * Import several of one directory's transcripts at once — the batch behind "this directory
+   * already has Claude Code history in it" on the new-workspace form.
+   *
+   * A wrapper, not a second import: every transcript goes through `importSession` above, so each
+   * refusal it states (already imported, no real conversation, recorded somewhere this workspace
+   * does not contain) reads the same whether one arrived or two hundred did.
+   *
+   * Per-item refusals are collected rather than thrown. Consent here was given for a directory's
+   * history as a whole, and the most ordinary case in a directory somebody has been working in is
+   * that one conversation was already imported last week — failing the batch over it would break
+   * the offer exactly where it is most useful. What IS thrown is a refusal about the request
+   * itself: a workspace that is not the caller's must not arrive as N per-item failures that read
+   * as though the transcripts were the problem.
+   *
+   * Nothing here waits for a transcript to be read. Each import is one row the runner claims and
+   * replays on its own schedule, so this returns as soon as the rows exist — which is what lets
+   * the workspace be usable the moment it is created, however much history was accepted.
+   */
+  async importBatch(
+    ownerId: string,
+    dto: {
+      workspaceId: string;
+      transcripts: Array<{ claudeSessionId: string; title?: string }>;
+    },
+  ) {
+    const items = dto?.transcripts ?? [];
+    if (!dto?.workspaceId) throw new BadRequestException('pick a workspace to import into');
+    if (items.length === 0) throw new BadRequestException('nothing to import');
+    if (items.length > CLAUDE_HISTORY_MAX_TRANSCRIPTS) {
+      throw new BadRequestException(
+        `at most ${CLAUDE_HISTORY_MAX_TRANSCRIPTS} transcripts at a time — that is what one scan reports`,
+      );
+    }
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: dto.workspaceId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!workspace) throw new ForbiddenException('workspace not found');
+    const sessionIds: string[] = [];
+    const skipped: Array<{ claudeSessionId: string; reason: string }> = [];
+    for (const item of items) {
+      try {
+        const session = await this.importSession(ownerId, {
+          claudeSessionId: item?.claudeSessionId,
+          workspaceId: dto.workspaceId,
+          // The name the conversation already carries on disk, so the list reads as the work the
+          // user remembers instead of two hundred rows of "Imported session 4e453ab7". The runner
+          // rewrites it from the transcript itself once the replay lands, either way.
+          title: item?.title,
+        });
+        sessionIds.push(session.id);
+      } catch (err) {
+        skipped.push({
+          claudeSessionId: item?.claudeSessionId,
+          reason: err instanceof Error ? err.message : 'import refused',
+        });
+      }
+    }
+    return { imported: sessionIds.length, skipped, sessionIds };
+  }
+
+  /** How many of a workspace's live sessions came in as imported transcripts — what the offer to
+   *  remove them again has to be able to say out loud before anyone presses it. */
+  async countImported(ownerId: string, workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    const count = await this.prisma.session.count({
+      where: { ownerId, workspaceId, importedAt: { not: null }, deletedAt: null },
+    });
+    return { count };
+  }
+
+  /**
+   * Remove every session a directory's history brought into one workspace.
+   *
+   * The other half of what the import offer promises. Consent was given for a whole directory's
+   * history at once — nobody chose two hundred conversations one by one — so withdrawing it has to
+   * work at the same granularity, or the warning that they "can be removed later" is a sentence
+   * nobody can act on.
+   *
+   * Each one goes through `remove` above rather than a bulk UPDATE: an imported session is a
+   * session, and it has to leave by the same door as any other, with the same end transition and
+   * the same notification to whoever is watching it. One that ends or is deleted concurrently is
+   * already where this was taking it, so it is counted as gone rather than failing the sweep.
+   */
+  async removeImported(ownerId: string, workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    const sessions = await this.prisma.session.findMany({
+      where: { ownerId, workspaceId, importedAt: { not: null }, deletedAt: null },
+      select: { id: true },
+    });
+    let removed = 0;
+    for (const session of sessions) {
+      try {
+        await this.remove(ownerId, session.id);
+        removed++;
+      } catch (err) {
+        this.logger.warn(
+          `removeImported: leaving ${session.id} — ${err instanceof Error ? err.message : 'unknown'}`,
+        );
+      }
+    }
+    return { removed, requested: sessions.length };
   }
 
   /**
