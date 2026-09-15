@@ -679,6 +679,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `workspace.repo_url` is deliberately NOT dropped beside them —
   //        `projects/project-integration-line.ts` still reads it to bootstrap a project's
   //        codebase binding — so no reader loses its input here.
+  //   0274 added `session.import_source_cwd`, the pending marker behind `orbit session import`:
+  //        non-null marks a session whose runner must copy a local Claude transcript into the
+  //        worktree and replay it as run events before the engine spawns, and import-result's
+  //        CAS clears it. Read against every claim above: it ALTERs `session`, a preserved
+  //        relation, by exactly one `ADD COLUMN "import_source_cwd"` — no other column of
+  //        `session` is named, no column is dropped, and the new column is NULL-able so no
+  //        stored row is rewritten (an added column is metadata, not a row change). It names no
+  //        `task`, `project` or `project_acceptance_criterion_definition` object, so the 0177
+  //        pair, `task_executable_acceptance_pair` and every stored task and criterion row are
+  //        out of its reach, and no criterion's `text` or `verification_method` can move by one
+  //        byte. It creates no table, enum, type, function or trigger, carries no `ALTER TYPE`
+  //        and no `DROP TYPE`, so the three `task_completion_criterion` labels survive with
+  //        0267's fourth beside them, and it is not another writer of the DONE fence. It has no
+  //        INSERT, UPDATE or DELETE, so no preserved row is read or written.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -717,7 +731,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0270_project_integration_line',
       '0271_watch_progress_continuous',
       '0272_drop_project_action',
-      '0273_drop_workspace_clone_provisioning'],
+      '0273_drop_workspace_clone_provisioning',
+      '0274_session_import_source'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -918,6 +918,12 @@ model Session {
   // pre-generated at creation (--session-id on first spawn, --resume on reclaim/respawn);
   // Codex/Kimi/OpenCode mint their own after process initialization, so it stays null then.
   runtimeSessionId     String?   @map("runtime_session_id")
+  // For a session created by importing a local Claude transcript: the transcript's original cwd
+  // (CLI import) or the workspace workDir used to locate and verify the transcript against (web
+  // import). Non-null marks the import PENDING: the runner copies the transcript into the
+  // worktree, replays it as run events, and clears this (or fails the session to Trash) via
+  // POST /runner/sessions/:id/import-result before the engine is spawned.
+  importSourceCwd      String?   @map("import_source_cwd")
   provider             String    @default("claude")
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
   // stale old-replica write that still uses the former custom-provider slug `kimi`.

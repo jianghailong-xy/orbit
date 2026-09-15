@@ -149,6 +149,59 @@ export class RunnerSessionsController {
     return this.sessions.spawnFromSession(runner.ownerId, caller, dto);
   }
 
+  /**
+   * `orbit session import`'s door: create a session by importing a Claude transcript that lives
+   * on THIS runner's disk. Headless-only by design — an agent already runs inside a workspace and
+   * has its own transcript continuity, so the only caller is a person's shell (or a bridge on a
+   * minted credential), which is also the only caller the machine credential's extra verb should
+   * reach.
+   *
+   * The machine's runner credential may import into any workspace it can resolve; a service token
+   * needs the session:create scope, and — that scope is only mintable pinned — may import into
+   * exactly its pinned workspace, resolved from the transcript's cwd or given explicitly.
+   */
+  @Post('sessions/import')
+  async importSession(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    // Inline type, as with create: `workspaceId` is exactly what a model copies out of an Orbit URL.
+    @Body(PublicIdPipe.forFields('workspaceId'))
+    dto: {
+      claudeSessionId: string;
+      /** The transcript's recorded cwd; when given it must sit inside the target workspace. */
+      sourceCwd?: string;
+      workspaceId?: string;
+      title?: string;
+    },
+  ) {
+    if (!isHeadlessCaller(callingSessionId)) {
+      throw new ForbiddenException(
+        'session import is a headless operation; run `orbit session import` from a shell',
+      );
+    }
+    let workspaceId = dto.workspaceId;
+    if (grant) {
+      const scope = this.headlessScope(runner, grant, 'session:create');
+      if (workspaceId && workspaceId !== scope.workspaceId) {
+        throw new ForbiddenException('this service token may only import into its own workspace');
+      }
+      workspaceId = workspaceId ?? scope.workspaceId ?? undefined;
+    }
+    return this.sessions.importSession(
+      runner.ownerId,
+      {
+        claudeSessionId: dto.claudeSessionId,
+        sourceCwd: dto.sourceCwd,
+        workspaceId,
+        title: dto.title,
+      },
+      // The transcript lives on this machine, so the import runs here whatever the workspace's
+      // own runner binding says.
+      { assignedRunnerId: runner.id },
+    );
+  }
+
   @Get('sessions')
   async listSessions(
     @CurrentRunner() runner: Runner,

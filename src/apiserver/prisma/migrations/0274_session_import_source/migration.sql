@@ -1,0 +1,23 @@
+-- Storage behind importing a local Claude transcript as an Orbit session: the transcript's cwd.
+--
+-- `orbit session import <claude-session-uuid>` creates a session whose `runtimeSessionId` is the
+-- Claude session id, so the runner spawns the engine with `--resume` against the transcript copied
+-- into the target worktree's `~/.claude/projects/<slug>/` directory. The runner must do that copy
+-- (and the event replay that makes the conversation visible to Orbit) inside one claim, before the
+-- spawn — and it must not do it twice across a crashed-and-reclaimed attempt. A non-null
+-- `import_source_cwd` marks the import PENDING: the claim/reclaim payload carries it, the runner
+-- performs the import step, and POST /runner/sessions/:id/import-result clears it on success or
+-- moves the session to Trash (FAILED + deletedAt) on failure.
+--
+-- Two callers, one column, two meanings:
+--   * CLI import writes the transcript's original cwd, read from the local JSONL before the API
+--     call. The server validates it against the target workspace's workDir at create time.
+--   * Workspace-settings import (a web user who never had the transcript's path in hand) writes
+--     the workspace's workDir instead, and the runner locates the file by globbing
+--     `$CLAUDE_CONFIG_DIR/projects/*/<uuid>.jsonl` and re-checks the recorded cwd.
+--
+-- Nothing to backfill: every existing session gets NULL, which is the "not an import" state and
+-- the value the CAS in import-result matches on. Catalog-only: ADD COLUMN NULL does not rewrite
+-- the heap.
+
+ALTER TABLE "session" ADD COLUMN "import_source_cwd" TEXT;

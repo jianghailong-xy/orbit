@@ -273,6 +273,25 @@ export class SessionsController {
     return this.sessions.create(user.userId, { ...dto, workspaceId: dto.workspaceId ?? dto.agentId });
   }
 
+  /**
+   * The workspace-settings door for `orbit session import`: create a session from a local Claude
+   * transcript. The web caller never has the transcript's cwd in hand, so no `sourceCwd` rides
+   * along — the runner locates the file by the Claude session id and verifies the recorded cwd
+   * against the workspace itself (the server check happens there instead of here).
+   */
+  @Post('import')
+  importSession(
+    @CurrentUser() user: AuthUser,
+    @Body(PublicIdPipe.forFields('workspaceId'))
+    dto: { claudeSessionId: string; workspaceId?: string; title?: string },
+  ) {
+    return this.sessions.importSession(user.userId, {
+      claudeSessionId: dto.claudeSessionId,
+      workspaceId: dto.workspaceId,
+      title: dto.title,
+    });
+  }
+
   @Get()
   list(
     @CurrentUser() user: AuthUser,

@@ -888,6 +888,164 @@ export class SessionsService {
     return withSessionState(publicSession);
   }
 
+  /** pg_advisory_xact_lock namespace for the import-claim serializer (see importSession). */
+  private static readonly IMPORT_LOCK_NAMESPACE = 4000274;
+
+  private static readonly CLAUDE_SESSION_ID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  /**
+   * Create a session by importing a local Claude Code transcript.
+   *
+   * The row is written PENDING with `runtimeSessionId` = the Claude session id and a non-null
+   * `importSourceCwd` (the transcript's original cwd, or the workspace workDir for the web path,
+   * where the runner locates the file itself). The runner then, inside one claim and before the
+   * spawn: copies the transcript into the session's `~/.claude/projects/<slug>/` directory,
+   * replays it as run events so Orbit can read and search the conversation, and clears the marker
+   * (or Trashes the session) via POST /runner/sessions/:id/import-result. `numTurns` is set to 1
+   * so the claim payload answers `resume = true`, which is what makes the spawn a `--resume` that
+   * carries the imported context.
+   */
+  async importSession(
+    ownerId: string,
+    dto: {
+      /** The Claude Code session id whose `<uuid>.jsonl` transcript to import. */
+      claudeSessionId: string;
+      /** The transcript's recorded cwd, when the caller has it (CLI path). */
+      sourceCwd?: string;
+      workspaceId?: string;
+      title?: string;
+    },
+    opts?: {
+      /** The runner that called this import (CLI door) — the transcript lives on its disk. */
+      assignedRunnerId?: string;
+    },
+  ) {
+    if (!SessionsService.CLAUDE_SESSION_ID_RE.test(dto.claudeSessionId)) {
+      throw new BadRequestException('claudeSessionId must be a UUID');
+    }
+    let workspace: {
+      id: string;
+      name: string;
+      workDir: string | null;
+      runnerId: string | null;
+      enableWorktree: boolean;
+      enabled: boolean;
+    } | null;
+    if (dto.workspaceId) {
+      workspace = await this.prisma.workspace.findFirst({
+        where: { id: dto.workspaceId, ownerId, deletedAt: null },
+        select: { id: true, name: true, workDir: true, runnerId: true, enableWorktree: true, enabled: true },
+      });
+      if (!workspace) throw new ForbiddenException('workspace not found');
+      if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+    } else {
+      // No explicit pick: the transcript's cwd names its workspace. Longest workDir prefix wins,
+      // so a project nested inside another binds the transcript to the tighter one.
+      const cwd = dto.sourceCwd;
+      if (!cwd) throw new BadRequestException('pick a workspace or pass the transcript cwd');
+      const candidates = await this.prisma.workspace.findMany({
+        where: { ownerId, deletedAt: null },
+        select: { id: true, name: true, workDir: true, runnerId: true, enableWorktree: true, enabled: true },
+      });
+      const inside = (workDir: string | null): boolean =>
+        workDir !== null &&
+        (cwd === workDir ||
+          cwd.startsWith(workDir.endsWith(path.sep) ? workDir : workDir + path.sep));
+      workspace = candidates.filter((c) => inside(c.workDir)).sort((a, b) => (b.workDir?.length ?? 0) - (a.workDir?.length ?? 0))[0];
+      if (!workspace) {
+        throw new BadRequestException(
+          `no workspace of yours contains the transcript's cwd ${cwd}; pass --workspace to pick one`,
+        );
+      }
+      if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+    }
+    if (!workspace.workDir) throw new BadRequestException('the workspace has no work directory');
+    if (dto.sourceCwd) {
+      // Rejection ②, checked at create so the caller never waits for a runner to refuse it: the
+      // resumed engine runs in this workspace, so a transcript recorded elsewhere would carry
+      // paths that mean nothing here.
+      if (
+        dto.sourceCwd !== workspace.workDir &&
+        !dto.sourceCwd.startsWith(
+          workspace.workDir.endsWith(path.sep) ? workspace.workDir : workspace.workDir + path.sep,
+        )
+      ) {
+        throw new BadRequestException(
+          `the transcript's cwd ${dto.sourceCwd} is not inside workspace ${workspace.name} (${workspace.workDir})`,
+        );
+      }
+    }
+    const assignedRunnerId = opts?.assignedRunnerId ?? workspace.runnerId ?? undefined;
+    if (!assignedRunnerId) {
+      throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
+    }
+    const accountPermissionMode = accountDefaultPermissionMode(
+      await this.prisma.user.findUnique({
+        where: { id: ownerId },
+        select: { preferences: true },
+      }),
+    );
+    const accountEffort = await this.resolveDefaultEffort(ownerId, dto.workspaceId);
+    const title = dto.title ?? `Imported session ${dto.claudeSessionId.slice(0, 8)}`;
+    const enableWorktree = workspace.enableWorktree;
+    const branch = enableWorktree ? makeBranchName(title) : null;
+    const sourceCwd = dto.sourceCwd ?? workspace.workDir;
+    // The lock key is a hash of the Claude session id, so two concurrent imports of the same
+    // transcript serialize and the second one sees the first's row. Namespace is a constant
+    // distinct from the claim serializer's, so imports never queue behind claims.
+    const lockKey = parseInt(createHash('sha256').update(dto.claudeSessionId).digest('hex').slice(0, 8), 16) & 0x7fffffff;
+    const session = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SessionsService.IMPORT_LOCK_NAMESPACE}, ${lockKey})`;
+        // Rejection ③: a Claude transcript can be imported once — the imported session IS the
+        // continuation of it. A Trashed one does not count: deleting the import frees the id.
+        const claimed = await tx.session.findFirst({
+          where: { runtimeSessionId: dto.claudeSessionId, deletedAt: null },
+          select: { id: true, title: true },
+        });
+        if (claimed) {
+          throw new ConflictException(
+            `this Claude session is already imported as Orbit session ${claimed.id} ("${claimed.title}")`,
+          );
+        }
+        return tx.session.create({
+          data: {
+            title,
+            branch,
+            prompt: '',
+            status: RunStatus.PENDING,
+            provider: AgentProvider.CLAUDE,
+            providerBuiltin: true,
+            // The Claude session id is pre-generated FOR us, by claude, when the transcript was
+            // recorded; the runner resumes it instead of minting one.
+            runtimeSessionId: dto.claudeSessionId,
+            // Non-null = import PENDING: the runner performs the import step and clears this.
+            importSourceCwd: sourceCwd,
+            // No model pin: the claim resolves the runner's Runtime default, as a fresh session
+            // without an explicit pick does.
+            model: null,
+            usesRuntimeDefaultModel: true,
+            // Resume is decided by numTurns > 0 in the claim payload; the seed turn is skipped
+            // for import sessions (queue.service), so this stays 1 and the spawn is a --resume.
+            numTurns: 1,
+            permissionMode: accountPermissionMode,
+            effort: normalizeEffortForProvider(AgentProvider.CLAUDE, accountEffort),
+            workspaceId: workspace.id,
+            assignedRunnerId,
+            creatorId: ownerId,
+            ownerId,
+          },
+        });
+      },
+      loggedRetry(this.logger, 'session.import'),
+    );
+    this.queue.notifySessionQueued();
+    this.realtime.publishSessionCreated(session.id);
+    return withSessionState(session);
+  }
+
   /**
    * Background naming for a session that started with a prompt-derived title: a cleaner display
    * title, plus a couple of semantic tags to file it under. The shared bounded queue prevents a

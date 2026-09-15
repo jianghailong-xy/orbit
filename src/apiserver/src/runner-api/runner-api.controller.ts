@@ -1635,6 +1635,9 @@ export class RunnerApiController {
         title: s.title,
         sessionUuid: runtime.sessionUuid,
         maxSeq: agg._max.seq ?? 0,
+        // cf. the claim path: non-null = import PENDING, and the runner performs the import step
+        // inside this claim before the spawn (a runner restarted mid-import resumes it here).
+        importSourceCwd: s.importSourceCwd ?? undefined,
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
@@ -4339,6 +4342,54 @@ export class RunnerApiController {
     @Body() dto: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
     return this.finalize(runner, sessionId, dto);
+  }
+
+  /**
+   * Settle a session's pending transcript import — the runner's import step, which runs inside
+   * the claim before the engine spawns, checks out with this. `ok` clears the
+   * `importSourceCwd` marker (CAS, so a retried ok after a lost reply is a no-op) and may carry
+   * the real title read out of the transcript; a failure moves the session to Trash
+   * (FAILED + deletedAt) with the reason. The runner then reports the session end via /finalize
+   * as usual, whose LIVE filter leaves this Trash'd row alone.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/import-result')
+  async importResult(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
+  ) {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      if (dto?.ok) {
+        // CAS on the pending marker: a replayed ok (the runner crashed between this POST and its
+        // reply) matches nothing and reports applied:false instead of applying twice.
+        const res = await tx.session.updateMany({
+          where: { id: sessionId, importSourceCwd: { not: null } },
+          data: {
+            importSourceCwd: null,
+            // The runner read a real title out of the transcript; it wins over the placeholder.
+            ...(dto.title ? { title: dto.title } : {}),
+          },
+        });
+        return { applied: res.count > 0, failed: false, announced: res.count > 0 && !!dto.title };
+      }
+      // The transcript could not be read, verified or replayed. Unconditional: an import that
+      // failed has no other state to write, and no second attempt is expected to succeed.
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          status: RunStatus.FAILED,
+          error: dto.error ?? 'import failed',
+          deletedAt: new Date(),
+        },
+      });
+      return { applied: false, failed: true, announced: true };
+    }, loggedRetry(this.logger, 'runnerApi.import-result'));
+    // Wake live clients: the imported session just got its real title (or went to Trash).
+    if (outcome.announced) this.realtime.publishSessionUpdated(sessionId);
+    return { ok: true, ...outcome };
   }
 
   /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,

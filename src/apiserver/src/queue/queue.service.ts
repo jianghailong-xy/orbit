@@ -282,35 +282,42 @@ export class QueueService {
     // Retried whole. The session row an aborted attempt inserted does not exist, so a re-run
     // inserts one session rather than a second — and the capacity fence it commits under is
     // re-evaluated inside the closure on every attempt.
-    await withTransactionRetry(this.prisma, async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
-      const seedClientTurnId = `initial-${session.id}`;
-      const existingSeed = await tx.conversationTurn.findUnique({
-        where: {
-          sessionId_clientTurnId: {
-            sessionId: session.id,
-            clientTurnId: seedClientTurnId,
+    //
+    // An import session has no prompt to seed (it resumes a conversation that already exists in
+    // its transcript), and must not gain one: the runner replays the transcript as events inside
+    // its first claim, and a seeded turn would hand the engine an empty "user message" instead.
+    // numTurns was set at create time precisely so resume stays true without this increment.
+    if (!session.importSourceCwd) {
+      await withTransactionRetry(this.prisma, async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
+        const seedClientTurnId = `initial-${session.id}`;
+        const existingSeed = await tx.conversationTurn.findUnique({
+          where: {
+            sessionId_clientTurnId: {
+              sessionId: session.id,
+              clientTurnId: seedClientTurnId,
+            },
           },
-        },
-        select: { id: true },
-      });
-      if (existingSeed) return;
-      const turn = await tx.conversationTurn.create({
-        data: {
-          sessionId: session.id,
-          seq: 1,
-          clientTurnId: seedClientTurnId,
-          kind: 'message',
-          content: session.prompt,
-          status: 'PENDING',
-        },
-        select: { id: true },
-      });
-      await tx.attachment.updateMany({
-        where: { sessionId: session.id, turnId: null },
-        data: { turnId: turn.id },
-      });
-    }, loggedRetry(this.logger, 'queue.buildSession'));
+          select: { id: true },
+        });
+        if (existingSeed) return;
+        const turn = await tx.conversationTurn.create({
+          data: {
+            sessionId: session.id,
+            seq: 1,
+            clientTurnId: seedClientTurnId,
+            kind: 'message',
+            content: session.prompt,
+            status: 'PENDING',
+          },
+          select: { id: true },
+        });
+        await tx.attachment.updateMany({
+          where: { sessionId: session.id, turnId: null },
+          data: { turnId: turn.id },
+        });
+      }, loggedRetry(this.logger, 'queue.buildSession'));
+    }
     // Continue the monotonic event seq past whatever a prior run persisted (incl. a
     // failed first run's error events) so new events never collide; 0 when fresh.
     const maxSeq =
@@ -423,6 +430,9 @@ export class QueueService {
       sessionUuid,
       maxSeq,
       resume,
+      // Non-null = import PENDING: the runner performs the transcript import step inside this
+      // claim (copy + event replay + /import-result) before spawning the engine.
+      importSourceCwd: session.importSourceCwd ?? undefined,
       // Injected into the runtime process so the `orbit mcp` server knows its context.
       agentId: session.workspaceId ?? undefined,
       // §13.8: a conversation ABOUT a task needs the same tool context as one executing it — the

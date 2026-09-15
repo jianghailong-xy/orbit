@@ -1033,6 +1033,12 @@ export interface ClaimedSession {
   /** True when reviving an ended session: claude's session already exists, so the
    *  runner must --resume (not --session-id) even on its first spawn. */
   resume?: boolean;
+  /** Non-null for a session created by importing a local Claude transcript: the transcript's
+   *  recorded cwd (CLI import) or the workspace workDir the runner should locate the file from
+   *  (web import). The runner, inside this claim and before spawning, copies the transcript into
+   *  the session's `~/.claude/projects/<slug>/` dir, replays it as run events, and clears the
+   *  marker via POST /runner/sessions/:id/import-result. It does not reach the spawn at all. */
+  importSourceCwd?: string;
   /** DB id of the session's agent, injected into the claude process (ORBIT_AGENT_ID)
    *  so the `orbit mcp` server can attribute task work to it. Omitted if no agent. */
   agentId?: string;
@@ -1358,6 +1364,8 @@ export interface ReclaimSession {
   leaseOwner?: string;
   /** Highest persisted RunEvent.seq, so the runner continues the seq counter. */
   maxSeq: number;
+  /** Non-null only while a transcript import is unfinished, cf. ClaimedSession.importSourceCwd. */
+  importSourceCwd?: string;
   /** How to re-drive `claude` — same shape a fresh claim hands the runner, so the
    *  resumed process keeps the session's model/permission-mode/tools. */
   agent: AgentExecConfig;
