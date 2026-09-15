@@ -390,6 +390,7 @@ export function buildTaskExecutionPrompt(task: {
   acceptanceCriteria?: string | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  completionCriterion?: TaskCompletionCriterionValue | null;
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
@@ -406,6 +407,11 @@ export function buildTaskExecutionPrompt(task: {
   const acceptance = task.acceptanceCriteria?.trim();
   const executableAcceptance =
     task.acceptanceCommand != null && task.acceptanceExpectedExitCode != null;
+  // OWNER_CONFIRMED is settled only by the account owner pressing Confirm done in the app, so a run
+  // of such a task has nothing to submit. Handed the evidence envelope like every other task, its
+  // runs did as told and filed evidence that criterion never reads — often for a task in no
+  // project, with no project_get criterion to copy.
+  const ownerConfirmed = task.completionCriterion === 'OWNER_CONFIRMED';
   return (
     `请开始执行任务「${task.title}」。\n\n` +
     (task.description ? `任务描述：\n${task.description}\n\n` : '') +
@@ -419,13 +425,18 @@ export function buildTaskExecutionPrompt(task: {
         `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
         `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
         ` coordinator 审批这个机械结论。\n`
-      : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
-        + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
-        + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`
-        + `gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它`
-        + `和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作`
-        + `属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是`
-        + `解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
+      : ownerConfirmed
+        ? `3. 完成后，在本会话里用一两句话说明做了什么，然后结束本轮。本任务的完成判据是 OWNER_CONFIRMED：`
+          + `由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…），任何 agent 会话`
+          + `（包括 coordinator）都无法代为确认；退回的理由会作为下一条消息进入本会话，收到后按理由继续。`
+          + `不要调用 task_evidence_submit，也不要写 status。\n`
+        : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
+          + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
+          + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`
+          + `gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它`
+          + `和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作`
+          + `属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是`
+          + `解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
     `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
     `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
     `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
@@ -12096,6 +12107,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     acceptanceCriteria?: string | null;
     acceptanceCommand?: string | null;
     acceptanceExpectedExitCode?: number | null;
+    completionCriterion?: TaskCompletionCriterionValue | null;
     isForeman?: boolean;
     verifiesTaskId?: string | null;
     list?: { instructions?: string | null } | null;

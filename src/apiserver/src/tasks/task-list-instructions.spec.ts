@@ -15,6 +15,7 @@ function promptFor(task: {
   acceptanceCriteria?: string | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
+  completionCriterion?: string;
   isForeman?: boolean;
   verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
@@ -283,6 +284,57 @@ test('an EXECUTABLE task delegates its terminal status to the one declared comma
   assert.match(step3, /不要自行写 status/);
   assert.match(step3, /不要让 coordinator 审批/);
   assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
+});
+
+test('an OWNER_CONFIRMED task reports in its session and ends the turn instead of submitting evidence', async () => {
+  // Only the account owner settles this criterion, by pressing Confirm done in the app. Handed the
+  // evidence envelope like every other task, runs of it did as told, each filing a
+  // `task_completion_evidence` row the criterion never reads — for tasks in no project, with no
+  // project_get criterion to copy.
+  const text = await (await promptFor({
+    description: 'x',
+    completionCriterion: 'OWNER_CONFIRMED',
+    list: null,
+  }))();
+  const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+  assert.match(step3, /在本会话里用一两句话说明做了什么，然后结束本轮/);
+  assert.match(step3, /由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…）/);
+  assert.match(step3, /退回的理由会作为下一条消息进入本会话，收到后按理由继续/);
+  assert.match(step3, /不要写 status/);
+  // Nothing in the prompt asks for the envelope, and the tool is named only to be refused.
+  assert.equal(/证据信封|claim|checks|gaps|project_get/.test(text), false, text);
+  assert.equal(text.replace('不要调用 task_evidence_submit', '').includes('task_evidence_submit'), false, text);
+  const step4 = text.split('\n').find((line) => line.startsWith('4. '))!;
+  assert.match(step4, /task_update 将状态（status）置为 FAILED/);
+});
+
+test('an EVIDENCE_JUDGMENT task, and a verifier, still get the evidence envelope word for word', async () => {
+  // The branch above is keyed on OWNER_CONFIRMED alone: declaring any other criterion dispatches
+  // the template exactly as it was before that branch existed.
+  for (const task of [
+    { completionCriterion: 'EVIDENCE_JUDGMENT' },
+    { completionCriterion: 'VERIFICATION', verifiesTaskId: 'subject-task' },
+  ]) {
+    const prompt = await promptFor({ description: '下载 000_00008.parquet', list: null, ...task });
+    assert.equal(await prompt(), PROMPT_WITHOUT_INSTRUCTIONS);
+  }
+});
+
+test('a task declaring EXECUTABLE keeps its step 3 word for word', async () => {
+  const text = await (await promptFor({
+    description: 'x',
+    completionCriterion: 'EXECUTABLE',
+    acceptanceCommand: 'npm test',
+    acceptanceExpectedExitCode: 0,
+    list: null,
+  }))();
+  const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+  assert.equal(
+    step3,
+    '3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令' +
+      '（期望退出码 0），并把命令、原始输出和实际退出码写入任务评论；退出码相等则推导 DONE，否则推导 FAILED。' +
+      '不要自行写 status，也不要让 coordinator 审批这个机械结论。',
+  );
 });
 
 test('foreman and verifier runs are told that their criterion, not their session, writes DONE', async () => {
