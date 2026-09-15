@@ -790,3 +790,22 @@ test('a recent turn-attributed batch cannot bypass the terminal fence', async ()
   assert.equal(calls.updateMany.length, 0);
   assert.equal(published(), 0);
 });
+
+test('a backlogged batch inserts in bounded chunks so no single createMany can stall the loop', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  const rows = 300;
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: Array.from({ length: rows }, (_, i) => ({
+      seq: i + 1,
+      type: RunEventType.SYSTEM,
+      ts: '2026-07-31T12:00:00.000Z',
+      payload: { subtype: 'notice', text: `event ${i}` },
+    })),
+  });
+
+  assert.equal(calls.createMany.length, 2, '300 rows split across two chunks');
+  assert.equal(calls.createMany[0].data.length, 256);
+  assert.equal(calls.createMany[1].data.length, 44);
+  assert.equal(calls.createMany.every((c: any) => c.skipDuplicates === true), true);
+});
