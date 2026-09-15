@@ -174,7 +174,13 @@ public enum WatchProjection {
     }
 
     static func metWord(_ predicate: WatchPredicate) -> String {
-        let leaves = Set(predicate.leaves)
+        var leaves = Set(predicate.leaves)
+        // "All of these finish, or any one fails" is the canonical agent condition (contract vector
+        // `all-terminal-or-any-failed`, what `task_await` sends by default) and names two leaves for
+        // one set of targets. A failed task has finished, so every target it counts as met has
+        // finished — and absorbing the escape leaf keeps the commonest wait of all from reading as
+        // the vaguest: "0 of 1 met" beside "0 of 1 finished" on the card under it.
+        if leaves == [.taskTerminal, .taskFailed] { leaves = [.taskTerminal] }
         guard leaves.count == 1, let leaf = leaves.first else { return "met" }
         switch leaf {
         case .sessionTurnSettled: return "finished their turn"
@@ -262,6 +268,25 @@ public enum WatchProjection {
         return "Last evaluated \(rel)"
     }
 
+    /// The deadline under the card's own EXPIRES label — "in 23h", "now" — so the label isn't said
+    /// twice. Web's `expiryLabel`. Nil once the deadline no longer means anything, and for an
+    /// expired watch, which the strip never holds: only live watches wait there.
+    public static func expiresIn(for watch: Watch, now: Date = Date()) -> String? {
+        guard WatchStateMachine.isLive(watch.state), let expiresAt = RelativeTime.parse(watch.expiresAt)
+        else { return nil }
+        let left = expiresAt.timeIntervalSince(now)
+        return left > 0 ? "in \(duration(left))" : "now"
+    }
+
+    /// The evaluator's last look under the card's UPDATED label: "checked 20s ago", web's wording.
+    /// `lastEvaluated` is the same fact as a standalone sentence, for the places with no label.
+    public static func checked(for watch: Watch, now: Date = Date()) -> String {
+        guard let iso = watch.lastEvaluatedAt, let relative = RelativeTime.format(iso, now: now) else {
+            return "never checked"
+        }
+        return "checked \(relative)"
+    }
+
     /// "Expires in 23h" while the watch is live, "Expired 2h ago" once it did, nil otherwise.
     public static func deadline(for watch: Watch, now: Date = Date()) -> String? {
         guard let expiresAt = RelativeTime.parse(watch.expiresAt) else { return nil }
@@ -326,6 +351,24 @@ public enum WatchProjection {
         }
     }
 
+    /// How many targets a card names before it stops counting them out, and that line. Web's
+    /// `SHOWN_TARGETS` and the `+N more` beside it; the wake card counts its own changes the same way.
+    public static let shownTargets = 3
+
+    public static func moreTargets(_ hidden: Int) -> String { "+\(hidden) more" }
+
+    /// A target by the name this client holds for it, and by kind and short id when it holds none.
+    /// A card that can't name what it waits on leaves several watches looking identical, which is
+    /// what sent the account owner into the detail sheet to tell them apart.
+    public static func targetTitle(kind: WatchTargetKind, id: String, name: String?) -> String {
+        if let name, !name.isEmpty { return name }
+        switch kind {
+        case .session: return "Session \(id.prefix(8))"
+        case .task: return "Task \(id.prefix(8))"
+        case .unknown: return id
+        }
+    }
+
     /// A target's own state word.
     public static func targetStateWord(_ state: WatchTargetState) -> String {
         switch state {
@@ -359,6 +402,44 @@ public enum WatchProjection {
             reason = error.localizedDescription
         }
         return "Couldn't \(verb) the watch — \(reason)."
+    }
+}
+
+/// One labelled row on a watch's card, in the words the browser labels the same row with
+/// (`WatchCard.tsx`'s `<dl>`). Only the live spellings are here: the console's strip holds nothing
+/// else, so a watch never reads "Result" or "Expired" there.
+public enum WatchRowLabel {
+    public static let watching = "Watching"
+    public static let progress = "Progress"
+    public static let updated = "Updated"
+    public static let then = "Then"
+    public static let expires = "Expires"
+}
+
+public struct WatchFact: Equatable, Sendable, Identifiable {
+    public let label: String
+    public let value: String
+    public var id: String { label }
+
+    public init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+}
+
+extension WatchProjection {
+    /// The card's rows under WATCHING, which the view draws itself because its targets are links.
+    /// The order is the browser's, and so is each label: a watch read on two screens is one thing.
+    public static func facts(for watch: Watch, observerTitle: String?, now: Date = Date()) -> [WatchFact] {
+        var rows = [
+            WatchFact(label: WatchRowLabel.progress, value: progress(for: watch)),
+            WatchFact(label: WatchRowLabel.updated, value: checked(for: watch, now: now)),
+            WatchFact(label: WatchRowLabel.then, value: action(for: watch, observerTitle: observerTitle)),
+        ]
+        if let expires = expiresIn(for: watch, now: now) {
+            rows.append(WatchFact(label: WatchRowLabel.expires, value: expires))
+        }
+        return rows
     }
 }
 
@@ -396,6 +477,23 @@ public struct WatchSessionSummary: Equatable, Sendable {
     /// One watch's progress, or how many watches there are when there are several.
     public var progress: String {
         watches.count == 1 ? WatchProjection.progress(for: watches[0]) : "\(watches.count) watches"
+    }
+
+    /// Several watches fold behind one line until it is opened; a single one is simply its card.
+    /// Web folds that one too, but there it is one card among a page of them — here it IS the strip
+    /// above the composer, and a fold over a single card hides the only thing the strip is for.
+    public var collapses: Bool { watches.count > 1 }
+
+    /// The line the closed strip reads as, web's `SessionWatchStrip` title.
+    public var waitingOn: String {
+        watches.count == 1 ? "Waiting on a watch" : "Waiting on \(watches.count) watches"
+    }
+
+    /// What is being waited for, behind that line, so a closed strip still says it.
+    public var conditions: String {
+        watches
+            .map { WatchProjection.condition($0.predicate, targetCount: WatchProgress($0.targets).live) }
+            .joined(separator: " · ")
     }
 
     /// The oldest last look among the ACTIVE watches — the least fresh reading is the one to show.

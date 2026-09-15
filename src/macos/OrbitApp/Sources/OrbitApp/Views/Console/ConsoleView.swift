@@ -535,8 +535,19 @@ struct TranscriptView: View {
         case .queued(let bubble):
             // No `AnchorRow` — a queued turn hasn't been asked yet, so it's never the sticky
             // "Your question" (web's `:not(.chat-queued)`).
-            UserBubbleView(bubble: bubble,
-                           onCancelQueued: { Task { await console.cancelQueued(bubble) } })
+            //
+            // A wake a watch queued is the card the transcript draws once a runner takes it, so it
+            // keeps that shape while it waits and its payload stays folded. Withdrawing is offered
+            // only once the server `turnId` is known — the DELETE keys on it.
+            if let wake = WatchWakeText.parse(bubble.text) {
+                WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
+                                  undelivered: bubble.undelivered,
+                                  onWithdraw: bubble.turnId == nil
+                                      ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else {
+                UserBubbleView(bubble: bubble,
+                               onCancelQueued: { Task { await console.cancelQueued(bubble) } })
+            }
         case .bottom:
             Color.clear.frame(height: 1)
         }
@@ -982,7 +993,15 @@ struct TranscriptItemView: View {
     var console: ConsoleModel? = nil
     var body: some View {
         switch item {
-        case .user(let b):      UserBubbleView(bubble: b)
+        case .user(let b):
+            // A turn a watch queued is the watch's to show, not a message the user typed: it opens
+            // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
+            if let wake = WatchWakeText.parse(b.text) {
+                WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
+                                  undelivered: b.undelivered || b.delivery == "failed")
+            } else {
+                UserBubbleView(bubble: b)
+            }
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)

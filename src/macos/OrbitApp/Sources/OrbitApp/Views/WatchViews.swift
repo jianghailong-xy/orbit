@@ -240,14 +240,17 @@ private struct WatchTargetRow: View {
         }
     }
 
-    /// Named from what the app already holds; a target it hasn't loaded shows its kind and short id.
+    /// Named from what the app already holds; a target it hasn't loaded shows its kind and short id
+    /// — the same naming the console's Watching card gives the same rows.
     private var title: String {
         let id = target.targetResourceId
+        let name: String?
         switch target.targetKind {
-        case .session: return model.session(id: id)?.title ?? "Session \(id.prefix(8))"
-        case .task: return model.tasks?.item(id)?.title ?? "Task \(id.prefix(8))"
-        case .unknown: return id
+        case .session: name = model.session(id: id)?.title
+        case .task: name = model.tasks?.item(id)?.title
+        case .unknown: name = nil
         }
+        return WatchProjection.targetTitle(kind: target.targetKind, id: id, name: name)
     }
 }
 

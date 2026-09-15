@@ -26,9 +26,21 @@ final class WatchProjectionTests: XCTestCase {
         let sessions = [F.target("S2", kind: "SESSION", state: "SATISFIED"), F.target("S3", kind: "SESSION")]
         XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: F.all("SESSION_TURN_SETTLED"),
                                                              targets: sessions)), "1 of 2 finished their turn")
-        let either: [String: Any] = ["kind": "ANY_OF", "operands": [F.all("TASK_TERMINAL"), F.any("TASK_FAILED")]]
-        XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: either, targets: F.tasks(7, met: 3))),
-                       "3 of 7 met")
+        // "All of these finish, or any one fails" names two leaves for one set of targets, and is
+        // what `task_await` sends by default — so it was the commonest wait on screen and read as
+        // the vaguest. A failed task has finished, so it counts in the same verb as one leaf would.
+        let orAnyFails: [String: Any] = ["kind": "ANY_OF",
+                                         "operands": [F.all("TASK_TERMINAL"), F.any("TASK_FAILED")]]
+        XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: orAnyFails, targets: F.tasks(7, met: 3))),
+                       "3 of 7 finished")
+        // Two leaves that genuinely say different things still count in the neutral word: a session
+        // satisfied by needing attention has not finished its turn.
+        let settledOrAsking: [String: Any] = ["kind": "ANY_OF",
+                                              "operands": [F.all("SESSION_TURN_SETTLED"),
+                                                           F.any("SESSION_NEEDS_ATTENTION")]]
+        let watched = [F.target("S2", kind: "SESSION", state: "SATISFIED"), F.target("S3", kind: "SESSION")]
+        XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: settledOrAsking, targets: watched)),
+                       "1 of 2 met")
     }
 
     // MARK: headline

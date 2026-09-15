@@ -1569,8 +1569,11 @@ final class ConsoleModel {
             // transcript and restoring would duplicate it. Unlike Stop (offered only with an empty
             // composer), Cancel is reachable mid-draft, so an in-progress draft always wins.
             // Attachments aren't rehydrated (the composer needs their bytes), matching interrupt.
+            // Except a wake a watch queued: nobody typed those words, so folding them back would
+            // put a UUID and a block of JSON in the composer as though the user had written it.
             let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !body.isEmpty, composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !body.isEmpty, WatchWakeText.parse(bubble.text) == nil,
+               composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 composerText = body
             }
         } catch {
@@ -1598,6 +1601,9 @@ final class ConsoleModel {
         interruptFollowUpClientTurnId = nil
         let restored = reducer.state.queued
             .filter { $0.clientTurnId == nil || $0.clientTurnId != followUp }
+            // A wake a watch queued was never the user's to get back (web parity: the queued tail
+            // filters them out of both restore paths).
+            .filter { WatchWakeText.parse($0.text) == nil }
             .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")

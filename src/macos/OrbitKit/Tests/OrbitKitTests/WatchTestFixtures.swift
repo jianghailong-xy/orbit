@@ -95,6 +95,75 @@ enum WatchFixture {
         try! JSONDecoder().decode(Watch.self, from: Data(json.utf8))
     }
 
+    // MARK: the turn a watch queues
+
+    // The three shapes `watch-delivery.service.ts` writes (`watchTurnContent`,
+    // `watchExpiryTurnContent`, `watchEndTurnContent`), built the way it builds them and with the
+    // ids the web's own fixtures use — the server writes a watch's UUID into the text while the API
+    // serves public ids, and reading one wake has to survive that.
+
+    static let wakeWatchID = "0195c0de-0000-7000-8000-0000000000c3"
+    static let wakeTaskID = "0195c0de-0000-7000-8000-0000000000d4"
+    static let wakeReason = "ANY_OF(ALL TASK_TERMINAL 2/3, ANY TASK_FAILED 1/3)"
+    private static let wakeMark = "This turn was queued by the watch, not typed by a person."
+
+    /// The payload, pretty-printed in a fenced block, as `JSON.stringify(payload, null, 2)` leaves it.
+    static func fenced(_ payload: [String: Any]) -> String {
+        let data = try! JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
+        return "```json\n\(String(decoding: data, as: UTF8.self))\n```"
+    }
+
+    static func change(kind: String = "TASK", id: String = wakeTaskID, state: String = "SATISFIED",
+                       status: String? = "FAILED") -> [String: Any] {
+        var entry: [String: Any] = ["kind": kind, "id": id, "state": state]
+        if let status { entry["observed"] = ["status": status] }
+        return entry
+    }
+
+    /// A Match's wake. `last` adds the line a CONTINUOUS watch's final wake carries between the head
+    /// and the mark, which is why the head is read as a line and not as the whole first paragraph.
+    static func matchWake(generation: Int = 1, reason: String = wakeReason,
+                          changed: [[String: Any]] = [change()], watchID: String = wakeWatchID,
+                          payloadWatchID: String? = nil, last: Bool = false) -> String {
+        var header = ["Orbit Watch \(watchID) matched at generation \(generation): \(reason)", ""]
+        if last {
+            header.append("That was the last wake its budget allows: the watch has ended and will "
+                          + "not wake this session again.")
+            header.append("")
+        }
+        header.append("\(wakeMark) What the watch recorded when its condition held:")
+        let payload: [String: Any] = [
+            "watchId": payloadWatchID ?? watchID,
+            "generation": generation,
+            "matchedAt": "2026-09-14T11:59:00.000Z",
+            "reason": reason,
+            "changedTargets": changed,
+            "latestSnapshot": ["evaluatedAt": "2026-09-14T11:59:00.000Z", "targets": [] as [Any]],
+        ]
+        return "\(header.joined(separator: "\n"))\n\n\(fenced(payload))"
+    }
+
+    static func expiryWake(watchID: String = wakeWatchID) -> String {
+        let header = [
+            "Orbit Watch \(watchID) EXPIRED at 2026-09-14T11:00:00.000Z without its condition ever holding.",
+            "",
+            "\(wakeMark) The watch has ended and will not wake this session again. What its last "
+                + "evaluation saw:",
+        ].joined(separator: "\n")
+        return "\(header)\n\n\(fenced(["watchId": watchID, "state": "EXPIRED"]))"
+    }
+
+    /// A REVOKED or UNRESOLVABLE end, which names no target and carries no snapshot.
+    static func endWake(_ end: String, watchID: String = wakeWatchID) -> String {
+        let header = [
+            "Orbit Watch \(watchID) ended \(end): every target it watched is gone, so its condition "
+                + "can never be decided.",
+            "",
+            "\(wakeMark) The watch has ended and will not wake this session again.",
+        ].joined(separator: "\n")
+        return "\(header)\n\n\(fenced(["watchId": watchID, "state": end]))"
+    }
+
     /// Captured from an apiserver built at main a8b6a0843 by the Watch integration QA (task 34DH29wQ6TIGLaPXPFlv2,
     /// `qa/artifacts/m1/m1-fixtures/watch-withdrawn.json`): a Match whose queued wake was withdrawn before a runner
     /// took it. A session_create(wait) that gets its answer inline releases its wake into the same dead letter.
