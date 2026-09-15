@@ -1,0 +1,68 @@
+-- The provisioning lifecycle behind "create a workspace from a repo URL", dropped with the enum
+-- that only it ever used.
+--
+-- 0171 added `repo_url`, `provision_state` and `provision_error` as the storage behind making a
+-- workspace out of a git remote: create wrote the row CLONING, the runner cloned on its next
+-- heartbeat, and `/runner/clone-result` moved the row to READY or FAILED. The account owner decided
+-- on 2026-09-15 that Orbit does not need that flow. The endpoints, the DTO field, the runner's
+-- clone dispatch and the shared wire contract are removed in the same change as this migration.
+--
+-- NEVER EXECUTED ONCE, SO THERE IS NOTHING TO ARCHIVE
+-- ===================================================
+-- On the production deployment all 23 workspaces (soft-deleted ones included) read
+-- `repo_url IS NULL` and `provision_state = 'READY'`, and no row has ever held a `provision_error`.
+-- READY is the state every workspace is BORN in — 0171 added the column NOT NULL DEFAULT 'READY' —
+-- so that population is entirely rows this path never touched. Unlike 0272, which dumped 3616 rows
+-- before removing them, there is no value in these two columns to preserve.
+--
+-- `repo_url` IS DELIBERATELY LEFT IN PLACE
+-- ========================================
+-- The task that ordered this removal listed `repo_url` with the other two. It is kept, because it is
+-- the one of the three that is still READ. `projects/project-integration-line.ts` (fe948d1f8,
+-- 2026-09-15) bootstraps a project's `project_codebase` binding from the remote its coordination
+-- workspace names — once in `configureProjectIntegration`, which SELECTs `w."repo_url"` directly,
+-- and once in `startOnFirstIntegration` via the work session's workspace — and it has no other
+-- source for that URL. Dropping the column does not merely fail to compile; it removes that
+-- feature's only input.
+--
+-- Nothing writes the column any more after this change, which is not a regression: nothing has ever
+-- successfully written it. Every row is NULL today, so that bootstrap already refuses every call
+-- with INTEGRATION_REPOSITORY_UNKNOWN, exactly as it will after this migration. Whether a workspace
+-- should record its remote again — and from where — is a product decision about the integration
+-- line, not part of withdrawing the clone flow, and is filed separately.
+--
+-- THE ENUM GOES, AND WHY THAT IS SAFE
+-- ===================================
+-- `workspace_provision_state` was created by 0171 for one column and never reused. That was checked
+-- against the production catalog rather than by eye, because this repo has dropped a database object
+-- by pattern before and nearly took a live guard with it (0272's `project_action_*` functions, three
+-- of which belonged to other tables):
+--   * `pg_attribute` joined to `pg_type`: `workspace.provision_state` is the ONLY column of this
+--     type in the database, and nothing uses its array type `_workspace_provision_state`.
+--   * `pg_depend` on both type oids returns three edges, all of them this column's own — the array
+--     type, the column, and the column's DEFAULT. No other object depends on the type.
+--   * No function body (`pg_proc.prosrc`), view definition, CHECK constraint or index expression
+--     anywhere in the database mentions `provision_state` or `provision_error`.
+-- So the type is named exactly, dropped after the column that holds it, and nothing else can lose a
+-- member it was relying on.
+--
+-- `runner.repos_root`, added by the same 0171, also stays: it is a Runner column rather than a
+-- Workspace one, it is still reported on every heartbeat and still stored, and withdrawing it is a
+-- separate decision. Nothing below touches it.
+--
+-- ROLLING DEPLOY. Ordered the usual way round: the build that stops reading these columns ships
+-- first and runs this on boot. A replica of the PREVIOUS build reading `provision_state` during the
+-- rollover is the one exposure, and it is bounded — every row reads 'READY', which is what that
+-- build's session guard already lets through.
+--
+-- Catalog-only: DROP COLUMN does not rewrite the heap, and there is no backfill UPDATE to split out
+-- into a migration of its own.
+
+-- 1. The two columns. `provision_state` takes its DEFAULT with it; neither carries a constraint, an
+--    index or a foreign key.
+ALTER TABLE "workspace"
+  DROP COLUMN IF EXISTS "provision_state",
+  DROP COLUMN IF EXISTS "provision_error";
+
+-- 2. The enum, now that the only column of that type is gone. Named exactly, never by pattern.
+DROP TYPE IF EXISTS "workspace_provision_state";

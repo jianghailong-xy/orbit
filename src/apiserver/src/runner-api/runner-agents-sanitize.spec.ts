@@ -67,9 +67,6 @@ function makeController() {
     model: 'gpt-safe',
     workDir: '/work/repo',
     runnerId: 'r1',
-    repoUrl: 'https://github.com/acme/existing.git',
-    provisionState: 'READY',
-    provisionError: null,
     enableWorktree: true,
     permissionMode: 'plan',
     defaultMergeTarget: 'main',
@@ -93,11 +90,7 @@ function makeController() {
     },
     create: async (_ownerId: string, dto: Record<string, unknown>) => {
       seen.create = dto;
-      return mergeDefined({
-        ...dto,
-        provisionState: dto.repoUrl && !dto.workDir ? 'CLONING' : 'READY',
-        provisionError: null,
-      });
+      return mergeDefined(dto);
     },
     update: async (_ownerId: string, _id: string, dto: Record<string, unknown>) => {
       seen.update = dto;
@@ -137,9 +130,6 @@ test('list forwards the session credential to the orchestration authorizer', asy
       lastProvider: 'codex',
       workDir: '/work/repo',
       runnerId: 'r1',
-      repoUrl: 'https://github.com/acme/existing.git',
-      provisionState: 'READY',
-      provisionError: null,
       enableWorktree: true,
       defaultMergeTarget: 'main',
       runner: { id: 'r1', name: 'runner', displayName: 'Build host' },
@@ -157,20 +147,15 @@ test('create forwards the workspace config fields an orchestrator may set', asyn
     env: { FOO: 'bar' },
     systemPrompt: 'new private prompt',
     permissionMode: 'acceptEdits',
-    repoUrl: 'https://github.com/acme/new.git',
     defaultMergeTarget: 'develop',
   });
   assert.deepEqual(seen.create?.env, { FOO: 'bar' });
   assert.equal(seen.create?.defaultMergeTarget, 'develop');
-  assert.equal(seen.create?.repoUrl, 'https://github.com/acme/new.git');
   // Unset fields stay undefined so Prisma leaves the column alone.
   assert.equal(seen.create?.workDir, undefined);
   // Bound to the calling runner by default.
   assert.equal(seen.create?.runnerId, 'r1');
   assert.equal(result.name, 'child');
-  assert.equal(result.repoUrl, 'https://github.com/acme/new.git');
-  assert.equal(result.provisionState, 'CLONING');
-  assert.equal(result.provisionError, null);
   assertSensitiveWorkspaceFieldsRedacted(result);
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
   assert.deepEqual(seen.published, ['s1', 'a1', false]);
@@ -265,7 +250,6 @@ test('the runner HTTP create whitelist is the exported parity contract', async (
     appendSystemPrompt: 'append',
     workDir: '/srv/existing',
     runnerId: 'runner-2',
-    repoUrl: 'https://github.com/acme/parity.git',
     enableWorktree: true,
     env: { REGION: 'eu' },
     defaultMergeTarget: 'main',
@@ -285,24 +269,6 @@ test('the runner HTTP create whitelist is the exported parity contract', async (
   );
   assert.equal(seen.create?.enableOrchestration, false);
   assert.equal('provider' in (seen.create ?? {}), false);
-});
-
-test('repoUrl is create-only and its HTTP bound matches CreateWorkspaceDto', async () => {
-  const { controller, seen } = makeController();
-  await controller.updateWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
-    name: 'renamed',
-    repoUrl: 'https://github.com/acme/must-not-reclone.git',
-  });
-  assert.equal('repoUrl' in (seen.update ?? {}), false);
-
-  await assert.rejects(
-    () =>
-      controller.createWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, {
-        name: 'too-long',
-        repoUrl: 'x'.repeat(2049),
-      }),
-    /2048/,
-  );
 });
 
 test('rejects a non-string env value — the runner decodes env as map[string]string', async () => {

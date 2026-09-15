@@ -340,7 +340,7 @@ apiserver 没有 checkout，runner 有。因此 ref→SHA 的解析必须在 run
 
 ### 7.1 规范化与身份
 
-**SR36（URL 规范化是一个纯函数，且只用于比较）**：`canonicalRepoUrl` 由一个纯函数产生：去首尾空白、去尾部 `/`、去尾部 `.git`、scheme/host 小写、丢弃 `user@` 认证前缀、scp 式 `git@host:owner/repo` 与 `ssh://git@host/owner/repo` 归一到同一形态。规范化结果**只用于身份比较，从不用于 clone** —— clone 用的是用户写下的原值。runner 侧已有 `src/runner-go/clone.go` 的 `cloneDirName` 做了同类拆解，两处必须共用同一份规则并有对拍测试。
+**SR36（URL 规范化是一个纯函数，且只用于比较）**：`canonicalRepoUrl` 由一个纯函数产生：去首尾空白、去尾部 `/`、去尾部 `.git`、scheme/host 小写、丢弃 `user@` 认证前缀、scp 式 `git@host:owner/repo` 与 `ssh://git@host/owner/repo` 归一到同一形态。规范化结果**只用于身份比较，从不用于 clone** —— clone 用的是用户写下的原值。这份规则目前只有 `canonicalRepoUrl` 一个实现：runner 侧同类的 URL 拆解随「从仓库 URL 创建 workspace」整套移除，因此不再有第二处需要对拍。
 
 **SR37（身份是一对值，URL 单独不够）**：只比 URL，一次远端迁移（GitHub → 自建）就会让所有 session 的身份全错；只比 `rootCommitSha`，两个 fork 无法区分。因此 G1 判定为：`canonicalRepoUrl` 相等 **或** `rootCommitSha` 相等且非空。两者皆不成立才是 `BASE_REPO_MISMATCH`。`rootCommitSha` 为 NULL 时首次成功解析可补写一次（这是**观测到的事实**，不是猜测），此后不可变。
 
@@ -605,7 +605,7 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 1. **多仓库任务**：一个 Task 需要两个仓库同时在特定版本时，`requiredContains` 与 worktree 布局如何表达。取舍 1 的直接后续。
 2. **服务端裸镜像**：若日后引入，`refAuthority` 需要第三个取值 `SERVER_MIRROR`，且 §6.3 的三步握手会塌缩成两步。本契约的分层允许这次替换，因为解析结论的**形状**不变。
 3. **`integrationRef` 上的并发推进**：目标 tip 围栏与重新验证规则由 `34D2AgK6sXw5VEbTu70EP` 定义，本契约只固定"默认目标是 `integrationRef`"和"landed 是包含关系"两点（SR44 / SR26）。
-4. **`rootCommitSha` 与浅克隆**：浅克隆没有根提交。runner 侧 `src/runner-go/clone.go` 的 `cloneRepo` 目前是全克隆（函数体里那句 `No --depth.` 注释写明了理由），因此 v1 不受影响；若日后支持浅克隆，SR37 的身份判据需要一个替代指纹。
+4. **`rootCommitSha` 与浅克隆**：浅克隆没有根提交。Orbit 目前不自己 clone 任何仓库（「从仓库 URL 创建 workspace」已整套移除），因此 v1 不受影响；若日后重新引入克隆且允许浅克隆，SR37 的身份判据需要一个替代指纹。
 
 ---
 

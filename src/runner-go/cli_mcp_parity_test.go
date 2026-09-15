@@ -96,10 +96,10 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 }
 
 // Workspace create has three public doors and one internal HTTP contract. This is the regression
-// gate for the failure mode where CreateWorkspaceDto grows a field (repoUrl was the motivating
-// case), while the runner HTTP whitelist, MCP schema/dispatcher or CLI parser/body silently stays
-// behind. The HTTP whitelist is an exported literal that sanitize itself iterates; reading that
-// literal here lets the Go and TypeScript halves meet without inventing a second protocol file.
+// gate for the failure mode where CreateWorkspaceDto grows a field while the runner HTTP
+// whitelist, MCP schema/dispatcher or CLI parser/body silently stays behind. The HTTP whitelist is
+// an exported literal that sanitize itself iterates; reading that literal here lets the Go and
+// TypeScript halves meet without inventing a second protocol file.
 func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) {
 	httpFields := typescriptStringLiteralArray(t,
 		filepath.Join("..", "apiserver", "src", "runner-api", "runner-agents.controller.ts"),
@@ -131,7 +131,6 @@ func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) 
 		"appendSystemPrompt": "append",
 		"workDir":            "/srv/existing",
 		"runnerId":           "runner-2",
-		"repoUrl":            "https://github.com/acme/parity.git",
 		"enableWorktree":     true,
 		"env":                map[string]interface{}{"REGION": "eu"},
 		"defaultMergeTarget": "main",
@@ -144,7 +143,7 @@ func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) 
 		if err := json.NewDecoder(r.Body).Decode(&mcpBody); err != nil {
 			t.Errorf("decode MCP create body: %v", err)
 		}
-		_, _ = w.Write([]byte(`{"id":"workspace-1","provisionState":"READY"}`))
+		_, _ = w.Write([]byte(`{"id":"workspace-1"}`))
 	}))
 	defer api.Close()
 	mcp := &mcpServer{
@@ -159,7 +158,7 @@ func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) 
 	assertSameStringSet(t, "MCP forwarded body vs runner HTTP create", httpFields, mapKeys(mcpBody))
 
 	fs := newCLIFlagSet("orbit agent create")
-	flags := registerAgentWriteFlags(fs, true)
+	flags := registerAgentWriteFlags(fs)
 	cliFields := []string{}
 	fs.VisitAll(func(cliFlag *flag.Flag) {
 		switch cliFlag.Name {
@@ -184,7 +183,6 @@ func TestWorkspaceCreateParametersStayInParityAcrossHTTPMCPAndCLI(t *testing.T) 
 		"--append-system-prompt", "append",
 		"--work-dir", "/srv/existing",
 		"--runner-id", "runner-2",
-		"--repo-url", "https://github.com/acme/parity.git",
 		"--enable-worktree=true",
 		"--env", "REGION=eu",
 		"--default-merge-target", "main",
@@ -241,7 +239,7 @@ func typescriptClassFields(t *testing.T, path, className, nextClassName string) 
 	if end < 0 {
 		t.Fatalf("%s has no %s after %s", path, nextClassName, className)
 	}
-	// Decorators and the property often share one line (`@IsOptional() @IsString() repoUrl?:`),
+	// Decorators and the property often share one line (`@IsOptional() @IsString() workDir?:`),
 	// so anchor on the TypeScript property punctuation rather than the beginning of the line.
 	matches := regexp.MustCompile(`\b([A-Za-z][A-Za-z0-9]*)[!?]:`).FindAllStringSubmatch(rest[:end], -1)
 	fields := make([]string, 0, len(matches))

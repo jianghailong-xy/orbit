@@ -15,7 +15,6 @@ import {
   type Session,
   SessionDispatchOrigin,
   SessionRunSource,
-  WorkspaceProvisionState,
 } from '@prisma/client';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { createHash, randomBytes, randomUUID } from 'crypto';
@@ -241,32 +240,6 @@ function assertKnownPermissionMode(mode: string | undefined): void {
   const modes = Object.values(PermissionMode) as string[];
   if (!modes.includes(mode)) {
     throw new BadRequestException(`unknown permissionMode "${mode}"; use one of: ${modes.join(', ')}`);
-  }
-}
-
-/**
- * A workspace whose working directory is not on its machine yet cannot host a session.
- *
- * Refused here rather than at spawn because of what the two failures LOOK like. The runtime
- * starting in a directory that does not exist dies with ENOENT and an absolute path — which reads
- * as a broken workspace, minutes after the click, on a machine the user cannot see. Said here it
- * is one sentence about a clone that is still running or has already failed, at the moment
- * somebody asks the workspace to do something.
- *
- * Both non-READY states are refused for the one reason: there is no directory. A failed clone has
- * an exit that a session is not — retry it, fix the URL, or point it at another machine.
- */
-function assertWorkspaceProvisioned(state: WorkspaceProvisionState): void {
-  if (state === 'CLONING') {
-    throw new ForbiddenException(
-      'this workspace is still cloning — its working directory is not on the machine yet',
-    );
-  }
-  if (state === 'FAILED') {
-    throw new ForbiddenException(
-      "this workspace's clone failed, so it has no working directory — retry the clone, " +
-        'correct the repository URL, or clone it onto another machine',
-    );
   }
 }
 
@@ -633,7 +606,6 @@ export class SessionsService {
           enableWorktree: true,
           enabled: true,
           env: true,
-          provisionState: true,
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -645,18 +617,16 @@ export class SessionsService {
       // Tested against `false` rather than falsiness: the column is non-nullable with a
       // default, so a real row is always a boolean, and only an explicit "off" should refuse.
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
-      assertWorkspaceProvisioned(workspace.provisionState);
       assignedRunnerId = workspace.runnerId ?? undefined;
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, provisionState: true },
+        select: { enableWorktree: true, enabled: true, env: true },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
-      assertWorkspaceProvisioned(workspace.provisionState);
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
     }

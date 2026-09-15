@@ -31,11 +31,11 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 		}
 		switch r.Method {
 		case http.MethodGet:
-			_, _ = w.Write([]byte(`[{"id":"agent-9","repoUrl":"https://github.com/acme/failed.git","provisionState":"FAILED","provisionError":"fatal: denied"}]`))
+			_, _ = w.Write([]byte(`[{"id":"agent-9","workDir":"/srv/failed"}]`))
 		case http.MethodPost:
-			_, _ = w.Write([]byte(`{"id":"agent-10","repoUrl":"https://github.com/acme/reviewer.git","provisionState":"CLONING","provisionError":null}`))
+			_, _ = w.Write([]byte(`{"id":"agent-10","workDir":"/srv/reviewer"}`))
 		default:
-			_, _ = w.Write([]byte(`{"id":"agent-9","provisionState":"READY","provisionError":null}`))
+			_, _ = w.Write([]byte(`{"id":"agent-9"}`))
 		}
 	}))
 	defer srv.Close()
@@ -52,7 +52,7 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 	if got.method != http.MethodGet || got.path != "/api/runner/agents" {
 		t.Fatalf("agent list hit %s %s", got.method, got.path)
 	}
-	if out.String() != "[{\"id\":\"agent-9\",\"repoUrl\":\"https://github.com/acme/failed.git\",\"provisionState\":\"FAILED\",\"provisionError\":\"fatal: denied\"}]\n" {
+	if out.String() != "[{\"id\":\"agent-9\",\"workDir\":\"/srv/failed\"}]\n" {
 		t.Fatalf("agent list output = %q", out.String())
 	}
 
@@ -61,7 +61,7 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 	err := cmdAgentCLI([]string{
 		"create", "--name", "reviewer", "--description", "reviews diffs",
 		"--system-prompt", "be exact", "--append-system-prompt", "and terse",
-		"--runner-id", "runner-2", "--repo-url", "https://github.com/acme/reviewer.git",
+		"--runner-id", "runner-2",
 		"--enable-worktree",
 		"--env", "TOKEN=abc=123", "--env", "REGION=eu",
 		"--default-merge-target", "develop", "--json",
@@ -78,7 +78,6 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 		"systemPrompt":       "be exact",
 		"appendSystemPrompt": "and terse",
 		"runnerId":           "runner-2",
-		"repoUrl":            "https://github.com/acme/reviewer.git",
 		"enableWorktree":     true,
 		"defaultMergeTarget": "develop",
 		// Split on the first '=' only, so a value may contain more of them.
@@ -87,8 +86,8 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 	if !reflect.DeepEqual(got.body, want) {
 		t.Fatalf("agent create body = %#v, want %#v", got.body, want)
 	}
-	if out.String() != "{\"id\":\"agent-10\",\"repoUrl\":\"https://github.com/acme/reviewer.git\",\"provisionState\":\"CLONING\",\"provisionError\":null}\n" {
-		t.Fatalf("agent create output lost its provisioning receipt: %q", out.String())
+	if out.String() != "{\"id\":\"agent-10\",\"workDir\":\"/srv/reviewer\"}\n" {
+		t.Fatalf("agent create output = %q", out.String())
 	}
 
 	// An update sends only what was asked for: the API replaces what it receives, so an
@@ -230,12 +229,10 @@ func TestAgentCLIValidatesArguments(t *testing.T) {
 		// the API refuses it with a 400 either way — but it never has to, because the request is
 		// not made: `requests` below asserts every case here stopped in the CLI.
 		{name: "blank runner id", args: []string{"create", "--name", "x", "--runner-id", ""}, wantError: "--runner-id cannot be empty"},
-		{name: "blank repo URL", args: []string{"create", "--name", "x", "--repo-url", " "}, wantError: "--repo-url cannot be empty"},
 		{name: "whitespace runner id", args: []string{"update", "343dlzsYWKo5z8l2M8tsD", "--runner-id", "  "}, wantError: "--runner-id cannot be empty"},
 		{name: "env without value", args: []string{"create", "--name", "x", "--env", "TOKEN"}, wantError: "KEY=VALUE"},
 		{name: "missing agent id", args: []string{"update", "--name", "x"}, wantError: "agent id is required"},
 		{name: "nothing to update", args: []string{"update", "agent-9"}, wantError: "no fields to update"},
-		{name: "repo URL is create-only", args: []string{"update", "agent-9", "--repo-url", "https://github.com/acme/new.git"}, wantError: "flag provided but not defined"},
 		{name: "unsafe agent id", args: []string{"update", "../sessions", "--name", "x"}, wantError: "agent "},
 		{name: "unknown command", args: []string{"restart"}, wantError: "unknown command"},
 	} {
@@ -252,12 +249,12 @@ func TestAgentCLIValidatesArguments(t *testing.T) {
 	}
 }
 
-func TestAgentCreateLeafHelpExplainsRepoProvisioning(t *testing.T) {
+func TestAgentCreateLeafHelpListsItsOptions(t *testing.T) {
 	var out bytes.Buffer
 	if err := cmdAgentCLI([]string{"create", "--help"}, &out); err != nil {
 		t.Fatalf("agent create --help: %v", err)
 	}
-	for _, want := range []string{"orbit agent create", "--repo-url", "CLONING", "READY", "FAILED", "provisionError", "orbit agent list"} {
+	for _, want := range []string{"orbit agent create", "--work-dir", "--runner-id", "--enable-worktree", "--default-merge-target"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("agent create --help does not mention %q: %q", want, out.String())
 		}

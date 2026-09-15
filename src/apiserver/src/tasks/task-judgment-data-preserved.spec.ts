@@ -661,6 +661,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        It has no INSERT, UPDATE or DELETE: putting the CHECK back reads `project_blocker` to
   //        validate it and writes nothing. Nothing it removes was still read to allow or refuse a
   //        status when it ran.
+  //   0273 withdrew the provisioning lifecycle behind "create a workspace from a repo URL", by
+  //        account-owner decision: two `workspace` columns — `provision_state` and
+  //        `provision_error` — and the enum `workspace_provision_state` that only the first ever
+  //        used. Read against every claim above: `workspace` is not a relation this file preserves
+  //        and is not reachable from one. It ALTERs that one table by exactly two `DROP COLUMN`s,
+  //        and names no `task` object, neither 0177 relation, `task_executable_acceptance_pair`
+  //        nor any `project_acceptance_*` object. Its single `DROP TYPE` is
+  //        `workspace_provision_state`, checked against the production catalog as that one
+  //        column's alone; it is not `task_completion_criterion`, and there is no `ALTER TYPE`, so
+  //        the three labels this file keeps survive with 0267's fourth beside them. It creates no
+  //        table, column, index, enum, function or trigger, and has no `CREATE OR REPLACE
+  //        FUNCTION` at all, so it is not another writer of the DONE fence. It has no INSERT,
+  //        UPDATE or DELETE, so no preserved row is read or written. Nothing is lost with the
+  //        columns: every workspace reads `provision_state = 'READY'` and a NULL
+  //        `provision_error`, because the path that could write anything else never ran once.
+  //        `workspace.repo_url` is deliberately NOT dropped beside them —
+  //        `projects/project-integration-line.ts` still reads it to bootstrap a project's
+  //        codebase binding — so no reader loses its input here.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -698,7 +716,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0269_project_blocker_resolution_note',
       '0270_project_integration_line',
       '0271_watch_progress_continuous',
-      '0272_drop_project_action'],
+      '0272_drop_project_action',
+      '0273_drop_workspace_clone_provisioning'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

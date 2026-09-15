@@ -265,16 +265,6 @@ const IMPLEMENTATION_ANCHORS: readonly {
     file: 'src/runner-go/worktree.go', symbol: 'resolveBaseSha', declares: 'func resolveBaseSha(',
     quotes: [],
   },
-  {
-    // SR36：runner 侧已有的同类 URL 拆解。
-    file: 'src/runner-go/clone.go', symbol: 'cloneDirName', declares: 'func cloneDirName(',
-    quotes: [],
-  },
-  {
-    // §14 未决 4：浅克隆。
-    file: 'src/runner-go/clone.go', symbol: 'cloneRepo', declares: 'func cloneRepo(',
-    quotes: ['No --depth.'],
-  },
 ];
 
 test('SR53 契约对实现的引用不含行号', () => {

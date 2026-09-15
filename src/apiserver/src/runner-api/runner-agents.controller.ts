@@ -32,7 +32,6 @@ export const ORCHESTRATOR_WORKSPACE_CREATE_FIELDS = [
   'appendSystemPrompt',
   'workDir',
   'runnerId',
-  'repoUrl',
   'enableWorktree',
   'env',
   'defaultMergeTarget',
@@ -45,7 +44,6 @@ type OrchestratorWorkspaceInput = {
   appendSystemPrompt?: string;
   workDir?: string;
   runnerId?: string;
-  repoUrl?: string;
   enableWorktree?: boolean;
   env?: unknown;
   defaultMergeTarget?: string;
@@ -58,9 +56,6 @@ type OrchestratorWorkspaceRecord = Pick<
   | 'description'
   | 'workDir'
   | 'runnerId'
-  | 'repoUrl'
-  | 'provisionState'
-  | 'provisionError'
   | 'enableWorktree'
   | 'defaultMergeTarget'
 > & {
@@ -152,12 +147,6 @@ export class RunnerAgentsController {
       lastProvider: workspace.lastProvider,
       workDir: workspace.workDir,
       runnerId: workspace.runnerId,
-      repoUrl: workspace.repoUrl,
-      // These three values are the provisioning receipt. A create returns CLONING before the
-      // runner starts, and agent_list keeps returning the same fields until it becomes READY or
-      // FAILED; the caller never has to mistake "an id was allocated" for "git clone worked".
-      provisionState: workspace.provisionState,
-      provisionError: workspace.provisionError,
       enableWorktree: workspace.enableWorktree,
       defaultMergeTarget: workspace.defaultMergeTarget,
       ...(workspace.runner
@@ -190,9 +179,6 @@ export class RunnerAgentsController {
     const creating = defaultRunnerId !== undefined;
     const sanitized: Record<string, unknown> = {};
     for (const field of ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) {
-      // repoUrl starts provisioning, so it is create-only. The update path keeps using the same
-      // safe config contract for every other field without accidentally becoming a clone retry.
-      if (!creating && field === 'repoUrl') continue;
       if (field === 'enableWorktree') {
         if (input[field] !== undefined && typeof input[field] !== 'boolean') {
           throw new BadRequestException(`${field} must be a boolean`);
@@ -213,11 +199,6 @@ export class RunnerAgentsController {
       // so it skips them and they arrive here verbatim. Neither is a spelling of an id.
       if (field === 'runnerId' && value !== undefined && value.trim() === '') {
         throw new BadRequestException('invalid runnerId');
-      }
-      // Same cap as CreateWorkspaceDto. Resolution and credentials remain git's answer on the
-      // runner; this only prevents an unbounded control-plane value.
-      if (field === 'repoUrl' && value !== undefined && value.length > 2048) {
-        throw new BadRequestException('repoUrl must be shorter than or equal to 2048 characters');
       }
       if (value !== undefined) sanitized[field] = value;
     }
