@@ -38,7 +38,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
-import { navigateWithPaneSlide } from '../lib/paneTransition';
+import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
@@ -1175,6 +1175,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const workspaceMatch = workspacesMatch ?? agentsMatch;
   const lockedWorkspaceId = routeId(workspaceMatch?.params.id);
   const composingRoute = (workspaceMatch?.params['*'] ?? '') === 'new';
+  // A conversation opened from the session list stamps that on its history entry, and the phone's
+  // ← reads it back: with the list one entry behind, going back can be a real back, so
+  // list → conversation → ← leaves the history where it started instead of stacking a third entry.
+  // Stamped only while the list is the screen being left (⌘N from an open conversation is not),
+  // and absent on a deep-linked conversation — which has no entry behind it to return to.
+  //
+  // Both halves read the browser's own URL and history entry at the moment they are asked, not the
+  // route this render closed over. <BrowserRouter> wraps every location update in a transition, so
+  // useLocation() trails the real entry by a render: long enough for a stamp to be written from the
+  // route we just left, and for the ← to misread the entry it is standing on.
+  const stampFromList = (): { paneFromList: true } | undefined =>
+    showsConversation(window.location.pathname) ? undefined : { paneFromList: true };
+  const arrivedFromList = (): boolean =>
+    (window.history.state?.usr as { paneFromList?: boolean } | null)?.paneFromList === true;
   // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
   // choices (the auto-open redirect, the in-pane back button) key off this.
   const isMobile = useIsMobile();
@@ -4375,7 +4389,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const goNew = (): void => {
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
     navigateWithPaneSlide('push', () =>
-      navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`),
+      navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`, {
+        state: stampFromList(),
+      }),
     );
     // No setText here: the per-target switch effect restores the saved 'new' draft, and
     // blanking would instead clobber the *outgoing* session's draft (text hasn't moved yet).
@@ -5272,7 +5288,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       }
                       if (openable)
                         navigateWithPaneSlide('push', () =>
-                          navigate(`/sessions/${encodeId(s.id)}`),
+                          navigate(`/sessions/${encodeId(s.id)}`, { state: stampFromList() }),
                         );
                     }}
                     onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
@@ -5440,8 +5456,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               aria-label="Back to sessions"
               onClick={() => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+                const list = a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`;
+                // A real back when the list is the entry behind this one, so returning unwinds
+                // the push instead of stacking a third entry on top of it. A deep-linked
+                // conversation has no such entry: replace it, which still lands on the list —
+                // and, unlike a bare back, never steps out of the app.
                 navigateWithPaneSlide('pop', () =>
-                  navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`),
+                  arrivedFromList() ? navigate(-1) : navigate(list, { replace: true }),
                 );
               }}
             >

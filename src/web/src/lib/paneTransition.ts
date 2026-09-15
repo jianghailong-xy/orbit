@@ -40,3 +40,30 @@ export function navigateWithPaneSlide(dir: 'push' | 'pop', navigate: () => void)
     delete root.dataset.paneNav;
   });
 }
+
+/** The two routes that put a conversation on the phone's one screen. WorkspaceView draws the
+ *  session list for every other route — `show-conversation` is exactly these two. */
+export const showsConversation = (path: string): boolean =>
+  /^\/sessions\/[^/]+$/.test(path) || /^\/(?:workspaces|agents)\/[^/]+\/new$/.test(path);
+
+/**
+ * The same slide for the backs the app never issues itself: the browser's Back button, Android's
+ * system back, the edge swipe. Those change the URL on their own, so nothing routes them through
+ * navigateWithPaneSlide — popstate is the last moment that still runs before React Router commits
+ * the new route, which is what keeps the "before" snapshot on the screen being left.
+ *
+ * Which way it went is read off the DOM rather than a remembered path: that class *is* the pane
+ * swap, and until React commits it still names the screen we're on. A pop that swaps no pane
+ * (conversation to conversation) or lands on a page without the split animates nothing.
+ */
+export function installPaneSlideOnPopState(): void {
+  window.addEventListener('popstate', () => {
+    const split = document.querySelector('.workspace-split');
+    if (!split) return;
+    const leaving = split.classList.contains('show-conversation');
+    const entering = showsConversation(window.location.pathname);
+    if (leaving === entering) return;
+    // The browser has already navigated; this only has to redraw around it.
+    navigateWithPaneSlide(entering ? 'push' : 'pop', () => {});
+  });
+}

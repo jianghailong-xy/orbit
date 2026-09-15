@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { navigateWithPaneSlide } from './paneTransition';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installPaneSlideOnPopState, navigateWithPaneSlide } from './paneTransition';
 import { MOBILE_QUERY } from './useMediaQuery';
 
 /**
@@ -129,6 +129,89 @@ describe('navigateWithPaneSlide', () => {
     navigateWithPaneSlide('push', navigate);
 
     expect(navigate).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.dataset.paneNav).toBeUndefined();
+  });
+});
+
+/**
+ * The backs the app never issues: browser Back, Android's system back, the edge swipe. They change
+ * the URL themselves, so the only thing left to decide is which pane the URL just landed on.
+ */
+describe('installPaneSlideOnPopState', () => {
+  // One listener for the file — installing per test would stack them, and every copy would start
+  // its own transition on the same pop.
+  beforeAll(() => installPaneSlideOnPopState());
+
+  /** The split as the page has it, showing one pane or the other. */
+  const mountSplit = (showing: 'list' | 'conversation'): HTMLDivElement => {
+    const split = document.createElement('div');
+    split.className = `workspace-split${showing === 'conversation' ? ' show-conversation' : ''}`;
+    document.body.append(split);
+    return split;
+  };
+
+  /** A history move the app didn't make: the URL is already the new one when popstate lands. */
+  const popTo = (path: string): void => {
+    window.history.pushState({}, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  it("the browser's own back off a conversation runs the ← button's pop slide", () => {
+    stubMedia({ phone: true });
+    const transition = stubViewTransitions();
+    const split = mountSplit('conversation');
+    try {
+      popTo('/workspaces/w1');
+
+      expect(transition.calls, 'a back gesture animates like the button does').toBe(1);
+      expect(document.documentElement.dataset.paneNav).toBe('pop');
+      expect(split.className, 'the list must be showing when the "after" snapshot is taken').toBe(
+        'workspace-split',
+      );
+    } finally {
+      split.remove();
+    }
+  });
+
+  it.each([
+    ['a conversation', '/sessions/s1'],
+    ['the new-session draft', '/workspaces/w1/new'],
+  ])('going forward into %s slides the other way', (_case, path) => {
+    stubMedia({ phone: true });
+    stubViewTransitions();
+    const split = mountSplit('list');
+    try {
+      popTo(path);
+
+      expect(document.documentElement.dataset.paneNav).toBe('push');
+      expect(split.className).toBe('workspace-split show-conversation');
+    } finally {
+      split.remove();
+    }
+  });
+
+  it('a pop between two conversations swaps no pane, so nothing animates', () => {
+    stubMedia({ phone: true });
+    const transition = stubViewTransitions();
+    const split = mountSplit('conversation');
+    try {
+      popTo('/sessions/s2');
+
+      expect(transition.calls).toBe(0);
+      expect(document.documentElement.dataset.paneNav).toBeUndefined();
+      expect(split.className).toBe('workspace-split show-conversation');
+    } finally {
+      split.remove();
+    }
+  });
+
+  it('a pop on a page that has no split at all animates nothing', () => {
+    stubMedia({ phone: true });
+    const transition = stubViewTransitions();
+
+    popTo('/tasks');
+
+    expect(transition.calls).toBe(0);
     expect(document.documentElement.dataset.paneNav).toBeUndefined();
   });
 });
