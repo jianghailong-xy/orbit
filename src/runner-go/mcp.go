@@ -461,6 +461,16 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// is forwarded as given, and an explicit null survives as null rather than being mistaken
 		// for "not supplied" — that last one is the whole clear path.
 		copyIfPresent(body, args, "title", "goal", "instructions", "status")
+		// The integration line travels as the object it is. Forwarded rather than picked apart here,
+		// so the fields the server validates are the fields the caller wrote; the server refuses the
+		// whole request when a session is on it, which is every call made through this tool.
+		if integration, present := args["integration"]; present {
+			settings, ok := integration.(map[string]interface{})
+			if !ok {
+				return toolResult("integration must be an object", true)
+			}
+			body["integration"] = settings
+		}
 		if structuredCriteria {
 			items, err := normalizeMCPProjectAcceptanceItems(args["acceptanceCriteriaItems"], true)
 			if err != nil {
@@ -2146,6 +2156,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
 					"description": "OPEN reopens work; CANCELLED abandons it; DONE says the goal was reached. Refused whenever this tool is called from inside a session, which is every call you make: the field is here for the headless owner-operated `orbit project update` path.",
+				},
+				"integration": map[string]interface{}{
+					"type": "object",
+					"description": "Where this project's finished tasks land, as " +
+						"{line: MAIN | PROJECT_BRANCH, projectBranchName, upstreamRef, " +
+						"mergeCheckCommand, mergeCheckTimeoutSeconds}. Refused whenever this tool is " +
+						"called from inside a session, which is every call you make: which branch a " +
+						"project's work lands on is the account owner's to choose, from the Orbit web " +
+						"app, the user API, or `orbit project update` at their own terminal. Read the " +
+						"line back from project_get, which carries it as `integration`, and say what " +
+						"you would change rather than changing it. Once a project has started " +
+						"integrating the line is locked, and a request to move it is refused even " +
+						"from the owner: to change it, its project branch reaches main first.",
 				},
 				"expectedConfigRevision": map[string]interface{}{
 					"type": "string",

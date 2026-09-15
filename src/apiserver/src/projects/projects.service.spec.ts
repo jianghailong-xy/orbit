@@ -358,6 +358,9 @@ test('the detail read reports progress without loading the project’s tasks', a
     // query rather than as a task read, which is why the refusal above still holds with them in
     // place.
     projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    // The landing lane's second statement: this project's binding, which says which branches its
+    // receipts have to name. No binding here, so it is read the way a project without one is.
+    projectCodebase: { findFirst: async () => null },
     // The independence lane's second statement: who wrote each criterion, which cannot be a
     // nested select because 0251 puts no foreign key on `definition_id`.
     projectCriteriaAuthorship: { findMany: async () => [] },
@@ -400,6 +403,7 @@ test('the detail read serves the authored criteria and no second representation 
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
+    projectCodebase: { findFirst: async () => null },
     projectCriteriaAuthorship: { findMany: async () => [] },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
@@ -440,6 +444,7 @@ test('the detail item is the authored declaration, with no derived verdict besid
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },
+    projectCodebase: { findFirst: async () => null },
     // Nobody recorded who wrote this criterion, which is the case the independence lane reports
     // as INDEPENDENT rather than as a fourth kind of doubt — see the assertion below.
     projectCriteriaAuthorship: { findMany: async () => [] },

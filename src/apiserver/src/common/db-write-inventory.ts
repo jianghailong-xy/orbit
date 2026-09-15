@@ -191,13 +191,24 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'projects/projects.service.ts#update',
     shape: 'TX_RETRIED',
-    locks: 'For a title write with a bound coordinator: that Session FOR UPDATE first (rank 30), then project FOR NO KEY UPDATE (rank 40). Every path then takes project_acceptance_criterion_definition children (rank 60) as needed and writes only rows it already holds. A pointer that changed between the rank-30 pre-read and rank-40 validation aborts and retries with the new Session.',
+    locks: 'For a title write with a bound coordinator: that Session FOR UPDATE first (rank 30), then project FOR NO KEY UPDATE (rank 40). A write carrying integration settings then takes this project’s binding FOR UPDATE (rank 55). Every path then takes project_acceptance_criterion_definition children (rank 60) as needed and writes only rows it already holds. A pointer that changed between the rank-30 pre-read and rank-40 validation aborts and retries with the new Session.',
     identity: 'The project id and the DTO, both outside the closure.',
     isolation: '',
     attempts: 4,
     replay: 'The row is re-read under its own lock and every derived decision — coordinator rebind and managed title sync — comes from that read. Pointer drift is retried from a fresh pre-read rather than locking downward.',
     effects: 'None inside; the control-plane publish is after this resolves.',
     answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/projects.service.ts#configureIntegration',
+    shape: 'TX_RETRIED',
+    locks: 'This project’s binding FOR UPDATE (rank 55), and nothing else: ownership is established before the transaction opens, and the write touches one `project_codebase` row. A project with no binding yet inserts one ON CONFLICT DO NOTHING and then locks the row that insert — or a concurrent binder’s — left.',
+    identity: 'The project id and the settings, both outside the closure. The binding is unique on (project_id, slot), so two configures of one project serialise on that row instead of making a second binding.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every decision is re-derived inside the closure from the row the attempt locked: which line is decided, whether integration has started, and where the settings would move it. A retried attempt that finds the line started refuses with INTEGRATION_LINE_LOCKED, which is the answer a first attempt against those rows would have given.',
+    effects: 'None inside. The view the caller gets back is the row this transaction wrote.',
+    answer: 'Typed 503 from the global boundary; a line that has started stays the explicit 409.',
   },
   {
     at: 'projects/projects.service.ts#decideCriteriaChange',
@@ -963,6 +974,13 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // and asks again outside its transaction. The rest are unlocked reads of that owner's live watches, so two creates of
   // one account decide one after the other and nothing waits on that lock.
   { at: 'watches/watches.service.ts#assertCapacity', under: 'watches.create' },
+  // The project's integration line, written under the rank-55 lock on its own binding and nothing
+  // else. `lockCodebase` takes that lock for both writers before either derives anything from the
+  // row; `bind` is the insert they lock and read back, and a concurrent binder wins it once.
+  { at: 'projects/project-integration-line.ts#lockCodebase', under: 'configureProjectIntegration and startOnFirstIntegration' },
+  { at: 'projects/project-integration-line.ts#bind', under: 'configureProjectIntegration and startOnFirstIntegration' },
+  { at: 'projects/project-integration-line.ts#configureProjectIntegration', under: "projects.configureIntegration and projects.update — the account owner's integration settings, under the binding lock taken after the project row when that write holds one" },
+  { at: 'projects/project-integration-line.ts#startOnFirstIntegration', under: 'the transaction that queues a project’s first integration — it takes the same binding lock and writes only that row' },
   // Test-only, and reachable only from the harness's own transaction.
 ];
 
@@ -1263,6 +1281,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"project_blocker","trigger":"project_blocker_escalation_once","event":"BEFORE UPDATE OF \"escalated_at\"","kind":"ROW/STATEMENT","since":"0125_project_blocker","takes":[]},
   {"table":"project_blocker","trigger":"project_blocker_resolution_final","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0125_project_blocker","takes":[]},
   {"table":"project_codebase","trigger":"project_codebase_config_guard","event":"BEFORE INSERT OR UPDATE","kind":"ROW/STATEMENT","since":"0231_project_codebase_session_source","takes":[]},
+  {"table":"project_codebase","trigger":"project_codebase_integration_lock","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0270_project_integration_line","takes":[]},
   {"table":"project_handoff_approval","trigger":"project_handoff_approval_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0155_project_handoff_approval","takes":[]},
   {"table":"project_member","trigger":"project_member_ratification_project_lock","event":"BEFORE INSERT OR UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0195_project_owner_ratification","takes":["project LOCK"]},
   {"table":"project_member","trigger":"zz_project_completion_contract_member","event":"AFTER INSERT OR UPDATE OR DELETE","kind":"CONSTRAINT","since":"0195_project_owner_ratification","takes":["project LOCK","project_completion_contract LOCK","project_completion_contract WRITE"]},

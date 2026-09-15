@@ -107,7 +107,19 @@ import {
   type CriterionSatisfaction,
   readCriterionSatisfaction,
 } from './project-criterion-satisfaction';
-import { type CriterionLanding, readCriterionLanding } from './project-criterion-landing';
+import {
+  type CriterionLanding,
+  criterionLanding,
+  landingBranchesFor,
+  readCriterionLandingFacts,
+} from './project-criterion-landing';
+import {
+  configureProjectIntegration,
+  type IntegrationSettings,
+  projectIntegrationView,
+  type ProjectIntegrationView,
+  readProjectCodebase,
+} from './project-integration-line';
 import { readProjectBlockers, resolveProjectBlocker } from './project-blocker-resolution';
 import {
   readCriterionIndependence,
@@ -861,6 +873,24 @@ export class ProjectsService {
   ): void {
     const refusal = refuseProjectStatusWrite(dto.status, actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
+  }
+
+  /**
+   * A project's integration line is the account owner's to choose (contract L5): no agent session,
+   * a coordinator's included, picks the branch its own project's work lands on. Checked before the
+   * transaction like `status` above, so a refused request writes nothing it carried.
+   */
+  private static assertIntegrationIsNotWrittenFromASession(
+    dto: UpdateProjectDto,
+    actingSessionId: string | undefined,
+  ): void {
+    if (dto.integration === undefined || !actingSessionId?.trim()) return;
+    throw new ForbiddenException({
+      statusCode: 403,
+      code: 'INTEGRATION_SETTINGS_OWNER_ONLY',
+      message: 'a project’s integration line is the account owner’s to set, not this session’s — ask '
+        + 'them to set it from the Orbit web app, the user API or `orbit project update` at their own terminal',
+    });
   }
 
   /**
@@ -2181,7 +2211,7 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, satisfaction, landing, independence, blockers] = await Promise.all([
+    const [byStatus, satisfaction, landingFacts, codebase, independence, blockers] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId: id },
@@ -2195,7 +2225,10 @@ export class ProjectsService {
       // on beside the derivation instead of inside it, which is what keeps the three clauses out of
       // reach of it; its cost is one findMany whose nested select carries every serving task's
       // merge receipts, so it is bounded by this project's criteria and not by its work.
-      readCriterionLanding(this.prisma, ownerId, id),
+      readCriterionLandingFacts(this.prisma, ownerId, id),
+      // The project's binding, one statement: which two branches those receipts count on, and the
+      // integration line this read serves beside the criteria.
+      readProjectCodebase(this.prisma, id),
       // And the independence lane, in the same batch and on the same terms. Two findManys rather
       // than one — the criteria with their serving work's sessions, and this project's authorship
       // rows — because 0251 deliberately puts no foreign key on `definition_id`, so Prisma has no
@@ -2208,7 +2241,8 @@ export class ProjectsService {
       readProjectBlockers(this.prisma, ownerId, id),
     ]);
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
-    const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
+    const landed = new Map(criterionLanding(landingFacts, landingBranchesFor(codebase))
+      .map((row) => [row.definitionId, row.landing]));
     const independent = new Map(independence.map((row) => [row.definitionId, row]));
     const stated = withAcceptanceDefinitions({
       ...withCoordination(project),
@@ -2232,7 +2266,32 @@ export class ProjectsService {
         ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
       blockers,
+      integration: projectIntegrationView(codebase),
     };
+  }
+
+  /** The project's integration line, as `GET /projects/:id/integration` serves it (contract §1.6). */
+  async integration(ownerId: string, id: string): Promise<ProjectIntegrationView> {
+    await this.assertOwned(ownerId, id);
+    return projectIntegrationView(await readProjectCodebase(this.prisma, id));
+  }
+
+  /**
+   * The account owner choosing this project's integration line and merge check
+   * (`PATCH /projects/:id/integration`, contract L5). Once the project started integrating, a change
+   * that would move the line is 409 `INTEGRATION_LINE_LOCKED`.
+   */
+  async configureIntegration(
+    ownerId: string,
+    id: string,
+    settings: IntegrationSettings,
+  ): Promise<ProjectIntegrationView> {
+    await this.assertOwned(ownerId, id);
+    return withTransactionRetry(
+      this.prisma,
+      (tx) => configureProjectIntegration(tx, { ownerId, projectId: id, settings }),
+      loggedRetry(this.logger, 'projects.configureIntegration'),
+    );
   }
 
   /** The account owner ending one of this project's blockers with a written reason. */
@@ -2754,6 +2813,7 @@ export class ProjectsService {
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
+    ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
@@ -2841,6 +2901,12 @@ export class ProjectsService {
         // The value the lock produced, not the one read before it: a concurrent write that turned
         // this project off is exactly the case the check has to see.
         ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
+
+        // The integration line, under its binding's own lock: rank 55, after the project row above
+        // and before any criterion row below.
+        if (dto.integration !== undefined) {
+          await configureProjectIntegration(tx, { ownerId, projectId: id, settings: dto.integration });
+        }
 
         // Definitions change under the already-held project lock. Nothing derives from them any
         // more: 0229 removed the evaluator that used to re-judge a project when its exam changed.

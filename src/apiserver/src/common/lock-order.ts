@@ -101,6 +101,17 @@ export const LOCK_ORDER = [
     why: 'Multi-row selections are always taken sorted by id (orderedIds).',
   },
   {
+    rank: 55,
+    relation: 'project_codebase',
+    modes: 'FOR UPDATE (the integration line: chosen by its owner, started by the first integration)',
+    why:
+      'A project\'s binding, between its Task and its children. Above `task` because the transaction '
+      + 'that starts a line is the one that finishes a Task and already holds it; below rank 60 '
+      + 'because a project update may write the line and then this project\'s criteria. One row per '
+      + 'project, taken by `project-integration-line.ts` alone, and nothing further down is reached '
+      + 'while it is held.',
+  },
+  {
     rank: 60,
     relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation',
     modes: 'INSERT/UPDATE/DELETE only',

@@ -25,6 +25,7 @@ import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
+import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
 const PROJECT_AUTOMATION_POLICIES = Object.values(ProjectAutomationPolicy);
@@ -200,6 +201,39 @@ export class CreateProjectDto {
   sessionBudgetPerDay?: number | null;
 }
 
+const INTEGRATION_LINES: readonly IntegrationLine[] = ['MAIN', 'PROJECT_BRANCH'];
+/** A full branch ref: PSC SR9's rule, narrowed to branches, which are all a line can be. */
+const BRANCH_REF = /^refs\/heads\/\S+$/;
+
+/**
+ * `PATCH /projects/:id/integration`, and `integration` on a project update: the account owner's
+ * choice of where this project's finished tasks land and what is checked before they do
+ * (`docs/project-integration-line-contract.md` L5). Only the owner's — a request carrying an
+ * acting session is refused whole — and each field is written only when sent.
+ */
+export class UpdateProjectIntegrationDto implements IntegrationSettings {
+  /** `MAIN` lands finished tasks straight on the upstream; `PROJECT_BRANCH` on the project's own
+   *  branch first. */
+  @IsOptional() @IsIn(INTEGRATION_LINES) line?: IntegrationLine;
+  /** The project branch as a full ref, `refs/heads/project/<project id>` unless named. Naming one
+   *  chooses `PROJECT_BRANCH`. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
+  })
+  projectBranchName?: string;
+  /** What "main" is for this project, as a full ref: `refs/heads/main` unless changed. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: upstreamRef must be a full branch ref such as refs/heads/main',
+  })
+  upstreamRef?: string;
+  /** The check run on the combined tree before a landing; null or blank removes it. */
+  @IsOptional() @IsString() mergeCheckCommand?: string | null;
+  /** That check's budget in seconds; null returns it to the one-hour default. */
+  @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+}
+
 export class UpdateProjectDto {
   @IsOptional() @IsString() @MinLength(1) title?: string;
   /** null clears the field, as on the task list's `instructions`: blank and absent must not be
@@ -234,6 +268,11 @@ export class UpdateProjectDto {
    * both the database gate and the application-layer refusal that used to make DONE
    * automatic-only, so a project is settled by whoever writes this column and by nothing else. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
+
+  /** This project's integration line and merge check (`UpdateProjectIntegrationDto`). The account
+   *  owner's to set: like `status`, a request carrying an acting session is refused whole. */
+  @IsOptional() @ValidateNested() @Type(() => UpdateProjectIntegrationDto)
+  integration?: UpdateProjectIntegrationDto;
 
   // ── What the project's coordinator is allowed to do ────────────────────────────────────────
   // The four fields below are the authorization set: they are the only fields whose value decides

@@ -49,6 +49,18 @@ import type { PrismaService } from '../prisma/prisma.service';
  * {@link CriterionLanding} altogether. There is no evidence this read can obtain that would
  * justify asserting it, and a value in the type is an invitation to somebody to assert it later.
  *
+ * TWO BRANCHES, SO TWO LEVELS OF LANDED
+ * -------------------------------------
+ * A code project names two branches in its `project_codebase` binding: its upstream, which is what
+ * "on main" means for it, and its integration line, where its finished tasks land — the upstream
+ * itself for a project that goes straight to main, a `project/<id>` branch for one that does not
+ * (`docs/project-integration-line-contract.md` §1.4). Work merged into the project branch has
+ * landed somewhere real, and it is not on main. So a task answers ON_UPSTREAM or
+ * ON_INTEGRATION_LINE, and a criterion is LANDED only when all of its work is on the upstream;
+ * work that has only reached the project branch reads ON_INTEGRATION_LINE. The two readings answer
+ * two questions — "has this prerequisite landed" wants the task's, "is the project done" wants the
+ * criterion's — and neither of them is a NOT_LANDED.
+ *
  * WHAT THIS DELIBERATELY DOES NOT DO
  * ----------------------------------
  *  - It never moves `satisfied`. That field means "the work settled", it is decided where the
@@ -67,13 +79,20 @@ import type { PrismaService } from '../prisma/prisma.service';
  *    to put a narrower guard back: the owner was asked again on 2026-09-08 with that sentence
  *    quoted back to them and answered that the projection should be built, and a projection
  *    refuses nobody — everything that could set `status` before it can still set it. What this
- *    lane still does not do is decide. It hands that caller the same three-valued answer it hands
- *    a screen, and UNKNOWN there withholds DONE rather than asserting the work did not land.
+ *    lane still does not do is decide. It hands that caller the same answer it hands a screen, and
+ *    anything but LANDED there withholds DONE rather than asserting the work did not land.
  *  - UNKNOWN names no tasks, where an unmet clause names every task holding it up. That asymmetry
  *    is the point: naming "the serving tasks with no receipt" would be read as "these tasks did
  *    not land", which is the one thing this lane refuses to say.
  */
-export type CriterionLanding = 'LANDED' | 'UNKNOWN';
+export type CriterionLanding = 'LANDED' | 'ON_INTEGRATION_LINE' | 'UNKNOWN';
+
+/**
+ * One task's answer, the unit a criterion's is folded from. `NOT_KNOWN` rather than a denial, for
+ * the reason at the top of this file: a task with no receipt on either branch may still have landed
+ * by a path that leaves none.
+ */
+export type TaskLanding = 'ON_UPSTREAM' | 'ON_INTEGRATION_LINE' | 'NOT_KNOWN';
 
 /**
  * The two results that mean the source is in the target.
@@ -85,18 +104,53 @@ export type CriterionLanding = 'LANDED' | 'UNKNOWN';
 const LANDED_RESULTS: ReadonlyArray<string> = ['MERGED', 'ALREADY_MERGED'];
 
 /**
- * What "the default branch" is, from a process with no repository to ask.
- *
- * These are the names the runner itself auto-detects when a merge names no target (`mergeToMain`
- * in `src/runner-go/worktree.go`: main, else master), so this is the same branch the receipt is
- * about rather than a second convention invented here. A receipt into any OTHER branch is a real
- * merge into somewhere else: it is evidence about that branch and no evidence at all about this
- * one, so it leaves the answer UNKNOWN — never NOT_LANDED.
+ * The branches a receipt has to name to be evidence, for one project: its upstream, and the
+ * integration line its tasks land on. Short names, because that is how a receipt spells
+ * `target_branch` — the runner reports the branch it merged into, not a ref.
  */
-const DEFAULT_BRANCH_NAMES: ReadonlyArray<string> = ['main', 'master'];
+export interface LandingBranches {
+  upstream: readonly string[];
+  integration: readonly string[];
+}
 
-/** The two fields of a receipt that decide whether it is evidence of a landing on the default
- *  branch. Kept structural so the fold is testable without Prisma. */
+/**
+ * The branches of a project with no `project_codebase` binding, and the one place this lane names
+ * main and master.
+ *
+ * They are the names the runner itself auto-detects when a merge names no target (`mergeToMain`
+ * in `src/runner-go/worktree.go`: main, else master), so for a project that never said which
+ * branch is its upstream this is the branch its receipts are about rather than a second convention
+ * invented here. A project with a binding says it for itself and gets no fallback: guessing a
+ * branch name is a convention of one repository, and this lane is about all of them.
+ */
+export const LEGACY_LANDING_BRANCHES: LandingBranches = {
+  upstream: ['main', 'master'],
+  integration: ['main', 'master'],
+};
+
+/** A binding's two refs, as `project_codebase` stores them: full names (PSC SR9). */
+export interface LandingCodebase {
+  upstreamRef: string;
+  integrationRef: string;
+}
+
+/** The branch a full ref names, spelled the way a receipt spells it. A ref outside `refs/heads/` is
+ *  not a branch anything merges into, and comes back whole, which no receipt matches. */
+export function branchName(ref: string): string {
+  return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+}
+
+/** What counts as landed for one project: its binding's two branches, or the legacy pair without one. */
+export function landingBranchesFor(codebase: LandingCodebase | null): LandingBranches {
+  if (!codebase) return LEGACY_LANDING_BRANCHES;
+  return {
+    upstream: [branchName(codebase.upstreamRef)],
+    integration: [branchName(codebase.integrationRef)],
+  };
+}
+
+/** The two fields of a receipt that decide whether it is evidence of a landing. Kept structural so
+ *  the fold is testable without Prisma. */
 export interface LandingReceiptFacts {
   result: string;
   targetBranch: string;
@@ -124,19 +178,38 @@ export interface CriterionLandingAnswer {
 }
 
 /**
- * Whether one receipt is evidence that this work is on the default branch.
+ * Whether one receipt is evidence that this work landed on either of the project's branches.
  *
  * Both halves are asked here rather than in the query's WHERE clause, so what "landed" MEANS is
  * one readable predicate in one place instead of a condition spread across a database filter and
  * a fold that no longer says what it is filtering for.
  */
-export function receiptIsLandingEvidence(receipt: LandingReceiptFacts): boolean {
+export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches: LandingBranches): boolean {
   return LANDED_RESULTS.includes(receipt.result)
-    && DEFAULT_BRANCH_NAMES.includes(receipt.targetBranch);
+    && (branches.upstream.includes(receipt.targetBranch)
+      || branches.integration.includes(receipt.targetBranch));
 }
 
 /**
- * The fold: one criterion is LANDED when every task serving it has landing evidence.
+ * Where one task's work landed, by the best of its receipts: the upstream outranks the integration
+ * line, because work on main is also everywhere a project branch will ever take it.
+ */
+export function taskLanding(
+  receipts: ReadonlyArray<LandingReceiptFacts>,
+  branches: LandingBranches,
+): TaskLanding {
+  const landed = receipts.filter((receipt) => LANDED_RESULTS.includes(receipt.result));
+  if (landed.some((receipt) => branches.upstream.includes(receipt.targetBranch))) return 'ON_UPSTREAM';
+  if (landed.some((receipt) => branches.integration.includes(receipt.targetBranch))) {
+    return 'ON_INTEGRATION_LINE';
+  }
+  return 'NOT_KNOWN';
+}
+
+/**
+ * The fold: one criterion is LANDED when every task serving it is on the upstream, and
+ * ON_INTEGRATION_LINE when every one of them landed on one of the two branches and not all of them
+ * on the upstream.
  *
  * A conjunction, for the same reason clause 2 of the work side's answer is one — three tasks serve
  * a criterion and one of them landed is not a criterion whose work is on main, and saying LANDED
@@ -145,32 +218,42 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts): boolean 
  */
 export function criterionLanding(
   definitions: ReadonlyArray<CriterionWithLandingFacts>,
+  branches: LandingBranches,
 ): CriterionLandingAnswer[] {
-  return definitions.map((definition) => ({
-    definitionId: definition.id,
-    landing:
-      definition.servingTasks.length > 0
-        && definition.servingTasks.every((task) => task.mergeReceipts.some(receiptIsLandingEvidence))
-        ? 'LANDED'
-        : 'UNKNOWN',
+  return definitions.map((definition) => {
+    const tasks = definition.servingTasks.map((task) => taskLanding(task.mergeReceipts, branches));
+    let landing: CriterionLanding = 'UNKNOWN';
+    if (tasks.length > 0 && tasks.every((task) => task === 'ON_UPSTREAM')) landing = 'LANDED';
+    else if (tasks.length > 0 && !tasks.includes('NOT_KNOWN')) landing = 'ON_INTEGRATION_LINE';
+    return { definitionId: definition.id, landing };
+  });
+}
+
+/** One project's landing branches, off its primary binding. One statement. */
+export async function readLandingBranches(
+  prisma: Pick<PrismaService, 'projectCodebase'>,
+  projectId: string,
+): Promise<LandingBranches> {
+  return landingBranchesFor(await prisma.projectCodebase.findFirst({
+    where: { projectId, slot: 'primary' },
+    select: { upstreamRef: true, integrationRef: true },
   }));
 }
 
 /**
- * Every criterion this project states, and whether the work filed under each has a merge receipt
- * putting it on the default branch.
+ * Every criterion this project states, each with its serving work's merge receipts.
  *
  * One call, whose nested select carries every serving task's receipts with it — not one query per
  * criterion and not one per task. It reads the criterion rows again rather than borrowing the work
  * side's, which keeps this lane genuinely bolted on: the three clauses are untouched, and nothing
  * here can change the answer they fold.
  */
-export async function readCriterionLanding(
+export function readCriterionLandingFacts(
   prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition'>,
   ownerId: string,
   projectId: string,
-): Promise<CriterionLandingAnswer[]> {
-  const definitions = await prisma.projectAcceptanceCriterionDefinition.findMany({
+): Promise<CriterionWithLandingFacts[]> {
+  return prisma.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
@@ -180,5 +263,17 @@ export async function readCriterionLanding(
       },
     },
   });
-  return criterionLanding(definitions);
+}
+
+/** Every criterion this project states, and where the work filed under each has landed. */
+export async function readCriterionLanding(
+  prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectCodebase'>,
+  ownerId: string,
+  projectId: string,
+): Promise<CriterionLandingAnswer[]> {
+  const [definitions, branches] = await Promise.all([
+    readCriterionLandingFacts(prisma, ownerId, projectId),
+    readLandingBranches(prisma, projectId),
+  ]);
+  return criterionLanding(definitions, branches);
 }

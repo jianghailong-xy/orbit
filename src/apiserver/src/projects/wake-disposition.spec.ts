@@ -24,8 +24,9 @@ import { WakeDispositionService } from './wake-disposition.service';
 
 const T = (taskId: string, status: string) => ({ taskId, status });
 
-/** The two answers the merge receipts can give. `CriterionLanding` has no third member. */
-const LANDINGS: readonly CriterionLanding[] = ['LANDED', 'UNKNOWN'];
+/** Every answer the merge receipts can give: on the project's upstream, landed but only on its
+ *  integration line, or no evidence either way. `CriterionLanding` has no NOT_LANDED. */
+const LANDINGS: readonly CriterionLanding[] = ['LANDED', 'ON_INTEGRATION_LINE', 'UNKNOWN'];
 
 /** Every status a task can be in, so the table below can claim to be exhaustive. */
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'DONE', 'FAILED', 'CANCELLED'] as const;

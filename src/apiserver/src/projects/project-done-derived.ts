@@ -167,6 +167,8 @@ type DerivationClient = Pick<
   PrismaService,
   'project'
   | 'projectAcceptanceCriterionDefinition'
+  // The project's binding, which says which branch its work has to be on to read LANDED.
+  | 'projectCodebase'
   | 'projectCriteriaAuthorship'
   | 'projectStandardSetConfirmation'
 >;

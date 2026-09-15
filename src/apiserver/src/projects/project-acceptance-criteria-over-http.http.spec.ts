@@ -119,6 +119,9 @@ function fakePrisma() {
         return read(where.id);
       },
     },
+    // The detail read asks a project for its binding, which says which branches count as landed.
+    // This probe binds no repository, so every project here is read the way one without a binding is.
+    projectCodebase: { findFirst: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async ({ where }: { where: { projectId: string } }) => state.criteria
         .filter((row) => row.projectId === where.projectId)

@@ -1972,6 +1972,16 @@ model ProjectCodebase {
   /// `upstreamRef` unless somebody says otherwise, and never rewritten by a merge (SR44) — a
   /// one-off "merge this elsewhere" writes `session.mergeTarget` and nothing here.
   integrationRef String @map("integration_ref")
+  /// Who decided `integrationRef`: `EXPLICIT` when the account owner chose the line, `DEFAULT_RULE`
+  /// when the platform decided it at the project's first integration (`project-integration-line.ts`).
+  integrationRefSource     String    @default("DEFAULT_RULE") @map("integration_ref_source")
+  /// When the platform started landing work on the line. Non-null locks it: from then on a trigger
+  /// refuses moving either ref or the repository's identity (0270).
+  integrationStartedAt     DateTime? @map("integration_started_at") @db.Timestamptz(3)
+  /// The project-level check run on the combined tree before a landing. Null: none.
+  mergeCheckCommand        String?   @map("merge_check_command")
+  /// That check's budget in seconds. Null: the one-hour default an acceptance command gets.
+  mergeCheckTimeoutSeconds Int?      @map("merge_check_timeout_seconds")
 
   /// Where a ref → SHA resolution COUNTS: `REMOTE` (against `canonicalRepoUrl`) or `RUNNER_LOCAL`
   /// (against one named machine's checkout). Not "which machine runs it" — authority is what

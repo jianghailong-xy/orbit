@@ -163,6 +163,12 @@ Options:
   --instructions-file -            read the replacement instructions from stdin
   --clear-instructions             leave the project with no standing instructions
   --status OPEN|DONE|CANCELLED     where the work stands
+  --integration-line MAIN|PROJECT_BRANCH
+                                   where this project's finished tasks land
+  --project-branch REF             the project branch's full ref (refs/heads/project/next)
+  --upstream-ref REF               what main is for this project, as a full ref
+  --merge-check-command CMD        run on the combined tree before a landing (empty removes it)
+  --merge-check-timeout-seconds N  that check's budget in seconds
   --expected-config-revision N     only write if the project is still at that configRevision
   --json                           emit compact JSON
 
@@ -192,6 +198,13 @@ least one flag is required — an update naming no field
 is refused here rather than sent as a request that would change nothing, and the fence below
 does not count as one: it names nothing to write.
 
+The integration line says where this project's finished tasks land: MAIN puts them straight on the
+upstream, PROJECT_BRANCH puts them on the project's own branch, which reaches main later. Choosing
+it is the account owner's, so it is accepted here — typed at a terminal there is no session — and
+refused for any agent session. A project nobody chose for is decided at its first integration: code
+tasks that depend on one another go through a project branch, anything else straight to main. After
+that the line is locked and a request to move it is refused; the merge check stays changeable.
+
 --expected-config-revision is a compare-and-swap. Pass the configRevision you read from
 'orbit project get' and the write commits only if the project is still at it; otherwise
 it is refused with STALE_CONFIG_REVISION and nothing is written. Use it when you read the
@@ -219,7 +232,7 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is created if they decline. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and the server opens THAT project its own coordinator in the same workspace and says so — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one.", Mutates: true},
-	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; only a tightening lands immediately, and [] drops every criterion, which is held)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Structured acceptance items are a whole-collection replacement, and only a tightening edit lands immediately — adding an item, reordering, or stepping an item's verificationMethod up the HUMAN → VERIFICATION → EXECUTABLE ladder. Any other edit (dropping an item, rewriting an item's text, or rewording verificationMethod any other way) is held as a proposal for the account owner to decide, reported as acceptanceCriteriaHold with the criteria left as they were; so [] drops every criterion rather than clearing the collection, and is held whenever there is one to drop. Every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; only a tightening lands immediately, and [] drops every criterion, which is held)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. The integration line — where this project's finished tasks land, MAIN or PROJECT_BRANCH, with the project branch and upstream as full refs and the check run on the combined tree before a landing — is the account owner's to choose, so it is accepted at a terminal and refused for an agent session; unchosen, it is decided at the first integration (code tasks that depend on one another go through a project branch), and locked from then on. Structured acceptance items are a whole-collection replacement, and only a tightening edit lands immediately — adding an item, reordering, or stepping an item's verificationMethod up the HUMAN → VERIFICATION → EXECUTABLE ladder. Any other edit (dropping an item, rewriting an item's text, or rewording verificationMethod any other way) is held as a proposal for the account owner to decide, reported as acceptanceCriteriaHold with the criteria left as they were; so [] drops every criterion rather than clearing the collection, and is held whenever there is one to drop. Every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
@@ -673,6 +686,11 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	instructionsFile := fs.String("instructions-file", "", "read the replacement instructions from stdin (-)")
 	clearInstructions := fs.Bool("clear-instructions", false, "leave the project with no standing instructions")
 	status := fs.String("status", "", "where the work stands: OPEN, DONE or CANCELLED")
+	integrationLine := fs.String("integration-line", "", "where finished tasks land: MAIN or PROJECT_BRANCH")
+	projectBranch := fs.String("project-branch", "", "the project branch's full ref, e.g. refs/heads/project/next")
+	upstreamRef := fs.String("upstream-ref", "", "what main is for this project, as a full ref")
+	mergeCheckCommand := fs.String("merge-check-command", "", "the check run on the combined tree before a landing (empty removes it)")
+	mergeCheckTimeoutSeconds := fs.Int("merge-check-timeout-seconds", 0, "that check's budget in seconds")
 	expectedConfigRevision := fs.String("expected-config-revision", "", "only write if the project is still at this configRevision")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
@@ -753,6 +771,39 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if flagWasSet(fs, "status") {
 		body["status"] = *status
+	}
+	// The integration line, sent as one object so the server validates the whole choice at once.
+	// Typed at a terminal there is no session, and the server reads that absence as the account
+	// owner — which is the only principal allowed to choose where a project's work lands.
+	integration := map[string]interface{}{}
+	if flagWasSet(fs, "integration-line") {
+		if *integrationLine != "MAIN" && *integrationLine != "PROJECT_BRANCH" {
+			return fmt.Errorf("--integration-line must be MAIN or PROJECT_BRANCH")
+		}
+		integration["line"] = *integrationLine
+	}
+	if flagWasSet(fs, "project-branch") {
+		integration["projectBranchName"] = *projectBranch
+	}
+	if flagWasSet(fs, "upstream-ref") {
+		integration["upstreamRef"] = *upstreamRef
+	}
+	// Whether the flag was named, not what it carries: an empty value is how the check is removed.
+	if flagWasSet(fs, "merge-check-command") {
+		if strings.TrimSpace(*mergeCheckCommand) == "" {
+			integration["mergeCheckCommand"] = nil
+		} else {
+			integration["mergeCheckCommand"] = *mergeCheckCommand
+		}
+	}
+	if flagWasSet(fs, "merge-check-timeout-seconds") {
+		if *mergeCheckTimeoutSeconds <= 0 {
+			return fmt.Errorf("--merge-check-timeout-seconds must be a positive number of seconds")
+		}
+		integration["mergeCheckTimeoutSeconds"] = *mergeCheckTimeoutSeconds
+	}
+	if len(integration) > 0 {
+		body["integration"] = integration
 	}
 	// An update naming no field would be a request the server accepts and that changes nothing —
 	// which reads to the caller as "the edit went through". Refused here instead, and counted

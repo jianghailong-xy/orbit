@@ -608,6 +608,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        both tables start empty. Like 0239's lane, the new one only READS a row — the owner's
   //        decision — to admit a DONE that decision derives; nothing reads a preserved row to allow
   //        or refuse a status.
+  //   0270 records a code project's integration line on `project_codebase`, a table 0231 created and
+  //        this file does not preserve: four columns (`integration_ref_source`,
+  //        `integration_started_at`, `merge_check_command`, `merge_check_timeout_seconds`), two CHECKs
+  //        on them, and the `project_codebase_integration_lock` function and BEFORE UPDATE row trigger
+  //        that refuse moving a line work has already landed on. Read against every claim above: its
+  //        only `ALTER TABLE` statements are on `project_codebase`, so no column of `task`, `project`
+  //        or `project_acceptance_criterion_definition` is added, dropped or changed, the 0177 pair and
+  //        `task_executable_acceptance_pair` are out of its reach, and no criterion's `text` or
+  //        `verification_method` can move by one byte. The trigger it creates is on `project_codebase`,
+  //        not on `task`, so it is not another writer of the DONE fence and cannot change which status
+  //        a write lands; the function it creates reads only the OLD and NEW of the row being written.
+  //        It names no `project_acceptance_*` object and none of the six preserved triggers/functions,
+  //        creates no enum or type and carries no `ALTER TYPE` or `DROP TYPE`, so all four
+  //        `task_completion_criterion` labels survive. It has no INSERT, no row UPDATE and no DELETE:
+  //        the columns take constant defaults, which PostgreSQL stores without rewriting the heap, and
+  //        the table is empty in production anyway. Nothing it adds is read to allow or refuse a status.
   //   0271 adds `task_progress` — a Task's structured progress and its lifecycle epoch — with the
   //        `task_progress_epoch_advance` function and an AFTER UPDATE OF "status" row trigger on `task`
   //        that calls it, and the columns and CHECKs a CONTINUOUS watch needs on `watch`. Read against
@@ -680,6 +696,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0266_coordinator_no_progress_retirement',
       '0267_task_owner_confirmation',
       '0269_project_blocker_resolution_note',
+      '0270_project_integration_line',
       '0271_watch_progress_continuous',
       '0272_drop_project_action'],
     'a later migration exists; re-read it before trusting the assertions above');

@@ -7,7 +7,7 @@ import { WakeFact, criterionUnlandedFact } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
 import type { MechanicalAction } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
-import { criterionLanding } from './project-criterion-landing';
+import { criterionLanding, landingBranchesFor } from './project-criterion-landing';
 
 /** The project disappeared between the committed criterion read and the wake's authorization. */
 export const CRITERION_UNLANDED_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -122,26 +122,38 @@ export class CriterionUnlandedProducer {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))].sort();
     if (ids.length === 0) return [];
 
-    const definitions = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
-      where: { projectId: { in: ids } },
-      select: {
-        id: true,
-        projectId: true,
-        servingTasks: {
-          select: {
-            id: true,
-            status: true,
-            mergeReceipts: { select: { result: true, targetBranch: true } },
+    const [definitions, codebases] = await Promise.all([
+      this.prisma.projectAcceptanceCriterionDefinition.findMany({
+        where: { projectId: { in: ids } },
+        select: {
+          id: true,
+          projectId: true,
+          servingTasks: {
+            select: {
+              id: true,
+              status: true,
+              mergeReceipts: { select: { result: true, targetBranch: true } },
+            },
           },
         },
-      },
-      orderBy: [{ projectId: 'asc' }, { ordinal: 'asc' }],
-    });
+        orderBy: [{ projectId: 'asc' }, { ordinal: 'asc' }],
+      }),
+      // Which branches each project's receipts count on: its own binding, and the legacy pair for
+      // a project that has none. One statement for all of them.
+      this.prisma.projectCodebase.findMany({
+        where: { projectId: { in: ids }, slot: 'primary' },
+        select: { projectId: true, upstreamRef: true, integrationRef: true },
+      }),
+    ]);
 
     // One pass over the same rows, so the landing answer this fact carries is the one the fold
-    // gives for that criterion rather than a per-criterion re-derivation that could disagree.
+    // gives for that criterion rather than a per-criterion re-derivation that could disagree. Per
+    // PROJECT, because "landed" is a question about that project's own two branches.
     const landed = new Map(
-      criterionLanding(definitions).map((answer) => [answer.definitionId, answer.landing]),
+      ids.flatMap((projectId) => criterionLanding(
+        definitions.filter((definition) => definition.projectId === projectId),
+        landingBranchesFor(codebases.find((codebase) => codebase.projectId === projectId) ?? null),
+      )).map((answer) => [answer.definitionId, answer.landing]),
     );
 
     return definitions

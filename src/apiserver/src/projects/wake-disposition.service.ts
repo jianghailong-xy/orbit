@@ -31,7 +31,10 @@ import {
 import { criterionKeyOf } from './project-acceptance';
 import {
   type CriterionWithLandingFacts,
+  type LandingBranches,
   criterionLanding,
+  landingBranchesFor,
+  readLandingBranches,
   receiptIsLandingEvidence,
 } from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
@@ -240,25 +243,35 @@ export class WakeDispositionService {
    */
   private async statesOf(fact: WakeFact): Promise<CriterionState[]> {
     if (fact.subjectType === 'TASK') {
-      const served = await this.prisma.projectAcceptanceCriterionDefinition.findFirst({
-        where: { projectId: fact.projectId, servingTasks: { some: { id: fact.subjectId } } },
-        select: { id: true, servingTasks: { select: SERVING_WORK } },
-      });
+      const [served, branches] = await Promise.all([
+        this.prisma.projectAcceptanceCriterionDefinition.findFirst({
+          where: { projectId: fact.projectId, servingTasks: { some: { id: fact.subjectId } } },
+          select: { id: true, servingTasks: { select: SERVING_WORK } },
+        }),
+        readLandingBranches(this.prisma, fact.projectId),
+      ]);
       if (!served) return [];
-      return [state(served, criterionCoverage(settlements(served.servingTasks), fact.subjectId))];
+      return [state(
+        served,
+        criterionCoverage(settlements(served.servingTasks), fact.subjectId),
+        branches,
+      )];
     }
 
     if (fact.subjectType === 'CRITERION') {
-      const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
-        where: { projectId: fact.projectId },
-        select: { id: true, servingTasks: { select: SERVING_WORK } },
-      });
+      const [stated, branches] = await Promise.all([
+        this.prisma.projectAcceptanceCriterionDefinition.findMany({
+          where: { projectId: fact.projectId },
+          select: { id: true, servingTasks: { select: SERVING_WORK } },
+        }),
+        readLandingBranches(this.prisma, fact.projectId),
+      ]);
       // Matched by re-deriving the subject rather than by parsing it: the spelling of a criterion's
       // wake subject belongs to the function that writes it, and a second parser of it here would
       // be a second definition of what a criterion is called.
       return stated
         .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
-        .map((row) => state(row, criterionCoverage(settlements(row.servingTasks))));
+        .map((row) => state(row, criterionCoverage(settlements(row.servingTasks)), branches));
     }
 
     return [];
@@ -455,6 +468,8 @@ export class WakeDispositionService {
       },
     });
 
+    const branches = await readLandingBranches(this.prisma, fact.projectId);
+
     return stated
       .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
       .flatMap((row) => row.servingTasks.map((task) => ({
@@ -473,7 +488,7 @@ export class WakeDispositionService {
           // The branch test is the landing fold's own, asked without its result: a conflict on
           // some other branch is a conflict about somewhere else, exactly as a merge into one is.
           conflictedPaths: task.mergeReceipts.find((receipt) => receipt.result === 'CONFLICT'
-            && receiptIsLandingEvidence({ result: 'MERGED', targetBranch: receipt.targetBranch }),
+            && receiptIsLandingEvidence({ result: 'MERGED', targetBranch: receipt.targetBranch }, branches),
           )?.conflicts ?? [],
         },
       })));
@@ -559,7 +574,7 @@ export class WakeDispositionService {
         subjectType: 'TASK',
         OR: LANDED_WORK_REASONS.map((reason) => ({ dedupeKey: { startsWith: dispositionKey(reason) } })),
       },
-      select: { id: true, subjectId: true },
+      select: { id: true, projectId: true, subjectId: true },
     });
     if (open.length === 0) return 0;
     const receipts = await this.prisma.sessionMergeReceipt.findMany({
@@ -567,11 +582,18 @@ export class WakeDispositionService {
       orderBy: { createdAt: 'asc' },
       select: { taskId: true, result: true, targetBranch: true },
     });
+    const codebases = await this.prisma.projectCodebase.findMany({
+      where: { projectId: { in: ids }, slot: 'primary' },
+      select: { projectId: true, upstreamRef: true, integrationRef: true },
+    });
 
     let resolved = 0;
     for (const blocker of open) {
+      const branches = landingBranchesFor(
+        codebases.find((codebase) => codebase.projectId === blocker.projectId) ?? null,
+      );
       const landed = receipts.find((receipt) => receipt.taskId === blocker.subjectId
-        && receiptIsLandingEvidence(receipt));
+        && receiptIsLandingEvidence(receipt, branches));
       if (!landed) continue;
       const now = new Date();
       const { count } = await this.prisma.projectBlocker.updateMany({
@@ -651,6 +673,10 @@ function settlements(tasks: ReadonlyArray<{ id: string; status: string }>) {
  * "landed" is defined, and calling it is how this unit stays a reader of that definition instead
  * of becoming a second author of it.
  */
-function state(criterion: CriterionWithLandingFacts, coverage: CriterionState['coverage']) {
-  return { coverage, landing: criterionLanding([criterion])[0]!.landing };
+function state(
+  criterion: CriterionWithLandingFacts,
+  coverage: CriterionState['coverage'],
+  branches: LandingBranches,
+) {
+  return { coverage, landing: criterionLanding([criterion], branches)[0]!.landing };
 }

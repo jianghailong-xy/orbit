@@ -4359,17 +4359,26 @@ export class SessionsService {
    * stored on `mergeTarget` and relayed to the runner. Omitted/empty → the default (the runner
    * auto-detects main, else master). A target equal to the session's own branch is rejected.
    *
-   * An explicit target is also remembered on the session's workspace (`defaultMergeTarget`), so
-   * switching the target sticks across all of that workspace's sessions — the next merge button
-   * defaults to it. Cleared back to the auto-detect default is not offered here (picking main
-   * from the dropdown re-records main).
+   * An explicit target picked in the owner's own Merge menu is also remembered on the session's
+   * workspace (`defaultMergeTarget`), so switching the target sticks across all of that
+   * workspace's sessions — the next merge button defaults to it. Cleared back to the auto-detect
+   * default is not offered here (picking main from the dropdown re-records main). Only that door
+   * passes `rememberTarget`. A merge the platform or an agent asks for names the branch ONE piece
+   * of work goes to, and every project shares the workspace, so remembering it would send every
+   * other session's next merge into that project's branch (`docs/project-integration-line-contract.md` L7).
    *
    * `waitSeconds` makes this call synchronous. The merge is queued exactly as it always is; the
    * request is then held until the runner has reported an outcome, and that outcome comes back
    * INLINE — see {@link awaitMergeConclusion}. Omitted, nothing here changes at all: the answer is
    * `{ ok: true }`, which is what the Merge button asks for and what every existing caller reads.
    */
-  async mergeToMain(ownerId: string, id: string, targetBranch?: string, waitSeconds?: number) {
+  async mergeToMain(
+    ownerId: string,
+    id: string,
+    targetBranch?: string,
+    waitSeconds?: number,
+    options: { rememberTarget?: boolean } = {},
+  ) {
     const wait = SessionsService.mergeWaitSeconds(waitSeconds);
     const target = targetBranch?.trim() || null;
     // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
@@ -4493,8 +4502,9 @@ export class SessionsService {
         receipt: row,
       };
     }
-    // Remember an explicitly chosen target on the workspace so every session of it defaults there.
-    if (target && workspaceId) {
+    // Remember a target the owner picked in their Merge menu on the workspace, so every session of it
+    // defaults there. No other merge writes it back — see `rememberTarget` above.
+    if (options.rememberTarget && target && workspaceId) {
       await this.prisma.workspace.update({
         where: { id: workspaceId },
         data: { defaultMergeTarget: target },

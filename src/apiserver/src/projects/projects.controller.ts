@@ -26,6 +26,7 @@ import {
   RecordTaskCheckpointDto,
   ResolveProjectBlockerDto,
   UpdateProjectDto,
+  UpdateProjectIntegrationDto,
 } from './dto';
 import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
@@ -420,6 +421,30 @@ export class ProjectsController {
     @Body() dto: ResolveProjectBlockerDto,
   ) {
     return this.projects.resolveBlocker(user.userId, id, blockerId, dto.reason);
+  }
+
+  /**
+   * Where this project's finished tasks land, who decided it, and whether it can still change
+   * (`docs/project-integration-line-contract.md` §1.6). A project nobody chose a line for, and that
+   * has integrated nothing yet, answers `NOT_DECIDED`.
+   */
+  @Get(':id/integration')
+  integration(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.integration(user.userId, id);
+  }
+
+  /**
+   * The account owner choosing this project's integration line — main or a project branch — and the
+   * check run before a landing (L5). Once the project started integrating, a change that would move
+   * the line is 409 `INTEGRATION_LINE_LOCKED`; the merge check can still change.
+   */
+  @Patch(':id/integration')
+  configureIntegration(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: UpdateProjectIntegrationDto,
+  ) {
+    return this.projects.configureIntegration(user.userId, id, dto);
   }
 
   /**

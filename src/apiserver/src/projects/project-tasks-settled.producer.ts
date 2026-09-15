@@ -17,7 +17,7 @@ import {
 } from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { criterionKeyOf } from './project-acceptance';
-import { criterionLanding } from './project-criterion-landing';
+import { criterionLanding, readLandingBranches } from './project-criterion-landing';
 import { criterionCoverage } from './wake-disposition';
 
 /**
@@ -186,24 +186,28 @@ export class ProjectTasksSettledProducer {
    * that would decide for itself which receipts count.
    */
   private async statedCriteria(projectId: string): Promise<SettledCriterionReport[]> {
-    const definitions = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
-      where: { projectId },
-      select: {
-        id: true,
-        text: true,
-        servingTasks: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            mergeReceipts: { select: { result: true, targetBranch: true } },
+    const [definitions, branches] = await Promise.all([
+      this.prisma.projectAcceptanceCriterionDefinition.findMany({
+        where: { projectId },
+        select: {
+          id: true,
+          text: true,
+          servingTasks: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              mergeReceipts: { select: { result: true, targetBranch: true } },
+            },
           },
         },
-      },
-      orderBy: { ordinal: 'asc' },
-    });
+        orderBy: { ordinal: 'asc' },
+      }),
+      // The branches this project's receipts count on, off its own binding.
+      readLandingBranches(this.prisma, projectId),
+    ]);
     const landed = new Map(
-      criterionLanding(definitions).map((answer) => [answer.definitionId, answer.landing]),
+      criterionLanding(definitions, branches).map((answer) => [answer.definitionId, answer.landing]),
     );
     return definitions.map((definition) => ({
       key: criterionKeyOf(definition.id),

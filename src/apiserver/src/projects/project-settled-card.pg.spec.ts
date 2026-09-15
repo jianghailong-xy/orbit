@@ -35,7 +35,7 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criteriaFromDefinitions, criterionKeyOf } from './project-acceptance';
-import { criterionLanding } from './project-criterion-landing';
+import { criterionLanding, landingBranchesFor } from './project-criterion-landing';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import {
   ProjectTasksSettledProducer,
@@ -498,7 +498,10 @@ async function expectedTurnId(db: PrismaClient, projectId: string): Promise<stri
     orderBy: { ordinal: 'asc' },
   });
   const landed = new Map(
-    criterionLanding(definitions).map((answer) => [answer.definitionId, answer.landing]),
+    criterionLanding(definitions, landingBranchesFor(await db.projectCodebase.findFirst({
+      where: { projectId, slot: 'primary' },
+      select: { upstreamRef: true, integrationRef: true },
+    }))).map((answer) => [answer.definitionId, answer.landing]),
   );
   const fact = projectAcceptanceLandedFact(
     projectId,

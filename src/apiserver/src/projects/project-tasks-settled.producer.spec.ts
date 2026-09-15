@@ -46,6 +46,10 @@ function producerFixture(
         }));
       },
     },
+    // The landing lane asks a project for its binding, which says which branches its receipts have
+    // to name. This fixture binds no repository, so it reads as a project without one — main or
+    // master, which is what the receipts above already name.
+    projectCodebase: { findFirst: async () => null },
     project: {
       findUnique: async () => {
         order.push('authorization-read');
