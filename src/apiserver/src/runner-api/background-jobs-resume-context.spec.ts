@@ -308,7 +308,7 @@ test('lists a Monitor that stopped with its engine', async () => {
   assert.match(text, /继续吧。/, 'the message the person actually sent must survive');
   assert.ok(text.includes('b97q4j1iy'), `the stopped Monitor's task id is missing from:\n${text}`);
   assert.ok(text.includes('toolu_monitor'), `the stopped Monitor's tool_use id is missing from:\n${text}`);
-  assert.match(text, /重新安排/, 'the agent must be told to arrange the wait again');
+  assert.match(text, /arrange the wait again/, 'the agent must be told to arrange the wait again');
   // Not a job: there is no output file to read and nothing to pick back up.
   assert.ok(!text.includes('mcp__orbit__bg_output'), `a stopped Monitor was offered as a job:\n${text}`);
 });
@@ -343,8 +343,8 @@ test('a job whose runner process was replaced before it reported an end is not o
 
   assert.ok(turn, 'the inbox handed back no turn at all');
   const text = turn.content ?? '';
-  const running = listedUnder(text, '仍在运行');
-  const endedWhileAway = listedUnder(text, '你不在的时候结束了');
+  const running = listedUnder(text, 'Still running');
+  const endedWhileAway = listedUnder(text, 'Ended while you were away');
   // The positive half: the job the current process hosts is still said to be running.
   assert.match(running, /bgj_live/, `the live job must still be reported running:\n${text}`);
   assert.ok(!running.includes('bgj_lost'), `a job whose runner process is gone was offered as running:\n${text}`);
@@ -353,7 +353,7 @@ test('a job whose runner process was replaced before it reported an end is not o
     `the job the replaced runner process took with it is not reported as ended:\n${text}`,
   );
   assert.ok(endedWhileAway.includes(LOST_PATH), `its output file must still be named:\n${text}`);
-  assert.match(endedWhileAway, /runner 进程/, `the agent must be told why it has no exit code:\n${text}`);
+  assert.match(endedWhileAway, /runner process/, `the agent must be told why it has no exit code:\n${text}`);
 });
 
 test('a job the stopping runner reported killed keeps the end it reported', async () => {
@@ -382,10 +382,10 @@ test('a job the stopping runner reported killed keeps the end it reported', asyn
 
   assert.ok(turn);
   const text = turn.content ?? '';
-  assert.ok(!listedUnder(text, '仍在运行').includes('bgj_cut'), `a killed job was offered as running:\n${text}`);
-  const line = listedUnder(text, '你不在的时候结束了').split('\n').find((l) => l.includes('bgj_cut')) ?? '';
-  assert.match(line, /killed｜原因 runner_shutdown/, `the kill must be listed as the runner reported it:\n${text}`);
-  assert.ok(!line.includes('没有结束报告'), `a reported end was replaced by a guess:\n${text}`);
+  assert.ok(!listedUnder(text, 'Still running').includes('bgj_cut'), `a killed job was offered as running:\n${text}`);
+  const line = listedUnder(text, 'Ended while you were away').split('\n').find((l) => l.includes('bgj_cut')) ?? '';
+  assert.match(line, /killed｜reason runner_shutdown/, `the kill must be listed as the runner reported it:\n${text}`);
+  assert.ok(!line.includes('no end reported'), `a reported end was replaced by a guess:\n${text}`);
 });
 
 test("a replaced runner process's job is announced once, not by every engine after it", async () => {

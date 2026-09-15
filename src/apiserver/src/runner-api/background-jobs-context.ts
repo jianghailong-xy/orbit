@@ -49,7 +49,8 @@ interface BackgroundJob {
 
 /** What can be said of a job whose runner process stopped without reporting how the job ended. */
 const RUNNER_GONE_OUTCOME =
-  '没有结束报告｜托管它的 runner 进程已经不在了（重启、自更新或崩溃），按已停止处理，没有退出码';
+  'no end reported｜the runner process hosting it is gone (a restart, a self-update or a crash), ' +
+  'so it is taken as stopped, with no exit code';
 
 /**
  * Whether this delivery is the first one this engine process has taken.
@@ -161,7 +162,7 @@ function describe(job: BackgroundJob): string {
 }
 
 function outputOf(job: BackgroundJob): string {
-  return job.outputPath ? `｜输出 ${job.outputPath}` : '';
+  return job.outputPath ? `｜output ${job.outputPath}` : '';
 }
 
 /** A Claude Monitor the runner reported stopped along with the engine that was running it. */
@@ -216,11 +217,11 @@ function buildBackgroundJobsBlock(
   if (live.length === 0 && ended.length === 0 && stoppedMonitors.length === 0) return null;
   const lines: string[] = ['<background-jobs>'];
   if (live.length > 0) {
-    lines.push('  仍在运行（runner 托管，不随 engine 重启而死）：');
+    lines.push('  Still running (runner-hosted, so an engine restart does not kill them):');
     for (const job of live) lines.push(`    ${describe(job)}${outputOf(job)}`);
   }
   if (ended.length > 0) {
-    lines.push('  你不在的时候结束了：');
+    lines.push('  Ended while you were away:');
     for (const job of ended) {
       if (job.outlivedItsRunner) {
         lines.push(`    ${describe(job)}｜${RUNNER_GONE_OUTCOME}${outputOf(job)}`);
@@ -230,21 +231,21 @@ function buildBackgroundJobsBlock(
       // ended is reported as it actually ended, including the kill it did not ask for.
       const outcome = job.exitCode === undefined
         ? job.status
-        : `${job.status}｜退出码 ${job.exitCode}`;
-      const why = job.reason ? `｜原因 ${job.reason}` : '';
+        : `${job.status}｜exit code ${job.exitCode}`;
+      const why = job.reason ? `｜reason ${job.reason}` : '';
       lines.push(`    ${describe(job)}｜${outcome}${why}${outputOf(job)}`);
     }
   }
   if (stoppedMonitors.length > 0) {
-    lines.push('  随上一个 engine 一起停掉的 Monitor（它跑在 engine 进程里，不会再通知你）：');
+    lines.push('  Monitors that stopped with the previous engine (they ran inside it, so they will not notify you again):');
     for (const monitor of stoppedMonitors) lines.push(`    ${describeMonitor(monitor)}`);
-    lines.push('  还要等的事，请重新安排等待。');
+    lines.push('  If you are still waiting on something, arrange the wait again.');
   }
   if (live.length > 0 || ended.length > 0) {
-    lines.push('  这是控制面替你记下的，不是用户说的。输出文件由 runner 持有，engine 换过也还在。');
-    lines.push('  用 mcp__orbit__bg_output 按 id 读输出，mcp__orbit__bg_list 取完整清单。');
+    lines.push('  The control plane recorded this for you; the user did not say it. The output files belong to the runner, so they are still there after an engine change.');
+    lines.push('  Read output with mcp__orbit__bg_output by id; mcp__orbit__bg_list gives the whole list.');
   } else {
-    lines.push('  这是控制面替你记下的，不是用户说的。');
+    lines.push('  The control plane recorded this for you; the user did not say it.');
   }
   lines.push('</background-jobs>');
   return lines.join('\n');
