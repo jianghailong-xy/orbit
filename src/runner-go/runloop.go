@@ -168,6 +168,9 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 type reclaimedStart struct {
 	job             *ClaimedSession
 	initiallyActive bool
+	// endTakeover ends the takeover prepared for this row. The caller calls it once the
+	// supervisor is started; reclaim itself calls it for every row it hands to nobody.
+	endTakeover func()
 }
 
 // takeoverConflictLimit caps how many snapshot refreshes one session's takeover
@@ -224,7 +227,7 @@ func reclaimMissingSessions(
 	ctx context.Context,
 	t *Transport,
 	knownStates func() map[string]bool,
-	prepareTakeover func(*ClaimedSession) error,
+	prepareTakeover func(*ClaimedSession) (func(), error),
 ) ([]reclaimedStart, bool, error) {
 	delay := 250 * time.Millisecond
 	conflicts := map[string]int{}
@@ -251,6 +254,21 @@ func reclaimMissingSessions(
 		})
 		localStates := knownStates()
 		pending := make([]reclaimedStart, 0, len(sessions))
+		// Every takeover this pass began. A row it hands to no supervisor — terminal,
+		// conflicted, or dropped when the snapshot is refreshed — ends its takeover here, or
+		// its checkout stays fenced against merges with nothing left to lift the fence.
+		begun := map[string]func(){}
+		endTakeoversExcept := func(started []reclaimedStart) {
+			keep := make(map[string]bool, len(started))
+			for _, s := range started {
+				keep[s.job.SessionID] = true
+			}
+			for id, endTakeover := range begun {
+				if !keep[id] {
+					endTakeover()
+				}
+			}
+		}
 		retrySnapshot := false
 		skippedAny := false
 		lastID := ""
@@ -279,10 +297,15 @@ func reclaimMissingSessions(
 				continue
 			}
 			job := claimedSessionFromReclaim(r)
+			endTakeover := func() {}
 			if prepareTakeover != nil {
-				if prepareErr := prepareTakeover(job); prepareErr != nil {
+				prepared, prepareErr := prepareTakeover(job)
+				if prepareErr != nil {
+					endTakeoversExcept(nil)
 					return nil, false, prepareErr
 				}
+				endTakeover = prepared
+				begun[r.SessionID] = prepared
 			}
 			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
 			if takeoverErr != nil {
@@ -303,6 +326,7 @@ func reclaimMissingSessions(
 					retrySnapshot = true
 					break
 				}
+				endTakeoversExcept(nil)
 				return nil, false, takeoverErr
 			}
 			if !reclaimStatusOpen(status) {
@@ -314,11 +338,15 @@ func reclaimMissingSessions(
 			pending = append(pending, reclaimedStart{
 				job:             job,
 				initiallyActive: reclaimInitiallyActive(status),
+				endTakeover:     endTakeover,
 			})
 		}
 		if !retrySnapshot {
+			endTakeoversExcept(pending)
 			return pending, skippedAny, nil
 		}
+		// The refreshed snapshot prepares its own takeovers; end this pass's first.
+		endTakeoversExcept(nil)
 		select {
 		case <-ctx.Done():
 			return nil, false, ctx.Err()
@@ -335,19 +363,23 @@ func reclaimMissingSessions(
 // process still has the predecessor supervisor, drain it while that rotated owner
 // fences every old write, then let takeover restore the process owner. Waiting for
 // full cleanup prevents two epochs sharing a credential file or worktree.
+//
+// The returned func ends the takeover and lowers the fence it raised. Callers must call it
+// once they have either started the replacement supervisor or given the row up: it is the
+// only thing that can lower a fence for a session that never gets one.
 func prepareLocalSupervisorTakeover(
 	ctx context.Context,
 	pool *sessionPool,
 	job *ClaimedSession,
 	processOwner string,
-) error {
+) (func(), error) {
 	if job == nil {
-		return nil
+		return func() {}, nil
 	}
 	// Close manual Commit/Merge admission before inspecting the supervisor.
 	// This also covers a completed session with no supervisor: a heartbeat op
 	// that linearized first must finish before setupWorktree/takeover begins.
-	operationDone := pool.fenceWorktreeOperations(job.SessionID)
+	operationDone, endTakeover := pool.beginWorktreeTakeover(job.SessionID)
 	var done <-chan struct{}
 	if strings.EqualFold(job.LeaseOwner, processOwner) {
 		// Normally this is a warm reuse. If a heartbeat already began detaching
@@ -363,10 +395,11 @@ func prepareLocalSupervisorTakeover(
 		select {
 		case <-barrier:
 		case <-ctx.Done():
-			return ctx.Err()
+			endTakeover()
+			return func() {}, ctx.Err()
 		}
 	}
-	return nil
+	return endTakeover, nil
 }
 
 // Modern manual-worktree commands are bound to this exact runner process.
@@ -1222,7 +1255,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	takeoverSession := func(job *ClaimedSession) (string, error) {
 		return takeoverClaimedSession(loopCtx, t, job)
 	}
-	prepareTakeover := func(job *ClaimedSession) error {
+	prepareTakeover := func(job *ClaimedSession) (func(), error) {
 		return prepareLocalSupervisorTakeover(loopCtx, pool, job, t.leaseOwner)
 	}
 
@@ -1265,11 +1298,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// A lease-loss heartbeat can start detaching a cold supervisor in the
 			// narrow interval after the claim's prepare step. Join its exact cleanup
 			// before staging resources or registering the replacement epoch.
-			if err := prepareTakeover(job); err != nil {
+			endTakeover, err := prepareTakeover(job)
+			if err != nil {
 				logln("local supervisor activation barrier failed for", job.SessionID+":", err)
 				loopCancel()
 				return
 			}
+			// Held until this call returns — by then the replacement supervisor is registered,
+			// or this session was not started at all and the fence has to come down.
+			defer endTakeover()
 			if _, ok := pool.activatePrepared(job, stageCredential); ok {
 				return
 			}
@@ -1361,6 +1398,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		for _, pending := range pendingStarts {
 			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 			startSession(pending.job, pending.initiallyActive)
+			pending.endTakeover()
 		}
 		reclaimed = true
 	}
@@ -1403,6 +1441,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 				startSession(pending.job, pending.initiallyActive)
+				pending.endTakeover()
 			}
 			reclaimRetryAt = time.Time{}
 			if skipped {
@@ -1466,6 +1505,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
 				startSession(pending.job, pending.initiallyActive)
+				pending.endTakeover()
 			}
 			continue
 		}
@@ -1480,7 +1520,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			startSession(job, true)
 			continue
 		}
-		if prepareErr := prepareTakeover(job); prepareErr != nil {
+		endTakeover, prepareErr := prepareTakeover(job)
+		if prepareErr != nil {
 			logln("local supervisor takeover drain failed for", job.SessionID+":", prepareErr)
 			loopCancel()
 			break
@@ -1489,8 +1530,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		if err != nil {
 			if loopCtx.Err() != nil {
 				startSession(job, true)
+				endTakeover()
 				continue
 			}
+			endTakeover()
 			logln("claim lease takeover failed for", job.SessionID+":", err)
 			if !isRetryableTransportError(err) && !isTransportHTTPStatus(err, 409) && !isTransportHTTPStatus(err, 403) {
 				logln("lease takeover failure is permanent; stopping runner")
@@ -1510,12 +1553,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			for _, pending := range recovered {
 				startSession(pending.job, pending.initiallyActive)
+				pending.endTakeover()
 			}
 			continue
 		}
 		if reclaimStatusOpen(status) {
 			startSession(job, reclaimInitiallyActive(status))
 		}
+		endTakeover()
 	}
 
 	logln("runner stopping; draining session supervisors...")

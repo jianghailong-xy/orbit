@@ -126,6 +126,11 @@ type worktreeOperationState struct {
 	fenced  bool
 	running bool
 	done    chan struct{}
+	// takeovers counts the supervisor takeovers holding the fence open across the gap where
+	// this session has no supervisor at all — from the predecessor's cleanup to the
+	// replacement's registration. Every other fence belongs to a supervisor and goes when it
+	// does; this one has no supervisor to belong to, so each takeover releases its own hold.
+	takeovers int
 }
 
 // worktreeHolder is one reason a session's checkout is not free right now. A
@@ -425,13 +430,37 @@ func (p *sessionPool) fenceWorktreeOperationLocked(id string) <-chan struct{} {
 	return nil
 }
 
-// fenceWorktreeOperations closes admission before a claim/takeover and returns
-// the exact in-flight operation's completion barrier, if any.
-func (p *sessionPool) fenceWorktreeOperations(id string) <-chan struct{} {
+// beginWorktreeTakeover closes admission before a claim/takeover. It returns the exact
+// in-flight operation's completion barrier, if any, and the release that ends the takeover.
+//
+// The release is what keeps this fence from outliving its reason. A fence a supervisor
+// raises is lowered by that same supervisor's lifecycle (park, register, finish); a takeover
+// raises one precisely where no supervisor exists, so nothing in that lifecycle can ever
+// lower it and the takeover itself must. Callers release once they have started the
+// replacement supervisor or given the row up — both, because a row given up is exactly the
+// case that used to leave a checkout fenced for the life of the process.
+func (p *sessionPool) beginWorktreeTakeover(id string) (<-chan struct{}, func()) {
 	p.mu.Lock()
 	done := p.fenceWorktreeOperationLocked(id)
+	state := p.worktreeOps[id]
+	state.takeovers++
 	p.mu.Unlock()
-	return done
+
+	var once sync.Once
+	return done, func() {
+		once.Do(func() {
+			p.mu.Lock()
+			if current := p.worktreeOps[id]; current == state && state.takeovers > 0 {
+				state.takeovers--
+				// A supervisor that registered meanwhile owns the fence under its own rules;
+				// releaseWorktreeFenceLocked lowers it only for an id nobody took.
+				if state.takeovers == 0 {
+					p.releaseWorktreeFenceLocked(id, nil)
+				}
+			}
+			p.mu.Unlock()
+		})
+	}
 }
 
 func (p *sessionPool) releaseWorktreeFenceLocked(id string, expected *liveSession) {
@@ -446,6 +475,14 @@ func (p *sessionPool) releaseWorktreeFenceLocked(id string, expected *liveSessio
 	if !state.running {
 		delete(p.worktreeOps, id)
 	}
+}
+
+// takeoverPendingLocked reports whether a supervisor takeover is holding this checkout's
+// fence open right now. It is the difference between a fence something is still coming for
+// and one nobody is.
+func (p *sessionPool) takeoverPendingLocked(id string) bool {
+	state := p.worktreeOps[id]
+	return state != nil && state.takeovers > 0
 }
 
 // beginHeartbeatWorktreeOperation binds a command to the exact supervisor map
@@ -1223,7 +1260,13 @@ func (p *sessionPool) finish(s *liveSession) {
 			s.warmTimer = nil
 		}
 		delete(p.sessions, s.id)
-		if !s.detaching {
+		// A detached supervisor's fence is the takeover's to lower — but only while there is
+		// one. Left raised without a takeover it can never come down: this id is out of the
+		// pool, so no register, park or finish will ever run for it again, and every later
+		// merge is refused as superseded for the life of the process. That is the 2026-09-15
+		// incident: a self-update re-exec reclaimed an already-ended session, a heartbeat
+		// detached it 28 seconds later when its lease moved, and its merge was wedged for good.
+		if !s.detaching || !p.takeoverPendingLocked(s.id) {
 			p.releaseWorktreeFenceLocked(s.id, nil)
 		}
 		p.signalLocked(s)

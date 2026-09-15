@@ -386,12 +386,13 @@ func TestPrepareLocalSupervisorTakeoverWaitsForPredecessorCleanup(t *testing.T) 
 	revived.LeaseOwner = "22222222-2222-4222-8222-222222222222"
 	prepared := make(chan error, 1)
 	go func() {
-		prepared <- prepareLocalSupervisorTakeover(
+		_, err := prepareLocalSupervisorTakeover(
 			context.Background(),
 			pool,
 			revived,
 			"33333333-3333-4333-8333-333333333333",
 		)
+		prepared <- err
 	}()
 
 	select {
@@ -421,7 +422,7 @@ func TestPrepareLocalSupervisorTakeoverKeepsMatchingOwnerSupervisor(t *testing.T
 	if !added {
 		t.Fatal("failed to register warm supervisor")
 	}
-	if err := prepareLocalSupervisorTakeover(context.Background(), pool, job, job.LeaseOwner); err != nil {
+	if _, err := prepareLocalSupervisorTakeover(context.Background(), pool, job, job.LeaseOwner); err != nil {
 		t.Fatal(err)
 	}
 	if pool.isDetaching(live) {
@@ -467,12 +468,13 @@ func TestPrepareLocalSupervisorTakeoverWaitsForHeartbeatDetachedColdCleanup(t *t
 
 	prepared := make(chan error, 1)
 	go func() {
-		prepared <- prepareLocalSupervisorTakeover(
+		_, err := prepareLocalSupervisorTakeover(
 			context.Background(),
 			pool,
 			&ClaimedSession{SessionID: "revived", LeaseOwner: "rotated-owner"},
 			"process-owner",
 		)
+		prepared <- err
 	}()
 	select {
 	case err := <-prepared:
@@ -507,12 +509,13 @@ func TestPrepareLocalSupervisorTakeoverWaitsForTerminalMergeWithoutSupervisor(t 
 
 	prepared := make(chan error, 1)
 	go func() {
-		prepared <- prepareLocalSupervisorTakeover(
+		_, err := prepareLocalSupervisorTakeover(
 			context.Background(),
 			pool,
 			&ClaimedSession{SessionID: "completed", LeaseOwner: "new-owner"},
 			"process-owner",
 		)
+		prepared <- err
 	}()
 	waitForWorktreeFence(t, pool, "completed")
 	select {
@@ -674,6 +677,92 @@ func TestTerminalLeaseLossMergeAdmissionRejectPostsExactErrorReceipt(t *testing.
 		leaseOwner,
 	)
 	pool.finish(live)
+}
+
+// The 2026-09-15 incident: a session that had already ended was reclaimed by the image its
+// runner re-executed into for a self-update, lost its lease 28 seconds later, and its
+// supervisor was detached and cleaned up. Every merge after that was refused with the
+// supersession wording for the life of the runner process — the detach raised the worktree
+// fence, the cleanup left it raised because the supervisor was detaching, and with no
+// supervisor left to register, park or finish, nothing could ever lower it again. A caller
+// cannot tell that answer apart from a real race, so it retries a merge that can never pass.
+func TestMergeAfterALeaseLostSupervisorIsCleanedUp(t *testing.T) {
+	const (
+		sessionID   = "restarted-runner-merge"
+		branch      = "orbit/restarted-runner-merge"
+		operationID = "55555555-5555-4555-8555-555555555555"
+		leaseOwner  = "66666666-6666-4666-8666-666666666666"
+	)
+	pool := newSessionPool(1)
+	live, added := pool.register(manualWorktreePoolJob(sessionID, branch), func() {}, false)
+	if !added {
+		t.Fatal("the reclaimed session was not registered")
+	}
+	// The heartbeat that reported the lease loss detaches the exact epoch it advertised...
+	supervisors, _ := pool.heartbeatSnapshot()
+	if _, detached := pool.detachExpectedForTakeover(supervisors[sessionID].supervisor); !detached {
+		t.Fatal("lease loss did not detach the reclaimed supervisor")
+	}
+	// ...and the supervisor goroutine's deferred cleanup runs, leaving no local epoch at all.
+	pool.finish(live)
+
+	advertised, _ := pool.heartbeatSnapshot()
+	if _, still := advertised[sessionID]; still {
+		t.Fatal("a cleaned-up supervisor is still advertised to the control plane")
+	}
+	ran := false
+	got := heartbeatMerge(
+		pool,
+		MergeCommand{SessionID: sessionID, OperationID: operationID, LeaseOwner: leaseOwner, Branch: branch},
+		advertised[sessionID],
+		func(MergeCommand) mergeOutcome {
+			ran = true
+			return mergeOutcome{Status: "merged", MergedSha: "merged-sha", SourceSha: "source-sha", TargetBranch: "main"}
+		},
+	)
+	if !ran || got.Status != "merged" {
+		t.Fatalf("merge for a session whose runner restarted under it: ran=%v status=%q message=%q; want it to run and land",
+			ran, got.Status, got.Message)
+	}
+}
+
+// The other half of that fix: the fence a takeover raises is still shut while the takeover is
+// in flight — a merge may not cross a checkout being handed over — and it opens when the
+// takeover ends, including when it ends by giving the row up rather than starting a supervisor.
+func TestMergeWaitsForASupervisorTakeoverAndNoLonger(t *testing.T) {
+	const (
+		sessionID   = "handed-over-merge"
+		branch      = "orbit/handed-over-merge"
+		operationID = "77777777-7777-4777-8777-777777777777"
+		leaseOwner  = "88888888-8888-4888-8888-888888888888"
+	)
+	pool := newSessionPool(1)
+	endTakeover, err := prepareLocalSupervisorTakeover(
+		context.Background(),
+		pool,
+		&ClaimedSession{SessionID: sessionID, LeaseOwner: "rotated-owner"},
+		"process-owner",
+	)
+	if err != nil {
+		t.Fatalf("prepare takeover: %v", err)
+	}
+	advertised, _ := pool.heartbeatSnapshot()
+	command := MergeCommand{
+		SessionID: sessionID, OperationID: operationID, LeaseOwner: leaseOwner, Branch: branch,
+	}
+	ran := false
+	merge := func(MergeCommand) mergeOutcome {
+		ran = true
+		return mergeOutcome{Status: "merged", MergedSha: "merged-sha", SourceSha: "source-sha", TargetBranch: "main"}
+	}
+	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); got.Status != "error" || ran {
+		t.Fatalf("merge crossed a takeover in flight: ran=%v status=%q", ran, got.Status)
+	}
+
+	endTakeover()
+	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); !ran || got.Status != "merged" {
+		t.Fatalf("merge after the takeover ended: ran=%v status=%q message=%q", ran, got.Status, got.Message)
+	}
 }
 
 func TestCommitAdmissionRejectPostsExactErrorReceipt(t *testing.T) {
