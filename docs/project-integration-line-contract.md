@@ -89,14 +89,16 @@
 | 号 | 名称 | 负责任务 | 节 |
 |---|---|---|---|
 | 0270 | `project_integration_line` | 项目 integrationRef | §1.1 |
-| 0271 | `project_open_item` | 例外待办 | §4.1 |
-| 0272 | `project_integration_job` | 平台自动集成 | §2.1 |
-| 0273 | `project_promotion` | main 同步与合入 main 状态机 | §3.2 |
-| 0274 | `project_fuse_episode` | 保险丝暂停卡 | §6.3 |
-| 0275 | 预留 | 冲突接入普查 / ask_owner（需要时） | |
+| 0278 | `project_open_item` | 例外待办 | §4.1 |
+| 落地时取下一个空号 | `project_integration_job` | 平台自动集成 | §2.1 |
+| 落地时取下一个空号 | `project_promotion` | main 同步与合入 main 状态机 | §3.2 |
+| 落地时取下一个空号 | `project_fuse_episode` | 保险丝暂停卡 | §6.3 |
+| 落地时取下一个空号 | 预留 | 冲突接入普查 / ask_owner（需要时） | |
 | 0265–0269 | `project_blocker_resolution`、`project_criteria_decision_reply` | blocker 解除、提案回复 | §6.7、§5.1 |
 
-跨表外键由后建的一方补：0272 给 `project_open_item.integration_job_id` 加外键，0273 给 `project_open_item.promotion_id` 与 `project_integration_job.promotion_id` 加外键，0274 给 `project_open_item.fuse_episode_id` 加外键。
+**预留号已经作废**：本契约写下后，`0271`–`0277` 被兄弟任务逐个占走，都已在 main 上（watch P3、`drop_project_action`、`drop_workspace_clone_provisioning`、`session_import_source`、`claude_history_import`、`task_list_pause_epoch`、`drop_run_event_duplicate_index`）。例外待办因此落在 `0278`。剩下几张表不再预留具体号：各任务在**落地当时**扫一遍 main 与各分支，取下一个没人用的号，并把它登记进 `task-judgment-data-preserved.spec.ts` 的迁移账本（不登记那条 spec 恒红）。
+
+跨表外键由后建的一方补：`project_integration_job` 的迁移给 `project_open_item.integration_job_id` 加外键，`project_promotion` 的迁移给 `project_open_item.promotion_id` 与 `project_integration_job.promotion_id` 加外键，`project_fuse_episode` 的迁移给 `project_open_item.fuse_episode_id` 加外键。
 
 ### 0.6 条款编号
 
@@ -589,7 +591,7 @@ interface ProjectPromotionView {
 
 ### 4.1 数据结构
 
-**`project_open_item`**（迁移 0271）：
+**`project_open_item`**（迁移 0278）：
 
 | 列 | 类型 | 约束与语义 |
 |---|---|---|
@@ -600,7 +602,7 @@ interface ProjectPromotionView {
 | `assignee` | text | CHECK ∈ {`COORDINATOR`, `OWNER`} |
 | `assignee_reason` | text | CHECK ∈ {`DEFAULT`, `NO_COORDINATOR`, `COORDINATOR_ENDED`, `CHAIN_LIMIT`, `ESCALATED`, `HANDED_OVER`} |
 | `task_id` / `session_id` | uuid NULL | 相关任务、相关尝试（会话） |
-| `integration_job_id` / `promotion_id` / `fuse_episode_id` | uuid NULL | 外键由 0272 / 0273 / 0274 补 |
+| `integration_job_id` / `promotion_id` / `fuse_episode_id` | uuid NULL | 外键由后建的那三张表各自的迁移补 |
 | `asked_by_session_id` | uuid NULL | `COORDINATOR_QUESTION` 的提问会话 |
 | `dedupe_key` | text NOT NULL | 部分唯一索引 `(project_id, dedupe_key) WHERE state = 'OPEN'` |
 | `title` | text NOT NULL | 创建时由不可变的行生成，英文 |
