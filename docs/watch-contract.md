@@ -287,6 +287,14 @@ Watch 当场结束，不占 live 名额。一个观察者会话一小时内最�
   generation 是规范十进制（无前导零，不超过 `integer` 上限）；以及各自只对应本类终态交付的 `:expired`（EXPIRY）、
   `:revoked`（REVOKED）、`:unresolvable`（UNRESOLVABLE）。`watch:<watchId>:01`、`:anything`、别的终态的词都是普通消息，
   把它们从队列里收掉不改变任何交付。
+- **`watch:` 是保留前缀，客户端入口一律拒绝。** 既然 `clientTurnId` 由调用方自选，占住唤醒的键这件事首先要在门口挡住：
+  所有能让调用方指定 turn key 的入口，对以 `watch:` 开头的 `clientTurnId` 返回 `400`，错误信息点名这是保留前缀。
+  公开 API 四个：`POST /api/sessions/:id/turns`、`POST :id/turns/current-work-routing`、`POST :id/resume`，
+  以及带 follow-up 的 `POST :id/interrupt`；runner 门两个：`POST /runner/sessions/:id/turns`（按 trim 之后的值判断，
+  因为那才是会被写入的键）和带 message 的 `POST /runner/sessions/:id/interrupt`。MCP 的 `session_send` /
+  `session_interrupt` 和 CLI 的 `--client-turn-id` 都经由 runner 门，因此同样被拒，400 的原文透传到工具结果里。
+  **不静默改写**：调用方拿回一个被改过的幂等键，就再也无法用自己选的键重试。校验只能放在入口——worker 自己正是经由
+  `SessionsService.createTurn` 写这些键的，下沉到 service 就会把唤醒本身也拒掉（`src/apiserver/src/sessions/watch-turn-key.ts`）。
 - `sendIntent = NEXT_TURN`。唤醒是新工作，不是插进正在跑的那个 turn。用 `CURRENT_WORK` 会在
   没有在飞的 message turn 时被 `CURRENT_WORK_UNAVAILABLE` 拒绝——而「观察者正停着」恰恰是最常见的情况。
 - **运行中的观察者不需要特例**：`statusAfterTurnEnqueued` 让 `RUNNING` 保持 `RUNNING`、
