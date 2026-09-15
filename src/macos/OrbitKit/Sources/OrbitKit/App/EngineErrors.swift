@@ -10,7 +10,9 @@ import Foundation
 ///
 /// Keep in sync with `isApiErrorText` / `isRetryableApiErrorText` / `isUsageLimitErrorText` in
 /// @orbit/shared (src/shared/src/events.ts) and the retry timing in src/shared/src/retry.ts — the
-/// card promises what the server's sweeper will actually do, so the two must agree.
+/// card promises what the server's sweeper will actually do, so the two must agree. The constants
+/// below are read back out of events.ts by `EngineErrorsParityTests`, which is what keeps that
+/// "keep in sync" from being a wish — which is also why they are internal rather than private.
 public enum EngineErrors {
 
     /// Does this text carry an API error (content filtering, a 4xx/5xx)? Keys on the stable
@@ -25,12 +27,12 @@ public enum EngineErrors {
     /// the call was early rather than wrong. Every one succeeds on a plain re-send once the far side
     /// recovers. Deliberately absent: 400 (context overflow / content filtering), 401/403 and 404 —
     /// facts about the request that a re-send reproduces exactly.
-    private static let retryableStatuses: Set<Int> = [408, 429, 500, 502, 503, 504, 529]
+    static let retryableStatuses: Set<Int> = [408, 429, 500, 502, 503, 504, 529]
 
     /// Transport-level phrasings that carry no status code — the call never reached a response to
     /// have one. Only wording actually observed is listed: a missing entry costs a manual retry,
     /// a guessed one costs a silent retry loop.
-    private static let retryableMarkers = [
+    static let retryableMarkers = [
         "mid-response", "mid-stream",     // the stream died between request and reply
         "connection error", "timed out", "timeout",
         "internal server error",          // a 500 in prose, when there was no response to read a status off
@@ -43,7 +45,7 @@ public enum EngineErrors {
     /// rejected (429) · This request would exceed your account's rate limit. Please try again
     /// later."). The wrapper needs its own pattern: none of the codeless markers appear in that
     /// sentence, so without it a rate limit reads as an error we cannot place.
-    private static let statusPatterns = [
+    static let statusPatterns = [
         "^\\s*api error:?\\s*(\\d{3})\\b",
         "^\\s*api error:?\\s*request rejected \\((\\d{3})\\)",
     ].compactMap { try? NSRegularExpression(pattern: $0) }
@@ -71,7 +73,7 @@ public enum EngineErrors {
     /// Wording, in the provider's own words, marking a run killed by an exhausted account quota.
     /// Only messages observed in the wild are listed — add one when a new runtime's shows up rather
     /// than guessing at its phrasing.
-    private static let usageLimitMarkers = [
+    static let usageLimitMarkers = [
         "hit your usage limit",     // Codex app-server
         "hit your session limit",   // Claude Code, rolling 5-hour window
         "hit your weekly limit",    // Claude Code, 7-day window
@@ -81,7 +83,7 @@ public enum EngineErrors {
     /// else, so this is an allowance for a variant lead-in, not a search window: past it the marker
     /// is the model *quoting* a quota error, and rendering that reply as the provider refusing to
     /// answer replaces it with a card saying the opposite of what it says.
-    private static let usageLimitMaxOffset = 40
+    static let usageLimitMaxOffset = 40
 
     /// Was this run killed by the account's quota running out? The reply must *open* with the
     /// provider's sentence, not merely contain it.
