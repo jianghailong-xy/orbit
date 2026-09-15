@@ -138,7 +138,9 @@ import {
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeCard } from './WatchWakeCard';
+import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { parseWatchWake } from '../lib/watches';
+import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
@@ -5952,6 +5954,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
                 // its delivery stands is the queue's line to say, as for every queued row.
                 const wake = parseWatchWake(q.content);
+                // A wake the control plane queued for a background job's news, or for a wakeup coming
+                // due, is nobody's message either: it gets the card the transcript draws once a
+                // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
+                const background = wake ? null : parseBackgroundWake(q.content);
                 return wake ? (
                   <WatchWakeCard
                     key={q.turnId}
@@ -5967,6 +5973,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         deliveryReason={q.deliveryReason}
                         wake
                         onCancel={() => withdrawWake(q.turnId)}
+                      />
+                    }
+                  />
+                ) : background ? (
+                  <BackgroundWakeCard
+                    key={q.turnId}
+                    wake={background}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
                       />
                     }
                   />

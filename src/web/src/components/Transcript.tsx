@@ -56,8 +56,10 @@ import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from 
 import { RunnerSignIn } from './RunnerSignIn';
 import { SameOriginLink } from './SameOriginLink';
 import { WatchWakeCard } from './WatchWakeCard';
+import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 import { parseWatchWake } from '../lib/watches';
+import { parseBackgroundWake } from '../lib/backgroundWake';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -917,18 +919,39 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'user': {
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);
-      return wake ? (
-        <WatchWakeCard
-          wake={wake}
-          text={node.text}
-          seq={node.seq}
-          ts={node.ts}
-          linkable={!exporting}
-          undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-        />
-      ) : (
-        <UserBubble node={node} />
-      );
+      if (wake) {
+        return (
+          <WatchWakeCard
+            wake={wake}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            linkable={!exporting}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+          />
+        );
+      }
+      // A turn the control plane opened for a background job's news, or for a wakeup coming due, is
+      // nobody's message either: the block IS the turn, so it is read off the recorded note rather
+      // than the person's words, which are empty. Only the wake blocks become the card — anything
+      // else the same note carried stays the folded entry it has always been, under it.
+      const background = parseBackgroundWake(node.note);
+      if (background) {
+        return (
+          <>
+            <BackgroundWakeCard
+              wake={background}
+              seq={node.seq}
+              ts={node.ts}
+              undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            />
+            {(node.text.trim() !== '' || background.rest !== '') && (
+              <UserBubble node={{ ...node, note: background.rest || undefined }} />
+            )}
+          </>
+        );
+      }
+      return <UserBubble node={node} />;
     }
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;

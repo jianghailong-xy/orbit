@@ -12336,6 +12336,157 @@ button.composer-usage:focus-visible {
   flex-basis: 100%;
   white-space: normal;
 }
+/* The turn the control plane opened for a background job's news, or for a wakeup coming due
+   (BackgroundWakeCard). Same shape and the same two tones as a watch's wake — brand for a job that
+   finished, warning for one that failed or was killed, as Watch triggered and Watch expired take
+   them — so the transcript reads one way whoever queued the turn. Each job gets a raised row of its
+   own: one wake can carry six. */
+.bgwake-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+.bgwake {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+.bgwake.is-failed {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.bgwake-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-weight: 600;
+}
+.bgwake.is-failed .bgwake-title {
+  color: var(--warning);
+}
+.bgwake-why {
+  margin: 3px 0 8px;
+}
+.bgwake-jobs,
+.bgwake-wakeups {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+.bgwake-job,
+.bgwake-wakeup {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.bgwake-job + .bgwake-job,
+.bgwake-wakeup + .bgwake-wakeup {
+  margin-top: 6px;
+}
+.bgwake-job-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.bgwake-job-mark {
+  flex: none;
+}
+.bgwake-job-mark.is-ok {
+  color: var(--success-solid);
+}
+.bgwake-job-mark.is-failed {
+  color: var(--error-solid);
+}
+.bgwake-job-mark.is-running {
+  color: var(--text-3);
+}
+.bgwake-job-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bgwake-job-exit {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+}
+/* The command and the id line up under the description that named the row, not under its icon. */
+.bgwake-job-cmd,
+.bgwake-job-meta {
+  padding-left: 22px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.bgwake-job-cmd {
+  margin-top: 2px;
+  color: var(--text-2);
+}
+.bgwake-job-meta {
+  margin-top: 4px;
+  color: var(--text-3);
+}
+.bgwake-job .chat-pre-wrap {
+  margin: 6px 0 0 22px;
+}
+.bgwake-wakeup-reason {
+  margin-bottom: 2px;
+}
+.bgwake-wakeup-meta {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.bgwake-wakeup .chat-pre-wrap {
+  margin-top: 6px;
+}
+.bgwake-meta {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.bgwake-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.bgwake-raw {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.bgwake-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.bgwake-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
+   message, with the queue's own status line at its foot. */
+.bgwake.is-queued {
+  border-style: dashed;
+}
+.bgwake-queued {
+  margin-top: 6px;
+}
+.bgwake-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
 .watch-editor {
   display: flex;
   flex-direction: column;
