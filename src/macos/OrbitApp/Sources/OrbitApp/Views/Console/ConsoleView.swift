@@ -544,6 +544,16 @@ struct TranscriptView: View {
                                   undelivered: bubble.undelivered,
                                   onWithdraw: bubble.turnId == nil
                                       ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let background = BackgroundWakeText.parse(bubble.text) {
+                // A wake the control plane queued for a background job's news, or for a wakeup
+                // coming due, is nobody's message either: it gets the card the transcript draws
+                // once a runner takes it. Nothing has been recorded yet, so the block is still the
+                // turn's own content rather than a note beside it (web parity: the queued tail
+                // reads `q.content`). Withdrawing it is an ordinary cancel — nothing re-sends it.
+                BackgroundWakeCardView(wake: background, ts: bubble.ts,
+                                       undelivered: bubble.undelivered,
+                                       onCancelQueued: bubble.turnId == nil
+                                           ? nil : { Task { await console.cancelQueued(bubble) } })
             } else {
                 UserBubbleView(bubble: bubble,
                                onCancelQueued: { Task { await console.cancelQueued(bubble) } })
@@ -999,6 +1009,20 @@ struct TranscriptItemView: View {
             if let wake = WatchWakeText.parse(b.text) {
                 WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                                   undelivered: b.undelivered || b.delivery == "failed")
+            } else if let background = BackgroundWakeText.parse(b.note) {
+                // A turn the control plane opened for a background job's news, or for a wakeup
+                // coming due, is nobody's message either: the block IS the turn, so it is read off
+                // the recorded note rather than the person's words, which are empty. Only the wake
+                // blocks become the card — anything else the same note carried stays the folded
+                // entry it has always been, under it.
+                VStack(alignment: .leading, spacing: 6) {
+                    BackgroundWakeCardView(wake: background, ts: b.ts,
+                                           undelivered: b.undelivered || b.delivery == "failed")
+                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || !background.rest.isEmpty {
+                        UserBubbleView(bubble: withNote(b, background.rest))
+                    }
+                }
             } else {
                 UserBubbleView(bubble: b)
             }
@@ -1029,5 +1053,13 @@ struct TranscriptItemView: View {
                     .foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
+    }
+
+    /// The same bubble with only what the wake card did NOT take left on its note, so a mixed note
+    /// still shows its other blocks under the card instead of repeating the wake beneath it.
+    private func withNote(_ bubble: UserBubble, _ note: String) -> UserBubble {
+        var rest = bubble
+        rest.note = note.isEmpty ? nil : note
+        return rest
     }
 }
