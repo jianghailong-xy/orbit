@@ -247,6 +247,18 @@ export function expiryLabel(
   return w.state === 'EXPIRED' ? { text: ago(w.expiresAt, now), soon: false } : null;
 }
 
+/**
+ * The console's Watching strip (`SessionWatchStrip`): one line above the composer, reading the same
+ * words on web and macOS — the macOS client's `WatchStripCopyParityTests` holds each to its
+ * declaration here. The times are composed from `formatSpan`; "earliest" prefixes the soonest
+ * deadline only on the count line, since a lone watch's own deadline needs no qualifier.
+ */
+export const STRIP_LABEL = 'Watching';
+export const STRIP_UNTIL = 'Until';
+export const STRIP_THEN = 'Resume this session';
+export const STRIP_MANAGE = 'Manage in Watches ›';
+export const STRIP_EARLIEST = 'earliest ';
+
 export interface WatchProgress {
   met: number;
   waiting: number;

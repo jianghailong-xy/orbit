@@ -6,9 +6,11 @@ import OrbitKit
 /// polling shell used to leave behind. It sits above the Background processes tray, which keeps the
 /// real shells and dev servers (contract §9.2).
 ///
-/// Several watches fold behind one line until it is opened — the browser's `SessionWatchStrip` —
-/// because N watches used to mean N cards permanently spread across the composer. A single watch is
-/// simply its card: here the strip IS the thing, and a fold over one card hides all of it.
+/// Always one line first — the same language as the tray beside it — naming the single target a
+/// lone watch waits on, or counting the targets several watches cover, with the soonest deadline.
+/// Opened, each watch reads as read-only rows and the only action is the way to the Following page:
+/// a wait is changed by talking to the agent, and Pause/Stop live on the detail page (the web's
+/// `SessionWatchStrip`).
 struct WatchingCardStack: View {
     @Environment(AppModel.self) private var model
     let sessionID: String
@@ -16,19 +18,21 @@ struct WatchingCardStack: View {
 
     var body: some View {
         if let store = model.watches, let summary = store.summary(for: sessionID) {
-            // "checked …" is relative to now: redraw between fetches so it doesn't freeze.
+            // "checked …" and the deadline are relative to now: redraw between fetches so they
+            // don't freeze.
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 VStack(spacing: 0) {
-                    if summary.collapses {
-                        stripRow(summary)
-                    }
-                    if open || !summary.collapses {
-                        ForEach(summary.watches) { watch in
-                            if summary.collapses || watch.id != summary.watches.first?.id {
+                    stripRow(summary, now: context.date)
+                    if open {
+                        Divider().opacity(0.5)
+                        ForEach(Array(summary.watches.enumerated()), id: \.element.id) { index, watch in
+                            if index > 0 {
                                 Divider().opacity(0.5)
                             }
-                            WatchingCard(store: store, watch: watch, now: context.date)
+                            WatchingCard(watch: watch, now: context.date, showsThen: index == 0)
                         }
+                        Divider().opacity(0.5)
+                        manageRow
                     }
                 }
             }
@@ -40,20 +44,26 @@ struct WatchingCardStack: View {
         }
     }
 
-    /// The one line the strip reads as while it is closed: what is being waited on, the conditions
-    /// behind it, and the caret that opens them.
-    private func stripRow(_ summary: WatchSessionSummary) -> some View {
+    /// The one line the strip always reads as: Watching, the single target by name or the targets
+    /// by count, how long the soonest deadline has left, and the caret that opens the facts.
+    private func stripRow(_ summary: WatchSessionSummary, now: Date) -> some View {
         Button { open.toggle() } label: {
             HStack(spacing: 6) {
                 Image(systemName: "eye").font(.orbitMeta).foregroundStyle(.secondary)
-                Text(summary.waitingOn)
+                Text(WatchProjection.stripLabel)
                     .font(.orbitLabel.weight(.semibold))
                     .lineLimit(1)
-                Text(summary.conditions)
+                Text(stripTarget(summary))
                     .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tint)
                     .lineLimit(1)
-                Spacer(minLength: 8)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let time = summary.lineTime(now: now) {
+                    Text(time)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
                 Image(systemName: open ? "chevron.down" : "chevron.right")
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
@@ -63,95 +73,89 @@ struct WatchingCardStack: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(summary.waitingOn)
+        .accessibilityLabel(WatchProjection.stripLabel)
+    }
+
+    /// One target by name, several by count. A target this client holds no name for falls back to
+    /// its short id, never "Task <id>": two nameless watches used to look identical, which is what
+    /// sent the account owner into the detail sheet to tell them apart.
+    private func stripTarget(_ summary: WatchSessionSummary) -> String {
+        if let target = summary.lineTarget {
+            return WatchProjection.targetTitle(kind: target.targetKind,
+                                               id: target.targetResourceId,
+                                               name: targetName(target))
+        }
+        return WatchProjection.targetCount(summary.lineTargetCount)
+    }
+
+    /// The way to the Following page, where Pause and Stop live: the strip itself is read-only.
+    private var manageRow: some View {
+        Button { model.selectedSection = .following } label: {
+            HStack {
+                Text(WatchProjection.stripManage)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.tint)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
-/// One watch, answering what the browser's card answers with nothing opened: what it watches — by
-/// name, so two watches are never the same card — how far along it is, how fresh that reading is,
-/// what happens when the condition holds, and when it runs out. With View, Edit, Pause (or Resume)
-/// and Stop, which are the moves its state actually has (`WatchStateMachine.controls`).
+/// A target's name where this model holds it: the session's title or the task's.
+private func targetName(_ target: WatchTarget, model: AppModel) -> String? {
+    switch target.targetKind {
+    case .session: return model.session(id: target.targetResourceId)?.title
+    case .task: return model.tasks?.item(target.targetResourceId)?.title
+    case .unknown: return nil
+    }
+}
+
+/// One watch's facts in the opened strip, read-only: Watching / Until / Progress / Then / Expires,
+/// the browser's rows (`WatchStripCopyParityTests`). Progress carries the evaluator's last look so
+/// the strip keeps one fewer row than a card does, and Then — a constant for every strip watch,
+/// since all of them resume this session — is said once, on the first.
 private struct WatchingCard: View {
     @Environment(AppModel.self) private var model
-    let store: WatchesModel
     let watch: Watch
     let now: Date
-    @State private var busy = false
-    @State private var errorText: String?
-    @State private var viewing = false
-    @State private var editing = false
-    @State private var confirmingStop = false
+    let showsThen: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Controls beside the headline when they fit (macOS, iPad), under it when they don't (iPhone).
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    headline
-                    Spacer(minLength: 8)
-                    controls
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    headline
-                    controls
-                }
-            }
             watching
-            ForEach(WatchProjection.facts(for: watch, observerTitle: observerTitle, now: now)) { fact in
-                factRow(fact.label) {
-                    Text(fact.value)
+            factRow(WatchRowLabel.until) {
+                Text(WatchProjection.condition(watch.predicate, targetCount: liveTargets))
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            factRow(WatchRowLabel.progress) {
+                Text("\(WatchProjection.progress(for: watch)) · \(WatchProjection.checked(for: watch, now: now))")
+                    .font(.orbitMeta)
+                    .foregroundStyle(tone)
+                    .lineLimit(2)
+            }
+            if showsThen {
+                factRow(WatchRowLabel.then) {
+                    Text(WatchProjection.stripThen)
                         .font(.orbitMeta)
-                        .foregroundStyle(tone(of: fact))
-                        .lineLimit(2)
+                        .foregroundStyle(.secondary)
                 }
             }
-            if let errorText {
-                Text(errorText)
-                    .font(.orbitMeta)
-                    .foregroundStyle(.red)
-                    .lineLimit(3)
+            if let expires = WatchProjection.expiresIn(for: watch, now: now) {
+                factRow(WatchRowLabel.expires) {
+                    Text(expires)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .sheet(isPresented: $viewing) {
-            WatchDetailSheet(store: store, watch: watch)
-        }
-        .sheet(isPresented: $editing) {
-            WatchEditSheet(store: store, watch: watch)
-        }
-        .confirmationDialog("Stop watching?", isPresented: $confirmingStop, titleVisibility: .visible) {
-            Button("Stop", role: .destructive) { run(.stop) }
-        } message: {
-            Text(WatchProjection.stopWarning(for: watch))
-        }
-    }
-
-    private var headline: some View {
-        HStack(spacing: 6) {
-            Image(systemName: watch.state == .paused ? "pause.circle" : "eye")
-                .font(.orbitMeta)
-                .foregroundStyle(.secondary)
-            Text(WatchProjection.headline(for: watch))
-                .font(.orbitLabel.weight(.semibold))
-                .lineLimit(1)
-            Text(WatchProjection.condition(watch.predicate, targetCount: liveTargets))
-                .font(.orbitMeta)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-    }
-
-    private var controls: some View {
-        HStack(spacing: 6) {
-            ForEach(WatchStateMachine.controls(for: watch.state), id: \.self) { control in
-                Button(control.title) { tap(control) }
-                    .font(.orbitLabel)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(busy && control != .view)
-            }
-        }
     }
 
     /// The targets themselves, named and openable. Without this every watch on the strip was the
@@ -179,7 +183,7 @@ private struct WatchingCard: View {
         // that wraps pushes the thing the person is typing into off the screen.
         let title = WatchProjection.targetTitle(kind: target.targetKind,
                                                 id: target.targetResourceId,
-                                                name: name(of: target))
+                                                name: targetName(target, model: model))
         if let destination = route(for: target) {
             Button { model.route(to: destination) } label: {
                 Text(title).font(.orbitMeta).foregroundStyle(.tint).lineLimit(1)
@@ -191,7 +195,7 @@ private struct WatchingCard: View {
     }
 
     /// One labelled row. The label goes beside the value where it fits and above it where it
-    /// doesn't — the same narrow-screen fallback the headline and its controls use.
+    /// doesn't — the same narrow-screen fallback the browser's card uses.
     private func factRow<Content: View>(_ label: String,
                                         @ViewBuilder _ value: () -> Content) -> some View {
         let caption = Text(label.uppercased())
@@ -212,25 +216,11 @@ private struct WatchingCard: View {
 
     /// An evaluator that isn't keeping up is the one fact on the card worth colouring: everything
     /// else it says is only as fresh as that look.
-    private func tone(of fact: WatchFact) -> Color {
-        guard fact.label == WatchRowLabel.updated,
-              WatchFreshness.of(watch, now: now) == .stale else { return .secondary }
-        return .orange
+    private var tone: Color {
+        WatchFreshness.of(watch, now: now) == .stale ? .orange : .secondary
     }
 
     private var liveTargets: Int { WatchProgress(watch.targets).live }
-
-    private var observerTitle: String? {
-        watch.observerSessionId.flatMap { model.session(id: $0)?.title }
-    }
-
-    private func name(of target: WatchTarget) -> String? {
-        switch target.targetKind {
-        case .session: return model.session(id: target.targetResourceId)?.title
-        case .task: return model.tasks?.item(target.targetResourceId)?.title
-        case .unknown: return nil
-        }
-    }
 
     private func route(for target: WatchTarget) -> Route? {
         guard target.state != .gone else { return nil }
@@ -238,24 +228,6 @@ private struct WatchingCard: View {
         case .session: return .session(target.targetResourceId)
         case .task: return .task(target.targetResourceId)
         case .unknown: return nil
-        }
-    }
-
-    private func tap(_ control: WatchControl) {
-        switch control {
-        case .view: viewing = true
-        case .edit: editing = true
-        case .stop: confirmingStop = true
-        case .pause, .resume: run(control)
-        }
-    }
-
-    private func run(_ control: WatchControl) {
-        busy = true
-        errorText = nil
-        Task {
-            errorText = await store.perform(control, on: watch)
-            busy = false
         }
     }
 }

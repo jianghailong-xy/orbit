@@ -12167,13 +12167,17 @@ button.composer-usage:focus-visible {
   color: var(--text-1);
   font-weight: 600;
 }
-.watch-strip-summary {
+.watch-strip-target {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--text-3);
+  color: var(--brand);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.watch-strip-time {
+  flex: none;
+  color: var(--text-3);
 }
 .watch-strip-caret {
   flex: none;
@@ -12182,17 +12186,25 @@ button.composer-usage:focus-visible {
 .watch-strip-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   max-height: 360px;
-  padding: 8px;
   overflow: auto;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
 }
-/* Natural height inside the height-capped list, as .bg-shell does: flex-shrink would otherwise squash
-   an opened card to fit and clip its details with no scrollbar to reach them. */
-.watch-strip-list .watch-card {
+/* The opened strip is one card of read-only fact rows: hairline between the watches, the manage
+   link pinned to the bottom of the whole. */
+.watch-strip-block {
+  padding: 8px 10px;
+}
+.watch-strip-block + .watch-strip-block {
+  border-top: 1px solid var(--border-subtle);
+}
+.watch-strip-manage {
   flex: none;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--brand);
+  font-size: 12px;
 }
 .watch-wake-wrap {
   display: flex;

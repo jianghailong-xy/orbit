@@ -143,35 +143,14 @@ final class WatchWakeTests: XCTestCase {
         XCTAssertEqual(WatchWakeQueue.keep, "Keep it queued")
     }
 
-    // MARK: the strip the watches sit on
-
-    func testSeveralWatchesFoldBehindOneLineAndASingleOneDoesNot() throws {
-        let one = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [F.watch()]))
-        XCTAssertFalse(one.collapses)
-        XCTAssertEqual(one.waitingOn, "Waiting on a watch")
-        XCTAssertEqual(one.conditions, "All tasks finish")
-
-        let several = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
-            F.watch(id: "W1", predicate: F.all("TASK_DONE"), targets: F.tasks(2)),
-            F.watch(id: "W2", predicate: F.any("TASK_FAILED"), targets: F.tasks(3)),
-            F.watch(id: "W3", predicate: F.all("SESSION_TURN_SETTLED"),
-                    targets: [F.target("S9", kind: "SESSION")]),
-        ]))
-        XCTAssertTrue(several.collapses)
-        XCTAssertEqual(several.waitingOn, "Waiting on 3 watches")
-        // Closed, the one line still says what is being waited for — a watch over one target names it.
-        XCTAssertEqual(several.conditions,
-                       "All tasks are done · Any task fails · The session finishes its turn")
-    }
-
     // MARK: the card a watch reads as
 
-    func testTheWatchingCardsRowsAreTheBrowsersRowsInOrder() {
+    func testTheWatchingCardsRowsReadOffTheProjection() {
         let watch = F.watch(targets: F.tasks(7, met: 3), lastEvaluatedAt: F.ago(240))
-        let rows = WatchProjection.facts(for: watch, observerTitle: "Coordinator: release", now: now)
-        XCTAssertEqual(rows.map(\.label), ["Progress", "Updated", "Then", "Expires"])
-        XCTAssertEqual(rows.map(\.value),
-                       ["3 of 7 finished", "checked 4m ago", "Resume Coordinator: release", "in 1h"])
+        XCTAssertEqual(WatchProjection.progress(for: watch), "3 of 7 finished")
+        XCTAssertEqual(WatchProjection.checked(for: watch, now: now), "checked 4m ago")
+        XCTAssertEqual(WatchProjection.action(for: watch, observerTitle: "Coordinator: release"),
+                       "Resume Coordinator: release")
         // The label is said once: under EXPIRES the deadline is a span, not a sentence repeating it.
         XCTAssertEqual(WatchProjection.expiresIn(for: watch, now: now), "in 1h")
         XCTAssertEqual(WatchProjection.expiresIn(for: F.watch(expiresAt: F.ago(5)), now: now), "now")
@@ -179,8 +158,8 @@ final class WatchWakeTests: XCTestCase {
         XCTAssertNil(WatchProjection.expiresIn(for: F.watch(state: "EXPIRED", expiresAt: F.ago(60)), now: now))
         XCTAssertEqual(WatchProjection.checked(for: F.watch(lastEvaluatedAt: nil), now: now), "never checked")
         // A watch nobody is resuming says so rather than naming a session it hasn't got.
-        XCTAssertEqual(WatchProjection.facts(for: F.watch(action: "NOTIFY_USER", observer: nil),
-                                             observerTitle: nil, now: now).first { $0.label == "Then" }?.value,
+        XCTAssertEqual(WatchProjection.action(for: F.watch(action: "NOTIFY_USER", observer: nil),
+                                              observerTitle: nil),
                        "Notify you")
     }
 

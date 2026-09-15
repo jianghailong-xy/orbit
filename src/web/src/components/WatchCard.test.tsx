@@ -254,7 +254,10 @@ describe('a watch card', { timeout: 30_000 }, () => {
     expect(facts.Then).toBe('Resume Coordinator: Watch project');
     expect(facts.Expires).toMatch(/^in 21h · /);
     expect(card.querySelector('.watch-details'), 'nothing had to be opened').toBeNull();
-    expect(['Edit', 'Pause', 'Stop'].map((label) => !!button(label, card))).toEqual([true, true, true]);
+    // Edit is gone (docs/watch-contract.md): a change is only a change once the server tells the
+    // agent its wait moved, so the card offers Pause and Stop alone.
+    expect(['Pause', 'Stop'].map((label) => !!button(label, card))).toEqual([true, true]);
+    expect(button('Edit', card)).toBeUndefined();
   });
 
   it('pauses from the card and redraws it from the answer', async () => {
@@ -438,14 +441,5 @@ describe('a watch card', { timeout: 30_000 }, () => {
     expect(details.textContent).toContain('Notify you · delivered');
     // Opened, the card names every target, not the first three.
     expect(card.querySelectorAll('.watch-facts .watch-target')).toHaveLength(5);
-  });
-
-  it('opens the editor on the watch it belongs to', async () => {
-    serve({}, { T1: 'Ship it' });
-    await mount(<WatchCard watch={watch()} />);
-    await click(button('Edit'), 'Edit');
-    expect(document.body.querySelector('.ant-modal-title')?.textContent).toBe('Edit watch');
-    const finishes = [...document.body.querySelectorAll('label')].find((l) => l.textContent?.startsWith('Finishes'));
-    expect(finishes?.querySelector<HTMLInputElement>('input')?.checked, 'its own condition is chosen').toBe(true);
   });
 });

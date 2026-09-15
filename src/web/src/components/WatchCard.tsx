@@ -23,7 +23,6 @@ import {
   watchErrorMessage,
   watchProblem,
 } from '../lib/watches';
-import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } from './WatchParts';
 
 /** How many targets a closed card names before "+N more". */
@@ -45,7 +44,6 @@ const absTime = (iso: string): string => {
 export function WatchCard({ watch, focused = false }: { watch: WatchView; focused?: boolean }) {
   const now = useNow();
   const [open, setOpen] = useState(focused);
-  const [editing, setEditing] = useState(false);
   const problem = watchProblem(watch);
   const live = isLiveWatch(watch);
   const progress = progressOf(watch);
@@ -128,7 +126,7 @@ export function WatchCard({ watch, focused = false }: { watch: WatchView; focuse
         )}
       </dl>
       <footer className="watch-actions">
-        {live && <WatchControls watch={watch} onEdit={() => setEditing(true)} />}
+        {live && <WatchControls watch={watch} />}
         <span className="watch-spacer" />
         <button
           type="button"
@@ -140,7 +138,6 @@ export function WatchCard({ watch, focused = false }: { watch: WatchView; focuse
         </button>
       </footer>
       {open && <WatchDetails watch={watch} now={now} />}
-      {editing && <WatchEditorModal mode={{ kind: 'edit', watch }} onClose={() => setEditing(false)} />}
     </article>
   );
 }
@@ -195,8 +192,18 @@ const CONTROL: Record<ControlVerb, { call: (id: string) => Promise<WatchView>; d
   cancel: { call: cancelWatch, done: 'Stopped watching' },
 };
 
-/** Edit, Pause or Resume, and Stop — the controls a live watch has (contract §3). */
-export function WatchControls({ watch, onEdit }: { watch: WatchView; onEdit: () => void }) {
+/**
+ * What Stop costs, said before it happens — the macOS client's `WatchProjection.stopWarning`, held
+ * to these words by `WatchStripCopyParityTests`. CANCELLED is the one end nobody is told about, so
+ * the consequence is named for whoever the watch would have woken (contract §3).
+ */
+export const STOP_WARNING_RESUME =
+  "The waiting session won't be resumed, and it isn't told the watch stopped.";
+export const STOP_WARNING_NOTIFY = "You won't be notified when the condition holds.";
+
+/** Pause or Resume, and Stop — the controls a live watch has (contract §3). Edit is gone until the
+ *  server tells the agent when its wait's condition changed (docs/watch-contract.md). */
+export function WatchControls({ watch }: { watch: WatchView }) {
   const qc = useQueryClient();
   const toast = useToast();
   const control = useMutation({
@@ -215,9 +222,6 @@ export function WatchControls({ watch, onEdit }: { watch: WatchView; onEdit: () 
   const pending = control.isPending ? control.variables : undefined;
   return (
     <>
-      <Button size="small" onClick={onEdit} disabled={control.isPending}>
-        Edit
-      </Button>
       {watch.state === 'PAUSED' ? (
         <Button
           size="small"
@@ -240,7 +244,7 @@ export function WatchControls({ watch, onEdit }: { watch: WatchView; onEdit: () 
       )}
       <Popconfirm
         title="Stop this watch?"
-        description="It ends for good and will not trigger. What it recorded stays in its history."
+        description={watch.action === 'NOTIFY_USER' ? STOP_WARNING_NOTIFY : STOP_WARNING_RESUME}
         okText="Stop watching"
         okButtonProps={{ danger: true }}
         cancelText="Keep watching"

@@ -80,6 +80,39 @@ final class SessionWatchingTests: XCTestCase {
                        "2 watches paused")
     }
 
+    func testTheStripsOneLineProjectsTheLoneTargetOrTheCount() throws {
+        // One watch over one target that still exists names it, and its own deadline needs no qualifier.
+        let lone = try XCTUnwrap(summary([
+            F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(-3 * 3600)),
+        ]))
+        XCTAssertEqual(lone.lineTarget?.targetResourceId, "T0")
+        XCTAssertEqual(lone.lineTargetCount, 1)
+        XCTAssertEqual(lone.lineTime(now: now), "3h")
+        // A deleted target is out of the set, in the single branch too.
+        let gone = try XCTUnwrap(summary([
+            F.watch(id: "W1", targets: [F.target("T0"), F.target("G", state: "GONE")]),
+        ]))
+        XCTAssertEqual(gone.lineTarget?.targetResourceId, "T0")
+        // Anything else counts the distinct targets and prefixes the soonest deadline: T2 appears on
+        // both watches and is counted once, G is gone, and 4h is W1's deadline, not W2's 6h.
+        let several = try XCTUnwrap(summary([
+            F.watch(id: "W1", targets: [F.target("T1"), F.target("T2")], expiresAt: F.ago(-4 * 3600)),
+            F.watch(id: "W2", targets: [F.target("T2"), F.target("G", state: "GONE")],
+                    expiresAt: F.ago(-6 * 3600)),
+        ]))
+        XCTAssertNil(several.lineTarget)
+        XCTAssertEqual(several.lineTargetCount, 2)
+        XCTAssertEqual(several.lineTime(now: now), "earliest 4h")
+        // A deadline already reached reads "now", as the web's `left <= 0 ? 'now' : …` does.
+        XCTAssertEqual(summary([F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(5))])?
+            .lineTime(now: now), "now")
+        // Two watches over the same single target still read as a count: "one" is about the strip.
+        XCTAssertNil(summary([
+            F.watch(id: "W1", targets: [F.target("T1")]),
+            F.watch(id: "W2", targets: [F.target("T1")]),
+        ])?.lineTarget)
+    }
+
     func testOnlyLiveWatchesThatResumeTheSessionCount() throws {
         let sessionID = PublicID.newToken()
         let watches = [

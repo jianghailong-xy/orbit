@@ -6,22 +6,27 @@ import { Link } from 'react-router-dom';
 import type { WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
 import {
+  STRIP_EARLIEST,
+  STRIP_LABEL,
+  STRIP_MANAGE,
+  STRIP_THEN,
+  STRIP_UNTIL,
   ago,
   describeCondition,
   describeProgress,
   expiryLabel,
+  formatSpan,
   isLiveWatch,
+  linkId,
   progressOf,
   watchBucket,
   watchHref,
   watchProblem,
-  watchStateCopy,
   watchesFollowedBy,
   watchesFollowing,
 } from '../lib/watches';
-import { WatchCard } from './WatchCard';
 import { WatchEditorModal } from './WatchEditor';
-import { ObserverLink, WatchStatePill, useNow } from './WatchParts';
+import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } from './WatchParts';
 
 const rowsOf = (data: unknown): WatchView[] => (Array.isArray(data) ? (data as WatchView[]) : []);
 
@@ -182,27 +187,35 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * Above the composer: the watches this session is waiting on, while any is live. One line until it is
- * opened, then the full cards. Its own strip on purpose — a watch is not a process, and contract §9.2
- * keeps it out of the Background processes tray beside it.
+ * Above the composer: the watches this session is waiting on, while any is live. Always one line
+ * first — the same language as the Background processes tray beside it — naming the single target a
+ * lone watch waits on, or counting the targets several watches cover, with the soonest deadline.
+ * Opened, each watch's facts read as read-only rows: a wait is changed by talking to the agent, and
+ * Pause/Stop live on the Following page. Its own strip on purpose — a watch is not a process, and
+ * contract §9.2 keeps it out of the Background processes tray beside it.
  */
 export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
   const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId).filter(isLiveWatch);
+  // One line names the target only when there is one name to give: a lone watch over one target
+  // that still exists. Anything else counts the distinct targets, so two watches over the same
+  // task never read "2 targets".
+  const targets = waitingOn.flatMap((w) =>
+    w.targets.filter((t) => t.state !== 'GONE').map((t) => `${t.targetKind}:${t.targetResourceId}`),
+  );
+  const single =
+    waitingOn.length === 1 && new Set(targets).size === 1 ? waitingOn[0].targets.find((t) => t.state !== 'GONE')! : null;
+  const { name: singleName } = useTargetName(single?.targetKind ?? null, single?.targetResourceId ?? null);
   if (waitingOn.length === 0) return null;
-  const [first] = waitingOn;
-  const summary =
-    waitingOn.length === 1
-      ? [
-          describeCondition(first.predicate, first.targets),
-          first.state === 'PAUSED'
-            ? watchStateCopy(first.state).label.toLowerCase()
-            : describeProgress(progressOf(first)),
-          `checked ${ago(first.lastEvaluatedAt, now)}`,
-        ].join(' · ')
-      : waitingOn.map((w) => describeCondition(w.predicate, w.targets)).join(' · ');
+  const deadline = Math.min(...waitingOn.map((w) => Date.parse(w.expiresAt)));
+  const left = Number.isFinite(deadline) ? deadline - now : NaN;
+  const time = Number.isFinite(left)
+    ? `${single ? '' : STRIP_EARLIEST}${left <= 0 ? 'now' : formatSpan(left)}`
+    : '';
+  const targetCount = new Set(targets).size;
+  const targetLine = single ? (singleName ?? linkId(single.targetResourceId).slice(0, 8)) : `${targetCount} ${targetCount === 1 ? 'target' : 'targets'}`;
   return (
     <div className={`watch-strip${open ? ' is-open' : ''}`}>
       <button
@@ -212,19 +225,61 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
         onClick={() => setOpen((o) => !o)}
       >
         <EyeOutlined className="watch-strip-ico" />
-        <span className="watch-strip-title">
-          Waiting on {waitingOn.length === 1 ? 'a watch' : `${waitingOn.length} watches`}
-        </span>
-        <span className="watch-strip-summary">{summary}</span>
-        <span className="watch-strip-caret">{open ? '▾' : '▸'}</span>
+        <span className="watch-strip-title">{STRIP_LABEL}</span>
+        <span className="watch-strip-target">{targetLine}</span>
+        {time && <span className="watch-strip-time">{time}</span>}
+        <span className="watch-strip-caret">{open ? '⌄' : '›'}</span>
       </button>
       {open && (
         <div className="watch-strip-list">
-          {waitingOn.map((w) => (
-            <WatchCard key={w.id} watch={w} />
+          {waitingOn.map((w, index) => (
+            <StripWatchBlock key={w.id} watch={w} now={now} showsThen={index === 0} />
           ))}
+          <Link className="watch-strip-manage" to="/following">
+            {STRIP_MANAGE}
+          </Link>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One watch's facts in the opened strip, read-only: the rows are Watching / Until / Progress /
+ * Then / Expires, and Then — a constant for every strip watch, since all of them resume this
+ * session — is said once, on the first. Progress carries the evaluator's last look, so the strip
+ * keeps one fewer row than a card does.
+ */
+function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: number; showsThen: boolean }) {
+  const expiry = expiryLabel(watch, now);
+  const until = describeCondition(watch.predicate, watch.targets).replace(/^When /, '').replace(/^./, (c) => c.toUpperCase());
+  return (
+    <dl className="watch-facts watch-strip-block" data-watch-id={watch.id}>
+      <dt>Watching</dt>
+      <dd className="watch-targets">
+        {watch.targets
+          .filter((t) => t.state !== 'GONE')
+          .map((t) => (
+            <WatchTargetLink
+              key={`${t.targetKind}:${t.targetResourceId}`}
+              kind={t.targetKind}
+              id={t.targetResourceId}
+              state={t.state}
+            />
+          ))}
+      </dd>
+      <dt>{STRIP_UNTIL}</dt>
+      <dd>{until}</dd>
+      <dt>Progress</dt>
+      <dd>{`${describeProgress(progressOf(watch))} · checked ${ago(watch.lastEvaluatedAt, now)}`}</dd>
+      {showsThen && (
+        <>
+          <dt>Then</dt>
+          <dd>{STRIP_THEN}</dd>
+        </>
+      )}
+      <dt>Expires</dt>
+      <dd>{expiry ? expiry.text : ''}</dd>
+    </dl>
   );
 }

@@ -234,23 +234,33 @@ final class WatchWakeCopyParityTests: XCTestCase {
         XCTAssertEqual(String(WatchProjection.shownTargets), shown)
     }
 
-    /// The line several watches fold behind.
+    /// The line the strip always opens as: the fixed "Watching" title, then the one target by name —
+    /// or, for anything else, the distinct targets by count — and the soonest deadline, "earliest"
+    /// only on the count line since a lone watch's own deadline needs no qualifier.
     func testTheStripsOneLineMatchesTheBrowsers() throws {
         let web = try flat(Self.webRelations)
-        let summary = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
-            WatchFixture.watch(id: "W1"), WatchFixture.watch(id: "W2"), WatchFixture.watch(id: "W3"),
+        // The title is a constant, not a state word: "Watching" alone, with the target beside it.
+        XCTAssertTrue(web.contains("className=\"watch-strip-title\">{STRIP_LABEL}"),
+                      "the strip's title drifted: \(Self.webRelations) no longer renders it from "
+                          + "STRIP_LABEL — first is WatchProjection.stripLabel.")
+        // The deadline: a lone watch's own, "earliest" before it only when the line counts.
+        XCTAssertTrue(web.contains("${single ? '' : STRIP_EARLIEST}"),
+                      "the count line stopped prefixing the soonest deadline with STRIP_EARLIEST, "
+                          + "which this client does through WatchProjection.stripEarliest.")
+        // Which shape the line takes: one watch over one live target names it, anything else counts.
+        let lone = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
+            WatchFixture.watch(id: "W1", targets: [WatchFixture.target("T1")]),
         ]))
-        XCTAssertTrue(web.contains("Waiting on {"),
-                      "the strip's title drifted: \(Self.webRelations) no longer opens it with "
-                          + "\"Waiting on \" — first is WatchSessionSummary.waitingOn.")
-        assertWritten(web, "a watch", "what one watch is waited on as", Self.webRelations)
-        XCTAssertTrue(web.contains("${waitingOn.length} watches"),
+        XCTAssertNotNil(lone.lineTarget, "a lone watch over one live target names it")
+        let several = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
+            WatchFixture.watch(id: "W1", targets: [WatchFixture.target("T1"), WatchFixture.target("T2")]),
+            WatchFixture.watch(id: "W2", targets: [WatchFixture.target("T2")]),
+        ]))
+        XCTAssertNil(several.lineTarget)
+        XCTAssertEqual(several.lineTargetCount, 2, "T1 and T2, not T1, T2 and T2 again")
+        XCTAssertTrue(web.contains("targetCount === 1 ? 'target' : 'targets'"),
                       "how several watches are counted drifted — this client says "
-                          + summary.waitingOn.debugDescription)
-        // The conditions behind that line, so a closed strip still says what is being waited for.
-        XCTAssertTrue(web.contains("describeCondition(w.predicate, w.targets)).join(' · ')"),
-                      "the closed strip stopped summarising the conditions, which is the only thing "
-                          + "it says about what is being waited for.")
+                          + "\(several.lineTargetCount) targets.")
     }
 
     // MARK: the wake that is still queued

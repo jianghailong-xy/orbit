@@ -55,20 +55,23 @@ final class WatchWiringTests: XCTestCase {
 
     func testTheWatchingCardSpeaksForTheWatchNotForAProcess() throws {
         let card = code(try source("Views/WatchingCard.swift"))
-        XCTAssertTrue(card.contains("WatchStateMachine.controls(for: watch.state)"), "View/Edit/Pause/Stop come from the state machine")
-        XCTAssertTrue(card.contains("WatchProjection.headline(for: watch)"))
-        // Progress, the evaluator's last look, what happens when the condition holds and when the
-        // watch runs out are the card's four labelled rows, all read off the projection in the
-        // browser's order (`WatchProjection.facts`, held to the browser's `<dt>`s by
-        // `WatchWakeCopyParityTests`). Before that they were one line of headline and one of
-        // condition, and the last two weren't on the card at all.
-        XCTAssertTrue(card.contains("WatchProjection.facts(for: watch, observerTitle:"))
-        // And it names what it waits ON: several watches used to be the same card, tellable apart
-        // only by opening the detail sheet.
+        // The strip is read-only: no control comes from the state machine here, and the one action
+        // it offers is the way to the Following page, where Pause and Stop live.
+        XCTAssertFalse(card.contains("WatchStateMachine.controls"),
+                       "the strip took back View/Edit/Pause/Stop — controls belong to the detail page")
+        XCTAssertTrue(card.contains("model.selectedSection = .following"),
+                      "the strip's only action is the way to the Following page")
+        // The one line the strip is by default: the fixed label, the lone target by name or the
+        // targets by count, and the soonest deadline (`WatchProjection.stripLabel` et al, held to
+        // the browser's `STRIP_*` declarations by `WatchStripCopyParityTests`).
+        XCTAssertTrue(card.contains("WatchProjection.stripLabel"))
         XCTAssertTrue(card.contains("WatchProjection.targetTitle(kind:"))
-        // Several watches fold behind one line until it is opened; a single one is simply its card.
-        XCTAssertTrue(card.contains("summary.collapses"))
-        XCTAssertTrue(card.contains("summary.waitingOn"))
+        XCTAssertTrue(card.contains("summary.lineTime(now: now)"))
+        // Opened, each watch reads as the browser's rows, in the browser's order.
+        XCTAssertTrue(card.contains("WatchRowLabel.until"))
+        XCTAssertTrue(card.contains("WatchProjection.checked(for: watch, now: now)"))
+        XCTAssertTrue(card.contains("WatchProjection.stripThen"))
+        XCTAssertTrue(card.contains("WatchProjection.expiresIn(for: watch, now: now)"))
         for borrowed in ["BackgroundTrayView", "bgRunningLabel", "Background process", "\"terminal\""] {
             XCTAssertFalse(card.contains(borrowed), "the Watching card borrows \(borrowed)")
         }
