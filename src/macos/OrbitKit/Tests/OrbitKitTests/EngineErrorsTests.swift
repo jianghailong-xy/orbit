@@ -27,6 +27,19 @@ final class EngineErrorsTests: XCTestCase {
         XCTAssertFalse(EngineErrors.isRetryableApiErrorText("API Error: 404 model not found"))
     }
 
+    /// The runtime has a second shape for a request the API turned away — prose first, the status in
+    /// parentheses. The status inside it still decides, so the wrapper is read for one rather than
+    /// trusted or ignored wholesale. Without this the commonest one, a rate limit, matches no marker
+    /// and becomes a dead-end red line while the server is already re-sending.
+    func testRetryableReadsTheStatusOutOfTheRejectionWrapper() {
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(
+            "API Error: Request rejected (429) · This request would exceed your account's rate limit. "
+            + "Please try again later."))
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText(
+            "API Error: Request rejected (400) · Output blocked by content filtering policy"),
+                       "being phrased as a rejection is not what makes it retryable")
+    }
+
     /// A transport failure never reached a response to have a status, so its wording is all there is.
     func testRetryableFromWordingWhenThereIsNoStatus() {
         XCTAssertTrue(EngineErrors.isRetryableApiErrorText("API Error: Connection error."))

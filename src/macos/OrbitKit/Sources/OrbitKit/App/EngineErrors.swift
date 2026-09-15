@@ -37,7 +37,16 @@ public enum EngineErrors {
         "overloaded",                     // likewise a 529
     ]
 
-    private static let statusPattern = try? NSRegularExpression(pattern: "^\\s*api error:?\\s*(\\d{3})\\b")
+    /// A status arrives in two shapes, tried in this order: the raw dump the runtime prints when it
+    /// has a response to read one off ("API Error: 429 …"), and its friendlier wrapper for a request
+    /// the API turned away, which puts the status in parentheses after prose ("API Error: Request
+    /// rejected (429) · This request would exceed your account's rate limit. Please try again
+    /// later."). The wrapper needs its own pattern: none of the codeless markers appear in that
+    /// sentence, so without it a rate limit reads as an error we cannot place.
+    private static let statusPatterns = [
+        "^\\s*api error:?\\s*(\\d{3})\\b",
+        "^\\s*api error:?\\s*request rejected \\((\\d{3})\\)",
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
 
     /// Is this the transient kind — the provider briefly unable to answer, rather than anything
     /// about the message? Such a failure says nothing about the work, which is what makes it safe to
@@ -48,12 +57,12 @@ public enum EngineErrors {
         let lower = text.lowercased()
         // The status, when there is one, is authoritative: a 400 whose message happens to contain
         // the word "timeout" is still a 400.
-        if let status = statusPattern.flatMap({ re -> Int? in
+        if let status = statusPatterns.lazy.compactMap({ re -> Int? in
             let range = NSRange(lower.startIndex..., in: lower)
             guard let m = re.firstMatch(in: lower, range: range), m.numberOfRanges > 1,
                   let r = Range(m.range(at: 1), in: lower) else { return nil }
             return Int(lower[r])
-        }) {
+        }).first {
             return retryableStatuses.contains(status)
         }
         return retryableMarkers.contains { lower.contains($0) }
