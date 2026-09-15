@@ -241,7 +241,8 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself would. Expired means the batch can never commit, the runner retries the same giant
 // batch, and the queue never drains — the 2026-09-15 wedge. Every write in this transaction is
 // retry-idempotent (see the events() comment), so a long timeout costs nothing but the timeout
-// itself.
+// itself. maxWait uses the same value: a batch that already burned its compile should queue for
+// a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
@@ -4099,7 +4100,7 @@ export class RunnerApiController {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
       return { session, currentWorkAcknowledged };
-    }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+    }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
 
     // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they
