@@ -4386,7 +4386,7 @@ export class RunnerApiController {
         },
       });
       return { applied: false, failed: true, announced: true };
-    }, loggedRetry(this.logger, 'runnerApi.import-result'));
+    }, loggedRetry(this.logger, 'runnerApi.importResult'));
     // Wake live clients: the imported session just got its real title (or went to Trash).
     if (outcome.announced) this.realtime.publishSessionUpdated(sessionId);
     return { ok: true, ...outcome };
