@@ -88,6 +88,9 @@ function serviceFailingWith(error: unknown, liveProjects: string[]) {
     const query = strings && typeof strings === 'object' && 'raw' in (strings as object)
       ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
       : (strings as Prisma.Sql);
+    // The task detail's progress read (`readTaskProgress`), which `update` makes before it plans
+    // the write: nothing here has reported, and the owner row would be read as a progress row.
+    if (/"task_progress"/.test(query.text)) return [];
     return /FROM "session"/i.test(query.text) ? [] : [{ id: OWNER_ID }];
   };
   client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(client);

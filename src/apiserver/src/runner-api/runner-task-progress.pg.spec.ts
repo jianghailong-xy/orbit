@@ -13,7 +13,10 @@
  *   (2) a report against a revision that has moved is 409 PROGRESS_REVISION_CONFLICT and writes nothing;
  *       read again, the same report against the revision read lands;
  *   (3) a task with a conclusion is 409 TASK_NOT_OPEN and writes nothing; reopened, it takes reports in
- *       its next epoch, where a report still aimed at the revision read before the reopen loses.
+ *       its next epoch, where a report still aimed at the revision read before the reopen loses;
+ *   (4) task_get, over the runner route it calls, carries as `progress` exactly what this door reads,
+ *       before any report and after one, and its top-level `lastProgressAt` stays the convergence
+ *       ledger's column, which no report writes.
  *
  * The routes are read from contracts/watch.contract.json `progress.runnerDoor`, the list runner-go's
  * task_progress_test.go holds the tool to, so the two halves meet in one place.
@@ -44,9 +47,22 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { ProjectAttributionService } from '../projects/project-attribution.service';
+import { TaskListsService } from '../task-lists/task-lists.service';
 import { TaskProgressService } from '../tasks/task-progress.service';
+import { TasksService } from '../tasks/tasks.service';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerTaskProgressController } from './runner-task-progress.controller';
+import { RunnerTasksController } from './runner-tasks.controller';
+
+declare global {
+  interface BigInt { toJSON(): string; }
+}
+// `main.ts` installs this before it creates the app. A task row carries BIGINT columns, and without it
+// task_get answers 500, a server-shaped failure but not the one under test.
+BigInt.prototype.toJSON = function toJSON(this: bigint): string {
+  return this.toString();
+};
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -93,10 +109,18 @@ test('the runner progress door', { skip, concurrency: 1, timeout: 300_000 }, asy
   });
   await verifyCoordinatorPgIdentity(sql);
 
+  // The service behind task_get, built here and not handed to the module: an instance the module holds
+  // gets its onModuleInit, which starts the auto-run sweeps over this database. The route is lent `get`,
+  // the one method it calls, and the controller's other collaborators are left empty for the same reason.
+  const tasks = new TasksService(prisma as unknown as PrismaService, {} as never, { publishForUser: () => undefined } as never);
+
   @Module({
-    controllers: [RunnerTaskProgressController],
+    controllers: [RunnerTaskProgressController, RunnerTasksController],
     providers: [
       { provide: TaskProgressService, useValue: new TaskProgressService(prisma as unknown as PrismaService) },
+      { provide: TasksService, useValue: { get: (ownerId: string, id: string) => tasks.get(ownerId, id) } },
+      { provide: TaskListsService, useValue: {} },
+      { provide: ProjectAttributionService, useValue: {} },
       RunnerAuthGuard,
       { provide: PrismaService, useValue: prisma },
     ],
@@ -170,7 +194,12 @@ test('the runner progress door', { skip, concurrency: 1, timeout: 300_000 }, asy
   }
 
   async function send(token: string, method: 'GET' | 'POST', taskId: string, report?: Record<string, unknown>): Promise<Reply> {
-    const response = await fetch(`${base}${route(method, taskId)}`, {
+    return request(token, method, route(method, taskId), report);
+  }
+
+  /** One request on a runner's credential to a path of the API, the way the runner sends it. */
+  async function request(token: string, method: 'GET' | 'POST', pathname: string, report?: Record<string, unknown>): Promise<Reply> {
+    const response = await fetch(`${base}${pathname}`, {
       method,
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: report === undefined ? undefined : JSON.stringify(report),
@@ -187,6 +216,8 @@ test('the runner progress door', { skip, concurrency: 1, timeout: 300_000 }, asy
 
   const read = (token: string, taskId: string) => send(token, 'GET', taskId);
   const report = (token: string, taskId: string, body: Record<string, unknown>) => send(token, 'POST', taskId, body);
+  /** task_get: the path runner-go's getTask requests (transport.go), under main.ts's global prefix. */
+  const taskGet = (token: string, taskId: string) => request(token, 'GET', `/api/runner/tasks/${uuidToBase62(taskId)}`);
 
   const owner = await insertOwner();
   const stranger = await insertOwner();
@@ -319,5 +350,55 @@ test('the runner progress door', { skip, concurrency: 1, timeout: 300_000 }, asy
     const reopened = await report(ownRunner, cancelled, { phase: 'plan' });
     assert.equal(reopened.status, 200, reopened.text);
     assert.equal((await row(cancelled))?.phase, 'plan');
+  });
+
+  // ═══ (4) task_get carries the reported progress ═══════════════════════════════════════════════
+
+  await t.test('(4) task_get carries the progress this door reads, and leaves lastProgressAt to the convergence ledger', async () => {
+    const task = await insertTask(owner, 'IN_PROGRESS');
+    // The convergence ledger's column on the task row, at a time no report could write, so the top-level
+    // field is seen to stay the ledger's rather than merely to stay empty.
+    const ledgerProgressAt = '2026-01-02T03:04:05.678Z';
+    await sql.query(`UPDATE "task" SET "last_progress_at" = $2 WHERE "id" = $1::uuid`, [task, '2026-01-02 03:04:05.678']);
+
+    // Never reported: `progress` is the read's own empty shape, not null (epoch 0, revision 0, nothing in
+    // it), and the same answer this door gives.
+    const unreported = await taskGet(ownRunner, task);
+    assert.equal(unreported.status, 200, unreported.text);
+    assert.deepEqual(
+      pick(unreported.body.progress, 'taskId', 'lifecycleEpoch', 'phase', 'current', 'total', 'message', 'revision', 'lastProgressAt', 'updatedAt'),
+      { taskId: uuidToBase62(task), lifecycleEpoch: 0, phase: null, current: null, total: null, message: null, revision: 0, lastProgressAt: null, updatedAt: null },
+    );
+    const unreportedRead = await read(ownRunner, task);
+    assert.equal(unreportedRead.status, 200, unreportedRead.text);
+    assert.deepEqual(unreported.body.progress, unreportedRead.body);
+    assert.equal(unreported.body.lastProgressAt, ledgerProgressAt);
+
+    // Two reports, so what task_get shows is the latest position and not the first.
+    const first = await report(ownRunner, task, { phase: 'build', current: 1, total: 3, message: 'compiling' });
+    assert.equal(first.status, 200, first.text);
+    const latest = await report(ownRunner, task, { current: 2 });
+    assert.equal(latest.status, 200, latest.text);
+    const { changed, progressed, ...answered } = latest.body;
+    assert.deepEqual({ changed, progressed, revision: answered.revision }, { changed: true, progressed: true, revision: 2 });
+    assert.equal(typeof answered.lastProgressAt, 'string', latest.text);
+
+    const reported = await taskGet(ownRunner, task);
+    assert.equal(reported.status, 200, reported.text);
+    assert.deepEqual(pick(reported.body.progress, 'revision', 'lastProgressAt'), pick(answered, 'revision', 'lastProgressAt'));
+    // And the rest of it: the report's answer less the two facts only a report has, and the door's read.
+    assert.deepEqual(reported.body.progress, answered);
+    const reread = await read(ownRunner, task);
+    assert.equal(reread.status, 200, reread.text);
+    assert.deepEqual(reported.body.progress, reread.body);
+
+    // The top-level lastProgressAt is still the ledger's: task_get did not stand the reported time in for
+    // it, and no report wrote the column.
+    assert.equal(reported.body.lastProgressAt, ledgerProgressAt);
+    const { rows: [ledger] } = await sql.query<{ lastProgressAt: string }>(
+      `SELECT to_char("last_progress_at", 'YYYY-MM-DD HH24:MI:SS.MS') AS "lastProgressAt" FROM "task" WHERE "id" = $1::uuid`,
+      [task],
+    );
+    assert.equal(ledger?.lastProgressAt, '2026-01-02 03:04:05.678');
   });
 });

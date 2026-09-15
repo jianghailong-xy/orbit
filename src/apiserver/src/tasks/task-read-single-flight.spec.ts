@@ -29,6 +29,9 @@ function detailServiceWith(task: unknown): TasksService {
     // An edge-free detail still asks the dependency reader once; no successor or verification
     // delegates are needed after this narrow, truthful answer.
     taskDependency: { findMany: async () => [] },
+    // The detail also carries the task's reported progress. Nothing here reported, so the read
+    // answers with no row — and it is not the `task.findFirst` these cases count.
+    $queryRaw: async () => [],
   });
 }
 

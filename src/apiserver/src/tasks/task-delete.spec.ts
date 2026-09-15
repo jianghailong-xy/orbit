@@ -201,6 +201,10 @@ function deleteRecorder(runs: string[], deleted = 1) {
     $queryRaw: async (...args: unknown[]) => {
       const query = renderRawQuery(args);
       const sql = query.text.replace(/\s+/g, ' ').trim();
+      // The task detail's progress read (`readTaskProgress`): `remove()` loads the detail before
+      // it deletes, and this read takes no lock — so it answers "never reported" and stays out of
+      // `calls`, which are about the four locks this delete does take.
+      if (sql.includes('"task_progress"')) return [];
       // Labelled by what it DOES, and the lock clause decides first: the rank-30 session pre-lock
       // walks the same cascade to find its rows, so testing for the walk first would relabel an
       // acquisition as a read and hide it from the order assertion.

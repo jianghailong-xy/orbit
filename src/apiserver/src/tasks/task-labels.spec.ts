@@ -14,6 +14,9 @@ function serviceWith(prisma: unknown): TasksService {
   // the transactional client; a caller that supplies its own wins.
   const client: Record<string, unknown> = {
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(client),
+    // The task detail's progress read runs on every `get()` and `update()`. Nothing here reports
+    // progress, so it answers with no row; a case that records statements supplies its own.
+    $queryRaw: async () => [],
     ...(prisma as Record<string, unknown>),
   };
   return new TasksService(client as never, {} as never, {

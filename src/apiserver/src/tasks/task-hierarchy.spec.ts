@@ -43,6 +43,10 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
       ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
       : (strings as Prisma.Sql);
     const sql = query.text.replace(/\s+/g, ' ').trim();
+    // The task detail's progress read (`readTaskProgress`), which every `get()` and `update()`
+    // makes: it takes no lock and asks no hierarchy question, so it is answered "never reported"
+    // and kept out of `calls`, which pin the locks and the questions these cases are about.
+    if (sql.includes('"task_progress"')) return [];
     // Status writes perform a post-commit completeness read for their realtime invalidation. Keep
     // that distinct from the hierarchy admission/locking statements these tests pin down.
     if (sql.includes('changed(id) AS') && sql.includes('family_probe(id) AS')) {

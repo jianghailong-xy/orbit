@@ -1853,7 +1853,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_get",
-			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this.",
+			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this. The top-level lastProgressAt, progressState and convergenceCounters belong to the project's convergence accounting, not to reported progress: what the task's run reported with task_progress_report is in `progress` (phase, current, total, message, revision, lastProgressAt), the same read task_progress_report gives when called with none of its fields; a task that never reported shows revision 0 with nothing in it.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{

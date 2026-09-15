@@ -68,16 +68,9 @@ export class TaskProgressService {
 
   /** The Task's progress in its current lifecycle epoch; a Task that never reported reads as epoch 0 with nothing in it. */
   async get(ownerId: string, taskId: string): Promise<TaskProgressView> {
-    const [row] = await this.prisma.$queryRaw<Array<ProgressRow & { taskCreatedAt: Date }>>`
-      SELECT t."created_at" AT TIME ZONE 'UTC' AS "taskCreatedAt",
-             COALESCE(p."lifecycle_epoch", 0) AS "lifecycleEpoch", p."epoch_started_at" AS "epochStartedAt",
-             p."phase", p."current", p."total", p."message", COALESCE(p."revision", 0) AS "revision",
-             p."last_progress_at" AS "lastProgressAt", p."updated_at" AS "updatedAt"
-      FROM "task" t
-      LEFT JOIN "task_progress" p ON p."task_id" = t."id"
-      WHERE t."id" = ${taskId}::uuid AND t."owner_id" = ${ownerId}::uuid`;
-    if (!row) throw new NotFoundException('task not found');
-    return progressView(taskId, row, row.taskCreatedAt);
+    const view = await readTaskProgress(this.prisma, ownerId, taskId);
+    if (!view) throw new NotFoundException('task not found');
+    return view;
   }
 
   /**
@@ -157,6 +150,27 @@ export class TaskProgressService {
       progressed: outcome.progressed,
     };
   }
+}
+
+/**
+ * The read behind `TaskProgressService.get`, for a reader that holds a prisma rather than the service:
+ * the task detail (`TasksService.loadDetail`, what task_get returns) carries it as `progress`, so that
+ * detail and task_progress_report's read answer from one query. Null for an id the owner lacks.
+ */
+export async function readTaskProgress(
+  prisma: PrismaService,
+  ownerId: string,
+  taskId: string,
+): Promise<TaskProgressView | null> {
+  const [row] = await prisma.$queryRaw<Array<ProgressRow & { taskCreatedAt: Date }>>`
+    SELECT t."created_at" AT TIME ZONE 'UTC' AS "taskCreatedAt",
+           COALESCE(p."lifecycle_epoch", 0) AS "lifecycleEpoch", p."epoch_started_at" AS "epochStartedAt",
+           p."phase", p."current", p."total", p."message", COALESCE(p."revision", 0) AS "revision",
+           p."last_progress_at" AS "lastProgressAt", p."updated_at" AS "updatedAt"
+    FROM "task" t
+    LEFT JOIN "task_progress" p ON p."task_id" = t."id"
+    WHERE t."id" = ${taskId}::uuid AND t."owner_id" = ${ownerId}::uuid`;
+  return row ? progressView(taskId, row, row.taskCreatedAt) : null;
 }
 
 /** The fields a report names, each held to its own bounds; what they add up to is checked once merged. */

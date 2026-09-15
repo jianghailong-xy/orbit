@@ -197,6 +197,7 @@ import {
   type DependencyState,
 } from './task-dependencies';
 import { loadVerificationEpochGates } from './verification-epoch-read';
+import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import {
@@ -7111,7 +7112,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // graph, so the three cannot describe it differently. Only a declared subject (the fields
     // `verificationSubjectSql` reads) is asked: that read answers NULL for every other task, and
     // this detail is polled while a run is live.
-    const [dependencyFacts, supersession, autoRunSkipped, workState] = await Promise.all([
+    const [dependencyFacts, supersession, autoRunSkipped, workState, progress] = await Promise.all([
       this.dependencyFactsFor(ownerId, [id]),
       this.supersession(ownerId, task),
       this.autoRunSkipped(ownerId, task),
@@ -7120,6 +7121,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         && task.verifiesTaskId == null
         ? readTaskWorkState(this.prisma, ownerId, task.id)
         : null,
+      readTaskProgress(this.prisma, ownerId, task.id),
     ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -7139,6 +7141,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // PENDING/BLOCKED/RUNNING/PASSED/FAILED/MISSING on a verification subject, null on every
       // other task.
       verificationState: workState?.verificationState ?? null,
+      // What the task's run reported with task_progress_report, from the read that tool makes
+      // (readTaskProgress), so the two cannot disagree: a task that never reported reads as epoch 0,
+      // revision 0 with nothing in it, not as null. Not the top-level `lastProgressAt` spread in
+      // above: that one, with `progressState` and `convergenceCounters`, is the project convergence
+      // ledger's (projects/convergence-ledger.ts), which no progress report writes.
+      progress,
       ...supersession,
     };
   }
