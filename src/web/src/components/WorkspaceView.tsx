@@ -135,6 +135,8 @@ import {
 } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
+import { WatchWakeCard } from './WatchWakeCard';
+import { parseWatchWake } from '../lib/watches';
 import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
@@ -1047,6 +1049,10 @@ function WaitElapsed({ since }: { since?: string | null }) {
   return label ? <span className="chat-wait-elapsed">{label}</span> : null;
 }
 
+/** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
+const WAKE_WITHDRAW_CONSEQUENCE =
+  "If withdrawn, this session is not woken this time, and the watch won't send it again.";
+
 /**
  * The line under a message in the queued tail — the one thing that says which of the two kinds
  * the server filed it as, and where the way out of it is offered.
@@ -1061,12 +1067,17 @@ function WaitElapsed({ since }: { since?: string | null }) {
  * and nothing will; the row is a durable statement about a boundary that has passed. So it is the
  * one state that needs the opposite of Cancel's caution: the text exists nowhere else, and with no
  * action offered the bubble is a dead end that outlives the conversation it failed under.
+ *
+ * A wake a watch queued leaves through the same door, but it was never anyone's to take back:
+ * withdrawing it dead-letters the watch's delivery (WAKE_WITHDRAWN), so the session is not woken
+ * and the watch does not send it again. The action says what it does, and the line what follows.
  */
 export function QueuedTurnMeta({
   placement,
   delivery,
   deliveryCode,
   deliveryReason,
+  wake,
   onCancel,
   onPutBack,
 }: {
@@ -1074,6 +1085,8 @@ export function QueuedTurnMeta({
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
+  /** The turn is a wake a watch queued (lib/watches `parseWatchWake`), not a message anyone typed. */
+  wake?: boolean;
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
@@ -1086,7 +1099,9 @@ export function QueuedTurnMeta({
       : 'Queued for next turn';
   const why = delivery != null
     ? deliveryFailureExplanation(deliveryCode, deliveryReason)
-    : undefined;
+    : wake && placement === 'queued'
+      ? WAKE_WITHDRAW_CONSEQUENCE
+      : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
       <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
@@ -1094,7 +1109,7 @@ export function QueuedTurnMeta({
       </span>
       {why && <span className="chat-queued-why">{why}</span>}
       {delivery == null
-        ? placement === 'queued' && <a onClick={onCancel}>Cancel</a>
+        ? placement === 'queued' && <a onClick={onCancel}>{wake ? 'Withdraw wake' : 'Cancel'}</a>
         : onPutBack && <a onClick={onPutBack}>Put back in the composer</a>}
     </span>
   );
@@ -3612,6 +3627,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // empty composer), so this never clobbers an in-progress draft. Queued images can't
       // be rehydrated (a ComposerImage needs its File), so flag any that were dropped.
       const restored = visibleQueuedTurns
+        .filter((q) => !parseWatchWake(q.content)) // a wake is the watch's words, never theirs
         .map((q) => {
           const body = q.content.trim();
           return body && q.shell ? `!${body}` : body; // a `!cmd` comes back as one
@@ -3656,6 +3672,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
     }
+  };
+  // Withdraw a wake a watch queued. Nobody typed it, so unlike a message nothing folds back into the
+  // composer — and it is gone for good: the server dead-letters the watch's delivery (WAKE_WITHDRAWN)
+  // and the watch never sends it again. That is why this one asks first, where Cancel does not.
+  const withdrawWake = (turnId: string): void => {
+    const sessionId = selectedId;
+    if (!sessionId) return;
+    modal.confirm({
+      title: 'Withdraw this wake?',
+      content: WAKE_WITHDRAW_CONSEQUENCE,
+      okText: 'Withdraw wake',
+      okButtonProps: { danger: true },
+      cancelText: 'Keep it queued',
+      onOk: async () => {
+        setQueued((q) => q.filter((x) => x.turnId !== turnId));
+        try {
+          await cancelQueuedTurn(sessionId, turnId);
+        } catch {
+          message.info('This wake is already being processed and cannot be withdrawn');
+        }
+      },
+    });
   };
   // Lifecycle actions happen immediately and offer Undo; Complete also ends a live run.
   const restoreMut = useMutation({
@@ -5839,42 +5877,66 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   onChatAbout={startChatReply}
                 />
               ))}
-              {!selectedTrashed && visibleQueuedTurns.map((q) => (
-                <div className="chat-msg chat-user chat-queued" key={q.turnId}>
-                  {turnImages[q.turnId]?.length ? (
-                    // Fresh local previews (object URLs) — instant, before a reload drops them.
-                    <div className="chat-images">
-                      {turnImages[q.turnId].map((im, i) => (
-                        <ChatImage key={i} src={im.url} />
-                      ))}
-                    </div>
-                  ) : q.attachments?.length ? (
-                    // After a reload the local previews are gone; fetch the refs the queued-turn
-                    // list carries from the server, so an image-only turn stays visible.
-                    <div className="chat-images">
-                      {q.attachments.map((a) => (
-                        <AttachmentImage key={a.id} id={a.id} />
-                      ))}
-                    </div>
-                  ) : null}
-                  {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
-                      message doesn't change shape when the runner picks it up. A queued `!cmd`
-                      shows the command verbatim — markdown would mangle its shell syntax. */}
-                  {q.shell ? (
-                    <code className="chat-queued-cmd">!{q.content}</code>
-                  ) : (
-                    q.content && <MD breaks>{q.content}</MD>
-                  )}
-                  <QueuedTurnMeta
-                    placement={q.placement}
-                    delivery={q.delivery}
-                    deliveryCode={q.deliveryCode}
-                    deliveryReason={q.deliveryReason}
-                    onCancel={() => cancelQueued(q.turnId)}
-                    onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
+              {!selectedTrashed && visibleQueuedTurns.map((q) => {
+                // A wake a watch queued is the card the transcript draws once a runner takes it
+                // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
+                // its delivery stands is the queue's line to say, as for every queued row.
+                const wake = parseWatchWake(q.content);
+                return wake ? (
+                  <WatchWakeCard
+                    key={q.turnId}
+                    wake={wake}
+                    text={q.content}
+                    linkable
+                    undelivered={false}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        wake
+                        onCancel={() => withdrawWake(q.turnId)}
+                      />
+                    }
                   />
-                </div>
-              ))}
+                ) : (
+                  <div className="chat-msg chat-user chat-queued" key={q.turnId}>
+                    {turnImages[q.turnId]?.length ? (
+                      // Fresh local previews (object URLs) — instant, before a reload drops them.
+                      <div className="chat-images">
+                        {turnImages[q.turnId].map((im, i) => (
+                          <ChatImage key={i} src={im.url} />
+                        ))}
+                      </div>
+                    ) : q.attachments?.length ? (
+                      // After a reload the local previews are gone; fetch the refs the queued-turn
+                      // list carries from the server, so an image-only turn stays visible.
+                      <div className="chat-images">
+                        {q.attachments.map((a) => (
+                          <AttachmentImage key={a.id} id={a.id} />
+                        ))}
+                      </div>
+                    ) : null}
+                    {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
+                        message doesn't change shape when the runner picks it up. A queued `!cmd`
+                        shows the command verbatim — markdown would mangle its shell syntax. */}
+                    {q.shell ? (
+                      <code className="chat-queued-cmd">!{q.content}</code>
+                    ) : (
+                      q.content && <MD breaks>{q.content}</MD>
+                    )}
+                    <QueuedTurnMeta
+                      placement={q.placement}
+                      delivery={q.delivery}
+                      deliveryCode={q.deliveryCode}
+                      deliveryReason={q.deliveryReason}
+                      onCancel={() => cancelQueued(q.turnId)}
+                      onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
+                    />
+                  </div>
+                );
+              })}
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
               {selected &&
                 selectedTrashed &&

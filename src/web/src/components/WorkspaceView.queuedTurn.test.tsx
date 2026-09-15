@@ -86,4 +86,23 @@ describe('the server-placement labels in the pending tail', () => {
     expect(html).not.toContain('Not delivered');
     expect(html).not.toContain('Cancel');
   });
+
+  it('names withdrawing a queued wake for what it does, and says what follows', () => {
+    // Nobody typed a wake, so there is nothing to cancel and take back: withdrawing it loses it for
+    // good (the watch dead-letters the delivery and never sends it again).
+    const html = renderToStaticMarkup(<QueuedTurnMeta placement="queued" wake onCancel={() => {}} />);
+    expect(html).toContain('Queued for next turn');
+    expect(html).toContain('>Withdraw wake</a>');
+    // React escapes the apostrophe in static markup, so the sentence is matched either side of it.
+    expect(html).toContain('If withdrawn, this session is not woken this time, and the watch won');
+    expect(html).toContain('t send it again.');
+    expect(html).not.toContain('Cancel');
+  });
+
+  it('keeps a typed message on plain Cancel, with no word about a watch', () => {
+    const html = renderToStaticMarkup(<QueuedTurnMeta placement="queued" onCancel={() => {}} />);
+    expect(html).toContain('>Cancel</a>');
+    expect(html).not.toContain('Withdraw');
+    expect(html).not.toContain('chat-queued-why');
+  });
 });
