@@ -765,6 +765,68 @@ func TestMergeWaitsForASupervisorTakeoverAndNoLonger(t *testing.T) {
 	}
 }
 
+// The literal shape of that incident's headline: the session had already ended when the runner
+// restarted under it. A self-update re-exec reclaims it anyway — the row is still in the reclaim
+// snapshot — and the takeover fences its checkout before the takeover-leases answer says the
+// control plane calls it terminal. The row is dropped there, so no supervisor is ever started
+// for it and none of park, register or finish will ever run for that id again. Before the fix
+// the fence that reclaim raised stayed raised, and the merge the user asked for hours later was
+// refused as superseded for the life of the runner process.
+func TestMergeAfterARestartReclaimsAnAlreadyEndedSession(t *testing.T) {
+	const (
+		sessionID   = "ended-before-the-restart"
+		branch      = "orbit/ended-before-the-restart"
+		operationID = "99999999-9999-4999-8999-999999999999"
+		leaseOwner  = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/reclaim":
+			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{
+				{SessionID: sessionID, Status: stAwaitingInput},
+			}})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
+			// It ended while the old image was draining; the runner finds that out here.
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stSucceeded})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	pool := newSessionPool(1)
+	starts, _, err := reclaimMissingSessions(
+		context.Background(),
+		NewTransport(srv.URL, "token"),
+		func() map[string]bool { return map[string]bool{} },
+		func(job *ClaimedSession) (func(), error) {
+			return prepareLocalSupervisorTakeover(context.Background(), pool, job, "process-owner")
+		},
+	)
+	if err != nil {
+		t.Fatalf("reclaim after the restart: %v", err)
+	}
+	if len(starts) != 0 {
+		t.Fatalf("a session the control plane calls terminal was handed to a supervisor: %#v", starts)
+	}
+
+	advertised, _ := pool.heartbeatSnapshot()
+	ran := false
+	got := heartbeatMerge(
+		pool,
+		MergeCommand{SessionID: sessionID, OperationID: operationID, LeaseOwner: leaseOwner, Branch: branch},
+		advertised[sessionID],
+		func(MergeCommand) mergeOutcome {
+			ran = true
+			return mergeOutcome{Status: "merged", MergedSha: "merged-sha", SourceSha: "source-sha", TargetBranch: "main"}
+		},
+	)
+	if !ran || got.Status != "merged" {
+		t.Fatalf("merge for a session the restart's reclaim picked up and dropped: ran=%v status=%q message=%q; want it to run and land",
+			ran, got.Status, got.Message)
+	}
+}
+
 func TestCommitAdmissionRejectPostsExactErrorReceipt(t *testing.T) {
 	const leaseOwner = "33333333-3333-4333-8333-333333333333"
 	tests := []struct {
