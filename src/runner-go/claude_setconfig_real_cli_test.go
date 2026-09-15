@@ -24,11 +24,16 @@ package main
 //     turn only to read the CLI's authoritative system/init model after set_model; the CLI
 //     reports that state before its synthetic signed-out answer, so no API request or token is
 //     involved.
-//   - The control channel is serviced before authentication matters. A config dir with no
-//     credentials in it answers all of these (verified against 2.1.241 on an empty HOME),
-//     which is why nothing here borrows the machine's login and why "signed out" is not a
-//     skip condition — a skip for it would be dead code hiding a real regression. If a
-//     future CLI does gate control behind a login, these fail loudly with its own stderr.
+//   - The control channel is serviced before authentication matters — but set_model's model
+//     argument is not. 2.1.270 validates an id it cannot resolve locally against the API, so
+//     on a config dir with no credentials in it those answer "Unable to validate model: Could
+//     not resolve authentication method". set_permission_mode, and set_model's own argument
+//     checks, still answer with no credentials at all (verified against 2.1.241, and again
+//     against 2.1.270, on an empty HOME); only the id lookup reaches out, which is why the
+//     probes move a model this CLI resolves offline (realClaudeTargetModel). So nothing here
+//     borrows the machine's login and "signed out" is still not a skip condition — a skip for
+//     it would be dead code hiding a real regression. If a future CLI does gate the control
+//     channel itself behind a login, these fail loudly with its own stderr.
 //
 // The one reason to skip is a CLI that is not installed, and the skip says so out loud.
 
@@ -59,9 +64,18 @@ const (
 	// The two model ids the set_model probes move between: the process is spawned on one
 	// and asked for the other, so an init readback left on the spawn model cannot pass.
 	// Haiku is the spawn model so that a probe that somehow did reach an API would be the
-	// cheapest one available.
+	// cheapest one available; --model is not validated at spawn, so the spawn id does not
+	// have to be one the CLI can resolve offline.
+	//
+	// The target does have to be. set_model is the one frame here whose argument 2.1.270
+	// checks against the API, and a probe with no credentials cannot pass that check:
+	// measured on 2.1.270 against an empty config dir, "claude-opus-5" and the aliases
+	// opus/sonnet/haiku answer success, while "claude-sonnet-5", "claude-haiku-4-5" and
+	// "claude-fable-5-1" answer "Unable to validate model: Could not resolve authentication
+	// method". claude-opus-5 is also the id Orbit sends by default, so the frame under test
+	// stays the one production really writes, and system/init reads it back verbatim.
 	realClaudeSpawnModel  = "claude-haiku-4-5-20251001"
-	realClaudeTargetModel = "claude-sonnet-5"
+	realClaudeTargetModel = "claude-opus-5"
 )
 
 // A permission mode Orbit sets on a live session. Two things have to be true, and only the
