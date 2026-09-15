@@ -1,4 +1,10 @@
 import { TaskStatus } from '@orbit/shared';
+import {
+  LANDED_RESULTS,
+  LandingReceiptFacts,
+  landingBranchesFor,
+  taskLanding,
+} from '../projects/project-criterion-landing';
 import { successorChain } from './task-supersession';
 import {
   VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN,
@@ -48,6 +54,20 @@ export interface DependencyPrerequisiteFact {
    * SATISFACTION while only one of them speaks about liveness.
    */
   verificationGateStalled?: boolean;
+  /**
+   * §2.5 J9: has this prerequisite's work LANDED on its project's integration line?
+   *
+   * Additive, and absent reads as "nothing to land" — which is what a prerequisite outside a
+   * project, a codeless one, and every prerequisite of a project that has not started integrating
+   * all are (§8.4 C2). Only `false` holds a dependent back, so a caller that does not gather this
+   * gets exactly the behaviour it had before the field existed.
+   *
+   * It is a separate field from `status` because the two answer different questions and fail
+   * differently. DONE says the acceptance command agreed with its exit code — inside the task's own
+   * worktree, on a branch, with no statement about where that work IS. A dependent started on that
+   * alone runs on a baseline that does not contain the thing it depends on.
+   */
+  landed?: boolean;
 }
 
 export function computeDependencyState(
@@ -70,7 +90,14 @@ export function computeDependencyState(
   // runs") is false for exactly those, and reporting them as an ordinary wait is how a project
   // sits stopped with every liveness check green.
   if (prerequisites.some((p) => p.verificationGateStalled === true)) return 'BLOCKED_FAILED';
-  if (prerequisites.every((p) => p.status === TaskStatus.DONE && p.verificationGate == null))
+  // §2.5 J9: DONE and verified, AND its work is on the line this project integrates into. A wait
+  // rather than a refusal — BLOCKED and not BLOCKED_FAILED — because nobody has to do anything
+  // about it: the platform lands the prerequisite and the landing receipt releases this task
+  // (J10). Telling a person to go and fix something would be advice to intervene in a step that
+  // is already under way.
+  if (prerequisites.every((p) => p.status === TaskStatus.DONE
+    && p.verificationGate == null
+    && p.landed !== false))
     return 'READY';
   return 'BLOCKED';
 }
@@ -293,7 +320,14 @@ export function dependencySatisfied(
  * The depth cap mirrors `TASK_SUPERSESSION_MAX_HOPS`: 0128's trigger refuses a cycle, and a walk
  * that reaches the cap has found data no writer here produced, so it stops rather than spinning.
  */
-export function dependenciesSatisfiedSql(alias = 't'): string {
+export function dependenciesSatisfiedSql(
+  alias = 't',
+  { ignoreLanding = false }: { ignoreLanding?: boolean } = {},
+): string {
+  // `ignoreLanding` answers a DIFFERENT question — "would this task be ready if landing were not
+  // required" — and it exists for exactly one reader: the run queue, which subtracts the two to say
+  // how many tasks are held up by nothing but a landing (§7.2 V6). It is never the dispatch gate.
+  const landed = ignoreLanding ? 'TRUE' : prerequisiteLandedSql('chain_task');
   return `NOT EXISTS (
     SELECT 1 FROM task_dependency dep
      WHERE dep.task_id = ${alias}.id
@@ -303,6 +337,102 @@ export function dependenciesSatisfiedSql(alias = 't'): string {
           WHERE chain_task.id = task_dependency_tail_id(dep.depends_on_task_id)
             AND chain_task.status = 'DONE'
             AND ${verificationEpochOpenSql('chain_task', alias)}
+            AND ${landed}
        )
   )`;
 }
+
+/** A full ref as a merge receipt spells `target_branch`: the runner reports a branch, not a ref. */
+function branchNameSql(ref: string): string {
+  return `regexp_replace(${ref}, '^refs/heads/', '')`;
+}
+
+/**
+ * §2.5 J9 in SQL, correlated to a PREREQUISITE alias: is there nothing left for it to land?
+ *
+ * TRUE — nothing to wait for — in three cases, and they are disjuncts rather than a filter because
+ * each one means "this prerequisite has no landing to do", not "skip the check":
+ *
+ *  1. **Its project has not started integrating** (§8.4 C2), which includes a task filed under no
+ *     project at all. Nothing lands work on a line that does not exist yet, so requiring a landing
+ *     would hold every dependent of every project in this repository for ever.
+ *  2. **It is not code work** (§1.1 `isCodeTask`): declared codeless, or its newest work session did
+ *     not run in a worktree on a branch. A documentation prerequisite has no commit to land, and
+ *     SR27 says the same thing one contract over.
+ *  3. **A receipt says it landed** on the project's integration line or on its upstream (§1.4
+ *     `taskLanding` ∈ {ON_INTEGRATION_LINE, ON_UPSTREAM}) — the upstream counts because work on main
+ *     is also everywhere the project branch will ever take it.
+ *
+ * It reads `project_codebase` and `session_merge_receipt` only, never the integration job table:
+ * whether the platform has a job queued is a different fact from whether the work is THERE, and
+ * keeping the job table out is what lets this ship before the queue that fills it does.
+ */
+export function prerequisiteLandedSql(alias = 'chain_task'): string {
+  const results = LANDED_RESULTS.map((result) => `'${result}'`).join(', ');
+  return `(
+      NOT EXISTS (
+        SELECT 1 FROM "project_codebase" landing_line
+         WHERE landing_line."project_id" = ${alias}."project_id"
+           AND landing_line."slot" = 'primary'
+           AND landing_line."integration_started_at" IS NOT NULL
+      )
+      OR ${alias}."codeless" = true
+      OR NOT EXISTS (
+        SELECT 1 FROM "session" landing_work
+         WHERE landing_work."id" = (
+                 SELECT newest_work."id" FROM "session" newest_work
+                  WHERE newest_work."task_id" = ${alias}."id"
+                    AND newest_work."starts_task_work" = true
+                    AND newest_work."deleted_at" IS NULL
+                  ORDER BY newest_work."created_at" DESC, newest_work."id" DESC
+                  LIMIT 1
+               )
+           AND landing_work."isolation_status" = 'worktree'
+           AND landing_work."branch" IS NOT NULL
+      )
+      OR EXISTS (
+        SELECT 1 FROM "session_merge_receipt" landing_receipt
+          JOIN "project_codebase" receipt_line
+            ON receipt_line."project_id" = ${alias}."project_id"
+           AND receipt_line."slot" = 'primary'
+         WHERE landing_receipt."task_id" = ${alias}."id"
+           AND landing_receipt."result" IN (${results})
+           AND landing_receipt."target_branch" IN (
+                 ${branchNameSql('receipt_line."integration_ref"')},
+                 ${branchNameSql('receipt_line."upstream_ref"')}
+               )
+      )
+    )`;
+}
+
+/** One prerequisite's rows, as the TypeScript spelling of J9 reads them. */
+export interface PrerequisiteLandingFacts {
+  codeless: boolean;
+  projectId: string | null;
+  /** The project's primary binding, or null when it has none. */
+  codebase: { upstreamRef: string; integrationRef: string; integrationStartedAt: Date | null } | null;
+  /** Its newest work session — §1.1's whole evidence that a task is code work. */
+  work: { isolationStatus: string | null; branch: string | null } | null;
+  receipts: readonly LandingReceiptFacts[];
+}
+
+/**
+ * §2.5 J9 as a pure function, so the dispatch paths that read rows and the sweeps that count in SQL
+ * cannot answer differently — the same hazard `dependenciesSatisfiedSql` names about SU9, one
+ * clause further along. The three disjuncts are `prerequisiteLandedSql`'s, in the same order.
+ */
+export function prerequisiteLanded(facts: PrerequisiteLandingFacts): boolean {
+  if (!facts.codebase?.integrationStartedAt) return true;
+  if (facts.codeless || facts.projectId === null) return true;
+  if (facts.work?.isolationStatus !== 'worktree' || !facts.work.branch) return true;
+  return taskLanding(facts.receipts, landingBranchesFor(facts.codebase)) !== 'NOT_KNOWN';
+}
+
+/**
+ * What to tell a person whose run was refused because a prerequisite is finished but not yet on the
+ * line. A wait, and one nobody has to act on — so it says who is doing it, rather than sending the
+ * reader to look for something to fix.
+ */
+export const PREREQUISITE_NOT_LANDED_MESSAGE =
+  'A prerequisite is finished but its work has not landed on this project\'s integration line yet '
+  + '— it starts by itself once the landing is recorded';

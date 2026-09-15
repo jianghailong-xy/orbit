@@ -10,7 +10,14 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModuleRef } from '@nestjs/core';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import { TasksService } from '../tasks/tasks.service';
+
+/** The one thing a landing asks of the task side (contract §2.5 J10). */
+export interface LandingDispatcher {
+  dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void>;
+}
 import {
   MERGE_RECEIPT_MAX_CONFLICTS,
   MergeReceiptRecorder,
@@ -105,7 +112,43 @@ export class MergeReceiptService {
     @Optional()
     @Inject(forwardRef(() => CompletionInputRouter))
     private readonly completionInputs?: CompletionInputRouter,
+    /**
+     * The work a committed landing releases (contract §2.5 J10), for a caller that hands it over.
+     *
+     * A dependency waits for its prerequisite to be ON the project's integration line, not merely
+     * DONE (§2.5 J9), so the receipt that records the landing is the fact that makes a dependent
+     * runnable — and until this existed, nothing derived anything from it: the DONE edge had
+     * already run and found the predicate unsatisfied, and the next automatic look was the
+     * 60-second sweep.
+     *
+     * Typed structurally and resolved through `ModuleRef` below rather than injected as
+     * `TasksService`, because the declarative form costs more than it is worth here: SessionsModule
+     * would have to import TasksModule, which closes a ring through CoordinatorJudgmentModule and —
+     * the part that actually bites — makes every consumer of SessionsModule instantiate TasksModule
+     * and PushModule as well. A pg fixture passes its own dispatcher here; nothing else does.
+     */
+    @Optional()
+    private readonly tasks?: LandingDispatcher,
+    /**
+     * How the running server finds `TasksService` without this module importing TasksModule.
+     * Always available, needs no import, and resolved at CALL time — by which point every module
+     * is loaded, so the lookup cannot see a half-built graph.
+     */
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
+
+  /** The dispatcher this receipt should release work through, or nothing if there is none. */
+  private landingDispatcher(): LandingDispatcher | undefined {
+    if (this.tasks) return this.tasks;
+    try {
+      return this.moduleRef?.get(TasksService, { strict: false });
+    } catch {
+      // No TasksService in this application context — a fixture, or a process that does not run
+      // tasks. The receipt is still recorded; nothing downstream of it is waiting here.
+      return undefined;
+    }
+  }
 
   /**
    * Deliver the project facts one COMMITTED merge receipt may have moved.
@@ -150,9 +193,21 @@ export class MergeReceiptService {
    * set, so a delivery that failed above does not make it wrong; and a projection that could not be
    * stored must no more un-record a merge than a wake that could not be delivered.
    */
-  async deliverProjectFactsAfterCommit(projectId: string | null | undefined): Promise<void> {
-    if (!this.completionInputs) return;
+  async deliverProjectFactsAfterCommit(
+    projectId: string | null | undefined,
+    landedTaskId?: string | null,
+  ): Promise<void> {
     if (!projectId) return;
+    await this.deliverCompletionInputs(projectId);
+    // LAST, and outside the router's own guard: this one is not a delivery to a coordinator, it is
+    // the platform starting the next task (§2.5 J10). A receipt that could not be announced to
+    // anybody still landed the work that the tasks downstream of it were waiting for.
+    await this.dispatchWhatThisLandingReleased(landedTaskId);
+  }
+
+  /** The three completion-input doors and the DONE projection, unchanged. */
+  private async deliverCompletionInputs(projectId: string): Promise<void> {
+    if (!this.completionInputs) return;
     const projectIds = [projectId];
     await this.completionInputs.routeSettledProjects(projectIds).catch((e) =>
       this.logger.warn(`settled-project delivery failed after a merge receipt: ${e?.message ?? e}`),
@@ -164,6 +219,30 @@ export class MergeReceiptService {
       this.logger.warn(`unlanded-criterion delivery failed after a merge receipt: ${e?.message ?? e}`),
     );
     await this.reprojectProjectStatus(projectId);
+  }
+
+  /**
+   * Start the work this landing released (§2.5 J10).
+   *
+   * The owner comes from the TASK rather than from the receipt: a receipt's `ownerId` is provenance
+   * about who recorded the merge, and what is being dispatched here is the tenant's own work — the
+   * same distinction `reprojectProjectStatus` makes when it reads the project's owner instead.
+   *
+   * Logged and never raised, like everything else on this edge. The receipt is committed, the
+   * predicate that reads it is the same one the 60-second sweep reads, and a dispatch that failed
+   * is re-derived from the same rows there.
+   */
+  private async dispatchWhatThisLandingReleased(landedTaskId?: string | null): Promise<void> {
+    const tasks = this.landingDispatcher();
+    if (!tasks || !landedTaskId) return;
+    const task = await this.prisma.task.findUnique({
+      where: { id: landedTaskId },
+      select: { ownerId: true },
+    }).catch(() => null);
+    if (!task) return;
+    await tasks.dispatchDependentsOf(task.ownerId, landedTaskId).catch((e) =>
+      this.logger.warn(`dependents of a landed task were not dispatched: ${e?.message ?? e}`),
+    );
   }
 
   /**
@@ -374,7 +453,7 @@ export class MergeReceiptService {
     // well as for a new row: an idempotent replay is exactly the state a caller retrying a request
     // whose response was lost is in, and the first attempt's delivery is the one that may have been
     // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read.
-    await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId);
+    await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId, recorded.receipt.taskId);
     return recorded;
   }
 

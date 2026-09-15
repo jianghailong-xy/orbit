@@ -4662,7 +4662,10 @@ export class RunnerApiController {
     // because `withTransactionRetry` may run the closure again and would otherwise leave a project
     // named by an attempt that was thrown away — re-adding the same id is a no-op, and the closure
     // adds nothing on the paths that write no receipt.
-    const receiptProjects = new Set<string>();
+    // ...and the task whose work it landed, because that is what the dispatch edge is keyed on
+    // (§2.5 J10). A Map rather than a Set for the same reason it was a Set: re-adding the same
+    // project on a retried attempt overwrites rather than accumulates.
+    const receiptProjects = new Map<string, string | null>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -4799,7 +4802,7 @@ export class RunnerApiController {
               select: { projectId: true },
             })
           : null;
-        if (task?.projectId) receiptProjects.add(task.projectId);
+        if (task?.projectId) receiptProjects.set(task.projectId, current.taskId ?? null);
         await MergeReceiptService.fromRunnerMergeResult(tx, {
           ownerId: current.ownerId,
           sessionId,
@@ -4846,8 +4849,8 @@ export class RunnerApiController {
     // writers; here the transaction is ours, so the call is too. Failures are logged inside it —
     // the merge and the receipt are committed and a coordinator that could not be reached does not
     // un-record them.
-    for (const projectId of receiptProjects) {
-      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId);
+    for (const [projectId, landedTaskId] of receiptProjects) {
+      await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId);
     }
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it

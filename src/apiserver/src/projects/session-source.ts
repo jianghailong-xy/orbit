@@ -16,6 +16,7 @@ import {
   SOURCE_REFUSAL_CODES,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { branchName, LANDED_RESULTS } from './project-criterion-landing';
 import { resolveSource, SourceReason, SourceResolution } from './source-selector';
 
 /**
@@ -143,6 +144,12 @@ export async function decideSessionSource(
   if (codebase && !task.codeless) {
     await assertCheckpointInputsAvailable(prisma, task);
   }
+  // P4's two inputs (§1.5 L10): which tasks this one waits on, and the commit each of them landed
+  // on this project's line. Read only for a code task with a binding — for anything else P0' has
+  // already decided, and these would be two queries for an answer nobody reads.
+  const closure = codebase && !task.codeless
+    ? await prerequisiteLandingCommits(prisma, task.id, codebase)
+    : { dependsOnTaskIds: [] as string[], checkpoints: [] as PrerequisiteCommit[] };
   const resolution = resolveSource({
     task: {
       id: task.id,
@@ -152,10 +159,7 @@ export async function decideSessionSource(
       codeless: task.codeless,
       attemptGeneration: task.attemptGeneration,
       inheritedKnownGoodSha: task.knownGoodSha,
-      // Empty because it has been PROVEN empty, not because it was not looked at: the guard above
-      // refuses any task that has prerequisites and a code binding, so anything reaching here with
-      // a codebase has none. A task with no binding resolves at P0' and never reads this.
-      dependsOnTaskIds: [],
+      dependsOnTaskIds: closure.dependsOnTaskIds,
     },
     codebase: codebase
       ? {
@@ -171,41 +175,79 @@ export async function decideSessionSource(
         }
       : null,
     subjectCandidate: null,
-    prerequisiteCheckpoints: [],
+    prerequisiteCheckpoints: closure.checkpoints,
   });
   return { columns: sourceCreateColumns(resolution), reason: resolution.reason };
 }
 
+/** One prerequisite's product, in the shape §4's closure reads (SR25). */
+type PrerequisiteCommit = { taskId: string; commitSha: string; kind: string };
+
 /**
- * The seam where the dependency-closure task (`34D2AgHxulKr87lKaZgYW`) plugs in — and a refusal,
- * not a default, until it does.
+ * Each prerequisite's landed commit on this project's line — P4's input (contract §1.5 L10).
  *
- * §4's P1 and P4 read two inputs nothing gathers yet: the subject's newest accepted checkpoint, and
- * each prerequisite's accepted product. Supplying empty values for them would not be
- * "unimplemented", it would be WRONG in the specific way SR19 forbids — a verification would report
- * "no candidate" without having looked, and a task with prerequisites would quietly fall through to
- * P5 and start from the upstream tip with no containment requirement at all. A baseline that merely
- * looks runnable is the shape of all three degradations in §0.
+ * The product of a finished code task is the commit that carries its work on the line the project
+ * integrates into, and the merge receipt is where that is recorded: `MERGED` moved the target to
+ * `target_sha_after`, and `ALREADY_MERGED` says the target already contained `source_sha`. Both
+ * branches count, upstream included, for the reason §1.4 gives — work on main is also everywhere
+ * the project branch will ever take it.
  *
- * So it refuses, loudly and retryably. Structurally unreachable today: it needs a project with a
- * `ProjectCodebase` row, and nothing can write one until the API task (`34D2AgMRztyeLUaaV9CWM`)
- * lands, which is after the closure task.
+ * A prerequisite with no such receipt contributes NOTHING rather than a refusal, and that is safe
+ * here for one reason only: §2.5 J9 will not let this task be dispatched at all while a code
+ * prerequisite of it has not landed. The sweep, the run queue and Run Now read that predicate, so
+ * a task reaching this line with prerequisites has them on the line — and a codeless prerequisite,
+ * which never lands anything, must not manufacture a Git requirement (SR27).
+ */
+async function prerequisiteLandingCommits(
+  prisma: PrismaService,
+  taskId: string,
+  codebase: { upstreamRef: string; integrationRef: string },
+): Promise<{ dependsOnTaskIds: string[]; checkpoints: PrerequisiteCommit[] }> {
+  const edges = await prisma.taskDependency.findMany({
+    where: { taskId },
+    select: { dependsOnTaskId: true },
+  });
+  const dependsOnTaskIds = [...new Set(edges.map((edge) => edge.dependsOnTaskId))];
+  if (dependsOnTaskIds.length === 0) return { dependsOnTaskIds, checkpoints: [] };
+  const receipts = await prisma.sessionMergeReceipt.findMany({
+    where: {
+      taskId: { in: dependsOnTaskIds },
+      result: { in: [...LANDED_RESULTS] },
+      targetBranch: { in: [branchName(codebase.integrationRef), branchName(codebase.upstreamRef)] },
+    },
+    select: { taskId: true, result: true, sourceSha: true, targetShaAfter: true },
+  });
+  const checkpoints = receipts.flatMap((receipt): PrerequisiteCommit[] => {
+    const commitSha = receipt.result === 'MERGED' ? receipt.targetShaAfter : receipt.sourceSha;
+    return receipt.taskId && commitSha
+      ? [{ taskId: receipt.taskId, commitSha, kind: 'ACCEPTED' }]
+      : [];
+  });
+  return { dependsOnTaskIds, checkpoints };
+}
+
+/**
+ * P1's input is still gathered by nobody, and a refusal is still the honest answer for it.
+ *
+ * §4's P1 reads the subject's newest accepted checkpoint. Supplying an empty value would not be
+ * "unimplemented", it would be WRONG in the specific way SR19 forbids: a verification would report
+ * "no candidate" without having looked, and a baseline that merely looks runnable is the shape of
+ * all three degradations in §0.
+ *
+ * P4 no longer refuses, and the thing that changed is not this guard — it is that its input exists.
+ * `prerequisiteLandingCommits` above reads each prerequisite's landing off the receipts, so a task
+ * with prerequisites resolves DEPENDENCY_CLOSURE against the integration ref with a containment
+ * requirement per prerequisite, rather than falling through to P5 with none.
  */
 async function assertCheckpointInputsAvailable(
   prisma: PrismaService,
   task: SessionSourceTaskRow,
 ): Promise<void> {
-  let needs: string | null = null;
-  if (task.verifiesTaskId !== null) {
-    needs = 'the accepted checkpoint this verification was filed against';
-  } else if (await prisma.taskDependency.count({ where: { taskId: task.id } })) {
-    needs = "its prerequisites' accepted checkpoints";
-  }
-  if (needs === null) return;
+  if (task.verifiesTaskId === null) return;
   throw new ServiceUnavailableException(
-    `this task's SOURCE needs ${needs}, and checkpoint resolution is not wired up yet ` +
-      '(project-source-contract §4 P1/P4, task 34D2AgHxulKr87lKaZgYW). Refusing rather than ' +
-      'starting from a baseline nobody chose.',
+    "this task's SOURCE needs the accepted checkpoint this verification was filed against, and "
+      + 'checkpoint resolution is not wired up yet (project-source-contract §4 P1). Refusing '
+      + 'rather than starting from a baseline nobody chose.',
   );
 }
 

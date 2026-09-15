@@ -191,6 +191,8 @@ import {
   canRun,
   computeDependencyState,
   dependenciesSatisfiedSql,
+  prerequisiteLanded,
+  PREREQUISITE_NOT_LANDED_MESSAGE,
   dependencyEpochGate,
   dependencyEpochStalled,
   statusPrerequisites,
@@ -2379,11 +2381,81 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: [...byTask.keys()] }, verifiesTaskId: { not: null } },
         select: { id: true, verifiesTaskId: true },
       })).map((row) => [row.id, row.verifiesTaskId]));
+    // §2.5 J9: whether each FINISHED prerequisite's work is on its project's integration line. Only
+    // the DONE tails are asked, because that is the only status the answer can change — everything
+    // else is already unsatisfied on its status alone, and asking would be a read per edge on every
+    // task page for an answer nobody reads.
+    const landing = await this.prerequisiteLandingOf(
+      ownerId,
+      [...resolvedByTask.values()].flat()
+        .filter((entry) => entry.status === TaskStatus.DONE)
+        .map((entry) => entry.id),
+    );
     return new Map([...resolvedByTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
       status: entry.status,
       verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
       verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
+      // Absent — not `false` — for anything this read said nothing about, which is what the field
+      // means: a prerequisite with no landing to do (`task-dependencies.ts`).
+      landed: landing.get(entry.id),
     }))]));
+  }
+
+  /**
+   * Which of these finished prerequisites still owe a landing (§2.5 J9), by their own rows.
+   *
+   * A Prisma read rather than raw SQL, and one statement per chunk: every fixture that already
+   * reaches `dependencyFactsFor` answers `task.findMany`, and a row that carries none of the nested
+   * facts reads as a prerequisite with nothing to land — which is exactly what a task outside a
+   * project, or in one that never started integrating, IS (§8.4 C2).
+   */
+  private async prerequisiteLandingOf(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, boolean>> {
+    const landed = new Map<string, boolean>();
+    const uniqueIds = [...new Set(taskIds)];
+    for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
+      const rows = await this.prisma.task.findMany({
+        where: { id: { in: uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) }, ownerId },
+        select: {
+          id: true,
+          codeless: true,
+          projectId: true,
+          project: {
+            select: {
+              codebases: {
+                where: { slot: 'primary' },
+                select: { upstreamRef: true, integrationRef: true, integrationStartedAt: true },
+              },
+            },
+          },
+          // §1.1 reads the NEWEST work session, so a task whose first attempt ran in a worktree and
+          // whose latest one did not is judged by the latest.
+          sessions: {
+            where: { startsTaskWork: true, deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { isolationStatus: true, branch: true },
+          },
+          mergeReceipts: { select: { result: true, targetBranch: true } },
+        },
+      });
+      for (const row of rows) {
+        // Every nested list is read defensively, and that is the sentence above made true rather
+        // than merely stated: a double that answers `task.findMany` with rows it wrote before this
+        // read existed carries none of these, and indexing into an absent list would turn "this
+        // fixture says nothing about landing" into a crash on the task page.
+        landed.set(row.id, prerequisiteLanded({
+          codeless: row.codeless,
+          projectId: row.projectId,
+          codebase: row.project?.codebases?.[0] ?? null,
+          work: row.sessions?.[0] ?? null,
+          receipts: row.mergeReceipts ?? [],
+        }));
+      }
+    }
+    return landed;
   }
 
 
@@ -8421,8 +8493,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** The dependency dispatch itself, separated so the completion edge above always delivers. */
-  private async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void> {
+  /**
+   * The dependency dispatch itself, separated so the completion edge above always delivers.
+   *
+   * Public because a completion is no longer the only fact that releases work: a committed merge
+   * receipt is the other one (contract §2.5 J10), and `MergeReceiptService` calls this directly.
+   * Both edges ask the same predicate about the same rows, so the one that arrives second finds
+   * nothing left to start rather than starting anything twice.
+   */
+  async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
     // that relation in PostgreSQL, using the same fail-closed rules as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
@@ -11810,7 +11889,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ? `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`
           : depState === 'BLOCKED_FAILED'
             ? 'A prerequisite was cancelled — resolve it before running'
-            : 'Prerequisites are not all complete yet, cannot run',
+            // §2.5 J9, said as what it is. "Prerequisites are not all complete yet" is false here —
+            // they are complete — and a person told that about a task whose prerequisite finished
+            // an hour ago goes looking for work that nobody owes.
+            : depFacts.some((fact) => fact.landed === false)
+              ? PREREQUISITE_NOT_LANDED_MESSAGE
+              : 'Prerequisites are not all complete yet, cannot run',
       );
     }
     // The sweep already filters held tasks out in SQL; this is the manual button's half of the

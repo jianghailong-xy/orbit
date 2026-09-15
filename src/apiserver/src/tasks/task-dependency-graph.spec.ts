@@ -111,6 +111,26 @@ function graphFixture(
             return task ? [chainFact(task)] : [];
           });
         }
+        // The landing read (§2.5 J9) asks a different question of the same table: which finished
+        // prerequisites still owe a landing. It is answered here, ahead of the refresh branch
+        // below, so that `nodeRefreshWhere` keeps meaning "what the node refresh asked for" —
+        // every task in this fixture is an ordinary one outside any project, which is a
+        // prerequisite with nothing to land and therefore changes no dependency state.
+        if (args.select?.mergeReceipts) {
+          return requested.flatMap((id) => {
+            const task = taskRows.get(id);
+            return task
+              ? [{
+                id: task.id,
+                codeless: false,
+                projectId: null,
+                project: null,
+                sessions: [],
+                mergeReceipts: [],
+              }]
+              : [];
+          });
+        }
         nodeRefreshWhere = args.where;
         return requested.flatMap((id) => {
           const task = taskRows.get(id);

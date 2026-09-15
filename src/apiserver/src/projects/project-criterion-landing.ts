@@ -101,7 +101,7 @@ export type TaskLanding = 'ON_UPSTREAM' | 'ON_INTEGRATION_LINE' | 'NOT_KNOWN';
  * answer in the external fast-forward case — a branch an agent merged itself and Orbit found out
  * about afterwards — which is how most of this work actually lands.
  */
-const LANDED_RESULTS: ReadonlyArray<string> = ['MERGED', 'ALREADY_MERGED'];
+export const LANDED_RESULTS: ReadonlyArray<string> = ['MERGED', 'ALREADY_MERGED'];
 
 /**
  * The branches a receipt has to name to be evidence, for one project: its upstream, and the

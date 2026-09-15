@@ -262,6 +262,9 @@ test('an empty queue preserves its count row and returns no fake task', async ()
     queuedCount: 0,
     runningCount: 0,
     pausedCount: 0,
+    // Absent from this fixture's row, because a double that predates the column answers what it
+    // always answered: no task is waiting for a prerequisite to land.
+    waitingForLanding: 0,
     items: [],
     impactTruncated: null,
   });

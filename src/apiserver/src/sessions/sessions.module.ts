@@ -17,6 +17,14 @@ import { SessionsService } from './sessions.service';
   // import existed no receipt writer knocked on any delivery door. `forwardRef` on BOTH sides is
   // what lets Nest resolve the pair; the argument for choosing this over the shapes that avoid the
   // ring is in `merge-receipt.service.ts`'s constructor.
+  //
+  // TasksModule is deliberately NOT imported, though `MergeReceiptService` dispatches through
+  // `TasksService` (contract §2.5 J10). Importing it would put this module inside a second ring —
+  // CoordinatorJudgmentModule -> SessionsModule -> TasksModule -> CoordinatorJudgmentModule — and
+  // the cost is not the ring itself but what it drags: every consumer of SessionsModule would
+  // instantiate TasksModule and PushModule too, so a hand-built harness that wanted the judgment
+  // wiring fails on a ConfigService that only AppModule's global ConfigModule provides. The
+  // dispatcher is resolved lazily instead; see `MergeReceiptService`'s constructor.
   imports: [SessionTagsModule, forwardRef(() => CoordinatorJudgmentModule)],
   controllers: [SessionsController],
   // AutoRetryService lives here rather than beside the reaper so it can depend on

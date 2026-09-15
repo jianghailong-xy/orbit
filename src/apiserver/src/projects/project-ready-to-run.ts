@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
+import { dependenciesSatisfiedSql } from '../tasks/task-dependencies';
 import { BLOCKING_MAX_UNFINISHED_TASKS } from './project-panorama-blocking';
 
 export type ProjectReadyToRunState = 'READY' | 'QUEUED' | 'RUNNING' | 'PAUSED';
@@ -38,6 +39,16 @@ export interface ProjectReadyToRun {
   runningCount: number;
   /** Otherwise-runnable tasks currently held by a paused task list. */
   pausedCount: number;
+  /**
+   * Tasks held up by NOTHING but a landing: everything else about them is runnable, and a
+   * prerequisite of theirs is finished but not yet on the project's integration line (§2.5 J9).
+   *
+   * Counted rather than listed, and separate from `readyCount`, because the queue's job is to say
+   * what a person can start — and this is the part of the backlog nobody has to do anything about:
+   * the platform lands the prerequisite and the landing starts these by itself (§2.5 J10). Without
+   * it they simply vanish from the queue, which reads as "the project has nothing left to run".
+   */
+  waitingForLanding: number;
   /** Active tasks first, then ready tasks, then candidates whose list can be resumed. */
   items: ProjectReadyToRunItem[];
   /** The ready list remains usable when impact ranking is skipped. */
@@ -49,6 +60,7 @@ interface ReadyTotals {
   queuedCount: number;
   runningCount: number;
   pausedCount: number;
+  waitingForLanding: number;
   impactTruncated: boolean;
 }
 
@@ -178,6 +190,19 @@ export async function readProjectReadyToRun(
       paused_size AS (
         SELECT count(*)::int AS count FROM paused
       ),
+      -- Held up by a landing and by nothing else: the dependency predicate refuses it, and the
+      -- same predicate with the landing clause lifted would not. Subtracting the two is what makes
+      -- this "waiting for a prerequisite to land" rather than "blocked", which every task with an
+      -- unfinished prerequisite also is.
+      waiting_for_landing AS (
+        SELECT count(*)::int AS count
+          FROM task t
+         WHERE t.project_id = ${projectId}::uuid
+           AND t.owner_id = ${ownerId}::uuid
+           AND t.status = 'OPEN'::task_status
+           AND NOT (${Prisma.raw(dependenciesSatisfiedSql('t'))})
+           AND ${Prisma.raw(dependenciesSatisfiedSql('t', { ignoreLanding: true }))}
+      ),
       active_size AS (
         SELECT (count(*) FILTER (WHERE "runState" = 'QUEUED'))::int AS queued,
                (count(*) FILTER (WHERE "runState" = 'RUNNING'))::int AS running
@@ -224,6 +249,7 @@ export async function readProjectReadyToRun(
            active_size.queued AS "queuedCount",
            active_size.running AS "runningCount",
            paused_size.count AS "pausedCount",
+           waiting_for_landing.count AS "waitingForLanding",
            unfinished_size.truncated AS "impactTruncated",
            ranked."taskId",
            ranked.title,
@@ -242,6 +268,7 @@ export async function readProjectReadyToRun(
       FROM ready_size
       CROSS JOIN active_size
       CROSS JOIN paused_size
+      CROSS JOIN waiting_for_landing
       CROSS JOIN unfinished_size
       LEFT JOIN LATERAL (
         SELECT candidate.id AS "taskId",
@@ -327,6 +354,7 @@ export async function readProjectReadyToRun(
     queuedCount: first?.queuedCount ?? 0,
     runningCount: first?.runningCount ?? 0,
     pausedCount: first?.pausedCount ?? 0,
+    waitingForLanding: first?.waitingForLanding ?? 0,
     items,
     impactTruncated: first?.impactTruncated
       ? { reason: 'TOO_MANY_UNFINISHED_TASKS', maxTasks: BLOCKING_MAX_UNFINISHED_TASKS }
