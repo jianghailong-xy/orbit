@@ -83,7 +83,7 @@ struct WatchingCardStack: View {
         if let target = summary.lineTarget {
             return WatchProjection.targetTitle(kind: target.targetKind,
                                                id: target.targetResourceId,
-                                               name: targetName(target))
+                                               name: targetName(target, model: model))
         }
         return WatchProjection.targetCount(summary.lineTargetCount)
     }
@@ -106,6 +106,7 @@ struct WatchingCardStack: View {
 }
 
 /// A target's name where this model holds it: the session's title or the task's.
+@MainActor
 private func targetName(_ target: WatchTarget, model: AppModel) -> String? {
     switch target.targetKind {
     case .session: return model.session(id: target.targetResourceId)?.title
