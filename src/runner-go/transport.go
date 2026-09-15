@@ -587,6 +587,17 @@ func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
 }
 
+// importResult settles a session's pending transcript import; the receipt says whether the
+// ok applied (a retried ok after a lost reply applies nothing) or the session went to Trash.
+func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*ImportResultResponse, error) {
+	b.LeaseOwner = t.leaseOwner
+	var out ImportResultResponse
+	if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/import-result", b, &out, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // loginResult reports one step of the browser-less sign-in relay: the URL to approve, then
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {
@@ -1546,6 +1557,17 @@ func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
 func (t *Transport) createSession(parentSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken)
+	return out, err
+}
+
+// importSession is `orbit session import`'s create: record a PENDING session that imports the
+// named Claude transcript off THIS machine's disk, and let the runner's import step (inside one
+// claim, before the spawn) do the rest. Headless-only, so deliberately no orchestration headers:
+// a calling session is refused by the door, and a credential token authenticates the process
+// instead.
+func (t *Transport) importSession(body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/import", body, &out, taskOpTimeout)
 	return out, err
 }
 

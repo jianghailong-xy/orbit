@@ -972,6 +972,20 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		for _, stranded := range activated.AbandonedSteers {
 			reportAbandonedSteer(stranded, job, emitFor, completeTurn)
 		}
+		// A claim that carries the import marker is a `orbit session import` first run: the
+		// transcript is copied, replayed and settled before any engine exists. runTranscriptImport
+		// already posted the failure (the session ends in Trash with the reason); what remains is
+		// the local half of stopping the run, mirroring the activation-failure path.
+		if job.ImportSourceCwd != nil {
+			if err := runTranscriptImport(sessionCtx, t, job, execDir, emit, flushWithContext); err != nil {
+				pool.engineStopped(live, engineGeneration)
+				if releaseErr := retirePendingGeneration(); releaseErr != nil {
+					logln("inbox generation cleanup after failed import for", sessionID+":", releaseErr)
+				}
+				status = stFailed
+				break
+			}
+		}
 		engineCtx, engineCancel := context.WithCancel(sessionCtx)
 		engineHandle := &engineStopHandle{cancel: engineCancel}
 		engineStopMu.Lock()

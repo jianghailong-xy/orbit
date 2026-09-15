@@ -388,6 +388,25 @@ type MergeCommand struct {
 	RequiredSourceSha string `json:"requiredSourceSha,omitempty"`
 }
 
+// ImportResultRequest settles a session's pending transcript import: ok clears the
+// importSourceCwd marker (optionally carrying the real title read out of the transcript),
+// ok=false moves the session to Trash with the reason.
+type ImportResultRequest struct {
+	LeaseOwner string `json:"leaseOwner,omitempty"`
+	Ok         bool   `json:"ok,omitempty"`
+	Error      string `json:"error,omitempty"`
+	Title      string `json:"title,omitempty"`
+}
+
+// ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
+// CAS matched nothing), failed=true when the session went to Trash.
+type ImportResultResponse struct {
+	Ok        bool `json:"ok"`
+	Applied   bool `json:"applied"`
+	Failed    bool `json:"failed"`
+	Announced bool `json:"announced"`
+}
+
 // MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a
 // MergeCommand, POSTed back so the UI status bar can show merged ✓ / conflict / error.
 type MergeResultRequest struct {
@@ -548,6 +567,13 @@ type ClaimedSession struct {
 	// Resume marks a session revived from an ended state: like a reclaim, claude's
 	// session already exists, so even the first spawn must --resume. Server-set.
 	Resume bool `json:"resume"`
+	// ImportSourceCwd is non-nil only while a transcript import is unfinished: the recorded
+	// cwd of the local Claude transcript being imported (CLI path) or the workspace workDir
+	// the runner should locate the file from (web path). The runner, inside this claim and
+	// before spawning, copies the transcript into the session's
+	// `~/.claude/projects/<slug>/` directory, replays it as run events and clears the marker
+	// via POST /runner/sessions/:id/import-result. It does not reach the spawn at all.
+	ImportSourceCwd *string `json:"importSourceCwd,omitempty"`
 	// AgentID/TaskID are injected into the claude process (ORBIT_AGENT_ID/ORBIT_TASK_ID)
 	// so the `orbit mcp` server can attribute task work and resolve the current task.
 	AgentID string `json:"agentId,omitempty"`
@@ -747,6 +773,9 @@ type ReclaimSession struct {
 	RuntimeSessionID string          `json:"runtimeSessionId,omitempty"`
 	LeaseOwner       string          `json:"leaseOwner,omitempty"`
 	MaxSeq           int             `json:"maxSeq"`
+	// ImportSourceCwd, cf. ClaimedSession.ImportSourceCwd: non-nil only while a transcript
+	// import is unfinished, and it names the cwd the runner locates the transcript from.
+	ImportSourceCwd *string         `json:"importSourceCwd,omitempty"`
 	Agent            AgentExecConfig `json:"agent"`
 	// WorkDir is claude's cwd for this session, from the session's agent.
 	WorkDir string `json:"workDir,omitempty"`
