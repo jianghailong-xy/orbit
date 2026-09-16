@@ -150,7 +150,7 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
     /// The grammar of both blocks, character for character. This is the pair most expensive to get
     /// wrong: a wording only the browser matches is a wake this client draws as an empty message the
     /// account owner typed, with the block underneath — which is the screenshot this work started
-    /// from. It is also the pair most likely to drift silently, since the 59 turns already in the
+    /// from. It is also the pair most likely to drift silently, since the 73 turns already in the
     /// record are read by these patterns alone.
     func testTheGrammarOfBothBlocksIsTheSameOnBothEnds() throws {
         let web = try flat(Self.webWake)

@@ -14,7 +14,7 @@ import {
  *
  * Both are held to the wording the apiserver writes today (runner-api/background-job-wake.ts
  * `buildBackgroundWakeBlock`, scheduled-wakeup.ts `buildScheduledWakeupBlock`) AND to the wording
- * that shipped until 2026-09-15, which the 59 turns already in the record still carry — recognising
+ * that shipped until 2026-09-15, which the 73 turns already in the record still carry — recognising
  * only the new one would have sent every older transcript back to an unnamed grey strip on the day
  * it shipped. The older fixtures are copied out of this deployment's own `run_event` rows
  * (backgroundWake.fixtures.ts), not typed out from the format's description.

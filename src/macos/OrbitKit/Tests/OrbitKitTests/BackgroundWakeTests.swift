@@ -10,7 +10,7 @@ import XCTest
 /// the four copied out of this deployment's own `run_event` rows are the same rows web's
 /// `backgroundWake.fixtures.ts` quotes, and the rest are built from that writer's own lines
 /// (`git show 3023d5c8d^:src/apiserver/src/runner-api/background-job-wake.ts`) rather than typed out
-/// from a description of the format. The 59 turns already in the record are not migrated, so a
+/// from a description of the format. The 73 turns already in the record are not migrated, so a
 /// client that read only today's wording would send every older transcript back to an unnamed grey
 /// strip on the day it shipped.
 private enum Fixture {
@@ -177,14 +177,15 @@ private enum Fixture {
             2026-09-15T11:29:14.912Z 约在 3600 秒后，2026-09-15T12:29:14.911Z 到点
             理由：复跑负载闸门 12:16Z 超时必开跑，12:26Z 检查时应有部分结果；防 waiter 被 drain 杀
             你留给这一轮的话：
-              兜底检查：入口 400 复跑 unit rerun-400-104631 现在状态如何？负载闸门 deadline 12:16Z 已过，应已开跑或已完成。
+              兜底检查：入口 400 复跑 unit rerun-400-104631 现在状态如何？负载闸门 deadline 12:16Z 已过，应已开跑或已完成。读 /root/.orbit/uploads/01a0992f-f058-7605-be10-6a02467ac860/scratch/rerun-400-1046.log 尾部与 systemctl show -p Result,ExecMainStatus rerun-400-104631.service 处理结论；仍在跑则续挂兜底。
           这是控制面替你记下的，不是用户说的。还要再等，就再调一次 mcp__orbit__schedule_wakeup。
         </scheduled-wakeup>
         """
 
     /// run_event 01a0a648-e8ca-7644-b92b-825c83b5f8aa: a job whose command runs to several lines of
-    /// its own, on a note that carried the coordinator's standing role as well. That block is
-    /// shortened here — what is under test is that it stays out of the card, not what it says.
+    /// its own, on a note that carried the coordinator's standing role as well. The role block is
+    /// quoted at its full length, the way the row carried it — what is under test is that it stays
+    /// out of the card, not what it says, and a shortened one would not be that row any more.
     static let zhWithCoordinatorContext = """
         <background-job-wake>
           你用 bg_run 起的后台作业有了你在等的消息，控制面为此给你开了这一轮：
@@ -206,7 +207,19 @@ private enum Fixture {
         <orbit_project_coordinator_context>
         你是项目（id: 34DGqqkpCEVavXwRLFWKU）的协调会话。
 
-        这里用来协调任务，不是替任务干活。
+        这里用来跟进这个项目的进展、协调它下面的任务，不是用来替它干活的——具体实现交给各个任务自己的会话去做。
+
+        先读再说：用 project_get 读这个项目的目标、验收标准和作业指导，再用 task_list（projectId 传上面那个 id）看它下面的任务各自停在哪里。这两样都不在任务的描述里，不读就只能靠猜。读完先简短汇报现状。
+
+        推进靠的是跟人对话：把现状说清楚，该问的问，商量下一步，然后动手。没有任何自动的环会替你决定什么时候动。
+
+        该动的时候你手上有工具：project_update 改这个项目的标题、目标、作业指导；task_create、task_update、task_start 管它下面的任务。
+
+        这条会话里冒出来的新工作，记成这个项目下的任务，别提议新建项目：一个会话只能协调一个项目，从这里建一个只会让服务器另开一条会话去接手它，而那条会话对这里的来龙去脉一无所知。真觉得该另起一个项目，把理由说清楚，交给屏幕这边的账号所有者去开。
+
+        有两件事不是你来定：改这个项目的验收标准，和把它记成 DONE。验收标准是判定这个项目做没做完的那把尺子，改尺子的人可以让任何结论成立；DONE 是「目标达成了」这句话本身，说错了没有下游会再问一遍。这两件都由账号所有者通道记录——你把该改什么、还差什么说清楚，让屏幕这边的账号所有者决定。这里的 HUMAN_ONLY 是角色隔离和按动作留痕，不是服务器对“真人在场”的密码学证明。
+
+        没给你的工具就别去找：列出或删除项目、另开一个协调会话、直接指挥 runner，都不在你手上。
         </orbit_project_coordinator_context>
         """
 

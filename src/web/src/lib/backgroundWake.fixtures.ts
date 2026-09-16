@@ -1,6 +1,6 @@
 /**
  * Wake blocks in the wording that shipped until 2026-09-15, copied verbatim out of this
- * deployment's `run_event` rows — the 59 turns already in the record are not migrated, so these
+ * deployment's `run_event` rows — the 73 turns already in the record are not migrated, so these
  * are what the parser meets in every transcript older than that day. Each is stamped with the row
  * it came from; none of it is typed out by hand.
  */

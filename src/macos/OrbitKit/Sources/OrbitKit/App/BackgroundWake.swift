@@ -16,7 +16,7 @@ import Foundation
 // Neither end compiles the other, so `BackgroundWakeCopyParityTests` is what holds the two to each
 // other.
 //
-// Both blocks were written in Chinese until 2026-09-15 and the 59 turns already in the record are
+// Both blocks were written in Chinese until 2026-09-15 and the 73 turns already in the record are
 // not migrated, so every field is read off what the two wordings share and never translated: the
 // tag names, the `bgj_` prefix, the full-width `｜` between fields, the indent each line sits at,
 // and the status and kill-reason values themselves. A wording this does not recognise parses as

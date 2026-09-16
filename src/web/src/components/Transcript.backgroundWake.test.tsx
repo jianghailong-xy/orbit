@@ -26,7 +26,7 @@ import type { RunEvent } from './Transcript';
  *
  * It is the control plane's card instead, built like the one a watch's wake gets, with the words the
  * agent read one native disclosure away. Two things are held here that a card drawn only for what
- * ships today would break: the 59 turns already in the record carry the wording that shipped until
+ * ships today would break: the 73 turns already in the record carry the wording that shipped until
  * 2026-09-15 and are not migrated (fixtures copied verbatim out of this deployment's `run_event`
  * rows), and a note that carries a wake AND something else keeps that something else where it has
  * always been — the folded entry under the card, not swallowed by it.
