@@ -1912,9 +1912,12 @@ final class ConsoleModel {
         return projectCriteria.allSatisfy { $0.satisfied == true }
     }
 
-    /// Put a question into this conversation once, anchored where it arrived.
+    /// Put a question into this conversation once, anchored where OrbitKit's rule puts it: where it
+    /// arrived, or trailing the tail for the one card whose delivery is triggered by the control
+    /// plane rather than by this transcript, and which was therefore drawn above the report it asks
+    /// about (`DeliveryAnchor`).
     private func deliver(_ kind: DeliveredDecisionCard.Kind) {
-        deliver(kind, anchoredAt: state.items.last?.id)
+        deliver(kind, anchoredAt: DeliveryAnchor.onArrival(of: kind, items: state.items))
     }
 
     /// …or where it happened, for a record that carries its own moment — a receipt is drawn at the

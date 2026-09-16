@@ -36,7 +36,7 @@ public struct LocalStatusCard: Identifiable, Equatable, Sendable {
 /// task's completion evidence. None is an `Approval` and none stops a turn, so none can be rendered
 /// at the tail the way a pending approval is — they sit where they arrived and later messages push
 /// them up, which is exactly why the cross-session "needs you" bar now also points DOWN at them
-/// inside their own session.
+/// inside their own session. The one exception, and why it is one, is `DeliveryAnchor`.
 ///
 /// It carries an address and never any content: what the card shows is re-derived from the server
 /// on every render (see OrbitKit's `CriteriaDecision.swift` and `EvidenceDecision.swift`), and a
@@ -75,6 +75,9 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
     /// The transcript item that was last when this card arrived — the same anchoring
     /// `LocalStatusCard` uses, and for the same reason: a question delivered an hour ago must not
     /// walk back down to the tail every time somebody says something.
+    ///
+    /// Nil is not "unknown": it is a card that FOLLOWS the tail, which `build` renders below every
+    /// item there is. `DeliveryAnchor` says which kind gets which, and why one of them does.
     public let afterItemID: String?
 
     public init(kind: Kind, afterItemID: String? = nil) {
@@ -152,6 +155,42 @@ public enum ReceiptAnchor {
             anchor = item.id
         }
         return anchor
+    }
+}
+
+/// Where a card being delivered RIGHT NOW belongs — the other half of the rule `ReceiptAnchor`
+/// states for a record that has a moment of its own.
+///
+/// Nearly every delivered card anchors to the item that was last when it arrived, and must: a
+/// question delivered an hour ago walking back down to the tail every time somebody says something
+/// is the thing the "needs you" bar points UP at. The owner-confirmation QUESTION is the one that
+/// cannot be placed that way, because its arrival is not its own. It is delivered by a read the
+/// CONTROL PLANE triggers — `adoptServerSnapshot` re-reads the moment the run's row moves — and
+/// that snapshot reaches the device before this turn's own transcript rows do, so the item that was
+/// last at delivery is the owner's question rather than the reply being asked about. Anchored
+/// there, the card was drawn ABOVE the report it quotes: the account owner's beta v0.1.2-beta.77
+/// screenshot, 2026-09-16 — `↑ Your question …`, the card, and only then the run's report.
+///
+/// It follows the tail instead, which is where the browser has always drawn it: a fixed slot after
+/// the transcript (`WorkspaceView.tsx`'s `SessionOwnerConfirmationCard`), re-derived on every render
+/// rather than frozen at delivery. That is the same guarantee, not a second one — the card sits
+/// below its own report however late the report arrives.
+///
+/// An ANSWERED card is not this. It is a receipt: a record of a decision, which keeps the place it
+/// was given (`adoptReceipts`) so a read coming round again cannot walk it down the conversation.
+public enum DeliveryAnchor {
+    /// The id `kind` anchors to, against the transcript as it stands this instant. Nil is a card
+    /// that trails: `TranscriptRows.build` draws an unanchored question below every item.
+    public static func onArrival(of kind: DeliveredDecisionCard.Kind,
+                                 items: [TranscriptItem]) -> String? {
+        switch kind {
+        case .ownerConfirmation:
+            return nil
+        // Exhaustive rather than defaulted: a card added later has to say which of the two it is.
+        case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
+             .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt:
+            return items.last?.id
+        }
     }
 }
 
