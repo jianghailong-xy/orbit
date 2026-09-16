@@ -754,10 +754,13 @@ export class RunnerApiController {
         lastHeartbeatAt: new Date(),
         // Refresh the `/` autocomplete catalog; older runners omit these (leave as-is).
         // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
-        availableCommands: (dto?.commands ?? undefined) as Prisma.InputJsonValue | undefined,
-        availableSkills: (dto?.skills ?? undefined) as Prisma.InputJsonValue | undefined,
+        // Stripped (see strip-nul): these are read off the machine's disk — a command or skill
+        // file that turns out to be binary would otherwise fail every heartbeat this runner
+        // sends, and a runner that cannot heartbeat goes OFFLINE and stays there.
+        availableCommands: stripNul(dto?.commands ?? undefined) as Prisma.InputJsonValue | undefined,
+        availableSkills: stripNul(dto?.skills ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
-        modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
+        modelCatalog: stripNul(dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
         // Capabilities belong to THIS authenticated process heartbeat, not to the machine forever.
         // Omission is an old/downgraded process and clears the prior process's declaration; keeping
         // the stale snapshot could admit CURRENT_WORK that the poller now owning the lease cannot
@@ -2648,10 +2651,13 @@ export class RunnerApiController {
     @Body() dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
-    const existing = dto.toolUseId
+    // Stripped before the lookup, not only before the write, so a retry finds the row the first
+    // call created: the idempotency key and the column it was stored in have to agree.
+    const toolUseId = stripNul(dto.toolUseId);
+    const existing = toolUseId
       ? await this.prisma.approval.findUnique({
           where: {
-            sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId },
+            sessionId_toolUseId: { sessionId, toolUseId },
           },
         })
       : null;
@@ -2676,9 +2682,13 @@ export class RunnerApiController {
       (await this.prisma.approval.create({
         data: {
           sessionId,
-          toolName: dto.toolName,
-          input: (dto.input ?? {}) as Prisma.InputJsonValue,
-          toolUseId: dto.toolUseId ?? null,
+          // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
+          // whatever the workspace typed into it, Postgres refuses U+0000 in text and jsonb with
+          // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
+          // agent that waits for a card nobody can ever be shown.
+          toolName: stripNul(dto.toolName),
+          input: stripNul(dto.input ?? {}) as Prisma.InputJsonValue,
+          toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           ...(autoAllowed
             ? { status: 'ALLOWED', decidedAt: new Date(), message: AUTO_ALLOWED_MESSAGE }
@@ -2857,8 +2867,14 @@ export class RunnerApiController {
     // addresses a row) alongside a lease token that is compared byte-for-byte and cast `::uuid`
     // in raw SQL. TurnCompleteRequest is an interface, so the global ValidationPipe never sees
     // this body — without the pipe the id reaches `where: { id: dto.turnId }` exactly as sent.
-    @Body(PublicIdPipe.forFields('turnId')) dto: TurnCompleteRequest,
+    @Body(PublicIdPipe.forFields('turnId')) body: TurnCompleteRequest,
   ) {
+    // Stripped once, at the edge, rather than at each write: `result` alone reaches the session's
+    // `error`, a turn's `deliveryFailureReason` and two different task comments below, and the
+    // worktree snapshot reaches two rows more — a per-write strip is a list to keep in sync, which
+    // is how the approval path came to be missed. Postgres stores no U+0000 and the runner retries
+    // a 5xx without a ceiling; see strip-nul.
+    const dto = stripNul(body);
     // The pipe decodes a turnId that is there and passes an absent one through. To Prisma
     // `where: { id: undefined }` is no condition at all, so the ACK below would answer every
     // unanswered turn of the session — queued messages and Watch wakes, none of them run. Refused
@@ -4150,8 +4166,11 @@ export class RunnerApiController {
   async finalize(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: RunFinalizeRequest,
+    @Body() body: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
+    // See turnComplete: the engine's last words (`result`, `error`) and the branch's per-file
+    // patches all land in text/jsonb here, and a NUL in any of them fails the whole statement.
+    const dto = stripNul(body);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Finalize in ONE row-locked transaction. Complete/remove/reaper also write this row,
     // so the locked re-read is the only snapshot allowed to decide the final status and
@@ -4357,8 +4376,11 @@ export class RunnerApiController {
   async importResult(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
+    @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
   ) {
+    // See turnComplete: the title is read out of the transcript file being imported, so it is
+    // workspace bytes reaching a text column.
+    const dto = stripNul(body);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
@@ -4768,8 +4790,11 @@ export class RunnerApiController {
   async diffResult(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: SessionDiffResultRequest,
+    @Body() body: SessionDiffResultRequest,
   ) {
+    // See turnComplete: these patches are file content, and `git diff` only hides a NUL behind
+    // "Binary files differ" when it sits in the first 8000 bytes.
+    const dto = stripNul(body);
     await this.assertSessionOwnership(sessionId, runner.id);
     // See turnComplete: a healed base with an omitted legacy `omitempty` slice means the newly
     // computed snapshot is empty, never that the old changedFiles still belong to the new base.
