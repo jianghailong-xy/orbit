@@ -54,26 +54,16 @@
 #
 # In a git worktree there is no node_modules at all — only the tracked files are there — so `$TSC`
 # and `$PRISMA` named paths that did not exist and this script died before it provisioned anything.
-# The main checkout's are borrowed below, one link per package for the apiserver so that the two
-# entries which cannot be shared are real: `@prisma/client` is copied (node, tsc and prisma all
-# resolve a linked package by its realpath and would read the main checkout's client straight back)
-# and `.prisma/client` is generated from THIS branch's schema, which is what `tsc -p
-# tsconfig.test.json` below is compiled against — borrowing the main checkout's leaves a branch that
-# adds a model failing with `Property 'x' does not exist on type 'PrismaService'`, a red that is the
-# harness rather than the product. In the main checkout the whole block is skipped: generating there
-# rewrites the client every concurrent session is compiling against. Same overlay, and for the same
-# reasons, as the one in `scripts/run-pg-spec.sh`.
+# Lending it one, giving this branch its own Prisma client and building this tree's `@orbit/shared`
+# is `scripts/worktree-overlay.sh`, which this script runs below and whose header explains each
+# piece and why it cannot be the main checkout's. It is one script rather than a section here
+# because `scripts/run-pg-spec.sh` runs the same one, and an overlay that drifts between two copies
+# of it comes back as harness reds that read like product reds.
 #
 # `@orbit/shared` is a workspace link to `src/shared`, and what a consumer reads is its `dist/` —
-# the package's `main`/`types` — not its sources. Nothing here used to build it, so both the compiler
-# and every child process read whatever `dist/` the main checkout happened to have lying around. On
-# 2026-09-08 that was four days older than `src/shared/src` and this script printed seven TS2339 and
-# TS2353 errors naming `refreshModelCatalog`, `minFreeDiskMb` and `enginePhase` in files no branch
-# had touched. The compile noise is the visible half. The quiet half is the one
-# `scripts/outcome-reconciler-full-api.sh` names — "a clean candidate can compile correctly and then
-# execute tests against an older codec/protocol implementation" — because `tsc` emits anyway and the
-# specs then ran against that same stale `dist/`. So it is built below and linked TWICE: once under
-# `src/` for the compiler and once under `build/` for the child, as `scripts/run-pg-spec.sh` does it.
+# the package's `main`/`types` — not its sources. The overlay builds that `dist/` and links the
+# package under `src/` for the compiler; below, this script adds its own link under `build/` for the
+# child process, as `scripts/run-pg-spec.sh` does it.
 #
 # Both `tsc` invocations end in `|| die`. Without that they were advisory: the errors above scrolled
 # past and the run continued against whatever tree tsc had emitted regardless. An emit that produced
@@ -143,80 +133,21 @@ CONTROL="${PCC_PG_CONTROL:-}"
 die() { echo "project-pg-matrix: $*" >&2; exit 2; }
 
 # --- the worktree overlays ----------------------------------------------------------------------
-# Refresh a symlink, create a missing one, never touch a real directory: in the main checkout every
-# one of these already exists and the block is skipped. That guard is the block's, not a nicety —
-# when MAIN falls back to REPO source and target are the same path, and on a tree that has no
-# node_modules at all the target does not exist yet, so `ln -sfn` made `node_modules -> node_modules`.
-# The run still stopped at the `no tsc` below, but a second one left anyone checking by hand reading
-# `Too many levels of symbolic links` instead, which is a broken environment rather than a missing
-# `npm install`, and three self-referential links in the caller's tree that this script had made.
-link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
-MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
-[ -d "$MAIN/node_modules" ] || MAIN="$REPO"
-if [ "$MAIN" != "$REPO" ]; then
-  echo "==> overlaying node_modules from $MAIN"
-  link "$MAIN/node_modules"                "$REPO/node_modules"
-  link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
-  link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
-fi
+# node_modules borrowed from the main checkout, this branch's own Prisma client, this tree's
+# `@orbit/shared` built and linked — all of it, and the reasoning behind each piece, is in the
+# script this line runs. That script also prints which tsc it picked up, which is the regression
+# signal this script used to lose in silence: a worktree that borrowed the repository root's 5.9.3
+# compiled a whole test tree with the wrong compiler and said nothing about it.
+bash "$REPO/scripts/worktree-overlay.sh" || die "scripts/worktree-overlay.sh failed"
 
-# TypeScript 7 and Prisma 7 were installed per workspace, beside a root that hoisted the 5.9.3 that
-# @nestjs/cli pinned, until the 2026-09-09 bumps (#74, #78) moved both to the root; so take the
-# apiserver copy when it is there and the root's otherwise. Resolved HERE rather than at the top of
-# the file because in a worktree neither binary exists until the links above are made.
+# Which tsc and prisma that left available, resolved the way the overlay resolves them and for the
+# same reason it resolves them late: in a worktree neither binary exists until its links are made.
 TSC="$API/node_modules/.bin/tsc"
 [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 PRISMA="$API/node_modules/.bin/prisma"
 [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
-[ -x "$TSC" ] || die "no tsc under $MAIN — run npm install in the main checkout first"
-[ -x "$PRISMA" ] || die "no prisma under $MAIN — run npm install in the main checkout first"
-
-# The branch's own Prisma client — see the header for why it cannot be the main checkout's. The
-# whole-directory link above is undone for the apiserver and rebuilt as one symlink per package, so
-# that the two entries which have to be ours can be real directories.
-if [ "$MAIN" != "$REPO" ]; then
-  NM="$API/node_modules"; MAIN_NM="$MAIN/src/apiserver/node_modules"
-  # Where the main checkout's install put the two packages this step pairs, asked of Node rather
-  # than named: npm kept both under the apiserver workspace until the 2026-09-09 dependabot bumps
-  # (#74, #78) hoisted them to the root, and `$MAIN_NM/@prisma/client` then named nothing at all.
-  pkg_dir() { ( cd "$MAIN/src/apiserver" && node -p "path.dirname(require.resolve('$1/package.json'))" ); }
-  CLIENT_PKG="$(pkg_dir @prisma/client)" || die "no @prisma/client under $MAIN — run npm install in the main checkout first"
-  PRISMA_PKG="$(pkg_dir prisma)" || die "no prisma under $MAIN — run npm install in the main checkout first"
-  [ -L "$NM" ] && rm -f "$NM"
-  mkdir -p "$NM/@prisma" "$NM/.prisma"
-  for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
-    [ -e "$d" ] || continue
-    case "$(basename "$d")" in @prisma|.prisma|prisma) continue ;; esac
-    link "$d" "$NM/$(basename "$d")"
-  done
-  for d in "$MAIN_NM/@prisma"/*; do
-    [ -e "$d" ] || continue
-    [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
-  done
-  # The CLI goes beside the copy below, wherever it was installed. `prisma generate` resolves
-  # `prisma` and `@prisma/client` from the schema's directory without following links, and refuses
-  # with `Could not resolve @prisma/client` unless both sit in the same node_modules — so a private
-  # client here with the CLI only at the root fails exactly as a missing client does.
-  link "$PRISMA_PKG" "$NM/prisma"
-  # A copy, ~75MB, once per worktree: `prisma generate` finds the package by walking up from the
-  # schema's directory, and through a link it would find — and write beside — the main checkout's.
-  # It also has to be in place BEFORE generating, which otherwise fails with `Could not resolve
-  # @prisma/client`. Copied again when the main checkout's package.json differs from the copy's, so
-  # a dependency bump reaches a worktree that already has one; the generated client goes with it.
-  if [ ! -d "$NM/@prisma/client" ] || [ -L "$NM/@prisma/client" ] ||
-     ! cmp -s "$CLIENT_PKG/package.json" "$NM/@prisma/client/package.json"; then
-    echo "==> copying @prisma/client out of $CLIENT_PKG (this worktree needs its own)"
-    rm -rf "$NM/@prisma/client" "$NM/.prisma/client"
-    cp -r "$CLIENT_PKG" "$NM/@prisma/client" || die "could not copy @prisma/client"
-  fi
-  # ~6s, so only when this branch's schema is newer than what was generated from it last time.
-  GENERATED="$NM/.prisma/client/index.d.ts"
-  if [ ! -f "$GENERATED" ] || [ "$API/prisma/schema.prisma" -nt "$GENERATED" ]; then
-    echo "==> generating this branch's Prisma client"
-    ( cd "$API" && "$PRISMA" generate >/dev/null ) || die "prisma generate failed"
-    [ -f "$GENERATED" ] || die "prisma generate wrote no $GENERATED"
-  fi
-fi
+[ -x "$TSC" ] || die "no tsc after the overlay — run npm install in the main checkout first"
+[ -x "$PRISMA" ] || die "no prisma after the overlay — run npm install in the main checkout first"
 
 cleanup() {
   if [ "$KEEP" = "1" ]; then
@@ -271,15 +202,12 @@ echo "==> ${APPLIED:-0} migrations applied"
 [ "$APPLIED" = "$FRONTIER" ] ||
   die "template $TMPL is at ${APPLIED:-no} of $FRONTIER migrations — a clone is not this schema"
 
-echo "==> building @orbit/shared"
-"$TSC" -p "$REPO/src/shared/tsconfig.json" || die "src/shared failed to compile"
-mkdir -p "$REPO/src/node_modules/@orbit"
-link "$REPO/src/shared" "$REPO/src/node_modules/@orbit/shared"          # compile time
-
 echo "==> building the test tree"
 ( cd "$API" && "$TSC" -p tsconfig.test.json ) || die "tsconfig.test.json failed to compile"
+# The overlay's `src/node_modules/@orbit/shared` already answers for everything under `build/`;
+# this one is here because it is nearer still, and because `build/` is this script's own to lay out.
 mkdir -p "$API/build/node_modules/@orbit"
-link "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"          # run time
+ln -sfn "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"       # run time
 
 cd "$API"
 # Taken once, and empty is fatal: a loop that never runs reports the same zeroes as a clean run.
