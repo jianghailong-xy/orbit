@@ -245,10 +245,17 @@ struct SelectableText: UIViewRepresentable {
         }
     }
 
-    /// A list item's marker plus the tab that opens its text: a GFM task item's checkbox as an SF
-    /// Symbol (sized to the surrounding type and sitting on the baseline, like `paperclip`), every
-    /// other marker as its text (`•` / `1.`). Nil when the paragraph isn't a list item.
+    /// A list item's marker plus the tab that opens its text: its text marker (`•` / `1.`), a GFM
+    /// task item's checkbox as an SF Symbol (sized to the surrounding type and sitting on the
+    /// baseline, like `paperclip`), or — for an ordered task item — the number and then the box.
+    /// Nil when the paragraph isn't a list item.
     private func markerRun(for seg: ProseSegment, font: UIFont) -> NSMutableAttributedString? {
+        guard seg.leadingMarker != nil || seg.markerSymbol != nil else { return nil }
+        let run = NSMutableAttributedString()
+        if let marker = seg.leadingMarker {
+            run.append(NSAttributedString(string: seg.markerSymbol == nil ? marker : marker + " ",
+                                          attributes: [.foregroundColor: ProseInk.secondary.uiColor]))
+        }
         if let symbol = seg.markerSymbol {
             let attachment = NSTextAttachment()
             if let glyph = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(font: font))?
@@ -256,15 +263,11 @@ struct SelectableText: UIViewRepresentable {
                 attachment.image = glyph
                 attachment.bounds = CGRect(x: 0, y: font.descender, width: glyph.size.width, height: glyph.size.height)
             }
-            let run = NSMutableAttributedString(attachment: attachment)
-            run.append(NSAttributedString(string: "\t"))
-            run.addAttributes([.font: font], range: NSRange(location: 0, length: run.length))
-            return run
+            run.append(NSAttributedString(attachment: attachment))
         }
-        guard let marker = seg.leadingMarker else { return nil }
-        return NSMutableAttributedString(string: marker + "\t", attributes: [
-            .font: font, .foregroundColor: ProseInk.secondary.uiColor,
-        ])
+        run.append(NSAttributedString(string: "\t"))
+        run.addAttributes([.font: font], range: NSRange(location: 0, length: run.length))
+        return run
     }
 
     /// The paperclip that opens an unreachable file link, sized to the surrounding type and sitting

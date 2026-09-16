@@ -116,9 +116,12 @@ private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGr
 }
 #endif
 
-/// A list item's text marker — the bullet, or the ordered item's source number.
-private func listMarker(_ item: MarkdownListItem) -> String {
-    item.ordered ? "\(item.number ?? 1)." : "•"
+/// A list item's text marker — an ordered item's source number, or a bullet. Nil for a task item's
+/// bullet, whose slot the checkbox takes; an ordered task item keeps its number *beside* the box,
+/// the way web draws both the `<ol>` marker and the `<input>`.
+private func listMarker(_ item: MarkdownListItem) -> String? {
+    if item.ordered { return "\(item.number ?? 1)." }
+    return item.checkbox == nil ? "•" : nil
 }
 
 /// The SF Symbol a GFM task item draws in place of that marker, mirroring the real (disabled)
@@ -206,10 +209,10 @@ private struct MarkdownBlockView: View {
     /// A list item's marker: a task item's checkbox, else its bullet or number. `Text(Image:)` rather
     /// than a bare `Image` so the symbol sits on the text baseline and scales with the inherited font.
     private func marker(_ item: MarkdownListItem) -> Text {
-        guard let symbol = listMarkerSymbol(item) else {
-            return Text(listMarker(item)).monospacedDigit()
-        }
-        return Text(Image(systemName: symbol))
+        let text = listMarker(item).map { Text($0).monospacedDigit() } ?? Text("")
+        guard let symbol = listMarkerSymbol(item) else { return text }
+        let box = Text(Image(systemName: symbol))
+        return item.ordered ? text + Text(" ") + box : box
     }
 
     private func headingFont(_ level: Int) -> Font {

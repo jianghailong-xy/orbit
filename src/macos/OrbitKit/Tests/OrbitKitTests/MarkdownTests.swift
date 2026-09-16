@@ -67,6 +67,13 @@ final class MarkdownTests: XCTestCase {
         }
         XCTAssertEqual(nested.map(\.indent), [0, 1])
         XCTAssertEqual(nested.map(\.checkbox), [true, false])
+        // An ordered task item keeps its number as well as its state — the renderers draw both,
+        // like web's `<ol>` marker beside the `<input>`.
+        guard case .list(let ordered) = parseMarkdownBlocks("1. [x] shipped")[0] else {
+            return XCTFail("expected a list")
+        }
+        XCTAssertEqual(ordered[0].number, 1)
+        XCTAssertEqual(ordered[0].checkbox, true)
     }
 
     func testBoldBulletIsNotConfusedWithRule() {
