@@ -68,6 +68,16 @@ export function resolveTaskCompletionCriterion(
 /**
  * Returns the public refusal reason for a malformed declaration, or null when it is coherent.
  * Kept pure so REST, batch creation and later status derivation share one definition.
+ *
+ * VERIFICATION is where the two columns say different things, and both are legal. The criterion
+ * names WHO settles the task — an independent verdict — while the policy says whether anything
+ * other than this row's own work is involved in getting there:
+ *
+ *  - `VERIFICATION` + `VERIFICATION_PASSED` + no subject: a gate row. It has no work to dispatch,
+ *    and a PASS recorded against it is its whole lifecycle.
+ *  - `VERIFICATION` + `MANUAL` + no subject: a work row. It runs, and a separate session's verdict
+ *    rather than its own run is what settles it.
+ *  - `VERIFICATION` + `MANUAL` + a subject: the verifier itself.
  */
 export function taskCompletionDeclarationError(
   declaration: TaskCompletionDeclaration,
@@ -112,8 +122,12 @@ export function taskCompletionDeclarationError(
         if (policy !== 'MANUAL') {
           return 'A verification task requires completionPolicy MANUAL';
         }
-      } else if (policy !== 'VERIFICATION_PASSED') {
-        return 'A subject using VERIFICATION requires completionPolicy VERIFICATION_PASSED';
+      } else if (policy === 'ALL_CHILDREN_DONE') {
+        // The one pair that would give this row two completion owners. VERIFICATION says a verdict
+        // settles it and ALL_CHILDREN_DONE says its subtasks do; `recomputeTask` reads the criterion
+        // first and treats every non-`VERIFICATION_PASSED` policy as "verified", so the pair would
+        // write DONE on the next reconcile with no verdict recorded anywhere.
+        return 'VERIFICATION cannot use completionPolicy ALL_CHILDREN_DONE';
       }
       return null;
     case 'EVIDENCE_JUDGMENT':
@@ -194,12 +208,15 @@ export const VERIFICATION_SUBJECT_REQUIRES_PROJECT_ACTION =
 /**
  * Why a verification SUBJECT cannot be written into no project, or null.
  *
- * A subject declares VERIFICATION and verifies nothing itself. It cannot run — a manual start is
- * refused and auto-dispatch passes it by — and it is settled only by a PASS that a separate task
- * pointing at it records. Nothing on the server files that task for it: `fileVerification` checks
- * work that is already DONE, which a subject never becomes on its own. Inside a project the
- * coordinator files and starts the verification; outside one there is no coordinator and no screen
- * that writes `verifiesTaskId`, so the subject would wait for a check nobody is going to file.
+ * A subject declares VERIFICATION and verifies nothing itself: it is settled only by a PASS that a
+ * separate task pointing at it records, and its own run — if its policy gives it one at all — can
+ * never produce that. (A `VERIFICATION_PASSED` subject has no run: a manual start is refused and
+ * auto-dispatch passes it by. A `MANUAL` one does its own work and still waits for the same PASS,
+ * which is why both are refused here.) Nothing on the server files that task for it:
+ * `fileVerification` checks work that is already DONE, which a subject never becomes on its own.
+ * Inside a project the coordinator files and starts the verification; outside one there is no
+ * coordinator and no screen that writes `verifiesTaskId`, so the subject would wait for a check
+ * nobody is going to file.
  *
  * A rule about what may be written, like `criterionNeedsProjectRefusal` above, but asked of one
  * more write: a project-less EVIDENCE_JUDGMENT row still settles against its own acceptanceCriteria,
@@ -221,13 +238,13 @@ export function verificationSubjectNeedsProjectRefusal(declaration: {
     kind: 'REFUSAL',
     requiredAction: VERIFICATION_SUBJECT_REQUIRES_PROJECT_ACTION,
     message:
-      'VERIFICATION with no verifiesTaskId makes this task a subject: it cannot run, and only a PASS '
-      + 'recorded by a separate verification task pointing at it can settle it. Nothing files that '
-      + 'verification task automatically, and this task is in no project, so there is no coordinator '
-      + 'to create and start one — it would wait for a check nobody is going to file. Give this work '
-      + 'a projectId, so its project\'s coordinator can file and start the verification; or declare '
-      + 'EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode, which it can settle on '
-      + 'its own.',
+      'VERIFICATION with no verifiesTaskId makes this task a subject: whatever its own run does, '
+      + 'only a PASS recorded by a separate verification task pointing at it can settle it. Nothing '
+      + 'files that verification task automatically, and this task is in no project, so there is no '
+      + 'coordinator to create and start one — it would wait for a check nobody is going to file. '
+      + 'Give this work a projectId, so its project\'s coordinator can file and start the '
+      + 'verification; or declare EXECUTABLE with acceptanceCommand and '
+      + 'acceptanceExpectedExitCode, which it can settle on its own.',
   };
 }
 

@@ -55,6 +55,14 @@ test('task_start is owned by an independent verifier even on a childless subject
     verifiesTaskId: 'subject',
     hasDirectChildren: false,
   }), false, 'the independent verifier is executable work');
+  // And so is the subject of one, when its policy says the work is this row's own. VERIFICATION
+  // answers who settles the task; only VERIFICATION_PASSED says nothing here is going to run.
+  assert.equal(taskStartOwnedByCompletion({
+    completionPolicy: 'MANUAL',
+    completionCriterion: 'VERIFICATION',
+    verifiesTaskId: null,
+    hasDirectChildren: false,
+  }), false, 'a work row checked by somebody else still has its own work to run');
 });
 
 interface Case {

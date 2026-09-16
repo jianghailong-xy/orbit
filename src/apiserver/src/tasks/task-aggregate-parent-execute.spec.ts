@@ -87,6 +87,34 @@ test('Run Now refuses a childless independent-verification subject', async () =>
   assert.deepEqual(started, []);
 });
 
+/**
+ * The same row shape, one column apart, and it must run.
+ *
+ * `completionCriterion = VERIFICATION` says an independent verdict settles this task.
+ * `completionPolicy = MANUAL` says nothing but this row's own Session produces the work that
+ * verdict is about. Read as one fact, the pair was a subject and neither door would start it; read
+ * as two, it is ordinary work that happens to be checked by somebody else.
+ */
+for (const door of ['execute', 'batchExecute'] as const) {
+  test(`${door} starts a VERIFICATION work row instead of holding it back`, async () => {
+    const { service, started } = serviceFor([
+      row({
+        id: TASK,
+        completionCriterion: 'VERIFICATION',
+        completionPolicy: 'MANUAL',
+        verifiesTaskId: null,
+        children: [],
+      }),
+    ]);
+    if (door === 'execute') await service.execute('owner-1', TASK);
+    else {
+      const result = await service.batchExecute('owner-1', [TASK]);
+      assert.deepEqual(result.skipped, [], 'and it is not reported as a roll-up node either');
+    }
+    assert.deepEqual(started, [TASK], 'a row with work of its own must reach a Session');
+  });
+}
+
 type Select = Record<string, unknown>;
 
 /**

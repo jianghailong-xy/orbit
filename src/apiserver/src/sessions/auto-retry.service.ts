@@ -931,7 +931,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         const [task] = await tx.$queryRaw<Array<{ projectId: string | null; aggregate: boolean }>>(
           Prisma.sql`
             SELECT t."project_id" AS "projectId",
-                   ((t."completion_criterion"::text = 'VERIFICATION'
+                   -- taskStartOwnedByCompletion, spelled in SQL because this one has to be read
+                   -- under the lock. The gate row is the POLICY's, not the criterion's: a task that
+                   -- declares VERIFICATION and does its own work is an ordinary work row, and
+                   -- answering true for it here would refund and permanently disarm a retry that
+                   -- the unlocked predicate above had already called transient.
+                   ((t."completion_policy"::text = 'VERIFICATION_PASSED'
                      AND t."verifies_task_id" IS NULL)
                     OR (t."completion_policy"::text <> 'MANUAL'
                         AND EXISTS (SELECT 1 FROM "task" c

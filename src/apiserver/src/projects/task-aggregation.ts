@@ -141,16 +141,22 @@ export function isAggregateParent(fact: AggregateParentFact): boolean {
 /**
  * True when `task_start` has no semantic work to execute on this row.
  *
- * Aggregate parents are completed by their children. A VERIFICATION subject is completed by its
- * independent verifier, even before it has any child rows; dispatching the subject itself cannot
- * produce the evidence its declared criterion requires. This is the shared service-door rule
- * behind manual Run, batch Run, session creation, retry and Work overview's Ready bucket.
+ * Aggregate parents are completed by their children. A `VERIFICATION_PASSED` gate row is completed
+ * by its independent verifier, even before it has any child rows; dispatching it cannot produce the
+ * verdict that settles it, because the verdict is another task's output. This is the shared
+ * service-door rule behind manual Run, batch Run, session creation, retry and Work overview's Ready
+ * bucket.
+ *
+ * The question is asked of `completionPolicy`, not of `completionCriterion`. A VERIFICATION
+ * criterion says an independent verdict is what settles the task; it does not say the task has
+ * nothing to do. "Do the work here, and have another session check it" is a shape with real work in
+ * it, and while the two columns were read as one fact it could not be dispatched at all.
  */
 export function taskStartOwnedByCompletion(fact: AggregateParentFact & {
   completionCriterion?: TaskCompletionCriterionValue | null;
   verifiesTaskId?: string | null;
 }): boolean {
-  if (fact.completionCriterion === 'VERIFICATION' && fact.verifiesTaskId == null) return true;
+  if (fact.completionPolicy === 'VERIFICATION_PASSED' && fact.verifiesTaskId == null) return true;
   return isAggregateParent(fact);
 }
 

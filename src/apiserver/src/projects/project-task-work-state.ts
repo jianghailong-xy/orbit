@@ -38,10 +38,17 @@ interface ProjectTaskWorkStateRow extends ProjectTaskWorkStateFields {
   taskId: string;
 }
 
-/** A subject whose own row can never satisfy its independent-verification criterion. */
+/**
+ * A gate row: one whose own work could never satisfy it, because it has none.
+ *
+ * `completion_policy` alone, and deliberately. A `VERIFICATION` criterion says an independent
+ * verdict is what settles this task — it says nothing about whether the task has work to do, and a
+ * row that has work is one somebody runs, reads progress on and expects to see in RUNNING or READY.
+ * Only `VERIFICATION_PASSED` says that nothing here is ever dispatched, which is what makes
+ * "waiting for its verifier" the whole truth about the row rather than half of it.
+ */
 export function verificationSubjectSql(alias = 't'): string {
-  return `${alias}."completion_criterion" = 'VERIFICATION'::"task_completion_criterion"
-    AND ${alias}."completion_policy" = 'VERIFICATION_PASSED'::"task_completion_policy"
+  return `${alias}."completion_policy" = 'VERIFICATION_PASSED'::"task_completion_policy"
     AND ${alias}."verifies_task_id" IS NULL`;
 }
 
@@ -60,9 +67,15 @@ export function liveTaskWorkSql(alias = 't'): string {
  * The one classification expression behind panorama, project-list rollups, task cards and graph.
  *
  * READY is not shorthand for OPEN. It is the exact shared manual execute predicate, constrained to
- * an OPEN lifecycle row. A VERIFICATION subject is judged before its stored DONE value, so corrupt
+ * an OPEN lifecycle row. A verification GATE ROW is judged before its stored DONE value, so corrupt
  * or stale status cannot make a missing/failed verifier look complete. FAILED and CANCELLED remain
  * explicit terminal lanes; consequently the bucket sum always reconciles with taskCount.
+ *
+ * AWAITING_VERIFICATION is that gate row's lane and only its lane. A task that declares
+ * VERIFICATION and does its own work (`MANUAL`) reaches this expression like any other work row:
+ * RUNNING while a Session holds it, READY while the shared execute predicate would start it. It has
+ * possibly never been run, and reporting a wait on a check nobody has been asked for yet would put
+ * it in the one lane no surface offers a next step from.
  */
 export function projectTaskWorkStateSql(alias = 't'): string {
   const verificationSubject = verificationSubjectSql(alias);

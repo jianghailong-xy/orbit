@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { TRIGGER_WRITE_SOURCES } from '../common/db-write-inventory';
+import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 
 /**
  * 0224 removed the verification-subject dispatch guard 0207 installed. This is the static half of
@@ -132,15 +133,42 @@ test('(a) the similarly named 0130 guard is not collateral', () => {
 test('(a) the service door still owns the rule, under the lock the triggers relied on', () => {
   // 0207's own header says the triggers preserved a rule "service gates and readiness use". This
   // is that rule, and the lock it is read under: without them the removal would not be a removal.
+  //
+  // The rule is read off `completion_policy`, not off `completion_criterion`. Those are two
+  // questions — who settles this task, and whether the row has work of its own — and while they
+  // were asked as one, a task that has work AND needs an independent check was undispatchable.
+  // What 0207 protected is the first sentence only: a row nothing but a verdict can finish must
+  // not be handed a Session.
   const aggregation = read('src/apiserver/src/projects/task-aggregation.ts');
   assert.match(aggregation,
-    /fact\.completionCriterion === 'VERIFICATION' && fact\.verifiesTaskId == null\) return true/);
+    /fact\.completionPolicy === 'VERIFICATION_PASSED' && fact\.verifiesTaskId == null\) return true/);
   const sessions = read('src/apiserver/src/sessions/sessions.service.ts');
   assert.match(sessions, /if \(startsTaskWork && taskStartOwnedByCompletion\(\{/);
   assert.match(sessions, /FOR SHARE OF t/);
   const runnable = read('src/apiserver/src/tasks/manual-runnable-task-sql.ts');
-  assert.match(runnable, /completion_criterion = 'VERIFICATION'::task_completion_criterion/);
+  assert.match(runnable, /completion_policy = 'VERIFICATION_PASSED'::task_completion_policy/);
   assert.match(runnable, /verifies_task_id IS NULL/);
+  // Retry's locked re-read is the same rule, written in SQL because it has to be answered under the
+  // lock rather than from the snapshot the sweep selected on. Two spellings that disagree is how an
+  // ordinary work row's transient failure gets refunded and permanently disarmed as if it were AG6.
+  const retry = read('src/apiserver/src/sessions/auto-retry.service.ts');
+  assert.match(retry,
+    /t\."completion_policy"::text = 'VERIFICATION_PASSED'\s*\n\s*AND t\."verifies_task_id" IS NULL/u);
+});
+
+test('(a) and the Ready predicate kills the gate row by policy, never by criterion', () => {
+  // Asserted on the SQL the builder actually emits rather than on the file it is written in, so
+  // prose about the old spelling cannot fail it and a clause reinstated under a different layout
+  // cannot pass it. `manualRunnableTaskSql` is spliced raw into the Ready tab, every project-scoped
+  // "Ready to run" surface and the execute gate, so this one string is what they all agree on.
+  const sql = manualRunnableTaskSql('t');
+  assert.match(sql, /NOT \(\s*t\.completion_policy = 'VERIFICATION_PASSED'::task_completion_policy\s*AND t\.verifies_task_id IS NULL\s*\)/u,
+    'a row only an independent verdict can finish still has nothing to dispatch');
+  assert.doesNotMatch(sql, /completion_criterion/u,
+    'a VERIFICATION criterion no longer says anything about whether this row has work to run');
+  // The alias is the caller's, so a second surface cannot be quietly excluded from the same rule.
+  assert.match(manualRunnableTaskSql('verifier_task'),
+    /verifier_task\.completion_policy = 'VERIFICATION_PASSED'::task_completion_policy/u);
 });
 
 // (b) --------------------------------------------------------------------------------------------

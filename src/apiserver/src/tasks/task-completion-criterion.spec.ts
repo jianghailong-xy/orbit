@@ -358,15 +358,50 @@ test('the three peer declarations require only their own evidence shape', () => 
 
   assert.match(taskCompletionDeclarationError({ completionCriterion: 'EXECUTABLE' })!, /requires/);
   assert.match(taskCompletionDeclarationError({
-    completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL',
-  })!, /VERIFICATION_PASSED/);
-  assert.match(taskCompletionDeclarationError({
     completionCriterion: 'EVIDENCE_JUDGMENT', verifiesTaskId: 'subject',
   })!, /must use VERIFICATION/);
   assert.match(taskCompletionDeclarationError({
     completionCriterion: 'EVIDENCE_JUDGMENT',
     acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
   })!, /cannot also/);
+});
+
+/**
+ * The two columns answer different questions, and on a subject they used to be fused.
+ *
+ * `completionCriterion` says WHO settles this task; `completionPolicy` says whether anything other
+ * than this row's own work is involved in getting there. Requiring VERIFICATION_PASSED of every
+ * subject read the first as if it were the second, so "do the work, then have another session check
+ * it" was a shape nobody could declare — the only VERIFICATION row without a `verifiesTaskId` was
+ * one that may never run.
+ */
+test('VERIFICATION names who settles the task, not that the row has no work of its own', () => {
+  // The gate row: no work of its own, settled by a PASS recorded against it.
+  assert.equal(taskCompletionDeclarationError({
+    completionCriterion: 'VERIFICATION', completionPolicy: 'VERIFICATION_PASSED',
+  }), null);
+  // The work row, and the capability this split adds: it runs, and an independent verdict rather
+  // than its own run is what settles it.
+  assert.equal(taskCompletionDeclarationError({
+    completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL',
+  }), null, 'a task may both do work and be settled by an independent verdict');
+  // The verifier itself, unchanged by any of this.
+  assert.equal(taskCompletionDeclarationError({
+    completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL', verifiesTaskId: 'subject',
+  }), null);
+
+  // Exactly three shapes, not four. ALL_CHILDREN_DONE says the children finish this row while
+  // VERIFICATION says a verdict does, and `recomputeTask` reads the criterion first: the pair would
+  // write DONE on the next reconcile with no verdict anywhere. It stays refused.
+  assert.match(taskCompletionDeclarationError({
+    completionCriterion: 'VERIFICATION', completionPolicy: 'ALL_CHILDREN_DONE',
+  })!, /ALL_CHILDREN_DONE/u);
+  // And a verifier still may not carry a roll-up policy.
+  assert.match(taskCompletionDeclarationError({
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'VERIFICATION_PASSED',
+    verifiesTaskId: 'subject',
+  })!, /A verification task requires completionPolicy MANUAL/u);
 });
 
 test('legacy create declarations retain their explicit meaning without a fallback chain', () => {
