@@ -21,9 +21,10 @@ import XCTest
 ///  - `NO_OUTPUT`, which the browser declares and never uses. Mirroring dead code would only make
 ///    this end harder to read, and there is no behaviour on either side to hold together.
 ///  - The span in a wakeup's row. The browser formats it with `formatSpan` and this client with
-///    `WatchProjection.duration`, which are the same function over [60, 3600] seconds — the range
-///    the control plane clamps a delay to — and that agreement is pinned in `BackgroundWakeTests`
-///    at both ends of the clamp rather than by comparing two implementations.
+///    `WatchProjection.duration`, which is that same function value for value — and the one that
+///    holds the two together is `WatchWakeCopyParityTests`, where the span is read off the
+///    browser's declaration. `BackgroundWakeTests` still pins both ends of the clamp the control
+///    plane puts a delay in ([60, 3600] seconds), which is all of that range this row reaches.
 final class BackgroundWakeCopyParityTests: XCTestCase {
 
     private static let webWake = "src/web/src/lib/backgroundWake.ts"

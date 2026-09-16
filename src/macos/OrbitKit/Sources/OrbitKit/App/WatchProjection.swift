@@ -300,13 +300,22 @@ public enum WatchProjection {
         return nil
     }
 
-    /// A span, coarsely: "45s", "12m", "5h", "3d".
+    /// A span short enough for a card row: "45s", "12m", "3h 20m", "23h", "2d 4h", "12d". The
+    /// browser's `formatSpan` (`src/web/src/lib/watches.ts`), value for value — it says the smaller
+    /// unit too while the larger one is still small, because "3h" for both 3h20m and 3h59m is one
+    /// word for two different waits. `WatchWakeCopyParityTests` holds the two ends to each other.
     static func duration(_ seconds: TimeInterval) -> String {
-        let s = Int(seconds)
-        if s < 60 { return "\(s)s" }
+        let s = Int(max(0, seconds))
+        if s < 60 { return "\(max(1, s))s" }
         if s < 3_600 { return "\(s / 60)m" }
-        if s < 86_400 { return "\(s / 3_600)h" }
-        return "\(s / 86_400)d"
+        if s < 86_400 {
+            let h = s / 3_600
+            let m = (s % 3_600) / 60
+            return h < 6 && m > 0 ? "\(h)h \(m)m" : "\(h)h"
+        }
+        let d = s / 86_400
+        let h = (s % 86_400) / 3_600
+        return d < 3 && h > 0 ? "\(d)d \(h)h" : "\(d)d"
     }
 
     /// The watch's latest delivery in words — what the Match (or the end) caused, and whether it got

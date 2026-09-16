@@ -132,9 +132,30 @@ final class WatchProjectionTests: XCTestCase {
         XCTAssertEqual(WatchFreshness.of(F.watch(state: "MATCHED", lastEvaluatedAt: F.ago(9_000)), now: now), .idle)
     }
 
+    /// The browser's `formatSpan`, value for value: the smaller unit is said while the larger one is
+    /// still small, so 3h20m and 3h59m are not both "3h". `WatchWakeCopyParityTests` holds this to
+    /// the browser's own declaration; these are the values that reading comes to.
+    func testASpanSaysItsSmallerUnitWhileTheLargerOneIsStillSmall() {
+        XCTAssertEqual(WatchProjection.duration(3 * 3_600 + 20 * 60), "3h 20m")
+        XCTAssertEqual(WatchProjection.duration(2 * 86_400 + 4 * 3_600), "2d 4h")
+        XCTAssertEqual(WatchProjection.duration(23 * 3_600), "23h")
+        XCTAssertEqual(WatchProjection.duration(12 * 86_400), "12d")
+        // Dropped once the larger unit is big enough to stand alone, and when there is no remainder.
+        XCTAssertEqual(WatchProjection.duration(6 * 3_600 + 20 * 60), "6h")
+        XCTAssertEqual(WatchProjection.duration(3 * 86_400 + 4 * 3_600), "3d")
+        XCTAssertEqual(WatchProjection.duration(3_600), "1h")
+        XCTAssertEqual(WatchProjection.duration(40), "40s")
+        XCTAssertEqual(WatchProjection.duration(12 * 60), "12m")
+        // A deadline this second, or one the server's clock puts just behind us, is not "0s".
+        XCTAssertEqual(WatchProjection.duration(0.4), "1s")
+        XCTAssertEqual(WatchProjection.duration(-5), "1s")
+    }
+
     func testDeadlineCountsDownWhileLiveAndDatesAnExpiry() {
         XCTAssertEqual(WatchProjection.deadline(for: F.watch(expiresAt: F.ago(-(23 * 3_600 + 60))), now: now),
                        "Expires in 23h")
+        XCTAssertEqual(WatchProjection.deadline(for: F.watch(expiresAt: F.ago(-(3 * 3_600 + 20 * 60))),
+                                                now: now), "Expires in 3h 20m")
         XCTAssertEqual(WatchProjection.deadline(for: F.watch(state: "PAUSED", expiresAt: F.ago(-300)), now: now),
                        "Expires in 5m")
         XCTAssertEqual(WatchProjection.deadline(for: F.watch(expiresAt: F.ago(5)), now: now), "Expiring now")

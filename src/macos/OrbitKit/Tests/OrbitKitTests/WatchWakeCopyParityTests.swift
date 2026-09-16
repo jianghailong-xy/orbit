@@ -96,6 +96,12 @@ final class WatchWakeCopyParityTests: XCTestCase {
         return String(source[range])
     }
 
+    /// A number the browser declares, as a number — the widths `formatSpan`'s buckets are built
+    /// out of, so the expectations below can be derived from them rather than typed out again.
+    private func number(_ source: String, _ pattern: String, _ what: String) throws -> Int {
+        try XCTUnwrap(Int(try capture(source, pattern, what, Self.webWatches)))
+    }
+
     /// Every capture of `pattern`, in source order.
     private func captures(_ source: String, _ pattern: String) throws -> [String] {
         let re = try NSRegularExpression(pattern: pattern)
@@ -202,6 +208,67 @@ final class WatchWakeCopyParityTests: XCTestCase {
         // The generation seal, and the sentence a changed target ends in.
         XCTAssertTrue(web.contains("generation ${wake.generation}"), "the generation seal drifted")
         XCTAssertTrue(web.contains(" is now ${t.status}"), "what a changed target is now drifted")
+    }
+
+    // MARK: the span both the card's EXPIRES row and the strip count off
+
+    /// How long is left, in units. This pair had already drifted: the browser said "3h 20m" and this
+    /// client "3h" — one deadline read two ways, on the card's EXPIRES row, in `deadline(for:)` and
+    /// on the strip above the composer, which are every place either client prints a span.
+    ///
+    /// Held to the browser's declaration rather than to a table of strings written out here: the
+    /// bucket widths are read out of `formatSpan` and the expectations built from them, so a bucket
+    /// widened at that end and not this one fails right here.
+    func testASpanIsCountedOffInTheBrowsersUnits() throws {
+        let web = try flat(Self.webWatches)
+        let body = try capture(web, "export function formatSpan\\(.*?\\{(.*?)\\n\\}", "formatSpan",
+                               Self.webWatches)
+
+        // The units, then the order the buckets are tried in.
+        for (unit, value) in [("SECOND", "1_000"), ("MINUTE", "60 * SECOND"),
+                              ("HOUR", "60 * MINUTE"), ("DAY", "24 * HOUR")] {
+            XCTAssertEqual(try capture(web, "const \(unit) = (.+?);", unit, Self.webWatches), value,
+                           "the browser's \(unit) is no longer \(value.debugDescription), and this "
+                               + "client still counts in it — every span it prints is now off by "
+                               + "the difference.")
+        }
+        XCTAssertEqual(try captures(body, "abs < ([A-Z]+)"), ["MINUTE", "HOUR", "DAY"],
+                       "formatSpan's buckets drifted: this client tries seconds, then minutes, then "
+                           + "hours, then days, and nothing else.")
+        // Each piece, built the browser's way — off the remainder, floored rather than rounded, and
+        // never from a negative span.
+        for piece in ["Math.max(0, ms)", "Math.floor(abs / SECOND)", "Math.floor(abs / MINUTE)",
+                      "Math.floor(abs / HOUR)", "Math.floor((abs % HOUR) / MINUTE)",
+                      "Math.floor(abs / DAY)", "Math.floor((abs % DAY) / HOUR)"] {
+            XCTAssertTrue(body.contains(piece),
+                          "formatSpan no longer computes \(piece.debugDescription), which this "
+                              + "client does — the two now round one span to different numbers.")
+        }
+
+        // How wide the two compound buckets are, and the least a sub-minute span is ever called.
+        let least = try number(body, "Math\\.max\\((\\d+), Math\\.floor\\(abs / SECOND\\)\\)\\}s",
+                               "the floor under a span of under a minute")
+        let hoursSayingMinutes = try number(
+            body, "h < (\\d+) && m > 0 \\? `\\$\\{h\\}h \\$\\{m\\}m` : `\\$\\{h\\}h`",
+            "how few hours still get their minutes said")
+        let daysSayingHours = try number(
+            body, "d < (\\d+) && h > 0 \\? `\\$\\{d\\}d \\$\\{h\\}h` : `\\$\\{d\\}d`",
+            "how few days still get their hours said")
+
+        let hour = 3_600, day = 86_400
+        XCTAssertEqual(WatchProjection.duration(0), "\(least)s", "a deadline just reached is not 0s")
+        XCTAssertEqual(WatchProjection.duration(40), "40s")
+        XCTAssertEqual(WatchProjection.duration(12 * 60), "12m")
+        XCTAssertEqual(WatchProjection.duration(TimeInterval(hour - 1)), "59m")
+        // Inside each compound bucket the smaller unit is said; at its edge it is dropped.
+        XCTAssertEqual(WatchProjection.duration(TimeInterval((hoursSayingMinutes - 1) * hour + 20 * 60)),
+                       "\(hoursSayingMinutes - 1)h 20m")
+        XCTAssertEqual(WatchProjection.duration(TimeInterval(hoursSayingMinutes * hour + 20 * 60)),
+                       "\(hoursSayingMinutes)h")
+        XCTAssertEqual(WatchProjection.duration(TimeInterval((daysSayingHours - 1) * day + 4 * hour)),
+                       "\(daysSayingHours - 1)d 4h")
+        XCTAssertEqual(WatchProjection.duration(TimeInterval(daysSayingHours * day + 4 * hour)),
+                       "\(daysSayingHours)d")
     }
 
     // MARK: the strip above the composer

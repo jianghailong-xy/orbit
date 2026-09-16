@@ -88,6 +88,10 @@ final class SessionWatchingTests: XCTestCase {
         XCTAssertEqual(lone.lineTarget?.targetResourceId, "T0")
         XCTAssertEqual(lone.lineTargetCount, 1)
         XCTAssertEqual(lone.lineTime(now: now), "3h")
+        // And the minutes with it while the hours are few, as the browser's `formatSpan` does.
+        XCTAssertEqual(try XCTUnwrap(summary([
+            F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(-(3 * 3600 + 20 * 60))),
+        ])).lineTime(now: now), "3h 20m")
         // A deleted target is out of the set, in the single branch too.
         let gone = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0"), F.target("G", state: "GONE")]),

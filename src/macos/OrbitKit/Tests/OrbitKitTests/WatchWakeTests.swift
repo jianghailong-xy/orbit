@@ -153,6 +153,8 @@ final class WatchWakeTests: XCTestCase {
                        "Resume Coordinator: release")
         // The label is said once: under EXPIRES the deadline is a span, not a sentence repeating it.
         XCTAssertEqual(WatchProjection.expiresIn(for: watch, now: now), "in 1h")
+        XCTAssertEqual(WatchProjection.expiresIn(for: F.watch(expiresAt: F.ago(-(3 * 3_600 + 20 * 60))),
+                                                 now: now), "in 3h 20m")
         XCTAssertEqual(WatchProjection.expiresIn(for: F.watch(expiresAt: F.ago(5)), now: now), "now")
         // Nothing waits on an ended watch, so it has no deadline row to draw.
         XCTAssertNil(WatchProjection.expiresIn(for: F.watch(state: "EXPIRED", expiresAt: F.ago(60)), now: now))

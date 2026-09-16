@@ -304,10 +304,9 @@ public enum BackgroundWakeCard {
 
     /// "Asked for 1h out · came due 4m ago".
     ///
-    /// The span is `WatchProjection.duration`, which is the browser's `formatSpan` exactly over the
-    /// range a wakeup can hold: the control plane clamps a delay to [60, 3600] seconds
-    /// (`SCHEDULED_WAKEUP_MIN_DELAY_SECONDS`, `..._MAX_...`), and below an hour both count whole
-    /// minutes. They part company only above that, where no wakeup reaches.
+    /// The span is `WatchProjection.duration`, which is the browser's `formatSpan` at every span,
+    /// not only over the [60, 3600] seconds the control plane clamps a delay to
+    /// (`SCHEDULED_WAKEUP_MIN_DELAY_SECONDS`, `..._MAX_...`) — which is all of it this row reaches.
     public static func wakeupMeta(_ wakeup: ScheduledWakeup, now: Date = Date()) -> String {
         var parts: [String] = []
         if let delay = wakeup.delaySeconds {
