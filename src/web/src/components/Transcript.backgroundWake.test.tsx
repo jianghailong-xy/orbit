@@ -8,9 +8,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSessionTurn } from '../api';
 import {
+  ZH_JOB_AND_SCHEDULED,
   ZH_JOB_DONE,
   ZH_JOB_FAILED,
   ZH_SCHEDULED,
+  ZH_TWO_JOBS,
   ZH_WAKE_WITH_COORDINATOR_CONTEXT,
 } from '../lib/backgroundWake.fixtures';
 import type { Runner } from './TasksSidePanel';
@@ -213,6 +215,37 @@ describe('a wake turn in the transcript', { timeout: 30_000 }, () => {
     expect(card().querySelector('.bgwake-meta')?.textContent).toMatch(
       /^Queued by a scheduled wakeup, not typed by you · /,
     );
+  });
+
+  it('draws the one older turn both blocks came on as a single card', async () => {
+    await mount([wakeEvent(ZH_JOB_AND_SCHEDULED)]);
+
+    expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
+    expect(card().querySelector('.bgwake-title')?.textContent?.trim()).toBe('Background job finished');
+    expect(card().querySelector('.bgwake-job-name')?.textContent).toBe(
+      'upgrade to 39551b637 (catalog-window fix + session-import)',
+    );
+    expect(card().querySelector('.bgwake-job-meta')?.textContent).toBe(
+      'bgj_13c53745a88a · 16.2 KB of output',
+    );
+    // The wakeup that came due while the job ran keeps its own row on the same card.
+    expect(card().querySelector('.bgwake-wakeup-reason')?.textContent).toContain('升级作业的备份验证');
+    expect(card().querySelector('.bgwake-wakeup-meta')?.textContent).toContain('Asked for 12m out');
+    expect(card().querySelector('details.bgwake-raw pre')?.textContent).toBe(ZH_JOB_AND_SCHEDULED);
+  });
+
+  it('counts the jobs of an older turn that answered for two', async () => {
+    await mount([wakeEvent(ZH_TWO_JOBS)]);
+
+    expect(card().className).toContain('is-failed');
+    expect(card().querySelector('.bgwake-title')?.textContent?.trim()).toBe(
+      '2 background jobs finished',
+    );
+    expect(card().querySelector('.bgwake-why')?.textContent).toBe('2 of 2 failed.');
+    expect([...card().querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent)).toEqual([
+      'bgj_52843eb345d1 · no output',
+      'bgj_974ceb2c3d52 · no output',
+    ]);
   });
 
   it('takes only the wake out of a note that carried more, and leaves the rest its own entry', async () => {

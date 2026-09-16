@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseBackgroundWake } from './backgroundWake';
 import {
+  ZH_JOB_AND_SCHEDULED,
   ZH_JOB_DONE,
   ZH_JOB_FAILED,
   ZH_SCHEDULED,
+  ZH_TWO_JOBS,
   ZH_WAKE_WITH_COORDINATOR_CONTEXT,
 } from './backgroundWake.fixtures';
 
@@ -159,6 +161,15 @@ describe('the block a background job’s wake opens a turn with', () => {
     expect(wake.jobs[1].outputTail).toBe('X Process completed with exit code 1.');
   });
 
+  it('keeps them apart in the older wording too, off a turn that answered for two', () => {
+    const wake = parseBackgroundWake(ZH_TWO_JOBS)!;
+
+    expect(wake.jobs.map((job) => job.id)).toEqual(['bgj_52843eb345d1', 'bgj_974ceb2c3d52']);
+    expect(wake.jobs.map((job) => job.status)).toEqual(['failed', 'failed']);
+    expect(wake.jobs.map((job) => job.exitCode)).toEqual([1, 1]);
+    expect(wake.jobs.map((job) => job.outputTail)).toEqual(['', '']);
+  });
+
   it('keeps a command that runs to several lines of its own whole, and still finds the description behind it', () => {
     const wake = parseBackgroundWake(ZH_WAKE_WITH_COORDINATOR_CONTEXT)!;
 
@@ -206,6 +217,23 @@ describe('the block a scheduled wakeup opens a turn with', () => {
     expect(wake.jobs).toHaveLength(1);
     expect(wake.wakeups).toHaveLength(1);
     expect(wake.text).toBe(joined);
+    expect(wake.rest).toBe('');
+  });
+
+  it('carries both out of the one older turn they came on together', () => {
+    const wake = parseBackgroundWake(ZH_JOB_AND_SCHEDULED)!;
+
+    expect(wake.jobs.map((job) => job.id)).toEqual(['bgj_13c53745a88a']);
+    expect(wake.jobs[0].outputTail.endsWith('✓ Upgrade complete — all services healthy.')).toBe(true);
+    expect(wake.wakeups).toHaveLength(1);
+    expect(wake.wakeups[0]).toMatchObject({
+      askedAt: '2026-09-15T17:35:28.715Z',
+      delaySeconds: 720,
+      dueAt: '2026-09-15T17:47:28.715Z',
+    });
+    expect(wake.wakeups[0].reason).toContain('升级作业的备份验证');
+    expect(wake.wakeups[0].prompt).toContain('升级备份唤醒');
+    expect(wake.text).toBe(ZH_JOB_AND_SCHEDULED);
     expect(wake.rest).toBe('');
   });
 });
