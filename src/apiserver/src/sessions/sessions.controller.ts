@@ -293,6 +293,42 @@ export class SessionsController {
     });
   }
 
+  /**
+   * Import a directory's local Claude Code history in one go — what the new-workspace form's
+   * "import this directory's conversations" answer posts once the workspace exists.
+   *
+   * The transcripts were named by the runner's own scan of that directory, so the caller passes
+   * ids it was given rather than ids it invented. Each one is created as a pending import and
+   * replayed by the runner on its own; this answers as soon as the rows exist.
+   */
+  @Post('import-batch')
+  importBatch(
+    @CurrentUser() user: AuthUser,
+    @Body(PublicIdPipe.forFields('workspaceId'))
+    dto: { workspaceId: string; transcripts: Array<{ claudeSessionId: string; title?: string }> },
+  ) {
+    return this.sessions.importBatch(user.userId, dto);
+  }
+
+  /** How many of a workspace's sessions arrived as imported transcripts. Declared before the
+   *  `:id` routes so "imported" is never read as a session id. */
+  @Get('imported')
+  importedCount(
+    @CurrentUser() user: AuthUser,
+    @Query('workspaceId', PublicIdPipe) workspaceId: string,
+  ) {
+    return this.sessions.countImported(user.userId, workspaceId);
+  }
+
+  /** Remove them all again — the promise the import offer's warning line makes. */
+  @Post('remove-imported')
+  removeImported(
+    @CurrentUser() user: AuthUser,
+    @Body(PublicIdPipe.forFields('workspaceId')) dto: { workspaceId: string },
+  ) {
+    return this.sessions.removeImported(user.userId, dto.workspaceId);
+  }
+
   @Get()
   list(
     @CurrentUser() user: AuthUser,

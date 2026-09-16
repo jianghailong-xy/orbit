@@ -346,6 +346,32 @@ public final class APIClient: @unchecked Sendable {
         return object["code"] as? String
     }
 
+    /// Why a request didn't go through, as the tail of one English sentence — the prose half of
+    /// what `refusalCode` answers in codes, and what every line that reports a failed press is
+    /// built from.
+    ///
+    /// Never the error itself. Interpolated, an `APIError` prints
+    /// `http(status: 503, body: Optional(""))` and a dropped connection prints the whole
+    /// `Error Domain=NSURLErrorDomain Code=-1005 "…" UserInfo={_kCFStreamErrorCodeKey=53, …}`
+    /// dump: it reads as a crash log and says nothing about what happened or what to do next.
+    public static func failureReason(_ error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .http(let status, let body):
+                return ComposerLogic.serverMessage(body) ?? "the server returned \(status)"
+            case .unauthorized:    return "you're signed out"
+            case .invalidResponse: return "the server's reply couldn't be read"
+            case .notConfigured:   return "no server is configured"
+            }
+        }
+        if error is URLError {
+            // Not `localizedDescription` — it follows the device language, and these are the app's
+            // English strings.
+            return "the connection dropped"
+        }
+        return error.localizedDescription
+    }
+
     // MARK: a project's ruler — the two standing questions its owner answers
 
     /// The loosening proposals this project's owner is being asked to decide, each carrying the

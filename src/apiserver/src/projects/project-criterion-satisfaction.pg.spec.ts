@@ -273,18 +273,26 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     ...EXECUTABLE_DECLARATION,
   } as never);
   await settleExecutable(metExecutable.id, 'true', 0);
-  const metSubject = await tasks.create(ownerId, {
-    title: 'the work an independent check settles',
-    projectId,
-    criterionKey: metAtFirst.key,
-    completionCriterion: 'VERIFICATION',
-    completionPolicy: 'VERIFICATION_PASSED',
-  } as never);
-  const metVerifier = await tasks.create(ownerId, {
-    title: 'the check itself, which also serves this criterion',
-    projectId,
-    criterionKey: metAtFirst.key,
-    verifiesTaskId: metSubject.id,
+  // Through the batch door, not two creates: the gate and its check go in together, and the check
+  // is more than a title here — it serves the same criterion, which only a batch item can say.
+  const [metSubject, metVerifier] = await tasks.createMany(ownerId, {
+    tasks: [
+      {
+        title: 'the work an independent check settles',
+        ref: 'met-subject',
+        projectId,
+        criterionKey: metAtFirst.key,
+        completionCriterion: 'VERIFICATION',
+        completionPolicy: 'VERIFICATION_PASSED',
+      },
+      {
+        title: 'the check itself, which also serves this criterion',
+        ref: 'met-check',
+        projectId,
+        criterionKey: metAtFirst.key,
+        verifiesRef: 'met-subject',
+      },
+    ],
   } as never);
   await tasks.update(ownerId, metVerifier.id, { verdict: 'PASS' } as never);
 

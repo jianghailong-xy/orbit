@@ -1065,7 +1065,7 @@ final class ConsoleModel {
                             permissionMode ?? baseline.permissionMode,
                             effort ?? baseline.effort)
         } catch {
-            statusMessage = "Couldn't apply change — \(error)"
+            statusMessage = "Couldn't apply change — \(APIClient.failureReason(error))."
         }
     }
 
@@ -1337,7 +1337,7 @@ final class ConsoleModel {
                 try await api.cancelAutoRetry(sessionID: sessionID)
             }
         } catch {
-            statusMessage = "Couldn't change auto-retry — \(error)"
+            statusMessage = "Couldn't change auto-retry — \(APIClient.failureReason(error))."
         }
         // Refetch either way: the card renders the server's answer, not the click.
         await worktree.loadDetail()
@@ -1456,7 +1456,7 @@ final class ConsoleModel {
             if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
             onSessionCreated?(session)
         } catch {
-            statusMessage = "Couldn't start the session — \(error)"
+            statusMessage = "Couldn't start the session — \(APIClient.failureReason(error))."
         }
     }
 
@@ -1754,7 +1754,7 @@ final class ConsoleModel {
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRule: rule)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
         catch {
-            statusMessage = "Approval failed — \(error)"
+            statusMessage = "Approval failed — \(APIClient.failureReason(error))."
             await refreshApprovals()
         }
     }
@@ -1830,7 +1830,7 @@ final class ConsoleModel {
             case .criteriaDecision(let intentID):
                 return CriteriaDecisions.isOpen(criteriaStanding(intentID))
             // A record of an answer, not a question: nothing is waiting on the reader.
-            case .criteriaDecisionReceipt:
+            case .criteriaDecisionReceipt, .evidenceDecisionReceipt:
                 return false
             case .acceptanceConfirmation:
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
@@ -1885,6 +1885,7 @@ final class ConsoleModel {
             for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID) {
                 deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
             }
+            adoptEvidenceReceipts(queue)
         }
         if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
             acceptanceConfirmation = standing
@@ -1911,9 +1912,12 @@ final class ConsoleModel {
         return projectCriteria.allSatisfy { $0.satisfied == true }
     }
 
-    /// Put a question into this conversation once, anchored where it arrived.
+    /// Put a question into this conversation once, anchored where OrbitKit's rule puts it: where it
+    /// arrived, or trailing the tail for the one card whose delivery is triggered by the control
+    /// plane rather than by this transcript, and which was therefore drawn above the report it asks
+    /// about (`DeliveryAnchor`).
     private func deliver(_ kind: DeliveredDecisionCard.Kind) {
-        deliver(kind, anchoredAt: state.items.last?.id)
+        deliver(kind, anchoredAt: DeliveryAnchor.onArrival(of: kind, items: state.items))
     }
 
     /// …or where it happened, for a record that carries its own moment — a receipt is drawn at the
@@ -1958,6 +1962,29 @@ final class ConsoleModel {
         }
     }
 
+    /// The same, for the revisions THIS session has already answered — evidence decisions, whose
+    /// read publishes them scoped to the deciding session (`decided`).
+    ///
+    /// One adoption per refresh, anchored once and never re-aimed, and the question card of each
+    /// answered revision is let go of: the receipt says which way it went, which is the thing a
+    /// dimmed card could not say. A revision the read does not name keeps its card.
+    private func adoptEvidenceReceipts(_ queue: EvidenceDecisionQueue) {
+        let receipts = EvidenceDecisions.receipts(queue: queue, items: state.items)
+        let answered = Set(receipts.map { "\($0.decided.taskId)@\($0.decided.evidenceRevision)" })
+        guard !answered.isEmpty else { return }
+        decisionCards.removeAll { card in
+            guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else {
+                return false
+            }
+            return answered.contains("\(taskID)@\(evidenceRevision)")
+        }
+        for receipt in receipts where !decisionCards.contains(where: { $0.id == receipt.id }) {
+            decisionCards.append(DeliveredDecisionCard(
+                kind: .evidenceDecisionReceipt(decided: receipt.decided),
+                afterItemID: receipt.afterItemID))
+        }
+    }
+
     /// Where one delivered proposal stands right now — the whole of what decides whether its
     /// buttons may be pressed, and never a frame this card kept.
     func criteriaStanding(_ intentID: String) -> CriteriaDecisionStanding {
@@ -1982,7 +2009,7 @@ final class ConsoleModel {
             // own answer this window can be sure is wrong — and left as an in-memory line it would
             // not survive the console being opened again.
         } catch {
-            statusMessage = "That decision was not recorded — \(error)"
+            statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
     }
@@ -2007,16 +2034,17 @@ final class ConsoleModel {
             if let waiting = OwnerConfirmations.waitingIn(read, sessionID: sessionID) {
                 deliver(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
             }
-            // The receipts this conversation has recorded, drawn where each was made. They come
-            // from the read rather than from the press, so a reload or another device shows them
-            // too — the same reason the browser draws them from `decisions`.
             // The receipts this conversation has recorded, oldest first — from the read rather than
             // from the press, so a reload or another device shows them too. They arrive where the
-            // conversation is, like every other delivered card; the browser places them by
-            // `decidedAt` instead, which this transcript cannot do — only a user bubble and a
-            // thinking stretch carry a timestamp, so there is no item to anchor a reply between.
-            // The line names its own moment ("Confirmed done by you · 9/14 08:42"), which is what
-            // that placement was for.
+            // conversation is, like every other delivered card, and the line names its own moment
+            // ("Confirmed done by you · 9/14 08:42").
+            //
+            // That placement is this path's, not the rule's: it was written when only a user bubble
+            // and a thinking stretch carried a clock, so there was no item to anchor a record
+            // between. Items carry one now (`TranscriptItem.clock`, added with the criteria and
+            // evidence receipts) and those two place themselves by `ReceiptAnchor`; anchoring these
+            // in flow where they happened would be the same move, and is left for whoever wants it
+            // — the read this draws from publishes each decision's `decidedAt`.
             for decided in OwnerConfirmations.receiptsIn(read, sessionID: sessionID) {
                 deliver(.ownerDecisionReceipt(taskID: taskID, decisionID: decided.id))
             }
@@ -2059,7 +2087,7 @@ final class ConsoleModel {
             // A refusal for staleness is said as such: the card stays and re-derives, and the
             // sentence tells the reader which refusal the press met rather than "it failed".
             let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
-            statusMessage = "\(title) — \(error)"
+            statusMessage = "\(title) — \(APIClient.failureReason(error))."
         }
         await refreshOwnerConfirmation(force: true)
     }
@@ -2081,13 +2109,13 @@ final class ConsoleModel {
         guard let request = EvidenceDecisions.request(row: row, decision: decision, note: note,
                                                       decidingSessionID: sessionID) else { return }
         do {
-            let result = try await api.decideEvidence(taskID: row.taskId, request)
+            _ = try await api.decideEvidence(taskID: row.taskId, request)
             close(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            // Left on screen, the card would go stale into "answered somewhere else", which is the
-            // one reading of its own answer this window can be sure is wrong.
-            appendDecisionLine(EvidenceDecisions.recordedLine(result))
+            // The card gives way to its receipt, which the re-read below draws where the decision
+            // happened (`adoptEvidenceReceipts`) — and which survives the console being opened
+            // again, unlike the in-memory line it replaces.
         } catch {
-            statusMessage = "That decision was not recorded — \(error)"
+            statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
     }
@@ -2103,7 +2131,7 @@ final class ConsoleModel {
             close(.acceptanceConfirmation)
             appendDecisionLine(AcceptanceConfirmations.confirmedLine(standing))
         } catch {
-            statusMessage = "That confirmation was not recorded — \(error)"
+            statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
             await refreshRulerQuestions(force: true)
         }
     }

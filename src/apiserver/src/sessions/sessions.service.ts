@@ -26,6 +26,7 @@ import {
   ApprovalStatus,
   AgentProvider,
   type BgShell,
+  CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   deriveBackgroundShells,
   deriveSessionFilingState,
   deriveSessionLifecycleState,
@@ -1050,6 +1051,10 @@ export class SessionsService {
             runtimeSessionId: dto.claudeSessionId,
             // Non-null = import PENDING: the runner performs the import step and clears this.
             importSourceCwd: sourceCwd,
+            // Durable provenance, unlike the marker above: this is never cleared, so "remove the
+            // conversations this directory's history brought in" still has something to select on
+            // long after every replay has landed.
+            importedAt: new Date(),
             // No model pin: the claim resolves the runner's Runtime default, as a fresh session
             // without an explicit pick does.
             model: null,
@@ -1071,6 +1076,111 @@ export class SessionsService {
     this.queue.notifySessionQueued();
     this.realtime.publishSessionCreated(session.id);
     return withSessionState(session);
+  }
+
+  /**
+   * Import several of one directory's transcripts at once — the batch behind "this directory
+   * already has Claude Code history in it" on the new-workspace form.
+   *
+   * A wrapper, not a second import: every transcript goes through `importSession` above, so each
+   * refusal it states (already imported, no real conversation, recorded somewhere this workspace
+   * does not contain) reads the same whether one arrived or two hundred did.
+   *
+   * Per-item refusals are collected rather than thrown. Consent here was given for a directory's
+   * history as a whole, and the most ordinary case in a directory somebody has been working in is
+   * that one conversation was already imported last week — failing the batch over it would break
+   * the offer exactly where it is most useful. What IS thrown is a refusal about the request
+   * itself: a workspace that is not the caller's must not arrive as N per-item failures that read
+   * as though the transcripts were the problem.
+   *
+   * Nothing here waits for a transcript to be read. Each import is one row the runner claims and
+   * replays on its own schedule, so this returns as soon as the rows exist — which is what lets
+   * the workspace be usable the moment it is created, however much history was accepted.
+   */
+  async importBatch(
+    ownerId: string,
+    dto: {
+      workspaceId: string;
+      transcripts: Array<{ claudeSessionId: string; title?: string }>;
+    },
+  ) {
+    const items = dto?.transcripts ?? [];
+    if (!dto?.workspaceId) throw new BadRequestException('pick a workspace to import into');
+    if (items.length === 0) throw new BadRequestException('nothing to import');
+    if (items.length > CLAUDE_HISTORY_MAX_TRANSCRIPTS) {
+      throw new BadRequestException(
+        `at most ${CLAUDE_HISTORY_MAX_TRANSCRIPTS} transcripts at a time — that is what one scan reports`,
+      );
+    }
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: dto.workspaceId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!workspace) throw new ForbiddenException('workspace not found');
+    const sessionIds: string[] = [];
+    const skipped: Array<{ claudeSessionId: string; reason: string }> = [];
+    for (const item of items) {
+      try {
+        const session = await this.importSession(ownerId, {
+          claudeSessionId: item?.claudeSessionId,
+          workspaceId: dto.workspaceId,
+          // The name the conversation already carries on disk, so the list reads as the work the
+          // user remembers instead of two hundred rows of "Imported session 4e453ab7". The runner
+          // rewrites it from the transcript itself once the replay lands, either way.
+          title: item?.title,
+        });
+        sessionIds.push(session.id);
+      } catch (err) {
+        skipped.push({
+          claudeSessionId: item?.claudeSessionId,
+          reason: err instanceof Error ? err.message : 'import refused',
+        });
+      }
+    }
+    return { imported: sessionIds.length, skipped, sessionIds };
+  }
+
+  /** How many of a workspace's live sessions came in as imported transcripts — what the offer to
+   *  remove them again has to be able to say out loud before anyone presses it. */
+  async countImported(ownerId: string, workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    const count = await this.prisma.session.count({
+      where: { ownerId, workspaceId, importedAt: { not: null }, deletedAt: null },
+    });
+    return { count };
+  }
+
+  /**
+   * Remove every session a directory's history brought into one workspace.
+   *
+   * The other half of what the import offer promises. Consent was given for a whole directory's
+   * history at once — nobody chose two hundred conversations one by one — so withdrawing it has to
+   * work at the same granularity, or the warning that they "can be removed later" is a sentence
+   * nobody can act on.
+   *
+   * Each one goes through `remove` above rather than a bulk UPDATE: an imported session is a
+   * session, and it has to leave by the same door as any other, with the same end transition and
+   * the same notification to whoever is watching it. One that ends or is deleted concurrently is
+   * already where this was taking it, so it is counted as gone rather than failing the sweep.
+   */
+  async removeImported(ownerId: string, workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required');
+    const sessions = await this.prisma.session.findMany({
+      where: { ownerId, workspaceId, importedAt: { not: null }, deletedAt: null },
+      select: { id: true },
+    });
+    let removed = 0;
+    for (const session of sessions) {
+      try {
+        await this.remove(ownerId, session.id);
+        removed++;
+      } catch (err) {
+        this.logger.warn(
+          `removeImported: leaving ${session.id} — ${err instanceof Error ? err.message : 'unknown'}`,
+        );
+      }
+    }
+    return { removed, requested: sessions.length };
   }
 
   /**
@@ -4808,8 +4918,17 @@ export class SessionsService {
    *
    * The runner picks the request up on its next heartbeat (≤30s), commits, and reports the
    * outcome back into `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the
-   * bar flips to Merge). Idempotent while a commit is already pending. A finished session
-   * already committed its work at completion, so it has nothing to commit here.
+   * bar flips to Merge). Idempotent while a commit is already pending.
+   *
+   * An ENDED session is admitted on one condition: its checkout still reports uncommitted changes.
+   * This endpoint used to refuse every finished session with "its work is already committed",
+   * which was the runner's intention rather than an observation — when finalization's `git add`
+   * or `git commit` was refused (a stale `index.lock` in the checkout's git dir is enough), the
+   * work stayed in the checkout and this was the door that could have put it on the branch,
+   * bolted shut by the assumption that it never needed to be open. Nothing is running in an
+   * ended session's checkout, so the idle gate below has nothing left to protect; `worktreeDirty`
+   * is the whole precondition, and a session that really did commit everything reports false and
+   * is refused exactly as before.
    */
   async commitWorktree(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -4817,13 +4936,17 @@ export class SessionsService {
     if (session.isolationStatus !== 'worktree' || !session.branch) {
       throw new BadRequestException('session has no worktree to commit');
     }
-    if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+    const ended = !SessionsService.LIVE.includes(session.status);
+    if (ended && session.worktreeDirty !== true) {
       throw new ConflictException('the session has ended — its work is already committed');
     }
-    if (session.status !== RunStatus.AWAITING_INPUT) {
+    if (!ended && session.cancelRequestedAt) {
+      throw new ConflictException('the session has ended — its work is already committed');
+    }
+    if (!ended && session.status !== RunStatus.AWAITING_INPUT) {
       throw new ConflictException('wait for the current turn to finish before committing');
     }
-    if (session.runningSubagents.length > 0) {
+    if (!ended && session.runningSubagents.length > 0) {
       throw new ConflictException('wait for the running sub-workspace to finish before committing');
     }
     if (!session.assignedRunnerId) {
@@ -4837,13 +4960,22 @@ export class SessionsService {
     // Close the read→write race with a turn starting (or background work being recorded)
     // after the checks above. A plain update would still queue a commit against the now-active
     // checkout. updateMany turns the same idle predicates into an atomic compare-and-set.
+    //
+    // An ended session's race is the opposite one — it can only be RESUMED, which would put a turn
+    // back in the checkout — so the predicate that has to hold is that it is still ended and still
+    // reports work the branch does not have.
+    const idle = ended
+      ? { status: { notIn: [...SessionsService.LIVE] }, worktreeDirty: true }
+      : {
+          status: RunStatus.AWAITING_INPUT,
+          cancelRequestedAt: null,
+          runningSubagents: { isEmpty: true },
+        };
     const queued = await this.prisma.session.updateMany({
       where: {
         id,
         ownerId,
-        status: RunStatus.AWAITING_INPUT,
-        cancelRequestedAt: null,
-        runningSubagents: { isEmpty: true },
+        ...idle,
         commitStatus: session.commitStatus,
         mergeStatus: session.mergeStatus,
       },
@@ -4860,12 +4992,14 @@ export class SessionsService {
       // A concurrent identical request may have won the compare-and-set. Keep the endpoint
       // idempotent in that case; every other transition means the checkout is no longer safe.
       const current = await this.prisma.session.findFirst({ where: { id, ownerId } });
-      if (
-        current?.commitStatus === 'pending' &&
-        current.status === RunStatus.AWAITING_INPUT &&
-        !current.cancelRequestedAt &&
-        current.runningSubagents.length === 0
-      ) {
+      const stillCommittable =
+        current != null &&
+        (SessionsService.LIVE.includes(current.status)
+          ? current.status === RunStatus.AWAITING_INPUT &&
+            !current.cancelRequestedAt &&
+            current.runningSubagents.length === 0
+          : current.worktreeDirty === true);
+      if (current?.commitStatus === 'pending' && stillCommittable) {
         return { ok: true };
       }
       if (current?.mergeStatus === 'pending') {
@@ -6017,7 +6151,9 @@ export class SessionsService {
    * already rides the reload (see `acceptsLiveConfig`), so it lands on the next turn all the same.
    * Model, permission mode and effort are not spawn-only: a resident engine can be told about all
    * three, so they travel as `setconfig`, which the inbox hands over mid-turn. A PATCH that moves
-   * both halves queues both, setconfig first.
+   * both halves queues both, setconfig first — unless the provider switch re-resolves the model,
+   * which is the one value a process still on the old endpoint cannot be told (see
+   * `modelCrossesProvider` below).
    *
    * Telling one requires a runtime with a control protocol to hear it, which is claude alone;
    * for the ACP and one-shot runtimes the whole config rides the reload, exactly as it always
@@ -6152,11 +6288,27 @@ export class SessionsService {
       // — so it joins the provider on the spawn-only side even on the runtime that HAS a control
       // channel. (On Codex `acceptsLiveConfig` is false, so this term changes nothing there.)
       const respawns = !acceptsLiveConfig || next.changed || fastModeMoved;
+      // A switch that re-resolves the MODEL must not be said to the running engine, whatever else
+      // moved beside it. Every value on this PATCH was resolved against the provider the session
+      // is moving TO, while the process a control frame reaches is still talking to the one it is
+      // moving FROM — and the CLI answers for the endpoint it is configured against, not for a
+      // model some other provider serves. Measured 2026-09-16 on a live claude session
+      // (anthropic-2 / claude-opus-5) moved to deepseek: the model frame was refused (`Model
+      // 'deepseek-flash' not found`), the runner took the re-spawn its refusal path promises —
+      // applying the committed config to job.Agent, but taking its environment from the reload
+      // turn, which the inbox had not delivered yet — and the engine came up as deepseek-flash
+      // against the ANTHROPIC endpoint. The resumed turn died on that endpoint's 404 ("There's an
+      // issue with the selected model (deepseek-flash)"), the session's run failed, and the switch
+      // the person asked for was left not in effect. `next.changed` queues the reload regardless,
+      // and the reload carries model, permission mode and effort, so nothing is lost by leaving
+      // all three to it.
+      const modelCrossesProvider = next.changed && exec.model !== session.model;
       // …and the control frame goes whenever the live half moved. A PATCH that moved nothing at
       // all still sends one rather than falling silent: re-stating the committed pair is what
       // this kind costs, and it is cheaper than the reload that used to be sent here.
       const setsLiveConfig =
         acceptsLiveConfig &&
+        !modelCrossesProvider &&
         (!respawns ||
           exec.model !== session.model ||
           normalizedPermissionMode !== session.permissionMode ||

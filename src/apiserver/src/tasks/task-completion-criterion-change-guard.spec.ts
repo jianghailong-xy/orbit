@@ -187,7 +187,14 @@ test('declaring any criterion at creation is untouched by the change door', asyn
       ...(criterion === 'EXECUTABLE'
         ? { acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 }
         : {}),
-      ...(criterion === 'VERIFICATION' ? { completionPolicy: 'VERIFICATION_PASSED' } : {}),
+      ...(criterion === 'VERIFICATION'
+        ? {
+            completionPolicy: 'VERIFICATION_PASSED',
+            // A subject and the check that settles it are ONE write (§ the pairing rule): the
+            // declaration under test is unchanged, and the check is the other half of writing it.
+            verification: { title: `[VERIFY] declare ${criterion}` },
+          }
+        : {}),
     } as never);
 
     assert.equal(created.completionCriterion, criterion, `${criterion} was declared as asked`);
@@ -195,7 +202,10 @@ test('declaring any criterion at creation is untouched by the change door', asyn
     // later reads this task as having been moved off a criterion it never had.
     assert.equal(created.completionCriterionOverrideReason ?? null, null, criterion);
     assert.equal(readTaskCriterionChange(created.completionCriterionOverrideReason), null);
-    assert.equal(rows.length, 1, `${criterion} was written exactly once`);
+    // One row per declaration, plus the verifier VERIFICATION arrives paired with. Neither is a
+    // second write of the declaration itself, which is what "declared as asked" above means.
+    assert.equal(rows.length, criterion === 'VERIFICATION' ? 2 : 1,
+      `${criterion} was written once, and never twice`);
   }
 });
 

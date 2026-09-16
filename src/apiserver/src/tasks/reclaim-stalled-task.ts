@@ -4,6 +4,9 @@ import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 export const EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE =
   'EXECUTABLE_ACCEPTANCE_UNAVAILABLE';
 
+/** Durable task-timeline signal emitted when a run ended with its work off the branch. */
+export const WORK_NOT_ON_BRANCH_SIGNAL_CODE = 'WORK_NOT_ON_BRANCH';
+
 // Sessions that could still be working a task: live (RUNNING/AWAITING_INPUT/
 // INTERRUPTED) or queued for a runner slot (PENDING). Mirrors the reaper's LIVE
 // set plus PENDING.
@@ -77,6 +80,57 @@ export async function postRunFailureComment(
       body:
         `**执行失败（系统自动记录）**\n\n本任务的一次执行会话因运行错误中止，未完成。\n\n` +
         `失败原因：\n${reason}\n\n可重新运行本任务重试。`,
+    },
+  });
+}
+
+/**
+ * Record, on the task's own timeline, that the run which just ended could not put its work on its
+ * branch — so the work exists only as uncommitted files in a checkout nothing will visit again.
+ *
+ * This is the one signal that makes "status DONE, acceptance command passed, not one commit on the
+ * branch" impossible to hold quietly. Those three are all true together whenever the runner's
+ * finalize commit is refused, because the acceptance command runs against the WORKING TREE, where
+ * the work is, and passes there whether or not anything was ever committed; the commit that would
+ * have captured it comes afterwards, and a stale `index.lock` in the checkout's git dir is enough
+ * to refuse it. Until this comment existed the refusal was a line in one runner process's log, the
+ * task said DONE, and the absence was found days later by whoever tried to merge the branch.
+ *
+ * Deliberately a comment and not a status change: the task's declared criterion was satisfied by
+ * the run, and re-deciding that here would be this code inventing a criterion of its own. What is
+ * missing is the landing, which is the reader's to act on — the ended session's Commit action puts
+ * the checkout's work on the branch without a new run.
+ *
+ * Call from the transaction that finalizes a task-bound session, gated on the finalization actually
+ * happening, so one stranded run produces one comment.
+ */
+export async function postWorkNotOnBranchComment(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+  branch: string | null,
+  reason: string,
+): Promise<void> {
+  const task = await tx.task.findUnique({
+    where: { id: taskId },
+    select: { assigneeId: true, creatorType: true, creatorId: true },
+  });
+  if (!task) return;
+  await tx.taskComment.create({
+    data: {
+      taskId,
+      authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
+      authorId: task.assigneeId ?? task.creatorId,
+      body:
+        `<!-- orbit:${WORK_NOT_ON_BRANCH_SIGNAL_CODE} -->\n` +
+        `**成果没有落到分支上（系统自动记录）**\n\n` +
+        `本任务的执行会话已结束，但 runner 的收尾提交失败了：改动仍以未提交文件的形式留在该会话的 worktree 里，` +
+        `分支${branch ? ` \`${branch}\`` : ''}上没有它们。\n\n` +
+        `注意判据不受影响：EXECUTABLE 验收命令跑的是工作树，成果就在那里，所以它照样能通过——` +
+        `「判据通过」和「成果已提交」从来不是同一件事。\n\n` +
+        `失败原因：\n${reason}\n\n` +
+        `回收办法：在 Orbit 里打开这条任务的会话，用状态栏的 Commit 把 worktree 里的改动提交到它自己的分支，` +
+        `然后照常合并。不需要重新运行本任务。\n\n` +
+        `信号来源：${WORK_NOT_ON_BRANCH_SIGNAL_CODE}`,
     },
   });
 }

@@ -478,6 +478,68 @@ export interface RepoCleanupCommand {
   requestedAt?: string;
 }
 
+/** Control plane → runner: what local Claude Code history sits under one working directory.
+ *
+ *  Answered only by the runner, because only the runner can see `~/.claude/projects` — the control
+ *  plane never does. Unlike `agentDirs`, this names a bare path rather than a workspace: it is
+ *  asked while someone is typing a directory into the new-workspace form, when there is no
+ *  workspace row to key an answer to yet. One slot per runner, like the sign-in/install/repair
+ *  relays, since it answers whatever path was typed last. */
+export interface ClaudeHistoryCommand {
+  /** The directory as typed. The runner derives Claude's project-directory slug from it itself,
+   *  by the same escaping `--resume` reads (every non-alphanumeric character becomes '-'). */
+  workDir: string;
+  /** When the user asked, echoed back for log correlation. */
+  requestedAt?: string;
+}
+
+/** One local Claude Code transcript found under a working directory. Carries what the import
+ *  offer has to say out loud — which conversation, how recently it was touched, how big it is —
+ *  and the id that `POST /sessions/import-batch` then imports it by. */
+export interface ClaudeHistoryTranscript {
+  /** The Claude Code session id: the transcript's filename, and what an import is keyed on. */
+  claudeSessionId: string;
+  /** The transcript's own title (its last `ai-title` record), absent when it never got one. */
+  title?: string;
+  /** File mtime — when this conversation was last added to. */
+  lastActiveAt: string;
+  /** User + assistant records in the file: what "N messages" counts. */
+  messages: number;
+}
+
+/** Runner → control plane: what `~/.claude/projects/<slug>/` holds for one working directory.
+ *
+ *  Scoped to ONE directory on purpose. A census of every slug on the machine was measured at
+ *  1,993 directories / 1.84 GB on a working runner — unreadable per heartbeat, and it would
+ *  report the paths of projects the user never asked about. */
+export interface RunnerClaudeHistoryResult {
+  /** The directory this answers for, echoed so a late answer about a since-retyped path is
+   *  recognisable as stale rather than being read as the answer for the current one. */
+  workDir: string;
+  /** How far back the scan looked. Reported rather than assumed, because Claude Code rolls
+   *  transcripts away on its own `cleanupPeriodDays` schedule: the UI says "last N days" with
+   *  the number the runner actually used, instead of promising history nobody kept. */
+  windowDays: number;
+  /** Transcripts inside the window, newest first — the count the offer states. */
+  conversations: number;
+  /** Their total size on disk, for the one-line "X MB" the offer shows. */
+  bytes: number;
+  /** User + assistant records across all of them: the "~M events" an "import everything" would
+   *  replay into Orbit. */
+  events: number;
+  /** The transcripts themselves, NEWEST FIRST (the first entry is the conversation the user is
+   *  in the middle of), capped at CLAUDE_HISTORY_MAX_TRANSCRIPTS. */
+  transcripts: ClaudeHistoryTranscript[];
+  /** Why there is nothing to report, when the scan itself failed. Absent on success — including
+   *  the ordinary success of finding no history at all, which is `conversations: 0`. */
+  error?: string;
+}
+
+/** The most transcripts one answer carries. A directory with more than this reports the newest
+ *  ones; `conversations` still counts them all, so the two numbers disagreeing is visible rather
+ *  than an "All N" that quietly imports fewer than it says. */
+export const CLAUDE_HISTORY_MAX_TRANSCRIPTS = 200;
+
 /** Runner → control plane: how the repair went, and where the checkout's old content lives now. */
 export interface RunnerRepoCleanupResult {
   root: string;
@@ -581,6 +643,10 @@ export interface RunnerHeartbeatResponse {
    *  `codex-rate-limit-reset-v1`, heartbeats with a leaseOwner and is not draining; redelivered
    *  every heartbeat until a result moves the operation on. Absent on older control planes. */
   codexRateLimitResetRequest?: CodexRateLimitResetCommand;
+  /** A working directory to report local Claude Code history for, answered via
+   *  POST /runner/claude-history-result. Absent on older control planes, and whenever nobody is
+   *  waiting on an answer — the new-workspace form is the only thing that asks. */
+  claudeHistoryRequest?: ClaudeHistoryCommand;
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
@@ -1178,7 +1244,10 @@ export interface ApprovalDecisionResponse {
 // It is deliverable mid-turn for the same reason interrupt is — nothing about it needs the
 // engine to be idle — and like reload it occupies no in-flight slot. When one PATCH moves
 // both halves the server queues both, setconfig first, so the re-spawn that follows carries
-// every new flag rather than re-doing what the control frame just did. Filed for the claude
+// every new flag rather than re-doing what the control frame just did — unless the switch
+// re-resolved the MODEL, which the engine being replaced cannot be told: it is still on the
+// endpoint it is leaving, and that endpoint answers for its own models and refuses the rest.
+// That PATCH queues the reload alone (SessionsService.updateConfig). Filed for the claude
 // runtime alone: the other runtimes' session loops have no arm for the kind (codex and
 // kimi are driven over ACP/JSON-RPC, opencode runs one process per turn), so one sent
 // there would be acked on delivery and applied by nobody. They keep the reload, effort
@@ -1558,6 +1627,19 @@ export interface RunFinalizeRequest {
   /** The worktree's actual HEAD branch at completion (see SessionLiveState.worktreeBranch); lets
    *  the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch. */
   worktreeBranch?: string;
+  /** Why the session's work did NOT reach its branch — the runner could not stage or could not
+   *  commit it. Absent on every finalize that captured the work, and from runners too old to say.
+   *
+   *  It exists because the two outcomes are otherwise the same bytes: a run that changed nothing
+   *  and a run whose entire output is still uncommitted in its checkout both arrive with no
+   *  `changedFiles`. Without this the difference lived only in the runner's own log, which is how a
+   *  task reaches DONE on a passing acceptance command with not one commit on its branch. */
+  captureError?: string;
+  /** The checkout's measured `git status` once finalization is done with it, rather than the
+   *  assumption that finalizing made it clean. True means the checkout still holds the only copy of
+   *  something and the ended session's Commit action is the way to get it onto the branch. Absent
+   *  from older runners, which the server reads as the historical "finalize left it clean". */
+  worktreeDirty?: boolean;
 }
 
 /**

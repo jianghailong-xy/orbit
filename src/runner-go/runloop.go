@@ -447,8 +447,15 @@ func heartbeatMerge(
 	return res
 }
 
-// heartbeatCommit is heartbeatMerge for a commit, which also needs a live supervisor.
-// commit is commitWorktree.
+// heartbeatCommit is heartbeatMerge for a commit. commit is commitWorktree.
+//
+// Admitted on the same terms as a merge, ended sessions included. A commit used to insist on a
+// live supervisor, on the reasoning that a finished session had already committed its work at
+// finalization — which is true right up until finalization is the thing that failed, and then the
+// checkout holds the only copy of the session's output and this is the one operation that can put
+// it on the branch. `expected` still pins the exact supervisor the heartbeat advertised, so a
+// session that has since been resumed is refused here as it always was; commitWorktree itself
+// refuses a checkout that is no longer on disk.
 func heartbeatCommit(
 	pool *sessionPool,
 	req CommitCommand,
@@ -459,7 +466,7 @@ func heartbeatCommit(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
-		true,
+		false,
 		"commit",
 	)
 	if !admitted {
@@ -1203,6 +1210,21 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("repo-cleanup-result POST failed:", err)
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
+			}
+			// Report what Claude Code history sits under a directory someone is typing into the
+			// new-workspace form. On its own goroutine: reading a directory's transcripts takes a
+			// second or two and the heartbeat it arrived on must not wait for it — the answer
+			// travels by its own POST rather than on the next beat. Delivered exactly once (the
+			// control plane hands it over instead of redelivering), so there is no in-flight guard
+			// to keep: someone who retypes the path asks again.
+			if ch := resp.ClaudeHistoryRequest; ch != nil && ch.WorkDir != "" {
+				heartbeatOps.Add(1)
+				go func(workDir string) {
+					defer heartbeatOps.Done()
+					if err := t.claudeHistoryResult(scanClaudeHistory(workDir)); err != nil {
+						logln("claude-history-result POST failed:", err)
+					}
+				}(ch.WorkDir)
 			}
 		})
 	}()

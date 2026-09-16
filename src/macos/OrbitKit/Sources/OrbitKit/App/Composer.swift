@@ -220,27 +220,10 @@ public enum ComposerLogic {
     }
 
     /// User-facing text for a send that failed for good — shown in the line above the composer,
-    /// which is also where the message itself has just been put back. Interpolating the raw error
-    /// there printed `http(status: 503, body: Optional(""))`: it reads as a crash log and says
-    /// nothing about what happened or what to do next.
+    /// which is also where the message itself has just been put back. The reason comes from
+    /// `APIClient.failureReason` rather than the raw error, which reads as a crash log.
     public static func sendFailureMessage(_ error: Error) -> String {
-        let reason: String
-        if let apiError = error as? APIError {
-            switch apiError {
-            case .http(let status, let body):
-                reason = serverMessage(body) ?? "the server returned \(status)"
-            case .unauthorized:  reason = "you're signed out"
-            case .invalidResponse: reason = "the server's reply couldn't be read"
-            case .notConfigured: reason = "no server is configured"
-            }
-        } else if error is URLError {
-            // Not `localizedDescription` — it follows the device language, and this line is one of
-            // the app's English strings.
-            reason = "the connection dropped"
-        } else {
-            reason = error.localizedDescription
-        }
-        return "Couldn't send — \(reason). Your message is back in the composer."
+        "Couldn't send — \(APIClient.failureReason(error)). Your message is back in the composer."
     }
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a

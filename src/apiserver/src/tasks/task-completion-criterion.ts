@@ -212,18 +212,19 @@ export const VERIFICATION_SUBJECT_REQUIRES_PROJECT_ACTION =
  * separate task pointing at it records, and its own run — if its policy gives it one at all — can
  * never produce that. (A `VERIFICATION_PASSED` subject has no run: a manual start is refused and
  * auto-dispatch passes it by. A `MANUAL` one does its own work and still waits for the same PASS,
- * which is why both are refused here.) Nothing on the server files that task for it:
- * `fileVerification` checks work that is already DONE, which a subject never becomes on its own.
- * Inside a project the coordinator files and starts the verification; outside one there is no
- * coordinator and no screen that writes `verifiesTaskId`, so the subject would wait for a check
- * nobody is going to file.
+ * which is why both are refused here.) Nothing on the server files that task for it: nothing here
+ * creates a verifier on its own — not for a subject, and not for anything else. Inside a project
+ * the coordinator files and starts the verification; outside one there is no coordinator and no
+ * screen that writes `verifiesTaskId`, so the subject would wait for a check nobody is going to
+ * file.
  *
  * A rule about what may be written, like `criterionNeedsProjectRefusal` above, but asked of one
  * more write: a project-less EVIDENCE_JUDGMENT row still settles against its own acceptanceCriteria,
  * while a subject taken out of its project is stranded exactly as one declared outside it.
  *
- * A verifier is never refused here. Its own verdict settles it, and `fileVerification` files its
- * `[VERIFY]` tasks in whatever project their subject is in, including none.
+ * A verifier is never refused here. Its own verdict settles it — nothing has to be filed for a
+ * verifier, so a project is not what would rescue it, and one outside every project is no more
+ * stranded than one inside.
  */
 export function verificationSubjectNeedsProjectRefusal(declaration: {
   completionCriterion?: TaskCompletionCriterionValue | null;
@@ -245,6 +246,98 @@ export function verificationSubjectNeedsProjectRefusal(declaration: {
       + 'Give this work a projectId, so its project\'s coordinator can file and start the '
       + 'verification; or declare EXECUTABLE with acceptanceCommand and '
       + 'acceptanceExpectedExitCode, which it can settle on its own.',
+  };
+}
+
+/** The stored code and remedy for a VERIFICATION subject that nothing in the same call verifies. */
+export const VERIFICATION_SUBJECT_NEEDS_VERIFIER_CODE = 'VERIFICATION_SUBJECT_NEEDS_VERIFIER';
+export const VERIFICATION_SUBJECT_NEEDS_VERIFIER_ACTION = 'CREATE_THE_VERIFIER_IN_THE_SAME_CALL';
+
+/**
+ * One item, as the pairing rule reads it — structural, because two very different callers ask it.
+ *
+ * A `CreateTaskBatchItemDto` arrives from a request and a `PlanItemFacts` from the plan preflight,
+ * and the answer has to be the same one at both doors: a preflight that promised a plan the write
+ * then refuses is the failure this pairing exists to end, not a second copy of it. What the two
+ * spell the same way is what is read here.
+ */
+export interface VerificationSubjectCandidate {
+  /** The label a sibling of this same call names this item by, when it has one. */
+  ref?: string | null;
+  /** Undeclared resolves the way the write resolves it — see `resolveTaskCompletionCriterion`. */
+  completionCriterion?: TaskCompletionCriterionValue | null;
+  completionPolicy?: TaskCompletionPolicyValue | null;
+  /** Either spelling of "this item IS a check of that one". Both answer the same here. */
+  verifiesTaskId?: string | null;
+  verifiesRef?: string | null;
+}
+
+/**
+ * True when this item declares the VERIFICATION-subject shape: settled by a verdict, and with no
+ * work of its own to run.
+ *
+ * Both axes are read, and the second is the one that is easy to drop. `completionCriterion` says
+ * WHO decides — an independent check — while `completionPolicy` says whether the row HAS work of its
+ * own. A row that runs (`MANUAL`) can be started, and its project can file the check once it is
+ * done; a row that does not (`VERIFICATION_PASSED`) is dead the moment it exists unless the check
+ * arrives with it. Reading the criterion alone would refuse the work rows this deployment has just
+ * started allowing, and reading neither would refuse nothing.
+ */
+export function verificationSubjectShape(item: VerificationSubjectCandidate): boolean {
+  const verifies = item.verifiesTaskId ?? item.verifiesRef ?? null;
+  // A verifier is the other half of the pair, never a subject: it points at the row it checks.
+  if (verifies != null) return false;
+  if ((item.completionPolicy ?? 'MANUAL') !== 'VERIFICATION_PASSED') return false;
+  return resolveTaskCompletionCriterion(item) === 'VERIFICATION';
+}
+
+/**
+ * The rule, as one predicate: a subject declared here that nothing declared here verifies.
+ *
+ * `siblings` is every item of the same call — the other items of a batch, or the verifier a single
+ * create is about to write beside its subject. A subject is paired when one of them names it, and
+ * inside one call the only way to name a row that does not exist yet is its `ref`.
+ */
+export function verificationSubjectUnpaired(
+  item: VerificationSubjectCandidate,
+  siblings: readonly VerificationSubjectCandidate[] = [],
+): boolean {
+  if (!verificationSubjectShape(item)) return false;
+  // Nothing in this call could have named it: a row without a ref is unnameable by construction.
+  if (item.ref == null) return true;
+  return !siblings.some((sibling) => (sibling.verifiesRef ?? null) === item.ref);
+}
+
+/**
+ * Why a subject with no verifier in the same call cannot be written, or null.
+ *
+ * The other direction of the rule `verificationSubjectNeedsProjectRefusal` states above, and the
+ * one that actually strands rows. That rule refuses a subject in no project; a subject INSIDE a
+ * project was refused nowhere, which is how eleven of them came to be live on 2026-09-16 — every
+ * one with zero sessions of its own, several OPEN for weeks, waiting for a check that no code path
+ * on this server was going to file.
+ *
+ * The words carry both ways out. A refusal a caller cannot act on is a wall, and both of these are
+ * things the caller can do in this same call: bring the verifier, or declare the row as one that
+ * has work of its own.
+ */
+export function verificationSubjectNeedsVerifierRefusal(
+  item: VerificationSubjectCandidate,
+  siblings: readonly VerificationSubjectCandidate[] = [],
+): { code: string; kind: 'REFUSAL'; requiredAction: string; message: string } | null {
+  if (!verificationSubjectUnpaired(item, siblings)) return null;
+  return {
+    code: VERIFICATION_SUBJECT_NEEDS_VERIFIER_CODE,
+    kind: 'REFUSAL',
+    requiredAction: VERIFICATION_SUBJECT_NEEDS_VERIFIER_ACTION,
+    message:
+      'VERIFICATION with completionPolicy VERIFICATION_PASSED and no verifiesTaskId makes this task '
+      + 'a subject: it has no work of its own to run, and only a PASS recorded by a separate '
+      + 'verification task pointing at it can settle it. Nothing files that verification task '
+      + 'automatically, so written on its own it waits for a check nobody is going to file. Create '
+      + 'the verifier in this same call — pass verification: { title, assigneeId } — so both rows are '
+      + 'written together; or, if this row does have work of its own to run, declare completionPolicy '
+      + 'MANUAL, which makes it a work row rather than a gate.',
   };
 }
 

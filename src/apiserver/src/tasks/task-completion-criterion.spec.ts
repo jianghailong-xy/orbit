@@ -440,7 +440,7 @@ test('a subject in a project, a verifier in none and the other criteria are not 
   assert.equal(verificationSubjectNeedsProjectRefusal({
     completionCriterion: 'VERIFICATION', projectId: 'project',
   }), null);
-  // A verifier settles on its own verdict, and `fileVerification` files those in no project too.
+  // A verifier settles on its own verdict, and nothing on the server has to file anything for it.
   assert.equal(verificationSubjectNeedsProjectRefusal({
     completionCriterion: 'VERIFICATION', verifiesTaskId: 'subject', projectId: null,
   }), null);

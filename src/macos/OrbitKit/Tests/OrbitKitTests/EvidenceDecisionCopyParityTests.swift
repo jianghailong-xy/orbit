@@ -215,4 +215,34 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
                        "result.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION",
                        "which action word the recorded line quotes")
     }
+
+    /// The record that outlives the console: what it is called (by whom it was answered), the line
+    /// that says which answer to which revision, and the label over a send-back's reason.
+    ///
+    /// Both ends draw this — the browser in the conversation, the phone in the console — and the
+    /// clock is each end's own locale, so it goes back as the web's own interpolation rather than
+    /// being compared as text.
+    func testTheReceiptMatchesTheWebCardsWords() throws {
+        let web = try flatWebCard()
+        assertDeclares(web, "EVIDENCE_DECISION_RECORDED_HEADING", EvidenceDecisions.recordedHeading,
+                       "the heading of a receipt the owner pressed")
+        assertDeclares(web, "EVIDENCE_DECISION_AGENT_RECORDED_HEADING",
+                       EvidenceDecisions.agentRecordedHeading,
+                       "the heading of one a run of the session recorded")
+        assertDeclares(web, "DECISION_RECEIPT_REASON", EvidenceDecisions.receiptReasonLabel,
+                       "the label over a send-back's reason")
+
+        let decided = RecordedEvidenceDecision(
+            taskId: "t", title: "T", projectId: nil, evidenceRevision: "8", decision: .confirm,
+            note: nil, decidedAt: "2026-09-16T09:45:00.000Z", decidedByType: "USER")
+        let line = template(EvidenceDecisions.receiptLine(decided), [
+            (EvidenceDecisions.confirmAction, "${action}"),
+            ("8", "${decided.evidenceRevision}"),
+            (EvidenceDecisions.receiptTime(decided.decidedAt), "${decisionReceiptTime(decided.decidedAt, now)}"),
+        ])
+        assertContains(web, "`\(line)`", "what a receipt says")
+        assertContains(web,
+                       "decided.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION",
+                       "which action word the receipt's line quotes")
+    }
 }

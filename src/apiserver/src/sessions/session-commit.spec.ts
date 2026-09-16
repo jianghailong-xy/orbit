@@ -140,3 +140,74 @@ test('a pending commit does not hide a turn that started after the compare-and-s
       error.message === 'the session is no longer idle — wait for its current work to finish',
   );
 });
+
+/**
+ * The recovery path for work a finished session left behind. This endpoint used to refuse every
+ * ended session with "its work is already committed" — the runner's intention stated as a fact —
+ * so the sessions that needed it most, the ones whose finalize commit was refused and whose branch
+ * therefore has nothing on it, were the ones it turned away. `worktreeDirty` is the observation
+ * that separates the two, and it is the whole precondition: nothing runs in an ended session's
+ * checkout, so there is no turn or sub-workspace left for the idle gate to protect.
+ */
+test('an ended session whose checkout still holds work may commit it', async () => {
+  const { service, updates } = makeService({
+    status: RunStatus.SUCCEEDED,
+    cancelRequestedAt: new Date(),
+    worktreeDirty: true,
+  });
+
+  await assert.doesNotReject(() => service.commitWorktree('owner-1', 'session-1'));
+
+  assert.equal(updates.length, 1);
+  const update = updates[0] as {
+    where: { status: { notIn: RunStatus[] }; worktreeDirty: boolean };
+    data: { commitStatus: string };
+  };
+  // Still ended and still holding work is the compare-and-set: the race an ended session has is
+  // being RESUMED, which would put a turn back in the checkout.
+  assert.ok(update.where.status.notIn.includes(RunStatus.AWAITING_INPUT));
+  assert.equal(update.where.worktreeDirty, true);
+  assert.equal(update.data.commitStatus, 'pending');
+});
+
+test('an ended session that really did commit its work is refused as before', async () => {
+  const { service, updates } = makeService({
+    status: RunStatus.SUCCEEDED,
+    worktreeDirty: false,
+  });
+
+  await assert.rejects(
+    () => service.commitWorktree('owner-1', 'session-1'),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message === 'the session has ended — its work is already committed',
+  );
+  assert.deepEqual(updates, []);
+});
+
+test('an ended session on a runner too old to report dirtiness is refused', async () => {
+  // Absent is not "clean", but it is not evidence of stranded work either, and queueing a commit
+  // against a checkout that may already be gone is the thing the old guard was right about.
+  const { service, updates } = makeService({ status: RunStatus.FAILED, worktreeDirty: null });
+
+  await assert.rejects(
+    () => service.commitWorktree('owner-1', 'session-1'),
+    (error: unknown) => error instanceof ConflictException,
+  );
+  assert.deepEqual(updates, []);
+});
+
+test('an ended session resumed under a lost compare-and-set is rejected', async () => {
+  const { service } = makeService(
+    { status: RunStatus.SUCCEEDED, worktreeDirty: true },
+    0,
+    { status: RunStatus.RUNNING, commitStatus: 'pending' },
+  );
+
+  await assert.rejects(
+    () => service.commitWorktree('owner-1', 'session-1'),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message === 'the session is no longer idle — wait for its current work to finish',
+  );
+});

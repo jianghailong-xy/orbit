@@ -334,6 +334,73 @@ export const importClaudeSession = (body: { claudeSessionId: string; workspaceId
     body,
   });
 
+/** One local Claude Code transcript a runner reported for a directory. */
+export interface ClaudeHistoryTranscriptInfo {
+  claudeSessionId: string;
+  title?: string;
+  lastActiveAt: string;
+  messages: number;
+}
+
+/** What one runner holds under one directory: the counts the offer states, and the transcripts
+ *  themselves newest first — so the first is the conversation the user is in the middle of. */
+export interface ClaudeHistoryResult {
+  workDir: string;
+  windowDays: number;
+  conversations: number;
+  bytes: number;
+  events: number;
+  transcripts: ClaudeHistoryTranscriptInfo[];
+  error?: string;
+}
+
+/** The relay's state for the path that was asked about. `result` is null until the runner answers
+ *  — and stays null for a path other than the one asked about, so an answer about a directory the
+ *  user has since retyped can never be read as the verdict on the one in the field now. */
+export interface ClaudeHistoryState {
+  workDir: string;
+  status: string;
+  requestedAt: string | null;
+  result: ClaudeHistoryResult | null;
+}
+
+/** Ask a runner what local Claude Code conversations already sit under a directory. Only the
+ *  runner can see `~/.claude/projects`, so this is a question put on its next heartbeat rather
+ *  than a lookup: `getClaudeHistory` is where the answer arrives. */
+export const askClaudeHistory = (runnerId: string, workDir: string) =>
+  api<{ workDir: string; status: string }>(`/runners/${runnerId}/claude-history`, {
+    method: 'POST',
+    body: { workDir },
+  });
+
+export const getClaudeHistory = (runnerId: string, workDir: string) =>
+  api<ClaudeHistoryState>(
+    `/runners/${runnerId}/claude-history?workDir=${encodeURIComponent(workDir)}`,
+  );
+
+/** Import a directory's conversations into a workspace that now exists. Answers once the rows are
+ *  created; the runner replays each transcript on its own, so the workspace is usable at once. */
+export const importClaudeHistory = (body: {
+  workspaceId: string;
+  transcripts: { claudeSessionId: string; title?: string }[];
+}) =>
+  api<{
+    imported: number;
+    sessionIds: string[];
+    skipped: { claudeSessionId: string; reason: string }[];
+  }>('/sessions/import-batch', { method: 'POST', body });
+
+/** How many of a workspace's sessions came in as imported transcripts, and the way to take them
+ *  all back out again — the promise the import warning makes. */
+export const countImportedSessions = (workspaceId: string) =>
+  api<{ count: number }>(`/sessions/imported?workspaceId=${encodeURIComponent(workspaceId)}`);
+
+export const removeImportedSessions = (workspaceId: string) =>
+  api<{ removed: number; requested: number }>('/sessions/remove-imported', {
+    method: 'POST',
+    body: { workspaceId },
+  });
+
 /** Send the next user message to a live interactive session. The returned turnId identifies
  *  it, e.g. to withdraw it with cancelQueuedTurn. `attachmentIds` are ids of images already
  *  uploaded via uploadAttachment, sent alongside the text.

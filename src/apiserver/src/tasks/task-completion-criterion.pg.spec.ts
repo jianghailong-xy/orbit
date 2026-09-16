@@ -105,9 +105,11 @@ suite('stored tasks expose one of the three criteria, and the database supplies 
     title: 'executable', completionCriterion: 'EXECUTABLE',
     acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
   });
+  // A work row, not a gate: this case is about which criterion a row can CARRY, and nothing here
+  // checks it. A gate would have to be filed with its carrier in the same call, which would add a
+  // fifth row to a list whose whole assertion is the three criteria in order.
   const verification = await service.create(ownerId, {
     title: 'verification', projectId, completionCriterion: 'VERIFICATION',
-    completionPolicy: 'VERIFICATION_PASSED',
   });
   const human = await service.create(ownerId, {
     title: 'human', projectId, completionCriterion: 'EVIDENCE_JUDGMENT',

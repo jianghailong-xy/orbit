@@ -71,6 +71,9 @@ import {
   LoginResult,
   OrchestrationCredentialResponse,
   RepoCleanupCommand,
+  CLAUDE_HISTORY_MAX_TRANSCRIPTS,
+  ClaudeHistoryTranscript,
+  RunnerClaudeHistoryResult,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   RunnerRepoCleanupResult,
@@ -145,6 +148,7 @@ import {
 import {
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
+  postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
@@ -978,6 +982,7 @@ export class RunnerApiController {
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
+    let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
@@ -1001,6 +1006,7 @@ export class RunnerApiController {
       loginRequest = await this.drainLoginRequest(runner.id);
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
+      claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
       // runner never has to hold a workspace list of its own. After the relays on purpose: it is
@@ -1041,6 +1047,9 @@ export class RunnerApiController {
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
+      // Same reasoning as the reset command above: present only while somebody is actually waiting
+      // on an answer, so a runner that never asked sees the response shape it always had.
+      ...(claudeHistoryRequest ? { claudeHistoryRequest } : {}),
     };
   }
 
@@ -1113,6 +1122,33 @@ export class RunnerApiController {
   }
 
   /**
+   * The directory this runner should report local Claude Code history for, if anyone is asking.
+   *
+   * Handed over ONCE rather than redelivered until answered, unlike the relays above. What waits
+   * on this is a person with a form open: an unanswered request should expire quietly — retyping
+   * the path asks again — instead of being retried forever at a runner too old to know the field,
+   * or scanned twice because the answer's own POST crossed the next heartbeat.
+   *
+   * The hand-over is a compare-and-set on the state it was read in, so two API replicas draining
+   * the same moment give the scan to one runner process rather than both.
+   */
+  private async drainClaudeHistoryRequest(
+    runnerId: string,
+  ): Promise<RunnerHeartbeatResponse['claudeHistoryRequest']> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { claudeHistoryStatus: true, claudeHistoryPath: true, claudeHistoryAt: true },
+    });
+    if (r?.claudeHistoryStatus !== 'pending' || !r.claudeHistoryPath) return undefined;
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, claudeHistoryStatus: 'pending', claudeHistoryPath: r.claudeHistoryPath },
+      data: { claudeHistoryStatus: 'scanning' },
+    });
+    if (claimed.count === 0) return undefined;
+    return { workDir: r.claudeHistoryPath, requestedAt: r.claudeHistoryAt?.toISOString() ?? '' };
+  }
+
+  /**
    * Runner → control plane: how the checkout repair went.
    *
    * The reported state also corrects the stored health snapshot for that root, so the warning
@@ -1149,6 +1185,67 @@ export class RunnerApiController {
       },
     });
     return { ok: true };
+  }
+
+  /**
+   * Runner → control plane: what Claude Code history that machine holds under the directory it was
+   * asked about.
+   *
+   * Stored only while the relay still names that same path. Someone typing a directory asks about
+   * several in a row, and an answer that arrives after the field moved on must be dropped rather
+   * than become the verdict on what is there now — offering to import a different project's
+   * conversations is the one mistake this feature cannot make.
+   *
+   * The body is re-read rather than trusted: it crosses the runner boundary, which nothing
+   * validates on the way in, and it is rendered as a number of conversations and a list of titles.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('claude-history-result')
+  @HttpCode(200)
+  async claudeHistoryResult(
+    @CurrentRunner() runner: { id: string },
+    @Body() body: RunnerClaudeHistoryResult,
+  ) {
+    const workDir = typeof body?.workDir === 'string' ? body.workDir.trim() : '';
+    if (!workDir) throw new BadRequestException('workDir is required');
+    const count = (value: unknown): number =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+    const text = (value: unknown, max: number): string | undefined =>
+      typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
+    // Filled to the cap with entries that could actually be imported, rather than capped first and
+    // then filtered: an entry with no session id is one no import could ever be keyed on, and a
+    // body padded with them must not shrink the answer below what one scan is allowed to carry.
+    // Bounded either way — it stops at the cap however long the list is.
+    const transcripts: ClaudeHistoryTranscript[] = [];
+    for (const t of Array.isArray(body?.transcripts) ? body.transcripts : []) {
+      if (transcripts.length >= CLAUDE_HISTORY_MAX_TRANSCRIPTS) break;
+      const claudeSessionId = text(t?.claudeSessionId, 64);
+      if (!claudeSessionId) continue;
+      const title = text(t?.title, 200);
+      transcripts.push({
+        claudeSessionId,
+        ...(title ? { title } : {}),
+        lastActiveAt: text(t?.lastActiveAt, 40) ?? '',
+        messages: count(t?.messages),
+      });
+    }
+    const result: RunnerClaudeHistoryResult = {
+      workDir,
+      windowDays: count(body?.windowDays),
+      conversations: Math.max(count(body?.conversations), transcripts.length),
+      bytes: count(body?.bytes),
+      events: count(body?.events),
+      transcripts,
+      ...(text(body?.error, 500) ? { error: text(body?.error, 500) } : {}),
+    };
+    const stored = await this.prisma.runner.updateMany({
+      where: { id: runner.id, claudeHistoryPath: workDir },
+      data: {
+        claudeHistoryStatus: result.error ? 'failed' : 'done',
+        claudeHistoryResult: result as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return { ok: true, applied: stored.count > 0 };
   }
 
   /**
@@ -4268,9 +4365,22 @@ export class RunnerApiController {
             : {}),
           // Candidate branches for the ended session's "Merge to…" dropdown (older runners omit it).
           ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
-          // finalizeWorktree committed everything onto the branch before /finalize, so the
-          // checkout is clean — the bar shows Merge (not Commit) for the ended session.
-          worktreeDirty: false,
+          // What the runner MEASURED the checkout to be once finalization was done with it. This
+          // used to be an unconditional `false`, on the reasoning that finalizeWorktree had just
+          // committed everything — and so, on the runs where staging or committing failed, the
+          // control plane overwrote the last true thing anyone knew about that checkout with the
+          // assumption. The session then read as clean and merge-ready while its whole output sat
+          // uncommitted, and the Commit action that could have rescued it was hidden by the same
+          // false flag. A runner too old to report keeps the historical answer.
+          ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : { worktreeDirty: false }),
+          // A finalize that could not put the work on the branch is a failed commit, and it is
+          // shown as one: same field, same place in the status bar, git's own words. Only ever
+          // written on failure — a successful finalize leaves whatever the session's own Commit
+          // actions last recorded alone — and never over a commit still in flight, whose own
+          // outcome is the more specific answer to the same question and is still owed to the row.
+          ...(dto.captureError && current.commitStatus !== 'pending'
+            ? { commitStatus: 'error', commitError: dto.captureError.slice(0, 1000) }
+            : {}),
           // The session is ending — Claude (and its background children) are gone, so neither
           // the background-shell set nor any in-flight sub-workspace (Task/Workspace) can still be live.
           // Clearing runningSubagents here is the teardown backstop for a sub-workspace that never got
@@ -4337,6 +4447,18 @@ export class RunnerApiController {
         if (effectiveStatus === RunStatus.FAILED) {
           await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
         }
+      }
+      // The run ended without getting its work onto its branch. Say so on the task, whatever the
+      // run's own status was — a SUCCEEDED run whose acceptance command passed is exactly the case
+      // that needs it, because nothing else about that task will ever mention the absence. The
+      // acceptance ran against the working tree, which is where the work still is.
+      if (current.taskId && dto.captureError) {
+        await postWorkNotOnBranchComment(
+          tx,
+          current.taskId,
+          dto.branch ?? current.branch,
+          dto.captureError.slice(0, 1000),
+        );
       }
       return {
         finalized: true,

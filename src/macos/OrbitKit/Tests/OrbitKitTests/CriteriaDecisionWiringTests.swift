@@ -190,8 +190,25 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                       "the receipts are derived from the read's own answers, placed by the items' clocks")
         XCTAssertTrue(console.contains("kind: .criteriaDecisionReceipt(settled: receipt.settled)"),
                       "and delivered as rows of their own, carrying the answer they record")
-        XCTAssertFalse(console.contains("appendDecisionLine(CriteriaDecisions.decisionLine(result))"),
-                       "the in-memory line is what this replaced: it did not survive the console")
+        // The press itself writes nothing: the re-read draws the record, and a press that also
+        // wrote its own line would put a second, in-memory copy beside it — the one that did not
+        // survive the console. Asserted over the press's OWN body, cut at the next declaration:
+        // the decisions around it still write a line, and one of them (the owner confirmation's)
+        // sits directly below it, so a slice that ran to "the next function I know of" would read
+        // somebody else's call and go red for the wrong reason.
+        XCTAssertTrue(console.contains("func decideCriteria("), "the press moved")
+        let after = console[console.range(of: "func decideCriteria(")!.lowerBound...]
+        let next = ["\n    func ", "\n    private func ", "\n    @MainActor "]
+            .compactMap { marker in
+                after.range(of: marker, range: after.index(after: after.startIndex)..<after.endIndex)
+            }
+            .map(\.lowerBound)
+            .min()
+        let press = String(after[..<(next ?? after.endIndex)])
+        XCTAssertTrue(press.contains("api.decideCriteriaChange("),
+                      "that slice is the press: it posts to the door")
+        XCTAssertFalse(press.contains("appendDecisionLine"),
+                       "a criteria decision no longer leaves an in-memory line behind it")
     }
 
     /// The receipt card says what it is and what happened, and offers nothing to press.

@@ -198,12 +198,13 @@ test('GET /projects/:id says, beside each criterion, whether the work has met it
   // The criterion somebody has filed work against and nobody has finished. VERIFICATION with no
   // carrier pointed at it: the task is OPEN and the fact that would settle it — a live PASS from
   // an independent check — does not exist, so the clause names it and says what it is waiting for.
+  // A work row (`MANUAL`), because "nobody has checked it" is the whole fixture: a gate is admitted
+  // only with its carrier in the same call, which is the one thing this row must not have.
   const unsettledTask = await tasks.create(ownerId, {
     title: 'the work still waiting for somebody to check it',
     projectId,
     criterionKey: unsettledAtFirst.key,
     completionCriterion: 'VERIFICATION',
-    completionPolicy: 'VERIFICATION_PASSED',
   } as never);
 
   // The criterion whose wording moves out from under work that has already settled.

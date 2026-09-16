@@ -68,8 +68,8 @@ function tasksService(db: PrismaClient): TasksService {
       for (const taskId of change.taskIds ?? []) published.push({ ownerId, taskId });
     },
   };
-  // Nothing here dispatches: every fixture task is unassigned, which is what makes `execute` and
-  // `fileVerification` unreachable. A stub that throws would say so loudly if that ever changed.
+  // Nothing here dispatches: every fixture task is unassigned, which is what makes `execute`
+  // unreachable. A stub that throws would say so loudly if that ever changed.
   const sessions = {
     create: () => {
       throw new Error('no fixture in this spec should start a run');
@@ -119,22 +119,25 @@ async function statusOf(db: PrismaClient, id: string): Promise<string> {
   return row.status;
 }
 
+/**
+ * The check a paired create wrote beside its subject.
+ *
+ * A gate — VERIFICATION with VERIFICATION_PASSED and nothing pointed at it — is refused by both
+ * write doors unless its carrier is named in the same call, so the fixtures below file the pair and
+ * then reach for the check by the id the receipt carries, rather than filing a second task later.
+ */
+function checkIdOf(created: unknown): string {
+  return (created as { verification: { id: string } }).verification.id;
+}
+
 /** Complete an ordinary VERIFICATION subject through the fact that actually derives DONE. */
 async function passViaIndependentVerifier(
   tasks: TasksService,
   ownerId: string,
-  projectId: string,
-  subjectId: string,
-  label: string,
+  checkId: string,
 ): Promise<string> {
-  const verifier = await tasks.create(ownerId, {
-    title: `[FIXTURE VERIFY] ${label}`,
-    projectId,
-    verifiesTaskId: subjectId,
-    completionCriterion: 'VERIFICATION',
-  });
-  await tasks.update(ownerId, verifier.id, { verdict: TaskVerdict.PASS });
-  return verifier.id;
+  await tasks.update(ownerId, checkId, { verdict: TaskVerdict.PASS });
+  return checkId;
 }
 
 /** Revoke the fact above; the subject and any aggregate ancestors must derive OPEN again. */
@@ -584,7 +587,23 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
           completionCriterion: 'VERIFICATION',
           completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
         },
+        // Every gate in the plan carries its own check, the subtasks' as much as the phase's. The
+        // phase's was always here; the other two used to be filed one at a time after the batch,
+        // which is the write that is now refused — and a plan that files a gate it never checks is
+        // exactly the plan the refusal is about.
         { title: '[VERIFY] Phase 25B', ref: 'check', projectId: w.projectId, verifiesRef: 'phase' },
+        {
+          title: '[FIXTURE VERIFY] Implement the door',
+          ref: 'impl-check',
+          projectId: w.projectId,
+          verifiesRef: 'impl',
+        },
+        {
+          title: '[FIXTURE VERIFY] Wire the CLI',
+          ref: 'cli-check',
+          projectId: w.projectId,
+          verifiesRef: 'cli',
+        },
       ],
     } as any);
     const id = Object.fromEntries(created.map((row: any) => [row.ref, row.id])) as Record<string, string>;
@@ -598,12 +617,10 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       /derived from the declared VERIFICATION criterion.*independent verification task with verdict PASS/,
     );
 
-    const implVerifierId = await passViaIndependentVerifier(
-      tasks, w.ownerId, w.projectId, id.impl, 'Implement the door',
-    );
+    const implVerifierId = await passViaIndependentVerifier(tasks, w.ownerId, id['impl-check']);
     assert.equal(await statusOf(db, id.phase), TaskStatus.OPEN, 'one subtask is not all of them');
 
-    await passViaIndependentVerifier(tasks, w.ownerId, w.projectId, id.cli, 'Wire the CLI');
+    await passViaIndependentVerifier(tasks, w.ownerId, id['cli-check']);
     assert.equal(
       await statusOf(db, id.phase),
       TaskStatus.OPEN,
@@ -669,8 +686,9 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       parentTaskId: phase.id,
       completionCriterion: 'VERIFICATION',
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[FIXTURE VERIFY] first' },
     });
-    await passViaIndependentVerifier(tasks, w.ownerId, w.projectId, first.id, 'first');
+    await passViaIndependentVerifier(tasks, w.ownerId, checkIdOf(first));
     assert.equal(await statusOf(db, phase.id), TaskStatus.DONE);
 
     const late = await tasks.create(w.ownerId, {
@@ -743,9 +761,10 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       parentTaskId: parent.id,
       completionCriterion: 'VERIFICATION',
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[FIXTURE VERIFY] child' },
     });
     const childVerifierId = await passViaIndependentVerifier(
-      tasks, w.ownerId, w.projectId, child.id, 'child',
+      tasks, w.ownerId, checkIdOf(child),
     );
     assert.equal(await statusOf(db, parent.id), TaskStatus.OPEN, 'MANUAL never completes itself');
     assert.match(
@@ -777,10 +796,11 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       parentTaskId: mid.id,
       completionCriterion: 'VERIFICATION',
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[FIXTURE VERIFY] leaf' },
     });
 
     const leafVerifierId = await passViaIndependentVerifier(
-      tasks, w.ownerId, w.projectId, leaf.id, 'leaf',
+      tasks, w.ownerId, checkIdOf(leaf),
     );
     // One write, two levels: a recomputation that only moved one level per event would need a
     // second trigger that nothing here produces.
@@ -810,15 +830,17 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
           parentTaskId: phase.id,
           completionCriterion: 'VERIFICATION',
           completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+          verification: { title: `[FIXTURE VERIFY] ${title}` },
         }),
       );
     }
 
     // Three completions at once. The CAS is the whole of the concurrency control, so the losers
-    // write nothing rather than fighting over the parent.
+    // write nothing rather than fighting over the parent. Each check was filed with its subject, so
+    // what races here is three verdicts and nothing else — which is what it was always meant to be.
     await Promise.all(
       children.map((child) => passViaIndependentVerifier(
-        tasks, w.ownerId, w.projectId, child.id, child.title,
+        tasks, w.ownerId, checkIdOf(child),
       )),
     );
     assert.deepEqual(
@@ -851,6 +873,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       title: 'phase',
       projectId: w.projectId,
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[VERIFY] phase' },
     });
     const work = await tasks.create(w.ownerId, {
       title: 'work',
@@ -858,13 +881,10 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       parentTaskId: phase.id,
       completionCriterion: 'VERIFICATION',
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[FIXTURE VERIFY] work' },
     });
-    await passViaIndependentVerifier(tasks, w.ownerId, w.projectId, work.id, 'work');
-    const check = await tasks.create(w.ownerId, {
-      title: '[VERIFY] phase',
-      projectId: w.projectId,
-      verifiesTaskId: phase.id,
-    });
+    await passViaIndependentVerifier(tasks, w.ownerId, checkIdOf(work));
+    const check = { id: checkIdOf(phase) };
 
     // N4: task verdicts are evidence for task execution, not project acceptance criteria. Neither
     // filing nor concluding this check may redefine what the project states it is for. Since 0229
@@ -884,10 +904,14 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     await emptyWorld(client);
     const w = await world(db, 'shape');
     const tasks = tasksService(db);
+    // Each gate is filed with its own check, so both exist from the start and neither has said
+    // anything yet. Which check a PASS belongs to is the question here, and it is asked by the
+    // ORDER OF THE VERDICTS below rather than by the order the two checks were filed in.
     const phase = await tasks.create(w.ownerId, {
       title: 'phase',
       projectId: w.projectId,
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[VERIFY] phase' },
     });
     const work = await tasks.create(w.ownerId, {
       title: 'work',
@@ -895,27 +919,18 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
       parentTaskId: phase.id,
       completionCriterion: 'VERIFICATION',
       completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+      verification: { title: '[VERIFY] work' },
     });
-    // A check of the SUBTASK, not of the phase. VERIFICATION_PASSED on the phase must not read
-    // this as its own evidence — it is a fact about `work`.
-    const checkOfWork = await tasks.create(w.ownerId, {
-      title: '[VERIFY] work',
-      projectId: w.projectId,
-      verifiesTaskId: work.id,
-    });
-    await tasks.update(w.ownerId, checkOfWork.id, { verdict: TaskVerdict.PASS });
+    // A pass on the check of the SUBTASK, not on the check of the phase. VERIFICATION_PASSED on the
+    // phase must not read this as its own evidence — it is a fact about `work`.
+    await tasks.update(w.ownerId, checkIdOf(work), { verdict: TaskVerdict.PASS });
     assert.equal(
       await statusOf(db, phase.id),
       TaskStatus.OPEN,
       'a pass about a subtask is not a pass about the phase',
     );
 
-    const checkOfPhase = await tasks.create(w.ownerId, {
-      title: '[VERIFY] phase',
-      projectId: w.projectId,
-      verifiesTaskId: phase.id,
-    });
-    await tasks.update(w.ownerId, checkOfPhase.id, { verdict: TaskVerdict.PASS });
+    await tasks.update(w.ownerId, checkIdOf(phase), { verdict: TaskVerdict.PASS });
     assert.equal(await statusOf(db, phase.id), TaskStatus.DONE);
   });
 });

@@ -280,7 +280,9 @@ suite(
     // VERIFICATION, the one criterion with an implementation.
     // ---------------------------------------------------------------------------------------
     // Both subjects are filed under the project, as a subject has to be: in none, nobody would file
-    // the verification it waits for, so the doors refuse it. Its verifier follows it there.
+    // the verification it waits for, so the doors refuse it. Its verifier comes with it — a gate
+    // and the check that settles it are one call, so there is no moment at which this subject
+    // exists with nothing pointed at it.
     const subject = await tasks.create(ownerId, {
       title: 'settled by an independent check',
       projectId: project.id,
@@ -288,24 +290,24 @@ suite(
       completionCriterion: 'VERIFICATION',
       completionPolicy: 'VERIFICATION_PASSED',
       acceptanceCriteria: 'A different session checks the artifact and records PASS.',
-    });
+      verification: {
+        title: '[VERIFY] settled by an independent check',
+        assigneeId: workspaceId,
+      },
+    }) as unknown as { id: string; verification: { id: string } };
+    // A work row rather than a gate: nothing checks the dependent, and what this fixture needs from
+    // it is a prerequisite edge, which reads the row it waits ON.
     const downstream = await tasks.create(ownerId, {
       title: 'waits on the verified subject',
       projectId: project.id,
       dependsOnTaskIds: [subject.id],
       autoRunWhenReady: false,
       completionCriterion: 'VERIFICATION',
-      completionPolicy: 'VERIFICATION_PASSED',
     });
     assert.equal(await dependencyState(tasks, ownerId, downstream.id), 'BLOCKED');
 
-    const verifier = await tasks.create(ownerId, {
-      title: '[VERIFY] settled by an independent check',
-      projectId: project.id,
-      assigneeId: workspaceId,
-      verifiesTaskId: subject.id,
-      completionCriterion: 'VERIFICATION',
-      completionPolicy: 'MANUAL',
+    const verifier = await db.task.findUniqueOrThrow({
+      where: { id: subject.verification.id },
     });
     assert.equal(verifier.verifiesTaskId, subject.id);
     assert.equal(await db.task.count({ where: { verifiesTaskId: subject.id } }), 1);
@@ -380,21 +382,17 @@ suite(
     // The negative half: a conclusion that is not PASS settles nothing.
     // ---------------------------------------------------------------------------------------
     for (const [verdict, label] of [['FAIL', 'fail'], ['INCONCLUSIVE', 'inconclusive']] as const) {
+      // Subject and check in one call: this case is precisely about a gate whose carrier answers
+      // something other than PASS, so the carrier is what the gate is filed with.
       const held = await tasks.create(ownerId, {
         title: `subject whose check answers ${verdict}`,
         projectId: project.id,
         assigneeId: workspaceId,
         completionCriterion: 'VERIFICATION',
         completionPolicy: 'VERIFICATION_PASSED',
-      });
-      const check = await tasks.create(ownerId, {
-        title: `[VERIFY] ${label}`,
-        projectId: project.id,
-        assigneeId: workspaceId,
-        verifiesTaskId: held.id,
-        completionCriterion: 'VERIFICATION',
-        completionPolicy: 'MANUAL',
-      });
+        verification: { title: `[VERIFY] ${label}`, assigneeId: workspaceId },
+      }) as unknown as { id: string; verification: { id: string } };
+      const check = { id: held.verification.id };
       const checkSessionId = randomUUID();
       await db.session.create({
         data: {
@@ -427,12 +425,14 @@ suite(
     // ---------------------------------------------------------------------------------------
     // Ordinary writes around the removal, each one positively.
     // ---------------------------------------------------------------------------------------
+    // Work rows, both of them: nothing below checks either one. They are renamed, commented on,
+    // given a run and wired to each other — the ordinary writes this section is about, none of
+    // which reads a completion policy.
     const plain = await tasks.create(ownerId, {
       title: 'an ordinary task',
       projectId: project.id,
       assigneeId: workspaceId,
       completionCriterion: 'VERIFICATION',
-      completionPolicy: 'VERIFICATION_PASSED',
     });
     const renamed = await tasks.update(ownerId, plain.id, { title: 'an ordinary task, renamed' });
     assert.equal(renamed.title, 'an ordinary task, renamed');
@@ -443,7 +443,6 @@ suite(
       title: 'waits on the ordinary task',
       projectId: project.id,
       completionCriterion: 'VERIFICATION',
-      completionPolicy: 'VERIFICATION_PASSED',
       autoRunWhenReady: false,
     });
     await tasks.addDependency(ownerId, dependent.id, plain.id);

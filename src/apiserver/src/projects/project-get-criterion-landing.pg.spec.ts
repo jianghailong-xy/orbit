@@ -209,12 +209,15 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
 
   // And one whose branch lands while the work itself is not settled: VERIFICATION with no carrier
   // pointed at it. Landing and settling are independent, and this is the direction that proves it.
+  // A work row (`MANUAL`) rather than a gate: what this fixture needs is a row whose criterion is
+  // VERIFICATION and whose PASS does not exist, and `servingTaskSettled` reads the criterion — the
+  // policy decides nothing here. A gate would additionally have to be filed with the very carrier
+  // this case is about not having.
   const unsettledTask = await tasks.create(ownerId, {
     title: 'the work merged before anybody checked it',
     projectId,
     criterionKey: unsettledAt.key,
     completionCriterion: 'VERIFICATION',
-    completionPolicy: 'VERIFICATION_PASSED',
   } as never);
   const unsettledSession = await sessionFor(unsettledTask.id, 'orbit/work-merged-unchecked');
 

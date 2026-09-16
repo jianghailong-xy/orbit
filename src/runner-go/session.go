@@ -1246,7 +1246,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		finalizeRequest.ChangedFiles, finalizeRequest.ChangedDiff, captureErr = finalizeWorktree(job.WT, status == stCancelled)
 		if captureErr != nil {
 			logln("worktree finalization failed for", job.SessionID+":", captureErr)
+			// Say it on the wire too. A log line on whichever machine happened to run this is not
+			// somewhere anybody looks, and it is the only thing that distinguishes a session that
+			// produced nothing from one whose entire output is still uncommitted in a checkout.
+			finalizeRequest.CaptureError = clip(captureErr.Error(), 1000)
 		}
+		// Measured, not assumed: this is the checkout as it actually stands once finalization is
+		// done with it, and it is what tells the control plane the work still needs committing.
+		finalizeRequest.WorktreeDirty = worktreeIsDirty(job.WT)
 		// finalizeWorktree may heal a stale fork point while computing this snapshot.
 		finalizeRequest.BaseSha = job.WT.baseSha()
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.

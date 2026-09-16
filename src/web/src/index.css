@@ -2150,6 +2150,54 @@ body {
 .rd-path-muted {
   color: var(--text-3);
 }
+/* The offer made when a directory already has Claude Code conversations recorded in it. Its height
+   is fixed by construction — one statistic, three choices, one warning — so a directory holding six
+   hundred conversations takes up exactly as much of the form as one holding six. */
+.rd-history-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 2px;
+}
+/* Only the statistic loses its top margin; the warning keeps one, or it reads as a fourth choice
+   rather than as the caveat under all three. */
+.rd-history-panel > .rd-path-hint:first-child {
+  margin-top: 0;
+}
+/* Every rule below is deliberately qualified with .rd-history-panel: antd's own `.ant-radio-group`
+   and `.ant-radio` rules are single-class too, and they are injected after this stylesheet, so a
+   plain `.rd-history-choices { margin }` ties on specificity and loses on order — measured as a
+   computed margin of 0 and three choices with no air between them and the lines around them. */
+.rd-history-panel .rd-history-choices {
+  display: block;
+  margin: 12px 0 14px;
+}
+.rd-history-panel .rd-history-choices .ant-radio-wrapper {
+  display: flex;
+  align-items: flex-start;
+  margin: 0 0 10px;
+}
+.rd-history-panel .rd-history-choices .ant-radio-wrapper:last-child {
+  margin-bottom: 0;
+}
+/* antd centres the control against the whole wrapper, which for a two-line choice parks the dot
+   between the label and its explanation, belonging to neither. */
+.rd-history-panel .rd-history-choices .ant-radio {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+/* The label and its explanation stack; antd puts both inside the wrapper's second span. */
+.rd-history-choice,
+.rd-history-choice .rd-set-label,
+.rd-history-choice .rd-set-desc {
+  display: block;
+}
+.rd-history-removal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
 .rd-quiet-btn {
   color: var(--text-3);
 }

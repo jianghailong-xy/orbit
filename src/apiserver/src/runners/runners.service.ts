@@ -523,6 +523,69 @@ export class RunnersService {
     return { requestedAt: requestedAt.toISOString() };
   }
 
+  /**
+   * Ask this runner what local Claude Code conversations already sit under a directory.
+   *
+   * Only the runner can answer: `~/.claude/projects` is on its disk and the control plane never
+   * sees it. Unlike the per-workspace directory probe, this names a bare path — it is asked while
+   * a directory is being typed into the new-workspace form, before there is a workspace row to
+   * key an answer to.
+   *
+   * One slot per machine, like the sign-in and install relays, because it answers whatever path
+   * was typed last: a second ask replaces the first rather than queueing behind it. The previous
+   * answer is deliberately left in place — `getClaudeHistory` only ever returns one whose path
+   * matches what was asked, so re-asking about the same directory shows the last answer at once
+   * while a fresh scan runs, and an answer about a different one is never shown at all.
+   */
+  async requestClaudeHistory(ownerId: string, id: string, workDir: string) {
+    const path = (workDir ?? '').trim();
+    if (!path) throw new BadRequestException('workDir is required');
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only look while connected');
+    }
+    await this.prisma.runner.update({
+      where: { id },
+      data: { claudeHistoryStatus: 'pending', claudeHistoryPath: path, claudeHistoryAt: new Date() },
+    });
+    return { workDir: path, status: 'pending' };
+  }
+
+  /**
+   * What this runner last reported for a directory — the answer the new-workspace form waits on.
+   *
+   * The stored answer is returned ONLY when it is about the path being asked about, checked at
+   * both ends (the request the relay holds, and the path inside the answer itself). A form where
+   * someone keeps typing asks about several directories in a row, and an answer arriving late for
+   * an abandoned one must read as nothing-yet rather than as the verdict on what is in the field
+   * now — offering to import another project's history would be the worst possible misread.
+   */
+  async getClaudeHistory(ownerId: string, id: string, workDir: string) {
+    const path = (workDir ?? '').trim();
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: {
+        claudeHistoryStatus: true,
+        claudeHistoryPath: true,
+        claudeHistoryAt: true,
+        claudeHistoryResult: true,
+      },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    const asked = (runner.claudeHistoryPath ?? '').trim();
+    const stored = runner.claudeHistoryResult as { workDir?: string } | null;
+    const answers = !!path && asked === path && stored?.workDir === path;
+    return {
+      workDir: path,
+      // 'pending' while the runner has yet to answer; the form polls on that and stops on the
+      // rest. A machine that has never been asked reports 'idle' rather than an empty string.
+      status: asked === path ? (runner.claudeHistoryStatus ?? 'idle') : 'idle',
+      requestedAt: asked === path ? (runner.claudeHistoryAt?.toISOString() ?? null) : null,
+      result: answers ? stored : null,
+    };
+  }
+
   /** Current install-relay state, for the row to poll. */
   async getInstallState(ownerId: string, id: string): Promise<RunnerInstallState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });

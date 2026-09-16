@@ -156,6 +156,11 @@ Options:
                               say why. Passing it IS the declaration; it needs a --project-id
   --parent-task-id TASK_ID    Create it as a subtask of this existing task
   --verifies-task-id TASK_ID  File it as a VERIFICATION of that existing task
+  --verification-title TITLE  Create the verifier that settles this task, in the SAME call
+  --verification-assignee-id ID
+                              The workspace that runs that verifier
+  --verification-description TEXT
+                              What that verifier is asked to check
   --supersedes-task-id TASK_ID
                               Record, in this same write, that the new task REPLACES that
                               stopped attempt (CANCELLED or FAILED, same project, not
@@ -237,6 +242,17 @@ accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin, 
 '-'; since --description-file reads the same stdin, the two file flags cannot be used together,
 but passing one field inline and the other on stdin is fine.
 
+--verification-title creates the verifier that settles this task, in the same call, and
+--verification-assignee-id and --verification-description describe that verifier. A task declaring
+--completion-criterion VERIFICATION with --completion-policy VERIFICATION_PASSED is a subject: it has
+no work of its own to run, and only a PASS recorded by a separate verification task pointing at it
+can settle it. Nothing files that task for it — no sweep, no coordinator-side default — so a subject
+written on its own is refused (VERIFICATION_SUBJECT_NEEDS_VERIFIER, remedy
+CREATE_THE_VERIFIER_IN_THE_SAME_CALL). Passing --verification-title is the whole remedy: both rows
+are written in one transaction, the verifier points at this task and lands in its project, and the
+receipt carries the verifier as verification.id. If this row does have work of its own to run, pass
+--completion-policy MANUAL instead: it runs, and its check can be filed later.
+
 --completion-criterion declares one of four peer outcomes, never an escalation order:
 EXECUTABLE compares one command's exit code, VERIFICATION reads the verdict of an independent
 verification task (with --completion-policy VERIFICATION_PASSED), EVIDENCE_JUDGMENT waits for one
@@ -244,6 +260,12 @@ an evidence judgment, and OWNER_CONFIRMED waits for the account owner to confirm
 Orbit app. An agent cannot confirm an OWNER_CONFIRMED task, a coordinator included: only the owner
 can. Runner task creation never infers EVIDENCE_JUDGMENT: every task must pass the flag.
 Related verifier, executable, and completion-policy flags do not replace that declaration.
+
+--completion-policy VERIFICATION_PASSED makes this row a pure gate, and a pure gate is NOT
+dispatchable: a manual start is refused (409) and auto-dispatch passes it by, so a row that has
+work of its own passes MANUAL. Nothing on the server files the verifier for you either — the
+check has to come in the SAME call: the MCP task_create carries a "verification" sub-object beside
+its subject, and 'orbit task create-batch' pairs two items with "verifiesRef".
 
 Orbit conservatively compares acceptance-criteria wording with that choice. A mismatch returns
 TASK_CRITERION_SHAPE_ADVICE with a suggestedCriterion and reason; it creates nothing. Either retry
@@ -287,6 +309,11 @@ completionPolicy. Nothing is written unless every item is valid.
 Every item must set "completionCriterion" explicitly. EVIDENCE_JUDGMENT remains available when it is
 intended, but omission never selects it on a runner write. Related verifier, executable, and
 completion-policy fields do not replace that declaration.
+
+An item declaring "completionPolicy": "VERIFICATION_PASSED" is a pure gate, and a pure gate is NOT
+dispatchable: a manual start is refused (409) and auto-dispatch passes it by, so an item that has
+work of its own sets "completionPolicy": "MANUAL". Its verifier is the caller's to file, with the
+"verifiesRef" below — the server never writes one for you.
 
 "acceptanceCriteria" states per item what would settle that THAT task is done — the
 observable result somebody else can check — where "description" says what work to
@@ -332,7 +359,13 @@ VERIFICATION_PASSED parent counts:
 
 "verifiesTaskId" is the same link to a subject that already exists; naming both is
 rejected. Filed as two calls instead, the window between them is a parent that can
-never complete. assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave
+never complete — and nothing on the server files that verifier for you either, so this ref is
+the whole pairing: a subject nothing points at in this same call waits forever. The single
+door's "verification" sub-object is not an item field here: a batch item is paired by
+verifiesRef, and an item carrying "verification" is refused rather than silently filed as the
+unpaired subject it would be.
+
+assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave
 an item unassigned). --tasks-file accepts only '-' (stdin).
 
 --dry-run judges the plan and writes none of it — not one task, and not even the
@@ -1298,6 +1331,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	handoffReason := fs.String("handoff-reason", "", "declare that this create crosses into the --project-id it names, and say why")
 	parentTaskID := fs.String("parent-task-id", "", "make the new task a subtask of this existing task")
 	verifiesTaskID := fs.String("verifies-task-id", "", "file the new task as a verification of this existing task")
+	verificationTitle := fs.String("verification-title", "", "create the verifier that settles this task, in the same call")
+	verificationAssigneeID := fs.String("verification-assignee-id", "", "workspace that runs the verifier named by --verification-title")
+	verificationDescription := fs.String("verification-description", "", "what the verifier named by --verification-title is asked to check")
 	supersedesTaskID := fs.String("supersedes-task-id", "", "record that this new task REPLACES that stopped attempt, in the same write")
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
@@ -1329,6 +1365,19 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *unassigned && flagWasSet(fs, "assignee-id") {
 		return fmt.Errorf("--unassigned and --assignee-id cannot be used together")
+	}
+	// The pair, refused locally so nothing reaches the server: a verifier is a task, and a task
+	// with no title is not one; and one task is either the check or the subject, never both.
+	verificationSet := flagWasSet(fs, "verification-title")
+	if !verificationSet &&
+		(flagWasSet(fs, "verification-assignee-id") || flagWasSet(fs, "verification-description")) {
+		return fmt.Errorf("--verification-assignee-id and --verification-description describe the verifier, so they need --verification-title")
+	}
+	if verificationSet && strings.TrimSpace(*verificationTitle) == "" {
+		return fmt.Errorf("--verification-title cannot be blank")
+	}
+	if verificationSet && flagWasSet(fs, "verifies-task-id") {
+		return fmt.Errorf("--verification-title and --verifies-task-id cannot be used together: this task either IS the check or is the subject to be checked, never both")
 	}
 	commandSet := flagWasSet(fs, "acceptance-command")
 	exitSet := flagWasSet(fs, "acceptance-expected-exit-code")
@@ -1428,6 +1477,22 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--verifies-task-id cannot be empty")
 		}
 		body["verifiesTaskId"] = *verifiesTaskID
+	}
+	// The other half of the same relation, in the direction a SUBJECT needs it: the check is
+	// written by this same call rather than named. Passing --verification-title IS the declaration;
+	// the other two flags only describe the check it creates, and the server fills in the rest.
+	if verificationSet {
+		verification := map[string]interface{}{"title": *verificationTitle}
+		if flagWasSet(fs, "verification-assignee-id") {
+			if strings.TrimSpace(*verificationAssigneeID) == "" {
+				return fmt.Errorf("--verification-assignee-id cannot be empty")
+			}
+			verification["assigneeId"] = *verificationAssigneeID
+		}
+		if flagWasSet(fs, "verification-description") {
+			verification["description"] = *verificationDescription
+		}
+		body["verification"] = verification
 	}
 	// The attempt this new task REPLACES. One request creates the successor and records the
 	// supersession together, which is the whole point: the two-call version leaves a window where
@@ -2467,6 +2532,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
 				"--acceptance-timeout-seconds <n> (acceptanceTimeoutSeconds: how long that command may run, 1..86400; omit for the one-hour default)",
+				"--verification-title <text> (verification: create the verifier that settles this task, in the SAME call. A task declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a subject — no work of its own, settled only by a PASS a separate check records — and nothing on the server files that check, so a subject written alone is refused VERIFICATION_SUBJECT_NEEDS_VERIFIER. On the batch door the same pairing is a later item naming this item's ref in verifiesRef)",
+				"--verification-assignee-id <id> (the workspace that runs the verifier named by --verification-title)",
+				"--verification-description <text> (what that verifier is asked to check)",
 			)
 		case "task_update":
 			capabilities[i].Arguments = append(

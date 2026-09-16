@@ -89,6 +89,9 @@ private struct RootView: View {
     var body: some View {
         if model.signedIn {
             Group {
+                // Either shell drives the same navigation state: one section's `NavigationStack`
+                // bound to its stack here, or a three-column split whose column selection is a
+                // projection of that same stack. Neither has to tell the model which one it is.
                 if hSize == .compact { CompactShell() } else { MainView() }
             }
             // Register for "needs your reply" pushes once signed in (idempotent).
