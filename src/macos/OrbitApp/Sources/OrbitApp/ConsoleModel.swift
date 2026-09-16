@@ -416,6 +416,10 @@ final class ConsoleModel {
                 // re-read: any of them can be answered in a browser while this phone is asleep, and
                 // nothing replays that — a card only learns it went stale by asking again.
                 Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
+                // The task's own confirmation, on the same argument and one more: a run that
+                // reported while this socket was suspended puts a card here, and the read is the
+                // only way this window hears about it.
+                Task { [weak self] in await self?.refreshOwnerConfirmation(force: true) }
             }
             isReconnect = true
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
@@ -766,6 +770,12 @@ final class ConsoleModel {
         // session has no project and makes none of those reads.
         projectID = s.projectId
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
+        // The task this conversation is a run of, if it is one. That — and not the project — is
+        // what decides whether an owner confirmation is asked here, so it is read separately and
+        // kicked separately: an OWNER_CONFIRMED task may be filed under no project at all.
+        taskID = s.taskId
+        ownerReadMoment = runMoment(s)
+        if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
         provider = s.provider ?? "claude"
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
@@ -856,6 +866,14 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         serverCapabilities = session.capabilities
+        // A run ending its turn moves this SESSION's row, not the task, so no task event re-reads
+        // the confirmation. Web re-reads when the row moves for exactly this reason, and the same
+        // change is what makes a report arrive: without it the card would wait for the next poll.
+        let moment = runMoment(session)
+        if moment != ownerReadMoment {
+            ownerReadMoment = moment
+            if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation(force: true) } }
+        }
         // The final SSE notification is intentionally live-only and can be missed while this app
         // is disconnected. REST is authoritative too: once it observes an idle/terminal run, drop
         // any stranded foreground-shell preview and publish the reducer immediately instead of
@@ -864,6 +882,12 @@ final class ConsoleModel {
             let cleared = reducer.clearLiveToolOutputsAtBoundary()
             if cleared || state != reducer.state { publishStateNow() }
         }
+    }
+
+    /// The moment of a run's row, as a value that changes when and only when something about the run
+    /// moved: web keys its confirmation re-read on the same pair.
+    private func runMoment(_ s: Session) -> String {
+        "\(s.effectiveRunState.rawValue)|\(s.lastTurnAt ?? "")"
     }
 
     /// Re-read the authoritative lifecycle + capabilities from REST (lighter than loadContext).
@@ -1756,6 +1780,21 @@ final class ConsoleModel {
     /// cannot read is the "signed unread" the whole path exists to prevent.
     private(set) var projectCriteria: [ProjectCriteriaDocument.Item] = []
 
+    /// The task whose run this conversation is, adopted from the session payload. Nil for an
+    /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
+    /// drawn in the run's own session and nowhere else.
+    private(set) var taskID: String?
+    /// What that task is waiting on from its owner, as `GET /tasks/:id/owner-confirmation` publishes
+    /// it, or nil while the read has not come back. Nil is NOT "nothing is waiting" — it is
+    /// `unread`, which shows a delivered card with dead buttons rather than one that quietly claims
+    /// the question went away.
+    private(set) var ownerConfirmation: OwnerConfirmationView?
+    private var loadingOwnerConfirmation = false
+    private var lastOwnerRead = Date.distantPast
+    /// The moment of the run this conversation last re-read the confirmation for: web re-reads when
+    /// a run's row moves, and the same change is what makes a report arrive.
+    private var ownerReadMoment: String?
+
     /// The questions delivered into THIS window, in arrival order, each anchored to the item that
     /// was last when it arrived. Addresses only — every word a card shows is re-derived from the
     /// reads above on each render (see OrbitKit's `CriteriaDecision.swift`).
@@ -1794,6 +1833,11 @@ final class ConsoleModel {
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
             case .evidenceDecision(let taskID, let evidenceRevision):
                 return EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))
+            case .ownerConfirmation(let taskID, let requestID):
+                return OwnerConfirmations.isOpen(ownerStanding(taskID, requestID))
+            case .ownerDecisionReceipt:
+                // A receipt is a record, not a question: it stays on screen and is never counted.
+                return false
             }
         }.map(\.id)
     }
@@ -1865,7 +1909,14 @@ final class ConsoleModel {
 
     /// Put a question into this conversation once, anchored where it arrived.
     private func deliver(_ kind: DeliveredDecisionCard.Kind) {
-        let card = DeliveredDecisionCard(kind: kind, afterItemID: state.items.last?.id)
+        deliver(kind, anchoredAt: state.items.last?.id)
+    }
+
+    /// …or where it happened, for a record that carries its own moment — a receipt is drawn at the
+    /// point in the conversation it belongs to rather than where the reader happened to be looking
+    /// when the read brought it back.
+    private func deliver(_ kind: DeliveredDecisionCard.Kind, anchoredAt anchor: String?) {
+        let card = DeliveredDecisionCard(kind: kind, afterItemID: anchor)
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)
@@ -1897,6 +1948,90 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(error)"
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Re-read what this conversation's task is waiting on from its owner.
+    ///
+    /// A read of its own, beside the project's questions rather than inside them: an OWNER_CONFIRMED
+    /// task may be filed under no project at all, and its run's session still owes its owner the
+    /// card. Nothing here needs a project, so nothing here may be gated on one.
+    ///
+    /// What it may never do is remove a card: a read that fails leaves the standing `unread`, which
+    /// is a card saying it could not check — and a card that vanished mid-read is indistinguishable,
+    /// to the person reading it, from a render that broke.
+    func refreshOwnerConfirmation(force: Bool = false) async {
+        guard !isDraft, let taskID, !loadingOwnerConfirmation else { return }
+        if !force, Date().timeIntervalSince(lastOwnerRead) < Self.rulerReadThrottle { return }
+        loadingOwnerConfirmation = true
+        defer { loadingOwnerConfirmation = false }
+
+        if let read = try? await api.ownerConfirmation(taskID: taskID) {
+            ownerConfirmation = read
+            if let waiting = OwnerConfirmations.waitingIn(read, sessionID: sessionID) {
+                deliver(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
+            }
+            // The receipts this conversation has recorded, drawn where each was made. They come
+            // from the read rather than from the press, so a reload or another device shows them
+            // too — the same reason the browser draws them from `decisions`.
+            for decided in OwnerConfirmations.receiptsIn(read, sessionID: sessionID) {
+                // A receipt whose moment is on a page that is not loaded is not drawn at all,
+                // rather than drawn above things that happened first or below things that
+                // happened after it (web's `decisionReceiptAnchor` returns null for the same
+                // case). The record is not lost: it is on the read, and it arrives with the page.
+                guard let anchor = OwnerConfirmations.receiptAnchor(items: receiptAnchorItems,
+                                                                    decidedAt: decided.decidedAt)
+                else { continue }
+                deliver(.ownerDecisionReceipt(taskID: taskID, decisionID: decided.id),
+                        anchoredAt: anchor)
+            }
+        }
+        lastOwnerRead = Date()
+    }
+
+    /// Where one delivered confirmation card stands right now — re-derived from the read on every
+    /// call, never a frame the card kept.
+    func ownerStanding(_ taskID: String, _ requestID: String) -> OwnerConfirmationStanding {
+        OwnerConfirmations.standing(ownerConfirmation, sessionID: sessionID, requestID: requestID)
+    }
+
+    /// The receipt one recorded decision draws, when the read still publishes it.
+    func ownerReceipt(_ taskID: String, _ decisionID: String) -> RecordedOwnerDecision? {
+        OwnerConfirmations.receipt(ownerConfirmation, decisionID: decisionID)
+    }
+
+    /// The transcript items a receipt can be anchored to — the moment of a decision is a position
+    /// in the conversation, and this is the conversation as it stands.
+    private var receiptAnchorItems: [(id: String, ts: String?)] {
+        state.items.map { (id: $0.id, ts: $0.ts) }
+    }
+
+    /// Answer the question this conversation's task is waiting on, at the owner-confirmation door
+    /// with this device's own credential — no agent between the press and the door, and no session
+    /// header on the request (the door refuses any that carries one).
+    ///
+    /// Not dropped optimistically, for the reason `decideEvidence` gives: the door's refusals are
+    /// the outcomes worth explaining, and the re-read below is what explains them. The receipt the
+    /// answer leaves comes back with that read, so what is drawn is the record rather than a guess.
+    func decideOwnerConfirmation(_ waiting: OwnerConfirmationWaiting, _ decision: OwnerDecision,
+                                 note: String? = nil) async {
+        guard let taskID,
+              let request = OwnerConfirmations.request(waiting: waiting, decision: decision,
+                                                       note: note) else { return }
+        do {
+            _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
+            close(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
+            // Left on screen, the card would go stale into "a later report is waiting", which is
+            // the one reading of its own answer this window can be sure is wrong.
+            appendDecisionLine(decision == .confirm
+                               ? OwnerConfirmations.confirmedHeading
+                               : OwnerConfirmations.sentBackHeading)
+        } catch {
+            // A refusal for staleness is said as such: the card stays and re-derives, and the
+            // sentence tells the reader which refusal the press met rather than "it failed".
+            let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
+            statusMessage = "\(title) — \(error)"
+        }
+        await refreshOwnerConfirmation(force: true)
     }
 
     /// Where one delivered evidence card stands right now — re-derived from the read on every call,

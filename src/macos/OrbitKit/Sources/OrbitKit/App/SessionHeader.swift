@@ -21,16 +21,22 @@ public enum SessionHeader {
     /// reads "Watching 7 targets" — not "Waiting for your reply", and not a background process.
     public static func statusWord(for s: Session, watching: WatchSessionSummary? = nil,
                                   now: Date = Date()) -> String {
+        // Somebody waiting on YOU outranks everything else the word could say, and — as in the web
+        // `statusLabel` this mirrors — the check sits OUTSIDE the generating gate: an owner
+        // confirmation is held open by no turn, so it is still waiting once the conversation parks.
+        // Read here rather than per-branch, or a parked session with one waiting would answer
+        // "Waiting for your reply" over a question the reader can answer.
+        if (s.pendingApprovals ?? 0) > 0 { return waitingWord(for: s) }
         switch s.effectiveRunState {
         case .queued:
             return "Queued"
         case .running:
-            return (s.pendingApprovals ?? 0) > 0 ? "Waiting for approval" : "Running"
+            return "Running"
         case .awaitingInput:
             // A turn the runtime started for itself keeps the run state parked for its whole
             // duration, so the parked branch is where it has to be caught (see `isGenerating`).
             if s.isGenerating {
-                return (s.pendingApprovals ?? 0) > 0 ? "Waiting for approval" : "Running"
+                return "Running"
             }
             if let watching = parkedOnWatch(s, watching) { return watching.word }
             if (s.runningBgCount ?? 0) > 0 { return SessionLine.bgRunningLabel(s.runningBgCount ?? 0) }
@@ -46,6 +52,18 @@ public enum SessionHeader {
         case .ended, .unknown:
             return "Ended"
         }
+    }
+
+    /// What a session that is waiting on you says — the one word the console header and the list
+    /// row share, in the words of whatever is actually waiting.
+    ///
+    /// The server names the kind when everything it counted is an OWNER_CONFIRMED task's run waiting
+    /// to be confirmed (`waitingKind`), and that row says so in the confirmation card's own words;
+    /// anything else waiting on you keeps the approval wording. Web parity: `waitingLabel` in
+    /// `WorkspaceView.tsx`, which the copy-parity test reads.
+    public static func waitingWord(for s: Session) -> String {
+        s.waitingKind == .ownerConfirmation ? OwnerConfirmations.waitingForConfirmation
+                                            : "Waiting for approval"
     }
 
     /// The full "run state · lifecycle · when" subtitle. Keeping both dimensions visible prevents

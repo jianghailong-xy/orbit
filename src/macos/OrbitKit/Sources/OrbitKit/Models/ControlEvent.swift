@@ -98,6 +98,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let projectId: String??
     public let projectTitle: String??
     public let pendingApprovals: Int
+    /// What `pendingApprovals` is counting, when one word says it better than "approval" — see
+    /// `SessionWaitingKind`. The server overwrites it together with the count, so the row reads it
+    /// the same way: a summary that carries a count and no kind is a count of approvals, and the
+    /// row that read "Waiting for your confirmation" stops saying so when the answer lands.
+    public let waitingKind: SessionWaitingKind?
     public let lastTurnAt: String?
     /// When the server will re-send the message this run's failure killed — part of the summary
     /// because it is part of what `runState == .failed` means (see `Session.retryPending`).
@@ -142,6 +147,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             ? .some(try values.decodeIfPresent(String.self, forKey: .projectTitle))
             : nil
         pendingApprovals = try values.decode(Int.self, forKey: .pendingApprovals)
+        // Absent and null are the same fact here — no named kind — unlike `retryAt`, where the
+        // absence of the key is an older control plane rather than a statement, so this one needs
+        // no `contains`: both spellings read as "nothing named", and an unrecognised name reads as
+        // a kind this client cannot say anything about.
+        waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
         retryAt = values.contains(.retryAt)
             ? .some(try values.decodeIfPresent(String.self, forKey: .retryAt))
@@ -194,6 +204,9 @@ public struct ControlSessionError: Codable, Equatable, Sendable {
 public struct ControlApproval: Codable, Equatable, Sendable {
     public let approvalId: String
     public let pendingApprovals: Int
+    /// Overwritten together with the count, for the reason `SessionUpsert` gives: the event's count
+    /// is the whole total the row shows, and so is the kind that says what the total is.
+    public let waitingKind: SessionWaitingKind?
 }
 
 /// `data` for `background.task`.

@@ -201,6 +201,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let assignedRunnerId: String?
     public let provider: String?
     public let pendingApprovals: Int?
+    /// What `pendingApprovals` is counting, when one word says it better than "approval":
+    /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
+    /// owner. Absent from an older control plane, and unknown values read as none. The session's row
+    /// and its console header say the confirmation card's words when it is set (`SessionLine`,
+    /// `SessionHeader`) — the words only: neither carries a button, because the one place to answer
+    /// is the card in this session.
+    public let waitingKind: SessionWaitingKind?
+    /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
+    /// question it may have to draw a card for (`OwnerConfirmation.swift`) — a card is drawn in the
+    /// run's own session, and only there.
+    public let taskId: String?
     public let branch: String?
     public let updatedAt: String?
     /// When the session was created / last had a turn (ISO-8601 strings). These drive the Agent
@@ -323,6 +334,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         assignedRunnerId = try values.decodeIfPresent(String.self, forKey: .assignedRunnerId)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
+        waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
+        taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
         createdAt = try values.decodeIfPresent(String.self, forKey: .createdAt)
@@ -353,7 +366,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 capabilities: SessionCapabilities? = nil,
                 agentId: String?,
                 assignedRunnerId: String?, provider: String? = nil,
-                pendingApprovals: Int?, branch: String?,
+                pendingApprovals: Int?, waitingKind: SessionWaitingKind? = nil, taskId: String? = nil,
+                branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 effort: String? = nil, source: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
@@ -377,6 +391,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.assignedRunnerId = assignedRunnerId
         self.provider = provider
         self.pendingApprovals = pendingApprovals
+        self.waitingKind = waitingKind
+        self.taskId = taskId
         self.branch = branch
         self.updatedAt = updatedAt
         self.model = model

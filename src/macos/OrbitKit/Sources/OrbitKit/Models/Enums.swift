@@ -136,6 +136,24 @@ public enum SessionLifecycleState: String, Codable, Sendable {
     }
 }
 
+/// What a session's `pendingApprovals` is counting, when one word says it better than "approval".
+///
+/// Only `OWNER_CONFIRMATION` is named today: everything counted is an OWNER_CONFIRMED task's run
+/// waiting for its owner to confirm it done, so the row says that instead of "Waiting for approval".
+/// A kind this client does not know decodes as ``unknown`` — and every reader treats it exactly like
+/// a missing one — because a runner and a control plane self-update on their own schedule and a
+/// description must never be the reason a payload fails to decode.
+public enum SessionWaitingKind: String, Codable, Sendable {
+    case ownerConfirmation = "OWNER_CONFIRMATION"
+    /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionWaitingKind(rawValue: raw) ?? .unknown
+    }
+}
+
 /// Legacy mixed lifecycle/filing state. Kept only as a compatibility fallback while old control
 /// planes are still in use; new presentation reads ``SessionRunState`` and ``SessionLifecycleState``.
 public enum SessionState: String, Codable, Sendable, CaseIterable {

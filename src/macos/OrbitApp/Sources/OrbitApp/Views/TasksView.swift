@@ -705,6 +705,9 @@ private struct TaskDetailContent: View {
         }
         .task(id: taskID) {
             await loadDetail()
+            // After the detail, so the panel's owner-confirmation rule has both halves of what it
+            // reads: this task's criterion and status, and what a run of it is waiting on.
+            await tasks.loadOwnerConfirmation(taskID)
             if model.agents?.items.isEmpty == true { await model.agents?.load() }
             await tasks.loadNavigation()
         }
@@ -742,6 +745,10 @@ private struct TaskDetailContent: View {
     }
 
     private func pollBusyDetail() async {
+        // This task fires when the detail's busy flag flips — which is exactly when a run ended its
+        // turn, and therefore when the owner may have just been asked something. The read is what
+        // turns that into the card's pointer rather than into a stale `Confirm done`.
+        await tasks.loadOwnerConfirmation(taskID)
         guard let task = tasks.detail, task.id == taskID, TaskListLogic.isBusy(task) else { return }
         while !Task.isCancelled {
             do { try await Task.sleep(nanoseconds: 4_000_000_000) }
@@ -770,6 +777,7 @@ private struct TaskDetailContent: View {
         let canStart = TaskListLogic.canStart(task, assigneeHasRunner: assigneeHasRunner(task))
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 10) {
+                ownerConfirmation(task)
                 if task.status != .done {
                     Button {
                         Task { _ = await tasks.execute(task.id) }
@@ -793,6 +801,38 @@ private struct TaskDetailContent: View {
             if task.status != .done, !canStart, let hint = runDisabledHint(task) {
                 Text(hint).font(.orbitMeta).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// The owner's confirmation, for a task an OWNER_CONFIRMED criterion settles: a pointer to the
+    /// card while a run of it is waiting on the owner, `Confirm done` when no run is, and nothing at
+    /// all for any other criterion or a task the door would refuse.
+    ///
+    /// One state, one place to answer — the rule `OwnerConfirmations.panelAction` states for both
+    /// clients. A second place to answer would be a second answer racing the first, which is why
+    /// the button becomes a link the moment a run starts waiting.
+    @ViewBuilder
+    private func ownerConfirmation(_ task: TaskItem) -> some View {
+        let read = tasks.ownerConfirmation?.taskId == task.id ? tasks.ownerConfirmation : nil
+        switch OwnerConfirmations.panelAction(
+            read,
+            taskIsOwnerConfirmed: task.completionCriterion == OwnerConfirmations.ownerConfirmedCriterion,
+            taskUnsettled: task.status == .open || task.status == .inProgress,
+            taskHasRuns: !(task.sessions ?? []).isEmpty) {
+        case .pointer(let sessionId):
+            Button { model.route(to: .session(sessionId)) } label: {
+                Label(OwnerConfirmations.waitingForConfirmation,
+                      systemImage: "arrow.turn.down.right")
+            }
+            .buttonStyle(.bordered)
+        case .confirm:
+            Button { Task { _ = await tasks.confirmOwner(task.id) } } label: {
+                Label(OwnerConfirmations.confirmAction, systemImage: "checkmark.seal")
+            }
+            .buttonStyle(.bordered)
+            .disabled(tasks.isMutating(task.id))
+        case nil:
+            EmptyView()
         }
     }
 

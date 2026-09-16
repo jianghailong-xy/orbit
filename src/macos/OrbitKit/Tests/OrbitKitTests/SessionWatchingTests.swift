@@ -50,9 +50,13 @@ final class SessionWatchingTests: XCTestCase {
         // The wake a watch queued is running on the parked session: that's the agent working.
         XCTAssertEqual(SessionHeader.statusWord(for: session(.awaitingInput, engineTurnActive: true),
                                                 watching: watching), "Running")
-        // Parked with a question for you: the watch doesn't hide it.
+        // Parked with a question for you: the watch doesn't hide it. In the waiting words, which is
+        // what the row next to it has always said — the header used to answer "Waiting for your
+        // reply" over a parked session holding a question, and web's `statusLabel` (which this
+        // mirrors) has never done that: the pending count is read before the run state there, and
+        // the count is not held open by the turn the way a blocked tool call is.
         let asking = session(.awaitingInput, pendingApprovals: 1)
-        XCTAssertEqual(SessionHeader.statusWord(for: asking, watching: watching), "Waiting for your reply")
+        XCTAssertEqual(SessionHeader.statusWord(for: asking, watching: watching), "Waiting for approval")
         XCTAssertEqual(SessionLine.make(for: asking, live: true, watching: watching).tone, .approval)
         XCTAssertNotEqual(SessionStatusGlyph.make(for: asking, watching: watching).label, "Watching 7 targets")
         // A Trash row is static.
