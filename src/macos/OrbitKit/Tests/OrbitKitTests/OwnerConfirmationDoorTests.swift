@@ -493,26 +493,6 @@ final class OwnerConfirmationDoorTests: XCTestCase {
 
     // MARK: 6 — the signal that gets you to the door
 
-    /// Where a receipt is drawn: after the last transcript item recorded at or before the decision.
-    /// Nil when every item loaded is later, which is the moment being on a page that is not loaded.
-    func testAReceiptIsAnchoredAtTheMomentItWasMade() {
-        let items: [(id: String, ts: String?)] = [
-            ("i1", "2026-09-16T07:00:00.000Z"),
-            ("i2", "2026-09-16T07:50:00.000Z"),
-            ("i3", "2026-09-16T08:10:00.000Z"),
-        ]
-        XCTAssertEqual(OwnerConfirmations.receiptAnchor(items: items,
-                                                        decidedAt: "2026-09-16T08:00:00.000Z"),
-                       "i2", "the item just before the decision, not the one after it")
-        XCTAssertEqual(OwnerConfirmations.receiptAnchor(items: items,
-                                                        decidedAt: "2026-09-16T09:00:00.000Z"),
-                       "i3")
-        XCTAssertNil(OwnerConfirmations.receiptAnchor(items: items,
-                                                      decidedAt: "2026-09-16T06:00:00.000Z"),
-                     "the moment is on a page that is not loaded")
-        XCTAssertNil(OwnerConfirmations.receiptAnchor(items: items, decidedAt: "not a time"))
-    }
-
     /// The session DTO carries the signal: `waitingKind` names what `pendingApprovals` is counting,
     /// and a kind this client does not know reads as no kind rather than failing the payload.
     func testWaitingKindDecodesAndNamesTheConfirmation() throws {

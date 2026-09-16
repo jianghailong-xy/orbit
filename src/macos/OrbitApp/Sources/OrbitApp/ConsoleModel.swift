@@ -1973,16 +1973,15 @@ final class ConsoleModel {
             // The receipts this conversation has recorded, drawn where each was made. They come
             // from the read rather than from the press, so a reload or another device shows them
             // too — the same reason the browser draws them from `decisions`.
+            // The receipts this conversation has recorded, oldest first — from the read rather than
+            // from the press, so a reload or another device shows them too. They arrive where the
+            // conversation is, like every other delivered card; the browser places them by
+            // `decidedAt` instead, which this transcript cannot do — only a user bubble and a
+            // thinking stretch carry a timestamp, so there is no item to anchor a reply between.
+            // The line names its own moment ("Confirmed done by you · 9/14 08:42"), which is what
+            // that placement was for.
             for decided in OwnerConfirmations.receiptsIn(read, sessionID: sessionID) {
-                // A receipt whose moment is on a page that is not loaded is not drawn at all,
-                // rather than drawn above things that happened first or below things that
-                // happened after it (web's `decisionReceiptAnchor` returns null for the same
-                // case). The record is not lost: it is on the read, and it arrives with the page.
-                guard let anchor = OwnerConfirmations.receiptAnchor(items: receiptAnchorItems,
-                                                                    decidedAt: decided.decidedAt)
-                else { continue }
-                deliver(.ownerDecisionReceipt(taskID: taskID, decisionID: decided.id),
-                        anchoredAt: anchor)
+                deliver(.ownerDecisionReceipt(taskID: taskID, decisionID: decided.id))
             }
         }
         lastOwnerRead = Date()
@@ -1997,12 +1996,6 @@ final class ConsoleModel {
     /// The receipt one recorded decision draws, when the read still publishes it.
     func ownerReceipt(_ taskID: String, _ decisionID: String) -> RecordedOwnerDecision? {
         OwnerConfirmations.receipt(ownerConfirmation, decisionID: decisionID)
-    }
-
-    /// The transcript items a receipt can be anchored to — the moment of a decision is a position
-    /// in the conversation, and this is the conversation as it stands.
-    private var receiptAnchorItems: [(id: String, ts: String?)] {
-        state.items.map { (id: $0.id, ts: $0.ts) }
     }
 
     /// Answer the question this conversation's task is waiting on, at the owner-confirmation door

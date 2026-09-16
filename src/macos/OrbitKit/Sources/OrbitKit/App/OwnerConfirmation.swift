@@ -320,25 +320,6 @@ public enum OwnerConfirmations {
         }
     }
 
-    /// The row a receipt is drawn after: the last transcript item recorded at or before the
-    /// decision. Nil when every item loaded so far is later — the moment is on a page that is not
-    /// loaded, and this client trails the receipt at the tail rather than drawing it above things
-    /// that happened first. Web parity: `decisionReceiptAnchor`.
-    public static func receiptAnchor(items: [(id: String, ts: String?)],
-                                     decidedAt: String) -> String? {
-        guard let at = RelativeTime.parse(decidedAt) else { return nil }
-        var anchor: String?
-        var anchorAt: Date?
-        for item in items {
-            guard let ts = item.ts, let when = RelativeTime.parse(ts), when <= at else { continue }
-            if anchorAt == nil || when > anchorAt! {
-                anchor = item.id
-                anchorAt = when
-            }
-        }
-        return anchor
-    }
-
     // MARK: the copy
     //
     // Every string below is the one its web twin declares, and `OwnerConfirmationCopyParityTests`
