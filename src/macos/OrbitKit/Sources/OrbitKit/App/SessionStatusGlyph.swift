@@ -46,7 +46,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
              engineTurnActive: s.engineTurnActive == true,
              error: s.error,
              retryPending: s.retryPending(now: now),
-             watchingLabel: watching?.word)
+             watchingLabel: watching?.word,
+             waitingKind: s.waitingKind)
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -78,13 +79,21 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             engineTurnActive: Bool = false,
                             error: String? = nil,
                             retryPending: Bool = false,
-                            watchingLabel: String? = nil) -> SessionStatusGlyph {
+                            watchingLabel: String? = nil,
+                            waitingKind: SessionWaitingKind? = nil) -> SessionStatusGlyph {
+        // Somebody waiting on YOU outranks everything else — first, and outside the generating gate,
+        // exactly as it is in the word beside this glyph (`SessionHeader.statusWord`) and in the web
+        // `StatusIcon` both mirror. The two are read together on one row: a pause glyph labelled
+        // "Waiting for your reply" over a question the reader can answer is that same disagreement in
+        // a different medium.
+        if (pendingApprovals ?? 0) > 0 {
+            return .init(shape: .symbol("pause.circle"), tone: .warning,
+                         label: waitingKind == .ownerConfirmation
+                            ? OwnerConfirmations.waitingForConfirmation : "Waiting for approval")
+        }
         // The working glyph, shared by the two states that mean the agent is generating.
         func generating() -> SessionStatusGlyph {
-            if (pendingApprovals ?? 0) > 0 {
-                return .init(shape: .symbol("pause.circle"), tone: .warning, label: "Waiting for approval")
-            }
-            return .init(shape: .spinner, tone: .brand, label: "Running")
+            .init(shape: .spinner, tone: .brand, label: "Running")
         }
         switch runState {
         case .queued:

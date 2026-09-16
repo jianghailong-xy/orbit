@@ -793,6 +793,266 @@ private struct DisclosureToggle: View {
     }
 }
 
+// MARK: - the owner's confirmation
+
+/// The card the ACCOUNT OWNER confirms an OWNER_CONFIRMED task done on, or sends back with a reason
+/// — drawn by Orbit from `GET /tasks/:id/owner-confirmation` and pressed at the same door with the
+/// owner's own sign-in, in the run's own session. Web's `OwnerConfirmationCard`.
+///
+/// It is delivered like the cards above: no `Approval` stands behind it, nothing stops a turn for
+/// it, and it keeps the address and nothing else — the standing is re-derived from the console's
+/// read on every body pass, which is what makes its buttons' disabled state honest rather than a
+/// guess. Every word it shows comes from `OwnerConfirmations`, so macOS, iOS and the browser cannot
+/// come apart on it.
+private struct OwnerConfirmationCardView: View {
+    let console: ConsoleModel
+    let taskID: String
+    /// The report this card was drawn for — the door's compare-and-set.
+    let requestID: String
+    @State private var deciding = false
+    /// The send-back's whole state, as one value OrbitKit owns the rules of — including the one that
+    /// matters: it cannot be sent without a reason, because the door refuses a SEND_BACK carrying
+    /// none and writes nothing at all.
+    @State private var sendBack = OwnerSendBackState()
+
+    private var standing: OwnerConfirmationStanding { console.ownerStanding(taskID, requestID) }
+
+    var body: some View {
+        let standing = self.standing
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.seal.fill", title: OwnerConfirmations.heading,
+                           tone: .blue)
+            // The ruler card's mark, for its reason: this card is Orbit's rather than the agent's
+            // typing, and a press goes to the door rather than into the conversation.
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let view = console.ownerConfirmation {
+                lead(view)
+                OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
+                                       report: standing.waiting?.report)
+            } else {
+                // The address and nothing else: a read that has not come back is not a description
+                // of anything, and this card kept no copy of an earlier one.
+                Text(taskID)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // Above the dead buttons, so it reads as the reason they are dead.
+            if let stale = OwnerConfirmations.staleExplanation(standing) {
+                Text(stale)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.blue.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            }
+
+            ApprovalActions {
+                confirmButton(standing)
+                sendBackButton(standing)
+            }
+            // Below the actions rather than inside them: on macOS those are one row, and a growing
+            // reason box wedged into it would push Confirm off its line.
+            if sendBack.open { reasonBox(standing) }
+        }
+        .approvalChrome(.blue, dimmed: !OwnerConfirmations.isOpen(standing))
+    }
+
+    /// What is being confirmed: the task, and which criterion asks for it.
+    private func lead(_ view: OwnerConfirmationView) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(view.title)
+                .font(.orbitProse.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("\(view.taskId) · \(view.completionCriterion)")
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: actions
+    //
+    // The one rule both clients are under: an action that cannot succeed is disabled rather than
+    // lit and refused.
+
+    private func confirmButton(_ standing: OwnerConfirmationStanding) -> some View {
+        Button { decide(standing, .confirm) } label: {
+            Text(OwnerConfirmations.confirmAction).approvalActionLabel()
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(deciding || !standing.answerable)
+    }
+
+    private func sendBackButton(_ standing: OwnerConfirmationStanding) -> some View {
+        Button {
+            PlatformHaptics.tap()
+            sendBack.open.toggle()
+        } label: {
+            Text(OwnerConfirmations.sendBackAction).approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+        .disabled(deciding || !standing.answerable)
+    }
+
+    private func reasonBox(_ standing: OwnerConfirmationStanding) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(OwnerConfirmations.sendBackLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField("", text: $sendBack.note, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.orbitControl)
+                .lineLimit(3...6)
+                .disabled(deciding || !standing.answerable)
+            Text(OwnerConfirmations.sendBackHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                decide(standing, .sendBack, note: sendBack.trimmedNote)
+            } label: {
+                Text(OwnerConfirmations.sendAction).approvalActionLabel()
+            }
+            .buttonStyle(.bordered)
+            // A send-back with no reason is refused by the door and writes nothing at all, so the
+            // control that would send one is not pressable until there is one.
+            .disabled(deciding || !standing.answerable || !sendBack.canSend)
+        }
+    }
+
+    /// The press re-checks what the buttons were rendered from, so a race between a render and a tap
+    /// cannot send an answer the standing says is dead.
+    private func decide(_ standing: OwnerConfirmationStanding, _ decision: OwnerDecision,
+                        note: String? = nil) {
+        guard let waiting = standing.waiting, standing.answerable, !deciding else { return }
+        PlatformHaptics.tap()
+        deciding = true
+        Task {
+            await console.decideOwnerConfirmation(waiting, decision, note: note)
+            deciding = false
+        }
+    }
+}
+
+/// The two boxes the owner decides from — what settles the task, and what the run reported — in the
+/// browser card's order and its own words. Every visible string is a field of the read or the
+/// card's copy; nothing is summarised.
+private struct OwnerConfirmationBoxes: View {
+    let acceptanceCriteria: String?
+    let report: OwnerConfirmationReport?
+
+    @State private var reportOpen = false
+
+    private var criteria: String { OwnerConfirmations.plainText(acceptanceCriteria) }
+    private var said: (text: String, folded: Bool) {
+        OwnerConfirmations.foldedBody(report?.text)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            box(OwnerConfirmations.whatSettlesIt) {
+                quietOrText(criteria, OwnerConfirmations.noCriteria)
+            }
+            // The heading carries the moment the run said it, when it said anything — a report
+            // whose time is missing is still a report.
+            box(OwnerConfirmations.reportHeading(
+                    report, time: report.flatMap { OwnerConfirmations.receiptTime($0.reportedAt) })) {
+                quietOrText(said.text.isEmpty ? "" : said.text, OwnerConfirmations.noReport)
+                if said.folded {
+                    // The rest of it, one press away — never dropped: a report the owner cannot
+                    // finish reading is a report they cannot decide from.
+                    DisclosureToggle(open: reportOpen,
+                                     label: reportOpen ? OwnerConfirmations.showLess
+                                                       : OwnerConfirmations.showAll) {
+                        reportOpen.toggle()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func box<Content: View>(_ heading: String,
+                                    @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(heading)
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            content()
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// A body that may be blank: the card says why rather than rendering an empty box.
+    @ViewBuilder
+    private func quietOrText(_ text: String, _ whenEmpty: String) -> some View {
+        if text.isEmpty {
+            Text(whenEmpty).font(.orbitProse).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(text).font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// What a decision left in the conversation it was made in, drawn at the moment it was made: folded
+/// to one line, because it is a record now and not a question. A confirmation opens to what settled
+/// it — the task's acceptance criteria and the report the owner confirmed. A send-back needs no
+/// fold: its reason is the owner's own message, right below it.
+///
+/// It is read back from the task's decisions rather than kept from the press, so a reload or another
+/// device shows it too — web's `OwnerDecisionReceipt`.
+private struct OwnerDecisionReceiptView: View {
+    let console: ConsoleModel
+    let taskID: String
+    let decisionID: String
+    @State private var open = false
+
+    var body: some View {
+        if let decided = console.ownerReceipt(taskID, decisionID),
+           let view = console.ownerConfirmation {
+            let confirmed = decided.decision == .confirm
+            VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+                ApprovalHeader(symbol: confirmed ? "checkmark.seal.fill" : "arrow.uturn.backward",
+                               title: confirmed ? OwnerConfirmations.confirmedHeading
+                                                : OwnerConfirmations.sentBackHeading,
+                               tone: .blue)
+                Text(CriteriaDecisions.provenanceLabel)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(view.title)
+                    .font(.orbitProse.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(OwnerConfirmations.receiptLine(
+                        decided, time: OwnerConfirmations.receiptTime(decided.decidedAt)))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if confirmed {
+                    DisclosureToggle(open: open,
+                                     label: open
+                                        ? "\(OwnerConfirmations.hideWhatSettledIt) ▴"
+                                        : "\(OwnerConfirmations.showWhatSettledIt) ▾") {
+                        open.toggle()
+                    }
+                    if open {
+                        OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
+                                               report: decided.report)
+                    }
+                }
+            }
+            // Dimmed for the reason the criteria card's receipt is: the question is over, and the
+                // record should not read as something still waiting to be pressed.
+            .approvalChrome(.blue, dimmed: true)
+        }
+    }
+}
+
 struct PlanCard: View {
     let console: ConsoleModel
     let approval: PendingApproval
@@ -860,13 +1120,23 @@ struct DeliveredDecisionCardView: View {
             case .evidenceDecision(let taskID, let evidenceRevision):
                 EvidenceDecisionCard(console: console, taskID: taskID,
                                      evidenceRevision: evidenceRevision)
+            case .ownerConfirmation(let taskID, let requestID):
+                OwnerConfirmationCardView(console: console, taskID: taskID, requestID: requestID)
+            case .ownerDecisionReceipt(let taskID, let decisionID):
+                OwnerDecisionReceiptView(console: console, taskID: taskID, decisionID: decisionID)
             }
         }
         // A card re-derives itself when it comes into view, on top of the reads the console runs
         // when it loads and when the stream reconnects: the question this card is about can be
         // answered in a browser while a phone is asleep, and the phone has to find that out by
         // asking rather than by being told.
-        .task { await console.refreshRulerQuestions() }
+        .task {
+            // Both reads, and each is a no-op where it does not apply: the project's questions
+            // belong to a coordinator conversation, the confirmation to a task's run — and a
+            // receipt of one of these cards is on screen in the same conversation as the card was.
+            await console.refreshRulerQuestions()
+            await console.refreshOwnerConfirmation()
+        }
     }
 }
 

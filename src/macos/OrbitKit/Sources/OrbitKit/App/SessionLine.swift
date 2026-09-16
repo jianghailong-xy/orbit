@@ -36,8 +36,13 @@ public struct SessionLine: Equatable, Sendable {
         // held open by nobody — the card is delivered and the turn ends underneath it — so they sit
         // on a PARKED conversation. Inside the gate, a real criteria decision waiting for an answer
         // left the row reading as an ordinary idle reply preview.
+        //
+        // WHAT it is waiting for is `SessionHeader.waitingWord`: an OWNER_CONFIRMED task's run says
+        // so in the confirmation card's words, and anything else keeps the approval wording. Only
+        // the words change — the row carries no button either way, because the one place to answer
+        // is the card in the session.
         if live && (s.pendingApprovals ?? 0) > 0 {
-            return SessionLine(text: "Waiting for approval", tone: .approval)
+            return SessionLine(text: SessionHeader.waitingWord(for: s), tone: .approval)
         }
         if live && s.isGenerating {
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }

@@ -17,6 +17,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let assigneeId: String?
     public let listId: String?
     public let dueDate: String?
+    /// Which of the four completion criteria settles this task. Carried on every task payload, so a
+    /// panel can tell an OWNER_CONFIRMED task from the three a run or a verifier settles without a
+    /// second read (`OwnerConfirmations.panelAction`).
+    public let completionCriterion: String?
     /// Per-task run override: the provider/model this task's runs use instead of the assignee
     /// agent's own. Both nil = inherit from the assignee (the common case).
     public let provider: String?
@@ -55,6 +59,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status, assigneeId, listId, dueDate, provider, model
+        case completionCriterion
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case running, queued, blocked, dependencyState, runnable

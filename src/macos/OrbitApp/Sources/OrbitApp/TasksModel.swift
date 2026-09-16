@@ -547,6 +547,45 @@ final class TasksModel {
         detailLoading = false
         detailMissing = false
         detailErrorText = nil
+        ownerConfirmation = nil
+    }
+
+    /// What the task on screen is waiting on from its owner, when it declares OWNER_CONFIRMED.
+    ///
+    /// Read beside the detail rather than as part of it: it is one task's own question, and the
+    /// panel decides from it whether it may confirm the task itself or may only point at the run
+    /// that is waiting. The server scopes it to this account and to nothing else.
+    private(set) var ownerConfirmation: OwnerConfirmationView?
+
+    /// Re-read it for the task on screen. A failed read leaves the last one — which is `unread` to
+    /// the panel's rule, and the rule then offers nothing rather than a `Confirm done` the door
+    /// might refuse because a run had started waiting in the meantime.
+    func loadOwnerConfirmation(_ id: String) async {
+        guard selectedDetailID == id else { return }
+        ownerConfirmation = try? await api.ownerConfirmation(taskID: id)
+    }
+
+    /// Confirm the task from its own panel — the press that answers no run, which the door takes as
+    /// a null `requestId` and refuses the moment a run starts waiting. The panel only offers it
+    /// while the read says nothing is waiting, and this re-reads either way so a refusal for
+    /// staleness turns the button into the pointer it should have been.
+    @discardableResult
+    func confirmOwner(_ id: String) async -> Bool {
+        guard selectedDetailID == id else { return false }
+        mutatingTaskIDs.insert(id)
+        errorText = nil
+        defer { mutatingTaskIDs.remove(id) }
+        do {
+            _ = try await api.decideOwnerConfirmation(taskID: id, OwnerConfirmations.panelRequest())
+            await loadOwnerConfirmation(id)
+            await refreshChangedTasks([id])
+            _ = await loadDetail(id)
+            return true
+        } catch {
+            errorText = friendly(error)
+            await loadOwnerConfirmation(id)
+            return false
+        }
     }
 
     func clearDetailError() {

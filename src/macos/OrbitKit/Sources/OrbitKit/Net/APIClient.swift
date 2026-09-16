@@ -310,6 +310,42 @@ public final class APIClient: @unchecked Sendable {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
     }
 
+    // MARK: an OWNER_CONFIRMED task — the question only its owner answers
+
+    /// What an OWNER_CONFIRMED task is waiting on and what its owner has decided about it — the read
+    /// the confirmation card is drawn from (`OwnerConfirmation.swift`), in the session whose run
+    /// reported. Owner-authenticated like the door it feeds: nothing here is a description of a
+    /// question, it is the question.
+    public func ownerConfirmation(taskID: String) async throws -> OwnerConfirmationView {
+        try await get("tasks/\(taskID)/owner-confirmation")
+    }
+
+    /// The owner-confirmation door, with this device's own credential.
+    ///
+    /// Deliberately the app's own route and nothing else: `makeRequest` sets no
+    /// `x-orbit-session-id`, and that is half of the rule — the door refuses every request that
+    /// names a session, which is how each agent tool and CLI call reaches Orbit. An
+    /// OWNER_CONFIRMED task is confirmed or sent back by the account owner in the app and by
+    /// nobody else, so a client that added that header would be refused and should be.
+    public func decideOwnerConfirmation(taskID: String,
+                                        _ req: OwnerDecisionRequest) async throws -> OwnerDecisionResult {
+        try await post("tasks/\(taskID)/owner-confirmation", body: req)
+    }
+
+    /// The server's own `code` for a refusal, when the error carries one.
+    ///
+    /// Every door of this service answers a refusal as `{ code, kind, requiredAction, message }`, and
+    /// a client that has to say WHICH refusal it met — "this card is out of date" rather than a bare
+    /// "not recorded" — needs the code rather than the prose. Nil for anything that is not a refusal
+    /// with a code: a transport error, an HTML error page, a body from something that is not Orbit.
+    public static func refusalCode(_ error: Error) -> String? {
+        guard case APIError.http(_, let body) = error, let body,
+              let data = body.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["code"] as? String
+    }
+
     // MARK: a project's ruler — the two standing questions its owner answers
 
     /// The loosening proposals this project's owner is being asked to decide, each carrying the

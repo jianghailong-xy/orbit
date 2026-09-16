@@ -708,7 +708,8 @@ final class AppModel {
             scheduleControlRefresh()
         case .approvalRequested, .approvalResolved:
             if let approval = ev.payload(ControlApproval.self),
-               mergePendingApprovals(sessionID: ev.sessionId, pending: approval.pendingApprovals) {
+               mergePendingApprovals(sessionID: ev.sessionId, pending: approval.pendingApprovals,
+                                     waitingKind: approval.waitingKind) {
                 return
             }
             scheduleControlRefresh()
@@ -775,11 +776,18 @@ final class AppModel {
     /// Same, for `approval.requested` / `approval.resolved` — the event carries the authoritative
     /// pending count, which is all a row needs to switch between the spinner and the amber
     /// needs-you cue (and to move the badge). False when the row isn't loaded.
-    private func mergePendingApprovals(sessionID: String, pending: Int) -> Bool {
+    ///
+    /// The kind comes with the count and replaces the row's, because the event's number is the
+    /// whole total: the one that answers an owner confirmation arrives with a count and no kind,
+    /// and a row left saying "Waiting for your confirmation" would be pointing at a card that is
+    /// gone.
+    private func mergePendingApprovals(sessionID: String, pending: Int,
+                                       waitingKind: SessionWaitingKind?) -> Bool {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
-        guard sessions[index].pendingApprovals != pending else { return true }
+        guard sessions[index].pendingApprovals != pending
+                || sessions[index].waitingKind != waitingKind else { return true }
         var list = sessions
-        list[index] = list[index].settingPendingApprovals(pending)
+        list[index] = list[index].settingPendingApprovals(pending, waitingKind: waitingKind)
         applySessionSnapshot(list)
         return true
     }

@@ -59,6 +59,13 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One revision of one task's completion evidence. The revision is part of the address
         /// because the door's compare-and-set is against it: a newer revision is its own card.
         case evidenceDecision(taskID: String, evidenceRevision: String)
+        /// One OWNER_CONFIRMED task's run waiting on its owner, by the report the door's
+        /// compare-and-set is against: a later report is its own card, and the earlier one becomes a
+        /// receipt (`OwnerConfirmation.swift`).
+        case ownerConfirmation(taskID: String, requestID: String)
+        /// A recorded owner decision, drawn where it was made. Not a question: nothing on it is
+        /// pressable, and it stays for as long as the read publishes the decision.
+        case ownerDecisionReceipt(taskID: String, decisionID: String)
     }
 
     public let kind: Kind
@@ -86,6 +93,14 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // The web evidence card's `decisionRowKey` spelling, taskId@evidenceRevision.
         case .evidenceDecision(let taskID, let evidenceRevision):
             return "evidence-decision-\(taskID)@\(evidenceRevision)"
+        // The web confirmation card's `data-owner-confirmation` spelling, plus the task it belongs
+        // to: two tasks can each have a card on screen in their own run's session, and the request
+        // alone would still collide with a sibling window's.
+        case .ownerConfirmation(let taskID, let requestID):
+            return "owner-confirmation-\(taskID)@\(requestID)"
+        // The web receipt's element key, `owner-decision-receipt:${decided.id}`.
+        case .ownerDecisionReceipt(let taskID, let decisionID):
+            return "owner-decision-receipt-\(taskID)@\(decisionID)"
         }
     }
 }

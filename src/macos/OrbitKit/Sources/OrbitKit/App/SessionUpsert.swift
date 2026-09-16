@@ -34,6 +34,11 @@ public extension Session {
             capabilities: summary.capabilities,
             agentId: summary.agentId,
             pendingApprovals: summary.pendingApprovals,
+            // Travelling with the count it qualifies, and overwritten with it: the summary that
+            // reports an owner confirmation answered carries a count and no kind, and a row left
+            // saying "Waiting for your confirmation" would be pointing at a card that is gone.
+            waitingKind: .some(summary.waitingKind),
+            taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
             // The row's nested agent is richer than the summary's (it carries provider + effort, which
             // the composer reads), so it wins; the summary only fills a row that somehow has none.
@@ -66,8 +71,13 @@ public extension Session {
     /// Apply an `approval.requested` / `approval.resolved` pending count — the one field those
     /// events carry, and all a row needs to switch between the working spinner and the amber
     /// needs-you cue (see `SessionStatusGlyph`).
-    func settingPendingApprovals(_ count: Int) -> Session {
-        merging(pendingApprovals: count)
+    ///
+    /// The kind rides with it and is overwritten with it: the event's count is the whole total, so
+    /// the event's `waitingKind` is the whole answer to what that total is waiting for — and the
+    /// event that reports an owner confirmation answered carries none.
+    func settingPendingApprovals(_ count: Int,
+                                 waitingKind: SessionWaitingKind? = nil) -> Session {
+        merging(pendingApprovals: count, waitingKind: .some(waitingKind))
     }
 
     /// Rebuild this row with the subset of fields a control event can change; `nil` means "keep what
@@ -83,6 +93,11 @@ public extension Session {
                          capabilities: SessionCapabilities? = nil,
                          agentId: String? = nil,
                          pendingApprovals: Int? = nil,
+                         // Doubly optional because the summary owns this field outright: `nil`
+                         // keeps the row's, `.some(nil)` is the server saying nothing is named any
+                         // more, `.some(kind)` names what is waiting.
+                         waitingKind: SessionWaitingKind?? = nil,
+                         taskId: String? = nil,
                          lastTurnAt: String? = nil,
                          agent: SessionAgentRef? = nil,
                          // Doubly optional: nil preserves an older server's omission; .some(nil)
@@ -108,6 +123,8 @@ public extension Session {
                 assignedRunnerId: assignedRunnerId,
                 provider: provider,
                 pendingApprovals: pendingApprovals ?? self.pendingApprovals,
+                waitingKind: waitingKind ?? self.waitingKind,
+                taskId: taskId ?? self.taskId,
                 branch: branch,
                 updatedAt: updatedAt,
                 model: model,
