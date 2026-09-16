@@ -1,4 +1,4 @@
-import { CloseOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, DeleteOutlined, PlayCircleOutlined, SafetyOutlined } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -17,7 +17,7 @@ import {
 } from '../lib/workspaceDefaults';
 import { encodeId } from '../lib/idCodec';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
-import { taskStartOwnedByCompletionDeclaration } from '../lib/taskFilters';
+import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
 import { ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
@@ -141,41 +141,36 @@ const rehypeMentions = (names: string[]) => () => (tree: any) => {
 };
 
 /**
- * What a verification subject's header button says instead of Run now, and the hover hint behind
- * it, keyed on the server's `verificationState` and worded the way the project page and its graph
- * word the same states. The button stays disabled whichever it is: a subject has no work of its own.
+ * What a gate row's header button says instead of Run now, and what its hover hint says per state.
+ *
+ * The label is ONE statement for every state, because that statement is what the button cannot do:
+ * this row has no work of its own, so nothing here starts a run and nothing here can be pressed.
+ * It used to be the verifier state, which read as a document the reader was being asked to fetch —
+ * "Missing verifier", with a hint telling them to create a verification task, an act no client in
+ * this repo can perform. What the check is doing is a fact about the check, and it is said where
+ * the check itself is shown: the card below the header.
+ *
+ * The hints keep that fact, and none of them asks for something the reader cannot do.
  */
-const VERIFICATION_SUBJECT_ACTION: Record<ProjectTaskVerificationState, { label: string; hint: string }> = {
-  MISSING: {
-    label: 'Missing verifier',
-    hint: 'Missing verifier — create a verification task with verifiesTaskId set to this task',
-  },
-  PENDING: {
-    label: 'Awaiting verification',
-    hint: 'Awaiting verification — subject work cannot be started',
-  },
-  RUNNING: {
-    label: 'Verifier running',
-    hint: 'Verifier running — its verdict decides this task',
-  },
-  BLOCKED: {
-    label: 'Verifier blocked',
-    hint: 'Verifier blocked — resolve what stops the verification task first',
-  },
-  FAILED: {
-    label: 'Verification failed',
-    hint: 'Verification failed or inconclusive — file a new verification task',
-  },
-  PASSED: {
-    label: 'Verification passed',
-    hint: 'Verification passed — applying the result',
-  },
+export const GATE_ACTION_LABEL = '由复核判定';
+
+export const VERIFICATION_SUBJECT_HINT: Record<ProjectTaskVerificationState, string> = {
+  MISSING: '还没有复核任务 —— 本行没有自己的活,而库里没有指向它的复核行。',
+  PENDING: '复核任务已建,还没有给出结论。',
+  RUNNING: '复核任务正在跑 —— 这一行由它的结论判定。',
+  BLOCKED: '复核任务被挡住了 —— 先把挡住它的东西解掉。',
+  FAILED: '复核结论是未通过 —— 这一行不会结算。',
+  PASSED: '复核已通过 —— 正在应用结果。',
 };
 
+/** A gate row whose check has passed and which is over: it is not waiting for anything any more. */
+const GATE_DONE_HINT = '复核已通过 —— 这一行已经结束。';
+
 /**
- * A DONE subject never reads Awaiting verification: its passed verifier, a newer one that has not
+ * A DONE subject never reads as still waiting: its passed verifier, a newer one that has not
  * reported yet, or an API too old to send the state all read as passed. A missing, failed, blocked
- * or running verifier still says so. A state this bundle does not know gets the generic wording.
+ * or running verifier still says what it is doing. A state this bundle does not know gets the
+ * generic wording.
  */
 function verificationSubjectAction(
   status?: string | null,
@@ -183,9 +178,74 @@ function verificationSubjectAction(
 ): { label: string; hint: string } {
   const passedAndDone = status === 'DONE'
     && (verificationState == null || verificationState === 'PASSED' || verificationState === 'PENDING');
-  if (passedAndDone) return { label: 'Verification passed', hint: 'Verification passed — this task is done' };
-  return VERIFICATION_SUBJECT_ACTION[verificationState ?? 'PENDING'] ?? VERIFICATION_SUBJECT_ACTION.PENDING;
+  if (passedAndDone) return { label: GATE_ACTION_LABEL, hint: GATE_DONE_HINT };
+  return {
+    label: GATE_ACTION_LABEL,
+    hint: VERIFICATION_SUBJECT_HINT[verificationState ?? 'PENDING'] ?? VERIFICATION_SUBJECT_HINT.PENDING,
+  };
 }
+
+/**
+ * What settles this row, as one chip under its title — the panel's answer to "and who decides
+ * whether this is done?", which the row's own status and badges never said.
+ *
+ * A gate row (see `taskStartOwnedByCompletionDeclaration`) says the thing that is true of it and
+ * was nowhere on the page: it has no work of its own, so no run of it can settle it.
+ */
+export const GATE_CHIP = '闸门 · 本行没有自己的活';
+
+/**
+ * The judgment each completion criterion declares, in the words the chip uses. Keyed on the
+ * criterion because that is what the criterion is for: it says who settles the task, which is a
+ * different question from whether the task has work to do (`completionPolicy`).
+ *
+ * A row that declares no criterion gets no chip rather than an invented one: every write door
+ * requires an explicit criterion, so those are rows from before that rule, and naming a method
+ * nobody declared would be the same kind of guess this panel is being fixed for.
+ */
+export const COMPLETION_CRITERION_CHIP: Record<string, string> = {
+  EXECUTABLE: '完成判定 · 验收命令',
+  VERIFICATION: '完成判定 · 独立复核',
+  EVIDENCE_JUDGMENT: '完成判定 · 证据判定',
+  OWNER_CONFIRMED: '完成判定 · 所有者确认',
+};
+
+/** The chip under a row's title, or null on a row that declares no judgment method. */
+export function judgmentChip(task: FilterableTask): { icon: 'gate' | 'judged'; text: string } | null {
+  if (taskStartOwnedByCompletionDeclaration(task)) return { icon: 'gate', text: GATE_CHIP };
+  const text = COMPLETION_CRITERION_CHIP[task.completionCriterion ?? ''];
+  return text ? { icon: 'judged', text } : null;
+}
+
+/** The check that settles a row, as the detail read returns it (the same current check the lanes use). */
+export interface TaskVerifierRow {
+  id: string;
+  title: string;
+  status: string;
+  verdict?: string | null;
+}
+
+/**
+ * The check's own state in the card's three words. A verdict is the conclusion; a check that has
+ * not written one yet reads Open whatever its run is doing, because that is the only thing its
+ * reader needs from this badge — whether a conclusion exists.
+ */
+export function verifierOutcome(
+  verifier: TaskVerifierRow,
+): { label: 'Open' | 'PASS' | 'FAIL'; tone: 'muted' | 'green' | 'red' } {
+  if (verifier.verdict === 'PASS') return { label: 'PASS', tone: 'green' };
+  if (verifier.verdict === 'FAIL' || verifier.verdict === 'INCONCLUSIVE') {
+    return { label: 'FAIL', tone: 'red' };
+  }
+  return { label: 'Open', tone: 'muted' };
+}
+
+/** The card heading, and the empty state a row with no check left reads — the same sentence its
+ *  header hint carries, so the two cannot send a reader to different places. */
+export const VERIFIER_CARD_HEADING = '复核任务';
+export const VERIFIER_CARD_EMPTY = VERIFICATION_SUBJECT_HINT.MISSING;
+/** How the card gets into the check task — the entry that did not exist at all before. */
+export const VERIFIER_CARD_ENTRY = '查看';
 
 /** The statuses an OWNER_CONFIRMED task can still be confirmed from: the door's own two. */
 export const OWNER_CONFIRMABLE_STATUSES: readonly string[] = ['OPEN', 'IN_PROGRESS'];
@@ -226,7 +286,7 @@ export function runNowHint({
   running,
   scheduledLocal,
 }: {
-  /** This row is completed by a verifier/aggregate and has no task_start work of its own. */
+  /** This row is owned by a check or an aggregate and has no task_start work of its own. */
   completionOwned?: boolean;
   /** On such a row, which sentence it gets — see `verificationSubjectAction`. */
   status?: string | null;
@@ -793,6 +853,15 @@ export function TaskDetailPanel({
   // executable work. The API execute gate is authoritative; this direct declaration check keeps the
   // button honest during a rolling deployment and before any verifier result arrives.
   const completionOwned = taskStartOwnedByCompletionDeclaration(q.data ?? {});
+  // The chip under the title, and the check that settles this row. Both read the detail payload:
+  // `verifier` is the same current check the work lanes and the project page's graph read, so the
+  // card cannot name a different check than the one that decides the row.
+  const judgment = judgmentChip(q.data ?? {});
+  const verifier: TaskVerifierRow | null = q.data?.verifier ?? null;
+  // A gate row without a check still gets the card, because that is where its empty state belongs:
+  // the row is settled by a check and there is none, which is worth saying in place rather than
+  // nowhere. An ordinary row that is no gate and has no check gets no card at all.
+  const showVerifierCard = completionOwned || verifier != null;
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
   // session. The button shows this state and stays disabled throughout — which also
   // debounces it against repeated clicks (no second trigger until the current run ends).
@@ -884,6 +953,15 @@ export function TaskDetailPanel({
             )}
             {task?.createdAt && <span className="tdp-meta-item muted">· {fmt(task.createdAt)}</span>}
           </div>
+          {/* How this row is judged, which nothing else on the page said: a row whose completion
+              is owned by a check has no work of its own, and every other row names the method
+              that settles it. */}
+          {judgment && (
+            <div className={`tdp-judgment is-${judgment.icon}`}>
+              {judgment.icon === 'gate' ? <SafetyOutlined /> : <CheckOutlined />}
+              <span>{judgment.text}</span>
+            </div>
+          )}
         </div>
         <div className="tdp-head-actions">
           {ownerWaiting ? (
@@ -942,6 +1020,26 @@ export function TaskDetailPanel({
         <div className="tdp-empty">Failed to load task details.</div>
       ) : (
         <div className="tdp-body">
+          {/* The check that settles this row, under the row it checks — the relation the database
+              has always held and no surface showed. Its title, its own state and the way in. */}
+          {showVerifierCard && (
+            <section className="tdp-verifier">
+              <div className="tdp-verifier-head">{VERIFIER_CARD_HEADING}</div>
+              {verifier ? (
+                <div className="tdp-verifier-row">
+                  <span className="tdp-verifier-title">{verifier.title}</span>
+                  <span className={`tdp-badge tone-${verifierOutcome(verifier).tone}`}>
+                    {verifierOutcome(verifier).label}
+                  </span>
+                  <Button size="small" onClick={() => onOpenTask(verifier.id)}>
+                    {VERIFIER_CARD_ENTRY}
+                  </Button>
+                </div>
+              ) : (
+                <div className="tdp-verifier-empty">{VERIFIER_CARD_EMPTY}</div>
+              )}
+            </section>
+          )}
           <section className="tdp-section">
             <div className="tdp-section-title">Details</div>
             <div className="tdp-field">

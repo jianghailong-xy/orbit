@@ -149,6 +149,41 @@ export async function readTaskWorkState(
   return states.get(taskId) ?? null;
 }
 
+/**
+ * The check that currently settles a task, as a row rather than as a lane.
+ *
+ * The task detail shows the check under the subject it checks, and it must be the SAME check the
+ * lanes and the release rule read — so this asks `latestLiveVerificationCheckIdSql`, which is that
+ * one definition, rather than ordering rows here. Null for a task nothing checks, which is the
+ * ordinary case: only rows somebody filed a check for have one.
+ */
+export async function readCurrentVerifier(
+  prisma: PrismaService,
+  ownerId: string,
+  taskId: string,
+): Promise<TaskVerifierRow | null> {
+  const rows = await prisma.$queryRaw<TaskVerifierRow[]>(Prisma.sql`
+    SELECT check_task."id" AS "id",
+           check_task."title" AS "title",
+           check_task."status"::text AS "status",
+           check_task."verdict"::text AS "verdict"
+      FROM "task" t
+      JOIN "task" check_task
+        ON check_task."id" = (${Prisma.raw(latestLiveVerificationCheckIdSql('t'))})
+     WHERE t."owner_id" = ${ownerId}::uuid AND t."id" = ${taskId}::uuid`);
+  return rows[0] ?? null;
+}
+
+/** One check, as the surface that names it needs it: what it is called, and where it stands. */
+export interface TaskVerifierRow {
+  id: string;
+  title: string;
+  /** `task_status` of the check row. */
+  status: string;
+  /** §13.2: its conclusion, null while it has not written one. */
+  verdict: string | null;
+}
+
 /** One query shape for every reader above, so a project page and a task detail cannot disagree. */
 async function readTaskWorkStates(
   prisma: PrismaService,

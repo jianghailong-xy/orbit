@@ -218,6 +218,16 @@ async function makeWorld(db: PrismaClient): Promise<World> {
   );
   await task('cancelled-history', { status: TaskStatus.CANCELLED });
 
+  // A gate row carrying the pair the write doors now refuse: `EVIDENCE_JUDGMENT` cannot declare
+  // `VERIFICATION_PASSED` (task-completion-criterion.ts), and rows written before that rule can hold
+  // it. `completion_policy` is what says nothing here will ever run; the criterion says who would
+  // have settled a row with work. The lane has always read this as a subject; the detail read used
+  // to ask the criterion as well, and answered nothing about it.
+  await task('legacy-gate', {
+    completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
+    completionPolicy: TaskCompletionPolicy.VERIFICATION_PASSED,
+  });
+
   return { ownerId, runnerId, workspaceId, projectId, ids };
 }
 
@@ -304,6 +314,8 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
       await t.test('the task detail reports the verifier state of every task from this same read', async () => {
         // The detail panel's button reads `verificationState` off GET /tasks/:id; the project page
         // and its graph read `states`. Every state above is in this world, and so are non-subjects.
+        // `legacy-gate` is what makes the comparison discriminating rather than a null-vs-null walk:
+        // it is a subject by policy, and this read answers about it only if it asks the same columns.
         const detail = (name: string) => tasks.get(world.ownerId, world.ids[name]);
         for (const name of Object.keys(world.ids)) {
           assert.equal((await detail(name)).verificationState, state(name)?.verificationState, name);
@@ -311,7 +323,34 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         // Not a comparison that could pass on nulls alone.
         assert.equal((await detail('subject-missing')).verificationState, 'MISSING');
         assert.equal((await detail('subject-passed')).verificationState, 'PASSED');
+        assert.equal((await detail('legacy-gate')).verificationState, 'MISSING');
         assert.equal((await detail('manual-ready')).verificationState, null);
+      });
+
+      await t.test('the task detail names the check that settles a row, and only that check', async () => {
+        // The panel shows the check under the row it checks, so the detail carries the check itself
+        // — the newest live one, read through the same selector dependency release and the lanes
+        // use, never a second ordering of the same rows.
+        const detail = (name: string) => tasks.get(world.ownerId, world.ids[name]);
+        assert.deepEqual((await detail('subject-open')).verifier, {
+          id: world.ids['verifier-open'],
+          title: 'verifier-open',
+          status: 'OPEN',
+          verdict: null,
+        });
+        // A conclusion rides along, which is what the card reads to say PASS or FAIL — and the
+        // check's own task status is DONE either way: a check that concluded has finished.
+        assert.deepEqual((await detail('subject-failed')).verifier, {
+          id: world.ids['verifier-failed'],
+          title: 'verifier-failed',
+          status: 'DONE',
+          verdict: 'FAIL',
+        });
+        assert.equal((await detail('subject-passed')).verifier?.verdict, 'PASS');
+        // A row nothing checks has no card to draw — including a check nobody checks.
+        assert.equal((await detail('manual-ready')).verifier, null);
+        assert.equal((await detail('verifier-open')).verifier, null);
+        assert.equal((await detail('legacy-gate')).verifier, null);
       });
 
       await t.test('FAILED to SUPERSEDED history remains an explicit failed denominator item', () => {

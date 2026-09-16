@@ -7953,6 +7953,64 @@ button.composer-usage:focus-visible {
   color: var(--warning);
   border-color: var(--warning-border);
 }
+/* How this row is judged, under its title. One pill either way: the judgment method on a row that
+   has its own work, and the plain statement that a gate row has none. */
+.tdp-judgment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-top: 10px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 20px;
+}
+.tdp-judgment.is-judged .anticon {
+  color: var(--success-solid);
+}
+.tdp-judgment.is-gate {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+/* The check that settles this row, directly under the row itself. */
+.tdp-verifier {
+  margin: 12px 20px 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.tdp-verifier-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.tdp-verifier-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.tdp-verifier-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tdp-verifier-empty {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
 
 .tdp-body {
   flex: 1;

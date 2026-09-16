@@ -118,7 +118,7 @@ import {
   touchesAcceptanceFact,
 } from './task-lock-order';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
-import { readTaskWorkState } from '../projects/project-task-work-state';
+import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import {
   admitProjectScopeWrite,
   type ScopeAdmission,
@@ -7109,20 +7109,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // is answered by the current work holder at the trusted chain tail (S).
     //
     // A verification subject's current verifier comes from the read behind the project page and its
-    // graph, so the three cannot describe it differently. Only a declared subject (the fields
-    // `verificationSubjectSql` reads) is asked: that read answers NULL for every other task, and
-    // this detail is polled while a run is live.
-    const [dependencyFacts, supersession, autoRunSkipped, workState, progress] = await Promise.all([
-      this.dependencyFactsFor(ownerId, [id]),
-      this.supersession(ownerId, task),
-      this.autoRunSkipped(ownerId, task),
-      task.completionCriterion === 'VERIFICATION'
-        && task.completionPolicy === 'VERIFICATION_PASSED'
-        && task.verifiesTaskId == null
-        ? readTaskWorkState(this.prisma, ownerId, task.id)
-        : null,
-      readTaskProgress(this.prisma, ownerId, task.id),
-    ]);
+    // graph, so the three cannot describe it differently. Which rows are subjects is
+    // `completion_policy` with `verifies_task_id`, the same two columns the Ready predicate and the
+    // work lanes ask: a `VERIFICATION` criterion says who settles the task, not whether it has work,
+    // and a row with work of its own is one whose detail has a verifier state like any other.
+    const [dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier] =
+      await Promise.all([
+        this.dependencyFactsFor(ownerId, [id]),
+        this.supersession(ownerId, task),
+        this.autoRunSkipped(ownerId, task),
+        task.completionPolicy === 'VERIFICATION_PASSED' && task.verifiesTaskId == null
+          ? readTaskWorkState(this.prisma, ownerId, task.id)
+          : null,
+        readTaskProgress(this.prisma, ownerId, task.id),
+        // The check that settles this row, for any row that has one: the panel shows it under the
+        // subject itself, which is the one place the relation is legible without a query of one's own.
+        readCurrentVerifier(this.prisma, ownerId, task.id),
+      ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
       ...task,
@@ -7141,6 +7144,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // PENDING/BLOCKED/RUNNING/PASSED/FAILED/MISSING on a verification subject, null on every
       // other task.
       verificationState: workState?.verificationState ?? null,
+      // The current check of this task, whatever settles it: the newest live row pointing at it,
+      // read through the same selector the release rule and the work lanes use. Null when nothing
+      // checks it — including on a subject, whose empty state says so in place.
+      verifier,
       // What the task's run reported with task_progress_report, from the read that tool makes
       // (readTaskProgress), so the two cannot disagree: a task that never reported reads as epoch 0,
       // revision 0 with nothing in it, not as null. Not the top-level `lastProgressAt` spread in
