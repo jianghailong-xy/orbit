@@ -489,7 +489,7 @@ struct TranscriptView: View {
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
-                             decisionCards: console.decisionCards)
+                             decisionCards: console.drawnDecisionCards)
     }
 
     /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.

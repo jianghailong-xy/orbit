@@ -33,10 +33,11 @@ public struct LocalStatusCard: Identifiable, Equatable, Sendable {
 
 /// A standing question a project puts to its owner, delivered into the conversation it belongs to:
 /// the held weakening proposal, the settlement confirmation, and the decision on one revision of a
-/// task's completion evidence. None is an `Approval` and none stops a turn, so none can be rendered
-/// at the tail the way a pending approval is — they sit where they arrived and later messages push
-/// them up, which is exactly why the cross-session "needs you" bar now also points DOWN at them
-/// inside their own session.
+/// task's completion evidence — and, beside them, the RECORD an answer to one of those leaves where
+/// it was given. None is an `Approval` and none stops a turn, so none can be rendered at the tail
+/// the way a pending approval is — they sit where they arrived and later messages push them up,
+/// which is exactly why the cross-session "needs you" bar now also points DOWN at them inside their
+/// own session.
 ///
 /// It carries an address and never any content: what the card shows is re-derived from the server
 /// on every render (see OrbitKit's `CriteriaDecision.swift` and `EvidenceDecision.swift`), and a
@@ -45,6 +46,16 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         /// One held loosening proposal, by the address the pending read publishes.
         case criteriaDecision(intentID: String)
+        /// The record the answer to such a proposal left in this conversation — what was recorded,
+        /// and when. Drawn from the same read (`CriteriaDecisions.receiptCards`), which is what
+        /// makes it survive a relaunch: the card that ASKED is gone from the pending read the
+        /// moment it is answered, so a receipt the window remembered died with the window.
+        ///
+        /// Not a question — it asks nothing and is answered nowhere — but it arrives in the
+        /// conversation the same way and is anchored the same way, so it is a kind of this card
+        /// rather than a row language of its own. It carries an address for the same reason the
+        /// others do: the words and the verdict are re-derived from the read on every render.
+        case criteriaReceipt(intentID: String)
         /// The one confirmation question a project has. There is never more than one.
         case acceptanceConfirmation
         /// One revision of one task's completion evidence. The revision is part of the address
@@ -68,6 +79,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // The web card's DOM id, in the same spelling, because both clients are pointed at it by
         // something else on screen and one vocabulary is cheaper than two.
         case .criteriaDecision(let intentID): return "criteria-decision-\(intentID)"
+        // NOT the web receipt's DOM id, which is the card's own (a browser draws one or the other,
+        // never both). Here the two can be in the same list — a card whose answer has not reached
+        // this window yet, beside a receipt for another proposal — and the List requires every id
+        // to be unique. Nothing points at a receipt, so it needs no shared spelling.
+        case .criteriaReceipt(let intentID):  return "criteria-receipt-\(intentID)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
         // The web evidence card's `decisionRowKey` spelling, taskId@evidenceRevision.
         case .evidenceDecision(let taskID, let evidenceRevision):

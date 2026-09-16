@@ -579,6 +579,18 @@ public enum CriteriaDecisions {
     public static let liveHeading = "A weakening change to this project’s ruler needs your decision"
     public static let staleHeading = "This decision is no longer yours to make"
     public static let unreadHeading = "This card could not be re-read just now"
+    /// What the RECEIPT carries instead: the question is answered, and this is the record of the
+    /// answer (`receiptCards`). Web's `CRITERIA_DECISION_RECORDED_HEADING`, same words.
+    ///
+    /// The recorded heading is what the receipt is, rather than the question it answered: a record
+    /// that still said "needs your decision" over a line reading "✓ Approved by you" would be
+    /// telling its reader to decide something already decided.
+    ///
+    /// `CriteriaDecisionCopyParityTests` does not compare this one yet: the web half that declares
+    /// it was still on its own branch when this was written, and that check reads the web source
+    /// under this tree — so an assertion here would be red on a tree where the other end is right.
+    /// The assertion belongs with the others the day that declaration reaches main.
+    public static let recordedHeading = "Decision recorded"
     /// The two that stand in for `staleHeading` once the read names the answer given at another
     /// end — the verdict first, because "which was it?" is the question a dimmed card was left
     /// unable to answer.
@@ -790,6 +802,92 @@ public enum CriteriaDecisions {
         !isOpen(standing)
     }
 
+    // MARK: derivation — the receipt an answer leaves
+
+    /// WHERE AN ANSWER LEAVES ITS RECORD IN A CONVERSATION
+    /// ---------------------------------------------------
+    /// A card's question leaves the pending read the moment it is answered, so a window that kept
+    /// the answer for as long as it remembered the card took the decision out of the conversation
+    /// when it was reloaded — in the one place the question had been asked. What survives is the
+    /// ANSWER, which is a committed row every client reads back (`settled` on this queue): the
+    /// record is drawn from the read, at the moment the decision was made, and so it is there on a
+    /// relaunch and on a device that never saw the card. The browser derives the same receipts
+    /// (`criteriaDecisionReceiptRows` in `src/web/src/lib/decisionReceipt.ts`); the two ends may
+    /// differ in where a moment falls, never in which answers are drawn.
+
+    /// The addresses the read names an answer for — the cards that have a receipt and give way to
+    /// it. A card whose answer the read does NOT name (older than the rows it carries, or a server
+    /// that does not publish them) keeps its place, dimmed, saying that it was answered; that is
+    /// why this is a filter over the read and not a rule about the card that was pressed.
+    public static func settledIntentIDs(_ queue: PendingCriteriaDecisionQueue?) -> Set<String> {
+        Set((queue?.settled ?? []).map(\.intentId))
+    }
+
+    /// The receipts this conversation draws: one per answer the read names that falls inside the
+    /// window it has loaded, each anchored where it happened.
+    public static func receiptCards(queue: PendingCriteriaDecisionQueue?,
+                                    items: [TranscriptItem]) -> [DeliveredDecisionCard] {
+        let answers = queue?.settled ?? []
+        guard !answers.isEmpty else { return [] }   // the ordinary read, and it costs nothing
+        // The window is walked ONCE for the whole read. This is on the render path of a transcript
+        // that re-renders on every streamed delta, so parsing a timestamp per answer per item — up
+        // to twenty answers over a window of hundreds — is work that has to not happen.
+        let spine = clockSpine(items)
+        return answers.compactMap { answer in
+            guard let at = RelativeTime.parse(answer.decidedAt),
+                  let anchor = spine.last(where: { $0.clock <= at })
+            else { return nil }
+            return DeliveredDecisionCard(kind: .criteriaReceipt(intentID: answer.intentId),
+                                         afterItemID: anchor.id)
+        }
+    }
+
+    /// Where one receipt goes: after the last item recorded at or before the moment the answer was
+    /// given. Nil when nothing in the window is that old — the moment is then on a page that is not
+    /// loaded yet, and a receipt drawn anyway would land at the tail, which presents an old answer
+    /// as the newest thing that happened.
+    public static func receiptAnchor(items: [TranscriptItem], decidedAt: String) -> String? {
+        guard let at = RelativeTime.parse(decidedAt) else { return nil }
+        return clockSpine(items).last(where: { $0.clock <= at })?.id
+    }
+
+    /// Every item with the clock it is placed by: its own when it has one, and the last one seen
+    /// when it has not.
+    ///
+    /// Only a user turn carries a clock (`UserBubble.ts`); everything else in `state.items` has a
+    /// `seq` and no wall-clock — the browser compares timestamps because its transcript events all
+    /// have one and these items do not. So a reply the agent streamed after 12:00:00 is at 12:00:00
+    /// for this purpose, which is the exchange it belongs to and the closest thing to "when" this
+    /// model carries. An item before the first clock is in no list: nothing can say it happened
+    /// before or after anything.
+    private static func clockSpine(_ items: [TranscriptItem]) -> [(id: String, clock: Date)] {
+        var clock: Date?
+        var spine: [(id: String, clock: Date)] = []
+        for item in items {
+            if case .user(let bubble) = item, let ts = bubble.ts,
+               let parsed = RelativeTime.parse(ts) {
+                clock = parsed
+            }
+            if let clock { spine.append((item.id, clock)) }
+        }
+        return spine
+    }
+
+    /// What was recorded, and when: the receipt's one line, in the browser's words
+    /// (`criteriaVerdictReceipt`). The clock is the device's own — the one part of this sentence the
+    /// two ends cannot spell identically, since the browser formats to its reader's locale as well.
+    ///
+    /// The two seals the door compared are deliberately NOT here, and this is the line that
+    /// replaced the one that carried them. A seal belongs to the RULER, and both cards that show
+    /// the ruler already name it: a delivered proposal says which version it was composed against,
+    /// and the confirmation card says which one is in force. Under every receipt it would be a
+    /// third place for the same fact, on a card whose whole problem is height.
+    public static func recordedVerdict(_ answer: SettledCriteriaDecision) -> String {
+        let verdict = answer.decision == .approve ? "Approved" : "Refused"
+        guard let clock = RelativeTime.clock(answer.decidedAt) else { return "✓ \(verdict) by you" }
+        return "✓ \(verdict) by you at \(clock)"
+    }
+
     // MARK: derivation — the diff
 
     /// The line that says how many criteria this proposal leaves alone.
@@ -927,17 +1025,6 @@ public enum CriteriaDecisions {
                                decision: CriteriaDecisionAnswer) -> CriteriaDecisionRequest {
         CriteriaDecisionRequest(commitToken: row.commitToken, decision: decision,
                                 baseSeal: row.baselineSeal)
-    }
-
-    /// What a decision leaves behind where it was made. The seals are the whole of the
-    /// compare-and-set the door performed, in the door's own words, so a reader a week later can
-    /// tell which version was answered — and, for a refusal, that the version did not move.
-    public static func decisionLine(_ result: CriteriaDecisionResult) -> String {
-        result.decision == .approve
-            ? "You approved the weakening — the ruler moved, seal \(shortSeal(result.baseSeal)) → "
-                + "\(shortSeal(result.resultingSeal))"
-            : "You refused the weakening — nothing was applied, seal stays "
-                + "\(shortSeal(result.baseSeal))"
     }
 }
 

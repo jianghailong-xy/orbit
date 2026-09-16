@@ -43,6 +43,8 @@ final class CriteriaDecisionWiringTests: XCTestCase {
     private static let cardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift"
     private static let bannerPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift"
     private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift"
+    private static let consoleViewPath =
+        "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
 
     /// One card's own section of the file, so a match 900 lines away cannot answer for it — a bare
     /// `contains` over a whole file is how a scan like this goes falsely green.
@@ -65,6 +67,12 @@ final class CriteriaDecisionWiringTests: XCTestCase {
             throw WiringError.missing("AcceptanceConfirmationCard")
         }
         return String(file[start.lowerBound...])
+    }
+
+    private func receiptCard() throws -> String {
+        try section(try source(Self.cardPath),
+                    from: "private struct CriteriaDecisionReceiptView: View",
+                    to: "private struct CriteriaDecisionCard: View")
     }
 
     // MARK: the rule this project stated
@@ -199,5 +207,68 @@ final class CriteriaDecisionWiringTests: XCTestCase {
         XCTAssertTrue(console.contains("if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }"),
                       "and one with a project reads them when its context loads — a card cannot "
                           + "drive the first read, because the read is what creates the card")
+    }
+
+    // MARK: the receipt, and the card that gives way to it
+
+    /// THE RECORD OF AN ANSWER IS DRAWN FROM THE READ, NOT FROM THE WINDOW THAT PRESSED.
+    ///
+    /// The bug this exists for: a card's question leaves the pending read the moment it is answered,
+    /// so a receipt the console remembered lived exactly as long as the console did. The account
+    /// owner's report, 2026-09-16: a decision that was gone from the conversation after the app was
+    /// reopened. Every link below is load-bearing — the receipts come off the criteria read, the
+    /// card that read has an answer for gives way, and the row builder is handed the derived list
+    /// rather than the stored cards.
+    func testTheReceiptsComeOffTheReadAndTheCardsTheyAnswerForGiveWay() throws {
+        let console = try source(Self.consolePath)
+        XCTAssertTrue(console.contains("CriteriaDecisions.settledIntentIDs(criteriaDecisions)"),
+                      "the cards that give way are the ones the READ names an answer for")
+        XCTAssertTrue(console.contains("CriteriaDecisions.receiptCards(queue: criteriaDecisions"),
+                      "and the receipts are derived from that same read on every render — delivered "
+                          + "like a card instead, they would die with the window")
+        XCTAssertTrue(try source(Self.consoleViewPath)
+                        .contains("decisionCards: console.drawnDecisionCards"),
+                      "the row builder is handed the derived list; handing it `decisionCards` is "
+                          + "the version that draws a card beside the receipt for its own answer")
+    }
+
+    /// The receipt is a card the console draws AND a card the view dispatches, derived from the
+    /// standing the read publishes rather than from anything a press left behind. A receipt with a
+    /// button, or one keeping its own copy of the answer, is what this catches — nothing on Linux
+    /// compiles that view.
+    func testTheReceiptIsDispatchedAndDerivesItsAnswerFromTheRead() throws {
+        let file = try source(Self.cardPath)
+        XCTAssertTrue(file.contains("case .criteriaReceipt(let intentID):"),
+                      "the delivered card dispatches by kind")
+        XCTAssertTrue(file.contains("CriteriaDecisionReceiptView(console: console, intentID: intentID)"),
+                      "and a receipt is drawn as a receipt — not as the card that asked the question")
+        let receipt = try receiptCard()
+        XCTAssertTrue(receipt.contains("console.criteriaStanding(intentID)"),
+                      "the answer is re-derived from the read, never a frame kept here")
+        XCTAssertFalse(receipt.contains("@State"),
+                       "a receipt keeps nothing: a copy of the answer is the thing that died with "
+                           + "the window this whole change is about")
+        XCTAssertTrue(receipt.contains("CriteriaDecisions.recordedHeading"), "the record's heading")
+        XCTAssertTrue(receipt.contains("CriteriaDecisions.recordedVerdict(answer)"),
+                      "and the line saying which way it went and when")
+        XCTAssertTrue(receipt.contains("CriteriaDecisions.meta(standing)"),
+                      "with the provenance mark: a transcript is where an agent's words appear, and "
+                          + "\u{201C}✓ Approved by you\u{201D} is a sentence an agent can type")
+        XCTAssertFalse(receipt.contains(".disabled("),
+                       "there is nothing on a receipt to press — the answer IS the card")
+    }
+
+    /// AND THE PRESS WRITES NOTHING OF ITS OWN. The line it used to append was the record — in that
+    /// window only, which is precisely the bug: gone after a relaunch, and a decision that vanishes
+    /// from the conversation it was made in is a decision nobody can go back and check.
+    func testThePressLeavesNoRecordThatLivesOnlyInThisWindow() throws {
+        let press = try section(try source(Self.consolePath),
+                                from: "func decideCriteria(",
+                                to: "func evidenceStanding(")
+        XCTAssertFalse(press.contains("appendDecisionLine"),
+                       "the press leaves the record to the read: a line written here is state in "
+                           + "the console that pressed, and outlives nothing")
+        XCTAssertTrue(press.contains("await refreshRulerQuestions(force: true)"),
+                      "and it re-reads at once, because that read is what draws the receipt")
     }
 }

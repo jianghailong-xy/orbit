@@ -224,4 +224,20 @@ final class TranscriptRowsTests: XCTestCase {
             decisionCards: [decision("in-1", after: "i1"), decision("in-1", after: "i1")])
         XCTAssertEqual(rows.map(\.id), ["i1", "criteria-decision-in-1", "transcript-bottom"])
     }
+
+    /// The RECORD an answer leaves is delivered and anchored like the question was, but its id is
+    /// deliberately not the card's. A browser draws one or the other for a given proposal, never
+    /// both; here they can meet — a card whose answer this window has not read back yet, beside the
+    /// receipt for an older one — and two rows sharing an id is the List diff that aborted.
+    func testAReceiptIsDrawnWhereItHappenedAndNeverUnderItsCardsId() {
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1")), .user(user("i2"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [DeliveredDecisionCard(kind: .criteriaReceipt(intentID: "in-1"),
+                                                  afterItemID: "i1"),
+                            decision("in-2", after: "i2")])
+        XCTAssertEqual(rows.map(\.id),
+                       ["i1", "criteria-receipt-in-1", "i2", "criteria-decision-in-2",
+                        "transcript-bottom"])
+    }
 }

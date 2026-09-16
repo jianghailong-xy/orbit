@@ -1790,12 +1790,39 @@ final class ConsoleModel {
             switch card.kind {
             case .criteriaDecision(let intentID):
                 return CriteriaDecisions.isOpen(criteriaStanding(intentID))
+            case .criteriaReceipt:
+                // A receipt is the record of an answer already given: it asks nothing, and nothing
+                // points at it.
+                return false
             case .acceptanceConfirmation:
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
             case .evidenceDecision(let taskID, let evidenceRevision):
                 return EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))
             }
         }.map(\.id)
+    }
+
+    /// The decision cards the transcript draws, and the receipts that have taken their place.
+    ///
+    /// A card the read names an answer for gives way to that answer's receipt: the answer is drawn
+    /// once, where it was decided, and the card that asked the question is not left beside it
+    /// saying the same thing — or, worse, going stale into "answered at another end" about its own
+    /// answer. The browser draws the same line (`receipted` in `CriteriaDecisionCard.tsx`); a card
+    /// whose answer the read does NOT name has no receipt to give way to, and stays where it is,
+    /// dimmed, saying that it was answered.
+    ///
+    /// The receipts are derived on every render and never delivered, unlike the cards above them. A
+    /// card is delivered once, into a window that was open to see the question arrive; an answer is
+    /// READ BACK, and that is the whole difference — it survives a relaunch, and it appears on a
+    /// device that never saw the card at all.
+    var drawnDecisionCards: [DeliveredDecisionCard] {
+        let answered = CriteriaDecisions.settledIntentIDs(criteriaDecisions)
+        let questions = decisionCards.filter { card in
+            guard case .criteriaDecision(let intentID) = card.kind else { return true }
+            return !answered.contains(intentID)
+        }
+        return questions + CriteriaDecisions.receiptCards(queue: criteriaDecisions,
+                                                         items: state.items)
     }
 
     /// A row the transcript has been asked to scroll to. The tick rides along so pressing the bar
@@ -1885,14 +1912,15 @@ final class ConsoleModel {
     func decideCriteria(_ row: PendingCriteriaDecisionRow, _ decision: CriteriaDecisionAnswer) async {
         guard let projectID else { return }
         do {
-            let result = try await api.decideCriteriaChange(
+            _ = try await api.decideCriteriaChange(
                 projectID: projectID, intentID: row.intentId,
                 CriteriaDecisions.request(row: row, decision: decision))
             close(.criteriaDecision(intentID: row.intentId))
-            // The card that was answered HERE gives way to the line describing what it did: left on
-            // screen it would go stale into "answered at another end", which is the one reading of
-            // its own answer this window can be sure is wrong.
-            appendDecisionLine(CriteriaDecisions.decisionLine(result))
+            // Nothing is written down in this window: the answer is a committed row the read
+            // publishes, and the refresh below draws its receipt where it happened
+            // (`drawnDecisionCards`). The line this used to append here lived exactly as long as
+            // this console did — a decision that was gone from the conversation the moment the app
+            // was reopened, which is the account owner's report of 2026-09-16.
         } catch {
             statusMessage = "That decision was not recorded — \(error)"
         }

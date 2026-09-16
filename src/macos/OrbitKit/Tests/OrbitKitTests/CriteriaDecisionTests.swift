@@ -481,19 +481,97 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(json?["decision"] as? String, "REJECT")
     }
 
-    func testTheLineLeftBehindNamesBothSealsForAnApprovalAndOneForARefusal() {
-        let approved = CriteriaDecisionResult(intentId: "i-1", decision: .approve,
-                                              decidedAt: "2026-09-09T12:05:00.000Z",
-                                              baseSeal: "6b1d02ea1122", resultingSeal: "9c4f7a1bb001",
-                                              applied: true)
-        let line = CriteriaDecisions.decisionLine(approved)
-        XCTAssertTrue(line.contains("6b1d02ea1122 → 9c4f7a1bb001"), line)
+    // MARK: the receipt an answer leaves
 
-        let refused = CriteriaDecisionResult(intentId: "i-1", decision: .reject,
-                                             decidedAt: "2026-09-09T12:05:00.000Z",
-                                             baseSeal: "6b1d02ea1122", resultingSeal: "6b1d02ea1122",
-                                             applied: false)
-        XCTAssertTrue(CriteriaDecisions.decisionLine(refused).contains("nothing was applied"))
+    private func bubble(_ id: String, _ ts: String?) -> UserBubble {
+        UserBubble(id: id, text: "hi", ts: ts, pending: false)
+    }
+
+    private func reply(_ id: String, seq: Int) -> TranscriptItem {
+        .assistant(AssistantBubble(id: id, text: "on it", streamingText: "", seq: seq))
+    }
+
+    /// A receipt is drawn where the decision HAPPENED — not at the tail of the conversation, and not
+    /// where the question arrived. Only a user turn carries a clock, so an item with no clock of its
+    /// own is placed by the last one that had it: the reply that followed the 15:00 question is at
+    /// 15:00 for this purpose, which is the exchange it belongs to.
+    func testAReceiptIsAnchoredAfterTheLastItemRecordedAtOrBeforeTheDecision() {
+        let items: [TranscriptItem] = [.user(bubble("u1", "2026-09-11T15:00:00.000Z")),
+                                       reply("a1", seq: 2),
+                                       .user(bubble("u2", "2026-09-11T16:00:00.000Z"))]
+
+        XCTAssertEqual(CriteriaDecisions.receiptAnchor(items: items,
+                                                       decidedAt: "2026-09-11T15:40:00.000Z"), "a1",
+                       "answered between two questions: the record belongs after the reply that was "
+                           + "streaming when it was made, and before the next question")
+        XCTAssertEqual(CriteriaDecisions.receiptAnchor(items: items,
+                                                       decidedAt: "2026-09-11T16:00:00.000Z"), "u2",
+                       "the boundary is inclusive — an answer given at the same moment as an event "
+                           + "comes after it")
+        XCTAssertEqual(CriteriaDecisions.receiptAnchor(items: items,
+                                                       decidedAt: "2026-09-11T18:00:00.000Z"), "u2",
+                       "and an answer given later than everything the window holds belongs at the "
+                           + "tail, because that is where it happened")
+    }
+
+    /// A moment the loaded window does not reach is NOT drawn. Anchoring it at the tail instead
+    /// would present an old answer as the newest thing that happened, which is the one reading of a
+    /// receipt that is certainly false; web drops these rows for the same reason
+    /// (`criteriaDecisionReceiptRows`, `decisionReceiptAnchor` → null).
+    func testAReceiptForAMomentOlderThanTheWindowIsNotDrawnAtAll() {
+        let items: [TranscriptItem] = [.user(bubble("u1", "2026-09-11T15:00:00.000Z")), reply("a1", seq: 2)]
+        XCTAssertNil(CriteriaDecisions.receiptAnchor(items: items,
+                                                     decidedAt: "2026-09-11T14:00:00.000Z"))
+        XCTAssertNil(CriteriaDecisions.receiptAnchor(items: [], decidedAt: "2026-09-11T15:40:00.000Z"),
+                     "nothing loaded yet is not a place to draw anything")
+        XCTAssertNil(CriteriaDecisions.receiptAnchor(items: [reply("a1", seq: 2)],
+                                                     decidedAt: "2026-09-11T15:40:00.000Z"),
+                     "an item with no clock and no clock before it carries no moment at all")
+        XCTAssertNil(CriteriaDecisions.receiptAnchor(items: items, decidedAt: "not a date"),
+                     "a moment this client cannot parse is not 'everything is after it'")
+    }
+
+    /// Which cards give way: the ones the READ names an answer for. A read that has not come back
+    /// names nothing and so takes nothing away — an unread card is not known to be answered.
+    func testOnlyTheAnswersTheReadNamesMakeTheirCardGiveWay() {
+        let named = queue([row("i-2")], settled: [answer("i-1", .approve), answer("i-0", .reject)])
+        XCTAssertEqual(CriteriaDecisions.settledIntentIDs(named), ["i-1", "i-0"])
+        XCTAssertTrue(CriteriaDecisions.settledIntentIDs(queue([])).isEmpty)
+        XCTAssertTrue(CriteriaDecisions.settledIntentIDs(nil).isEmpty)
+    }
+
+    /// The rows themselves: one per answer the read names that the window can place, and its address
+    /// is NOT the card's — a window can hold the card for one proposal beside the receipt for
+    /// another, and the List aborts on a repeated id.
+    func testTheReceiptRowsCarryWhereTheyGoAndNeverShareACardsId() {
+        let cards = CriteriaDecisions.receiptCards(
+            queue: queue([], settled: [answer("i-1", .approve), answer("i-0", .reject)]),
+            items: [.user(bubble("u1", "2026-09-11T15:00:00.000Z")), reply("a1", seq: 2)])
+        XCTAssertEqual(cards.map(\.id), ["criteria-receipt-i-1", "criteria-receipt-i-0"])
+        XCTAssertEqual(cards.map(\.afterItemID), ["a1", "a1"],
+                       "both were decided inside the same exchange, so both are drawn there")
+
+        let forTheSameProposal = [DeliveredDecisionCard(kind: .criteriaDecision(intentID: "i-1")),
+                                  DeliveredDecisionCard(kind: .criteriaReceipt(intentID: "i-1"))]
+        XCTAssertEqual(Set(forTheSameProposal.map(\.id)).count, 2)
+    }
+
+    /// The receipt's words: the record it is, and the one line that says which way it went and when.
+    ///
+    /// This is the sentence that replaced the local line a press used to append, and it is the
+    /// browser's (`criteriaVerdictReceipt`) with the device's own clock.
+    func testTheReceiptSaysWhatWasRecordedAndWhen() {
+        XCTAssertEqual(CriteriaDecisions.recordedHeading, "Decision recorded")
+        let moment = answer("i-1", .approve).decidedAt
+        // The clock is the reader's own locale — the one part of this sentence the two clients
+        // cannot spell identically — so the assertion is against the formatter rather than against
+        // a string this test host's time zone would have to agree with.
+        let clock = RelativeTime.clock(moment) ?? ""
+        XCTAssertFalse(clock.isEmpty, "a moment the client can parse reaches the line")
+        XCTAssertEqual(CriteriaDecisions.recordedVerdict(answer("i-1", .approve)),
+                       "✓ Approved by you at \(clock)")
+        XCTAssertEqual(CriteriaDecisions.recordedVerdict(answer("i-1", .reject)),
+                       "✓ Refused by you at \(clock)")
     }
 
     // MARK: the wire

@@ -853,6 +853,8 @@ struct DeliveredDecisionCardView: View {
             switch card.kind {
             case .criteriaDecision(let intentID):
                 CriteriaDecisionCard(console: console, intentID: intentID)
+            case .criteriaReceipt(let intentID):
+                CriteriaDecisionReceiptView(console: console, intentID: intentID)
             case .acceptanceConfirmation:
                 AcceptanceConfirmationCard(console: console)
             case .evidenceDecision(let taskID, let evidenceRevision):
@@ -865,6 +867,45 @@ struct DeliveredDecisionCardView: View {
         // answered in a browser while a phone is asleep, and the phone has to find that out by
         // asking rather than by being told.
         .task { await console.refreshRulerQuestions() }
+    }
+}
+
+/// WHAT AN ANSWER LEFT WHERE IT WAS GIVEN: the record a delivered question gives way to.
+///
+/// Drawn from the read and never from the window that pressed (`CriteriaDecisions.receiptCards`),
+/// which is the whole of the fix: the card that ASKED leaves the pending read the moment it is
+/// answered, so a receipt the pressing window remembered lasted exactly as long as that window did.
+/// This one is read back — so it is here after a relaunch, on a device that never saw the card, and
+/// it sits at the moment the decision was made rather than wherever the reader happens to be.
+///
+/// It keeps the provenance mark the card it replaced carried, for the reason that mark exists: a
+/// transcript is where an agent's words appear, and "✓ Approved by you" is a sentence an agent can
+/// type. There is nothing here to answer — the answer IS the card — so there are no buttons, and no
+/// badge either: the badge would say which way it went, which is what the line under it says.
+private struct CriteriaDecisionReceiptView: View {
+    let console: ConsoleModel
+    let intentID: String
+
+    var body: some View {
+        let standing = console.criteriaStanding(intentID)
+        // The read is what names the answer this receipt is FOR. It was drawn from `settled` one
+        // render ago, so an absent answer means exactly one thing: the read has moved on and no
+        // longer carries that one. Drawing nothing is then right — a record this window kept past
+        // the read would be the copy this whole design is buying its way out of.
+        if case .alreadySettled(let answer?) = standing.state {
+            VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+                ApprovalHeader(symbol: "checkmark.circle.fill",
+                               title: CriteriaDecisions.recordedHeading,
+                               tone: .orange)
+                Text(CriteriaDecisions.recordedVerdict(answer))
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(CriteriaDecisions.meta(standing))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .approvalChrome(.orange)
+        }
     }
 }
 

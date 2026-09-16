@@ -49,4 +49,23 @@ public enum RelativeTime {
     public static func parse(_ iso: String) -> Date? {
         iso8601Fractional.date(from: iso) ?? iso8601Whole.date(from: iso)
     }
+
+    /// A time of day, for the record a decision leaves: "14:03" or "2:03 PM", in the reader's own
+    /// locale — which is the one thing the two clients cannot say identically, since the browser
+    /// formats to its reader's locale too. Nil for a timestamp this client cannot parse.
+    ///
+    /// A clock and not a relative time (which is what a bubble carries): a receipt is read back
+    /// later, sometimes much later, and "5m ago" is a fact about when it was read rather than when
+    /// the decision was made.
+    public static func clock(_ iso: String) -> String? {
+        guard let date = parse(iso) else { return nil }
+        return timeOfDay.string(from: date)
+    }
+
+    private static let timeOfDay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
 }
