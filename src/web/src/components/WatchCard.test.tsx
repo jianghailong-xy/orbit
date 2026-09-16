@@ -239,7 +239,7 @@ describe('a watch card', { timeout: 30_000 }, () => {
     const card = container!.querySelector('.watch-card')!;
     expect(card.querySelector('.watch-state')?.textContent).toBe('Watching');
     // What it waits for.
-    expect(card.querySelector('h3')?.textContent).toBe('When all 3 tasks finish, or any of 3 tasks fails');
+    expect(card.querySelector('h3')?.textContent).toBe('When all 3 tasks finish, or any 1 of these 3 tasks fails');
     const facts = factsOf(card);
     expect(Object.keys(facts)).toEqual(['Watching', 'Progress', 'Updated', 'Then', 'Expires']);
     // What it watches, by name, with what the watch last recorded about each.

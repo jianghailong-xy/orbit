@@ -5,6 +5,7 @@ import {
   WATCH_LIMITS,
   uuidToBase62,
   type WatchDeliveryView,
+  type WatchPredicate,
   type WatchTargetView,
   type WatchView,
 } from '@orbit/shared';
@@ -29,6 +30,7 @@ import {
   predicateFor,
   progressOf,
   resumeWatch,
+  thresholdOf,
   updateWatch,
   wakeWithdrawn,
   watchBucket,
@@ -119,7 +121,9 @@ describe('the condition, in words', () => {
     expect(describeCondition(all, [target('a')])).toBe('When the task finishes');
     expect(describeCondition(all, [target('a'), target('b')])).toBe('When both tasks finish');
     expect(describeCondition(all, [target('a'), target('b'), target('c')])).toBe('When all 3 tasks finish');
-    expect(describeCondition(any, [target('a'), target('b'), target('c')])).toBe('When any of 3 tasks fails');
+    expect(describeCondition(any, [target('a'), target('b'), target('c')])).toBe(
+      'When any 1 of these 3 tasks fails',
+    );
     // Counted by the leaf's own kind: a session leaf over a mixed set talks about the sessions.
     expect(
       describeCondition({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' }, [
@@ -142,7 +146,7 @@ describe('the condition, in words', () => {
         },
         targets,
       ),
-    ).toBe('When all 7 tasks finish, or any of 7 tasks fails');
+    ).toBe('When all 7 tasks finish, or any 1 of these 7 tasks fails');
     expect(
       describeCondition({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_REOPENED' as never }, targets),
     ).toBe('When ALL TASK_REOPENED');
@@ -215,6 +219,65 @@ describe('how stale, and for how long', () => {
     expect(p).toEqual({ met: 1, waiting: 1, gone: 1, total: 3 });
     expect(describeProgress(p)).toBe('1 of 3 met · 1 deleted');
     expect(describeProgress(progressOf(watch({ targets: [] })))).toBe('No targets');
+  });
+});
+
+describe('the threshold the condition sets', () => {
+  const TASKS = Array.from({ length: 4 }, (_, i) => target(`t${i}`));
+  const any: WatchPredicate = { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' };
+
+  it('asks one target of an ANY, however many it looks at', () => {
+    expect(thresholdOf(any, TASKS)).toEqual({ needed: 1, of: 4 });
+  });
+
+  it('asks its own count of an AT_LEAST, and never more than the set holds', () => {
+    const atLeast = (count: number): WatchPredicate => ({
+      kind: 'AT_LEAST',
+      count,
+      over: 'ALL_TARGETS',
+      leaf: 'TASK_TERMINAL',
+    });
+    expect(thresholdOf(atLeast(2), TASKS)).toEqual({ needed: 2, of: 4 });
+    // The server refuses a quota larger than the set; one already stored is not trusted to be smaller.
+    expect(thresholdOf(atLeast(9), TASKS)).toEqual({ needed: 4, of: 4 });
+  });
+
+  it('asks every target of an ALL', () => {
+    expect(thresholdOf({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' }, TASKS)).toEqual({
+      needed: 4,
+      of: 4,
+    });
+  });
+
+  it('asks every target of a composite it cannot read, without throwing', () => {
+    const composite: WatchPredicate = {
+      kind: 'ALL_OF',
+      operands: [
+        { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+        { kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_FAILED' },
+      ],
+    };
+    expect(() => thresholdOf(composite, TASKS)).not.toThrow();
+    expect(thresholdOf(composite, TASKS)).toEqual({ needed: 4, of: 4 });
+  });
+
+  it('counts the targets its leaf can read, and no others', () => {
+    const mixed = [...TASKS, target('s1', { targetKind: 'SESSION' })];
+    expect(thresholdOf(any, mixed)).toEqual({ needed: 1, of: 4 });
+    expect(
+      thresholdOf({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' }, mixed),
+    ).toEqual({ needed: 1, of: 1 });
+  });
+
+  it('asks nothing of no targets', () => {
+    expect(thresholdOf(any, [])).toEqual({ needed: 0, of: 0 });
+  });
+
+  it('reads progress against that threshold, not against the target count', () => {
+    const w = watch({ predicate: any, targets: TASKS });
+    const said = describeProgress(progressOf(w), thresholdOf(w.predicate, w.targets));
+    expect(said).toBe('0 met');
+    expect(said).not.toContain('of 4');
   });
 });
 

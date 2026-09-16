@@ -175,7 +175,8 @@ export function describeCondition(
       const [one, many] = NOUN[kind];
       if (n <= 1) return `the ${one} ${copy.one}`;
       if (p.kind === 'AT_LEAST') return `at least ${p.count} of ${n} ${many} ${copy.many}`;
-      if (p.kind === 'ANY') return `any of ${n} ${many} ${copy.one}`;
+      // The threshold, not the set: one of them is enough, and the sentence says so.
+      if (p.kind === 'ANY') return `any 1 of these ${n} ${many} ${copy.one}`;
       return `${n === 2 ? 'both' : `all ${n}`} ${many} ${copy.many}`;
     }
     return (p.operands ?? []).map(phrase).join(p.kind === 'ALL_OF' ? ', and ' : ', or ');
@@ -277,9 +278,45 @@ export function progressOf(w: Pick<WatchView, 'targets'>): WatchProgress {
   return p;
 }
 
-export function describeProgress(p: WatchProgress): string {
+/** How many of a watch's targets its condition actually asks for. */
+export interface WatchThreshold {
+  /** How many of them have to meet the leaf. */
+  needed: number;
+  /** How many the leaf can read at all: the set the condition quantifies over. */
+  of: number;
+}
+
+/**
+ * The threshold the condition itself sets, over the targets its leaf can read — an ANY watch is done
+ * after one target, an AT_LEAST after its count. A composite, or any shape this build cannot read, asks
+ * for the whole set: the reading progress had before it looked at the predicate. Nothing here throws,
+ * the way `describeCondition` says a sentence rather than failing on a condition it cannot parse.
+ */
+export function thresholdOf(
+  predicate: WatchPredicate,
+  targets: readonly { targetKind: string }[],
+): WatchThreshold {
+  const p: WatchPredicate | null = predicate && typeof predicate === 'object' ? predicate : null;
+  const kind = p && 'leaf' in p ? WATCH_LEAVES[p.leaf] : undefined;
+  const of = kind ? targets.filter((t) => t.targetKind === kind).length : targets.length;
+  if (!p || !kind || of === 0) return { needed: of, of };
+  if (p.kind === 'ANY') return { needed: 1, of };
+  if (p.kind === 'AT_LEAST') return { needed: Math.min(p.count, of), of };
+  return { needed: of, of };
+}
+
+/**
+ * The snapshot in the words a card shows: how many of the targets the condition needs have met it. The
+ * denominator is the threshold, not the target count — one target settles an ANY watch — so it is left
+ * off when one is all it takes. The threshold defaults to every target, which is what an unqualified
+ * read counted.
+ */
+export function describeProgress(
+  p: WatchProgress,
+  threshold: WatchThreshold = { needed: p.total, of: p.total },
+): string {
   if (p.total === 0) return 'No targets';
-  const parts = [`${p.met} of ${p.total} met`];
+  const parts = [threshold.needed > 1 ? `${p.met} of ${threshold.needed} met` : `${p.met} met`];
   if (p.gone > 0) parts.push(`${p.gone} deleted`);
   return parts.join(' · ');
 }

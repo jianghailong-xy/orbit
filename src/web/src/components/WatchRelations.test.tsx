@@ -270,7 +270,7 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     // Until says the condition without the sentence's "When", which the label already is.
     expect(blocks[0].querySelectorAll('dd')[1]?.textContent).toBe('The task finishes');
     // Progress carries the evaluator's last look.
-    expect(blocks[0].querySelectorAll('dd')[2]?.textContent).toBe('0 of 1 met · checked 5m ago');
+    expect(blocks[0].querySelectorAll('dd')[2]?.textContent).toBe('0 met · checked 5m ago');
     // Then is said once, on the first watch: every strip watch resumes this session.
     expect(blocks[0].querySelectorAll('dd')[3]?.textContent).toBe('Resume this session');
     expect(blocks[1].querySelectorAll('dd')[3]?.textContent).toBe('in 20h');
