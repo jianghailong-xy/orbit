@@ -192,10 +192,21 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                       "and delivered as rows of their own, carrying the answer they record")
         // The press itself writes nothing: the re-read draws the record, and a press that also
         // wrote its own line would put a second, in-memory copy beside it — the one that did not
-        // survive the console. Asserted over the press's own body rather than the whole file,
-        // because the OTHER two decisions still write a line there, for want of a read to draw
-        // their receipt from.
-        let press = try section(console, from: "func decideCriteria(", to: "func evidenceStanding(")
+        // survive the console. Asserted over the press's OWN body, cut at the next declaration:
+        // the decisions around it still write a line, and one of them (the owner confirmation's)
+        // sits directly below it, so a slice that ran to "the next function I know of" would read
+        // somebody else's call and go red for the wrong reason.
+        XCTAssertTrue(console.contains("func decideCriteria("), "the press moved")
+        let after = console[console.range(of: "func decideCriteria(")!.lowerBound...]
+        let next = ["\n    func ", "\n    private func ", "\n    @MainActor "]
+            .compactMap { marker in
+                after.range(of: marker, range: after.index(after: after.startIndex)..<after.endIndex)
+            }
+            .map(\.lowerBound)
+            .min()
+        let press = String(after[..<(next ?? after.endIndex)])
+        XCTAssertTrue(press.contains("api.decideCriteriaChange("),
+                      "that slice is the press: it posts to the door")
         XCTAssertFalse(press.contains("appendDecisionLine"),
                        "a criteria decision no longer leaves an in-memory line behind it")
     }
