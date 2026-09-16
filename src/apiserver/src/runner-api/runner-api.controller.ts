@@ -111,7 +111,11 @@ import {
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  loggedRetry,
+  RUNNER_POLL_TRANSACTION_MAX_WAIT_MS,
+  withTransactionRetry,
+} from '../common/transaction-retry';
 import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
@@ -2699,7 +2703,9 @@ export class RunnerApiController {
             ? (await acceptanceBudgetSeconds(tx, owned[0].taskId)) ?? undefined
             : undefined,
       };
-    }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
+    }, loggedRetry(this.logger, 'runnerApi.dequeueTurn', {
+      transaction: { maxWait: RUNNER_POLL_TRANSACTION_MAX_WAIT_MS },
+    }));
     return outcome ?? null;
   }
 

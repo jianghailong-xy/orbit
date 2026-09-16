@@ -8467,15 +8467,45 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /** The dependency dispatch itself, separated so the completion edge above always delivers. */
   private async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<void> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
-    // that relation in PostgreSQL, using the same fail-closed function as the candidate scans and
+    // that relation in PostgreSQL, using the same fail-closed rules as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
     // sweep would eventually notice S, and the two automatic starters would disagree meanwhile.
+    //
+    // Asked TAIL-FIRST, not edge-by-edge. `task_dependency_tail_id(d.depends_on_task_id) = $1` is
+    // a function of every row of `task_dependency`, so PostgreSQL has to evaluate it on all of them
+    // — 110k rows and 40 seconds on the 2026-09-16 corpus, holding a pool connection for the whole
+    // walk on EVERY completion. The same relation read backwards is tiny: the completions that
+    // resolve to X are X itself (when it is a terminal) and the predecessors that point at it
+    // through FAILED/CANCELLED+SUPERSEDED attempts, and supersession chains are a handful of rows.
+    // Those names are then an indexed lookup (`task_dependency_depends_on_task_id_idx`) instead of
+    // a scan. The two spellings were compared over the whole live corpus before this replaced it:
+    // identical on all 110,850 (dependent, tail) pairs.
     const edges = await this.prisma.$queryRaw<Array<{ taskId: string }>>(Prisma.sql`
+      WITH RECURSIVE chain AS (
+        SELECT t."id", 0 AS depth
+          FROM "task" t
+         WHERE t."id" = ${doneTaskId}::uuid
+           AND t."owner_id" = ${ownerId}::uuid
+           -- A terminal is a row nothing superseded and that is not itself a superseded husk: the
+           -- statuses of the chain's interior are checked below, exactly as the function checks them.
+           AND t."superseded_by_task_id" IS NULL
+           AND t."terminal_reason" IS DISTINCT FROM 'SUPERSEDED'
+        UNION ALL
+        SELECT p."id", c.depth + 1
+          FROM "task" p
+          JOIN chain c ON p."superseded_by_task_id" = c."id"
+         WHERE p."owner_id" = ${ownerId}::uuid
+           AND p."status" IN ('FAILED'::task_status, 'CANCELLED'::task_status)
+           AND p."terminal_reason" = 'SUPERSEDED'
+           -- TASK_SUPERSESSION_MAX_HOPS, the same cap the function walks under (0128's trigger
+           -- refuses to create the cycle this could otherwise spin on).
+           AND c.depth < 256
+      )
       SELECT DISTINCT d."task_id" AS "taskId"
         FROM "task_dependency" d
         JOIN "task" dependent ON dependent."id" = d."task_id"
        WHERE dependent."owner_id" = ${ownerId}::uuid
-         AND task_dependency_tail_id(d."depends_on_task_id") = ${doneTaskId}::uuid
+         AND d."depends_on_task_id" IN (SELECT "id" FROM chain)
     `);
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
     if (!dependentIds.length) return;

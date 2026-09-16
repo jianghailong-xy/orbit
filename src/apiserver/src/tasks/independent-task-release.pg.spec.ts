@@ -328,6 +328,77 @@ test('the dependency dispatch is unchanged: a dependent starts only once every p
   });
 
 // -------------------------------------------------------------------------------------------------
+// (4b) The relation the dispatch resolves before it matches: an edge that names a replaced attempt.
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * `dependsOn: A` is stored as the row A, but what it MEANS is the tail of A's supersession chain —
+ * the attempt whose work is actually held. §13.6 SU9 made the completion edge resolve that, and
+ * the resolution is a walk over `task.superseded_by_task_id` that used to be spelled as a
+ * per-row plpgsql function over every stored edge (40s on the 2026-09-16 corpus, on every
+ * completion). It is now asked the other way round — which names resolve to this completion —
+ * and THIS is the fixture that says the two spellings agree: an edge at the first attempt, an
+ * edge at the middle of the chain, and a control that has an outstanding prerequisite of its
+ * own, so "released through the chain" cannot be confused with "released whatever it pointed at".
+ *
+ * The chain is built through the supersession door rather than seeded by hand, so its shape is
+ * the one the product produces.
+ */
+test("an edge naming a replaced attempt is released when the chain's tail completes",
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'release-chain');
+      const projectId = await project(s.db, ids, 'release-chain');
+
+      // The attempt whose work landed, and the two it replaced — newest first, as the door links
+      // them: each cancellation names the attempt that took over from it.
+      const tail = await seedTask(s.db, ids, projectId, 'the attempt that landed', {
+        status: TaskStatus.DONE,
+      });
+      const second = await seedTask(s.db, ids, projectId, 'second attempt', {
+        status: TaskStatus.CANCELLED,
+      });
+      const first = await seedTask(s.db, ids, projectId, 'first attempt', {
+        status: TaskStatus.CANCELLED,
+      });
+      await s.tasks.update(ids.ownerId, second, { supersededByTaskId: tail });
+      await s.tasks.update(ids.ownerId, first, { supersededByTaskId: second });
+
+      // The prerequisite this fixture needs UNSATISFIED, and one that keeps itself out of the way
+      // (no auto-run) so the control's refusal is about the dependency and nothing else.
+      const outstanding = await seedTask(s.db, ids, projectId, 'outstanding prerequisite', {
+        autoRunWhenReady: false,
+      });
+      const namesFirst = await seedTask(s.db, ids, projectId, 'names the first attempt');
+      const namesMiddle = await seedTask(s.db, ids, projectId, 'names the middle attempt');
+      const stillBlocked = await seedTask(s.db, ids, projectId, 'names the tail and an open one');
+      await s.db.taskDependency.create({ data: { taskId: namesFirst, dependsOnTaskId: first } });
+      await s.db.taskDependency.create({ data: { taskId: namesMiddle, dependsOnTaskId: second } });
+      await s.db.taskDependency.create({ data: { taskId: stillBlocked, dependsOnTaskId: tail } });
+      await s.db.taskDependency.create({
+        data: { taskId: stillBlocked, dependsOnTaskId: outstanding },
+      });
+
+      await completionEdge(s, ids.ownerId, tail);
+
+      assert.equal(await sessionCount(s.db, namesFirst), 1,
+        "an edge naming a replaced attempt was not released by its chain's tail completing");
+      assert.equal(await sessionCount(s.db, namesMiddle), 1,
+        'an edge naming the middle of the chain was not released');
+      assert.equal(await sessionCount(s.db, stillBlocked), 0,
+        'a dependent with an outstanding prerequisite was released anyway');
+      // The fixture's own premise: the two released dependents really did point at rows other than
+      // the completed one, which is what makes the two assertions above about the chain.
+      assert.equal(await prerequisiteCount(s.db, namesFirst), 1);
+      assert.equal(await prerequisiteCount(s.db, namesMiddle), 1);
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
+
+// -------------------------------------------------------------------------------------------------
 // (5) The project's concurrency budget.
 // -------------------------------------------------------------------------------------------------
 

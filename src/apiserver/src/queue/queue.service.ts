@@ -28,7 +28,11 @@ import {
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  loggedRetry,
+  RUNNER_POLL_TRANSACTION_MAX_WAIT_MS,
+  withTransactionRetry,
+} from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -233,7 +237,12 @@ export class QueueService {
         )
         RETURNING id
       `);
-      }, loggedRetry(this.logger, 'queue.trySessionClaim'));
+      }, loggedRetry(this.logger, 'queue.trySessionClaim', {
+        // The claim is a long poll too (claimSessionForRunner's deadline), so it queues behind a
+        // busy pool rather than failing into the runner's immediate retry — see
+        // RUNNER_POLL_TRANSACTION_MAX_WAIT_MS in runner-api.controller.ts.
+        transaction: { maxWait: RUNNER_POLL_TRANSACTION_MAX_WAIT_MS },
+      }));
       if (rows.length === 0) return null;
       // The PENDING -> RUNNING commit changes the task row's queued/running overlays. Announce it
       // before hydration: buildSession can fail after the claim committed, and in that case there

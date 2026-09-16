@@ -194,13 +194,20 @@ test('a prerequisite finishing does not start a task scheduled for later', async
   // scheduled one is held — and held, not dropped: its run_at is untouched, so the sweep starts
   // it when it comes due.
   assert.deepEqual(executed, [OTHER_TASK_ID]);
-  assert.equal(raw.statements.length, 1, 'one reverse-tail read finds every released dependent');
-  assert.match(raw.statements[0].text, /dependent\."owner_id" = \$1::uuid/);
-  assert.match(
-    raw.statements[0].text,
-    /task_dependency_tail_id\(d\."depends_on_task_id"\) = \$2::uuid/,
-  );
-  assert.deepEqual(raw.statements[0].values, [OWNER_ID, 'done-task']);
+  assert.equal(raw.statements.length, 1, 'one chain read finds every released dependent');
+  // The relation is resolved the other way round now — which names resolve to this completion,
+  // rather than what each stored edge resolves to — because the old spelling evaluated a function
+  // of every row of `task_dependency` (40s of pool-holding scan per completion; see
+  // `dispatchDependentsOf`). What the one read must still say: the completion is resolved through
+  // supersession chains, the EDGE side is scoped to this owner, and the ids it carries are this
+  // owner and this completion and nothing else.
+  assert.match(raw.statements[0].text, /WITH RECURSIVE chain AS \(/);
+  assert.match(raw.statements[0].text, /p\."superseded_by_task_id" = c\."id"/);
+  assert.match(raw.statements[0].text, /dependent\."owner_id" = \$\d+::uuid/);
+  assert.match(raw.statements[0].text, /d\."depends_on_task_id" IN \(SELECT "id" FROM chain\)/);
+  // The ids the read carries, in the order the statement binds them: the completion it resolves,
+  // then the owner scope, applied at the chain's seed and again on each edge side.
+  assert.deepEqual(raw.statements[0].values, ['done-task', OWNER_ID, OWNER_ID, OWNER_ID]);
 });
 
 test('a dependent whose schedule has already passed is started by its prerequisite', async () => {
