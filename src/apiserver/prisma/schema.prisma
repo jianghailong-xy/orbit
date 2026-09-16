@@ -2942,7 +2942,26 @@ model TaskList {
   // execute() refuses them, so one write halts a campaign that is dispatching wrongly —
   // previously the only way to stop one was to edit and redeploy the reconciler. Runs already
   // in flight are deliberately left alone: this gates dispatch, not execution.
+  //
+  // The stop reaches the tasks through `pause_epoch`/`pause_applied_epoch` below, not in the
+  // transaction that writes this column: the veto the sweep reads is the task's own
+  // `dispatch_hold`, and this row is only the decision. Between the two the pause is decided but
+  // not yet in force for dispatch, for as long as the projection window — which is why the lag
+  // between the counters is watched (`TaskListPauseProjectorService`).
   paused        Boolean @default(false)
+  /// The pause DECISION, counted. Bumped only when a write actually changes `paused` — a
+  /// same-value PATCH is a no-op that leaves this alone and asks for no projection.
+  ///
+  /// This exists because the decision and its consequence cannot be one transaction: writing
+  /// `dispatch_hold` onto every task of a 27,468-task list held the owner graph mutex for 5+
+  /// minutes and wedged every same-owner request behind it (2026-09-14). The request now writes
+  /// this counter in O(1) and a projector converges the tasks.
+  pauseEpoch    Int     @default(0) @map("pause_epoch")
+  /// The decision the projector has finished applying. `pause_applied_epoch < pause_epoch` IS the
+  /// worklist: no cursor, no lease and no queue row, so a projector that dies mid-sweep strands
+  /// nothing — the next pass re-claims the list from this comparison. A chunk's guard is
+  /// `dispatch_hold <> target`, so re-applying an already-applied chunk writes no rows.
+  pauseAppliedEpoch Int @default(0) @map("pause_applied_epoch")
   // Cap on this list's concurrently RUNNING task sessions, enforced by the claim transaction's
   // existing batch gate (see QueueService) with the list id as the batch. Null means uncapped,
   // which is the pre-existing behaviour: only the runner-wide cap applies, so a 500-task list
@@ -3458,6 +3477,11 @@ model Task {
   @@index([ownerId, listId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_list_created_id_idx")
   @@index([assigneeId])
   @@index([listId])
+  /// The pause projector's keyset page (migration 0276): `WHERE list_id = $1 AND id > $2 ORDER BY
+  /// id LIMIT n`, one query per chunk. Without it the plan for that page is an index scan of the
+  /// whole list plus a top-N heapsort of it — measured at 27,468 rows read for a 2,000-row page,
+  /// which is the O(list) per statement this migration exists to remove. Subsumes `task_list_id_idx`.
+  @@index([listId, id], map: "task_list_id_id_idx")
   /// "What is in this project" and "what are this task's subtasks" are the only two questions the
   /// new columns are read by, and each is one indexed lookup. Both are also the FKs' own lookup
   /// indexes, which is what keeps a project or parent delete from scanning the task table.

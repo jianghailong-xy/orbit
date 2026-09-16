@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
+import { TaskListPauseProjectorService } from './task-list-pause-projector.service';
 import {
   canRun,
   computeDependencyState,
@@ -50,6 +51,16 @@ export class TaskListsService {
     // The console opens sessions and remove() cancels them; nothing on the dispatch path
     // goes through here.
     private readonly sessions: SessionsService,
+    /**
+     * The other half of a pause: this service decides, the projector converges the tasks.
+     *
+     * Optional in the signature and not in the wiring — `TaskListsModule` provides it, and the
+     * ~15 places that build this service directly (unit specs) pass none. A caller with no
+     * projector gets exactly the pre-split behaviour of the DECISION (the epoch is bumped, the
+     * revision recorded) and no projection, which is what the specs that are about the decision
+     * alone want; the pg spec that asserts convergence constructs one and passes it.
+     */
+    private readonly pauseProjector?: TaskListPauseProjectorService,
   ) {}
 
   /** A pause/restore/delete can rewrite an unbounded number of task rows. A list id is not a
@@ -311,7 +322,7 @@ export class TaskListsService {
         ? { instructions: dto.instructions?.trim() ? dto.instructions : null }
         : {}),
     };
-    const list = await this.writePolicy(
+    const { list, pauseDecided } = await this.writePolicy(
       ownerId,
       id,
       { ...(dto.title !== undefined ? { title: dto.title } : {}), ...policy },
@@ -324,9 +335,23 @@ export class TaskListsService {
         : null,
     );
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
-    // Pausing/resuming projects dispatchHold onto every task in the list. That is an unbounded
-    // runnable-row change; the other policy fields do not rewrite task rows.
-    if (dto.paused !== undefined) this.publishTaskResync(ownerId);
+    // A pause that CHANGED something changes which tasks may be dispatched: an unbounded
+    // runnable-row change, so the client has to reconcile rather than be told which rows moved,
+    // and the rows themselves are converged by the projector — kicked here, after the transaction
+    // above has committed and therefore after the decision is durable. The kick is the latency;
+    // the projector's catch-up scan is the guarantee, and it is what converges a kick that never
+    // arrived because this process died between the commit and this line.
+    //
+    // Keyed on the decision and not on `dto.paused !== undefined`, which is what this condition
+    // was when the sweep lived in the transaction above: a same-value PATCH rewrote every task row
+    // then and had to say so, and it now rewrites none of them and says nothing. The distinction
+    // matters — a client retrying a PATCH it already sent is exactly the traffic that turned one
+    // slow write into fourteen minutes of them on 2026-09-14, and asking for a sweep of the list
+    // would put that traffic back on the expensive path.
+    if (pauseDecided) {
+      this.publishTaskResync(ownerId);
+      this.pauseProjector?.kick(id);
+    }
     return list;
   }
 
@@ -334,6 +359,11 @@ export class TaskListsService {
    * Apply `data` to the list and, when it touches dispatch policy, record the result as the next
    * revision — both under the list's row lock, so a concurrent writer can neither interleave
    * with the read-modify-write nor mint the same version number.
+   *
+   * A pause is DECIDED here, in a write whose cost does not depend on how many tasks the list has:
+   * the row gains the new value and its epoch. Converging the tasks onto that decision is the
+   * projector's job, after this commits — so nothing in this method may write a `task` row, and
+   * that is the property the rest of the design leans on (see the note inside).
    *
    * `recordAs` null means this write changed no policy (a rename), which deliberately produces
    * no revision: history is for decisions about how the list dispatches, and padding it with
@@ -346,18 +376,24 @@ export class TaskListsService {
     recordAs: { note?: string | null; author?: RevisionAuthor; authorSessionId?: string | null } | null,
   ) {
     // Retried whole. Everything it decides — the revision number, the seeded before-state, the
-    // dispatchHold sweep — is derived inside the closure from rows read under the two locks below,
-    // so a re-run re-derives all of it against the snapshot that actually won rather than
-    // replaying a version of the list that no longer exists.
+    // pause epoch — is derived inside the closure from rows read under the two locks below, so a
+    // re-run re-derives all of it against the snapshot that actually won rather than replaying a
+    // version of the list that no longer exists.
     return withTransactionRetry(this.prisma, async (tx) => {
-      // Rank 10 before rank 20 (common/lock-order.ts, I1): a pause writes every Task in the list,
-      // so it is a multi-row Task write and takes the same owner mutex every other one takes.
-      // Without it, this transaction holds the list row and waits for Task rows while a PATCH
-      // that re-files a Task holds that Task and waits for the list — the two sides of one
-      // foreign key, taken in opposite orders.
+      // Rank 10 before rank 20 (common/lock-order.ts, I1), kept after the task sweep left this
+      // transaction. Three reasons, in order of weight. The projector's chunks write `task` rows
+      // for a list and take rank 10 first, so a PATCH that read the decision without it could
+      // compare `paused` against a value a chunk was concurrently rewriting the tasks of. The
+      // list delete (remove, below) writes this same list row and those same task rows under the
+      // mutex, and the two must not reach the same pair in opposite orders. And this is still a
+      // member of the Task-writing family the rank is stated over; leaving it out for the one
+      // transaction that also decrees what the whole family will do is how an invariant like I1
+      // stops being one.
       await lockOwnerTaskGraph(tx, ownerId);
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "task_list"
+      const locked = await tx.$queryRaw<
+        Array<{ id: string; paused: boolean; pauseEpoch: number }>
+      >`
+        SELECT id, paused, "pause_epoch" AS "pauseEpoch" FROM "task_list"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('task list not found');
@@ -391,14 +427,27 @@ export class TaskListsService {
           });
         }
       }
-      const list = await tx.taskList.update({ where: { id }, data });
-      // Project the pause onto the tasks it governs, in the same transaction that sets it. This
-      // is the write that makes `Task.dispatchHold` true rather than merely stored: the dispatch
-      // path reads only the task, so a pause that failed to land here would be a pause that does
-      // nothing. Only on an actual pause change — a title rename must not rewrite 55k rows.
-      if ('paused' in data) {
-        await tx.task.updateMany({ where: { listId: id }, data: { dispatchHold: list.paused } });
-      }
+      // The pause DECISION, in O(1): this transaction records that the list is now paused (or no
+      // longer is) and nothing else. The tasks are converged by the projector afterwards, because
+      // writing `dispatch_hold` onto every task of a 27,468-task list here — under the owner graph
+      // mutex, in front of every same-owner request — is the 2026-09-14 outage: 5+ minutes per
+      // PATCH, clients timing out and re-running the whole O(n) unit until the pool was exhausted.
+      //
+      // The counter is the whole handoff. Bumped only on an actual change, so a same-value PATCH is
+      // a no-op that asks for no projection; `pause_applied_epoch < pause_epoch` is then the
+      // worklist the projector claims from, with no cursor or lease anywhere.
+      //
+      // `pauseDecided` goes back to the caller, which is where the kick and the resync hang off it:
+      // whether a pause was DECIDED is a fact only this transaction can establish, because it is a
+      // comparison against the stored value read under the lock — a caller comparing `dto.paused`
+      // with anything it read earlier would be comparing against a value a concurrent write may
+      // already have replaced.
+      const asked = data.paused as boolean | undefined;
+      const decided = asked !== undefined && asked !== locked[0].paused;
+      const list = await tx.taskList.update({
+        where: { id },
+        data: decided ? { ...data, pauseEpoch: locked[0].pauseEpoch + 1 } : data,
+      });
       if (recordAs) {
         const max = await tx.taskListRevision.aggregate({
           where: { listId: id },
@@ -421,7 +470,7 @@ export class TaskListsService {
           },
         });
       }
-      return list;
+      return { list, pauseDecided: decided };
     }, loggedRetry(this.logger, 'taskLists.writePolicy'));
   }
 
@@ -688,7 +737,7 @@ export class TaskListsService {
       where: { listId_version: { listId: id, version } },
     });
     if (!target) throw new NotFoundException('revision not found');
-    const list = await this.writePolicy(
+    const { list, pauseDecided } = await this.writePolicy(
       ownerId,
       id,
       {
@@ -702,9 +751,13 @@ export class TaskListsService {
       { note: note ?? `Restored v${version}`, author },
     );
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
-    // A restore always includes `paused`, and writePolicy therefore projects dispatchHold over
-    // the whole list even if the restored value happens to equal the current one.
+    // A restore always includes `paused`, so the tasks have to be converged onto whatever it
+    // restored — but only when that is a new decision. The resync below stays unconditional, as it
+    // was before the split: a restore can move several policy fields at once and the client is told
+    // to reconcile either way. The kick is not, because a restore that puts back the pause the list
+    // already had asks for a sweep whose result is already in the rows.
     this.publishTaskResync(ownerId);
+    if (pauseDecided) this.pauseProjector?.kick(id);
     return list;
   }
 

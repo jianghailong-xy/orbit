@@ -709,6 +709,23 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `DROP TYPE`, so the three `task_completion_criterion` labels survive with 0267's fourth
   //        beside them, and it is not another writer of the DONE fence. It has no INSERT, UPDATE
   //        or DELETE, so no preserved row is read or written.
+  //   0276 added `task_list.pause_epoch` and `task_list.pause_applied_epoch` — two INTEGER NOT NULL
+  //        DEFAULT 0 counters that split a list's pause decision from the projection of it onto the
+  //        tasks — plus one index on `task`, `task_list_id_id_idx (list_id, id)`, which is what
+  //        makes the projector's keyset page a range scan instead of a sort of the whole list.
+  //        Read against every claim above: it ALTERs exactly one table, `task_list`, which is not a
+  //        preserved relation and is not reachable from one, by exactly two `ADD COLUMN`s. No
+  //        column is dropped anywhere. Both columns carry a DEFAULT, which makes the ADD
+  //        catalog-only — PostgreSQL 11+ records the default in the catalog rather than rewriting
+  //        the heap — so no stored row is rewritten and no existing list needs a backfill (the
+  //        projection was already the same transaction as the pause, so every list starts
+  //        applied = epoch = 0). The index is a second copy of two columns `task` already has; it
+  //        reads every row of `task` once to build and changes none of them, is dropped by nothing,
+  //        and names no `task`, `project` or `project_acceptance_criterion_definition` COLUMN beyond
+  //        `list_id` and `id`. It creates no table, enum, type, function or trigger, carries no
+  //        `ALTER TYPE` and no `DROP TYPE`, so the three `task_completion_criterion` labels survive
+  //        with 0267's fourth beside them, and it is not another writer of the DONE fence. It has
+  //        no INSERT, UPDATE or DELETE, so no preserved row is read or written.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -749,7 +766,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0272_drop_project_action',
       '0273_drop_workspace_clone_provisioning',
       '0274_session_import_source',
-      '0275_claude_history_import'],
+      '0275_claude_history_import',
+      '0276_task_list_pause_epoch'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

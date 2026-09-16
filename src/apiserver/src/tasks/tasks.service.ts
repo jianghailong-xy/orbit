@@ -63,6 +63,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
+import { TaskListPauseProjectorService } from '../task-lists/task-list-pause-projector.service';
 import type { HandoffApproval } from '../projects/project-scope-decision';
 import {
   dependencyCrossingRefusal,
@@ -1528,13 +1529,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      */
     handoffs?: ProjectHandoffService,
     completionInputs?: CompletionInputRouter,
+    /**
+     * The pause projector, for the catch-up sweep that rides this service's reconcile timer (see
+     * `onModuleInit`). Resolved from `TaskListsModule`, which provides it once and exports it.
+     *
+     * Optional and, unlike `handoffs`, deliberately WITHOUT a fallback construction: this service
+     * is built directly by dozens of specs and by the e2e harness, and `new`-ing a projector here
+     * would hand each of them a private one — a second in-flight claim map sweeping lists the real
+     * projector is already sweeping. A directly-built TasksService therefore runs no catch-up at
+     * all, which is what those callers mean: their ticks are about dispatch, and a fixture that
+     * wants a projection builds one and drives it.
+     */
+    pauseProjector?: TaskListPauseProjectorService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.completionInputs = completionInputs;
+    this.pauseProjector = pauseProjector;
   }
 
   private readonly handoffs: ProjectHandoffService;
   private readonly completionInputs?: CompletionInputRouter;
+  private readonly pauseProjector?: TaskListPauseProjectorService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -1862,6 +1877,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         .then(() => this.deliverMentions())
         .catch((e) =>
           this.logger.error(`mention delivery sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        // The pause projector's catch-up, on this timer and not one of its own — the reason is the
+        // one written at the top of this block, and it applies twice over here. A second
+        // `setInterval` is how this service once ran its sweeps twice a minute; and a pause
+        // projection is dispatch work, so a task that a pause released must not become a candidate
+        // in a tick that projects it afterwards. Sequential means this tick's projection is
+        // finished before this tick's dispatch starts.
+        //
+        // 60s is the interval, and that is the whole worst-case bound the design quotes for a
+        // pause taking effect: sub-second when the PATCH's own kick fires, and at most one tick
+        // when the kick was missed or this process restarted between the commit and the kick. The
+        // watermark (`pause_applied_epoch < pause_epoch`) is what makes a tick sufficient — a
+        // missed kick leaves work the scan can still see, which is why nothing here has to be
+        // durable.
+        .then(() => this.pauseProjector?.catchUp())
+        .catch((e) =>
+          this.logger.error(`pause projection sweep failed: ${e instanceof Error ? e.message : e}`),
         );
     }, RECONCILE_INTERVAL_MS);
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer

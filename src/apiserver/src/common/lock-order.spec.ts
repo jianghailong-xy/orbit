@@ -9,6 +9,10 @@ const read = (rel: string) => readFileSync(path.resolve(__dirname, '../..', rel)
 
 const tasksService = read('src/tasks/tasks.service.ts');
 const taskListsService = read('src/task-lists/task-lists.service.ts');
+// The pause projector writes `task` rows from its own file, so it is scanned too. It is the one
+// Task writer outside the two services, and a file the scan cannot see is a write that can acquire
+// a rank without anybody stating the plan for it — which is the whole content of this inventory.
+const pauseProjector = read('src/task-lists/task-list-pause-projector.service.ts');
 const runnerApi = read('src/runner-api/runner-api.controller.ts');
 const workspacesService = read('src/workspaces/workspaces.service.ts');
 const dispatchBoundary = read('prisma/migrations/0122_project_dispatch_boundary/migration.sql');
@@ -29,7 +33,7 @@ const dependencyRevision = read('prisma/migrations/0132_task_dependency_revision
  * `holds` is what the method takes ahead of its writes; `note` is why that is the right set.
  */
 const TASK_WRITE_SOURCES: ReadonlyArray<{
-  file: 'tasks.service.ts' | 'task-lists.service.ts';
+  file: 'tasks.service.ts' | 'task-lists.service.ts' | 'task-list-pause-projector.service.ts';
   method: string;
   statements: string[];
   holds: string[];
@@ -201,21 +205,29 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'task-lists.service.ts',
-    method: 'writePolicy',
-    statements: ['task.updateMany'],
-    holds: ['await lockOwnerTaskGraph(tx, ownerId);', 'FROM "task_list"'],
-    note:
-      'Rank 10 then rank 20: a pause writes the list row and then every Task in it, which is the ' +
-      'other side of the foreign key a Task re-filing takes at rank 20.',
-  },
-  {
-    file: 'task-lists.service.ts',
     method: 'remove',
     statements: ['task.updateMany'],
     holds: ['await lockOwnerTaskGraph(tx, ownerId);'],
     note:
       'Two multi-row `task` writes — the disarm, and the Task.listId SET NULL the delete cascades ' +
       '— so rank 10, and both inside one transaction.',
+  },
+  {
+    file: 'task-list-pause-projector.service.ts',
+    method: 'sweepChunk',
+    statements: ['UPDATE "task"'],
+    holds: ['await lockOwnerTaskGraph(tx, head.own);'],
+    note:
+      'One keyset page of one list, so a multi-row `task` write and rank 10 (I1) — the same rank a ' +
+      'pause took when it wrote every task in its own request transaction, now taken for at most ' +
+      '2,000 rows at a time so the same-owner request behind it waits for a page instead of a sweep. ' +
+      'The rows are taken in ascending id order, the order `batchAssign` also takes more than one. ' +
+      'The decision is read under this lock and the UPDATE is guarded on `dispatch_hold <> target`, ' +
+      'so a page that lost a race rewrites nothing. `task_list` is deliberately NOT locked here: ' +
+      'FOR UPDATE on it is what a PATCH needs at rank 20, and holding it for a page would be the ' +
+      'convoy this unit exists to remove, moved to the background — the watermark UPDATE at rank 20 ' +
+      'runs only on the page that completes a pass, which is why it is ordered after rank 10 and ' +
+      'not before it.',
   },
 ];
 
@@ -254,6 +266,10 @@ test('every Task write source is in the lock-order inventory', () => {
   const scanned = [
     ...scanTaskWrites(tasksService).map((w) => ({ file: 'tasks.service.ts' as const, ...w })),
     ...scanTaskWrites(taskListsService).map((w) => ({ file: 'task-lists.service.ts' as const, ...w })),
+    ...scanTaskWrites(pauseProjector).map((w) => ({
+      file: 'task-list-pause-projector.service.ts' as const,
+      ...w,
+    })),
   ];
   const declared = TASK_WRITE_SOURCES.flatMap((s) =>
     s.statements.map((statement) => `${s.file}#${s.method}: ${statement}`),
@@ -269,7 +285,11 @@ test('every Task write source is in the lock-order inventory', () => {
 });
 
 test('each inventory entry holds what it says it holds', () => {
-  const sources = { 'tasks.service.ts': tasksService, 'task-lists.service.ts': taskListsService };
+  const sources = {
+    'tasks.service.ts': tasksService,
+    'task-lists.service.ts': taskListsService,
+    'task-list-pause-projector.service.ts': pauseProjector,
+  };
   for (const entry of TASK_WRITE_SOURCES) {
     for (const held of entry.holds) {
       assert.ok(

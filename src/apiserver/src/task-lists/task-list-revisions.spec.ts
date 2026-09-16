@@ -30,15 +30,22 @@ function makeService(initial: Partial<Revision> = {}) {
     instructions: null as string | null,
     paused: false,
     maxConcurrent: null as number | null,
+    // The pause decision, counted. It lives on the list rather than in the revision table: a
+    // revision records what the policy IS, and this records how many times the pause has been
+    // decided, which is what the projector converges against.
+    pauseEpoch: 0,
     ...initial,
   };
   const revisions: Revision[] = [];
   const published: unknown[][] = [];
-  // Every task.updateMany the policy write issues — the projection of `paused` onto the tasks it
-  // governs, which has to happen in the same transaction as the flag it mirrors.
+  // Every task.updateMany the policy write issues. It must stay empty: the tasks are converged by
+  // the projector AFTER the decision commits, and a policy write that widens a 27,468-task list
+  // into its own transaction is the 2026-09-14 outage this split exists to remove.
   const projected: Array<{ where: unknown; data: unknown }> = [];
+  // What the projector was kicked for, in order. The kick is how a decision reaches the tasks.
+  const kicks: string[] = [];
   const tx = {
-    $queryRaw: async () => [{ id: LIST_ID }],
+    $queryRaw: async () => [{ id: LIST_ID, paused: list.paused, pauseEpoch: list.pauseEpoch }],
     task: {
       updateMany: async (args: { where: unknown; data: unknown }) => {
         projected.push(args);
@@ -98,23 +105,35 @@ function makeService(initial: Partial<Revision> = {}) {
   } as never;
   const service = new TaskListsService(prisma, {
     publishForUser: (...args: unknown[]) => void published.push(args),
-  } as never, {} as never);
+  } as never, {} as never, {
+    kick: (listId: string) => void kicks.push(listId),
+  } as never);
   // get() is authorization plus a heavy detail read; these tests are about the revision
   // bookkeeping around it.
   (service as unknown as { get: unknown }).get = async () => ({ ...list });
-  return { service, revisions, list, projected, published };
+  return { service, revisions, list, projected, published, kicks };
 }
 
-test('pausing a list writes the hold onto its tasks, and resuming lifts it', async () => {
-  const { service, projected, published } = makeService();
+test('pausing a list decides it in O(1), and kicks the projector to converge the tasks', async () => {
+  const { service, projected, published, kicks, list } = makeService();
 
   await service.update(OWNER, LIST_ID, { paused: true });
-  // The dispatch path reads only the task, so this write *is* the pause. A flag stored on the
-  // list and nowhere else stops nothing.
-  assert.deepEqual(projected, [{ where: { listId: LIST_ID }, data: { dispatchHold: true } }]);
+  // The decision: the list row gains the value and its epoch. Nothing here is proportional to how
+  // many tasks the list has — that is the whole point of the split, and `projected` staying empty
+  // is the assertion that pins it. A policy write that reaches into `task` is the 2026-09-14
+  // outage: 5+ minutes holding the owner mutex, with the tasks of a 27,468-task list to rewrite.
+  assert.equal(list.paused, true);
+  assert.equal(list.pauseEpoch, 1);
+  assert.deepEqual(projected, [], 'the decision write wrote task rows');
+  assert.deepEqual(kicks, [LIST_ID]);
 
   await service.update(OWNER, LIST_ID, { paused: false });
-  assert.deepEqual(projected[1], { where: { listId: LIST_ID }, data: { dispatchHold: false } });
+  assert.equal(list.paused, false);
+  assert.equal(list.pauseEpoch, 2);
+  assert.deepEqual(projected, []);
+  assert.deepEqual(kicks, [LIST_ID, LIST_ID]);
+  // The tasks are now unheld, which is an unbounded runnable-row change: every client has to
+  // reconcile rather than be told which rows moved.
   assert.deepEqual(
     published.filter((event) => event[1] === 'task_changed'),
     [
@@ -124,35 +143,50 @@ test('pausing a list writes the hold onto its tasks, and resuming lifts it', asy
   );
 });
 
-test('an edit that is not a pause leaves the list-s tasks untouched', async () => {
-  const { service, projected, published } = makeService();
+test('pausing a list that is already paused is a no-op: no epoch, no projection, no resync', async () => {
+  const { service, projected, published, kicks, list } = makeService();
 
-  await service.update(OWNER, LIST_ID, { title: 'Renamed', maxConcurrent: 3 });
+  await service.update(OWNER, LIST_ID, { paused: false });
 
-  // Projecting unconditionally would rewrite every row of a 55k-task list on a rename.
+  // The stored value already equals the one asked for, so there is no decision to project and no
+  // work for the projector to reclaim. Bumping the epoch here would put every same-value PATCH —
+  // and every client that retries one, which is exactly what happened for 14 minutes on
+  // 2026-09-14 — behind a full sweep of the list.
+  assert.equal(list.pauseEpoch, 0);
   assert.deepEqual(projected, []);
+  assert.deepEqual(kicks, []);
   assert.equal(published.some((event) => event[1] === 'task_changed'), false);
 });
 
-test('restoring a revision that was paused re-applies the hold to the tasks', async () => {
+test('an edit that is not a pause leaves the tasks alone and wakes no projector', async () => {
+  const { service, projected, published, kicks, list } = makeService();
+
+  await service.update(OWNER, LIST_ID, { title: 'Renamed', maxConcurrent: 3 });
+
+  assert.deepEqual(projected, []);
+  assert.deepEqual(kicks, []);
+  assert.equal(list.pauseEpoch, 0);
+  assert.equal(published.some((event) => event[1] === 'task_changed'), false);
+});
+
+test('restoring a revision that was paused decides the pause again', async () => {
   // Starts paused, then resumed — so v1 (the state seeded before the first tracked edit) is the
-  // paused one, and restoring it must put the tasks back under the hold.
-  const { service, projected, published } = makeService({ paused: true });
+  // paused one, and restoring it must decide the pause once more.
+  const { service, projected, kicks, list } = makeService({ paused: true });
   await service.update(OWNER, LIST_ID, { paused: false });
+  assert.equal(list.pauseEpoch, 1);
 
   // Restore goes through the same writePolicy, which is the point of it being the choke point:
   // there is no second way to set `paused` that could forget to project it.
   await service.restoreRevision(OWNER, LIST_ID, 1);
 
-  assert.deepEqual(projected.at(-1), {
-    where: { listId: LIST_ID },
-    data: { dispatchHold: true },
-  });
-  assert.equal(
-    published.filter((event) => event[1] === 'task_changed').length,
-    2,
-    'the resume and the restore each invalidate the unbounded runnable-row set',
-  );
+  assert.equal(list.paused, true);
+  assert.equal(list.pauseEpoch, 2, 'a restore that changes `paused` is a new decision');
+  assert.deepEqual(projected, []);
+  // Kicked unconditionally, unlike the PATCH: a restore always includes `paused`, and it may move
+  // several policy fields at once. The projector reads the epoch before it does anything, so a
+  // restore that decided nothing costs one indexed read.
+  assert.deepEqual(kicks, [LIST_ID, LIST_ID]);
 });
 
 test('a policy change records the resulting state as a revision', async () => {
