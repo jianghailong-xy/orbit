@@ -13,12 +13,17 @@ public struct MarkdownListItem: Equatable, Sendable {
     public var ordered: Bool
     public var number: Int?     // source number for ordered items (nil for bullets)
     public var text: String     // inline-Markdown source of the item
+    /// GFM task item: nil = an ordinary item, false = `- [ ]`, true = `- [x]`. The parser eats the
+    /// box marker, so without this an unchecked item is indistinguishable from a checked one — the
+    /// state web draws as an `<input type="checkbox" disabled>`.
+    public var checkbox: Bool?
 
-    public init(indent: Int, ordered: Bool, number: Int?, text: String) {
+    public init(indent: Int, ordered: Bool, number: Int?, text: String, checkbox: Bool? = nil) {
         self.indent = indent
         self.ordered = ordered
         self.number = number
         self.text = text
+        self.checkbox = checkbox
     }
 }
 
@@ -184,7 +189,8 @@ private func flatten(_ list: ListItemContainer, depth: Int, into items: inout [M
             }
         }
 
-        items.append(MarkdownListItem(indent: depth, ordered: ordered, number: number, text: text))
+        items.append(MarkdownListItem(indent: depth, ordered: ordered, number: number, text: text,
+                                      checkbox: item.checkbox.map { $0 == .checked }))
         if let n = number { number = n + 1 }
         for sublist in sublists { flatten(sublist, depth: depth + 1, into: &items) }
     }

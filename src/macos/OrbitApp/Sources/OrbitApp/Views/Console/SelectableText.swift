@@ -51,6 +51,9 @@ struct ProseSegment: Hashable {
     /// A list marker (`•` / `1.`) laid in secondary ink with a hanging indent, so the marker copies
     /// with the item and its wrapped lines align under the text (web's `.md li`).
     var leadingMarker: String? = nil
+    /// An SF Symbol drawn in place of `leadingMarker`: a GFM task item's checkbox, which web draws as
+    /// a real (disabled) `<input type="checkbox">`. Takes precedence when both are set.
+    var markerSymbol: String? = nil
     /// List nesting depth; each level adds a 16pt head indent (web's nested lists).
     var indent: Int = 0
     /// Gap above this paragraph — the inter-block separation (8pt between blocks, 6pt between list
@@ -182,15 +185,14 @@ struct SelectableText: UIViewRepresentable {
         para.firstLineHeadIndent = indentBase
         para.headIndent = indentBase
 
-        if let marker = seg.leadingMarker {
-            let markerRun = marker + "\t"
-            let markerWidth = ceil((markerRun as NSString).size(withAttributes: [.font: base]).width)
+        if let markerRun = markerRun(for: seg, font: base) {
+            let markerWidth = ceil(markerRun.size().width)
             para.headIndent = indentBase + markerWidth
             para.tabStops = [NSTextTab(textAlignment: .left, location: indentBase + markerWidth, options: [:])]
             para.defaultTabInterval = markerWidth
-            result.append(NSAttributedString(string: markerRun, attributes: [
-                .font: base, .foregroundColor: ProseInk.secondary.uiColor, .paragraphStyle: para,
-            ]))
+            markerRun.addAttribute(.paragraphStyle, value: para,
+                                   range: NSRange(location: 0, length: markerRun.length))
+            result.append(markerRun)
         }
 
         // A Markdown segment's bare URLs are already `.link` runs by here (see `inlineMarkdownAttributed`),
@@ -241,6 +243,28 @@ struct SelectableText: UIViewRepresentable {
         if trailingNewline {
             result.append(NSAttributedString(string: "\n", attributes: [.font: base, .paragraphStyle: para]))
         }
+    }
+
+    /// A list item's marker plus the tab that opens its text: a GFM task item's checkbox as an SF
+    /// Symbol (sized to the surrounding type and sitting on the baseline, like `paperclip`), every
+    /// other marker as its text (`•` / `1.`). Nil when the paragraph isn't a list item.
+    private func markerRun(for seg: ProseSegment, font: UIFont) -> NSMutableAttributedString? {
+        if let symbol = seg.markerSymbol {
+            let attachment = NSTextAttachment()
+            if let glyph = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(font: font))?
+                .withTintColor(ProseInk.secondary.uiColor, renderingMode: .alwaysOriginal) {
+                attachment.image = glyph
+                attachment.bounds = CGRect(x: 0, y: font.descender, width: glyph.size.width, height: glyph.size.height)
+            }
+            let run = NSMutableAttributedString(attachment: attachment)
+            run.append(NSAttributedString(string: "\t"))
+            run.addAttributes([.font: font], range: NSRange(location: 0, length: run.length))
+            return run
+        }
+        guard let marker = seg.leadingMarker else { return nil }
+        return NSMutableAttributedString(string: marker + "\t", attributes: [
+            .font: font, .foregroundColor: ProseInk.secondary.uiColor,
+        ])
     }
 
     /// The paperclip that opens an unreachable file link, sized to the surrounding type and sitting
@@ -350,8 +374,9 @@ extension SelectableText {
 
 /// A read-only `UITextView` that cleans up the layout sentinels on Copy, so copied prose pastes as
 /// the reader sees it: the soft break (U+2028, used inside a merged prose run so wrapped lines don't
-/// pick up inter-block spacing) becomes an ordinary `\n`, and the paperclip glyph on an unreachable
-/// file link (a text attachment, U+FFFC) drops out with its spacer.
+/// pick up inter-block spacing) becomes an ordinary `\n`, and the symbol glyphs — the paperclip on an
+/// unreachable file link, a task item's checkbox — drop out with their spacers (a text attachment
+/// pastes as U+FFFC otherwise). A browser copies a task list the same way: the `<input>` leaves nothing.
 final class SelectableTextView: UITextView {
     override func copy(_ sender: Any?) {
         super.copy(sender)
@@ -359,6 +384,7 @@ final class SelectableTextView: UITextView {
         let clean = copied
             .replacingOccurrences(of: "\u{2028}", with: "\n")
             .replacingOccurrences(of: "\u{FFFC}\u{2009}", with: "")
+            .replacingOccurrences(of: "\u{FFFC}\t", with: "")
         if clean != copied { UIPasteboard.general.string = clean }
     }
 }

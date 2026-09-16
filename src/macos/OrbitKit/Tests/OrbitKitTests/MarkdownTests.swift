@@ -43,6 +43,32 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(items.map(\.text), ["a", "b", "c", "d"])
     }
 
+    func testTaskListKeepsCheckedState() {
+        // A GFM task list: the parser eats the `[ ]` / `[x]` marker, so the checked state has to
+        // survive on the item itself — otherwise `- [ ]` and `- [x]` render identically (the bug).
+        // Web's remark-gfm draws each as an `<input type="checkbox" disabled>`, checked or not.
+        let blocks = parseMarkdownBlocks("- [ ] unchecked\n- [x] checked\n- plain")
+        guard case .list(let items) = blocks[0] else { return XCTFail("expected a list") }
+        XCTAssertEqual(items.map(\.text), ["unchecked", "checked", "plain"])
+        // Three distinguishable states, and the two task items disagree.
+        XCTAssertEqual(items.map(\.checkbox), [false, true, nil])
+        XCTAssertNotEqual(items[0].checkbox, items[1].checkbox)
+        // Negative control: a plain bullet is not a task item, and neither is a literal `[x]` that
+        // isn't the item's leading marker.
+        XCTAssertNil(items[2].checkbox)
+        guard case .list(let mid) = parseMarkdownBlocks("- done [x] already")[0] else {
+            return XCTFail("expected a list")
+        }
+        XCTAssertNil(mid[0].checkbox)
+        XCTAssertEqual(mid[0].text, "done [x] already")
+        // Uppercase `[X]` is checked too, and a nested task item keeps both depth and state.
+        guard case .list(let nested) = parseMarkdownBlocks("- [X] top\n  - [ ] under")[0] else {
+            return XCTFail("expected a list")
+        }
+        XCTAssertEqual(nested.map(\.indent), [0, 1])
+        XCTAssertEqual(nested.map(\.checkbox), [true, false])
+    }
+
     func testBoldBulletIsNotConfusedWithRule() {
         // "**On-corp:** ..." starts with '*' but the next char isn't a space → paragraph, not a bullet.
         XCTAssertEqual(parseMarkdownBlocks("**On-corp:** direct, fast"),

@@ -98,11 +98,11 @@ private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGr
                                         spacingBefore: pending.isEmpty ? 0 : 8))
         case .list(let items):
             for (i, item) in items.enumerated() {
-                let marker = item.ordered ? "\(item.number ?? 1)." : "•"
                 // First item is a block gap (8) from the prior block; siblings sit tighter (6).
                 let gap: CGFloat = pending.isEmpty ? 0 : (i == 0 ? 8 : 6)
                 pending.append(ProseSegment(text: item.text, role: base, markdown: true,
-                                            leadingMarker: marker, indent: item.indent, spacingBefore: gap))
+                                            leadingMarker: listMarker(item), markerSymbol: listMarkerSymbol(item),
+                                            indent: item.indent, spacingBefore: gap))
             }
         // `.image`, like code/table/quote/rule, is an "island" that can't merge into a text run —
         // hand it to `MarkdownBlockView`, which renders it on both platforms.
@@ -115,6 +115,19 @@ private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGr
     return groups
 }
 #endif
+
+/// A list item's text marker — the bullet, or the ordered item's source number.
+private func listMarker(_ item: MarkdownListItem) -> String {
+    item.ordered ? "\(item.number ?? 1)." : "•"
+}
+
+/// The SF Symbol a GFM task item draws in place of that marker, mirroring the real (disabled)
+/// `<input type="checkbox">` web's remark-gfm renders — the app's own checkbox glyphs (see
+/// `ApprovalCards`). `nil` for an ordinary item, which keeps `listMarker`.
+private func listMarkerSymbol(_ item: MarkdownListItem) -> String? {
+    guard let checked = item.checkbox else { return nil }
+    return checked ? "checkmark.square.fill" : "square"
+}
 
 /// Parse cache backing `MarkdownView` (main-actor only, like the view bodies that call it).
 /// Bounded as a leak backstop: past the cap it resets wholesale — visible rows repopulate it
@@ -153,7 +166,7 @@ private struct MarkdownBlockView: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(items.indices, id: \.self) { i in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(marker(items[i])).monospacedDigit().foregroundStyle(.secondary)
+                        marker(items[i]).foregroundStyle(.secondary)
                         inlineMarkdown(items[i].text)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -190,8 +203,13 @@ private struct MarkdownBlockView: View {
         }
     }
 
-    private func marker(_ item: MarkdownListItem) -> String {
-        item.ordered ? "\(item.number ?? 1)." : "•"
+    /// A list item's marker: a task item's checkbox, else its bullet or number. `Text(Image:)` rather
+    /// than a bare `Image` so the symbol sits on the text baseline and scales with the inherited font.
+    private func marker(_ item: MarkdownListItem) -> Text {
+        guard let symbol = listMarkerSymbol(item) else {
+            return Text(listMarker(item)).monospacedDigit()
+        }
+        return Text(Image(systemName: symbol))
     }
 
     private func headingFont(_ level: Int) -> Font {

@@ -332,9 +332,8 @@ private struct OrbitAskBody: View {
                 // The criteria are one Markdown document, not a row each: a task's acceptance
                 // criteria arrive verbatim and a project's stated criteria as a list, which is the
                 // same string web hands its Markdown component — so a multi-line criterion reads as
-                // its own list instead of as one bullet holding its raw markup. A `- [ ]` item
-                // renders as a plain bullet: the block parser keeps the text and drops the
-                // checkbox, where web's remark-gfm draws a real one.
+                // its own list instead of as one bullet holding its raw markup. A `- [ ]` item keeps
+                // its checked state and draws a checkbox, the way web's remark-gfm does.
                 MarkdownView(source: rows.joined(separator: "\n"), base: .aside, ink: .secondary)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
