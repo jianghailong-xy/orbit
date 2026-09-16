@@ -112,11 +112,15 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
                        "the confirm action")
         assertDeclares(web, "OWNER_SEND_BACK_ACTION", OwnerConfirmations.sendBackAction,
                        "the send-back action")
-        assertDeclares(web, "OWNER_SEND_ACTION", OwnerConfirmations.sendAction, "the send action")
         assertDeclares(web, "OWNER_SEND_BACK_LABEL", OwnerConfirmations.sendBackLabel,
                        "the reason's label")
         assertDeclares(web, "OWNER_SEND_BACK_HINT", OwnerConfirmations.sendBackHint,
                        "why the reason is required")
+        // Neither end takes the reason on the card any more: both hand it to their composer, and
+        // this is the line that composer shows. It is compared for the reason every other string
+        // here is — one confirmation worded two ways is two answers writing the same row.
+        assertDeclares(web, "OWNER_SENDING_BACK_PREFIX", OwnerConfirmations.sendingBackPrefix,
+                       "what the armed composer says it is answering")
     }
 
     /// The two boxes a person decides from, and the folds over them.

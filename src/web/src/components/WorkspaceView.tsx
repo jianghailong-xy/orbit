@@ -180,7 +180,7 @@ import {
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
-import { ApprovalPanel } from './ApprovalPanel';
+import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import { SessionDecisionStrip, decisionRowKey, revealCriteriaCard } from './DecisionRail';
 import {
   CriteriaDecisionReceipt,
@@ -195,11 +195,17 @@ import {
 } from './EvidenceDecisionCard';
 import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
 import {
+  OWNER_SEND_BACK_LABEL,
+  OWNER_SENDING_BACK_PREFIX,
+  type OwnerConfirmationWaiting,
   OwnerDecisionReceipt,
   SessionOwnerConfirmationCard,
   WAITING_FOR_CONFIRMATION,
   ownerConfirmationWaitingIn,
   ownerDecisionReceiptsIn,
+  ownerDecisionRefusal,
+  refreshOwnerConfirmationViews,
+  sendOwnerDecision,
 } from './OwnerConfirmationCard';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
@@ -1294,10 +1300,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // between cannot treat the previous session's transcript as the newly selected session's.
   const [eventsSessionId, setEventsSessionId] = useState<string | null>(selectedId);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
-  // "Chat about this" on a pending AskUserQuestion routes the next composer send back to
-  // that approval as a deny+message (resolving the blocking question) instead of a fresh
-  // turn. Null = normal send; `question` is just the reply-chip's label.
-  const [replyTo, setReplyTo] = useState<{ id: string; question: string } | null>(null);
+  // An armed reply: the next composer send answers one open question instead of starting a fresh
+  // turn, and the card that armed it stays until then. Three presses arm it — a question's "Chat
+  // about this, a decline of one of Orbit's own asks, and the confirmation card's send-back — because
+  // all three want a sentence, and the composer is where a sentence is typed. Null = normal send;
+  // `target` is the only thing that differs, and it is which door the send goes to.
+  const [replyTo, setReplyTo] = useState<{
+    target:
+      | { kind: 'approval'; id: string }
+      | { kind: 'ownerConfirmation'; taskId: string; requestId: string };
+    /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
+    banner: string;
+    /** What the empty composer asks for while this is armed. */
+    placeholder: string;
+  } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   // When the stretch of reasoning on screen began: the live row counts up from it, and the row it
@@ -3280,6 +3296,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: Boolean(selectedTaskId) && !selectedTrashed,
   });
   const ownerWaiting = ownerConfirmationWaitingIn(ownerConfirmation.data, selectedId);
+  // The send-back the composer completes. It presses the same door the card's own confirm
+  // presses, and re-reads the same views after it; it lives here rather than in the card because
+  // the press that finishes it happens at the composer, after the card armed it.
+  const ownerDecision = useMutation({
+    mutationFn: (press: { taskId: string; requestId: string; decision: 'SEND_BACK'; note: string }) =>
+      sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note),
+    // Said as staleness when that is what the door's code means, for the reason the card gives: a
+    // reader told only "it failed" has been told the button is broken.
+    onError: (error: Error) => void message.error(ownerDecisionRefusal(error).title),
+    onSettled: (_data, _error, press) => refreshOwnerConfirmationViews(qc, press.taskId),
+  });
   // A run ending its turn moves this session's row, not the task, so no task event re-reads the
   // confirmation. Re-read it when the row moves, and the card arrives with the report rather than
   // on the card's next poll.
@@ -3367,12 +3394,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
   };
 
-  // If the approval the composer is replying to gets resolved another way (the user picks
-  // an option, or an SSE approval_resolved arrives), drop the reply context so the chip
-  // can't dangle over a question that's already gone.
+  // If the question the composer is replying to gets answered another way (the user picks an
+  // option, an SSE approval_resolved arrives, or the confirmation is settled on a phone), drop the
+  // reply context so the chip can't dangle over a question that's already gone.
   useEffect(() => {
-    if (replyTo && !approvals.some((a) => a.id === replyTo.id)) setReplyTo(null);
-  }, [approvals, replyTo]);
+    if (!replyTo) return;
+    if (replyTo.target.kind === 'approval') {
+      const id = replyTo.target.id;
+      if (!approvals.some((a) => a.id === id)) setReplyTo(null);
+      return;
+    }
+    // The same rule read from the other door — but only once the read has actually come back. A
+    // read in flight is "this browser cannot say yet", and disarming on it would throw away a
+    // reason somebody is in the middle of typing.
+    const view = ownerConfirmation.data;
+    if (!view) return;
+    const { requestId } = replyTo.target;
+    const answered = view.decisions.some((d) => d.requestId === requestId);
+    if (answered || ownerWaiting?.requestId !== requestId) setReplyTo(null);
+  }, [approvals, replyTo, ownerConfirmation.data, ownerWaiting]);
 
   const send = useMutation({
     mutationFn: async (
@@ -4428,10 +4468,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // (send.mutate, whose onSuccess also clears the staged chips). An image-only reply still
     // needs a text resolution, hence the stand-in message.
     if (replyTo) {
+      // A send-back reaches the owner-confirmation door, not the approval channel, and the door
+      // refuses one carrying no note — so unlike a question reply, an image alone cannot stand in
+      // for the reason. Nothing is sent and the bar stays armed.
+      if (replyTo.target.kind === 'ownerConfirmation') {
+        if (!c) return;
+        const { taskId, requestId } = replyTo.target;
+        pinToBottom();
+        setReplyTo(null);
+        setText('');
+        setComposerRefs({});
+        setHistIdx(-1);
+        ownerDecision.mutate({ taskId, requestId, decision: 'SEND_BACK', note: c });
+        return;
+      }
       const imgs = readyImages;
       if (!c && imgs.length === 0) return;
       pinToBottom();
-      void decide(replyTo.id, 'deny', undefined, c || '(see attached image)');
+      void decide(replyTo.target.id, 'deny', undefined, c || '(see attached image)');
       setReplyTo(null);
       setText('');
       setComposerRefs({});
@@ -4789,7 +4843,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
-    setReplyTo({ id, question });
+    setReplyTo({
+      target: { kind: 'approval', id },
+      banner: `Replying to Claude’s question${question ? `: ${question}` : ''}`,
+      placeholder: 'Reply to Claude’s question…',
+    });
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // Declining one of Orbit's own asks — same channel as a chat reply, because a decline IS a
+  // deny+message; what differs is that the sentence is the point rather than an alternative to
+  // picking an option. See `decliningPrefix`.
+  const startDeclineReply = (id: string, toolName: string, subject: string): void => {
+    setReplyTo({
+      target: { kind: 'approval', id },
+      banner: decliningPrefix(toolName) + subject,
+      placeholder: DECLINE_PLACEHOLDER,
+    });
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The confirmation card's send-back: the next send carries the typed text to the
+  // owner-confirmation door as the SEND_BACK's reason. The card stays until then, with its own
+  // confirm still live — pressing that is the other way out.
+  const startOwnerSendBack = (waiting: OwnerConfirmationWaiting, title: string): void => {
+    if (!selectedTaskId) return;
+    setReplyTo({
+      target: { kind: 'ownerConfirmation', taskId: selectedTaskId, requestId: waiting.requestId },
+      banner: OWNER_SENDING_BACK_PREFIX + title,
+      placeholder: OWNER_SEND_BACK_LABEL,
+    });
     setTimeout(() => taRef.current?.focus(), 0);
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
@@ -5217,7 +5298,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : !runner.online
           ? 'Runner offline'
           : replyTo
-            ? 'Reply to Claude’s question…'
+            ? replyTo.placeholder
             : selectedId
               ? 'Reply…'
               : 'Send this workspace a task…';
@@ -5936,6 +6017,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   key={`owner-confirmation:${selectedId}`}
                   sessionId={selectedId}
                   taskId={selectedSession?.taskId ?? null}
+                  onSendBack={startOwnerSendBack}
                 />
               )}
               {/* The settlement question — whether this project's criteria, together, are what
@@ -5989,6 +6071,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
+                  onDecline={startDeclineReply}
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => {
@@ -6298,9 +6381,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>
-            <span className="composer-replyto-text">
-              Replying to Claude’s question{replyTo.question ? `: ${replyTo.question}` : ''}
-            </span>
+            <span className="composer-replyto-text">{replyTo.banner}</span>
             <button
               type="button"
               className="composer-replyto-cancel"

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { useLocation } from 'react-router-dom';
@@ -27,8 +27,16 @@ import { decisionReceiptTime } from './EvidenceDecisionCard';
  * ---------------------------
  * The task, what settles it (its acceptance criteria, in its own words), and what the run reported
  * (its last message of the turn that asked). Confirm done records the decision the task's DONE is
- * derived from. Send back… opens a box for what is missing; that reason is sent to this session as
- * the owner's next message, the task stays open, and the next turn that ends asks again.
+ * derived from. Chat about this asks for what is missing; that reason is sent to this session as
+ * owner's next message, the task stays open, and the next turn that ends asks again.
+ *
+ * AND ONE PLACE TO TYPE
+ * ---------------------
+ * The reason is an ordinary message to this session, and the composer at the bottom of the screen
+ * already is one. So Chat about this opens no box here: it arms the composer (`WorkspaceView`'s
+ * `replyTo`), the bar there names what the next send answers, and that send goes to the door as
+ * SEND_BACK + note instead of starting a turn. Two places on screen taking the same sentence is
+ * what that avoids — and it is the same handoff a question card's "Chat about this" makes.
  *
  * WHAT A DECISION LEAVES
  * ----------------------
@@ -80,10 +88,19 @@ export type OwnerDecision = 'CONFIRM' | 'SEND_BACK';
 
 export const OWNER_CONFIRMATION_HEADING = 'Confirm this task is done?';
 export const OWNER_CONFIRM_ACTION = 'Confirm done';
-export const OWNER_SEND_BACK_ACTION = 'Send back…';
-export const OWNER_SEND_ACTION = 'Send back';
+/** The other answer, and the same words the question card and Orbit's own asks use for it: three
+ *  cards, one control, because all three do the same thing — hand the reply to the main composer,
+ *  where the next send carries it to that card's door. */
+export const OWNER_SEND_BACK_ACTION = 'Chat about this';
+/** What the composer asks for while it is armed: the reason's label, as the card used to print it
+ *  over its own box. */
 export const OWNER_SEND_BACK_LABEL = "What's missing?";
+/** What the action promises before it is pressed, where the card has room to say it (the button's
+ *  tooltip): the door refuses a send-back carrying no note and writes nothing at all, and a
+ *  confirmation sent back is not a task closed. */
 export const OWNER_SEND_BACK_HINT = 'Sent to this session as your next message. The task stays open.';
+/** What the composer says it is about to answer while armed, ahead of the task's own title. */
+export const OWNER_SENDING_BACK_PREFIX = 'Sending back to this run: ';
 export const WHAT_SETTLES_IT = 'WHAT SETTLES IT';
 export const WHAT_THE_RUN_REPORTED = 'WHAT THE RUN REPORTED';
 export const OWNER_CONFIRMATION_SHOW_ALL = 'Show all';
@@ -251,8 +268,13 @@ function OwnerConfirmationBoxes({
 }
 
 /**
- * The two answers: confirm on one press, or send back with the reason the door requires. Not
- * deciding yet is simply not pressing.
+ * The two answers: confirm on one press, or send the report back with a reason. Not deciding yet is
+ * simply not pressing.
+ *
+ * The reason does not get a box here. It is an ordinary message to this session — which is what the
+ * composer at the bottom of the screen already is — so the press arms that instead, and the door's
+ * "no reason, no write" rule becomes the composer's own refusal to send an empty line. Two places
+ * taking the same sentence is what this avoids.
  */
 export function OwnerConfirmationActions({
   disabled,
@@ -262,56 +284,22 @@ export function OwnerConfirmationActions({
   /** Whether no answer from here could succeed right now. Every control below follows it. */
   disabled: boolean;
   onConfirm: () => void;
-  /** Called with the reason, trimmed — and never with an empty one. */
-  onSendBack: (note: string) => void;
+  /** Hand the reply to the composer; the reason is whatever is sent next. */
+  onSendBack: () => void;
 }): JSX.Element {
-  const noteId = useId();
-  const boxId = useId();
-  const [backOpen, setBackOpen] = useState(false);
-  const [note, setNote] = useState('');
   return (
     <CardActions className="decision-ask-actions">
       <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
         {OWNER_CONFIRM_ACTION}
       </CardActionButton>
-      <div className="decision-ask-back">
-        <CardActionButton
-          tone="secondary"
-          disabled={disabled}
-          expanded={backOpen}
-          controls={boxId}
-          onClick={() => setBackOpen(!backOpen)}
-        >
-          {OWNER_SEND_BACK_ACTION}
-        </CardActionButton>
-        {backOpen && (
-          <div className="decision-ask-why" id={boxId}>
-            <label className="decision-ask-why-label" htmlFor={noteId}>
-              {OWNER_SEND_BACK_LABEL}
-            </label>
-            <textarea
-              id={noteId}
-              className="decision-ask-note"
-              rows={3}
-              value={note}
-              disabled={disabled}
-              onChange={(event) => setNote(event.target.value)}
-            />
-            <div className="owner-confirmation-hint">{OWNER_SEND_BACK_HINT}</div>
-            {/* The door refuses a send-back with no reason and writes nothing, so the control that
-                would send one is not pressable until there is one. */}
-            <CardActions className="decision-ask-send">
-              <CardActionButton
-                tone="secondary"
-                disabled={disabled || note.trim() === ''}
-                onClick={() => onSendBack(note.trim())}
-              >
-                {OWNER_SEND_ACTION}
-              </CardActionButton>
-            </CardActions>
-          </div>
-        )}
-      </div>
+      <CardActionButton
+        tone="secondary"
+        disabled={disabled}
+        title={OWNER_SEND_BACK_HINT}
+        onClick={onSendBack}
+      >
+        {OWNER_SEND_BACK_ACTION}
+      </CardActionButton>
     </CardActions>
   );
 }
@@ -323,6 +311,7 @@ export function OwnerConfirmationCard({
   busy = false,
   error = null,
   onDecide,
+  onSendBack,
 }: {
   view: Pick<OwnerConfirmationView, 'taskId' | 'title' | 'acceptanceCriteria'>;
   waiting: OwnerConfirmationWaiting;
@@ -331,6 +320,8 @@ export function OwnerConfirmationCard({
   /** The door's refusal of the last press, when it refused. */
   error?: Error | null;
   onDecide: (decision: OwnerDecision, note?: string) => void;
+  /** Hand the send-back to the composer. The door is pressed by the send that follows, not here. */
+  onSendBack: () => void;
 }): JSX.Element {
   const refusal = error ? ownerDecisionRefusal(error) : null;
   return (
@@ -359,11 +350,7 @@ export function OwnerConfirmationCard({
               description={error.message}
             />
           ) : null}
-          <OwnerConfirmationActions
-            disabled={busy}
-            onConfirm={() => onDecide('CONFIRM')}
-            onSendBack={(note) => onDecide('SEND_BACK', note)}
-          />
+          <OwnerConfirmationActions disabled={busy} onConfirm={() => onDecide('CONFIRM')} onSendBack={onSendBack} />
         </section>
       </div>
     </div>
@@ -380,10 +367,14 @@ export function OwnerConfirmationCard({
 export function SessionOwnerConfirmationCard({
   sessionId,
   taskId,
+  onSendBack,
 }: {
   sessionId: string;
   /** The task this session runs; an ordinary conversation has none and gets no card. */
   taskId: string | null | undefined;
+  /** Arm the composer to send this report back: it is handed the waiting request and the task's
+   *  title, and the send that follows presses the door. */
+  onSendBack: (waiting: OwnerConfirmationWaiting, title: string) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const location = useLocation();
@@ -418,6 +409,7 @@ export function SessionOwnerConfirmationCard({
       error={answer.isError ? answer.error : null}
       onDecide={(decision, note) =>
         answer.mutate({ requestId: waiting.requestId, decision, note })}
+      onSendBack={() => onSendBack(waiting, read.data.title)}
     />
   );
 }

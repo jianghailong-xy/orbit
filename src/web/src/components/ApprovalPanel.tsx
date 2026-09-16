@@ -35,6 +35,24 @@ function UnanswerableNote(): JSX.Element {
   return <p className="approval-stale">{UNANSWERABLE_NOTE}</p>;
 }
 
+/**
+ * Declining one of Orbit's own asks.
+ *
+ * Saying no to a batch of tasks, a create or a restructure is a position, not a misfire: the agent
+ * proposed something and the answer is "not this". So the decline hands the composer the same reply
+ * a question's "Chat about this" does — the refusal and what to do instead ride back together as
+ * one deny+message, rather than the agent learning only that it was refused and guessing.
+ *
+ * A plain tool-permission Reject keeps its old one-press meaning: refusing a shell command is not a
+ * proposal being discussed, and asking for a sentence first would be a tax on saying no. The native
+ * half is `Approvals.decliningPrefix` / `declinePlaceholder` (OrbitKit).
+ */
+export const decliningPrefix = (toolName: string | null | undefined): string =>
+  toolName === 'orbit_dag_change' ? 'Leaving the graph alone: ' : 'Not creating: ';
+
+/** What the empty composer asks for while a decline is armed. */
+export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
+
 // claude routes plan-mode "exit?" through the same permission tool as any other gated
 // call; ExitPlanMode is the one worth a rich render (its input carries the plan).
 const isPlan = (a: ApprovalInfo): boolean => a.toolName === 'ExitPlanMode';
@@ -220,6 +238,7 @@ export function ApprovalPanel({
   active = false,
   answerable = true,
   onChatAbout,
+  onDecline,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
@@ -227,6 +246,9 @@ export function ApprovalPanel({
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
   onChatAbout?: (id: string, question: string) => void;
+  /** Arm the composer to decline one of Orbit's own asks with the reason beside it; absent, the
+   *  press falls back to denying where it stands. See `decliningPrefix`. */
+  onDecline?: (id: string, toolName: string, subject: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
@@ -260,6 +282,16 @@ export function ApprovalPanel({
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
+  // What the composer's bar would name as the thing not being done: the proposal's own subject, and
+  // never the tool's name, which says nothing about what is not being created. Null for everything
+  // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
+  const declineSubject: string | null = dag
+    ? (dag.preview.listTitle ?? 'this list')
+    : batch
+      ? `${batch.taskCount ?? 0} new task${batch.taskCount === 1 ? '' : 's'}`
+      : create
+        ? create.title
+        : null;
   return (
     <div className="approval-card">
       <div className="approval-head">
@@ -313,17 +345,21 @@ export function ApprovalPanel({
         <CardActionButton
           tone="secondary"
           disabled={!answerable}
-          onClick={() => onDecide(approval.id, 'deny')}
+          onClick={() => {
+            // One of Orbit's own proposals: the press is "not this, and here is what instead",
+            // so it arms the composer and the refusal rides back with the next send. Everything
+            // else — a plan, a tool call — is denied where it stands.
+            if (declineSubject !== null && onDecline) {
+              onDecline(approval.id, approval.toolName ?? '', declineSubject);
+            } else {
+              onDecide(approval.id, 'deny');
+            }
+          }}
         >
-          {isPlan(approval)
-            ? 'Keep planning'
-            : dag
-              ? 'Leave the graph alone'
-              : batch
-                ? 'Create nothing'
-                : create
-                  ? "Don't create"
-                  : 'Reject'}
+          {/* Orbit's own asks say what the question card says, because the press does what the
+              question card's press does. A plan and a plain tool call keep their own words: both
+              are refused where they stand, with nothing to discuss. */}
+          {isPlan(approval) ? 'Keep planning' : declineSubject !== null ? '💬 Chat about this' : 'Reject'}
         </CardActionButton>
       </CardActions>
     </div>

@@ -190,7 +190,7 @@ describe('an OWNER_CONFIRMED task in the panel', () => {
     );
     const actions = head(html);
     expect(buttonLabels(actions)).not.toContain('Confirm done');
-    expect(buttonLabels(actions)).not.toContain('Send back…');
+    expect(buttonLabels(actions)).not.toContain('Chat about this');
     expect(actions).toMatch(
       new RegExp(`<a[^>]*href="/sessions/${RUN_SESSION}"[^>]*>Waiting for your confirmation</a>`, 'u'),
     );

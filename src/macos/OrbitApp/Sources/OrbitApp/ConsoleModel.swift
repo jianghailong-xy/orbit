@@ -28,11 +28,28 @@ struct PendingAttachment: Identifiable, Equatable, Sendable {
     var isUploading: Bool { remoteID == nil }
 }
 
-/// Active "Chat about this" reply: the composer's next send resolves this pending question as a
-/// deny+message (claude reads it as in-turn feedback) instead of starting a fresh turn.
+/// An armed reply: the composer's next send answers one open question instead of starting a fresh
+/// turn, and the card that armed it stays until then.
+///
+/// Three presses arm it, and they are the three places on screen that would otherwise each need
+/// their own text box — a question's "Chat about this", a decline of one of Orbit's own asks, and a
+/// confirmation's — all three saying the same words. Whichever armed it, the composer is where a
+/// typed; only the door it goes to differs, which is what `target` carries.
 struct QuestionReply: Equatable, Sendable {
-    let approvalID: String
-    let question: String
+    enum Target: Equatable, Sendable {
+        /// A pending approval, resolved as deny + the typed text (claude reads it as in-turn
+        /// feedback and continues).
+        case approval(id: String)
+        /// The confirmation waiting in this session, sent back with the typed text as its reason.
+        case ownerConfirmation(OwnerConfirmationWaiting)
+    }
+
+    let target: Target
+    /// What the reply bar says it is about to answer, whole — built by whoever armed it, because
+    /// the card knows what it asked and the composer does not.
+    let banner: String
+    /// What the empty composer asks for while this is armed.
+    let placeholder: String
 }
 
 // `LocalStatusCard` lives in OrbitKit (Transcript/TranscriptRows.swift) — the transcript's row
@@ -587,11 +604,23 @@ final class ConsoleModel {
         if state.status == .running || !tailIsUnansweredUser { awaitingReply = false }
     }
 
-    /// Drop the chat-reply context if its question was resolved another way (an option was picked,
-    /// or an SSE `approval_resolved` arrived) — mirrors the web clearing replyTo when it leaves.
+    /// Drop the armed reply if its question was answered another way (an option was picked, an SSE
+    /// `approval_resolved` arrived, or the confirmation was settled in a browser) — mirrors the web
+    /// clearing replyTo when it leaves. A bar left hanging over a question that is gone is an offer
+    /// to answer nothing.
     private func reconcileReplyContext() {
-        if let r = replyContext, !state.pendingApprovals.contains(where: { $0.id == r.approvalID }) {
-            replyContext = nil
+        guard let reply = replyContext else { return }
+        switch reply.target {
+        case .approval(let id):
+            if !state.pendingApprovals.contains(where: { $0.id == id }) { replyContext = nil }
+        case .ownerConfirmation(let waiting):
+            // `isOpen` and not `answerable`, deliberately: a read that has not come back leaves the
+            // standing `unread`, which is "this device cannot say" rather than "there is nothing to
+            // answer". Disarming on that would throw away a reason somebody is in the middle of
+            // typing because one poll failed.
+            let standing = OwnerConfirmations.standing(ownerConfirmation, sessionID: sessionID,
+                                                       requestID: waiting.requestId)
+            if !OwnerConfirmations.isOpen(standing) { replyContext = nil }
         }
     }
 
@@ -1181,12 +1210,22 @@ final class ConsoleModel {
             }
         }
         if isDraft { await createDraftSession(); return }
-        // "Chat about this": resolve the pending question as a deny+message so claude reads the
-        // text as in-turn feedback and continues — not a fresh turn. (Mirrors the web reroute.)
+        // An armed reply answers a question rather than starting a turn, so it goes to that
+        // question's own door. (Mirrors the web reroute.)
         if let reply = replyContext {
             composerText = ""
             replyContext = nil
-            await replyToQuestion(approvalID: reply.approvalID, text: text)
+            switch reply.target {
+            // Resolve the pending approval as a deny+message, so claude reads the text as in-turn
+            // feedback and continues.
+            case .approval(let id):
+                await replyToQuestion(approvalID: id, text: text)
+            // Send the report back with this text as the reason the door requires. `send` already
+            // refuses an empty composer, which is the same rule the door enforces.
+            case .ownerConfirmation(let waiting):
+                localSendTick &+= 1   // an answer is a send too — pin the transcript to the tail
+                await decideOwnerConfirmation(waiting, .sendBack, note: text)
+            }
             return
         }
 
@@ -1714,7 +1753,31 @@ final class ConsoleModel {
     /// Begin a "Chat about this" reply to a pending question: the next composer send resolves it
     /// as a deny+message instead of a fresh turn (see send()). The card stays until then.
     func startChatReply(approvalID: String, question: String) {
-        replyContext = QuestionReply(approvalID: approvalID, question: question)
+        replyContext = QuestionReply(
+            target: .approval(id: approvalID),
+            banner: question.isEmpty ? "Replying to Claude’s question"
+                                     : "Replying to Claude’s question: \(question)",
+            placeholder: "Type your reply to Claude…")
+    }
+
+    /// Decline one of Orbit's own asks — a batch, a create, a restructure — with the reason beside
+    /// it. Same channel as a chat reply, because a decline IS a deny+message; what differs is that
+    /// the sentence is the point rather than an alternative to picking an option.
+    func startDeclineReply(approvalID: String, toolName: String, subject: String) {
+        replyContext = QuestionReply(
+            target: .approval(id: approvalID),
+            banner: Approvals.decliningPrefix(toolName: toolName) + subject,
+            placeholder: Approvals.declinePlaceholder)
+    }
+
+    /// Send this session's waiting confirmation back: the next composer send carries the typed text
+    /// to the owner-confirmation door as the SEND_BACK's reason. The card stays until then, with
+    /// `Confirm done` still live — pressing it is the other way out.
+    func startOwnerSendBackReply(_ waiting: OwnerConfirmationWaiting, title: String) {
+        replyContext = QuestionReply(
+            target: .ownerConfirmation(waiting),
+            banner: OwnerConfirmations.sendingBackPrefix + title,
+            placeholder: OwnerConfirmations.sendBackLabel)
     }
 
     func cancelChatReply() { replyContext = nil }

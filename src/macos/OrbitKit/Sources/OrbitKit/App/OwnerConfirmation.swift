@@ -21,6 +21,15 @@ import Foundation
    one whose report was already answered — the panel carries `Confirm done` itself. Never both: a
    second place to answer is a second answer racing the first.
 
+   AND ONE PLACE TO TYPE
+   ---------------------
+   The card's second answer sends the report back with a reason, and that reason is an ordinary
+   message to this session — which is what the composer at the bottom of the screen already is. So
+   `Chat about this` arms the composer rather than growing a box inside the card: the bar names
+   what the next send answers, the send goes to the door as `SEND_BACK` + note instead of starting
+   a turn, and there are never two places on screen taking the same sentence. It is the same
+   handoff the question card makes (`Approvals.chatReplyLabel`), for the same reason.
+
    NOTHING IS FROZEN INTO THE CARD EXCEPT THE ADDRESS
    --------------------------------------------------
    A delivered card keeps one thing across renders — the `requestId` it was drawn for, which is the
@@ -232,33 +241,6 @@ public struct OwnerConfirmationStanding: Equatable, Sendable {
     public var answerable: Bool { waiting != nil }
 }
 
-/// The send-back half of the action area, as state a view holds and a test can assert on — the same
-/// value-not-three-booleans shape `EvidenceSendBackState` takes, and for the same reason: "the send
-/// control is dead until a reason exists" is one testable predicate instead of a condition spelled
-/// into a view modifier. The rule belongs to the server: the door refuses a SEND_BACK carrying no
-/// note and writes nothing at all, so a control that would send one cannot be pressable.
-public struct OwnerSendBackState: Equatable, Sendable {
-    /// Whether the reason box is open. Closed until `Send back…` is pressed: a permanently visible
-    /// box reads like an invitation to say something rather than like the one thing that makes the
-    /// button work.
-    public var open: Bool
-    public var note: String
-
-    public init(open: Bool = false, note: String = "") {
-        self.open = open
-        self.note = note
-    }
-
-    /// The note as it would be sent: trimmed, because whitespace is not a reason.
-    public var trimmedNote: String {
-        note.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Whether the send control may be pressed — the reason half of it. Whether the QUESTION may be
-    /// answered at all is the standing's `answerable`, and both are required.
-    public var canSend: Bool { !trimmedNote.isEmpty }
-}
-
 // MARK: - the logic
 
 public enum OwnerConfirmations {
@@ -329,13 +311,19 @@ public enum OwnerConfirmations {
     /// The card's heading (`OWNER_CONFIRMATION_HEADING`).
     public static let heading = "Confirm this task is done?"
     public static let confirmAction = "Confirm done"
-    public static let sendBackAction = "Send back…"
-    /// The send-back's own submit, behind the reason box rather than beside it.
-    public static let sendAction = "Send back"
+    /// The other answer, and the same words the question card and Orbit's own asks use for it
+    /// (`Approvals.chatAction`): three cards, one control, because all three do the same thing —
+    /// hand the reply to the main composer, where the next send carries it to that card's door.
+    public static let sendBackAction = Approvals.chatAction
+    /// What the composer asks for while it is armed: the reason's label, as the card used to
+    /// print it over its own box.
     public static let sendBackLabel = "What's missing?"
-    /// Why the reason is required rather than a placeholder somebody may ignore: the door refuses a
-    /// send-back carrying no note and writes nothing at all.
+    /// What the action promises before it is pressed, where the card has room to say it (a tooltip
+    /// on the desktop): the door refuses a send-back carrying no note and writes nothing at all,
+    /// and a confirmation sent back is not a task closed.
     public static let sendBackHint = "Sent to this session as your next message. The task stays open."
+    /// What the composer says it is about to answer while armed, ahead of the task's own title.
+    public static let sendingBackPrefix = "Sending back to this run: "
     public static let whatSettlesIt = "WHAT SETTLES IT"
     public static let whatTheRunReported = "WHAT THE RUN REPORTED"
     public static let showAll = "Show all"

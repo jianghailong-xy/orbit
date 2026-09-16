@@ -128,6 +128,29 @@ public enum Approvals {
         return header.isEmpty ? (first?.question ?? "") : header
     }
 
+    // MARK: declining one of Orbit's own asks
+    //
+    // Saying no to a batch of tasks, a create or a restructure is a position, not a misfire: the
+    // agent proposed something and the answer is "not this". So the decline hands the composer the
+    // same reply the question card does — the refusal and what to do instead ride back together as
+    // one deny+message, rather than the agent learning only that it was refused and guessing.
+    // A plain tool-permission `Deny` keeps its old one-press meaning: refusing a shell command is
+    // not a proposal being discussed, and asking for a sentence first would be a tax on saying no.
+
+    /// What every card calls the control that hands its reply to the composer: a question's, one
+    /// of Orbit's own asks, and the confirmation card's (`OwnerConfirmations.sendBackAction`). One
+    /// word, because it is one thing — the alternative was three buttons doing the same thing under
+    /// three names.
+    public static let chatAction = "Chat about this"
+
+    /// What the composer's bar says it is declining, ahead of the ask's own subject.
+    public static func decliningPrefix(toolName: String) -> String {
+        isDagChange(toolName: toolName) ? "Leaving the graph alone: " : "Not creating: "
+    }
+
+    /// What the empty composer asks for while a decline is armed.
+    public static let declinePlaceholder = "Say what to do instead…"
+
     private static func trimmed(_ s: String?) -> String {
         (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }

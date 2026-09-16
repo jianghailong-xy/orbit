@@ -89,7 +89,9 @@ describe('single create approval', () => {
     expect(html).toContain('Done when');
     expect(html).toContain('Signing in lands on /home');
     expect(html).toContain('Create it');
-    expect(html).toContain('Don&#x27;t create');
+    // Not creating it is the question card's own control, because the press does what that press
+    // does: it hands "not this, and here is what instead" to the composer (`decliningPrefix`).
+    expect(html).toContain('Chat about this');
     // The raw tool name over a JSON dump is exactly what this card replaces.
     expect(html).not.toContain('orbit_task_create');
   });
@@ -198,7 +200,10 @@ describe('batch create approval', () => {
 
     expect(html).not.toContain('Always allow');
     expect(html).toContain('Create them');
-    expect(html).toContain('Create nothing');
+    // Not creating them is not a verdict typed into the void: it is the question card's own
+    // control, and the reason rides back with it (`decliningPrefix`).
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('Create nothing');
   });
 });
 
@@ -239,7 +244,8 @@ describe('DAG change approval', () => {
 
     expect(html).not.toContain('Always allow');
     expect(html).toContain('Apply changes');
-    expect(html).toContain('Leave the graph alone');
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('Leave the graph alone');
   });
 
   it('conjugates the singular case', () => {
