@@ -220,7 +220,9 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                       "the native card no longer calls its open reading toggle \"Hide the criteria\"")
         assertDeclares(web, "ACCEPTANCE_HIDE_CRITERIA_LABEL", "Hide the criteria",
                        "the open reading toggle")
-        XCTAssertTrue(console.contains("\"That confirmation was not recorded — \\(error)\""),
+        // The words, not the tail: what follows the dash is the reason prose, which both ends build
+        // from their own error (`APIClient.failureReason` here, `error.message` in the browser).
+        XCTAssertTrue(console.contains("\"That confirmation was not recorded — "),
                       "the native console no longer says \"That confirmation was not recorded\"")
         assertDeclares(web, "CONFIRMATION_NOT_RECORDED", "That confirmation was not recorded",
                        "what a refused confirmation says")

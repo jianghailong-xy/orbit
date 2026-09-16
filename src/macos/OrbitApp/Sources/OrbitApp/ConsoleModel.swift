@@ -1065,7 +1065,7 @@ final class ConsoleModel {
                             permissionMode ?? baseline.permissionMode,
                             effort ?? baseline.effort)
         } catch {
-            statusMessage = "Couldn't apply change — \(error)"
+            statusMessage = "Couldn't apply change — \(APIClient.failureReason(error))."
         }
     }
 
@@ -1337,7 +1337,7 @@ final class ConsoleModel {
                 try await api.cancelAutoRetry(sessionID: sessionID)
             }
         } catch {
-            statusMessage = "Couldn't change auto-retry — \(error)"
+            statusMessage = "Couldn't change auto-retry — \(APIClient.failureReason(error))."
         }
         // Refetch either way: the card renders the server's answer, not the click.
         await worktree.loadDetail()
@@ -1456,7 +1456,7 @@ final class ConsoleModel {
             if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
             onSessionCreated?(session)
         } catch {
-            statusMessage = "Couldn't start the session — \(error)"
+            statusMessage = "Couldn't start the session — \(APIClient.failureReason(error))."
         }
     }
 
@@ -1754,7 +1754,7 @@ final class ConsoleModel {
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRule: rule)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
         catch {
-            statusMessage = "Approval failed — \(error)"
+            statusMessage = "Approval failed — \(APIClient.failureReason(error))."
             await refreshApprovals()
         }
     }
@@ -2009,7 +2009,7 @@ final class ConsoleModel {
             // own answer this window can be sure is wrong — and left as an in-memory line it would
             // not survive the console being opened again.
         } catch {
-            statusMessage = "That decision was not recorded — \(error)"
+            statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
     }
@@ -2087,7 +2087,7 @@ final class ConsoleModel {
             // A refusal for staleness is said as such: the card stays and re-derives, and the
             // sentence tells the reader which refusal the press met rather than "it failed".
             let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
-            statusMessage = "\(title) — \(error)"
+            statusMessage = "\(title) — \(APIClient.failureReason(error))."
         }
         await refreshOwnerConfirmation(force: true)
     }
@@ -2115,7 +2115,7 @@ final class ConsoleModel {
             // happened (`adoptEvidenceReceipts`) — and which survives the console being opened
             // again, unlike the in-memory line it replaces.
         } catch {
-            statusMessage = "That decision was not recorded — \(error)"
+            statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
     }
@@ -2131,7 +2131,7 @@ final class ConsoleModel {
             close(.acceptanceConfirmation)
             appendDecisionLine(AcceptanceConfirmations.confirmedLine(standing))
         } catch {
-            statusMessage = "That confirmation was not recorded — \(error)"
+            statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
             await refreshRulerQuestions(force: true)
         }
     }
