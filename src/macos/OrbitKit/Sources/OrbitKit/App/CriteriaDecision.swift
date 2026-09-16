@@ -824,38 +824,6 @@ public enum CriteriaDecisions {
         return receiptClockFormatter.string(from: date)
     }
 
-    /// The runner's clock on one transcript item, when it carries one.
-    ///
-    /// Reasoning is stamped at both ends (`ThinkingBlock.startedTs`/`finishedTs`) and a closed one
-    /// is anchored by when it FINISHED — the moment its row's words stopped being written. Nothing
-    /// else in the transcript carries a clock: an interrupt or an error row has no anchor of its
-    /// own, which is why the search below takes the LAST item that has one rather than the item
-    /// beside the moment.
-    public static func itemClock(_ item: TranscriptItem) -> String? {
-        switch item {
-        case .user(let bubble):        return bubble.ts
-        case .assistant(let bubble):   return bubble.ts
-        case .thinking(let block):     return block.finishedTs ?? block.startedTs
-        case .toolCall(let card):      return card.ts
-        case .interrupt, .error, .authError, .autoRetry: return nil
-        }
-    }
-
-    /// The item a receipt for `decidedAt` is drawn after: the last one whose clock is at or before
-    /// it. Nil when every loaded item is LATER — the moment is then above the window this device
-    /// holds, and drawing the receipt at the top would put a decision above things that happened
-    /// first (web's `decisionReceiptAnchor`, same rule).
-    public static func receiptAnchor(items: [TranscriptItem], decidedAt: String) -> String? {
-        guard let at = ThinkingSummary.date(decidedAt) else { return nil }
-        var anchor: String?
-        for item in items {
-            guard let stamp = itemClock(item), let when = ThinkingSummary.date(stamp), when <= at
-            else { continue }
-            anchor = item.id
-        }
-        return anchor
-    }
-
     /// One answer this console draws as a record, and the item it belongs after.
     public struct Receipt: Equatable, Sendable, Identifiable {
         public let settled: SettledCriteriaDecision
@@ -894,7 +862,7 @@ public enum CriteriaDecisions {
                                 items: [TranscriptItem]) -> [Receipt] {
         guard let queue else { return [] }
         return queue.settled.compactMap { settled in
-            guard let anchor = receiptAnchor(items: items, decidedAt: settled.decidedAt) else {
+            guard let anchor = ReceiptAnchor.after(items: items, at: settled.decidedAt) else {
                 return nil
             }
             return Receipt(settled: settled, afterItemID: anchor)
@@ -1045,16 +1013,6 @@ public enum CriteriaDecisions {
                                 baseSeal: row.baselineSeal)
     }
 
-    /// What a decision leaves behind where it was made. The seals are the whole of the
-    /// compare-and-set the door performed, in the door's own words, so a reader a week later can
-    /// tell which version was answered — and, for a refusal, that the version did not move.
-    public static func decisionLine(_ result: CriteriaDecisionResult) -> String {
-        result.decision == .approve
-            ? "You approved the weakening — the ruler moved, seal \(shortSeal(result.baseSeal)) → "
-                + "\(shortSeal(result.resultingSeal))"
-            : "You refused the weakening — nothing was applied, seal stays "
-                + "\(shortSeal(result.baseSeal))"
-    }
 }
 
 // MARK: - the settlement confirmation

@@ -25,10 +25,8 @@ import {
   REPLY_SENT_TO_SESSION,
   REPLY_WRITTEN_ON_TASK,
   changeSummary,
-  criteriaApprovedLine,
   criteriaDecisionRequest,
   criteriaDecisionStanding,
-  criteriaRefusedLine,
   isAnswerable,
   receiptClock,
   shortSeal,
@@ -864,30 +862,6 @@ describe('what one press sends', () => {
     // was composed against the ruler it is about to move.
     const stale = row({ currentSeal: SEAL_MOVED });
     expect(criteriaDecisionRequest(stale, 'REJECT').body.baseSeal).toBe(SEAL_DRAFTED);
-  });
-});
-
-describe('what a decision leaves in the transcript', () => {
-  const result = (over: Partial<CriteriaDecisionResult> = {}): CriteriaDecisionResult => ({
-    intentId: row().intentId,
-    decision: 'REJECT',
-    decidedAt: '2026-09-09T04:02:00.000Z',
-    baseSeal: SEAL_DRAFTED,
-    resultingSeal: SEAL_DRAFTED,
-    applied: false,
-    ...over,
-  });
-
-  it('says which way the ruler went, in the seals the door compared', () => {
-    const approved = criteriaApprovedLine(
-      result({ decision: 'APPROVE', resultingSeal: SEAL_MOVED, applied: true }),
-    );
-    expect(approved).toContain(shortSeal(SEAL_DRAFTED));
-    expect(approved).toContain(shortSeal(SEAL_MOVED));
-
-    const refused = criteriaRefusedLine(result());
-    expect(refused.toLowerCase()).toContain('nothing was applied');
-    expect(refused).toContain(shortSeal(SEAL_DRAFTED));
   });
 });
 

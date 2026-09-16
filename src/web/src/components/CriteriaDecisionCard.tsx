@@ -823,30 +823,6 @@ export function decideCriteriaChange(
 }
 
 /**
- * What a decision leaves behind in the transcript: the event, said where it happened.
- *
- * The seals are the whole of the compare-and-set the door performed, in the door's own words, so a
- * reader a week later can tell which version was answered — and, for a refusal, that the version
- * did not move.
- */
-export function criteriaApprovedLine(result: CriteriaDecisionResult): string {
-  return (
-    `You approved the weakening — the ruler moved, seal ${shortSeal(result.baseSeal)} → `
-    + `${shortSeal(result.resultingSeal)}`
-  );
-}
-
-export function criteriaRefusedLine(result: CriteriaDecisionResult): string {
-  return (
-    `You refused the weakening — nothing was applied, seal stays ${shortSeal(result.baseSeal)}`
-  );
-}
-
-export function criteriaDecisionLine(result: CriteriaDecisionResult): string {
-  return result.decision === 'APPROVE' ? criteriaApprovedLine(result) : criteriaRefusedLine(result);
-}
-
-/**
  * WHAT AN ANSWERED PROPOSAL LEAVES IN THE CONVERSATION IT WAS ASKED IN
  * --------------------------------------------------------------------
  * The session that asked for the change is waiting on this answer, and the door sends it there
