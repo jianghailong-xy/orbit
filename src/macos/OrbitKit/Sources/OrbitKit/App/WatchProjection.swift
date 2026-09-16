@@ -198,10 +198,33 @@ public enum WatchProjection {
 
     /// "3 of 7 finished", plus " · 1 gone" when a target was deleted. The verb is the condition's
     /// own when it names one leaf; with several a target counts once any of them holds, so it's "met".
+    /// The denominator is the threshold the condition sets, not the set itself: the targets it reads
+    /// are the ones still in it, and the count is left off when one is all it takes (web's
+    /// `describeProgress` over `thresholdOf`, the same two rules).
     public static func progress(for watch: Watch) -> String {
         let p = WatchProgress(watch.targets)
-        let text = "\(p.met) of \(p.live) \(metWord(watch.predicate))"
+        let needed = threshold(watch.predicate, targets: watch.targets.filter { $0.state != .gone }).needed
+        let verb = metWord(watch.predicate)
+        let text = needed == 1 ? "\(p.met) \(verb)" : "\(p.met) of \(needed) \(verb)"
         return p.gone > 0 ? "\(text) · \(p.gone) gone" : text
+    }
+
+    /// The threshold the condition itself sets, over the targets it can read: how many of them have to
+    /// meet the leaf (`needed`) and how many it reads at all (`of`). One target settles an ANY watch,
+    /// so it is done after the first — whatever the set it covers. A composite names no one leaf, and a
+    /// term this build can't read (v1's model is `.all/.any/.allOf/.anyOf/.unknown`) has no leaf to read
+    /// a kind from, so both ask for the whole set: the reading a caller had before it looked at the
+    /// predicate. Nothing here throws, the way `condition` says a sentence rather than failing on a
+    /// condition it cannot parse. The browser's `thresholdOf` is the same two numbers.
+    static func threshold(_ predicate: WatchPredicate, targets: [WatchTarget]) -> (needed: Int, of: Int) {
+        let kind: WatchTargetKind?
+        switch predicate {
+        case .all(let leaf), .any(let leaf): kind = leaf.targetKind
+        case .allOf, .anyOf, .unknown: kind = nil
+        }
+        let of = kind.map { k in targets.filter { $0.targetKind == k }.count } ?? targets.count
+        if case .any = predicate, of > 0 { return (needed: 1, of: of) }
+        return (needed: of, of: of)
     }
 
     static func metWord(_ predicate: WatchPredicate) -> String {

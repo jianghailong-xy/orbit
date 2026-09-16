@@ -19,8 +19,10 @@ final class WatchProjectionTests: XCTestCase {
     }
 
     func testProgressUsesTheConditionsOwnVerbOrMetForSeveralLeaves() {
+        // The four targets this ANY covers are not its denominator: one settles it, so the line counts
+        // the verb's totals only (the thresholds below).
         XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: F.any("TASK_FAILED"),
-                                                             targets: F.tasks(4, met: 1))), "1 of 4 failed")
+                                                             targets: F.tasks(4, met: 1))), "1 failed")
         XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: F.all("TASK_DONE"),
                                                              targets: F.tasks(2, met: 2))), "2 of 2 done")
         let sessions = [F.target("S2", kind: "SESSION", state: "SATISFIED"), F.target("S3", kind: "SESSION")]
@@ -41,6 +43,51 @@ final class WatchProjectionTests: XCTestCase {
         let watched = [F.target("S2", kind: "SESSION", state: "SATISFIED"), F.target("S3", kind: "SESSION")]
         XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: settledOrAsking, targets: watched)),
                        "1 of 2 met")
+    }
+
+    /// The denominator is the threshold the condition sets, not the targets it covers: an ANY watch is
+    /// done after one target, so the four it reads are not what it is waiting for, and the count is left
+    /// off entirely when one is all it takes (web's `describeProgress`).
+    func testProgressTakesItsDenominatorFromTheConditionsThreshold() {
+        // (a) ANY over four tasks, none met: one target settles it, so there is no "of 4" to show.
+        let any = F.watch(predicate: F.any("TASK_TERMINAL"), targets: F.tasks(4))
+        XCTAssertFalse(WatchProjection.progress(for: any).contains("of 4"),
+                       WatchProjection.progress(for: any))
+        XCTAssertEqual(WatchProjection.progress(for: any), "0 finished")
+
+        // (b) ALL: every target it reads is what it is waiting for.
+        XCTAssertEqual(WatchProjection.progress(for: F.watch(predicate: F.all("TASK_TERMINAL"),
+                                                             targets: F.tasks(4, met: 2))),
+                       "2 of 4 finished")
+
+        // (c) A composite names no one leaf to read a threshold from, so it asks for the whole set — the
+        // reading progress had before it looked at the predicate — and reading it never throws.
+        for kind in ["ANY_OF", "ALL_OF"] {
+            let composite: [String: Any] = ["kind": kind,
+                                            "operands": [F.all("TASK_TERMINAL"), F.any("TASK_FAILED")]]
+            let text = WatchProjection.progress(for: F.watch(predicate: composite, targets: F.tasks(4, met: 2)))
+            XCTAssertTrue(text.contains("of 4"), text)
+        }
+
+        // Zero targets keep the count they had — 0 is not a threshold of one to leave off.
+        XCTAssertEqual(WatchProjection.progress(for: F.watch(targets: [])), "0 of 0 finished")
+    }
+
+    /// A quorum is a shape this build cannot read, and that is a fact about the model rather than a gap
+    /// in this reading of it: `WatchPredicate.version` is 1, its cases are `.all/.any/.allOf/.anyOf/
+    /// .unknown`, and `AT_LEAST` is predicateVersion 2's — so it decodes to `.unknown("AT_LEAST")`, which
+    /// carries the kind alone and **no count**. There is no threshold to read out of it even in principle,
+    /// so the whole set is the only denominator there is, and a client that one day reads v2 has to widen
+    /// the model first. Web, which reads v2, prints the quorum's own count for the same watch instead.
+    func testAQuorumThisBuildCannotReadFallsBackToTheWholeSet() throws {
+        let quorum: [String: Any] = ["kind": "AT_LEAST", "count": 2, "over": "ALL_TARGETS",
+                                     "leaf": "TASK_TERMINAL"]
+        let data = try JSONSerialization.data(withJSONObject: quorum)
+        XCTAssertEqual(try JSONDecoder().decode(WatchPredicate.self, from: data), .unknown("AT_LEAST"))
+
+        let watch = F.watch(predicate: quorum, targets: F.tasks(4, met: 1))
+        XCTAssertEqual(watch.predicate, .unknown("AT_LEAST"))
+        XCTAssertEqual(WatchProjection.progress(for: watch), "1 of 4 met")
     }
 
     // MARK: headline
