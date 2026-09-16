@@ -471,24 +471,13 @@ public enum WatchProjection {
     /// A control or an edit that didn't go through, as one sentence. `verb` is the control's own
     /// ("pause", "stop", "save").
     public static func failureMessage(_ error: Error, verb: String) -> String {
+        // A 404 is this surface's own reading of a refusal — a watch that is gone is gone, whatever
+        // the body says. Everything else is the shared prose.
         let reason: String
-        if let apiError = error as? APIError {
-            switch apiError {
-            case .http(status: 404, body: _):
-                reason = "it no longer exists"
-            case .http(let status, let body):
-                reason = ComposerLogic.serverMessage(body) ?? "the server returned \(status)"
-            case .unauthorized:
-                reason = "you're signed out"
-            case .invalidResponse:
-                reason = "the server's reply couldn't be read"
-            case .notConfigured:
-                reason = "no server is configured"
-            }
-        } else if error is URLError {
-            reason = "the connection dropped"
+        if case APIError.http(status: 404, body: _) = error {
+            reason = "it no longer exists"
         } else {
-            reason = error.localizedDescription
+            reason = APIClient.failureReason(error)
         }
         return "Couldn't \(verb) the watch — \(reason)."
     }

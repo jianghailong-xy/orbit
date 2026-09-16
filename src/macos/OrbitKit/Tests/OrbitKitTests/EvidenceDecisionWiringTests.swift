@@ -153,6 +153,42 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         XCTAssertTrue(press.contains("api.decideEvidence(taskID: row.taskId, request)"))
     }
 
+    // MARK: the receipt, which is a record rather than a question
+
+    /// THE RECORD IS DRAWN FROM THE READ, NOT FROM THE WINDOW THAT PRESSED THE BUTTON.
+    ///
+    /// A receipt used to be an in-memory line written by the console that pressed
+    /// (`appendDecisionLine(EvidenceDecisions.recordedLine(…))`) — so opening the console again, or
+    /// relaunching the app, took the decision out of the conversation; the account owner reported
+    /// exactly that (about the criteria receipt, on the web client, 2026-09-16). The answers are
+    /// committed rows the pending read publishes for the deciding session, so the console derives
+    /// the receipts from them on every refresh and lets go of each revision the read names.
+    func testTheConsoleDerivesEvidenceReceiptsFromTheReadAndLetsTheAnsweredQuestionGo() throws {
+        let console = try source(Self.consolePath)
+        XCTAssertTrue(console.contains("EvidenceDecisions.receipts(queue: queue, items: state.items)"),
+                      "the receipts are derived from the read's own answers, placed by the items' clocks")
+        XCTAssertTrue(console.contains("kind: .evidenceDecisionReceipt(decided: receipt.decided)"),
+                      "and delivered as rows of their own, carrying the answer they record")
+        let press = try section(console, from: "func decideEvidence", to: "func confirmStandardSet")
+        XCTAssertFalse(press.contains("appendDecisionLine"),
+                       "a decision recorded from a card no longer leaves an in-memory line behind it")
+    }
+
+    /// The receipt card says what it is and what happened, and offers nothing to press.
+    func testTheEvidenceReceiptCardIsARecordWithNoActions() throws {
+        let card = try section(try source(Self.cardPath),
+                               from: "private struct EvidenceDecisionReceiptCard: View",
+                               to: "private struct AcceptanceConfirmationCard: View")
+        XCTAssertTrue(card.contains("decided.recordedByAgent ? EvidenceDecisions.agentRecordedHeading"),
+                      "the heading says whether the owner pressed a card or a run of the session "
+                          + "reached the door")
+        XCTAssertTrue(card.contains("EvidenceDecisions.receiptLine(decided)"),
+                      "and the line is OrbitKit's, from the answer the row carries")
+        XCTAssertFalse(card.contains("ApprovalActions"), "a record has no answers left to offer")
+        XCTAssertFalse(card.contains("confirmButton"),
+                       "and no button that would send a second decision to the door")
+    }
+
     // MARK: one entry for one question
 
     func testAnAskUserQuestionIsTheOrdinaryFormAndTheCardIsADeliveredOne() throws {

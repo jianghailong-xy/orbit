@@ -370,34 +370,40 @@ suite('(f)(g) a VERIFICATION subject is still settled by a PASS and only by a PA
   const w = await owner(db, 'verification');
   const tasks = tasksService(db);
 
-  const declare = async (title: string) => tasks.create(w.ownerId, {
-    title,
-    projectId: w.projectId,
-    completionCriterion: 'VERIFICATION',
-    completionPolicy: 'VERIFICATION_PASSED',
-    acceptanceCriteria: 'An independent verifier records PASS.',
-  });
-  const check = async (subjectId: string, title: string, verdict: TaskVerdict) => {
-    const verifier = await tasks.create(w.ownerId, {
-      title, projectId: w.projectId, verifiesTaskId: subjectId, completionCriterion: 'VERIFICATION',
-    });
-    await tasks.update(w.ownerId, verifier.id, { verdict });
-    return verifier.id;
+  // The subject and the check that settles it, written together — a gate filed on its own is
+  // refused, and rightly: it would be waiting for a verifier nobody was going to file. The verdict
+  // is the second step, because when it is recorded is the whole of what (f) and (g) are about.
+  const declare = async (title: string, checkTitle: string) => {
+    const subject = await tasks.create(w.ownerId, {
+      title,
+      projectId: w.projectId,
+      completionCriterion: 'VERIFICATION',
+      completionPolicy: 'VERIFICATION_PASSED',
+      acceptanceCriteria: 'An independent verifier records PASS.',
+      verification: { title: checkTitle },
+    }) as unknown as { id: string; verification: { id: string } };
+    return { id: subject.id, checkId: subject.verification.id };
+  };
+  const check = async (checkId: string, verdict: TaskVerdict) => {
+    await tasks.update(w.ownerId, checkId, { verdict });
+    return checkId;
   };
   const statusOf = async (id: string) =>
     (await db.task.findUniqueOrThrow({ where: { id } })).status;
 
   // (g) the negative, on its own subject: a FAIL verdict concludes the verifier and leaves the
   // subject exactly where it was.
-  const rejected = await declare('subject an independent check rejected');
-  const failing = await check(rejected.id, '[VERIFY] rejected', TaskVerdict.FAIL);
+  const rejected = await declare('subject an independent check rejected', '[VERIFY] rejected');
+  const failing = await check(rejected.checkId, TaskVerdict.FAIL);
   assert.equal(await statusOf(rejected.id), TaskStatus.OPEN, 'FAIL must not settle the subject');
   assert.equal(await statusOf(failing), TaskStatus.DONE, 'but it does conclude the verifier');
 
-  // (f) the positive, on its own: an independent PASS still derives DONE for the subject.
-  const accepted = await declare('subject an independent check passed');
+  // (f) the positive, on its own: an independent PASS still derives DONE for the subject. The
+  // check exists from the moment the subject does and has recorded nothing, which is why the
+  // subject reads OPEN here — a filed check is not a verdict.
+  const accepted = await declare('subject an independent check passed', '[VERIFY] accepted');
   assert.equal(await statusOf(accepted.id), TaskStatus.OPEN);
-  const passing = await check(accepted.id, '[VERIFY] accepted', TaskVerdict.PASS);
+  const passing = await check(accepted.checkId, TaskVerdict.PASS);
   assert.equal(await statusOf(accepted.id), TaskStatus.DONE,
     'an independent PASS still settles a VERIFICATION subject');
   assert.equal(await statusOf(passing), TaskStatus.DONE, 'and the carrier settles with it');

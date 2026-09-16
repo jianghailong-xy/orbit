@@ -1124,6 +1124,8 @@ struct DeliveredDecisionCardView: View {
                 OwnerConfirmationCardView(console: console, taskID: taskID, requestID: requestID)
             case .ownerDecisionReceipt(let taskID, let decisionID):
                 OwnerDecisionReceiptView(console: console, taskID: taskID, decisionID: decisionID)
+            case .evidenceDecisionReceipt(let decided):
+                EvidenceDecisionReceiptCard(decided: decided)
             }
         }
         // A card re-derives itself when it comes into view, on top of the reads the console runs
@@ -1366,6 +1368,38 @@ private struct CriteriaDecisionReceiptCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .approvalChrome(.green)
+    }
+}
+
+/// The record of an answer to one revision of a task's evidence, where the decision was made.
+///
+/// Blue like the card it replaces — same question, answered — with no actions, and a green tick in
+/// the header: it says which way it went, with which revision, and when, and the send-back's reason
+/// under it when there was one. Drawn from the answer the read publishes (`decided`), not from the
+/// window that pressed, so it is here after the console is opened again; the words are the
+/// browser's, held by `EvidenceDecisionCopyParityTests`.
+private struct EvidenceDecisionReceiptCard: View {
+    let decided: RecordedEvidenceDecision
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.circle.fill",
+                           title: decided.recordedByAgent ? EvidenceDecisions.agentRecordedHeading
+                                                          : EvidenceDecisions.recordedHeading,
+                           tone: .blue)
+            Text(decided.title)
+                .font(.orbitProse.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(EvidenceDecisions.receiptLine(decided))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let note = decided.note, !note.isEmpty {
+                Text("\(EvidenceDecisions.receiptReasonLabel)：\(note)")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .approvalChrome(.blue)
     }
 }
 

@@ -47,16 +47,28 @@ final class AppModel {
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
     /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
     var sessionTags: [SessionTag] = []
-    // Top-level nav: which AppShell section is showing, and the per-section selection. The app
-    // lands on the Agents section (the first agent's session list); the agent is selected once the
-    // list loads — see `loadAgentsThenLand`.
-    var selectedSection: AppSection = .agents {
-        // Switching sections tears down the other stacks (compact renders one at a time); drop the
-        // section-specific pushes so each section reads as "at root" again when you return to it.
-        didSet {
-            if selectedSection != .settings { settingsShowingRunners = false }
-            if selectedSection != .tasks { taskListsDirectoryPresented = false }
-            tasks?.setSectionActive(selectedSection == .tasks)
+    // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
+    // app lands on the Agents section (the first agent's session list); the agent is selected once
+    // the list loads — see `loadAgentsThenLand`.
+    //
+    // `nav` is the ONE copy of the navigation state. The compact shell binds its
+    // `NavigationStack(path:)` to the current section's stack, the three-column shells bind their
+    // `List(selection:)` to a projection of it, and every fact either of them needs — the
+    // highlighted row, what fills the detail pane, which session streams, whether the section is at
+    // its root, where the left screen edge goes — is a read of that stack (see OrbitKit
+    // `NavState`). Nothing below keeps a second copy of any of them.
+    var nav = NavState()
+    var selectedSection: AppSection {
+        get { nav.section }
+        set {
+            nav.section = newValue
+            // Switching sections tears down the other sections' *views* (the compact shell renders
+            // one at a time), but no longer their navigation: each section keeps its own stack, so
+            // coming back lands where you left instead of at the root. What still has to be dropped
+            // here is the state those shells keep outside a stack.
+            if newValue != .settings { settingsShowingRunners = false }
+            if newValue != .tasks { taskListsDirectoryPresented = false }
+            tasks?.setSectionActive(newValue == .tasks)
         }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
@@ -88,29 +100,31 @@ final class AppModel {
             if let id = selectedAgentID { UserDefaults.standard.set(id, forKey: Self.lastAgentKey) }
         }
     }
-    var selectedAgentSessionID: String? {   // the agent session whose console fills the detail pane
-        // A console reached any way other than a Recents tap drops the Recents edge-swipe affordance, so
-        // list-opened (and deep-linked) consoles keep the system back-swipe. `openRecentSession` sets
-        // `recentsConsoleSessionID` *before* the selection so this observer preserves it there.
-        didSet {
-            if selectedAgentSessionID != recentsConsoleSessionID { recentsConsoleSessionID = nil }
+    /// The agent session whose console fills the detail pane — the row drawn as selected, the
+    /// console pushed on the Agents stack, and the session that streams, all in one read. Kept under
+    /// its old name so its readers (the needs-you banner's exclusion, ⌘D's target, the cold-route
+    /// stale guard) needed no change, with the difference that it can no longer disagree with what is
+    /// on screen. Writable because that is what the three-column shells' `List(selection:)` writes.
+    var selectedAgentSessionID: String? {
+        get { nav.focusedConsoleSessionID }
+        set {
+            // Selecting in a three-column shell replaces the page the detail pane shows; clearing
+            // pops the console that is there — never a draft or a deeper frame.
+            if let id = newValue {
+                nav.replaceTop(with: .console(sessionID: id, origin: .list))
+            } else if case .console = nav.path.last {
+                nav.pop()
+            }
         }
     }
-    /// iOS compact: the session id a **Recents** drawer tap pushed into a console. While it equals the
-    /// selected session (`consoleFromRecents`), the shell frees the left screen edge for the drawer-open
-    /// swipe — you came from the drawer, so the edge returns you there. Cleared by the observer above the
-    /// moment the selection moves off it (back to the list, a different session, or leaving Agents).
-    var recentsConsoleSessionID: String?
-    /// True while composing a brand-new session for the selected agent (the detail pane shows the
-    /// draft composer instead of a console). Cleared once a session is selected/created or the
-    /// agent changes. See `NewSessionView`.
-    var composingAgentSession = false
-    /// On compact, the session a *pushed* compose page created and is now hosting the console for in
-    /// place (`AgentComposePush`). It's deliberately not the list selection, and `composingAgentSession`
-    /// stays true so that page stays pushed — so the normal `.agents` focus rule would resolve to nil
-    /// and never stream it. Surfacing it here makes it the focused (streaming) console. Set when the
-    /// draft creates the session, cleared when that page is dismissed. See `focusedConsoleSessionID`.
-    var composedConsoleSessionID: String?
+    /// True while a new-session draft is showing on the Agents stack: the three-column detail pane
+    /// renders it inline, the compact shell pushes it (`NewSessionView` either way). A read of the
+    /// stack like every other fact here — the draft is a frame, not a flag beside one. Cleared once a
+    /// session is selected, created, or the agent changes.
+    var composingAgentSession: Bool {
+        if case .compose = nav.path.last { return true }
+        return false
+    }
     var selectedUserID: String?
     var menuSummary: MenuBarSummary = .empty
     /// Bumped to ask the visible session list (Open or an agent's scoped list) to
@@ -455,14 +469,12 @@ final class AppModel {
     /// cleared wholesale — when adding a navigation field to this model, add its reset here, or a
     /// stale selection leaks into the next sign-in.
     private func resetNavigation() {
-        selectedSection = .agents
+        selectedSection = .agents      // runs the section switch's own housekeeping first
+        nav = NavState()               // then clears every section's stack with it
         didResolveDefaultLanding = false
         selectedTaskID = nil
         selectedRunnerID = nil
         selectedAgentID = nil
-        selectedAgentSessionID = nil
-        composingAgentSession = false
-        composedConsoleSessionID = nil
         selectedUserID = nil
         selectedWatchID = nil
     }
@@ -919,17 +931,11 @@ final class AppModel {
 
     /// The session whose console is currently on screen (whichever section) — and therefore the one
     /// that should be live-streaming. Nil when a list / placeholder / new-session draft is showing.
-    /// Section-aware so switching sections (or backing out to a list) stops the previous console's
-    /// stream even if SwiftUI keeps its view cached.
-    var focusedConsoleSessionID: String? {
-        switch selectedSection {
-        // A compose page hosting its just-created console in place (`composedConsoleSessionID`) wins
-        // over the compose/selection rule: `composingAgentSession` is still true there, so without this
-        // the session would render but never stream.
-        case .agents: return composedConsoleSessionID ?? (composingAgentSession ? nil : selectedAgentSessionID)
-        default:      return nil
-        }
-    }
+    /// A read of the current section's stack, so backing out to a list — a pop SwiftUI writes back
+    /// into the path — stops the previous console's stream by itself, even if SwiftUI keeps its view
+    /// cached. (The old flat selection promised this and could not keep it: the pop happened inside
+    /// SwiftUI's private stack, where the model never saw it.)
+    var focusedConsoleSessionID: String? { nav.focusedConsoleSessionID }
 
     /// Push the current console focus to the registry, which starts exactly that session's SSE stream
     /// and stops any other. Driven from the always-present shell on any focus change (MainView /
@@ -1091,14 +1097,18 @@ final class AppModel {
         return all.first?.id
     }
 
-    /// A draft composer just created `session`: surface it in the agent's list (so the `List`
-    /// selection that pushes its console has a matching row) and open its console. Registering *before*
-    /// arming the selection is what keeps the iPhone push from bouncing back to the "Select a session"
-    /// empty state — see `AgentsModel.registerCreatedSession`.
+    /// A draft composer just created `session`: surface it in the agent's list (so the list has a
+    /// matching row) and open its console. Registering *before* the push is what keeps the iPhone
+    /// push from bouncing back to the "Select a session" empty state — see
+    /// `AgentsModel.registerCreatedSession`.
+    ///
+    /// The draft's page is *replaced* by the console's, not popped and re-pushed: both shells render
+    /// the frame that is on the stack, so one `replaceTop` moves the page you are on to the session
+    /// it just created. That is why the push/pop churn that used to strand the compact detail on a
+    /// nil selection (opening ~10+ sessions in a row) has nothing left to race.
     func openCreatedAgentSession(_ session: Session) {
         registerCreatedAgentSession(session)
-        composingAgentSession = false
-        selectedAgentSessionID = session.id
+        nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
     }
 
     /// Seed every Native session store for a freshly created record. The compact compose page keeps
@@ -1127,33 +1137,32 @@ final class AppModel {
     }
 
     /// Open the draft composer for the agent pane already on screen (the "New session" toolbar
-    /// button): drop the session selection so the compose pane takes the detail column / pushes.
+    /// button): the draft replaces whatever the detail column was showing / pushes onto the stack.
     func startComposingSession() {
-        selectedAgentSessionID = nil
-        composingAgentSession = true
+        guard let id = currentAgentID else { return }
+        nav.replaceTop(with: .compose(agentID: id))
     }
 
     /// Switch the agent the new-session draft is composing for while staying on the compose page —
-    /// the hero's agent switcher. Unlike `openAgent` (which drops compose state to land on the
-    /// agent's session list), this keeps `composingAgentSession` true so the pushed/inline
-    /// `NewSessionView` just rebuilds for `id` (a fresh draft via its `.id(agent.id)`).
+    /// the hero's agent switcher. Unlike `openAgent` (which pops back to the agent's session list),
+    /// this swaps the draft's own frame for one naming `id`, so the pushed/inline `NewSessionView`
+    /// just rebuilds for it (a fresh draft via its `.id(agent.id)`).
     func composeWithAgent(_ id: String) {
         selectedSection = .agents
         selectedAgentID = id
-        selectedAgentSessionID = nil
-        composingAgentSession = true
+        nav.replaceTop(with: .compose(agentID: id))
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
-    /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent
-    /// clears that agent-scoped state (session selection + draft compose) so its pane opens on the
-    /// session list; re-selecting the current agent keeps them (a pushed console stays pushed).
+    /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent pops
+    /// that section's stack, so its pane opens on the session list (the console and the draft on it
+    /// belong to the agent you just left); re-selecting the current agent keeps the stack — a pushed
+    /// console stays pushed.
     func openAgent(_ id: String) {
         selectedSection = .agents
         if selectedAgentID != id {
             selectedAgentID = id
-            selectedAgentSessionID = nil
-            composingAgentSession = false
+            nav.popToRoot()
         }
     }
 
@@ -1166,12 +1175,10 @@ final class AppModel {
         if let agentID = s.agent?.id ?? s.agentId, selectedAgentID != agentID {
             selectedAgentID = agentID
         }
-        composingAgentSession = false
-        // Set BEFORE the selection so its observer preserves the marker (the observer clears it whenever
-        // the new selection doesn't match). Flags this as a Recents-opened console so the compact shell
-        // frees the left edge for the drawer-open swipe. See `consoleFromRecents`.
-        recentsConsoleSessionID = s.id
-        selectedAgentSessionID = s.id
+        // The frame records where it came from — a Recents drawer row — so the compact shell frees
+        // the left edge for the drawer-open swipe on that console (see `NavState.consoleFromRecents`).
+        // Nothing to set first, and no observer with an ordering convention to preserve it.
+        nav.replaceTop(with: .console(sessionID: s.id, origin: .drawer))
     }
 
     /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
@@ -1181,18 +1188,16 @@ final class AppModel {
         NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
     }
 
-    /// Open the session the banner points at. Same navigation as a Recents tap, minus the Recents
-    /// marker: a banner tap didn't come from the drawer, so the console it lands on keeps the system
-    /// back-swipe instead of yielding the edge to the drawer gesture. A stale marker from an earlier
-    /// Recents tap is cleared by `selectedAgentSessionID`'s observer, which drops it as soon as the
-    /// selection moves off that session.
+    /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
+    /// that says "drawer": a banner tap didn't come from the drawer, so the console it lands on keeps
+    /// the system back-swipe instead of yielding the edge to the drawer gesture. An earlier Recents
+    /// tap's origin can't linger either — it rode the frame that tap pushed, and this one replaces it.
     func openNeedsYouSession(_ s: Session) {
         selectedSection = .agents
         if let agentID = s.agent?.id ?? s.agentId, selectedAgentID != agentID {
             selectedAgentID = agentID
         }
-        composingAgentSession = false
-        selectedAgentSessionID = s.id
+        nav.replaceTop(with: .console(sessionID: s.id, origin: .banner))
     }
 
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents
@@ -1205,8 +1210,8 @@ final class AppModel {
     }
 
     /// The session whose console fills the detail pane right now — the ⌘D ("Complete Session")
-    /// target. In Agents it's the selected agent session (nil while drafting a new one). nil in
-    /// every other section, which disables the command.
+    /// target. In Agents it's the selected agent session (nil while drafting a new one, since a
+    /// draft's frame is not a console). nil in every other section, which disables the command.
     var currentSessionID: String? {
         switch selectedSection {
         case .agents: return composingAgentSession ? nil : selectedAgentSessionID
@@ -1225,23 +1230,18 @@ final class AppModel {
     /// **Recents** drawer row (and is still the one showing). The compact shell uses this to free the
     /// left screen edge for the drawer-open swipe on that page — you came from the drawer, so the edge
     /// returns you there — while the nav-bar back button still pops to the agent's session list.
-    var consoleFromRecents: Bool {
-        selectedSection == .agents
-            && !composingAgentSession
-            && selectedAgentSessionID != nil
-            && selectedAgentSessionID == recentsConsoleSessionID
-    }
+    var consoleFromRecents: Bool { nav.consoleFromRecents }
 
-    /// True when the current section's navigation stack is at its root (nothing pushed) — derived
-    /// from the same selection state that drives each stack's push. The compact shell uses this to
-    /// yield the left screen edge to its drawer-open gesture only where no pushed page needs the
-    /// edge for the system back-swipe.
+    /// True when the current section's navigation stack is at its root (nothing pushed) — the
+    /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
+    /// no pushed page needs the edge for the system back-swipe. Agents reads its stack; the sections
+    /// still driven by a flat selection answer from that until they move onto theirs.
     var sectionAtRoot: Bool {
         switch selectedSection {
         case .tasks:   return selectedTaskID == nil && !taskListsDirectoryPresented
-        // The compose page (composing) is pushed too, not just a selected session's console — so the
-        // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
-        case .agents:  return selectedAgentSessionID == nil && !composingAgentSession
+        // Nothing pushed on the Agents stack: no draft, no console — one read, where this used to
+        // ask two fields that the stack could disagree with.
+        case .agents:  return nav.sectionAtRoot
         case .runners: return selectedRunnerID == nil
         case .following: return selectedWatchID == nil
         // Settings pushes its Runners sub-page (iOS); it's at root only when that isn't up, so the
@@ -1287,14 +1287,7 @@ final class AppModel {
     /// Clear a session out of the pane that has it open (the agent console selection), so a
     /// completed/trashed session can't linger in the detail view. Used by ⌘D and row actions.
     private func dropIfOpen(_ id: String) {
-        if selectedAgentSessionID == id { selectedAgentSessionID = nil }
-        if recentsConsoleSessionID == id { recentsConsoleSessionID = nil }
-        if composedConsoleSessionID == id {
-            composedConsoleSessionID = nil
-            // The compact compose page owns its created console in local view state. Dismissing
-            // that page is the only way to ensure a remotely purged session is not still rendered.
-            composingAgentSession = false
-        }
+        nav.removeConsole(id)
     }
 
     /// Remove every local fallback for an authoritative detail 404, then close the ghost console.
@@ -1629,8 +1622,10 @@ final class AppModel {
     /// background; retaining that response is what lets Completed / Trash headers and composers
     /// render correctly on a cold launch.
     private func openSession(_ id: String) {
-        composingAgentSession = false
-        selectedAgentSessionID = id
+        // A route replaces what the detail pane / stack top is showing (a draft included) — the same
+        // "select this session" act as a list row, so the three-column shells land exactly where
+        // they did when this was a selection write.
+        nav.replaceTop(with: .console(sessionID: id, origin: .deepLink))
         if let aid = agentID(for: id) {
             selectedAgentID = aid
         }

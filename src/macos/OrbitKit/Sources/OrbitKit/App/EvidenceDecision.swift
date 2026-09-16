@@ -151,15 +151,76 @@ public struct EvidenceDecisionQueue: Codable, Equatable, Sendable {
     public let oldestAgeSeconds: Int?
     public let pending: [EvidenceDecisionRow]
     public let waitingOnYou: [EvidenceDecisionRow]
+    /// What THIS session has already decided, oldest first — the receipts its conversation keeps
+    /// after a card's question is gone. A read that has not published them yet decodes as empty
+    /// rather than failing the whole queue, which would take the pending cards down with it.
+    public let decided: [RecordedEvidenceDecision]
 
     public init(decidingSessionId: String, count: Int, oldestAgeSeconds: Int? = nil,
-                pending: [EvidenceDecisionRow], waitingOnYou: [EvidenceDecisionRow] = []) {
+                pending: [EvidenceDecisionRow], waitingOnYou: [EvidenceDecisionRow] = [],
+                decided: [RecordedEvidenceDecision] = []) {
         self.decidingSessionId = decidingSessionId
         self.count = count
         self.oldestAgeSeconds = oldestAgeSeconds
         self.pending = pending
         self.waitingOnYou = waitingOnYou
+        self.decided = decided
     }
+
+    // Tolerant decode, like `PendingCriteriaDecisionQueue`: the key is absent from a server older
+    // than this build, and an absent receipt list is "nothing to draw", not a broken read.
+    enum CodingKeys: String, CodingKey {
+        case decidingSessionId, count, oldestAgeSeconds, pending, waitingOnYou, decided
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        decidingSessionId = try c.decode(String.self, forKey: .decidingSessionId)
+        count = try c.decode(Int.self, forKey: .count)
+        oldestAgeSeconds = try? c.decodeIfPresent(Int.self, forKey: .oldestAgeSeconds)
+        pending = try c.decode([EvidenceDecisionRow].self, forKey: .pending)
+        waitingOnYou = (try? c.decodeIfPresent([EvidenceDecisionRow].self, forKey: .waitingOnYou)) ?? []
+        decided = (try? c.decodeIfPresent([RecordedEvidenceDecision].self, forKey: .decided)) ?? []
+    }
+}
+
+/// One answer this session has already recorded, as the pending read publishes it: what was
+/// decided, on which revision of which task, and when.
+///
+/// Small on purpose — it rides every poll — and it is the ONLY copy of the answer the console keeps:
+/// the receipt is drawn from it, so a reload, a relaunch or another device shows the same record.
+/// The evidence it answered is not here; the browser fetches that when a reader opens the receipt's
+/// fold, which is a step this client does not need and does not take.
+public struct RecordedEvidenceDecision: Codable, Equatable, Sendable, Identifiable {
+    public let taskId: String
+    public let title: String
+    public let projectId: String?
+    /// The revision that was answered, in the decimal spelling a pending row uses.
+    public let evidenceRevision: String
+    public let decision: EvidenceDecisionAnswer
+    public let note: String?
+    /// ISO-8601, as JSON carries it.
+    public let decidedAt: String
+    /// `USER` when the owner pressed a card, `AGENT` when a run of the deciding session called the
+    /// door. The receipt says which, because the two are different events in a conversation.
+    public let decidedByType: String
+
+    public init(taskId: String, title: String, projectId: String?, evidenceRevision: String,
+                decision: EvidenceDecisionAnswer, note: String?, decidedAt: String,
+                decidedByType: String) {
+        self.taskId = taskId
+        self.title = title
+        self.projectId = projectId
+        self.evidenceRevision = evidenceRevision
+        self.decision = decision
+        self.note = note
+        self.decidedAt = decidedAt
+        self.decidedByType = decidedByType
+    }
+
+    public var recordedByAgent: Bool { decidedByType == "AGENT" }
+    /// The version this receipt answers — the same address a pending row carries.
+    public var id: String { "\(taskId)@\(evidenceRevision)" }
 }
 
 // MARK: - the door
@@ -571,10 +632,101 @@ public enum EvidenceDecisions {
 
     /// What an answer given from a card leaves where it was given: the door's receipt, in the card's
     /// own words (`evidenceDecisionRecordedLine`).
+    ///
+    /// Only the card whose button was pressed is handed this. The record that OUTLIVES the console
+    /// is `receipts` below, drawn from the read.
     public static func recordedLine(_ result: EvidenceDecisionResult) -> String {
         let action = result.decision == .confirm ? confirmAction : sendBackAction
         let line = "已记下「\(action)」 · rev \(result.evidenceRevision)"
         guard let note = result.note, !note.isEmpty else { return line }
         return "\(line)：\(note)"
+    }
+
+    // MARK: the receipt an answered revision leaves
+
+    /// What a receipt says it is, where the card asked a question. Web's
+    /// `EVIDENCE_DECISION_RECORDED_HEADING` and `EVIDENCE_DECISION_AGENT_RECORDED_HEADING`, word for
+    /// word — a run of this session reaching the door is a different event from the owner pressing a
+    /// card, and the heading is where a reader tells them apart.
+    public static let recordedHeading = "你的裁决已记下"
+    public static let agentRecordedHeading = "agent 的裁决已记下"
+    /// The label over a send-back's reason, as the receipt shows it (web: `DECISION_RECEIPT_REASON`).
+    public static let receiptReasonLabel = "退回理由"
+
+    private static let receiptClockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+    private static let receiptDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .short
+        f.timeStyle = .short
+        return f
+    }()
+
+    /// When a receipt says it was decided: the clock on the day it happened, the date as well after
+    /// — a bare "5:42" on a receipt a week old reads as this morning. Web's `decisionReceiptTime`,
+    /// same rule.
+    public static func receiptTime(_ decidedAt: String, now: Date = Date()) -> String {
+        guard let at = ThinkingSummary.date(decidedAt) else { return decidedAt }
+        let sameDay = Calendar.current.isDate(at, inSameDayAs: now)
+        return (sameDay ? receiptClockFormatter : receiptDayFormatter).string(from: at)
+    }
+
+    /// The receipt's line: which answer, to which revision, and when — web's `decisionReceiptLine`,
+    /// word for word.
+    public static func receiptLine(_ decided: RecordedEvidenceDecision,
+                                   now: Date = Date()) -> String {
+        let action = decided.decision == .confirm ? confirmAction : sendBackAction
+        return "\(action) · rev \(decided.evidenceRevision) · \(receiptTime(decided.decidedAt, now: now))"
+    }
+
+    /// One answer this console draws as a record, and the item it belongs after.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let decided: RecordedEvidenceDecision
+        public let afterItemID: String
+
+        public init(decided: RecordedEvidenceDecision, afterItemID: String) {
+            self.decided = decided
+            self.afterItemID = afterItemID
+        }
+
+        /// Beside the question card's id rather than equal to it — see `DeliveredDecisionCard`,
+        /// where both rows can be on screen at once for one revision.
+        public var id: String { "evidence-decision-receipt-\(decided.id)" }
+    }
+
+    /// The receipts this console draws for the revisions ITS session has answered.
+    ///
+    /// WHY THIS IS NOT THE PRESSING WINDOW'S
+    /// -------------------------------------
+    /// A receipt used to be written by the console that pressed (`appendDecisionLine`) and kept in
+    /// memory, so closing the console or relaunching the app took the decision out of the
+    /// conversation — the same defect the criteria receipt had, reported by the account owner on
+    /// 2026-09-16. The answers are committed rows the pending read publishes (`decided`, scoped to
+    /// the deciding session), so they are derived here like everything else on a card, and a device
+    /// that never saw the question still shows what was decided.
+    ///
+    /// Placed by `ReceiptAnchor` — the last item at or before the door's clock — and NOT drawn at
+    /// all when that moment is older than everything this console holds: the window starts at the
+    /// tail, so such a receipt has no honest place to go.
+    public static func receipts(queue: EvidenceDecisionQueue?,
+                                items: [TranscriptItem]) -> [Receipt] {
+        guard let queue else { return [] }
+        return queue.decided.compactMap { decided in
+            guard let anchor = ReceiptAnchor.after(items: items, at: decided.decidedAt) else {
+                return nil
+            }
+            return Receipt(decided: decided, afterItemID: anchor)
+        }
+    }
+
+    /// Whether the read says this revision was answered — what makes its question card give way.
+    public static func answered(_ queue: EvidenceDecisionQueue?, taskID: String,
+                                evidenceRevision: String) -> Bool {
+        queue?.decided.contains { $0.taskId == taskID && $0.evidenceRevision == evidenceRevision }
+            ?? false
     }
 }

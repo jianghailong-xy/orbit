@@ -54,9 +54,15 @@ func TestAcceptanceTimeoutDeclaredBudgetBoundsTheAcceptanceCommand(t *testing.T)
 			"the hard-coded two-minute ceiling is still the only budget",
 			*req.ShellExitCode, elapsed.Round(time.Millisecond))
 	}
-	if elapsed > 2*time.Second {
-		t.Fatalf("the command ran %s, so it was not cut at its declared 1s budget",
-			elapsed.Round(time.Millisecond))
+	// Which budget cut the command comes from the kill note, not from timing the call. Past the
+	// deadline terminateSessionProcessTree freezes the group but kills it only after walking the
+	// process table with `ps -A`; on a loaded host that walk takes seconds and even the freeze can
+	// trail the deadline by a second, so a wall-clock ceiling failed while the budget worked.
+	if req.ShellOutput == nil {
+		t.Fatal("the acceptance turn reported no output at all")
+	}
+	if !strings.Contains(*req.ShellOutput, "killed at this shell turn's 1s budget") {
+		t.Fatalf("the command was not cut at its declared 1s budget: %q", *req.ShellOutput)
 	}
 	if req.ShellOutput != nil && strings.Contains(*req.ShellOutput, "finished") {
 		t.Fatalf("the command ran to completion under the default budget: %q", *req.ShellOutput)

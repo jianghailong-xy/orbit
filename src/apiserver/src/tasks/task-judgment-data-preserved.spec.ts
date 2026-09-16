@@ -693,6 +693,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        and no `DROP TYPE`, so the three `task_completion_criterion` labels survive with
   //        0267's fourth beside them, and it is not another writer of the DONE fence. It has no
   //        INSERT, UPDATE or DELETE, so no preserved row is read or written.
+  //   0275 added the storage behind importing a directory's existing Claude Code history: four
+  //        `runner` columns (`claude_history_status`, `_path`, `_at`, `_result`) holding the
+  //        one-slot request/answer relay the new-workspace form asks through, and
+  //        `session.imported_at`, durable provenance for a session that arrived as an imported
+  //        transcript. Read against every claim above: it ALTERs exactly two tables, `runner` —
+  //        which is not a preserved relation and is not reachable from one — and `session`, a
+  //        preserved relation, by exactly one `ADD COLUMN "imported_at"`. No other column of
+  //        `session` is named, no column is dropped anywhere, and every added column is NULL-able,
+  //        so no stored row is rewritten (an added column is metadata, not a row change). It names
+  //        no `task`, `project` or `project_acceptance_criterion_definition` object, so the 0177
+  //        pair, `task_executable_acceptance_pair` and every stored task and criterion row are out
+  //        of its reach, and no criterion's `text` or `verification_method` can move by one byte.
+  //        It creates no table, enum, type, function or trigger, carries no `ALTER TYPE` and no
+  //        `DROP TYPE`, so the three `task_completion_criterion` labels survive with 0267's fourth
+  //        beside them, and it is not another writer of the DONE fence. It has no INSERT, UPDATE
+  //        or DELETE, so no preserved row is read or written.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -732,7 +748,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0271_watch_progress_continuous',
       '0272_drop_project_action',
       '0273_drop_workspace_clone_provisioning',
-      '0274_session_import_source'],
+      '0274_session_import_source',
+      '0275_claude_history_import'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

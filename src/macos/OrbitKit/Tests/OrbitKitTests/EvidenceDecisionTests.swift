@@ -193,6 +193,87 @@ final class EvidenceDecisionTests: XCTestCase {
         XCTAssertEqual(EvidenceDecisions.gapPreview(r).shown.count, EvidenceDecisions.gapsShown)
     }
 
+    // MARK: the receipt an answered revision leaves
+
+    private func recorded(_ taskID: String = "34LMiluvx0jK63cj8arWl", revision: String = "1",
+                          _ decision: EvidenceDecisionAnswer = .confirm,
+                          note: String? = nil, at decidedAt: String,
+                          by: String = "USER") -> RecordedEvidenceDecision {
+        RecordedEvidenceDecision(taskId: taskID, title: "改掉 update() 的头注释",
+                                 projectId: EvidenceDecisionTests.project,
+                                 evidenceRevision: revision, decision: decision, note: note,
+                                 decidedAt: decidedAt, decidedByType: by)
+    }
+
+    private func item(_ id: String, at ts: String?) -> TranscriptItem {
+        .assistant(AssistantBubble(id: id, text: "…", streamingText: "", seq: 1, turnId: "t", ts: ts))
+    }
+
+    /// The anchor is the last row at or before the door's clock, so the record lands where the
+    /// decision happened — on a device that never saw the card, that is the only honest place.
+    func testAReceiptIsDrawnWhereTheDecisionHappened() {
+        let items = [item("a1", at: "2026-09-16T09:00:00.000Z"),
+                     item("a2", at: "2026-09-16T09:30:00.000Z"),
+                     item("a3", at: "2026-09-16T10:00:00.000Z")]
+        let read = EvidenceDecisionQueue(
+            decidingSessionId: "s", count: 0, pending: [], waitingOnYou: [],
+            decided: [recorded(at: "2026-09-16T09:45:00.000Z")])
+        let receipts = EvidenceDecisions.receipts(queue: read, items: items)
+        XCTAssertEqual(receipts.map(\.afterItemID), ["a2"])
+        XCTAssertEqual(receipts.map(\.id), ["evidence-decision-receipt-34LMiluvx0jK63cj8arWl@1"])
+    }
+
+    /// An answer older than everything this console holds is not drawn — the window starts at the
+    /// tail, so it has no honest place — and the paired control on the same row is one item early
+    /// enough to anchor it. A read that has not come back draws nothing at all.
+    func testAnAnswerOlderThanEverythingLoadedIsNotDrawn() {
+        let read = EvidenceDecisionQueue(
+            decidingSessionId: "s", count: 0, pending: [], waitingOnYou: [],
+            decided: [recorded(at: "2026-09-16T08:00:00.000Z")])
+        let later = [item("a1", at: "2026-09-16T09:00:00.000Z")]
+        XCTAssertTrue(EvidenceDecisions.receipts(queue: read, items: later).isEmpty)
+        XCTAssertEqual(
+            EvidenceDecisions.receipts(queue: read,
+                                       items: [item("a0", at: "2026-09-16T07:00:00.000Z")] + later)
+                .map(\.afterItemID),
+            ["a0"])
+        XCTAssertTrue(EvidenceDecisions.receipts(queue: nil, items: later).isEmpty)
+    }
+
+    /// What the question card is let go of by: the read naming that revision's answer.
+    func testAQuestionGivesWayOnlyWhenTheReadNamesItsRevision() {
+        let read = EvidenceDecisionQueue(
+            decidingSessionId: "s", count: 0, pending: [], waitingOnYou: [],
+            decided: [recorded("34LMiluvx0jK63cj8arWl", revision: "2",
+                               at: "2026-09-16T09:45:00.000Z")])
+        XCTAssertTrue(EvidenceDecisions.answered(read, taskID: "34LMiluvx0jK63cj8arWl",
+                                                 evidenceRevision: "2"))
+        // The same task at the revision a NEWER submission filed: still a question.
+        XCTAssertFalse(EvidenceDecisions.answered(read, taskID: "34LMiluvx0jK63cj8arWl",
+                                                  evidenceRevision: "3"))
+        XCTAssertFalse(EvidenceDecisions.answered(nil, taskID: "34LMiluvx0jK63cj8arWl",
+                                                  evidenceRevision: "2"))
+    }
+
+    /// The line itself: which answer, to which revision, and when. Web's `decisionReceiptLine`, in
+    /// the reader's own locale for the clock — so only the shape is asserted here.
+    func testTheReceiptLineSaysWhichAnswerToWhichRevision() {
+        let confirmed = EvidenceDecisions.receiptLine(recorded(at: "2026-09-16T09:45:00.000Z"))
+        XCTAssertTrue(confirmed.hasPrefix("\(EvidenceDecisions.confirmAction) · rev 1 · "), confirmed)
+
+        let returned = EvidenceDecisions.receiptLine(
+            recorded(revision: "2", .sendBack, at: "2026-09-16T09:45:00.000Z"))
+        XCTAssertTrue(returned.hasPrefix("\(EvidenceDecisions.sendBackAction) · rev 2 · "), returned)
+
+        // The clock is the date as well once the day has passed: a bare "5:42" a week later reads
+        // as this morning. Both are rendered from the same stamp, so the later one is longer.
+        let stamp = "2026-09-16T09:45:00.000Z"
+        let sameDay = EvidenceDecisions.receiptTime(stamp, now: ThinkingSummary.date(stamp)!)
+        let later = EvidenceDecisions.receiptTime(stamp, now: ThinkingSummary.date("2026-09-20T09:45:00.000Z")!)
+        XCTAssertTrue(later.hasSuffix(sameDay), "\(later) should end with \(sameDay)")
+        XCTAssertGreaterThan(later.count, sameDay.count)
+    }
+
     // MARK: the wire
 
     /// The row decodes from what `GET /tasks/evidence-decisions/pending` actually sends — including

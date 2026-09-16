@@ -29,12 +29,22 @@ import {
   Tag,
   type MenuProps,
 } from 'antd';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, revokeWorkspacePermissionRule } from '../api';
+import {
+  api,
+  askClaudeHistory,
+  countImportedSessions,
+  getClaudeHistory,
+  importClaudeHistory,
+  removeImportedSessions,
+  revokeWorkspacePermissionRule,
+  type ClaudeHistoryResult,
+} from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { meQuery, providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../lib/sessionImport';
+import { ClaudeHistoryOffer, type ImportMode } from '../components/ClaudeHistoryOffer';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
@@ -66,6 +76,15 @@ interface Workspace {
    *  "Enable isolation" action), which changes what a non-git path means here. */
   autoInitGit?: boolean;
 }
+
+/** How long the create form waits for the runner to answer what history a directory holds. The
+ *  question rides the runner's 30s heartbeat, so this is two beats plus the scan — past that the
+ *  offer simply never appears, which is the same as the machine having nothing to offer. */
+const HISTORY_WAIT_MS = 75_000;
+const HISTORY_POLL_MS = 2500;
+/** Long enough that typing a path doesn't ask once per keystroke, short enough that the offer is
+ *  on screen while the rest of the form is still being filled in. */
+const HISTORY_DEBOUNCE_MS = 500;
 
 const fmtTime = (d?: string | null): string =>
   d
@@ -153,6 +172,12 @@ export function RunnerDetailPage() {
   // The Claude session id the Import section carries (edit mode only — importing needs the
   // workspace to exist). Reset with the rest of the form so a stale id can't leak across picks.
   const [importId, setImportId] = useState('');
+  // What the runner reported about Claude Code conversations already recorded under the directory
+  // being typed into the create form, and which of the three offers is selected. Null until an
+  // answer arrives for the exact path in the field — an unanswered or empty directory shows no
+  // offer at all rather than an empty one.
+  const [history, setHistory] = useState<ClaudeHistoryResult | null>(null);
+  const [importMode, setImportMode] = useState<ImportMode>('none');
   // The long tail (orchestration / env / instructions) stays folded until asked for, and
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
@@ -173,10 +198,28 @@ export function RunnerDetailPage() {
         ),
       };
       return editing
-        ? api(`/workspaces/${editing.id}`, { method: 'PATCH', body })
-        : api('/workspaces', { method: 'POST', body: { ...body, runnerId } });
+        ? api<Workspace>(`/workspaces/${editing.id}`, { method: 'PATCH', body })
+        : api<Workspace>('/workspaces', { method: 'POST', body: { ...body, runnerId } });
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Whatever was answered about this directory's existing conversations, acted on now that
+      // there is a workspace to import them into. Deliberately not awaited: each transcript
+      // becomes a session the runner replays on its own, so the form closes and the workspace is
+      // usable immediately rather than when the last of the history has landed.
+      if (!editing && history && importMode !== 'none' && saved?.id) {
+        const transcripts =
+          importMode === 'latest' ? history.transcripts.slice(0, 1) : history.transcripts;
+        importClaudeHistory({ workspaceId: saved.id, transcripts })
+          .then((res) => {
+            message.success(
+              res.imported === 1
+                ? 'Importing 1 conversation — it appears as it lands.'
+                : `Importing ${res.imported} conversations — they appear as they land.`,
+            );
+            void qc.invalidateQueries({ queryKey: ['sessions'] });
+          })
+          .catch((e: Error) => message.error(e.message || 'Import failed'));
+      }
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
       setFormOpen(false);
       setEditing(null);
@@ -246,6 +289,74 @@ export function RunnerDetailPage() {
     onError: (e: Error) => message.error(e.message || 'Import failed'),
   });
 
+  // Ask the runner what Claude Code history sits under the directory being typed, and wait for the
+  // answer. Create mode only: a saved workspace has the settings-page import instead, and this is
+  // the one moment where "you already have conversations here" is news.
+  //
+  // The runner is the only one who can answer — the control plane never sees ~/.claude/projects —
+  // so the question goes out on its heartbeat and the answer arrives on its own POST. Everything
+  // here is keyed to the exact path in the field: retyping drops the offer immediately, and an
+  // answer about a directory that is no longer named is never shown.
+  useEffect(() => {
+    const path = fWorkDir.trim();
+    setHistory(null);
+    setImportMode('none');
+    if (!formOpen || editing || !runnerId || !path) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          await askClaudeHistory(runnerId, path);
+        } catch {
+          return; // an offline runner, or one too old to know the question: offer nothing
+        }
+        const deadline = Date.now() + HISTORY_WAIT_MS;
+        for (;;) {
+          await new Promise((r) => setTimeout(r, HISTORY_POLL_MS));
+          if (cancelled) return;
+          let state;
+          try {
+            state = await getClaudeHistory(runnerId, path);
+          } catch {
+            return;
+          }
+          if (cancelled) return;
+          if (state.result) {
+            // A directory with nothing in it is not an offer with a zero in it.
+            if (state.result.conversations > 0 && state.result.transcripts.length > 0) {
+              setHistory(state.result);
+            }
+            return;
+          }
+          if (state.status === 'failed' || Date.now() > deadline) return;
+        }
+      })();
+    }, HISTORY_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fWorkDir, formOpen, editing, runnerId]);
+
+  // How many of this workspace's sessions arrived as imported transcripts — read in the settings
+  // of a saved workspace, which is where taking them back out again belongs.
+  const importedQ = useQuery({
+    queryKey: ['imported-sessions', editing?.id],
+    queryFn: () => countImportedSessions(editing?.id as string),
+    enabled: !!editing?.id,
+  });
+  const removeImportedMut = useMutation({
+    mutationFn: () => removeImportedSessions(editing?.id as string),
+    onSuccess: (res) => {
+      message.success(
+        res.removed === 1 ? '1 imported conversation removed.' : `${res.removed} imported conversations removed.`,
+      );
+      void qc.invalidateQueries({ queryKey: ['imported-sessions', editing?.id] });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error) => message.error(e.message || 'Remove failed'),
+  });
+
   // Shared reset for both entry points — every field the form owns is set here, so a stale
   // value from the previous workspace can never leak into the next one.
   const resetForm = (a: Workspace | null) => {
@@ -257,6 +368,8 @@ export function RunnerDetailPage() {
     setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setImportId('');
+    setHistory(null);
+    setImportMode('none');
     setAdvOpen(false);
     setDirty(false);
     setFormOpen(true);
@@ -384,6 +497,24 @@ export function RunnerDetailPage() {
           )}
         </div>
       </div>
+      {/* Shown only when this directory has something to offer — an empty path, a directory nobody
+          has run claude in, and a runner that never answers all show nothing here rather than an
+          offer with a zero in it.
+
+          The same height whether the directory holds six conversations or six hundred. Consent is
+          given for this directory's history as a whole, which is the granularity the person has an
+          opinion about; a checklist would put hundreds of decisions in front of someone who is
+          still naming the workspace, and none of them could be made well. */}
+      {mode === 'create' && history && (
+        <ClaudeHistoryOffer
+          history={history}
+          value={importMode}
+          onChange={(next) => {
+            setImportMode(next);
+            setDirty(true);
+          }}
+        />
+      )}
       <SettingRow
         label="Worktree isolation"
         desc="Each session runs in its own git worktree. Off → sessions run directly in the working directory, sharing it."
@@ -443,6 +574,36 @@ export function RunnerDetailPage() {
               Imports the local Claude transcript as this workspace's session — readable,
               searchable, and the next message continues it with its original context.
             </div>
+            {/* The other half of what the create form's offer promised: history that came in as a
+                directory goes back out as one. The transcripts on the runner are not touched —
+                this removes Orbit's copies. */}
+            {(importedQ.data?.count ?? 0) > 0 && (
+              <div className="rd-history-removal">
+                <span className="rd-set-desc">
+                  {importedQ.data?.count} imported{' '}
+                  {importedQ.data?.count === 1 ? 'conversation' : 'conversations'} in this
+                  workspace.
+                </span>
+                <Button
+                  size="small"
+                  danger
+                  loading={removeImportedMut.isPending}
+                  onClick={() =>
+                    modal.confirm({
+                      title: 'Remove imported conversations?',
+                      content: `The ${importedQ.data?.count} imported sessions of ${editing.name} move to Trash. The transcripts on the runner are left alone.`,
+                      okText: 'Remove',
+                      okButtonProps: { danger: true },
+                      cancelText: 'Keep',
+                      autoFocusButton: 'cancel',
+                      onOk: () => removeImportedMut.mutate(),
+                    })
+                  }
+                >
+                  Remove all
+                </Button>
+              </div>
+            )}
           </div>
         </>
       )}

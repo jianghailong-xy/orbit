@@ -40,6 +40,10 @@ const item = (over: Partial<PlanItemFacts> = {}): PlanItemFacts => ({
   parentRef: null,
   verifiesTaskId: null,
   verifiesRef: null,
+  // Undeclared, which is what every item of a plan that says nothing about completion carries:
+  // the pairing rule resolves it the way the write does, and EVIDENCE_JUDGMENT is not a subject.
+  completionCriterion: null,
+  completionPolicy: null,
   dependsOnTaskIds: [],
   dependsOnRefs: [],
   assigneeId: null,
@@ -112,6 +116,48 @@ test('a check of a check has nothing left to verify, in either shape', () => {
     [1, 'PLAN_VERIFIES_A_VERIFICATION'],
     [2, 'PLAN_VERIFIES_A_VERIFICATION'],
   ]);
+});
+
+// The other direction of the same pairing: the checks above judge what a verification points AT,
+// this judges a subject nothing points at. A subject has no work of its own to run, so a plan that
+// files one without its check files a row that can never settle — and the plan is the last place
+// that can be said before it is written.
+test('a subject nothing in the plan verifies is refused, and one that is verified is not', () => {
+  const gate = {
+    completionCriterion: 'VERIFICATION' as const,
+    completionPolicy: 'VERIFICATION_PASSED' as const,
+  };
+  const found = preflightPlan(facts([
+    item({ index: 0, ref: 'gate', ...gate }),
+    item({ index: 1, ref: 'orphan', ...gate }),
+    // A verifier of its own, which is the whole of what the first item is missing.
+    item({ index: 2, ref: 'check', verifiesRef: 'gate' }),
+  ]));
+
+  assert.deepEqual(found.map((f) => [f.index, f.ref, f.code, f.severity, f.dimension]), [
+    [1, 'orphan', 'PLAN_VERIFICATION_SUBJECT_UNPAIRED', 'REFUSE', 'HIERARCHY'],
+  ]);
+  // The finding reuses the refusal's own words rather than restating the rule: one rule, one
+  // wording, and the plan's answer is the same sentence the write would answer with.
+  assert.match(found[0].message, /only a PASS recorded by a separate verification task/);
+  assert.match(found[0].requiredAction, /CREATE_THE_VERIFIER_IN_THE_SAME_CALL|verification:/);
+});
+
+test('a work row is not a subject: the policy answers "has work of its own", not the criterion', () => {
+  const gate = {
+    completionCriterion: 'VERIFICATION' as const,
+    completionPolicy: 'VERIFICATION_PASSED' as const,
+  };
+  // The control, so the two cases below cannot pass by the check being silent about everything.
+  assert.deepEqual(preflightPlan(facts([item(gate)])).map((f) => f.code), [
+    'PLAN_VERIFICATION_SUBJECT_UNPAIRED',
+  ]);
+  // VERIFICATION with a MANUAL policy runs and is settled by a verdict like any other row, so
+  // filing it alone is not the dead row this check is for: the criterion says WHO decides, and the
+  // policy says whether the row has work of its own.
+  assert.deepEqual(preflightPlan(facts([item({ ...gate, completionPolicy: 'MANUAL' })])), []);
+  // And a verifier is not a subject: it is the other half of the pair.
+  assert.deepEqual(preflightPlan(facts([item({ ...gate, verifiesTaskId: TASK_IN_A })])), []);
 });
 
 test('one ref, one item: a link is never resolved by input order', () => {

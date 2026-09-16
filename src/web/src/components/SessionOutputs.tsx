@@ -174,11 +174,12 @@ export function SessionOutputs({
   // don't report it (null) → fall back to the session lifecycle (`committed`): live shows the
   // read-only "uncommitted" note, ended shows Merge.
   const dirtyKnown = detail.worktreeDirty != null;
-  // Commit only applies to a live session: the runner commits a finished session's work at
-  // completion and the backend rejects /commit once it has ended. So an ended session that
-  // still reports dirty (stale flag, not-yet-reset by a heartbeat) must NOT keep offering a
-  // Commit button that always 409s — it falls through to Merge like any other ended session.
-  const showCommit = dirtyKnown && detail.worktreeDirty === true && !committed;
+  // Dirty is dirty, ended or not. An ended session used to fall through to Merge whatever it
+  // reported, because the runner was believed to have committed its work at completion — so the
+  // one session that really needed Commit, the one whose finalize commit was refused and whose
+  // branch therefore has nothing on it, was the one shown a Merge button with nothing to merge.
+  // The backend admits an ended session on exactly this flag now.
+  const showCommit = dirtyKnown && detail.worktreeDirty === true;
   const mergeReady = dirtyKnown ? !showCommit : !!committed;
   // Hold "Merge to main" while a turn is in flight: a clean worktree mid-turn is just a
   // transient checkpoint the workspace is still building on, not finished work ready for main.

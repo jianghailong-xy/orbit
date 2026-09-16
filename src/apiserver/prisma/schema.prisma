@@ -459,6 +459,25 @@ model Runner {
   repoCleanupMessage String?     @map("repo_cleanup_message")
   repoCleanupAt      DateTime?   @map("repo_cleanup_at")
 
+  // One-slot "what Claude Code history is on this machine under <path>?" relay, the same shape as
+  // the sign-in/install/repair relays above. The new-workspace form asks it while a directory is
+  // still being typed: there is no workspace row yet, so the per-workspace `agentDirs` probe has
+  // nowhere to put an answer, and the control plane can never read ~/.claude/projects itself.
+  //   NULL     — nobody is asking
+  //   pending  — the next heartbeat carries the request
+  //   done     — claudeHistoryResult holds the answer FOR claudeHistoryPath
+  //   failed   — the runner could not read that directory; the result carries the reason
+  claudeHistoryStatus String?   @map("claude_history_status")
+  // The path the request is about. Kept beside the result so an answer can be matched to the path
+  // it answers for — the form retypes freely, and a late answer about an abandoned path must read
+  // as stale rather than as the verdict on the current one.
+  claudeHistoryPath   String?   @map("claude_history_path")
+  claudeHistoryAt     DateTime? @map("claude_history_at")
+  // @orbit/shared RunnerClaudeHistoryResult: counts, total size and the newest transcripts under
+  // claudeHistoryPath. Advisory and disposable — it is a cache of what was on that disk a moment
+  // ago, never the record of what was imported.
+  claudeHistoryResult Json?     @map("claude_history_result")
+
   executableRuntimeHeartbeats     ExecutableRuntimeHeartbeat[]
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
@@ -924,6 +943,11 @@ model Session {
   // worktree, replays it as run events, and clears this (or fails the session to Trash) via
   // POST /runner/sessions/:id/import-result before the engine is spawned.
   importSourceCwd      String?   @map("import_source_cwd")
+  // When this session came into Orbit by importing a local Claude transcript. Distinct from the
+  // marker above, which is the import's PENDING state and is cleared the moment the replay lands:
+  // this is durable provenance, and it is what "remove the conversations this directory's history
+  // brought in" selects on — long after every import has finished.
+  importedAt           DateTime? @map("imported_at")
   provider             String    @default("claude")
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
   // stale old-replica write that still uses the former custom-provider slug `kimi`.

@@ -304,6 +304,33 @@ export class TaskHandoffDto {
   @IsOptional() @IsString() @MaxLength(1_000) reason?: string;
 }
 
+/**
+ * The verifier to write in the SAME call as the subject it settles.
+ *
+ * A task declaring the VERIFICATION-subject shape — settled by a verdict, and with no work of its
+ * own to run (the two axes are `verificationSubjectShape`'s) — is settled only by a PASS another
+ * task records against it. Nothing on the server files that task, so filed alone the subject is the
+ * dead row this deployment has eleven of: it cannot start, and it waits for a check nobody is going
+ * to write.
+ *
+ * Naming the check here is the whole of the repair, and it is deliberately not a second request:
+ * both rows are written in one transaction, so there is no window in which the subject exists and
+ * the check that settles it does not. What this object carries is what a check needs to BE one —
+ * a title, and optionally the description it runs from and the workspace that runs it. Everything
+ * else about the check (its criterion, its project, its link to the subject) is the relation's,
+ * not the caller's.
+ */
+export class TaskVerificationDto {
+  @IsString()
+  @MinLength(1)
+  title!: string;
+
+  @IsOptional() @IsString() description?: string;
+
+  /** The workspace that runs the check. Must be owned by the caller, like any other assignee. */
+  @IsOptional() @IsPublicId() assigneeId?: string;
+}
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -383,6 +410,16 @@ export class CreateTaskDto {
   // verification, and must be in the same project — aggregation reads one project's tasks, so a
   // check filed across that line would be one nothing can ever count.
   @IsOptional() @IsPublicId() verifiesTaskId?: string;
+  // The verifier to write in the SAME call as the subject it settles, so the two rows are one
+  // transaction (see TaskVerificationDto). Refused together with `verifiesTaskId`: a task that IS a
+  // check cannot also be the subject to be checked — one of the two, never both.
+  //
+  // `POST /tasks` spells it this way; the batch door pairs its own items with `verifiesRef`, which
+  // is the same link between two rows the same call writes. A batch item carrying this field is
+  // refused rather than silently dropped, since dropping it would file the dead row this exists to
+  // prevent.
+  @IsOptional() @ValidateNested() @Type(() => TaskVerificationDto)
+  verification?: TaskVerificationDto;
   // §13.6 SU7: the attempt this new task REPLACES. The successor and the link are written in one
   // transaction — the point of the field is that there is no window in which the replacement
   // exists and the thing it replaced does not know.

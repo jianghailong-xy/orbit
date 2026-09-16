@@ -598,6 +598,13 @@ func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*Impo
 	return &out, nil
 }
 
+// claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code
+// conversations this machine holds for that directory. The path is echoed inside the body, so a
+// late answer about a directory the user has since retyped can be recognised and dropped.
+func (t *Transport) claudeHistoryResult(b RunnerClaudeHistoryResult) error {
+	return t.do(nil, "POST", "/runner/claude-history-result", b, nil, 15*time.Second)
+}
+
 // loginResult reports one step of the browser-less sign-in relay: the URL to approve, then
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {

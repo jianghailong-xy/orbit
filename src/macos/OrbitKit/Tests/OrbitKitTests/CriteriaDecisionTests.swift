@@ -481,21 +481,6 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertEqual(json?["decision"] as? String, "REJECT")
     }
 
-    func testTheLineLeftBehindNamesBothSealsForAnApprovalAndOneForARefusal() {
-        let approved = CriteriaDecisionResult(intentId: "i-1", decision: .approve,
-                                              decidedAt: "2026-09-09T12:05:00.000Z",
-                                              baseSeal: "6b1d02ea1122", resultingSeal: "9c4f7a1bb001",
-                                              applied: true)
-        let line = CriteriaDecisions.decisionLine(approved)
-        XCTAssertTrue(line.contains("6b1d02ea1122 → 9c4f7a1bb001"), line)
-
-        let refused = CriteriaDecisionResult(intentId: "i-1", decision: .reject,
-                                             decidedAt: "2026-09-09T12:05:00.000Z",
-                                             baseSeal: "6b1d02ea1122", resultingSeal: "6b1d02ea1122",
-                                             applied: false)
-        XCTAssertTrue(CriteriaDecisions.decisionLine(refused).contains("nothing was applied"))
-    }
-
     // MARK: the receipt an answered proposal leaves
 
     private func assistant(_ id: String, at ts: String?) -> TranscriptItem {

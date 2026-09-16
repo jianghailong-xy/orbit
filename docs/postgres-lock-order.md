@@ -98,8 +98,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `TasksService.create` | 有依赖/父/verifies/supersedes 时 | ✔ | ✔ | supersedes 时 ✔ | 普通 create 不排队；failure successor 在同一事务锁 source、推进 current generation、重绑边并设置 durable `run_at` |
 | `TasksService.createMany` | ✔ 无条件 | ✔ | ✔ | — | 批量按 item 顺序写多行 `task`，别人无法共享这个顺序 |
 | `TasksService.update` | 仅当重构 | 仅当改 `listId` | 仅当会**两次**写该行（0132 起只剩 supersession；依赖替换不再算） | 兼容性预锁或 scope fence | 0178 已删除 task → acceptance 触发器；现存预锁不参与 DONE 语义 |
-| `TasksService.fileVerification` | — | — | — | — | 裸 INSERT；0178 后不再触发 project acceptance 写 |
-| `TasksService.dispatchStalledListForemen` | — | — | — | — | 同上 |
+| `TasksService.dispatchStalledListForemen` | — | — | — | — | 裸 INSERT；0178 后不再触发 project acceptance 写 |
 | `TasksService.applyDag` | ✔ | — | — | — | 0132 起只写边，一个 `task` 行都不写 ⇒ 没有第二次写、没有外键重查 |
 | `TasksService.addDependency` / `removeDependency` | ✔ | — | — | — | 同上；两侧推进同一个 revision 行（秩 70） |
 | `TasksService.deleteAndStopRuns` | ✔ | — | ✔（附着的 run） | ✔（这些 task 的 project） | 锁序**唯一声明的例外**，见 §5 |

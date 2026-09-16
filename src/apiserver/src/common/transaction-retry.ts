@@ -119,6 +119,23 @@ const PERMANENT_CODES = new Set(['23503', '23505', 'P2002', 'P2003', 'P2025']);
 const RESOURCE_CLASS = /^(?:08|53|57|58)[0-9A-Z]{3}$/;
 
 /**
+ * Prisma's own two names for the same thing, which never reach a SQLSTATE because the statement
+ * never ran: `P2024` is the connection pool refusing to hand one out in time, and `P2028` is a
+ * transaction that could not be started, or that was closed under the caller, for that same
+ * reason. Both are the database or its pool failing, not the data answering — `53300`
+ * (`too_many_connections`) told from the client side — and neither is retried, exactly as the
+ * SQLSTATE classes above are not.
+ *
+ * They are named because `RESOURCE` is the one `retryable: false` a reader may act on. The reaper
+ * does: a runner is declared offline by nothing having written its heartbeat, so a control plane
+ * that has just watched its own database refuse a unit of work has disqualified that silence as
+ * evidence (see `realtime/reaper.service.ts`). Left `UNCLASSIFIED`, as these were, the incident
+ * that made this necessary — P2028 storm, four live runners' sessions reaped as `runner offline`,
+ * 2026-09-15 — is indistinguishable from an ordinary bug nobody has classified.
+ */
+const RESOURCE_CODES = new Set(['P2024', 'P2028']);
+
+/**
  * Where a code hides. `code` is Prisma's and `pg`'s field; `originalCode` is the driver adapter's,
  * which is where the SQLSTATE of a failed raw query actually survives in Prisma 7 — the error the
  * caller catches says `P2010` ("raw query failed") and keeps PostgreSQL's own verdict two objects
@@ -199,7 +216,7 @@ function signalOf(node: unknown, depth: number): Signal | null {
   // and a chain that carries a named permanent code as well as a resource class is reporting the
   // statement that failed, which is the more specific of the two.
   for (const code of codes) {
-    if (RESOURCE_CLASS.test(code)) {
+    if (RESOURCE_CLASS.test(code) || RESOURCE_CODES.has(code)) {
       return { rank: Rank.PermanentCode, family: 'RESOURCE', evidence: code, depth };
     }
   }

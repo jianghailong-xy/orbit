@@ -838,7 +838,7 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	// changes to commit", and finalize would report a session that changed nothing while its whole
 	// output sits uncommitted in a checkout about to be deleted. An empty diff may only be
 	// reported when staging actually succeeded.
-	if _, err := git(wt.Path, "add", "-A"); err != nil {
+	if err := stageForFinalize(wt.Path); err != nil {
 		return nil, nil, fmt.Errorf("staging the work of session %s failed: %w", wt.Session, err)
 	}
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
@@ -1914,6 +1914,87 @@ func commitWorktree(req CommitCommand) commitOutcome {
 // refusal names the lock file in whatever language git speaks.
 func indexLockHeld(err error) bool {
 	return strings.Contains(gitStderr(err), "index.lock")
+}
+
+// staleIndexLockAge is how long a checkout's index.lock must have sat untouched before
+// finalization treats it as abandoned. A git holding it is writing the new index into it and then
+// renaming it over index, so its mtime keeps moving for as long as it is really in use: a minute
+// of no writes is far longer than any single index write takes, and far shorter than the time
+// these are actually found sitting — the 2026-09-16 sweep of this machine cleared 22 of them, the
+// oldest four days old.
+const staleIndexLockAge = time.Minute
+
+// stageForFinalize is `git add -A` for finalizeWorktree, plus the one recovery the finalize
+// moment can justify: breaking an index.lock nobody is using.
+//
+// A lock left behind by a git that crashed or was killed — a runner restart or self-update is the
+// known source — refuses every `add` in that checkout for as long as it sits there, and finalize's
+// staging is the step that decides whether a session's work reaches its branch at all. The session
+// is over by the time this runs: its engine has exited, stopAll has joined its background jobs, and
+// the finalization fence keeps any merge/commit off this checkout, so nothing the runner knows of
+// can be mid-index-write here. breakStaleIndexLock adds the evidence the runner cannot get from
+// that alone, and staging is retried once when the lock is gone.
+func stageForFinalize(dir string) error {
+	_, err := git(dir, "add", "-A")
+	if err == nil || !indexLockHeld(err) {
+		return err
+	}
+	broke, why := breakStaleIndexLock(dir)
+	if !broke {
+		logln("staging kept refusing on this checkout's index.lock and it was not safe to break:", why)
+		return err
+	}
+	logln("broke", why, "— retrying the staging it was refusing")
+	_, retried := git(dir, "add", "-A")
+	return retried
+}
+
+// breakStaleIndexLock removes a checkout's own index.lock when every cheap piece of evidence says
+// no live git is using it, and reports what it did (or why it declined) in words a log line can
+// carry. Three conditions, each of which a real holder fails:
+//
+//   - The lock belongs to a LINKED worktree, not the shared checkout. `.git/worktrees/<id>/index.lock`
+//     is private to one session; `<repo>/.git/index.lock` is the one every other session and every
+//     person working in that repository shares, and this never touches it.
+//   - It is an empty regular file. Git creates index.lock and writes the new index into it, so a
+//     lock a live git is actually working through has content.
+//   - Nothing has written it for staleIndexLockAge.
+//
+// This is deliberately the same test a person applies by hand, minus the open-file scan, which
+// costs a /proc walk this machine cannot afford under load. What it buys is bounded: the fallback
+// when it declines is the honest report that staging failed, which is what the caller already does.
+func breakStaleIndexLock(dir string) (bool, string) {
+	gitDir, err := git(dir, "rev-parse", "--absolute-git-dir")
+	if err != nil || gitDir == "" {
+		return false, "a checkout whose git dir could not be resolved"
+	}
+	common, err := git(dir, "rev-parse", "--git-common-dir")
+	if err != nil || common == "" {
+		return false, "a checkout whose shared git dir could not be resolved"
+	}
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(dir, common)
+	}
+	if filepath.Clean(gitDir) == filepath.Clean(common) {
+		// The shared checkout's index, which concurrent sessions and the person at the keyboard
+		// are both entitled to be holding. Never ours to break.
+		return false, "the shared repository's index.lock in " + gitDir
+	}
+	lock := filepath.Join(gitDir, "index.lock")
+	info, err := os.Lstat(lock)
+	if err != nil {
+		return false, "no index.lock at " + lock
+	}
+	if !info.Mode().IsRegular() || info.Size() != 0 {
+		return false, fmt.Sprintf("%s, which is %d bytes and so is being written", lock, info.Size())
+	}
+	if age := time.Since(info.ModTime()); age < staleIndexLockAge {
+		return false, fmt.Sprintf("%s, untouched for only %s of the %s that makes a lock abandoned", lock, age.Truncate(time.Second), staleIndexLockAge)
+	}
+	if err := os.Remove(lock); err != nil {
+		return false, fmt.Sprintf("%s, which could not be removed: %v", lock, err)
+	}
+	return true, fmt.Sprintf("the abandoned index.lock at %s (empty, untouched since %s)", lock, info.ModTime().UTC().Format(time.RFC3339))
 }
 
 // commitFailure is what a failed commit says: git's own words and, when git was still refusing on
