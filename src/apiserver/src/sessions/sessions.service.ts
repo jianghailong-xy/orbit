@@ -18,6 +18,7 @@ import {
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
+import { settleWithdrawnWakeTurn } from '../runner-api/wake-turn-withdraw';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -4597,6 +4598,10 @@ export class SessionsService {
       // stops reading DELIVERED first (watches/watch-wake-drain.ts). A withdrawal refused below rolls
       // that back with it.
       await deadLetterQueuedWatchWakes(tx, id, { code: 'WAKE_WITHDRAWN', turnId });
+      // A `bg-wake:` turn is withdrawn the same way, and carries the same kind of payload beside it:
+      // the job wakes and the due wakeup settled onto it, which the delete alone would leave pointing
+      // at a turn that is gone (runner-api/wake-turn-withdraw.ts). Refusals below roll this back too.
+      await settleWithdrawnWakeTurn(tx, id, turnId);
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {
