@@ -3,13 +3,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -32,11 +35,21 @@ import (
 // plane it takes no events for a session it has closed — by a turn completion that ends the
 // session, or by /finalize — and keeps what arrives after apart: a report sent too late was not
 // delivered.
+//
+// It persists a batch the way the real one does, which is what makes its record of a job's end
+// mean the same thing: run_event is unique on (sessionId, seq) and the ingest writes with
+// skipDuplicates, so an event for a seq already persisted is dropped, not recorded twice. The
+// runner is built on that — a flush whose answer is lost resends the whole batch, knowing the
+// requests are seq-idempotent — so a stub that kept the resend would report a duplicate that the
+// control plane never had. A second terminal report at a DIFFERENT seq is a second report, and is
+// still exactly the failure this stub exists to catch; only the same seq is the same event.
 type runnerStopControlPlane struct {
 	mu           sync.Mutex
 	inbox        []RunInboxResponse
 	events       []RunEvent
 	late         []RunEvent
+	persisted    map[int]bool
+	arrived      []RunEvent
 	closed       bool
 	completions  []TurnCompleteRequest
 	finalizes    []RunFinalizeRequest
@@ -69,16 +82,7 @@ func (c *runnerStopControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(r.URL.Path, "/events"):
 		var batch RunEventBatch
 		if json.NewDecoder(r.Body).Decode(&batch) == nil {
-			c.mu.Lock()
-			if c.closed {
-				// The real control plane refuses these with 409 ("session is no longer open"). Taken
-				// quietly here, so a verdict is read off what was accepted rather than off how the
-				// runner takes a refusal.
-				c.late = append(c.late, batch.Events...)
-			} else {
-				c.events = append(c.events, batch.Events...)
-			}
-			c.mu.Unlock()
+			c.accept(batch)
 		}
 	case strings.HasSuffix(r.URL.Path, "/turn-complete"):
 		var req TurnCompleteRequest
@@ -126,6 +130,33 @@ func (c *runnerStopControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, _ = w.Write([]byte(`{}`))
+}
+
+// accept is the control plane's ingest: it records what it was delivered, dropping an event whose
+// seq is already persisted as the real one's skipDuplicates does, and keeping apart what arrived
+// after the session was closed. Every delivery is counted in arrived, resends included — what the
+// runner sent, as opposed to what the control plane kept.
+func (c *runnerStopControlPlane) accept(batch RunEventBatch) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.persisted == nil {
+		c.persisted = map[int]bool{}
+	}
+	c.arrived = append(c.arrived, batch.Events...)
+	for _, e := range batch.Events {
+		if c.persisted[e.Seq] {
+			continue
+		}
+		c.persisted[e.Seq] = true
+		if c.closed {
+			// The real control plane refuses these with 409 ("session is no longer open"). Taken
+			// quietly here, so a verdict is read off what was accepted rather than off how the
+			// runner takes a refusal.
+			c.late = append(c.late, e)
+			continue
+		}
+		c.events = append(c.events, e)
+	}
 }
 
 // imports is every /import-result the runner posted, in arrival order.
@@ -177,6 +208,16 @@ func (c *runnerStopControlPlane) lateTerminalReports(jobID string) []map[string]
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return terminalReportsOf(c.late, jobID)
+}
+
+// terminalArrivals is how many times the runner delivered a terminal background_task for one job,
+// counting a re-delivery the durable record correctly dropped. What the runner sent, as opposed to
+// what the control plane kept: it is what says a batch whose answer was lost was re-sent rather
+// than dropped, which is the only thing that keeps a kill from going missing.
+func (c *runnerStopControlPlane) terminalArrivals(jobID string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(terminalReportsOf(c.arrived, jobID))
 }
 
 func terminalReportsOf(events []RunEvent, jobID string) []map[string]interface{} {
@@ -236,7 +277,14 @@ type runnerStopSupervisor struct {
 // under a live job.
 func superviseUntilRunnerStop(t *testing.T, job *ClaimedSession, active bool, api *runnerStopControlPlane) *runnerStopSupervisor {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(api.serve))
+	return superviseUntilRunnerStopOn(t, job, active, api, http.HandlerFunc(api.serve))
+}
+
+// superviseUntilRunnerStopOn is superviseUntilRunnerStop with the control plane's answers under the
+// caller's hand. api is still the one whose lease releases the teardown relies on.
+func superviseUntilRunnerStopOn(t *testing.T, job *ClaimedSession, active bool, api *runnerStopControlPlane, handler http.Handler) *runnerStopSupervisor {
+	t.Helper()
+	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
 	pool := newSessionPool(4)
@@ -351,6 +399,39 @@ func runnerStopJob(t *testing.T, id string) *ClaimedSession {
 	return job
 }
 
+// committedButUnanswered is the control plane with one thing changed about the answer to the batch
+// carrying a job's end: that batch is recorded — committed, as the real one commits inside its
+// ingest transaction — and the answer is then held until the runner gives up on the request. This
+// is the control plane's own latency, not a fault injected into the runner: the batch landed, and
+// the only thing that would have told the runner so never arrived. `held` reports that it happened.
+func committedButUnanswered(api *runnerStopControlPlane, held *atomic.Bool, hold time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/events") {
+			api.serve(w, r)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var batch RunEventBatch
+		_ = json.Unmarshal(body, &batch)
+		terminal := false
+		for _, e := range batch.Events {
+			if e.Type == evBackgroundTask && isTerminalBgStatus(asString(e.Payload["status"])) {
+				terminal = true
+			}
+		}
+		if !terminal || !held.CompareAndSwap(false, true) {
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			api.serve(w, r)
+			return
+		}
+		api.accept(batch)
+		select {
+		case <-time.After(hold):
+		case <-r.Context().Done():
+		}
+	}
+}
+
 // assertEndedByRunnerStop is the verdict both cases share: exactly one terminal report on the
 // control plane, `killed` with the runner's own reason, and a process that is really gone.
 func assertEndedByRunnerStop(t *testing.T, api *runnerStopControlPlane, job bgJobStatus) {
@@ -450,5 +531,57 @@ func TestRunnerStopMidTurnStillDeliversTheJobKill(t *testing.T) {
 	sup.end()
 	sup.awaitReturn(t, time.Minute)
 
+	assertEndedByRunnerStop(t, api, suite)
+}
+
+// The same case with the control plane's answer to the job's end held back after that batch was
+// committed: the runner is never told it landed. Delivery is at-least-once by construction — the
+// request that would have carried the acknowledgement is the only thing that could tell the runner
+// otherwise — so the batch is kept and sent again rather than assumed delivered, and the
+// seq-idempotent ingest is what makes that the same report and not a second one. Both halves are
+// the contract: drop the resend and a kill can go missing, keep the resend and the control plane
+// still has exactly one end for the job.
+func TestRunnerStopResendsABatchItWasNeverAnsweredFor(t *testing.T) {
+	fake := newFakeClaude(t,
+		fakeStep{Await: "user"},
+		fakeStep{Emit: "replay_user"},
+		fakeStep{Emit: "system_init"},
+		fakeStep{Emit: "tool_use", ToolUseID: "toolu_suite", ToolName: "Bash",
+			Input: map[string]interface{}{"command": "go test ./..."}},
+	)
+	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	job := runnerStopJob(t, "sess-stop-no-answer")
+	api := newRunnerStopControlPlane()
+	api.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "run the full suite"})
+
+	var held atomic.Bool
+	// Held far longer than the answer takes to be abandoned: the runner gives up on the request
+	// when the session ends, which is as soon as it sees the report this batch committed.
+	sup := superviseUntilRunnerStopOn(t, job, true, api, committedButUnanswered(api, &held, 20*time.Second))
+	awaitCondition(t, 30*time.Second, "the turn never reached its tool call", func() bool {
+		return api.delivered(isToolUse("toolu_suite"))
+	})
+
+	suite := sup.mustRun(t, "exec sleep 300", bgKindJob)
+	awaitCondition(t, 15*time.Second, "the job's launch was never delivered", func() bool {
+		return api.delivered(isJobLaunch(suite.JobID))
+	})
+
+	api.holdLeaseReleases()
+	sup.stop()
+	awaitCondition(t, 4*time.Minute, "the supervisor neither reported the job's end nor returned", func() bool {
+		return len(api.terminalReports(suite.JobID)) > 0 || sup.returned()
+	})
+	api.releaseLeases()
+	sup.end()
+	sup.awaitReturn(t, time.Minute)
+
+	if !held.Load() {
+		t.Fatal("the control plane never held an answer to the job's end, so nothing was put to the test")
+	}
+	if got := api.terminalArrivals(suite.JobID); got < 2 {
+		t.Errorf("the runner delivered the job's end %d time(s); a batch whose answer never arrived "+
+			"must be sent again — dropping it is how a kill goes missing", got)
+	}
 	assertEndedByRunnerStop(t, api, suite)
 }
