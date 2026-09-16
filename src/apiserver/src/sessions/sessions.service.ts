@@ -18,7 +18,7 @@ import {
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
-import { settleWithdrawnWakeTurn } from '../runner-api/wake-turn-withdraw';
+import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -4270,6 +4270,12 @@ export class SessionsService {
       // its delivery stops reading DELIVERED first, and nothing queues the wake again
       // (watches/watch-wake-drain.ts).
       await deadLetterQueuedWatchWakes(tx, id, { code: 'OBSERVER_TURN_INTERRUPTED' });
+      // A `bg-wake:` turn is deleted by that same statement, and what it was to deliver is kept beside
+      // it rather than in it: the delete alone would leave a job's wakes under the key its next wake
+      // reuses, and a due wakeup settled onto a turn that is gone. Both are settled with the turns
+      // here — every one of them, because an interrupt drops the whole queue and not one named turn
+      // (runner-api/wake-turn-withdraw.ts). A refusal below rolls this back too.
+      await settleUnrunWakeTurns(tx, id, { interrupted: true });
       if (protectedTargetIds.length > 0) {
         // Target FKs intentionally prevent individual deletion. Retire an undelivered seed in
         // place so its attachments and clientTurnId receipt remain auditable.
@@ -4601,7 +4607,7 @@ export class SessionsService {
       // A `bg-wake:` turn is withdrawn the same way, and carries the same kind of payload beside it:
       // the job wakes and the due wakeup settled onto it, which the delete alone would leave pointing
       // at a turn that is gone (runner-api/wake-turn-withdraw.ts). Refusals below roll this back too.
-      await settleWithdrawnWakeTurn(tx, id, turnId);
+      await settleUnrunWakeTurns(tx, id, { turnId });
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {

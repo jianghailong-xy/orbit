@@ -1003,11 +1003,11 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // the turn off. It takes only the delivery rows of that session's own wakes, after the caller holds
   // the session, and nothing holding a delivery row waits on a session.
   { at: 'watches/watch-wake-drain.ts#deadLetterQueuedWatchWakes', under: 'runnerApi turn-complete/finalize, sessions end/interrupt/cancelQueuedTurn and realtime reaper — each caller already owns the rank-30 Session transaction that takes the wake off the queue unrun' },
-  // The `bg-wake:` half of the same thing: a control-plane wake turn withdrawn from a live session's
+  // The `bg-wake:` half of the same thing: a control-plane wake turn deleted from a live session's
   // queue takes the payload kept beside it with it — the job wakes it carried are deleted, the due
   // wakeup settled onto it is CANCELLED. Both are children of that session (rank 60), written after
-  // the caller holds its row and before the turn they belong to is deleted.
-  { at: 'runner-api/wake-turn-withdraw.ts#settleWithdrawnWakeTurn', under: 'sessions.cancelQueuedTurn — the rank-30 Session transaction that deletes the withdrawn turn' },
+  // the caller holds its row and before the turns they belong to are deleted.
+  { at: 'runner-api/wake-turn-withdraw.ts#settleUnrunWakeTurns', under: 'sessions.cancelQueuedTurn and sessions.interrupt — the rank-30 Session transaction that deletes the turn withdrawn by name, or every turn queued behind the one an interrupt stops' },
   { at: 'watches/watch-evaluator.service.ts#land', under: 'watchEvaluator.evaluate' },
   // A Watch create's capacity checks. Its one lock-shaped statement is `pg_try_advisory_xact_lock` on the owner, taken
   // after the create's watch row and before its targets, and never waited for: a create that finds it held rolls back

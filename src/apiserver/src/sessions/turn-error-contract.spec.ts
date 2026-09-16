@@ -47,15 +47,12 @@ function makeService(opts: {
       update: async () => ({ ...session }),
     },
     conversationTurn: {
+      // Nothing queued here has a payload to settle before the delete: no Watch wake and no
+      // `bg-wake:` turn (watches/watch-wake-drain.ts, runner-api/wake-turn-withdraw.ts).
       findMany: async () => [],
       updateMany: async () => ({ count: 0 }),
       findUnique: async () => null,
-      // Two questions are asked here: whether the turn is a steer, and — before the delete —
-      // whether it is a `bg-wake:` turn whose payload has to be settled with it
-      // (runner-api/wake-turn-withdraw.ts). Only the second filters on `clientTurnId`, and no
-      // wake turn is queued in any case here.
-      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-        (where.clientTurnId === undefined && opts.steerRow ? { id: TURN_ID } : null),
+      findFirst: async () => (opts.steerRow ? { id: TURN_ID } : null),
       deleteMany: async () => ({ count: opts.deleted ?? 0 }),
       count: async () => opts.executable ?? 1,
       create: async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', seq: 2, ...data }),

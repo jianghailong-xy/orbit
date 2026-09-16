@@ -46,20 +46,15 @@ function makeService(
       update: async () => ({ ...session }),
     },
     conversationTurn: {
-      // No Watch wake is queued here, so a withdrawal has no delivery to dead-letter.
+      // Nothing is queued here that a withdrawal has to settle before it deletes: no Watch wake with
+      // a delivery to dead-letter, and no `bg-wake:` turn with a payload kept beside it.
       findMany: async () => [],
       deleteMany: async ({ where }: { where: Record<string, unknown> }) => {
         deleteFilters.push(where);
         return { count: deleteCounts[deletes++] ?? 0 };
       },
-      // What the delete matched nothing BECAUSE of: a steer row, or nothing at all. A withdrawal
-      // asks this twice, and the other question is whether the turn is a `bg-wake:` one whose
-      // payload has to be settled with it (runner-api/wake-turn-withdraw.ts) — never here, which
-      // is what the `clientTurnId` filter identifies.
-      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-        (where.clientTurnId === undefined && rows.some((r) => r.kind === 'steer')
-          ? { id: rows[0].id }
-          : null),
+      // What the delete matched nothing BECAUSE of: a steer row, or nothing at all.
+      findFirst: async () => (rows.some((r) => r.kind === 'steer') ? { id: rows[0].id } : null),
       count: async () => 1,
     },
   };
