@@ -561,7 +561,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -1768,6 +1768,29 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":        []string{"string", "null"},
 		"description": "Omit to leave the schedule as it is, null to cancel it, a date-time to set or move it. " + runAtDescription,
 	}
+	// The verifier to write BESIDE this subject, in the same call. Deliberately not part of
+	// taskCreateProps: the batch door pairs its own items with verifiesRef, the server refuses this
+	// field on a batch item, and a schema that advertised it there would invite a call that cannot
+	// work. Its fields are only what makes the check a check — the link to the subject and the
+	// project it lands in are the relation's, and the server fills them in.
+	verificationProp := obj(map[string]interface{}{
+		"title": str,
+		"description": taskDescriptionProp,
+		"assigneeId": map[string]interface{}{
+			"type":        []string{"string", "null"},
+			"description": "The workspace that runs the check. Must be owned by the caller.",
+		},
+	}, "title")
+	verificationProp["description"] = "Create the verifier that settles this task, in the SAME call. A task declaring " +
+		"completionCriterion VERIFICATION with completionPolicy VERIFICATION_PASSED is a subject: it " +
+		"has no work of its own to run, and only a PASS recorded by a separate verification task " +
+		"pointing at it can settle it. Nothing on the server files that task automatically, so a " +
+		"subject written alone is refused (VERIFICATION_SUBJECT_NEEDS_VERIFIER) — name the verifier " +
+		"here instead and both rows are written in one transaction, the check pointing at this task. " +
+		"On the batch door the pairing is verifiesRef between two items of the call. Give the verifier " +
+		"an assigneeId if it should be able to run, since a check with no assignee waits for somebody " +
+		"to hand it one."
+
 	// The fields of one new task, shared by task_create and every task_create_batch item.
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
@@ -2259,7 +2282,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_create",
 			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately, or pass runAt to have the server start it at a set time. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
 			"inputSchema": func() map[string]interface{} {
-				return obj(taskCreateProps(), "title", "completionCriterion")
+				props := taskCreateProps()
+				// On the single door only: see verificationProp.
+				props["verification"] = verificationProp
+				return obj(props, "title", "completionCriterion")
 			}(),
 		},
 		{

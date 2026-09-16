@@ -41,6 +41,11 @@
 import type { ScopePrincipal } from '../projects/project-scope-contract';
 import { dependencyCrossingRefusal } from '../projects/project-handoff';
 import type { HandoffApproval } from '../projects/project-scope-decision';
+import {
+  verificationSubjectNeedsVerifierRefusal,
+  type TaskCompletionCriterionValue,
+} from './task-completion-criterion';
+import type { TaskCompletionPolicyValue } from '../projects/task-aggregation';
 
 export const PLAN_PREFLIGHT_DIMENSIONS = [
   'PROJECT',
@@ -81,6 +86,7 @@ export const PLAN_PREFLIGHT_COVERAGE: Readonly<
     { check: 'a parent named inside the batch is earlier and in the same project', where: 'TasksService.assertBatchValid' },
     { check: 'a parent that already exists is in the same project', where: 'TasksService.assertBatchHierarchy' },
     { check: 'a verification is in the same project as its subject, and its subject is not itself a check', where: 'TasksService.assertVerificationEligible' },
+    { check: 'a subject nothing in this plan verifies is refused, before any of it is written', where: 'here' },
     { check: 'both sides are judged against the project the item was BOUND to, before any lock is taken', where: 'here' },
     { check: 'a ref names exactly one item of this plan, so no link is resolved by input order', where: 'here' },
   ],
@@ -143,6 +149,10 @@ export interface PlanItemFacts {
   parentRef: string | null;
   verifiesTaskId: string | null;
   verifiesRef: string | null;
+  /** As the request spells it, unresolved: `verificationSubjectUnpaired` resolves it the way the
+   *  write does. Null is an undeclared criterion, which is not a subject. */
+  completionCriterion: TaskCompletionCriterionValue | null;
+  completionPolicy: TaskCompletionPolicyValue | null;
   dependsOnTaskIds: readonly string[];
   dependsOnRefs: readonly string[];
   assigneeId: string | null;
@@ -329,6 +339,18 @@ export function preflightPlan(facts: PlanFacts): PlanPreflightFinding[] {
           );
         }
       }
+    }
+
+    // HIERARCHY, read the other way round. The loop above judges what a verification points AT;
+    // this judges a subject nothing points at. A subject has no work of its own to run and is
+    // settled only by a PASS another task records, so a plan that files one without its check files
+    // a row that can never settle — and the plan is the last place that can be said before any of
+    // it is written. The predicate and the sentence are the write doors' own
+    // (`verificationSubjectNeedsVerifierRefusal`), so a plan cannot promise what a write refuses.
+    const unpaired = verificationSubjectNeedsVerifierRefusal(item, facts.items);
+    if (unpaired) {
+      add(item, 'HIERARCHY', 'REFUSE', 'PLAN_VERIFICATION_SUBJECT_UNPAIRED',
+        unpaired.message, unpaired.requiredAction);
     }
 
     // DEPENDENCY_AUTHORITY. An edge does not move a task between projects, so L1's write decision

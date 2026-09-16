@@ -96,6 +96,7 @@ import {
   DAG_PREVIEW_TITLES,
   MAX_DAG_OPS,
   TASK_BATCH_CREATE_MAX,
+  type TaskVerificationDto,
   UpdateTaskDto,
 } from './dto';
 import {
@@ -209,6 +210,7 @@ import {
   taskCompletionRequiredAction,
   taskCompletionDeclarationError,
   verificationSubjectNeedsProjectRefusal,
+  verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import {
@@ -592,6 +594,17 @@ const MENTION_DELIVERY_PER_SWEEP = 20;
  * is somehow malformed.
  */
 const MAX_TASK_PARENT_DEPTH = 50;
+
+/**
+ * The two `ref`s a paired single create wires itself with (`verification` on the single door).
+ *
+ * Internal and never stored — `ref` exists only to let one item of a batch name another, and the
+ * pair is written through the batch. They are constants rather than locals so the subject's and the
+ * verifier's halves cannot be spelled differently in one call; the verifier's `verifiesRef` is the
+ * link, and a typo there would file an unpaired subject through the very door that refuses one.
+ */
+const VERIFICATION_PAIR_SUBJECT_REF = 'verification-subject';
+const VERIFICATION_PAIR_VERIFIER_REF = 'verification-check';
 
 /**
  * What a task LIST row needs: every scalar column except `description`, plus the assignee
@@ -2923,6 +2936,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
+    // The paired shape: this task and the check that settles it, in one call. Delegated rather than
+    // reimplemented, because a second writer is a second thing to keep in step with every column a
+    // Task has — see `createWithVerifier`.
+    const verification = dto.verification;
+    if (verification) {
+      // One task, one role in the relation: it either IS the check (verifiesTaskId) or is the
+      // subject something else checks (verification). Naming both would make it its own subject.
+      if (dto.verifiesTaskId) {
+        throw new BadRequestException(
+          'verification and verifiesTaskId cannot be used together: this task either IS the check '
+          + '(verifiesTaskId) or is the subject to be checked (verification), never both',
+        );
+      }
+      return await this.createWithVerifier(
+        ownerId, { ...dto, verification }, creator, creatorSessionId,
+      );
+    }
     const completionCriterion = this.assertCompletionDeclaration(dto);
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
@@ -3023,6 +3053,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The shape advice reads the same project, so it is asked here too, still ahead of the gate.
     this.assertCriterionShape(dto, completionCriterion, scopedProjectId != null);
     this.assertCriterionHasAProject(dto.completionCriterion, dto.verifiesTaskId, scopedProjectId);
+    // The pairing rule, asked of this call's own items — a single create is a plan of one, and
+    // nothing in it points at this row. Answered before the transaction, like every other refusal
+    // on this path, so a subject filed without its check leaves no row and takes no lock (AC1).
+    const unpaired = verificationSubjectNeedsVerifierRefusal(dto, []);
+    if (unpaired) throw new BadRequestException({ ...unpaired, itemIndex: null });
     // Unit T6: a single create is one item of a plan, judged by the same bound a fifty-item one is.
     await this.assertTaskOpeningAuthorized(
       ownerId,
@@ -3294,6 +3329,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The single door's paired create: this task and the verifier that settles it, written together.
+   *
+   * Not a second write path. The pair is expressed as what it is — two items of one plan, the
+   * second naming the first by `ref` — and handed to the batch for exactly the reasons a batch
+   * exists: one admission, one transaction, all-or-nothing, and one idempotency key per row, so a
+   * redelivered turn replays both rows or neither. The sub-object is the caller's spelling; below it
+   * there is one writer, which is what keeps this from drifting the next time a Task column is added.
+   */
+  private async createWithVerifier(
+    ownerId: string,
+    dto: CreateTaskDto & { verification: TaskVerificationDto },
+    creator?: Creator,
+    creatorSessionId?: string,
+  ) {
+    const { verification, ...subject } = dto;
+    const [created, verifier] = await this.createMany(ownerId, {
+      tasks: [
+        { ...subject, ref: VERIFICATION_PAIR_SUBJECT_REF },
+        {
+          title: verification.title,
+          description: verification.description,
+          assigneeId: verification.assigneeId,
+          // The subject's project, so both rows land in one project even when it is the scope —
+          // rather than the request — that names it. Aggregation reads one project, so a check
+          // filed outside its subject's project is one nothing can count.
+          projectId: dto.projectId,
+          ref: VERIFICATION_PAIR_VERIFIER_REF,
+          verifiesRef: VERIFICATION_PAIR_SUBJECT_REF,
+        },
+      ],
+    }, creator, creatorSessionId);
+    // `ref` is the batch's internal wiring, never stored and never part of this door's receipt.
+    const { ref: _wiring, ...row } = created;
+    return { ...row, verification: { id: verifier.id, status: verifier.status } };
+  }
+
+  /**
    * Which of these lists are paused. A task filed into a paused list has to be born held —
    * otherwise "pause the list" means "pause the tasks that happened to exist when I clicked",
    * and a campaign that is still being written keeps dispatching around its own stop.
@@ -3413,6 +3485,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const positionByRef = new Map<string, number>();
     items.forEach((item, index) => {
       if (!item.title) throw new BadRequestException(`tasks[${index}]: title is required`);
+      // `verification` is the single door's spelling of a pair. This door wires its own items
+      // together with refs, and accepting the sub-object here would mean either a second writer or
+      // — worse — ignoring it and filing exactly the unpaired subject the pairing rule refuses.
+      if (item.verification) {
+        throw new BadRequestException(
+          `tasks[${index}]: verification is the single-door spelling of a paired subject — on this `
+            + 'door an item is paired by a LATER item naming its ref in verifiesRef',
+        );
+      }
       if (item.ref === undefined) return;
       if (positionByRef.has(item.ref))
         throw new BadRequestException(`tasks[${index}]: duplicate ref "${item.ref}"`);
@@ -3916,6 +3997,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Unit L7: judged, and not written. Before the transaction, before the locks — the same place
     // a refused plan stops, so a preview costs exactly what a refusal costs and no row either way.
     if (dryRun) return planPreviewBody(planAdmission!.findings, planAdmission!.facts);
+
+    // The pairing rule, for the write that asked for no plan judgement. Every agent write preflights
+    // (§4 R1 keeps only the owner outside it) and has already been answered in the plan's own
+    // vocabulary — PLAN_VERIFICATION_SUBJECT_UNPAIRED, among every other finding. What is left is
+    // the owner's write, refused here in the single door's words rather than in a plan's, and still
+    // before the transaction: a refused batch costs no row and no lock (AC5).
+    items.forEach((item, index) => {
+      if (frozen.has(index)) return;
+      const unpaired = verificationSubjectNeedsVerifierRefusal(item, items);
+      if (unpaired) throw new BadRequestException({ ...unpaired, itemIndex: index });
+    });
 
     // Only parents that already exist. A parentRef points at a row this very transaction writes,
     // which no other request can see — let alone move into another project — so there is nothing
@@ -4996,6 +5088,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         parentRef: item.parentRef ?? null,
         verifiesTaskId: item.verifiesTaskId ?? null,
         verifiesRef: item.verifiesRef ?? null,
+        // As the request spells them, unresolved: the pairing predicate resolves the criterion the
+        // same way the write does, so an item that declares nothing is judged as the row it would
+        // become rather than by this module's own guess at what a default means.
+        completionCriterion: item.completionCriterion ?? null,
+        completionPolicy: item.completionPolicy ?? null,
         dependsOnTaskIds: item.dependsOnTaskIds ?? [],
         dependsOnRefs: item.dependsOnRefs ?? [],
         assigneeId: item.assigneeId ?? null,

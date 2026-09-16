@@ -432,7 +432,15 @@ test('update lets a verifier, an unfiled EVIDENCE_JUDGMENT task and a moved subj
 
 test('a subject in a project, and a verifier in none, pass the doors as before', async () => {
   const fixture = serviceFixture();
-  await fixture.service.create('owner', { title: 'a subject filed', projectId: PROJECT, ...SUBJECT });
+  // A subject in a project is not refused for its project — that is this pair of cases' question.
+  // It arrives with the check that settles it, because the pairing rule asks a second question
+  // (VERIFICATION_SUBJECT_NEEDS_VERIFIER) and the answer to it is the other half of the write.
+  await fixture.service.create('owner', {
+    title: 'a subject filed',
+    projectId: PROJECT,
+    ...SUBJECT,
+    verification: { title: '[VERIFY] a subject filed' },
+  });
   await fixture.service.createMany('owner', {
     tasks: [
       { ref: 'work', title: 'project-less work', completionCriterion: 'EXECUTABLE',
@@ -442,7 +450,8 @@ test('a subject in a project, and a verifier in none, pass the doors as before',
         completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL' },
     ],
   });
-  assert.equal(fixture.rows.length, 3);
+  // The subject and its check, then the project-less work and the check on it.
+  assert.equal(fixture.rows.length, 4);
 });
 
 test('a create is asked about VERIFICATION wording by the project it lands in', async () => {
