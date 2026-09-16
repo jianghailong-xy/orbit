@@ -22,6 +22,15 @@ function sweepWithOfflineRunner(taskId: string | null) {
       },
       count: async () => 0,
     },
+    // Still silent when the finalize runs, which is what the sweep's snapshot said too. The
+    // reaper re-asks here before writing, so this row is what decides these two cases; a runner
+    // that had answered by now is reaper-live-runner-fence.spec.ts.
+    runner: {
+      findUnique: async () => ({
+        status: 'ONLINE',
+        lastHeartbeatAt: new Date(Date.now() - 120_000),
+      }),
+    },
     task: { updateMany: async () => ({ count: 1 }) },
     $executeRaw: async () => 1,
     conversationTurn: { updateMany: async () => ({ count: 1 }),
