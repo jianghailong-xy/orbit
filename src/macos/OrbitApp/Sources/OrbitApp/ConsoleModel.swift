@@ -1134,8 +1134,16 @@ final class ConsoleModel {
     /// by the view at tap time — the same source the Stop button uses. It decides whether a mid-turn
     /// send is labeled "Queued"; nil until the session record loads, where it falls back to the
     /// stream-reconciled status. See `ComposerLogic.willQueue`.
-    func send(authoritative: RunStatus? = nil) async {
+    ///
+    /// `overrideText` is a message the caller supplies instead of the composer's draft — the retry
+    /// of the last user turn (see `retryLastMessage`). It rides this same path for the gating,
+    /// queueing and failure handling below, but the composer is neither read nor cleared for it: a
+    /// retry is nothing the user just typed, so it must not flash through the input field on its
+    /// way out, nor take the draft they are part-way through typing with it.
+    func send(authoritative: RunStatus? = nil, overrideText: String? = nil) async {
         guard !sending, !waitingForUploads else { return }
+        // `false` for a retry: its message was handed in, so the composer keeps what it holds.
+        let fromComposer = overrideText == nil
         // A chip is staged the moment an image is picked, while its bytes are still going up (see
         // `attach`). Sending in that window would leave the image behind for good: only chips that
         // already carry a `remoteID` ride along, and the staged list is cleared below either way.
@@ -1150,18 +1158,18 @@ final class ConsoleModel {
         }
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
-        let (text, shell) = ComposerLogic.parseShell(composerText)
+        let (text, shell) = ComposerLogic.parseShell(overrideText ?? composerText)
         // Empty text still sends when something is staged to carry the message (see
         // `canSendAttachmentsAlone`) — but never as a shell turn: a bare `!` is a no-op that only
         // clears itself, and attachments mean nothing to a raw command (web ignores them there too).
         guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
-            if shell { composerText = "" }
+            if shell, fromComposer { composerText = "" }
             return
         }
         if let command = ComposerHostCommand.commandName(in: text) {
             if ComposerHostCommand.isLocal(command) {
                 showStatusCommand()
-                composerText = ""
+                if fromComposer { composerText = "" }
                 return
             }
             if replyContext == nil, provider != "codex", provider != "opencode" {
@@ -1184,7 +1192,7 @@ final class ConsoleModel {
         // "Chat about this": resolve the pending question as a deny+message so claude reads the
         // text as in-turn feedback and continues — not a fresh turn. (Mirrors the web reroute.)
         if let reply = replyContext {
-            composerText = ""
+            if fromComposer { composerText = "" }
             replyContext = nil
             await replyToQuestion(approvalID: reply.approvalID, text: text)
             return
@@ -1209,10 +1217,11 @@ final class ConsoleModel {
             return
         }
         let clientTurnId = UUID().uuidString
-        // What the composer is about to be cleared of. A send that fails for good hands it straight
-        // back (see the catch) rather than making the user retype a message they can no longer see.
-        // The raw draft, so a shell send comes back with its leading `!`.
-        let draft = composerText
+        // What this send consumes. A send that fails for good hands it straight back (see the
+        // catch) rather than making the user retype a message they can no longer see; for a retry
+        // that hands the retried text to the composer, which never held it. The raw draft, so a
+        // shell send comes back with its leading `!`.
+        let draft = overrideText ?? composerText
         let staged = pendingAttachments
         // Every staged attachment has finished uploading by now (the send waited above), so each
         // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
@@ -1238,7 +1247,7 @@ final class ConsoleModel {
         awaitingReply = true
         publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
         localSendTick &+= 1 // …and force that scroll even if the user had scrolled up to read history
-        composerText = ""
+        if fromComposer { composerText = "" }
         pendingAttachments = []
 
         sending = true
@@ -1296,19 +1305,14 @@ final class ConsoleModel {
     }
 
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
-    /// message"). Routed through the composer so the retry obeys the same gating, queueing and
-    /// failure handling as anything else sent from here.
+    /// message"). Handed to `send` as the message itself rather than typed into the composer, so
+    /// the retry obeys the same gating, queueing and failure handling as anything else sent from
+    /// here without the text flashing through the input field on its way out — and without a draft
+    /// the user is part-way through typing having to be moved aside and put back.
     func retryLastMessage() async {
         let text = lastUserMessageText
         guard !text.isEmpty, !sending else { return }
-        // Anything the user had typed goes back on top afterwards: send() clears the composer when
-        // the message goes out and hands it back when it doesn't, so this is that draft's only copy.
-        let draft = composerText
-        composerText = text
-        await send()
-        if !draft.isEmpty {
-            composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
-        }
+        await send(overrideText: text)
     }
 
     // MARK: auto-retry (the quota / provider-error card)
