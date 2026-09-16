@@ -47,6 +47,11 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
     // makes: it takes no lock and asks no hierarchy question, so it is answered "never reported"
     // and kept out of `calls`, which pin the locks and the questions these cases are about.
     if (sql.includes('"task_progress"')) return [];
+    // The same detail's current-check read (`readCurrentVerifier`) is the same kind of statement:
+    // no lock, no hierarchy question, and not one of these cases has a check — so it answers
+    // "nothing checks it" and stays out of `calls`. Answered here rather than by the default row
+    // below, which would read as a check whose title and verdict are missing.
+    if (sql.includes('check_task')) return [];
     // Status writes perform a post-commit completeness read for their realtime invalidation. Keep
     // that distinct from the hierarchy admission/locking statements these tests pin down.
     if (sql.includes('changed(id) AS') && sql.includes('family_probe(id) AS')) {
