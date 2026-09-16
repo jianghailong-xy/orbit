@@ -13,7 +13,6 @@ import {
   EVIDENCE_DECISION_RECORDED_HEADING,
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
-  decisionReceiptAnchor,
   decisionReceiptLine,
   decisionReceiptTime,
 } from './EvidenceDecisionCard';
@@ -23,8 +22,8 @@ import {
  *
  * The card remembered a decision only for as long as the page did, so a reload took it out of the
  * conversation. The receipt is drawn from the decision rows the pending read now carries, which is
- * what these pin: what one says, where it goes, and that the card for a version with a receipt is
- * not drawn beside it.
+ * what these pin: what one says, and that the card for a version with a receipt is not drawn beside
+ * it. Where it goes in the flow is the two halves' shared arithmetic, in `lib/decisionReceipt`.
  */
 
 const SESSION_ID = '34MOJw69NzKSq2X0exxf9';
@@ -147,25 +146,6 @@ describe('the receipt a decision leaves', () => {
     const dated = decisionReceiptTime(DECIDED_AT, twoDaysLater);
     expect(dated.endsWith(clock)).toBe(true);
     expect(dated.length).toBeGreaterThan(clock.length);
-  });
-});
-
-describe('where a receipt goes', () => {
-  const events = [
-    { seq: 1, ts: '2026-09-13T12:50:00.000Z' },
-    { seq: 2, ts: '2026-09-13T12:53:55.000Z' },
-    { seq: 3 },
-    { seq: 4, ts: '2026-09-13T13:20:00.000Z' },
-  ];
-
-  it('follows the last event recorded at or before the decision', () => {
-    expect(decisionReceiptAnchor(events, DECIDED_AT)).toBe(2);
-    expect(decisionReceiptAnchor(events, '2026-09-13T12:53:55.000Z')).toBe(2);
-    expect(decisionReceiptAnchor(events, '2026-09-13T14:00:00.000Z')).toBe(4);
-  });
-
-  it('has no place when every loaded event is later, rather than going to the top', () => {
-    expect(decisionReceiptAnchor(events, '2026-09-13T12:00:00.000Z')).toBeNull();
   });
 });
 

@@ -6,26 +6,26 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import {
   APPROVE_LABEL,
-  CRITERIA_DECISION_HEADING,
-  REPLY_SENT_TO_SESSION,
   SessionCriteriaDecisionCard,
   type CriteriaDecisionResult,
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
+  type SettledCriteriaDecision,
 } from './CriteriaDecisionCard';
 
 /**
- * A card pressed in this window gives way to its receipt, in its own place — the half a static
- * render of the receipt cannot reach.
+ * What an answered proposal leaves where it was answered: a card that gives way to the read, and a
+ * receipt that outlives the page.
  *
- * The door now answers the session that proposed the change and says where that answer went. The
- * reader who pressed learns it from the receipt: the card's head stays, and one line under it says
- * what was recorded and that the proposing session was sent it. Until then the pressed card was
- * simply dropped from the window, which told the reader nothing about the session still waiting.
+ * The card kept the answer in the window that pressed it, so a reload took the decision out of the
+ * conversation altogether — the account owner's report, 2026-09-16: approved, refreshed, gone. The
+ * receipt is now drawn by `WorkspaceView` from the answer the read publishes (`settled`), which is
+ * what these two halves pin: that the press hands the door's reply on for that receipt to carry, and
+ * that the card is not drawn beside it.
  *
  * The press goes through the wired card and the mocked `api` the way it goes through the real one:
  * the pending read draws the card, the button posts to the decision door, and the door's response
- * — here carrying a reply to the proposing session — is what the receipt is drawn from.
+ * — here carrying a reply to the proposing session — is what the press contributes.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -74,7 +74,19 @@ function held(): PendingCriteriaDecisionRow {
   };
 }
 
-function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue {
+/** The answer as the read publishes it once the door has recorded one. */
+function answered(): SettledCriteriaDecision {
+  return {
+    intentId: INTENT,
+    decision: 'APPROVE',
+    decidedAt: '2026-09-13T05:42:00.000Z',
+    baseSeal: SEAL,
+    resultingSeal: 'f'.repeat(64),
+  };
+}
+
+function queue(rows: PendingCriteriaDecisionRow[], settled: SettledCriteriaDecision[] = []):
+PendingCriteriaDecisionQueue {
   return {
     readAt: '2026-09-13T05:42:00.000Z',
     projectId: PROJECT,
@@ -82,6 +94,7 @@ function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue
     oldestAgeSeconds: rows[0]?.ageSeconds ?? null,
     decidableCount: rows.length,
     pending: rows,
+    settled,
   };
 }
 
@@ -138,11 +151,12 @@ async function until(done: () => boolean, what: string): Promise<void> {
 }
 
 describe('a criteria card answered in this window', () => {
-  it('is replaced where it stood by a receipt saying the proposing session was sent the answer', async () => {
+  it('hands the door’s answer on, and gives way to the receipt the read publishes', async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     let decided = false;
     const posts: string[] = [];
     let readsSinceDecided = 0;
+    const handedOn: CriteriaDecisionResult[] = [];
     vi.mocked(api).mockImplementation((async (path: string, init?: { method?: string }) => {
       if (init?.method === 'POST' && path === DECISION_PATH) {
         posts.push(path);
@@ -151,7 +165,9 @@ describe('a criteria card answered in this window', () => {
       }
       if (path === PENDING_PATH) {
         if (decided) readsSinceDecided += 1;
-        return queue(decided ? [] : [held()]);
+        // The read that comes back names the answer, which is what the transcript's receipt is
+        // drawn from — and the proposal itself is not a question any more.
+        return decided ? queue([], [answered()]) : queue([held()]);
       }
       throw new Error(`nothing is stubbed at ${init?.method ?? 'GET'} ${path}`);
     }) as unknown as typeof api);
@@ -167,7 +183,10 @@ describe('a criteria card answered in this window', () => {
     const qc = client;
     await act(async () => tree.render(
       <QueryClientProvider client={qc}>
-        <SessionCriteriaDecisionCard projectId={PROJECT} />
+        <SessionCriteriaDecisionCard
+          projectId={PROJECT}
+          onDecided={(result) => handedOn.push(result)}
+        />
       </QueryClientProvider>,
     ));
     await until(() => approveButton(node) !== null, 'the card to offer its answer');
@@ -175,31 +194,18 @@ describe('a criteria card answered in this window', () => {
     await act(async () => {
       approveButton(node)!.click();
     });
-    await until(
-      () => node.querySelector('.criteria-decision-receipt') !== null,
-      'the receipt to replace the card',
-    );
-    expect(posts).toEqual([DECISION_PATH]);
-
-    const cards = [...node.querySelectorAll('.criteria-decision')];
-    expect(cards.map((card) => card.id), 'one receipt, at the card’s own address')
-      .toEqual([`criteria-decision-${INTENT}`]);
-    const [card] = cards;
-    expect(card.querySelector('.criteria-decision-heading')?.textContent)
-      .toBe(CRITERIA_DECISION_HEADING);
-    const line = card.querySelector('.criteria-decision-receipt')?.textContent ?? '';
-    expect(line).toContain('✓ Approved by you at');
-    expect(line).toContain(REPLY_SENT_TO_SESSION);
-    expect(line).toContain(`(${SESSION_TITLE})`);
-    expect(approveButton(node), 'a receipt offers no answer').toBeNull();
-
-    // The press invalidated the pending read, and the proposal is gone from it. The card this
-    // window answered stays a receipt rather than going stale into "answered at another end".
     await until(() => readsSinceDecided > 0, 'the pending read to come back without the proposal');
     await until(() => !qc.isFetching(), 'that read to settle');
-    expect([...node.querySelectorAll('.criteria-decision')].map((each) => each.id))
-      .toEqual([`criteria-decision-${INTENT}`]);
-    expect(node.querySelector('.criteria-decision-receipt')?.textContent).toBe(line);
+
+    expect(posts).toEqual([DECISION_PATH]);
+    // The door's own response, reply and all, is what the press contributes: the read publishes the
+    // outcome and its seals, and the window that pressed is the only one handed the destination.
+    expect(handedOn).toEqual([DECIDED]);
+    // The card is gone: its question is answered, and the receipt for it is in the conversation.
+    await until(() => node.querySelectorAll('.criteria-decision').length === 0,
+      'the card to give way to the receipt');
+    expect(approveButton(node), 'an answered proposal still offers an answer').toBeNull();
     expect(node.querySelector('.is-stale')).toBeNull();
   });
 });
+

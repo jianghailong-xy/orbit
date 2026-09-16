@@ -81,6 +81,7 @@ import {
   sessionsQuery,
   sessionTagsQuery,
   ownerConfirmationQuery,
+  pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -181,11 +182,15 @@ import {
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { SessionDecisionStrip, decisionRowKey, revealCriteriaCard } from './DecisionRail';
-import { SessionCriteriaDecisionCard } from './CriteriaDecisionCard';
+import {
+  CriteriaDecisionReceipt,
+  SessionCriteriaDecisionCard,
+  type CriteriaDecisionReply,
+} from './CriteriaDecisionCard';
+import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import {
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
-  decisionReceiptAnchor,
   evidenceDecisionCardRows,
 } from './EvidenceDecisionCard';
 import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
@@ -3239,6 +3244,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
 
+  // What this project's owner has answered about its ruler, drawn into the transcript at the moment
+  // each was decided (`CriteriaDecisionReceipt` below) — the criteria half of the receipts, on the
+  // same query key the delivered card is drawn from, so it costs no request. A reload used to take
+  // a decided proposal out of the conversation altogether: no card (a settled question is not a
+  // question) and no receipt (that was state in the page that pressed).
+  const coordinatedProjectId = selectedSession?.projectId ?? null;
+  const criteriaDecisions = useQuery({
+    ...pendingCriteriaDecisionsQuery(coordinatedProjectId ?? ''),
+    enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+  });
+  // Where the answers pressed in this window were sent: the door hands the reply to the window that
+  // pressed and to nobody else. Keyed by intent, which names exactly one project, so a press from
+  // one conversation can never be read as one from another.
+  const [criteriaReplies, setCriteriaReplies] = useState<
+    Record<string, CriteriaDecisionReply | null>
+  >({});
+
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
   // the card's own filter over the same read and the project this session coordinates. The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
@@ -3268,10 +3290,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [qc, selectedTaskId, selectedRunMoment]);
 
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
-  // made (`EvidenceDecisionReceipt`, `OwnerDecisionReceipt`). Memoized because `Transcript` is: a
-  // fresh array on every render would rebuild the whole conversation with it.
+  // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`). Memoized
+  // because `Transcript` is: a fresh array on every render would rebuild the whole conversation
+  // with it.
   const decisionReceipts = useMemo(
     () => [
+      ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies)
+        .map((row) => ({
+          afterSeq: row.afterSeq,
+          key: `criteria-receipt:${row.settled.intentId}`,
+          element: <CriteriaDecisionReceipt settled={row.settled} reply={row.reply} />,
+        })),
       ...(pendingDecisions.data?.decided ?? []).flatMap((decided) => {
         const afterSeq = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
         return afterSeq === null
@@ -3293,7 +3322,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             }];
       }),
     ],
-    [pendingDecisions.data, ownerConfirmation.data, selectedId, transcriptEvents],
+    [
+      criteriaDecisions.data,
+      criteriaReplies,
+      pendingDecisions.data,
+      ownerConfirmation.data,
+      selectedId,
+      transcriptEvents,
+    ],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -5866,7 +5902,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {selected && !selectedTrashed && (
                 <SessionCriteriaDecisionCard
                   key={selectedId}
-                  projectId={selectedSession?.projectId ?? null}
+                  projectId={coordinatedProjectId}
+                  onDecided={(result) =>
+                    setCriteriaReplies((previous) => ({
+                      ...previous,
+                      [result.intentId]: result.reply ?? null,
+                    }))
+                  }
                 />
               )}
               {/* The same kind of card for the evidence this session may confirm or send back:

@@ -10,10 +10,12 @@ import {
   APPROVE_LABEL,
   CRITERIA_DECISION_ALREADY_SETTLED,
   CRITERIA_DECISION_HEADING,
+  CRITERIA_DECISION_RECORDED_HEADING,
   CRITERIA_DECISION_STALE_HEADING,
   REFUSE_LABEL,
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
+  type SettledCriteriaDecision,
 } from './CriteriaDecisionCard';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
 
@@ -114,7 +116,21 @@ function held(): PendingCriteriaDecisionRow {
   };
 }
 
-function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue {
+/** The answer to `held()`, as the read publishes it once the door has recorded one. */
+function answered(): SettledCriteriaDecision {
+  return {
+    intentId: INTENT,
+    decision: 'APPROVE',
+    decidedAt: '2026-09-10T16:48:00.000Z',
+    baseSeal: SEAL,
+    resultingSeal: 'f'.repeat(64),
+  };
+}
+
+function queue(
+  rows: PendingCriteriaDecisionRow[],
+  settled: SettledCriteriaDecision[] = [],
+): PendingCriteriaDecisionQueue {
   return {
     readAt: '2026-09-10T16:48:00.000Z',
     projectId: PROJECT_PUBLIC,
@@ -122,6 +138,7 @@ function queue(rows: PendingCriteriaDecisionRow[]): PendingCriteriaDecisionQueue
     oldestAgeSeconds: rows[0]?.ageSeconds ?? null,
     decidableCount: rows.filter((row) => row.decidability.decidable).length,
     pending: rows,
+    settled,
   };
 }
 
@@ -370,6 +387,28 @@ describe('the criteria decision card in an open coordinator conversation', { tim
     });
     expect(offered, 'a card of the settled intent still offers an answer').toEqual([]);
     expect(doorRequests, 'a press on the settled intent reached the decision door').toEqual([]);
+  });
+
+  it('draws the receipt of an answer already on the read, in the conversation — the reload case', async () => {
+    // The page the answer was pressed on is gone. All that is left is the committed answer, which
+    // every client reads back — and which the owner could not find anywhere in this conversation
+    // after a refresh, because the receipt was state in the page that pressed.
+    criteriaRead = queue([], [answered()]);
+    await mount();
+    await waitForUi(() => {
+      expect(mounted().querySelector('.criteria-decision-receipt')).toBeTruthy();
+    });
+    const receipt = mounted().querySelector<HTMLElement>(`#criteria-decision-${INTENT}`)!;
+    // A record, and no longer a question: the heading says what happened, not what is being asked.
+    expect(headingOf(receipt)).toBe(CRITERIA_DECISION_RECORDED_HEADING);
+    expect(receipt.textContent).toContain('✓ Approved by you at');
+    // Drawn INTO the conversation, at the moment it happened: the receipt shares its container with
+    // the events, rather than sitting under them where the card was.
+    expect(receipt.parentElement?.querySelector('[data-seq]'), 'the receipt is outside the flow')
+      .toBeTruthy();
+    // No question is left to answer, and nothing of the card is drawn beside the receipt.
+    expect(receipt.querySelectorAll('button').length).toBe(0);
+    expect(cardsOnPage().map((card) => card.id)).toEqual([`criteria-decision-${INTENT}`]);
   });
 
   it('leaves no card behind on New session, which has no project', async () => {

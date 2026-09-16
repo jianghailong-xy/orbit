@@ -259,6 +259,15 @@ export const PROVENANCE_TITLE =
 
 export const CRITERIA_DECISION_HEADING =
   'A weakening change to this project’s ruler needs your decision';
+/**
+ * What the receipt carries instead: the question is answered, and this is the record of the answer.
+ *
+ * The receipt outlives the press — it is drawn from the read, so it appears on every reload and on
+ * every device, including the ones that never saw the card — and a record that still said "needs
+ * your decision" over a line reading "✓ Approved by you" would be telling its reader to decide
+ * something already decided.
+ */
+export const CRITERIA_DECISION_RECORDED_HEADING = 'Decision recorded';
 /** The heading a card that can no longer be answered carries instead. */
 export const CRITERIA_DECISION_STALE_HEADING = 'This decision is no longer yours to make';
 /** And the one for a card that cannot say: this browser has not managed the read. */
@@ -838,15 +847,19 @@ export function criteriaDecisionLine(result: CriteriaDecisionResult): string {
 }
 
 /**
- * THE RECEIPT A CARD ANSWERED HERE LEAVES IN ITS PLACE
- * ----------------------------------------------------
- * The session that asked for the change is waiting on this answer, and the door now sends it
- * there itself. So a pressed card keeps its head and trades everything under it for one line:
- * what was recorded, and where the proposing session was told — a turn on that session, a comment
- * on its task when the session had already ended, or why it could not be told at all.
+ * WHAT AN ANSWERED PROPOSAL LEAVES IN THE CONVERSATION IT WAS ASKED IN
+ * --------------------------------------------------------------------
+ * The session that asked for the change is waiting on this answer, and the door sends it there
+ * itself. This is the other reader: the conversation the card was delivered to, which keeps the
+ * receipt of what its owner did — what was recorded, and where the proposing session was told (a
+ * turn on that session, a comment on its task when the session had already ended, or why it could
+ * not be told at all).
  *
- * Drawn from the door's response and from nothing else, like the transcript line above: what
- * happened here is an event, and the pending read no longer publishes a settled proposal.
+ * Drawn from the READ, not from the window that pressed (`criteriaDecisionReceiptRows`). Kept in
+ * the pressing window it lasted exactly as long as the page did, so a reload took the decision out
+ * of the conversation altogether — the account owner's report, 2026-09-16. The clause about the
+ * proposing session is the one part only the door's response carries, and it is the part a press in
+ * another window or on another device has never had.
  */
 export const REPLY_SENT_TO_SESSION = 'sent to the proposing session';
 export const REPLY_WRITTEN_ON_TASK = 'the proposing session had ended — written on its task';
@@ -862,9 +875,11 @@ export function receiptClock(at: string): string {
 }
 
 /** What was recorded, and when: the first half of the receipt line. */
-export function criteriaVerdictReceipt(result: CriteriaDecisionResult): string {
-  const verdict = result.decision === 'APPROVE' ? 'Approved' : 'Refused';
-  return `✓ ${verdict} by you at ${receiptClock(result.decidedAt)}`;
+export function criteriaVerdictReceipt(
+  settled: { decision: CriteriaDecision; decidedAt: string },
+): string {
+  const verdict = settled.decision === 'APPROVE' ? 'Approved' : 'Refused';
+  return `✓ ${verdict} by you at ${receiptClock(settled.decidedAt)}`;
 }
 
 /** Where the proposing session was told, as the second half of the line, or null for nobody. */
@@ -893,21 +908,29 @@ function ReplyReceipt({ reply }: { reply: CriteriaDecisionReply | null }): JSX.E
   return null;
 }
 
-export function CriteriaDecisionReceipt({ result }: { result: CriteriaDecisionResult }): JSX.Element {
+export function CriteriaDecisionReceipt({
+  settled,
+  reply = null,
+}: {
+  /** The answer as the read publishes it: which way, when, and against which two seals. */
+  settled: SettledCriteriaDecision;
+  /** Where the answer went — known only to the window that pressed. See the note above. */
+  reply?: CriteriaDecisionReply | null;
+}): JSX.Element {
   return (
     <div
       className="approval-card criteria-decision is-answered"
-      id={`criteria-decision-${result.intentId}`}
+      id={`criteria-decision-${settled.intentId}`}
     >
       <div className="approval-head criteria-decision-head">
-        <span className="criteria-decision-heading">{CRITERIA_DECISION_HEADING}</span>
+        <span className="criteria-decision-heading">{CRITERIA_DECISION_RECORDED_HEADING}</span>
         <span className="criteria-provenance" title={PROVENANCE_TITLE}>
           {PROVENANCE_LABEL}
         </span>
       </div>
       <p className="criteria-decision-receipt">
-        <span className="criteria-decision-verdict">{criteriaVerdictReceipt(result)}</span>
-        <ReplyReceipt reply={result.reply ?? null} />
+        <span className="criteria-decision-verdict">{criteriaVerdictReceipt(settled)}</span>
+        <ReplyReceipt reply={reply} />
       </p>
     </div>
   );
@@ -925,10 +948,14 @@ export function CriteriaDecisionReceipt({ result }: { result: CriteriaDecisionRe
  * seen here are kept, and only the ids: the content, the decidability and the three ways a card
  * goes stale are all conclusions about the read as it stands right now.
  *
- * Reloading the page forgets them, which is correct — a settled question needs no card. Opening
- * another conversation forgets them too: WorkspaceView keys this component by the session, since
- * the view outlives navigation and an address shown in one project's conversation, looked up in
- * another project's read, would be drawn there as a proposal already answered.
+ * Reloading the page forgets them, which is correct — a settled question needs no card. What a
+ * reload must NOT forget is the ANSWER, and that is not this component's: it is a committed row
+ * the read publishes (`settled`), drawn as a receipt in the conversation at the moment it was
+ * decided, which is why this component only ever has to say that its card is no longer one of
+ * them. Opening another conversation forgets the addresses too: WorkspaceView keys this component
+ * by the session, since the view outlives navigation and an address shown in one project's
+ * conversation, looked up in another project's read, would be drawn there as a proposal already
+ * answered.
  */
 export function SessionCriteriaDecisionCard({
   projectId,
@@ -936,12 +963,14 @@ export function SessionCriteriaDecisionCard({
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
-  onDecided?: (line: string) => void;
+  /**
+   * The door's response to a press made in this window. The one fact only this window holds is
+   * where the answer went; the read carries the rest, and `WorkspaceView` draws the receipt.
+   */
+  onDecided?: (result: CriteriaDecisionResult) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [seen, setSeen] = useState<string[]>([]);
-  // The answers given in this window, by address — each drawn as its receipt where its card was.
-  const [answered, setAnswered] = useState<Record<string, CriteriaDecisionResult>>({});
   const pending = useQuery({
     ...pendingCriteriaDecisionsQuery(projectId ?? ''),
     enabled: Boolean(projectId),
@@ -961,13 +990,10 @@ export function SessionCriteriaDecisionCard({
     mutationFn: ({ row, decision }: { row: PendingCriteriaDecisionRow; decision: CriteriaDecision }) =>
       decideCriteriaChange(row, decision),
     onSuccess: (result) => {
-      // The card that was answered HERE gives way to its receipt, in the same place: what is true
-      // now is a fact about the criteria, and what happened — the answer, and where the session
-      // that asked was told it — is an event in this conversation. Left as a card it would go
-      // stale into "answered at another end", which is the one reading of its own answer this
-      // window can be sure is wrong.
-      setAnswered((previous) => ({ ...previous, [result.intentId]: result }));
-      onDecided?.(criteriaDecisionLine(result));
+      // What the door said went where: the receipt this conversation draws is re-derived from the
+      // read, and only the window that pressed was handed the reply — so it is handed on before the
+      // read comes back and the card gives way to that receipt.
+      onDecided?.(result);
       void qc.invalidateQueries({
         queryKey: pendingCriteriaDecisionsQuery(projectId ?? '').queryKey,
       });
@@ -975,11 +1001,15 @@ export function SessionCriteriaDecisionCard({
   });
 
   if (!projectId || seen.length === 0) return null;
+  // An answer the read publishes is drawn in the transcript as its receipt, where it was decided,
+  // so its card goes — the one just pressed included, which would otherwise sit beside that
+  // receipt saying the same thing, or go stale into "answered at another end" about its own answer.
+  // An answer the read does NOT name (older than the ones it carries, or a server that does not
+  // publish them) still has no receipt, and its card stays where it was, dimmed, saying so.
+  const receipted = new Set((pending.isError ? [] : queue?.settled ?? []).map((each) => each.intentId));
   return (
     <>
-      {seen.map((intentId) => {
-        const result = answered[intentId];
-        if (result) return <CriteriaDecisionReceipt key={intentId} result={result} />;
+      {seen.filter((intentId) => !receipted.has(intentId)).map((intentId) => {
         const standing = criteriaDecisionStanding(pending.isError ? null : queue, intentId);
         return (
           <CriteriaDecisionCard

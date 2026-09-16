@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
+import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
@@ -718,25 +719,6 @@ export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): 
 export function decisionReceiptLine(decided: RecordedDecisionRow, now?: Date): string {
   const action = decided.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION;
   return `${action} · rev ${decided.evidenceRevision} · ${decisionReceiptTime(decided.decidedAt, now)}`;
-}
-
-/**
- * The seq a receipt is drawn after: the last event recorded at or before the decision.
- *
- * Null when every event loaded so far is later. The moment is then on a page that is not loaded
- * yet, and drawing the receipt at the top would put a decision above things that happened first.
- */
-export function decisionReceiptAnchor(
-  events: ReadonlyArray<{ seq: number; ts?: string }>,
-  decidedAt: string,
-): number | null {
-  const at = Date.parse(decidedAt);
-  let anchor: number | null = null;
-  for (const event of events) {
-    const ts = event.ts === undefined ? Number.NaN : Date.parse(event.ts);
-    if (ts <= at && (anchor === null || event.seq > anchor)) anchor = event.seq;
-  }
-  return anchor;
 }
 
 /** The claim and gaps of the revision a receipt answered, read out of its stored envelope. */
