@@ -27,6 +27,7 @@ import {
   watchesFollowing,
   type WatchThreshold,
 } from '../lib/watches';
+import { absTime } from './WatchCard';
 import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } from './WatchParts';
 
@@ -272,16 +273,21 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * One watch's facts in the opened strip, read-only: the rows are Watching / Until / Progress /
- * Then / Expires, and Then — a constant for every strip watch, since all of them resume this
- * session — is said once, on the first. Progress carries the evaluator's last look, so the strip
- * keeps one fewer row than a card does.
+ * One watch's facts in the opened strip, read-only: the rows are Until / Progress / Watching /
+ * Then / Expires — what the wait is for first, so a reader with several watches open reads the
+ * conditions before wading through the names they are over. Then — a constant for every strip
+ * watch, since all of them resume this session — is said once, on the first. Progress carries the
+ * evaluator's last look, so the strip keeps one fewer row than a card does.
  */
 function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: number; showsThen: boolean }) {
   const expiry = expiryLabel(watch, now);
   const until = describeCondition(watch.predicate, watch.targets).replace(/^When /, '').replace(/^./, (c) => c.toUpperCase());
   return (
     <dl className="watch-facts watch-strip-block" data-watch-id={watch.id}>
+      <dt>{STRIP_UNTIL}</dt>
+      <dd>{until}</dd>
+      <dt>Progress</dt>
+      <dd>{`${describeProgress(progressOf(watch), thresholdOf(watch.predicate, watch.targets))} · checked ${ago(watch.lastEvaluatedAt, now)}`}</dd>
       <dt>Watching</dt>
       <dd className="watch-targets">
         {watch.targets
@@ -295,10 +301,6 @@ function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: num
             />
           ))}
       </dd>
-      <dt>{STRIP_UNTIL}</dt>
-      <dd>{until}</dd>
-      <dt>Progress</dt>
-      <dd>{`${describeProgress(progressOf(watch))} · checked ${ago(watch.lastEvaluatedAt, now)}`}</dd>
       {showsThen && (
         <>
           <dt>Then</dt>
@@ -306,7 +308,10 @@ function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: num
         </>
       )}
       <dt>Expires</dt>
-      <dd>{expiry ? expiry.text : ''}</dd>
+      <dd>
+        {expiry ? expiry.text : ''}
+        {expiry && <span className="watch-muted"> · {absTime(watch.expiresAt)}</span>}
+      </dd>
     </dl>
   );
 }

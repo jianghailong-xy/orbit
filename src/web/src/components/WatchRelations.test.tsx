@@ -315,15 +315,16 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
       expect(strip.textContent, `no ${verb}`).not.toContain(verb);
     }
     const labels = (block: HTMLElement) => [...block.querySelectorAll('dt')].map((dt) => dt.textContent);
-    expect(labels(blocks[0])).toEqual(['Watching', 'Until', 'Progress', 'Then', 'Expires']);
-    expect(labels(blocks[1])).toEqual(['Watching', 'Until', 'Progress', 'Expires']);
+    expect(labels(blocks[0])).toEqual(['Until', 'Progress', 'Watching', 'Then', 'Expires']);
+    expect(labels(blocks[1])).toEqual(['Until', 'Progress', 'Watching', 'Expires']);
     // Until says the condition without the sentence's "When", which the label already is.
-    expect(blocks[0].querySelectorAll('dd')[1]?.textContent).toBe('The task finishes');
+    expect(blocks[0].querySelectorAll('dd')[0]?.textContent).toBe('The task finishes');
     // Progress carries the evaluator's last look.
-    expect(blocks[0].querySelectorAll('dd')[2]?.textContent).toBe('0 met · checked 5m ago');
+    expect(blocks[0].querySelectorAll('dd')[1]?.textContent).toBe('0 met · checked 5m ago');
     // Then is said once, on the first watch: every strip watch resumes this session.
     expect(blocks[0].querySelectorAll('dd')[3]?.textContent).toBe('Resume this session');
-    expect(blocks[1].querySelectorAll('dd')[3]?.textContent).toBe('in 20h');
+    // The deadline says both the span left and the moment it lands, as the card's Expires does.
+    expect(blocks[1].querySelectorAll('dd')[3]?.textContent).toMatch(/^in 20h · /);
     const manage = strip.querySelector('a.watch-strip-manage');
     expect(manage?.textContent).toBe('Manage in Watches ›');
     expect(manage?.getAttribute('href')).toBe('/following');

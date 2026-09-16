@@ -116,10 +116,12 @@ private func targetName(_ target: WatchTarget, model: AppModel) -> String? {
     }
 }
 
-/// One watch's facts in the opened strip, read-only: Watching / Until / Progress / Then / Expires,
-/// the browser's rows (`WatchStripCopyParityTests`). Progress carries the evaluator's last look so
-/// the strip keeps one fewer row than a card does, and Then — a constant for every strip watch,
-/// since all of them resume this session — is said once, on the first.
+/// One watch's facts in the opened strip, read-only: Until / Progress / Watching / Then / Expires,
+/// the browser's rows in the browser's order (`WatchStripCopyParityTests`) — the condition first, so
+/// a reader with several watches open reads what each is waiting for before the names it is over.
+/// Progress carries the evaluator's last look so the strip keeps one fewer row than a card does, and
+/// Then — a constant for every strip watch, since all of them resume this session — is said once, on
+/// the first.
 private struct WatchingCard: View {
     @Environment(AppModel.self) private var model
     let watch: Watch
@@ -128,7 +130,6 @@ private struct WatchingCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            watching
             factRow(WatchRowLabel.until) {
                 Text(WatchProjection.condition(watch.predicate, targetCount: liveTargets))
                     .font(.orbitMeta)
@@ -141,6 +142,7 @@ private struct WatchingCard: View {
                     .foregroundStyle(tone)
                     .lineLimit(2)
             }
+            watching
             if showsThen {
                 factRow(WatchRowLabel.then) {
                     Text(WatchProjection.stripThen)

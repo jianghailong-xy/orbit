@@ -29,7 +29,9 @@ import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } 
 /** How many targets a closed card names before "+N more". */
 const SHOWN_TARGETS = 3;
 
-const absTime = (iso: string): string => {
+/** A deadline as a moment rather than a span, in the reader's own locale: the strip's Expires row
+ *  says it beside the card's, so both read the one clock. */
+export const absTime = (iso: string): string => {
   const at = new Date(iso);
   return Number.isNaN(at.getTime())
     ? iso

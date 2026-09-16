@@ -111,10 +111,12 @@ final class WatchStripCopyParityTests: XCTestCase {
         }
     }
 
-    /// The strip's opened rows, label for label, in the order both clients draw them. The card's
-    /// rows are held by `WatchWakeCopyParityTests`; the strip is its own shape — one row fewer (no
-    /// Updated, the evaluator's last look rides on Progress) and one the card has no reason for
-    /// (Until, since the strip's headline is the fixed "Watching" and not the condition).
+    /// The strip's opened rows, label for label, in the order both clients draw them — the
+    /// condition first (Until), then how far it has got, then the names it is over, which is the
+    /// card's reading too: its heading is the condition. The card's rows are held by
+    /// `WatchWakeCopyParityTests`; the strip is its own shape — one row fewer (no Updated, the
+    /// evaluator's last look rides on Progress) and one the card has no reason for (Until, since
+    /// the strip's headline is the fixed "Watching" and not the condition).
     func testTheStripsRowLabelsAreTheBrowsersRowLabelsInOrder() throws {
         let web = try flat(Self.webRelations)
         let labels = try captures(web, "<dt>(.*?)</dt>")
@@ -123,7 +125,7 @@ final class WatchStripCopyParityTests: XCTestCase {
         }
         // Until is the one label the browser says through a constant; the rest are bare.
         let spelled = labels.map { $0 == "{STRIP_UNTIL}" ? WatchRowLabel.until : $0 }
-        let mine = [WatchRowLabel.watching, WatchRowLabel.until, WatchRowLabel.progress,
+        let mine = [WatchRowLabel.until, WatchRowLabel.progress, WatchRowLabel.watching,
                     WatchRowLabel.then, WatchRowLabel.expires]
         var last = -1
         for label in mine {
