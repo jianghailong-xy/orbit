@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import type { WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
 import {
+  SHOWN_TARGETS,
   STRIP_EARLIEST,
   STRIP_LABEL,
   STRIP_MANAGE,
@@ -282,6 +283,15 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
 function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: number; showsThen: boolean }) {
   const expiry = expiryLabel(watch, now);
   const until = describeCondition(watch.predicate, watch.targets).replace(/^When /, '').replace(/^./, (c) => c.toUpperCase());
+  // Capped the way the card caps its Watching row: a watch may name 200 targets, and all of them
+  // flat pushes the rows this strip exists for out of the list's scroll box. What the condition has
+  // already met goes first, so the three that survive are the ones worth the room — a stable sort,
+  // so the watch's own order holds within each group.
+  const targets = watch.targets
+    .filter((t) => t.state !== 'GONE')
+    .sort((a, b) => Number(a.state !== 'SATISFIED') - Number(b.state !== 'SATISFIED'));
+  const shown = targets.slice(0, SHOWN_TARGETS);
+  const hidden = targets.length - shown.length;
   return (
     <dl className="watch-facts watch-strip-block" data-watch-id={watch.id}>
       <dt>{STRIP_UNTIL}</dt>
@@ -290,16 +300,21 @@ function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: num
       <dd>{`${describeProgress(progressOf(watch), thresholdOf(watch.predicate, watch.targets))} · checked ${ago(watch.lastEvaluatedAt, now)}`}</dd>
       <dt>Watching</dt>
       <dd className="watch-targets">
-        {watch.targets
-          .filter((t) => t.state !== 'GONE')
-          .map((t) => (
-            <WatchTargetLink
-              key={`${t.targetKind}:${t.targetResourceId}`}
-              kind={t.targetKind}
-              id={t.targetResourceId}
-              state={t.state}
-            />
-          ))}
+        {shown.map((t) => (
+          <WatchTargetLink
+            key={`${t.targetKind}:${t.targetResourceId}`}
+            kind={t.targetKind}
+            id={t.targetResourceId}
+            // Only the satisfied ones are worded: a word on every unmet target is the Progress row
+            // read out one row per target, which says nothing while they are all the same.
+            state={t.state === 'SATISFIED' ? t.state : undefined}
+          />
+        ))}
+        {hidden > 0 && (
+          <Link className="watch-strip-more" to={watchHref(watch.id)}>
+            +{hidden} more
+          </Link>
+        )}
       </dd>
       {showsThen && (
         <>

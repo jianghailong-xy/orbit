@@ -12244,6 +12244,17 @@ button.composer-usage:focus-visible {
 .watch-strip-block + .watch-strip-block {
   border-top: 1px solid var(--border-subtle);
 }
+/* The cap's fold, beside the targets it hides: quieter than them, and a link rather than the card's
+   button — the strip is read-only, and what is behind it is the watch itself. */
+.watch-strip-more {
+  flex: none;
+  color: var(--text-2);
+  font-size: 12px;
+  text-decoration: none;
+}
+.watch-strip-more:hover {
+  color: var(--brand);
+}
 .watch-strip-manage {
   flex: none;
   padding: 8px 10px;

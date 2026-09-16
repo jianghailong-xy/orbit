@@ -249,6 +249,13 @@ export function expiryLabel(
 }
 
 /**
+ * How many targets a watch names before the rest fold into a "+N more": the closed card's Watching
+ * row and the opened strip's both cap here, so one number reads the same on both. The macOS client's
+ * `WatchProjection.shownTargets` is this number, held to it by `WatchWakeCopyParityTests`.
+ */
+export const SHOWN_TARGETS = 3;
+
+/**
  * The console's Watching strip (`SessionWatchStrip`): one line above the composer, reading the same
  * words on web and macOS — the macOS client's `WatchStripCopyParityTests` holds each to its
  * declaration here. The times are composed from `formatSpan`; "earliest" prefixes the soonest

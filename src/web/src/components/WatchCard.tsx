@@ -5,6 +5,7 @@ import type { WatchDeliveryView, WatchSnapshot, WatchView } from '@orbit/shared'
 import { watchesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import {
+  SHOWN_TARGETS,
   ago,
   cancelWatch,
   deliveriesOf,
@@ -25,9 +26,6 @@ import {
   watchProblem,
 } from '../lib/watches';
 import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } from './WatchParts';
-
-/** How many targets a closed card names before "+N more". */
-const SHOWN_TARGETS = 3;
 
 /** A deadline as a moment rather than a span, in the reader's own locale: the strip's Expires row
  *  says it beside the card's, so both read the one clock. */

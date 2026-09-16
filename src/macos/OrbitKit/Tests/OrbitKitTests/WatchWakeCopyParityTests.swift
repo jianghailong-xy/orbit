@@ -296,8 +296,11 @@ final class WatchWakeCopyParityTests: XCTestCase {
                                      + "somebody who never sees both.")
             last = at
         }
-        let shown = try capture(try flat(Self.webCard), "const SHOWN_TARGETS = (\\d+)",
-                                "SHOWN_TARGETS", Self.webCard)
+        // The cap itself lives in the shared library, not in the card: the strip's Watching row caps
+        // at the same number, and one declaration is what keeps the two ends of the browser from
+        // drifting apart from each other as well as from this client.
+        let shown = try capture(try flat(Self.webWatches), "const SHOWN_TARGETS = (\\d+)",
+                                "SHOWN_TARGETS", Self.webWatches)
         XCTAssertEqual(String(WatchProjection.shownTargets), shown)
     }
 

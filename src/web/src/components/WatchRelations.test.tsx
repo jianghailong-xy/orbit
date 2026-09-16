@@ -21,12 +21,13 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const at = (fromNow: number) => new Date(Date.now() + fromNow).toISOString();
 
-const target = (kind: 'TASK' | 'SESSION', id: string): WatchTargetView => ({
+const target = (kind: 'TASK' | 'SESSION', id: string, over: Partial<WatchTargetView> = {}): WatchTargetView => ({
   targetKind: kind,
   targetResourceId: id,
   state: 'OBSERVED',
   targetEpoch: 0,
   lastEvaluatedAt: at(-HOUR),
+  ...over,
 });
 
 /** The same target once the evaluator has seen it meet the condition. */
@@ -328,6 +329,55 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     const manage = strip.querySelector('a.watch-strip-manage');
     expect(manage?.textContent).toBe('Manage in Watches ›');
     expect(manage?.getAttribute('href')).toBe('/following');
+  });
+
+  it('caps the Watching row at three targets and folds the rest into a link', async () => {
+    // A watch may name 200 targets; drawn flat, the names push Until, Progress, Then and Expires
+    // past the list's max-height and the strip is a directory again.
+    serve([
+      watch('WIDE', {
+        targets: Array.from({ length: 24 }, (_, i) => target('TASK', `T${i + 1}`)),
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    await click(strip.querySelector('.watch-strip-row'), 'the strip');
+
+    const block = strip.querySelector('.watch-strip-block')!;
+    expect(block.querySelectorAll('.watch-target')).toHaveLength(3);
+    const more = [...block.querySelectorAll('a')].find((a) => a.textContent === '+21 more');
+    expect(more, 'the fold is on screen').toBeTruthy();
+    expect(more!.tagName).toBe('A');
+    expect(more!.getAttribute('href')).toBe('/following?watch=WIDE');
+    expect(block.querySelector('.watch-target-state'), 'no state word on the shown three').toBeNull();
+    expect(buttons(strip.querySelector('.watch-strip-list')!)).toEqual([]);
+  });
+
+  it('names the targets that met the condition first, and words only those', async () => {
+    serve([
+      watch('W', {
+        targets: [
+          target('TASK', 'T1'),
+          target('TASK', 'T2', { state: 'SATISFIED' }),
+          target('TASK', 'T3'),
+          target('TASK', 'T4', { state: 'SATISFIED' }),
+        ],
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const strip = container!.querySelector('.watch-strip')!;
+    await click(strip.querySelector('.watch-strip-row'), 'the strip');
+
+    const shown = [...strip.querySelectorAll<HTMLElement>('.watch-target')];
+    // T2 and T4 first, each group keeping the watch's own order; T3 falls past the cap.
+    expect(shown.map((t) => t.getAttribute('title'))).toEqual(['Task T2', 'Task T4', 'Task T1']);
+    expect(shown.map((t) => t.querySelector('.watch-target-state')?.textContent ?? null)).toEqual([
+      'met',
+      'met',
+      null,
+    ]);
   });
 
   it('draws no strip when the session waits on nothing live', async () => {
