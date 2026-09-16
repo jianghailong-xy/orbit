@@ -297,3 +297,30 @@ func TestMCPCreateStopsWhenTheCardIsGone(t *testing.T) {
 		t.Fatalf("wrote without a yes: %v", hits)
 	}
 }
+
+// A dry run writes nothing, so nobody is asked. The CLI door is pinned above; this is the MCP one,
+// where the agent actually reaches it — and the assertion is on the wire, because "it asks nobody"
+// is only true if no card was FILED, not merely if none was waited on.
+func TestMCPCreateBatchDryRunAsksNobody(t *testing.T) {
+	srv, hits, _ := createApprovalServer(t, `{"status":"DENIED"}`, `{"dryRun":true,"wouldWrite":1,"plan":[]}`)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"dryRun": true,
+		"tasks": []interface{}{
+			map[string]interface{}{"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT"},
+		},
+	})
+
+	if res["isError"] == true {
+		t.Fatalf("dry run failed: %#v", res["content"])
+	}
+	for _, hit := range *hits {
+		if strings.Contains(hit, "/approvals") {
+			t.Fatalf("a preview that writes nothing raised a card: %v", *hits)
+		}
+	}
+	if len(*hits) != 1 {
+		t.Fatalf("hits = %v, want the preview call alone", *hits)
+	}
+}
