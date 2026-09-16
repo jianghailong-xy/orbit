@@ -18,7 +18,11 @@ import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  classifyTransactionFault,
+  loggedRetry,
+  withTransactionRetry,
+} from '../common/transaction-retry';
 import {
   CURRENT_WORK_SESSION_REAPED,
   terminalizePendingCurrentWorkSteers,
@@ -52,6 +56,29 @@ const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatu
 const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
 
 /**
+ * Whether a runner has stopped answering, as this service reads it.
+ *
+ * One function rather than an expression at each site because it is asked TWICE about the same
+ * session and the two answers have to be the same question: once from the sweep's snapshot, to
+ * decide there is something to do, and once inside the transaction that actually writes FAILED,
+ * against whatever the row says by then. Two copies of `now - hb > OFFLINE_AFTER_MS` are two
+ * copies that can drift, and the whole point of the second ask is that it is the first one's
+ * predicate re-run, not a similar one.
+ *
+ * `status` is not a second opinion: nothing in this control plane ever writes OFFLINE, which only
+ * a runner reports about itself on its way out (`runner-api.controller.ts` heartbeat). A crashed
+ * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal.
+ */
+function runnerLooksOffline(
+  runner: { status: string; lastHeartbeatAt: Date | null } | null | undefined,
+  now: number,
+): boolean {
+  if (!runner) return true;
+  if (runner.status === 'OFFLINE') return true;
+  return now - (runner.lastHeartbeatAt?.getTime() ?? 0) > OFFLINE_AFTER_MS;
+}
+
+/**
  * Background sweeper for interactive sessions (Route B). Without it, a session
  * whose runner dies mid-turn would sit RUNNING forever, leaking an active-turn slot.
  * An AWAITING_INPUT session is intentionally independent of runner liveness. v1 is single-replica;
@@ -62,6 +89,17 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('Reaper');
   private timer?: ReturnType<typeof setInterval>;
   private purgeTimer?: ReturnType<typeof setInterval>;
+  /**
+   * Whether the PREVIOUS sweep watched the database refuse a unit of work.
+   *
+   * Carried across the sweep boundary because the verdict is about a span, not an instant: a
+   * session is called offline on 90s of silence, and sweeps are 30s apart, so the silence a sweep
+   * is reading overlaps the sweeps before it. A refusal in any of them is a refusal that could
+   * have produced the silence. One sweep the database answers in full clears it — this is
+   * disqualified evidence, not a latch, or the first storm would stop the reaper for the life of
+   * the process.
+   */
+  private databaseRefusedWorkLastSweep = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -120,11 +158,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
       },
     });
+    // Whether THIS sweep has watched the database refuse a unit of work; see the field above for
+    // why the answer outlives the sweep. Read together with it, so a refusal fences the rest of
+    // this sweep as well as the next one.
+    let databaseRefusedWork = false;
+    const heartbeatEvidenceIsDisqualified = () =>
+      databaseRefusedWork || this.databaseRefusedWorkLastSweep;
     for (const s of sessions) {
       try {
-        const hb = s.assignedRunner?.lastHeartbeatAt?.getTime() ?? 0;
-        const offline =
-          !s.assignedRunner || s.assignedRunner.status === 'OFFLINE' || now - hb > OFFLINE_AFTER_MS;
+        const offline = runnerLooksOffline(s.assignedRunner, now);
         // A runner that hasn't honored a cancel/end in time is wedged. Handle this
         // before ordinary offline liveness so a graceful end remains graceful even if
         // the runner disappeared while tearing down.
@@ -178,14 +220,39 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // AWAITING_INPUT/INTERRUPTED session consumes no slot and remains resumable;
           // its next message simply waits in PENDING until this runner is online.
           if (runnerOfflineIsFatal(s.status)) {
+            // "Offline" is read off the ABSENCE of a heartbeat write, so it is only a fact about
+            // the runner while the writes this control plane takes were landing. Once they were
+            // not, the silence is as likely to be ours; leave the session for a sweep that can
+            // tell the difference. Named in the log, because the whole reason this exists is that
+            // `runner offline` sent the 2026-09-15 investigation to the machines.
+            if (heartbeatEvidenceIsDisqualified()) {
+              this.log.warn(
+                `not reaping ${s.id}: this control plane could not reach its own database within ` +
+                  `the window its ${OFFLINE_AFTER_MS}ms of runner silence was read from`,
+              );
+              continue;
+            }
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
               expectedStatuses: [RunStatus.RUNNING],
               onlyIfNotCancelling: true,
+              // The verdict above came from ONE snapshot taken at the top of this sweep, and this
+              // write happens a transaction-per-session later. Re-ask inside the transaction.
+              requireRunnerStillOffline: true,
               // Losing the runner says nothing about the work — the same message succeeds on
               // a plain re-send — so this is the one finalize here that auto-retry can undo
               // by itself. A task-bound session is deliberately excluded: reclaimStalledTask
               // just put its task back in the actionable pool, and the task scheduler picking
               // it up again IS its retry. Arming here too would race that with a second one.
+              //
+              // That substitute is CONDITIONAL, and the condition is not checked here: all three
+              // auto-run candidate scans require `t.auto_run_when_ready = true` (tasks.service.ts
+              // AUTO_RUN_READY_SQL, PROJECT_INDEPENDENT_READY_SQL, AUTO_RUN_RETRY_CANDIDATE_SQL),
+              // so a reclaimed task that does not opt in is retried by nobody — not here, because
+              // of this line, and not there, because it is not a candidate. Two of the four
+              // sessions reaped on 2026-09-15 were left that way, one of them holding 88
+              // uncommitted lines. Whether to arm on `!s.task?.autoRunWhenReady` instead is a
+              // retry-policy decision with its own double-dispatch question, so it is filed
+              // rather than taken here.
               armRetry: !s.taskId,
             });
           }
@@ -249,10 +316,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           await this.endParked(s.id, s.assignedRunnerId, taskEndReason);
         }
       } catch (e) {
-        // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
+        // Isolate per-session failures so one doesn't skip the rest; retried next sweep. A failure
+        // that was the DATABASE refusing the work — rather than the data answering — also fences
+        // the offline branch above, for this sweep and the next.
+        if (classifyTransactionFault(e).family === 'RESOURCE') databaseRefusedWork = true;
         this.log.error(`reap of ${s.id} failed: ${(e as Error).message}`);
       }
     }
+    this.databaseRefusedWorkLastSweep = databaseRefusedWork;
   }
 
   /**
@@ -280,6 +351,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       expectedStatuses?: RunStatus[];
       /** Non-cancel decisions must not overwrite an end/cancel that won the race. */
       onlyIfNotCancelling?: boolean;
+      /** Re-ask `runnerLooksOffline` inside this transaction before writing. Only the offline
+       *  branch sets it: it is the one decision here made about a row OTHER than the session's,
+       *  read from a snapshot this write can be a whole sweep younger than. */
+      requireRunnerStillOffline?: boolean;
       /** Hand this session to AutoRetryService instead of leaving it for the user to
        *  re-send by hand. Only for a finalize that says nothing about the work itself. */
       armRetry?: boolean;
@@ -294,6 +369,25 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // Retried whole. The reaper re-reads the session under its row lock and decides from that read,
     // so a re-run either finds the same stalled run or finds that somebody finished it first.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      // Before anything is written: is the thing this decision was made ABOUT still true? The
+      // sweep's verdict came from one snapshot read at the top of a loop that awaits a transaction
+      // per session, so under the database stress that produces "no heartbeat for 90s" in the
+      // first place, this write can be minutes younger than the read that authorised it — and a
+      // runner that came back inside that gap was killed by a fact that had expired. The row lock
+      // this takes is the session's, not the runner's: a heartbeat committing between this read
+      // and the update below still wins the old way, but that window is a statement rather than a
+      // sweep, and locking runners against their own heartbeats would be the more expensive bug.
+      if (opts.requireRunnerStillOffline) {
+        const runner = runnerId
+          ? await tx.runner.findUnique({
+              where: { id: runnerId },
+              select: { status: true, lastHeartbeatAt: true },
+            })
+          : null;
+        if (!runnerLooksOffline(runner, Date.now())) {
+          return { ok: false, taskReclaimed: false, currentWorkTerminalized: 0, recanted: true };
+        }
+      }
       const res = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -345,7 +439,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       }
       return { ok: true, taskReclaimed, currentWorkTerminalized };
     }, loggedRetry(this.log, 'reaper.forceFinalize'));
-    if (!outcome.ok) return;
+    if (!outcome.ok) {
+      if ('recanted' in outcome) {
+        this.log.log(`not reaping ${sessionId}: its runner answered again before the write landed`);
+      }
+      return;
+    }
     // The session summary refreshes the task's own running/queued overlay. A reclaimed status also
     // changes prerequisite dependents, whose complete reverse fan-out is not known here; the
     // compatibility helper deliberately emits an explicit resync for that rare abnormal path.

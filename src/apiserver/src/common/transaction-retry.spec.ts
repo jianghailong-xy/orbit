@@ -11,6 +11,7 @@ import {
   TransactionOutcomeEvent,
   TransactionRunner,
   classifyTransactionError,
+  classifyTransactionFault,
   isTransientTransactionError,
   transactionRetryDelayMs,
   withTransactionRetry,
@@ -178,6 +179,29 @@ test('constraint violations and Prisma statement errors are not retried', () => 
     isTransientTransactionError(knownRequestError('23505', 'duplicate key value violates unique constraint')),
     false,
   );
+});
+
+// Named as RESOURCE rather than left unclassified because one reader ACTS on that family: a
+// runner is declared offline by nothing having written its heartbeat, so a control plane that
+// just watched its own pool refuse it work has disqualified that silence as evidence
+// (realtime/reaper.service.ts). Neither becomes retryable — re-running a unit against a pool
+// with nothing left to give only spends the caller's latency on the same answer.
+test('the pool refusing to start work is the database failing, not the data answering', () => {
+  for (const code of ['P2024', 'P2028']) {
+    const verdict = classifyTransactionFault(knownRequestError(code));
+    assert.equal(verdict.family, 'RESOURCE', code);
+    assert.equal(verdict.retryable, false, code);
+    assert.equal(verdict.evidence, code);
+  }
+  // The exact wording the 2026-09-15 storm arrived in.
+  assert.equal(
+    classifyTransactionFault(
+      knownRequestError('P2028', 'Transaction API error: Unable to start a transaction in the given time.'),
+    ).family,
+    'RESOURCE',
+  );
+  // A statement code still outranks it: that one is an answer about data this unit will reach again.
+  assert.equal(classifyTransactionFault(knownRequestError('P2002')).family, 'PERMANENT');
 });
 
 test('an ordinary unknown error is not retried', () => {
