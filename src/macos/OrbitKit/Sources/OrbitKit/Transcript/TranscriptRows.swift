@@ -66,6 +66,9 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// A recorded owner decision, drawn where it was made. Not a question: nothing on it is
         /// pressable, and it stays for as long as the read publishes the decision.
         case ownerDecisionReceipt(taskID: String, decisionID: String)
+        /// One answer to such a revision, as the same read publishes it under `decided`. Carries
+        /// the answer itself, for the reason `criteriaDecisionReceipt` gives.
+        case evidenceDecisionReceipt(decided: RecordedEvidenceDecision)
     }
 
     public let kind: Kind
@@ -101,7 +104,54 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // The web receipt's element key, `owner-decision-receipt:${decided.id}`.
         case .ownerDecisionReceipt(let taskID, let decisionID):
             return "owner-decision-receipt-\(taskID)@\(decisionID)"
+        case .evidenceDecisionReceipt(let decided):
+            return "evidence-decision-receipt-\(decided.id)"
         }
+    }
+}
+
+public extension TranscriptItem {
+    /// The runner's clock on this row, when it carries one.
+    ///
+    /// Reasoning is stamped at both ends (`ThinkingBlock.startedTs`/`finishedTs`) and a closed one
+    /// reads as when it FINISHED — the moment its row's words stopped being written. Nothing else
+    /// carries a clock: an interrupt or an error row has no time of its own, which is why
+    /// `ReceiptAnchor` takes the last row that HAS one rather than the row beside the moment.
+    var clock: String? {
+        switch self {
+        case .user(let bubble):      return bubble.ts
+        case .assistant(let bubble): return bubble.ts
+        case .thinking(let block):   return block.finishedTs ?? block.startedTs
+        case .toolCall(let card):    return card.ts
+        case .interrupt, .error, .authError, .autoRetry: return nil
+        }
+    }
+}
+
+/// Where a record that arrived from a READ — not from the stream — belongs in the conversation.
+///
+/// A card delivered live anchors to the item that was last when it ARRIVED. A record has no arrival
+/// of its own on a device that was not there: the criteria decision's receipt and the evidence
+/// decision's are both derived from the answers the server publishes, on every console open and
+/// every reload, so they are placed by the door's own clock against the rows' clocks instead. One
+/// function, because two ends of one rule is how a phone and a browser come to disagree about where
+/// the same answer happened.
+public enum ReceiptAnchor {
+    /// The id of the LAST item whose own clock is at or before `stamp`.
+    ///
+    /// Nil when every loaded item is later: the moment is then above the window this device holds,
+    /// and drawing the record at the top would put a decision above things that happened first. Nil
+    /// too for a stamp nothing can parse — a record nobody can place is not drawn in the wrong one.
+    public static func after(items: [TranscriptItem], at stamp: String) -> String? {
+        guard let at = ThinkingSummary.date(stamp) else { return nil }
+        var anchor: String?
+        for item in items {
+            guard let own = item.clock, let when = ThinkingSummary.date(own), when <= at else {
+                continue
+            }
+            anchor = item.id
+        }
+        return anchor
     }
 }
 

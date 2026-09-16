@@ -234,6 +234,29 @@ final class TranscriptRowsTests: XCTestCase {
                         "i2", "transcript-bottom"])
     }
 
+    /// The evidence half of the same rule: the record of an answer is a row of its own, id beside
+    /// the question card's rather than equal to it.
+    func testAnEvidenceReceiptSitsWhereItsAnswerHappenedUnderAnIdOfItsOwn() {
+        let decided = RecordedEvidenceDecision(
+            taskId: "34LMiluvx0jK63cj8arWl", title: "T", projectId: nil, evidenceRevision: "2",
+            decision: .confirm, note: nil, decidedAt: "2026-09-16T09:45:00.000Z",
+            decidedByType: "USER")
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1")), .user(user("i2"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [
+                DeliveredDecisionCard(kind: .evidenceDecision(taskID: decided.taskId,
+                                                              evidenceRevision: decided.evidenceRevision),
+                                      afterItemID: "i1"),
+                DeliveredDecisionCard(kind: .evidenceDecisionReceipt(decided: decided),
+                                      afterItemID: "i1"),
+            ])
+        XCTAssertEqual(rows.map(\.id),
+                       ["i1", "evidence-decision-34LMiluvx0jK63cj8arWl@2",
+                        "evidence-decision-receipt-34LMiluvx0jK63cj8arWl@2",
+                        "i2", "transcript-bottom"])
+    }
+
     /// The rule the crash taught: every row the List is handed carries a unique id, whatever the
     /// sources do. A card delivered twice must not become two rows with one id.
     func testARepeatedDecisionCardYieldsExactlyOneRow() {
