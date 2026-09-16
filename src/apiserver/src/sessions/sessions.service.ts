@@ -4808,8 +4808,17 @@ export class SessionsService {
    *
    * The runner picks the request up on its next heartbeat (≤30s), commits, and reports the
    * outcome back into `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the
-   * bar flips to Merge). Idempotent while a commit is already pending. A finished session
-   * already committed its work at completion, so it has nothing to commit here.
+   * bar flips to Merge). Idempotent while a commit is already pending.
+   *
+   * An ENDED session is admitted on one condition: its checkout still reports uncommitted changes.
+   * This endpoint used to refuse every finished session with "its work is already committed",
+   * which was the runner's intention rather than an observation — when finalization's `git add`
+   * or `git commit` was refused (a stale `index.lock` in the checkout's git dir is enough), the
+   * work stayed in the checkout and this was the door that could have put it on the branch,
+   * bolted shut by the assumption that it never needed to be open. Nothing is running in an
+   * ended session's checkout, so the idle gate below has nothing left to protect; `worktreeDirty`
+   * is the whole precondition, and a session that really did commit everything reports false and
+   * is refused exactly as before.
    */
   async commitWorktree(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -4817,13 +4826,17 @@ export class SessionsService {
     if (session.isolationStatus !== 'worktree' || !session.branch) {
       throw new BadRequestException('session has no worktree to commit');
     }
-    if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+    const ended = !SessionsService.LIVE.includes(session.status);
+    if (ended && session.worktreeDirty !== true) {
       throw new ConflictException('the session has ended — its work is already committed');
     }
-    if (session.status !== RunStatus.AWAITING_INPUT) {
+    if (!ended && session.cancelRequestedAt) {
+      throw new ConflictException('the session has ended — its work is already committed');
+    }
+    if (!ended && session.status !== RunStatus.AWAITING_INPUT) {
       throw new ConflictException('wait for the current turn to finish before committing');
     }
-    if (session.runningSubagents.length > 0) {
+    if (!ended && session.runningSubagents.length > 0) {
       throw new ConflictException('wait for the running sub-workspace to finish before committing');
     }
     if (!session.assignedRunnerId) {
@@ -4837,13 +4850,22 @@ export class SessionsService {
     // Close the read→write race with a turn starting (or background work being recorded)
     // after the checks above. A plain update would still queue a commit against the now-active
     // checkout. updateMany turns the same idle predicates into an atomic compare-and-set.
+    //
+    // An ended session's race is the opposite one — it can only be RESUMED, which would put a turn
+    // back in the checkout — so the predicate that has to hold is that it is still ended and still
+    // reports work the branch does not have.
+    const idle = ended
+      ? { status: { notIn: [...SessionsService.LIVE] }, worktreeDirty: true }
+      : {
+          status: RunStatus.AWAITING_INPUT,
+          cancelRequestedAt: null,
+          runningSubagents: { isEmpty: true },
+        };
     const queued = await this.prisma.session.updateMany({
       where: {
         id,
         ownerId,
-        status: RunStatus.AWAITING_INPUT,
-        cancelRequestedAt: null,
-        runningSubagents: { isEmpty: true },
+        ...idle,
         commitStatus: session.commitStatus,
         mergeStatus: session.mergeStatus,
       },
@@ -4860,12 +4882,14 @@ export class SessionsService {
       // A concurrent identical request may have won the compare-and-set. Keep the endpoint
       // idempotent in that case; every other transition means the checkout is no longer safe.
       const current = await this.prisma.session.findFirst({ where: { id, ownerId } });
-      if (
-        current?.commitStatus === 'pending' &&
-        current.status === RunStatus.AWAITING_INPUT &&
-        !current.cancelRequestedAt &&
-        current.runningSubagents.length === 0
-      ) {
+      const stillCommittable =
+        current != null &&
+        (SessionsService.LIVE.includes(current.status)
+          ? current.status === RunStatus.AWAITING_INPUT &&
+            !current.cancelRequestedAt &&
+            current.runningSubagents.length === 0
+          : current.worktreeDirty === true);
+      if (current?.commitStatus === 'pending' && stillCommittable) {
         return { ok: true };
       }
       if (current?.mergeStatus === 'pending') {

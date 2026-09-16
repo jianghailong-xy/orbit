@@ -967,6 +967,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'task-lists/list-events.service.ts#blockFor', under: 'taskLists.writePolicy' },
   { at: 'tasks/reclaim-stalled-task.ts#reclaimStalledTask', under: 'runnerApi.finalize, reaper.forceFinalize' },
   { at: 'tasks/reclaim-stalled-task.ts#postRunFailureComment', under: 'runnerApi.finalize, reaper.forceFinalize' },
+  { at: 'tasks/reclaim-stalled-task.ts#postWorkNotOnBranchComment', under: "runnerApi.finalize — inside the same rank-30 Session transaction that settles the run, beside postRunFailureComment and taking the same locks: one task_comment child row whose task foreign key is FOR KEY SHARE on the rank-50 task. It says on the task's own timeline that the run's work never reached its branch, which is the only place that fact can be read once the acceptance command has already derived DONE" },
   { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceComment', under: 'runnerApi.turnComplete — after the rank-40 project and rank-50 task are locked; the first conversation-turn ACK owns both the derived status and its evidence comment' },
   { at: 'tasks/reclaim-stalled-task.ts#postExecutableAcceptanceUnavailableComment', under: 'runnerApi.turnComplete — after the reserved shell turn is ACKed and the rank-50 task is locked; it is the durable needs-human branch mutually exclusive with a comparable result and status derivation' },
   { at: 'tasks/tasks.service.ts#linkSupersededBy', under: 'tasks.create, tasks.update' },

@@ -917,6 +917,20 @@ type RunFinalizeRequest struct {
 	// WorktreeBranch: the worktree's actual HEAD branch at completion (see SessionLiveState); lets
 	// the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch.
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+	// CaptureError is why the session's work did NOT reach its branch: finalizeWorktree could not
+	// stage or could not commit. Empty on every finalize that captured the work.
+	//
+	// Without it the two outcomes are the same bytes on the wire — a run that changed nothing and a
+	// run whose whole output is still sitting uncommitted both send no changedFiles — and the only
+	// record of the difference was a line in this process's log. That is how a task reaches DONE on
+	// an acceptance command that passed, with not one commit on its branch, and nothing anywhere
+	// says so.
+	CaptureError string `json:"captureError,omitempty"`
+	// WorktreeDirty is the checkout's measured `git status` after finalization, not the assumption
+	// that finalizing made it clean. False for a captured session; true means the checkout still
+	// holds the only copy of something, which is what re-opens the Commit door on the ended session.
+	// No omitempty: a clean checkout has to say false, or a server reads the field as unreported.
+	WorktreeDirty bool `json:"worktreeDirty"`
 }
 
 // RunFinalizeResponse is the control plane's reply when the runner finalizes a run through

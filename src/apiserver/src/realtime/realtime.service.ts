@@ -1087,10 +1087,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           },
           {
             // A finalized row may still need the same process to retry a
-            // cached receipt. Never claim an unowned terminal commit: its
-            // checkout may already have been finalized or removed.
+            // cached receipt. An unowned terminal commit is claimed only when the
+            // session reports its checkout still dirty: that is the one case where a
+            // finished session has work no branch has (finalization's commit was
+            // refused), and it is also the proof the checkout is still there —
+            // removeWorktree declines to reclaim a checkout holding uncaptured work.
+            // Without the flag the old reasoning stands: the checkout may already be gone.
+            // Unowned is claimed once, the same way the live arm does it: whoever sets
+            // commitOperationOwner first stops being unowned for everybody else.
             status: { notIn: OPEN_SESSION_STATUSES },
-            commitOperationOwner: leaseOwner,
+            OR: [
+              { commitOperationOwner: leaseOwner },
+              { commitOperationOwner: null, worktreeDirty: true },
+            ],
           },
         ],
       },
@@ -1119,7 +1128,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                   }
                 : {
                     status: { notIn: OPEN_SESSION_STATUSES },
-                    commitOperationOwner: leaseOwner,
+                    OR: [
+                      { commitOperationOwner: leaseOwner },
+                      { commitOperationOwner: null, worktreeDirty: true },
+                    ],
                   }),
             },
             // Same restamp as the merge claim: keep the staleness clock a liveness signal.

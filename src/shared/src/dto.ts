@@ -1561,6 +1561,19 @@ export interface RunFinalizeRequest {
   /** The worktree's actual HEAD branch at completion (see SessionLiveState.worktreeBranch); lets
    *  the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch. */
   worktreeBranch?: string;
+  /** Why the session's work did NOT reach its branch — the runner could not stage or could not
+   *  commit it. Absent on every finalize that captured the work, and from runners too old to say.
+   *
+   *  It exists because the two outcomes are otherwise the same bytes: a run that changed nothing
+   *  and a run whose entire output is still uncommitted in its checkout both arrive with no
+   *  `changedFiles`. Without this the difference lived only in the runner's own log, which is how a
+   *  task reaches DONE on a passing acceptance command with not one commit on its branch. */
+  captureError?: string;
+  /** The checkout's measured `git status` once finalization is done with it, rather than the
+   *  assumption that finalizing made it clean. True means the checkout still holds the only copy of
+   *  something and the ended session's Commit action is the way to get it onto the branch. Absent
+   *  from older runners, which the server reads as the historical "finalize left it clean". */
+  worktreeDirty?: boolean;
 }
 
 /**

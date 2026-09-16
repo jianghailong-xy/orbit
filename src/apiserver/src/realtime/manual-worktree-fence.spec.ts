@@ -280,7 +280,10 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
           idleBranch,
           {
             status: { notIn: OPEN_SESSION_STATUSES },
-            commitOperationOwner: NEW_OWNER,
+            OR: [
+              { commitOperationOwner: NEW_OWNER },
+              { commitOperationOwner: null, worktreeDirty: true },
+            ],
           },
         ],
       },
@@ -321,7 +324,15 @@ test('commit is not dispatched when the idle-state CAS loses', async () => {
   assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
 });
 
-test('terminal commit is redelivered only to its exact operation owner', async (t) => {
+/**
+ * A terminal commit reaches its own operation owner, and reaches a fresh owner only on the one
+ * piece of evidence that there is something to commit: the session reports its checkout still
+ * dirty. That is what a finished session looks like when finalization's own commit was refused —
+ * and it is also the proof the checkout is still on disk, because the sweep declines to reclaim a
+ * checkout holding work no branch has. Without it the old reasoning stands: the checkout may
+ * already be gone, so an unowned terminal commit is nobody's to claim.
+ */
+test('terminal commit reaches its owner, and a fresh owner only for a dirty checkout', async (t) => {
   await t.test('same owner receives a cached receipt retry', async () => {
     const writes: unknown[] = [];
     const prisma = {
@@ -359,19 +370,20 @@ test('terminal commit is redelivered only to its exact operation owner', async (
           commitStatus: 'pending',
           commitOperationId: OPERATION_ID,
           status: { notIn: OPEN_SESSION_STATUSES },
-          commitOperationOwner: NEW_OWNER,
+          OR: [
+            { commitOperationOwner: NEW_OWNER },
+            { commitOperationOwner: null, worktreeDirty: true },
+          ],
         },
         data: { commitOperationOwner: NEW_OWNER, commitRequestedAt: restampedAt },
       },
     ]);
   });
 
-  await t.test('unowned terminal receipt cannot be claimed', async () => {
+  await t.test('an unowned terminal commit is claimed only for a dirty checkout', async () => {
     const writes: unknown[] = [];
     const prisma = {
       session: {
-        // Simulates a row changing to unowned after selection; the terminal CAS
-        // must still require self instead of accepting NULL.
         findMany: async () => [
           {
             id: SESSION_ID,
@@ -380,6 +392,8 @@ test('terminal commit is redelivered only to its exact operation owner', async (
             status: RunStatus.FAILED,
           },
         ],
+        // The row is unowned and clean by the time the CAS runs, so it wins nothing — and the
+        // claim must have ASKED for one of the two, rather than taking any terminal row it saw.
         updateMany: async (args: unknown) => {
           writes.push(args);
           return { count: 0 };
@@ -388,11 +402,15 @@ test('terminal commit is redelivered only to its exact operation owner', async (
     };
 
     assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
-    assert.deepEqual(
+    assert.deepEqual((writes[0] as { where: Record<string, unknown> }).where.OR, [
+      { commitOperationOwner: NEW_OWNER },
+      { commitOperationOwner: null, worktreeDirty: true },
+    ]);
+    assert.equal(
       (writes[0] as { where: Record<string, unknown> }).where.commitOperationOwner,
-      NEW_OWNER,
+      undefined,
+      'a bare owner equality outside the OR would make the dirty-checkout arm unreachable',
     );
-    assert.equal((writes[0] as { where: Record<string, unknown> }).where.OR, undefined);
   });
 });
 

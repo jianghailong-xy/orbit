@@ -204,4 +204,10 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     resolveWhen:
       'A later reserved EXECUTABLE turn records a comparable command result, or the task is explicitly failed, cancelled, retired, or otherwise ceases to await this criterion; the timeline comment remains append-only audit evidence.',
   },
+  {
+    family: 'DURABLE_SIGNAL',
+    type: 'WORK_NOT_ON_BRANCH',
+    resolveWhen:
+      "The checkout's work reaches the branch: the ended session's Commit puts it there, a later run of the same task commits it, or it is committed by hand — each of which clears the session's worktreeDirty and so retires the Commit action this signal points at. The episode also ends when the task is cancelled or its work is abandoned. The timeline comment remains append-only audit evidence.",
+  },
 ] as const satisfies readonly BlockerSignalExitRegistration[];

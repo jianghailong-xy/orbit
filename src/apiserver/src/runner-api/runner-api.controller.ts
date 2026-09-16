@@ -145,6 +145,7 @@ import {
 import {
   postExecutableAcceptanceUnavailableComment,
   postRunFailureComment,
+  postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
@@ -4268,9 +4269,22 @@ export class RunnerApiController {
             : {}),
           // Candidate branches for the ended session's "Merge to…" dropdown (older runners omit it).
           ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
-          // finalizeWorktree committed everything onto the branch before /finalize, so the
-          // checkout is clean — the bar shows Merge (not Commit) for the ended session.
-          worktreeDirty: false,
+          // What the runner MEASURED the checkout to be once finalization was done with it. This
+          // used to be an unconditional `false`, on the reasoning that finalizeWorktree had just
+          // committed everything — and so, on the runs where staging or committing failed, the
+          // control plane overwrote the last true thing anyone knew about that checkout with the
+          // assumption. The session then read as clean and merge-ready while its whole output sat
+          // uncommitted, and the Commit action that could have rescued it was hidden by the same
+          // false flag. A runner too old to report keeps the historical answer.
+          ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : { worktreeDirty: false }),
+          // A finalize that could not put the work on the branch is a failed commit, and it is
+          // shown as one: same field, same place in the status bar, git's own words. Only ever
+          // written on failure — a successful finalize leaves whatever the session's own Commit
+          // actions last recorded alone — and never over a commit still in flight, whose own
+          // outcome is the more specific answer to the same question and is still owed to the row.
+          ...(dto.captureError && current.commitStatus !== 'pending'
+            ? { commitStatus: 'error', commitError: dto.captureError.slice(0, 1000) }
+            : {}),
           // The session is ending — Claude (and its background children) are gone, so neither
           // the background-shell set nor any in-flight sub-workspace (Task/Workspace) can still be live.
           // Clearing runningSubagents here is the teardown backstop for a sub-workspace that never got
@@ -4337,6 +4351,18 @@ export class RunnerApiController {
         if (effectiveStatus === RunStatus.FAILED) {
           await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
         }
+      }
+      // The run ended without getting its work onto its branch. Say so on the task, whatever the
+      // run's own status was — a SUCCEEDED run whose acceptance command passed is exactly the case
+      // that needs it, because nothing else about that task will ever mention the absence. The
+      // acceptance ran against the working tree, which is where the work still is.
+      if (current.taskId && dto.captureError) {
+        await postWorkNotOnBranchComment(
+          tx,
+          current.taskId,
+          dto.branch ?? current.branch,
+          dto.captureError.slice(0, 1000),
+        );
       }
       return {
         finalized: true,

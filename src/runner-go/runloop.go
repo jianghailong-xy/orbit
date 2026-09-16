@@ -447,8 +447,15 @@ func heartbeatMerge(
 	return res
 }
 
-// heartbeatCommit is heartbeatMerge for a commit, which also needs a live supervisor.
-// commit is commitWorktree.
+// heartbeatCommit is heartbeatMerge for a commit. commit is commitWorktree.
+//
+// Admitted on the same terms as a merge, ended sessions included. A commit used to insist on a
+// live supervisor, on the reasoning that a finished session had already committed its work at
+// finalization — which is true right up until finalization is the thing that failed, and then the
+// checkout holds the only copy of the session's output and this is the one operation that can put
+// it on the branch. `expected` still pins the exact supervisor the heartbeat advertised, so a
+// session that has since been resumed is refused here as it always was; commitWorktree itself
+// refuses a checkout that is no longer on disk.
 func heartbeatCommit(
 	pool *sessionPool,
 	req CommitCommand,
@@ -459,7 +466,7 @@ func heartbeatCommit(
 		req.SessionID,
 		advertised.supervisor,
 		advertised.permitGeneration,
-		true,
+		false,
 		"commit",
 	)
 	if !admitted {
