@@ -933,12 +933,17 @@ export class SessionsService {
    *
    * The row is written PENDING with `runtimeSessionId` = the Claude session id and a non-null
    * `importSourceCwd` (the transcript's original cwd, or the workspace workDir for the web path,
-   * where the runner locates the file itself). The runner then, inside one claim and before the
-   * spawn: copies the transcript into the session's `~/.claude/projects/<slug>/` directory,
-   * replays it as run events so Orbit can read and search the conversation, and clears the marker
-   * (or Trashes the session) via POST /runner/sessions/:id/import-result. `numTurns` is set to 1
-   * so the claim payload answers `resume = true`, which is what makes the spawn a `--resume` that
-   * carries the imported context.
+   * where the runner locates the file itself). The runner then, inside one claim: copies the
+   * transcript into the session's `~/.claude/projects/<slug>/` directory, replays it as run
+   * events so Orbit can read and search the conversation, and clears the marker (or Trashes the
+   * session) via POST /runner/sessions/:id/import-result — and spawns no engine, because an
+   * import has no user turn behind it to run. The session parks at AWAITING_INPUT, and the
+   * engine starts on the first message, resuming the transcript placed here.
+   *
+   * `importedAt` is written in the same row and is what carries that: it is the durable record
+   * that this session's conversation already exists on disk, which is what the claim's `resume`
+   * answer reads, and what keeps the opening-prompt seeders off a session whose prompt is empty
+   * by construction.
    */
   async importSession(
     ownerId: string,
@@ -1059,9 +1064,11 @@ export class SessionsService {
             // without an explicit pick does.
             model: null,
             usesRuntimeDefaultModel: true,
-            // Resume is decided by numTurns > 0 in the claim payload; the seed turn is skipped
-            // for import sessions (queue.service), so this stays 1 and the spawn is a --resume.
-            numTurns: 1,
+            // Left honest at 0: no turn has run here, and none can until the first message (an
+            // import settles no turn, and the claim it arrives on spawns no engine). The
+            // `--resume` this session's spawn needs comes from `importedAt` instead — the durable
+            // statement that its conversation already exists on disk (queue.buildSession).
+            numTurns: 0,
             permissionMode: accountPermissionMode,
             effort: normalizeEffortForProvider(AgentProvider.CLAUDE, accountEffort),
             workspaceId: workspace.id,
@@ -3502,12 +3509,20 @@ export class SessionsService {
    * the prompt. Uses the SAME fixed clientTurnId the claim uses, so whichever path runs
    * first wins and the other no-ops (insertTurn is idempotent on clientTurnId). Check that fixed
    * id rather than an arbitrary turn count: a control turn must never masquerade as the prompt.
+   *
+   * An imported session has no prompt to lay down — `prompt` is empty by construction, because
+   * its conversation arrived from a transcript rather than from a first message (see
+   * importSession). Seeding it would put an empty "user message" at the head of a conversation
+   * that already has one, and the message that triggered it would be answered a turn late.
+   * `importedAt` says so durably; `importSourceCwd` cannot, having been cleared by the import
+   * itself, and numTurns is now honestly 0 for these rows.
    */
   private async ensurePromptSeeded(
     tx: Prisma.TransactionClient,
-    session: { id: string; prompt: string },
+    session: { id: string; prompt: string; importedAt: Date | null },
     excludedAttachmentIds: readonly string[] = [],
   ) {
+    if (session.importedAt) return;
     const existing = await tx.conversationTurn.findUnique({
       where: {
         sessionId_clientTurnId: {

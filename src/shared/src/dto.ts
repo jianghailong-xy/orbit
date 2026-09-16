@@ -1105,6 +1105,16 @@ export interface ClaimedSession {
    *  the session's `~/.claude/projects/<slug>/` dir, replays it as run events, and clears the
    *  marker via POST /runner/sessions/:id/import-result. It does not reach the spawn at all. */
   importSourceCwd?: string;
+  /** Set by a control plane whose /import-result parks the session at AWAITING_INPUT: this
+   *  claim carries the import and nothing else, so the runner settles it and releases it
+   *  WITHOUT spawning an engine — the spawn happens on the first message, which claims the
+   *  session again and resumes the transcript placed here.
+   *
+   *  Deliberately separate from `importSourceCwd`, which only says what to import. Absent — an
+   *  older control plane — the runner must spawn as it always has: that control plane leaves
+   *  the session RUNNING, and a RUNNING session with no engine has nobody to consume the turn
+   *  the user sends next. */
+  importOnly?: boolean;
   /** DB id of the session's agent, injected into the claude process (ORBIT_AGENT_ID)
    *  so the `orbit mcp` server can attribute task work to it. Omitted if no agent. */
   agentId?: string;
@@ -1435,6 +1445,8 @@ export interface ReclaimSession {
   maxSeq: number;
   /** Non-null only while a transcript import is unfinished, cf. ClaimedSession.importSourceCwd. */
   importSourceCwd?: string;
+  /** Cf. ClaimedSession.importOnly: finishing this reclaimed import does not spawn either. */
+  importOnly?: boolean;
   /** How to re-drive `claude` — same shape a fresh claim hands the runner, so the
    *  resumed process keeps the session's model/permission-mode/tools. */
   agent: AgentExecConfig;

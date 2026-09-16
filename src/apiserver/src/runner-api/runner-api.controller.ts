@@ -1742,6 +1742,9 @@ export class RunnerApiController {
         // cf. the claim path: non-null = import PENDING, and the runner performs the import step
         // inside this claim before the spawn (a runner restarted mid-import resumes it here).
         importSourceCwd: s.importSourceCwd ?? undefined,
+        // …and, cf. the claim path, an import this control plane settles without an engine: a
+        // runner that comes back to an unfinished import finishes it and goes cold the same way.
+        importOnly: s.importSourceCwd != null,
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
@@ -4510,12 +4513,14 @@ export class RunnerApiController {
   }
 
   /**
-   * Settle a session's pending transcript import — the runner's import step, which runs inside
-   * the claim before the engine spawns, checks out with this. `ok` clears the
-   * `importSourceCwd` marker (CAS, so a retried ok after a lost reply is a no-op) and may carry
-   * the real title read out of the transcript; a failure moves the session to Trash
-   * (FAILED + deletedAt) with the reason. The runner then reports the session end via /finalize
-   * as usual, whose LIVE filter leaves this Trash'd row alone.
+   * Settle a session's pending transcript import — the runner's import step, which is the whole
+   * of the claim that carries it and spawns no engine after it. `ok` clears the
+   * `importSourceCwd` marker (CAS, so a retried ok after a lost reply is a no-op), may carry the
+   * real title read out of the transcript, and parks the session: AWAITING_INPUT, or PENDING when
+   * a message is already queued, so the claim it was holding is released and the engine starts
+   * with the first message instead. A failure moves the session to Trash (FAILED + deletedAt)
+   * with the reason, and the runner reports that run end via /finalize as usual, whose LIVE
+   * filter leaves this Trash'd row alone.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/import-result')
@@ -4531,17 +4536,40 @@ export class RunnerApiController {
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       if (dto?.ok) {
+        // The import is the whole of this claim's work and it spawns no engine, so this receipt
+        // is the last thing the runner does before releasing it — which makes this the only place
+        // that can move the session off RUNNING. Nothing else ever would: a RUNNING row with no
+        // engine holds a runner slot and is never offered to a claim again, so leaving it here
+        // would strand the session the import just made readable.
+        //
+        // Where it stops is decided the way a completed turn's park is (see turn-complete): a
+        // message that arrived while the import was running is already queued and needs a runner,
+        // so the session goes back to PENDING and the next claim is what spawns the engine for it.
+        // With nothing queued there is no turn to run, and AWAITING_INPUT leaves the session
+        // claimable by the first message a person sends — that claim is the one that spawns,
+        // --resuming the transcript this one placed.
+        //
+        // A session cancelled mid-import parks too. The 'end' turn that cancel queued has no
+        // engine to consume it either way, and parking is what releases the slot; the row reads
+        // as ended from cancelRequestedAt, and getSendable refuses to arm it with a new message.
+        const pendingExecutable = await tx.conversationTurn.count({
+          where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
+        });
         // CAS on the pending marker: a replayed ok (the runner crashed between this POST and its
-        // reply) matches nothing and reports applied:false instead of applying twice.
+        // reply) matches nothing and reports applied:false instead of applying twice. Same for a
+        // row some other writer already finalized — the status guard keeps this from resurrecting
+        // one, and the marker it leaves behind is inert on a session that can no longer be claimed.
         const res = await tx.session.updateMany({
-          where: { id: sessionId, importSourceCwd: { not: null } },
+          where: { id: sessionId, importSourceCwd: { not: null }, status: RunStatus.RUNNING },
           data: {
             importSourceCwd: null,
             // The runner read a real title out of the transcript; it wins over the placeholder.
             ...(dto.title ? { title: dto.title } : {}),
+            status: pendingExecutable > 0 ? RunStatus.PENDING : RunStatus.AWAITING_INPUT,
           },
         });
-        return { applied: res.count > 0, failed: false, announced: res.count > 0 && !!dto.title };
+        // Applied is what clients have to reconcile — the row's status moved, not just its title.
+        return { applied: res.count > 0, failed: false, announced: res.count > 0 };
       }
       // The transcript could not be read, verified or replayed. Unconditional: an import that
       // failed has no other state to write, and no second attempt is expected to succeed.

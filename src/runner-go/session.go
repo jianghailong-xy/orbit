@@ -973,10 +973,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			reportAbandonedSteer(stranded, job, emitFor, completeTurn)
 		}
 		// A claim that carries the import marker is a `orbit session import` first run: the
-		// transcript is copied, replayed and settled before any engine exists. runTranscriptImport
-		// already posted the failure (the session ends in Trash with the reason); what remains is
-		// the local half of stopping the run, mirroring the activation-failure path.
+		// transcript is copied, replayed and settled before any engine exists. A refusal ends the
+		// run here: runTranscriptImport already posted the reason (the session ends in Trash with
+		// it), and what remains is the local half of stopping it, mirroring the
+		// activation-failure path.
 		if job.ImportSourceCwd != nil {
+			// Captured before the round-trip that settles the import, the way completeTurn
+			// captures it: the first message can claim this session while the import is still
+			// landing, and that claim's permit is not this one's to release.
+			importPermit := pool.permitGeneration(live)
 			if err := runTranscriptImport(sessionCtx, t, job, execDir, emit, flushWithContext); err != nil {
 				pool.engineStopped(live, engineGeneration)
 				if releaseErr := retirePendingGeneration(); releaseErr != nil {
@@ -984,6 +989,31 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				}
 				status = stFailed
 				break
+			}
+			// Import and warm-up are separate things. The transcript is placed where --resume will
+			// read it and replayed as events, and that is everything an import produces — there is
+			// no user turn behind this claim for an engine to run. So the engine belongs to the
+			// first message, which claims this session again and resumes what was placed here;
+			// spawning it now would take a residency slot and a resident process for a
+			// conversation nobody has spoken to yet, once per imported transcript. The control
+			// plane has already parked the session at AWAITING_INPUT (/import-result), so
+			// releasing the permit and waiting cold leaves it exactly where a message can reach it.
+			//
+			// Gated on what the control plane says it did, not on the marker alone: one that does
+			// not park the session leaves it RUNNING, and an engine is the only thing that could
+			// then consume the next message. A control plane that has not learned to say so gets
+			// the spawn it has always got.
+			if job.ImportOnly {
+				pool.engineStopped(live, engineGeneration)
+				// Nothing was ever spawned for this claim, so no process is consuming this
+				// session's inbox, and a release that does not land leaves a fence the next
+				// activation replaces. It must not turn a settled import into a failed session.
+				if releaseErr := retirePendingGeneration(); releaseErr != nil {
+					logln("inbox generation cleanup after import for", sessionID+":", releaseErr)
+				}
+				pool.park(live, importPermit)
+				logln(fmt.Sprintf("○ import %s settled (transcript replayed; no engine until the first message)", job.SessionID))
+				continue
 			}
 		}
 		engineCtx, engineCancel := context.WithCancel(sessionCtx)

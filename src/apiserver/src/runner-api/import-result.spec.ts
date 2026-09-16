@@ -7,10 +7,12 @@ import { RunnerApiController } from './runner-api.controller';
 /**
  * POST /runner/sessions/:id/import-result — the checkout the runner's transcript-import step
  * makes when it is done. `ok` clears the `importSourceCwd` marker with a CAS on the pending
- * state, so a retried ok after a lost reply is a no-op (`applied: false`), and may carry the
- * real title read out of the transcript; a failure moves the session to Trash (FAILED +
- * deletedAt) with the reason, where /finalize's LIVE filter leaves it alone. Both sit behind the
- * same lease fence as every other runner write on a session.
+ * state, so a retried ok after a lost reply is a no-op (`applied: false`), may carry the real
+ * title read out of the transcript, and parks the session — AWAITING_INPUT, or PENDING when a
+ * message is already queued — because the import is the whole of that claim's work and it spawns
+ * no engine, so nothing else will ever move the row off RUNNING. A failure moves the session to
+ * Trash (FAILED + deletedAt) with the reason, where /finalize's LIVE filter leaves it alone. All
+ * of it sits behind the same lease fence as every other runner write on a session.
  */
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -22,12 +24,15 @@ function makeController(opts: {
   lock?: Array<{ id: string; leaseOwnerMatches: boolean }>;
   /** What the CAS updateMany answers. */
   updateManyCount?: number;
+  /** Executable turns still queued for the session when the import settles. */
+  pendingTurns?: number;
 } = {}) {
   const updateManyCalls: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const updateCalls: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const published: string[] = [];
   const tx = {
     $queryRaw: async () => opts.lock ?? [{ id: SESSION_ID, leaseOwnerMatches: true }],
+    conversationTurn: { count: async () => opts.pendingTurns ?? 0 },
     session: {
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         updateManyCalls.push(args);
@@ -56,17 +61,38 @@ function importResult(
   return controller.importResult({ id: RUNNER_ID }, SESSION_ID, dto);
 }
 
-test('ok clears the pending marker with a CAS on importSourceCwd', async () => {
+test('ok clears the pending marker with a CAS, and parks the session it was holding', async () => {
   const h = makeController();
 
   const response = await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true });
 
-  assert.deepEqual(response, { ok: true, applied: true, failed: false, announced: false });
+  assert.deepEqual(response, { ok: true, applied: true, failed: false, announced: true });
   assert.equal(h.updateManyCalls.length, 1);
-  assert.deepEqual(h.updateManyCalls[0].where, { id: SESSION_ID, importSourceCwd: { not: null } });
+  assert.deepEqual(h.updateManyCalls[0].where, {
+    id: SESSION_ID,
+    importSourceCwd: { not: null },
+    // The claim set the row RUNNING; a row another writer already finalized is not this
+    // receipt's to move, and must not be resurrected as claimable.
+    status: RunStatus.RUNNING,
+  });
   assert.equal(h.updateManyCalls[0].data.importSourceCwd, null);
+  assert.equal(
+    h.updateManyCalls[0].data.status,
+    RunStatus.AWAITING_INPUT,
+    'the import is the whole claim and spawns no engine: nothing else moves the row off RUNNING',
+  );
   assert.deepEqual(h.updateCalls, [], 'an ok never touches the session row itself');
-  assert.deepEqual(h.published, [], 'no title change to announce');
+  assert.deepEqual(h.published, [SESSION_ID], 'the parked status is a change every client reconciles');
+});
+
+test('a message already queued when the import lands keeps the session claimable', async () => {
+  // Somebody typed while the import was running: the turn is filed, and with no engine to
+  // consume it a parked session would never run it. PENDING is what hands it to a claim.
+  const h = makeController({ pendingTurns: 1 });
+
+  await importResult(h.controller, { leaseOwner: LEASE_OWNER, ok: true });
+
+  assert.equal(h.updateManyCalls[0].data.status, RunStatus.PENDING);
 });
 
 test('ok may carry the real transcript title, which wins and is announced', async () => {
