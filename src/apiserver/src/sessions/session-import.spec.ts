@@ -18,6 +18,7 @@ import { SessionsService } from './sessions.service';
 const OWNER = '00000000-0000-7000-8000-000000000001';
 const WORKSPACE_A = '00000000-0000-7000-8000-0000000000d1';
 const WORKSPACE_B = '00000000-0000-7000-8000-0000000000d2';
+const WORKSPACE_HOME = '00000000-0000-7000-8000-0000000000d3';
 const CLAUDE_ID = '4e453ab7-f37c-494d-8017-bb4e9beffeef';
 
 function makeService(opts: { claimed?: { id: string; title: string } } = {}) {
@@ -35,6 +36,15 @@ function makeService(opts: { claimed?: { id: string; title: string } } = {}) {
       id: WORKSPACE_B,
       name: 'nested',
       workDir: '/srv/work/project',
+      runnerId: 'runner-1',
+      enableWorktree: false,
+      enabled: true,
+    },
+    {
+      // Stored as the user typed it, which is what almost every real workspace looks like.
+      id: WORKSPACE_HOME,
+      name: 'home-relative',
+      workDir: '~/orbit',
       runnerId: 'runner-1',
       enableWorktree: false,
       enabled: true,
@@ -217,6 +227,73 @@ test('the web path (no cwd known) records the workspace workDir as the import ma
   const { service, creates } = makeService();
   await service.importSession(OWNER, { claudeSessionId: CLAUDE_ID, workspaceId: WORKSPACE_A });
   assert.equal(creates[0].importSourceCwd, '/srv/work');
+});
+
+/**
+ * A `~/…` workDir names a path under the RUNNER's home, and the control plane has no idea where
+ * that is — this one account spans `/root` and `/home/husong`. So the tail is what is compared,
+ * and a transcript recorded under some home's `orbit` belongs to it. Comparing the stored string
+ * literally is what made `orbit session import` refuse 100% of this account's workspaces.
+ */
+test('a tilde workDir accepts a transcript recorded under the runner home', async () => {
+  const { service, creates } = makeService();
+  await service.importSession(OWNER, {
+    claudeSessionId: CLAUDE_ID,
+    workspaceId: WORKSPACE_HOME,
+    sourceCwd: '/root/orbit',
+  });
+  assert.equal(creates.length, 1);
+  assert.equal(creates[0].importSourceCwd, '/root/orbit', 'the transcript cwd is recorded as-is');
+});
+
+test('a tilde workDir does not assume the home is /root', async () => {
+  const { service, creates } = makeService();
+  await service.importSession(OWNER, {
+    claudeSessionId: CLAUDE_ID,
+    workspaceId: WORKSPACE_HOME,
+    sourceCwd: '/home/husong/orbit/src/apiserver',
+  });
+  assert.equal(creates.length, 1);
+});
+
+test('a tilde workDir still refuses a cwd that is outside it under any home', async () => {
+  const { service, creates } = makeService();
+  await assert.rejects(
+    service.importSession(OWNER, {
+      claudeSessionId: CLAUDE_ID,
+      workspaceId: WORKSPACE_HOME,
+      sourceCwd: '/root/wikova',
+    }),
+    (err: unknown) => {
+      if (!(err instanceof BadRequestException)) return false;
+      const msg = String(err.message);
+      return msg.includes('/root/wikova') && msg.includes('~/orbit') && msg.includes('home-relative');
+    },
+  );
+  assert.deepEqual(creates, [], 'the relaxed comparison is still a comparison');
+});
+
+test('the tilde tail is matched on directory boundaries, not as a substring', async () => {
+  const { service, creates } = makeService();
+  await assert.rejects(
+    service.importSession(OWNER, {
+      claudeSessionId: CLAUDE_ID,
+      workspaceId: WORKSPACE_HOME,
+      sourceCwd: '/root/orbital',
+    }),
+    (err: unknown) => err instanceof BadRequestException,
+  );
+  assert.deepEqual(creates, []);
+});
+
+test('no workspaceId: a tilde workspace is a candidate like any other', async () => {
+  const { service, creates } = makeService();
+  await service.importSession(OWNER, {
+    claudeSessionId: CLAUDE_ID,
+    sourceCwd: '/root/orbit/src',
+  });
+  assert.equal(creates.length, 1);
+  assert.equal(creates[0].workspaceId, WORKSPACE_HOME);
 });
 
 test('a workspace bound to no runner is refused at create', async () => {

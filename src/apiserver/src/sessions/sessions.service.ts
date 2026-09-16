@@ -286,6 +286,39 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * How much of `cwd` a workspace's `workDir` accounts for, or -1 when the path is outside it.
+ * Used to decide which workspace an imported Claude transcript belongs to.
+ *
+ * A workDir is stored exactly as the user typed it, which for most workspaces is home-relative
+ * (`~/orbit`), while a transcript always records an absolute cwd (`/root/orbit`). The control
+ * plane does not know the runner's home — one account's machines span `/root` and
+ * `/home/husong` — so a `~/` workDir is read as "this tail under SOME home": the tail has to
+ * appear at a directory boundary one component deep or more, with nothing or a subpath after
+ * it. That is deliberately the looser question. The binding one is the runner's, which expands
+ * the tilde against its own home before it copies anything (transcript_import.go); this check
+ * exists so the caller does not wait for a runner to refuse the obvious cases. An absolute
+ * workDir keeps its exact prefix meaning, unrelaxed.
+ *
+ * The answer is the matched prefix's length rather than a boolean so the tightest-workspace-wins
+ * pick compares the two forms on the same footing: `~/orbit` accounts for 11 characters of
+ * `/root/orbit/src`, not 7.
+ */
+function workDirPrefixLength(workDir: string, cwd: string): number {
+  const holds = (dir: string): boolean =>
+    cwd === dir || cwd.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
+  if (!workDir.startsWith('~' + path.sep)) return holds(workDir) ? workDir.length : -1;
+  const tail = workDir.slice(2);
+  // Walk the cwd's own separators, so the tail is only ever tried at a directory boundary
+  // (`~/orbit` is not inside `/root/orbital`). Starting past index 0 keeps the home at least one
+  // component long, which every home is.
+  for (let sep = cwd.indexOf(path.sep, 1); sep !== -1; sep = cwd.indexOf(path.sep, sep + 1)) {
+    const underThisHome = cwd.slice(0, sep + 1) + tail;
+    if (holds(underThisHome)) return underThisHome.length;
+  }
+  return -1;
+}
+
+/**
  * The corpus half of `stripEmphasis`, in SQL — the query half lives in search-query.ts and the two
  * must always be applied together.
  *
@@ -948,11 +981,10 @@ export class SessionsService {
         where: { ownerId, deletedAt: null },
         select: { id: true, name: true, workDir: true, runnerId: true, enableWorktree: true, enabled: true },
       });
-      const inside = (workDir: string | null): boolean =>
-        workDir !== null &&
-        (cwd === workDir ||
-          cwd.startsWith(workDir.endsWith(path.sep) ? workDir : workDir + path.sep));
-      workspace = candidates.filter((c) => inside(c.workDir)).sort((a, b) => (b.workDir?.length ?? 0) - (a.workDir?.length ?? 0))[0];
+      workspace = candidates
+        .map((c) => ({ c, matched: c.workDir === null ? -1 : workDirPrefixLength(c.workDir, cwd) }))
+        .filter((s) => s.matched >= 0)
+        .sort((a, b) => b.matched - a.matched)[0]?.c;
       if (!workspace) {
         throw new BadRequestException(
           `no workspace of yours contains the transcript's cwd ${cwd}; pass --workspace to pick one`,
@@ -965,12 +997,7 @@ export class SessionsService {
       // Rejection ②, checked at create so the caller never waits for a runner to refuse it: the
       // resumed engine runs in this workspace, so a transcript recorded elsewhere would carry
       // paths that mean nothing here.
-      if (
-        dto.sourceCwd !== workspace.workDir &&
-        !dto.sourceCwd.startsWith(
-          workspace.workDir.endsWith(path.sep) ? workspace.workDir : workspace.workDir + path.sep,
-        )
-      ) {
+      if (workDirPrefixLength(workspace.workDir, dto.sourceCwd) < 0) {
         throw new BadRequestException(
           `the transcript's cwd ${dto.sourceCwd} is not inside workspace ${workspace.name} (${workspace.workDir})`,
         );

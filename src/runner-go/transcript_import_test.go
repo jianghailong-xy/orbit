@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -300,4 +303,98 @@ func dumpEvents(events []StoredEvent) string {
 		return err.Error()
 	}
 	return string(raw)
+}
+
+// A workspace's workDir is stored as the user typed it, so the claim payload carries `~/orbit`
+// while the transcript records the absolute `/root/orbit`. Comparing the two literally never
+// matches, and this refusal Trashes the session — so the import expands the tilde against this
+// machine's home, the way every other consumer of a workDir here already does.
+func TestRunTranscriptImportTildeWorkDir(t *testing.T) {
+	const uuid = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
+	run := func(t *testing.T, cwdFor func(home string) string) (ImportResultRequest, []StoredEvent, error) {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+		recordedCwd := cwdFor(home)
+
+		var tr importTestTranscript
+		tr.add(map[string]interface{}{"type": "ai-title", "aiTitle": "Imported talk", "timestamp": "2026-09-15T10:00:00Z"})
+		tr.add(importMsgRow("user", recordedCwd, "2026-09-15T10:00:01Z", map[string]interface{}{"type": "text", "text": "hi"}))
+		tr.add(importMsgRow("assistant", recordedCwd, "2026-09-15T10:00:02Z", map[string]interface{}{"type": "text", "text": "hello"}))
+		projects := filepath.Join(home, ".claude", "projects", claudeProjectSlug(recordedCwd))
+		if err := os.MkdirAll(projects, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		tr.write(t, filepath.Join(projects, uuid+".jsonl"))
+
+		var posted ImportResultRequest
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/runner/sessions/s1/import-result" {
+				t.Errorf("unexpected request to %s", r.URL.Path)
+			}
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Errorf("decoding the import result: %v", err)
+			}
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"applied":true}`))
+		}))
+		defer srv.Close()
+
+		// The web path records the workspace workDir itself as the marker, so this carries a
+		// tilde too — claudeTranscriptPath has to resolve it to find the file directly.
+		marker := "~/proj"
+		job := &ClaimedSession{SessionID: "s1", SessionUUID: uuid, WorkDir: "~/proj", ImportSourceCwd: &marker}
+		var events []StoredEvent
+		emit := func(eventType string, payload map[string]interface{}) {
+			events = append(events, StoredEvent{Type: eventType, Payload: payload})
+		}
+		transport := &Transport{baseURL: srv.URL, client: srv.Client()}
+		err := runTranscriptImport(context.Background(), transport, job, t.TempDir(), emit, func(context.Context) error { return nil })
+		return posted, events, err
+	}
+
+	t.Run("a cwd under this machine's home is inside a tilde workDir", func(t *testing.T) {
+		posted, events, err := run(t, func(home string) string { return filepath.Join(home, "proj") })
+		if err != nil {
+			t.Fatalf("runTranscriptImport: %v", err)
+		}
+		if !posted.Ok || posted.Title != "Imported talk" {
+			t.Errorf("import result = %+v, want ok with the transcript's title", posted)
+		}
+		if len(events) != 2 || events[0].Type != evUser || events[1].Type != evAssistant {
+			t.Errorf("replayed %s, want the transcript's two messages", dumpEvents(events))
+		}
+	})
+
+	t.Run("a cwd outside the expanded workDir is still refused", func(t *testing.T) {
+		posted, events, err := run(t, func(string) string { return "/elsewhere/proj" })
+		if err == nil || !strings.Contains(err.Error(), "/elsewhere/proj") {
+			t.Fatalf("err = %v, want the outside-the-workspace refusal", err)
+		}
+		if posted.Ok {
+			t.Errorf("import result = %+v, want the failure that Trashes the session", posted)
+		}
+		if len(events) != 0 {
+			t.Errorf("replayed %s, want nothing from a refused transcript", dumpEvents(events))
+		}
+	})
+}
+
+// The directory Claude keeps a transcript in is derived from the session's cwd, so a tilde in it
+// has to be resolved before the slug is built — filepath.Abs would otherwise hang "~/proj" off
+// the process's own cwd and name a project directory that does not exist.
+func TestClaudeTranscriptPathExpandsTilde(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	const uuid = "4e453ab7-f37c-494d-8017-bb4e9beffeef"
+	got, err := claudeTranscriptPath("~/proj", uuid)
+	if err != nil {
+		t.Fatalf("claudeTranscriptPath: %v", err)
+	}
+	want := filepath.Join(home, ".claude", "projects", claudeProjectSlug(filepath.Join(home, "proj")), uuid+".jsonl")
+	if got != want {
+		t.Errorf("claudeTranscriptPath = %q, want %q", got, want)
+	}
 }

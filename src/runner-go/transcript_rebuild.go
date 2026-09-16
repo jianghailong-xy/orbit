@@ -118,7 +118,10 @@ func claudeTranscriptPath(cwd, sessionUUID string) (string, error) {
 		}
 		base = filepath.Join(home, ".claude")
 	}
-	abs, err := filepath.Abs(cwd)
+	// A session's cwd can be a workspace workDir straight off the claim, which is stored as the
+	// user typed it: filepath.Abs would hang a leading `~` off this process's own cwd and name a
+	// project directory that has never existed.
+	abs, err := filepath.Abs(expandTilde(cwd))
 	if err != nil {
 		return "", err
 	}

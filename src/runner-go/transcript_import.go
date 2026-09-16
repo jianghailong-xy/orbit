@@ -352,6 +352,10 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 	// parses and belongs to this workspace, and report the last refusal when none does.
 	var lastErr error
 	seen := map[string]bool{}
+	// The workspace workDir arrives from the claim exactly as the user typed it, so most of them
+	// are home-relative (`~/orbit`) while a transcript always records an absolute cwd. Expanded
+	// here, once, the way every other consumer of a workDir on this machine already does it.
+	workDir := expandTilde(job.WorkDir)
 	for _, cand := range append([]string{src}, candidates...) {
 		if seen[cand] {
 			continue
@@ -362,8 +366,8 @@ func runTranscriptImport(ctx context.Context, t *Transport, job *ClaimedSession,
 			lastErr = err
 			continue
 		}
-		if !insideDir(job.WorkDir, cwd) {
-			lastErr = fmt.Errorf("the transcript was recorded in %s, outside the workspace %s", cwd, job.WorkDir)
+		if !insideDir(workDir, cwd) {
+			lastErr = fmt.Errorf("the transcript was recorded in %s, outside the workspace %s", cwd, workDir)
 			continue
 		}
 		dst, derr := claudeTranscriptPath(execDir, job.SessionUUID)
