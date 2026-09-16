@@ -45,6 +45,15 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         /// One held loosening proposal, by the address the pending read publishes.
         case criteriaDecision(intentID: String)
+        /// One answer to such a proposal, as the same read publishes it under `settled`.
+        ///
+        /// The row carries the answer ITSELF and not its address, unlike the question above it. A
+        /// question is re-derived from the read on every render, because what a reader may do with
+        /// it depends on what the project's ruler says now; an answer is a committed fact that
+        /// cannot change, and the read carries only the most recent handful — a record that
+        /// disappeared because the read's window slid would be the same defect as one that never
+        /// survived a relaunch.
+        case criteriaDecisionReceipt(settled: SettledCriteriaDecision)
         /// The one confirmation question a project has. There is never more than one.
         case acceptanceConfirmation
         /// One revision of one task's completion evidence. The revision is part of the address
@@ -68,6 +77,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // The web card's DOM id, in the same spelling, because both clients are pointed at it by
         // something else on screen and one vocabulary is cheaper than two.
         case .criteriaDecision(let intentID): return "criteria-decision-\(intentID)"
+        // Beside the question's id rather than equal to it: for one intent both rows can be on
+        // screen at once while the question is being let go of, and a duplicate id costs the List
+        // its diff.
+        case .criteriaDecisionReceipt(let settled):
+            return "criteria-decision-receipt-\(settled.intentId)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
         // The web evidence card's `decisionRowKey` spelling, taskId@evidenceRevision.
         case .evidenceDecision(let taskID, let evidenceRevision):

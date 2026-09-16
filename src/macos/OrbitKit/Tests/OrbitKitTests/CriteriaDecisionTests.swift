@@ -496,6 +496,95 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertTrue(CriteriaDecisions.decisionLine(refused).contains("nothing was applied"))
     }
 
+    // MARK: the receipt an answered proposal leaves
+
+    private func assistant(_ id: String, at ts: String?) -> TranscriptItem {
+        .assistant(AssistantBubble(id: id, text: "…", streamingText: "", seq: 1, turnId: "t", ts: ts))
+    }
+
+    private func settled(_ intentID: String, _ decision: CriteriaDecisionAnswer = .approve,
+                         at decidedAt: String) -> SettledCriteriaDecision {
+        SettledCriteriaDecision(intentId: intentID, decision: decision, decidedAt: decidedAt,
+                                baseSeal: "6b1d02ea11223344", resultingSeal: "9c4f7a1bb001")
+    }
+
+    /// The anchor is the last item at or before the door's clock — the moment the decision happened,
+    /// which on a device that never saw the card is the only place the record can honestly go.
+    func testAReceiptIsDrawnWhereTheDecisionHappened() {
+        let items: [TranscriptItem] = [
+            .user(UserBubble(id: "u1", text: "drafting", ts: "2026-09-11T15:00:00.000Z",
+                             pending: false)),
+            assistant("a1", at: "2026-09-11T15:20:00.000Z"),
+            // No clock of its own: an interrupt row cannot anchor anything, and the search steps
+            // over it rather than stopping there.
+            .interrupt(id: "x1", seq: 2),
+            assistant("a2", at: "2026-09-11T15:50:00.000Z"),
+        ]
+        let receipts = CriteriaDecisions.receipts(
+            queue: queue([], settled: [settled("i-1", at: "2026-09-11T15:40:00.000Z")]),
+            items: items)
+        XCTAssertEqual(receipts.map(\.afterItemID), ["a1"])
+        XCTAssertEqual(receipts.map(\.id), ["criteria-decision-receipt-i-1"])
+        XCTAssertEqual(receipts.map(\.settled.intentId), ["i-1"])
+    }
+
+    /// The read carries the project's ANSWERS, newest first — one row per one of them, in that
+    /// order, each at its own moment rather than in a stack at the tail.
+    func testOneReceiptPerAnswerInTheOrderTheReadPublishesThem() {
+        let items: [TranscriptItem] = [
+            assistant("a1", at: "2026-09-11T14:00:00.000Z"),
+            assistant("a2", at: "2026-09-11T15:00:00.000Z"),
+        ]
+        let receipts = CriteriaDecisions.receipts(
+            queue: queue([], settled: [settled("i-2", at: "2026-09-11T15:30:00.000Z"),
+                                       settled("i-1", .reject, at: "2026-09-11T14:30:00.000Z")]),
+            items: items)
+        XCTAssertEqual(receipts.map { "\($0.settled.intentId)@\($0.afterItemID)" },
+                       ["i-2@a2", "i-1@a1"])
+    }
+
+    /// An answer older than everything this device holds has no honest place, so it is not drawn —
+    /// the paired control on the same row is one item early enough to anchor it.
+    func testAnAnswerOlderThanEverythingLoadedIsNotDrawn() {
+        let answer = settled("i-1", at: "2026-09-11T13:00:00.000Z")
+        let later: [TranscriptItem] = [assistant("a1", at: "2026-09-11T15:00:00.000Z")]
+        XCTAssertTrue(CriteriaDecisions.receipts(queue: queue([], settled: [answer]), items: later)
+            .isEmpty)
+        let windowed: [TranscriptItem] = [
+            assistant("a0", at: "2026-09-11T12:00:00.000Z"),
+        ] + later
+        XCTAssertEqual(CriteriaDecisions.receipts(queue: queue([], settled: [answer]), items: windowed)
+            .map(\.afterItemID), ["a0"])
+        // A read that has not come back, or one from a server that publishes no answers, draws none.
+        XCTAssertTrue(CriteriaDecisions.receipts(queue: nil, items: windowed).isEmpty)
+    }
+
+    /// What the question card is let go of by: the read naming its answer. A question whose answer
+    /// is not named keeps its card, dimmed — the only thing left that can explain what happened.
+    func testAQuestionGivesWayOnlyWhenTheReadNamesItsAnswer() {
+        let read = queue([row("i-2")], settled: [settled("i-1", at: "2026-09-11T15:40:00.000Z")])
+        XCTAssertTrue(CriteriaDecisions.answered(read, intentID: "i-1"))
+        XCTAssertFalse(CriteriaDecisions.answered(read, intentID: "i-2"))
+        XCTAssertFalse(CriteriaDecisions.answered(nil, intentID: "i-1"))
+    }
+
+    /// The line itself: which way it went, and the clock the door recorded it at. The clock is the
+    /// reader's own locale (web: `toLocaleTimeString`), so only its presence is asserted here.
+    func testTheReceiptLineSaysWhichWayItWentAndWhen() {
+        let approved = CriteriaDecisions.receiptLine(settled("i-1", .approve,
+                                                            at: "2026-09-11T15:40:00.000Z"))
+        XCTAssertTrue(approved.hasPrefix("✓ Approved by you at "), approved)
+        XCTAssertFalse(CriteriaDecisions.receiptClock("2026-09-11T15:40:00.000Z").isEmpty)
+
+        let refused = CriteriaDecisions.receiptLine(settled("i-1", .reject,
+                                                           at: "2026-09-11T15:40:00.000Z"))
+        XCTAssertTrue(refused.hasPrefix("✓ Refused by you at "), refused)
+
+        // A stamp nothing can parse is shown as it came rather than dropped: a record with no time
+        // on it is a record the reader cannot place.
+        XCTAssertEqual(CriteriaDecisions.receiptClock("not-a-timestamp"), "not-a-timestamp")
+    }
+
     // MARK: the wire
 
     func testTheOwnerReadDecodesTheServersOwnShape() throws {

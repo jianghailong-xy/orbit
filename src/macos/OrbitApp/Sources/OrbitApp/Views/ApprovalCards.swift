@@ -853,6 +853,8 @@ struct DeliveredDecisionCardView: View {
             switch card.kind {
             case .criteriaDecision(let intentID):
                 CriteriaDecisionCard(console: console, intentID: intentID)
+            case .criteriaDecisionReceipt(let settled):
+                CriteriaDecisionReceiptCard(settled: settled)
             case .acceptanceConfirmation:
                 AcceptanceConfirmationCard(console: console)
             case .evidenceDecision(let taskID, let evidenceRevision):
@@ -1065,6 +1067,35 @@ private struct CriteriaDecisionCard: View {
             await console.decideCriteria(row, answer)
             deciding = false
         }
+    }
+}
+
+/// The record of an answer to a held proposal, where the decision was made.
+///
+/// Green and ticked, with no actions and no badge: this is not a question any more, and the only
+/// thing it has to do is say which way it went and when. It is drawn from the committed answer the
+/// read publishes rather than kept by the window that pressed the button, so it is here after a
+/// relaunch, on a device that never saw the card, and it is what the browser's receipt says, word
+/// for word (`CriteriaDecisions.recordedHeading` / `receiptLine`).
+private struct CriteriaDecisionReceiptCard: View {
+    let settled: SettledCriteriaDecision
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.circle.fill",
+                           title: CriteriaDecisions.recordedHeading,
+                           tone: .green)
+            Text(CriteriaDecisions.receiptLine(settled))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // Who is speaking, on the line that is standing in for the card's meta row: the browser
+            // puts the same mark on its receipt, and a record of a decision the owner made is no
+            // more the agent's writing than the question was.
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .approvalChrome(.green)
     }
 }
 

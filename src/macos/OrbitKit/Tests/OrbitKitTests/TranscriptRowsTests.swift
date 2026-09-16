@@ -215,6 +215,25 @@ final class TranscriptRowsTests: XCTestCase {
                         "criteria-decision-in-1", "criteria-decision-in-2", "transcript-bottom"])
     }
 
+    /// The record of an answer sits where the DECISION happened — the anchor is computed from the
+    /// door's clock, not from when the read brought the row in — and its id is beside the question's
+    /// rather than the same as it: for one intent both rows can be on screen at once while the
+    /// question is being let go of, and two rows sharing an id costs the List its diff.
+    func testAReceiptSitsWhereItsAnswerHappenedUnderAnIdOfItsOwn() {
+        let settled = SettledCriteriaDecision(intentId: "in-1", decision: .approve,
+                                              decidedAt: "2026-09-11T15:40:00.000Z",
+                                              baseSeal: "a", resultingSeal: "b")
+        let receipt = DeliveredDecisionCard(kind: .criteriaDecisionReceipt(settled: settled),
+                                            afterItemID: "i1")
+        let rows = TranscriptRows.build(
+            state: state(items: [.user(user("i1")), .user(user("i2"))]),
+            statusCards: [], canPageOlder: false, showWorkingIndicator: false,
+            decisionCards: [decision("in-1", after: "i1"), receipt])
+        XCTAssertEqual(rows.map(\.id),
+                       ["i1", "criteria-decision-in-1", "criteria-decision-receipt-in-1",
+                        "i2", "transcript-bottom"])
+    }
+
     /// The rule the crash taught: every row the List is handed carries a unique id, whatever the
     /// sources do. A card delivered twice must not become two rows with one id.
     func testARepeatedDecisionCardYieldsExactlyOneRow() {

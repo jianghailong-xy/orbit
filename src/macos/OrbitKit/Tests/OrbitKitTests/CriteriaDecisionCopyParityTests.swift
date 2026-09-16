@@ -159,6 +159,29 @@ final class CriteriaDecisionCopyParityTests: XCTestCase {
                        "what a card approved at another end says")
     }
 
+    /// The record an answered proposal leaves: what it is called, and the sentence that says which
+    /// way it went.
+    ///
+    /// Both ends draw this card — the browser in the conversation the question was asked in, the
+    /// phone in the console that coordinates the project — and a reader who answers on one and reads
+    /// on the other must not be told two different things. The line's clock is the reader's own
+    /// locale at each end (`toLocaleTimeString` there, a date formatter here), so it is put back as
+    /// the web's own interpolation rather than compared as text.
+    func testTheReceiptMatchesTheWebCardsWords() throws {
+        let web = try flatWebCard()
+        assertDeclares(web, "CRITERIA_DECISION_RECORDED_HEADING", CriteriaDecisions.recordedHeading,
+                       "the heading of a receipt")
+
+        let settled = SettledCriteriaDecision(
+            intentId: "i", decision: .approve, decidedAt: "2026-09-11T15:40:00.000Z",
+            baseSeal: "deadbeefcafedeadbeefcafe", resultingSeal: "facadebeadedfacadebeaded")
+        let line = template(CriteriaDecisions.receiptLine(settled), [
+            ("Approved", "${verdict}"),
+            (CriteriaDecisions.receiptClock(settled.decidedAt), "${receiptClock(settled.decidedAt)}"),
+        ])
+        assertContains(web, "`\(line)`", "what a receipt says")
+    }
+
     // MARK: the words the diff is said in
 
     /// The vocabulary for what a proposal does to a criterion.

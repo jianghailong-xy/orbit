@@ -167,8 +167,9 @@ public struct TranscriptReducer: Sendable, Codable {
         }
 
         switch ev.type {
-        case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "")
-        case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq, turnId: ev.turnId)
+        case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
+        case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq,
+                                              turnId: ev.turnId, ts: ev.ts)
         case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
         case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts)
         case .toolUse:        openTool(ev)
@@ -498,18 +499,21 @@ public struct TranscriptReducer: Sendable, Codable {
 
     // MARK: - assistant / thinking streaming
 
-    private mutating func appendAssistantDelta(_ delta: String) {
+    private mutating func appendAssistantDelta(_ delta: String, ts: String? = nil) {
         guard !delta.isEmpty else { return }
         if let i = openAssistant, case .assistant(var b) = state.items[i] {
             b.streamingText += delta
+            if b.ts == nil { b.ts = ts }
             state.items[i] = .assistant(b)
         } else {
-            state.items.append(.assistant(AssistantBubble(id: nextID(), text: "", streamingText: delta, seq: nil, turnId: nil)))
+            state.items.append(.assistant(AssistantBubble(id: nextID(), text: "", streamingText: delta,
+                                                          seq: nil, turnId: nil, ts: ts)))
             openAssistant = state.items.count - 1
         }
     }
 
-    private mutating func finalizeAssistant(_ full: String, seq: Int, turnId: String?) {
+    private mutating func finalizeAssistant(_ full: String, seq: Int, turnId: String?,
+                                           ts: String? = nil) {
         // Three failures arrive as an ordinary assistant reply — an expired sign-in, a spent quota
         // or an unreachable provider, and an outright API error — with a `success` result, so
         // nothing upstream treats the turn as failed. Rendered verbatim they read as the agent
@@ -548,9 +552,11 @@ public struct TranscriptReducer: Sendable, Codable {
             b.streamingText = ""
             b.seq = seq
             b.turnId = turnId ?? b.turnId
+            if ts != nil { b.ts = ts }
             state.items[i] = .assistant(b)
         } else {
-            state.items.append(.assistant(AssistantBubble(id: nextID(), text: full, streamingText: "", seq: seq, turnId: turnId)))
+            state.items.append(.assistant(AssistantBubble(id: nextID(), text: full, streamingText: "",
+                                                          seq: seq, turnId: turnId, ts: ts)))
         }
         openAssistant = nil
     }
@@ -656,7 +662,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // learning that it is a background shell permanently retires this side channel: its output
         // belongs in `background_output` / the tray.
         var card = ToolCard(id: id, name: name, input: input, result: nil, status: .running,
-                            inputSeq: ev.seq, inputTruncated: ev.truncated)
+                            inputSeq: ev.seq, inputTruncated: ev.truncated, ts: ev.ts)
         if foregroundShell, !suppressedLiveToolIDs.contains(id), let snapshot = liveToolOutputs[id] {
             card.result = snapshot.content
         } else if id.hasPrefix("shell-"), !foregroundShell {

@@ -1790,6 +1790,9 @@ final class ConsoleModel {
             switch card.kind {
             case .criteriaDecision(let intentID):
                 return CriteriaDecisions.isOpen(criteriaStanding(intentID))
+            // A record of an answer, not a question: nothing is waiting on the reader.
+            case .criteriaDecisionReceipt:
+                return false
             case .acceptanceConfirmation:
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
             case .evidenceDecision(let taskID, let evidenceRevision):
@@ -1830,6 +1833,7 @@ final class ConsoleModel {
         if let queue = try? await api.pendingCriteriaDecisions(projectID: projectID) {
             criteriaDecisions = queue
             for row in queue.pending { deliver(.criteriaDecision(intentID: row.intentId)) }
+            adoptReceipts(queue)
         }
         // Scoped to THIS session: every row says whether the door would take an answer from here.
         if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
@@ -1871,6 +1875,38 @@ final class ConsoleModel {
         decisionCards.append(card)
     }
 
+    /// Put the answers this project's read publishes into the conversation as records, and let go of
+    /// the question each one answers.
+    ///
+    /// The receipt is the record of what the owner did — drawn where the decision HAPPENED, the last
+    /// item at or before the door's own clock — and it survives a relaunch that never saw the card,
+    /// which the in-memory line it replaces did not (the account owner's report, 2026-09-16, about
+    /// the browser client, whose receipt was state in the page for the same reason).
+    ///
+    /// The question card is dropped in the same pass rather than left to dim into "answered at
+    /// another end": the record says which way it went, which is the thing the dimmed card could not
+    /// say (the owner's complaint of 2026-09-11), and two rows about one answer is one row too many.
+    /// A question whose answer the read does NOT name keeps its card, dimmed, and that heading is
+    /// then the only thing left that can explain what happened to it.
+    ///
+    /// Anchors are captured once: a receipt already delivered keeps the place it was given, so a
+    /// read coming round again cannot walk it down the conversation. One whose moment is older than
+    /// everything loaded is not drawn at all — see `CriteriaDecisions.receipts`.
+    private func adoptReceipts(_ queue: PendingCriteriaDecisionQueue) {
+        let receipts = CriteriaDecisions.receipts(queue: queue, items: state.items)
+        let answered = Set(receipts.map(\.settled.intentId))
+        guard !answered.isEmpty else { return }
+        decisionCards.removeAll { card in
+            guard case .criteriaDecision(let intentID) = card.kind else { return false }
+            return answered.contains(intentID)
+        }
+        for receipt in receipts where !decisionCards.contains(where: { $0.id == receipt.id }) {
+            decisionCards.append(DeliveredDecisionCard(
+                kind: .criteriaDecisionReceipt(settled: receipt.settled),
+                afterItemID: receipt.afterItemID))
+        }
+    }
+
     /// Where one delivered proposal stands right now — the whole of what decides whether its
     /// buttons may be pressed, and never a frame this card kept.
     func criteriaStanding(_ intentID: String) -> CriteriaDecisionStanding {
@@ -1885,14 +1921,15 @@ final class ConsoleModel {
     func decideCriteria(_ row: PendingCriteriaDecisionRow, _ decision: CriteriaDecisionAnswer) async {
         guard let projectID else { return }
         do {
-            let result = try await api.decideCriteriaChange(
+            _ = try await api.decideCriteriaChange(
                 projectID: projectID, intentID: row.intentId,
                 CriteriaDecisions.request(row: row, decision: decision))
             close(.criteriaDecision(intentID: row.intentId))
-            // The card that was answered HERE gives way to the line describing what it did: left on
-            // screen it would go stale into "answered at another end", which is the one reading of
-            // its own answer this window can be sure is wrong.
-            appendDecisionLine(CriteriaDecisions.decisionLine(result))
+            // The card that was answered HERE gives way to its receipt, which the re-read below
+            // draws where the decision happened (`adoptReceipts`). Nothing is written locally: left
+            // as a card it would go stale into "answered at another end" — the one reading of its
+            // own answer this window can be sure is wrong — and left as an in-memory line it would
+            // not survive the console being opened again.
         } catch {
             statusMessage = "That decision was not recorded — \(error)"
         }

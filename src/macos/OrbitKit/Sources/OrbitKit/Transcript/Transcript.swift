@@ -184,6 +184,12 @@ public struct AssistantBubble: Equatable, Sendable, Codable {
     public var streamingText: String
     public var seq: Int?
     public var turnId: String?
+    /// The runner's clock on the event this row came from (`RunEvent.ts`), where the stream carried
+    /// one. Kept so a row can say WHEN it happened rather than only that it did: a receipt drawn
+    /// from a read long after the fact (a criteria decision answered in another window) is placed
+    /// by comparing its own clock against the rows', the way web's `decisionReceiptAnchor` does.
+    /// Nil while the bubble is still streaming, and on transcripts recorded before this existed.
+    public var ts: String?
     public var isFinalized: Bool { seq != nil }
     /// What the UI renders: finalized text if present, else the live buffer.
     public var displayText: String { text.isEmpty ? streamingText : text }
@@ -262,11 +268,16 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// The same pair for the `tool_result` — a different event with its own seq.
     public var resultSeq: Int?
     public var resultTruncated: Bool
+    /// The runner's clock on this call's `tool_use` event (`RunEvent.ts`), for the same reason
+    /// `AssistantBubble.ts` is kept: a receipt arrives from a read rather than from the stream and
+    /// is placed by comparing clocks.
+    public var ts: String?
 
     public init(id: String, name: String, input: JSONValue, result: String?,
                 resultImages: [Data] = [], resultHasImage: Bool = false, status: ToolStatus,
                 inputSeq: Int = 0, inputTruncated: Bool = false,
-                resultSeq: Int? = nil, resultTruncated: Bool = false) {
+                resultSeq: Int? = nil, resultTruncated: Bool = false,
+                ts: String? = nil) {
         self.id = id
         self.name = name
         self.input = input
@@ -278,12 +289,13 @@ public struct ToolCard: Equatable, Sendable, Codable {
         self.inputTruncated = inputTruncated
         self.resultSeq = resultSeq
         self.resultTruncated = resultTruncated
+        self.ts = ts
     }
 
     // Tolerant decode so transcript snapshots written before `resultImages` existed still rehydrate
     // (the key just defaults to empty) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated
+        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated, ts
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -300,6 +312,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
         inputTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .inputTruncated)) ?? false
         resultSeq = try? c.decodeIfPresent(Int.self, forKey: .resultSeq)
         resultTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .resultTruncated)) ?? false
+        ts = try? c.decodeIfPresent(String.self, forKey: .ts)
     }
 }
 

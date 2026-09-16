@@ -790,6 +790,122 @@ public enum CriteriaDecisions {
         !isOpen(standing)
     }
 
+    // MARK: the receipt an answered proposal leaves
+
+    /// What a receipt says it is, where the card asked a question. Web's
+    /// `CRITERIA_DECISION_RECORDED_HEADING`, word for word — the same tripwire the rest of this
+    /// file's copy is held to (`CriteriaDecisionCopyParityTests`).
+    public static let recordedHeading = "Decision recorded"
+
+    /// The receipt's line: which way it was answered, and the clock the door recorded it at.
+    ///
+    /// Web's `criteriaVerdictReceipt`, word for word, minus its reply clause: where the answer went
+    /// is handed to the window that pressed the button and to nobody else, so a record read back
+    /// later — on a phone that never saw the card, or after the page was reloaded — says what was
+    /// decided rather than claiming a destination it never learned.
+    public static func receiptLine(_ settled: SettledCriteriaDecision) -> String {
+        let verdict = settled.decision == .approve ? "Approved" : "Refused"
+        return "✓ \(verdict) by you at \(receiptClock(settled.decidedAt))"
+    }
+
+    /// A receipt's clock, in the reader's own locale — the browser's `toLocaleTimeString` with a
+    /// two-digit hour and minute. Built once and reused, like `RelativeTime`'s formatters. An
+    /// unparseable stamp is shown as it came rather than dropped: a record with no time on it is a
+    /// record the reader cannot place.
+    private static let receiptClockFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+
+    public static func receiptClock(_ decidedAt: String) -> String {
+        guard let date = ThinkingSummary.date(decidedAt) else { return decidedAt }
+        return receiptClockFormatter.string(from: date)
+    }
+
+    /// The runner's clock on one transcript item, when it carries one.
+    ///
+    /// Reasoning is stamped at both ends (`ThinkingBlock.startedTs`/`finishedTs`) and a closed one
+    /// is anchored by when it FINISHED — the moment its row's words stopped being written. Nothing
+    /// else in the transcript carries a clock: an interrupt or an error row has no anchor of its
+    /// own, which is why the search below takes the LAST item that has one rather than the item
+    /// beside the moment.
+    public static func itemClock(_ item: TranscriptItem) -> String? {
+        switch item {
+        case .user(let bubble):        return bubble.ts
+        case .assistant(let bubble):   return bubble.ts
+        case .thinking(let block):     return block.finishedTs ?? block.startedTs
+        case .toolCall(let card):      return card.ts
+        case .interrupt, .error, .authError, .autoRetry: return nil
+        }
+    }
+
+    /// The item a receipt for `decidedAt` is drawn after: the last one whose clock is at or before
+    /// it. Nil when every loaded item is LATER — the moment is then above the window this device
+    /// holds, and drawing the receipt at the top would put a decision above things that happened
+    /// first (web's `decisionReceiptAnchor`, same rule).
+    public static func receiptAnchor(items: [TranscriptItem], decidedAt: String) -> String? {
+        guard let at = ThinkingSummary.date(decidedAt) else { return nil }
+        var anchor: String?
+        for item in items {
+            guard let stamp = itemClock(item), let when = ThinkingSummary.date(stamp), when <= at
+            else { continue }
+            anchor = item.id
+        }
+        return anchor
+    }
+
+    /// One answer this console draws as a record, and the item it belongs after.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let settled: SettledCriteriaDecision
+        /// The transcript item that was last at or before the decision. A card delivered live
+        /// anchors to the item that was last when it ARRIVED; a record has no arrival of its own on
+        /// a device that was not there, so it is anchored by the door's clock instead.
+        public let afterItemID: String
+
+        public init(settled: SettledCriteriaDecision, afterItemID: String) {
+            self.settled = settled
+            self.afterItemID = afterItemID
+        }
+
+        /// The row id, beside the live card's rather than the same as it: both can be on screen at
+        /// once for one intent (a question answered elsewhere is drawn as its receipt while the
+        /// question it answers is still being let go of), and two rows sharing an id would cost the
+        /// List its diff.
+        public var id: String { "criteria-decision-receipt-\(settled.intentId)" }
+    }
+
+    /// The receipts this console draws for the answers the project's read publishes.
+    ///
+    /// WHY THIS IS NOT THE PRESSING WINDOW'S
+    /// -------------------------------------
+    /// A receipt used to be written by the window that pressed the button (`appendDecisionLine`) and
+    /// kept in memory, so closing the app or opening the console again took the decision out of the
+    /// conversation altogether — the account owner's report, 2026-09-16, on the web client, whose
+    /// receipt was state in the page for the same reason. The answer is a committed row the read
+    /// publishes (`settled`), so it is derived here like the standing of every card, and a device
+    /// that never saw the question still shows what was decided. Web draws the same receipts in the
+    /// same place, from the same array (`criteriaDecisionReceiptRows`).
+    ///
+    /// An answer whose moment is older than everything loaded is NOT drawn: the window this console
+    /// holds starts at the tail, so a receipt with no anchor has no honest place to go.
+    public static func receipts(queue: PendingCriteriaDecisionQueue?,
+                                items: [TranscriptItem]) -> [Receipt] {
+        guard let queue else { return [] }
+        return queue.settled.compactMap { settled in
+            guard let anchor = receiptAnchor(items: items, decidedAt: settled.decidedAt) else {
+                return nil
+            }
+            return Receipt(settled: settled, afterItemID: anchor)
+        }
+    }
+
+    /// Whether the read says this proposal was answered — what makes its question card give way.
+    public static func answered(_ queue: PendingCriteriaDecisionQueue?, intentID: String) -> Bool {
+        queue?.settled.contains { $0.intentId == intentID } ?? false
+    }
+
     // MARK: derivation — the diff
 
     /// The line that says how many criteria this proposal leaves alone.
