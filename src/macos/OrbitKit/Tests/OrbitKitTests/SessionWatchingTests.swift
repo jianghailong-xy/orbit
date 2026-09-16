@@ -81,8 +81,8 @@ final class SessionWatchingTests: XCTestCase {
     }
 
     func testTheStripsOneLineProjectsTheLoneTargetOrTheCount() throws {
-        // One watch over one target that still exists names it, and its one deadline needs no
-        // "earliest": the line reads how far it has got, which is nothing yet.
+        // One watch over one target that still exists names it, and its own deadline needs no
+        // qualifier: one watch has exactly one deadline, so there is no soonest of several to name.
         let lone = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(-3 * 3600)),
         ]))
@@ -93,14 +93,52 @@ final class SessionWatchingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(-(3 * 3600 + 20 * 60))),
         ])).lineTime(now: now), "0 met · 3h 20m left")
-        // A deleted target is out of the set, in the single branch too.
+        // How far the wait has got, beside how long it has left: what the strip says on the line it
+        // is folded down to, so two looks at the same watch never read alike.
+        XCTAssertEqual(try XCTUnwrap(summary([
+            F.watch(id: "W1", targets: F.tasks(4, met: 2), expiresAt: F.ago(-3 * 3600)),
+        ])).lineTime(now: now), "2 met · 3h left")
+        // A deleted target is out of the set, in the single branch too — and out of the count.
         let gone = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0"), F.target("G", state: "GONE")]),
         ]))
         XCTAssertEqual(gone.lineTarget?.targetResourceId, "T0")
-        // Several watches count the distinct targets and prefix the soonest deadline — the one
-        // figure that is a soonest of several: T2 appears on both watches and is counted once, G is
-        // gone, and 4h is W1's deadline, not W2's 6h.
+        // A lone watch over several targets says what its own condition asks for, in the noun the
+        // card's rows count in: "4 targets" is what the watch covers, "all 4 tasks" is what it waits
+        // for, and an ANY watch over the same four is done after one of them.
+        let severalTargets = try XCTUnwrap(summary([F.watch(id: "W1", targets: F.tasks(4))]))
+        XCTAssertNil(severalTargets.lineTarget, "four targets are counted, not named")
+        XCTAssertEqual(severalTargets.lineTargetWord, "all 4 tasks")
+        XCTAssertEqual(try XCTUnwrap(summary([
+            F.watch(id: "W1", predicate: F.any("TASK_TERMINAL"), targets: F.tasks(4)),
+        ])).lineTargetWord, "any 1 of 4 tasks")
+        // A condition this build can't read states no threshold: the line counts the targets it can
+        // see and stops there. AT_LEAST is a predicateVersion 2 quorum and this client reads grammar
+        // 1, so on the watch the browser calls "2 of 4 tasks" this line says nothing about what the
+        // wait needs — "all 4 tasks" would be a requirement of this line's own, said about a
+        // condition the card beside it refuses to show, and the watch matches at two.
+        XCTAssertEqual(try XCTUnwrap(summary([
+            F.watch(id: "W1", predicate: ["kind": "AT_LEAST", "count": 2, "over": "ALL_TARGETS",
+                                          "leaf": "TASK_TERMINAL"],
+                    targets: F.tasks(4), predicateVersion: 2),
+        ])).lineTargetWord, "4 tasks")
+        // A leaf a later grammar added is the same case, aggregation and all: this build reads ALL
+        // and still cannot read the leaf it quantifies, so it states no count of them.
+        XCTAssertEqual(try XCTUnwrap(summary([
+            F.watch(id: "W1", predicate: ["kind": "ALL", "over": "ALL_TARGETS",
+                                          "leaf": "TASK_PROGRESS_AT_LEAST", "params": ["percent": 50]],
+                    targets: F.tasks(4), predicateVersion: 2),
+        ])).lineTargetWord, "4 tasks")
+        // A composite this build does read is not that case: nothing reduced it to one threshold, so
+        // it asks for the whole set — the browser's `thresholdOf` rule for it too.
+        XCTAssertEqual(try XCTUnwrap(summary([
+            F.watch(id: "W1", predicate: ["kind": "ALL_OF", "operands": [
+                ["kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL"],
+            ]],
+                    targets: F.tasks(4)),
+        ])).lineTargetWord, "all 4 tasks")
+        // Anything else counts the distinct targets and prefixes the soonest deadline: T2 appears on
+        // both watches and is counted once, G is gone, and 4h is W1's deadline, not W2's 6h.
         let several = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T1"), F.target("T2")], expiresAt: F.ago(-4 * 3600)),
             F.watch(id: "W2", targets: [F.target("T2"), F.target("G", state: "GONE")],
@@ -108,6 +146,7 @@ final class SessionWatchingTests: XCTestCase {
         ]))
         XCTAssertNil(several.lineTarget)
         XCTAssertEqual(several.lineTargetCount, 2)
+        XCTAssertEqual(several.lineTargetWord, "2 tasks")
         XCTAssertEqual(several.lineTime(now: now), "earliest 0 met · 4h left")
         // A deadline already reached reads "now", as the web's `left <= 0 ? 'now' : …` does.
         XCTAssertEqual(summary([F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(5))])?

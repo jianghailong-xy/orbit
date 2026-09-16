@@ -65,12 +65,12 @@ enum WatchFixture {
                       targets: [[String: Any]] = tasks(2), matches: [[String: Any]] = [],
                       endDeliveries: [[String: Any]] = [], generation: Int = 0,
                       lastEvaluatedAt: String? = ago(20), createdAt: String = ago(600),
-                      expiresAt: String = ago(-3_600)) -> Watch {
+                      expiresAt: String = ago(-3_600), predicateVersion: Int = 1) -> Watch {
         let object: [String: Any] = [
             "id": id,
             "observerType": observer == nil ? "USER" : "SESSION",
             "observerSessionId": observer.map { $0 as Any } ?? NSNull(),
-            "predicateVersion": 1,
+            "predicateVersion": predicateVersion,
             "predicate": predicate,
             "mode": "ONE_SHOT",
             "action": action,

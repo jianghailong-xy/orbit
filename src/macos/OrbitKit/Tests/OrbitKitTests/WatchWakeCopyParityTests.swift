@@ -344,6 +344,23 @@ final class WatchWakeCopyParityTests: XCTestCase {
         ]))
         XCTAssertEqual(waitAll.lineTargetWord, "all 4 tasks")
         XCTAssertEqual(waitAll.lineTime(now: WatchFixture.now), "2 met · 1h left")
+        // The one condition the two ends say different things about, and why: the browser reads
+        // predicateVersion 2, so it states the quorum's own count — "2 of 4 tasks" — while this
+        // client reads grammar 1, where a quorum is a term it does not know, and counts the targets
+        // instead. Both halves are asserted — the browser's branch here, this client's own word in
+        // `SessionWatchingTests` — so neither drifts, and the difference stays the grammar each
+        // client reads rather than becoming a copy that happens to agree.
+        let webLib = try flat(Self.webWatches)
+        XCTAssertTrue(webLib.contains("if (p.kind === 'AT_LEAST') return { needed: Math.min(p.count, of), of };"),
+                      "the browser stopped stating an AT_LEAST's own count: \(Self.webWatches) no "
+                          + "longer reads the quorum through `thresholdOf`. This client's v1 line "
+                          + "still counts the targets instead of naming a requirement it can't read.")
+        let quorum = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
+            WatchFixture.watch(id: "W1", predicate: ["kind": "AT_LEAST", "count": 2,
+                                                     "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL"],
+                               targets: WatchFixture.tasks(4), predicateVersion: 2),
+        ]))
+        XCTAssertEqual(quorum.lineTargetWord, "4 tasks", "a condition this client can't read states no threshold")
         let several = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
             WatchFixture.watch(id: "W1", targets: [WatchFixture.target("T1"), WatchFixture.target("T2")]),
             WatchFixture.watch(id: "W2", targets: [WatchFixture.target("T2")]),

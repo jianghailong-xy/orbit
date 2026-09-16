@@ -162,8 +162,17 @@ public enum WatchProjection {
     /// What one watch's condition asks for, over the targets its leaf can read: "all 4 tasks", "any
     /// 1 of 4 tasks". The count is the predicate's own — an ANY watch over four targets is done
     /// after one — so the middle of the strip line says what the wait needs, not what it covers.
-    /// The browser's `thresholdLine` over `thresholdOf` reads the same; a composite, a leaf this
-    /// build can't read, or a set it can't see asks for all of them.
+    /// The browser's `thresholdLine` over `thresholdOf` reads the same, and the two agree on every
+    /// condition both of them can read.
+    ///
+    /// A condition this build cannot read states no threshold: the line counts the targets it can
+    /// see instead ("4 tasks"). `AT_LEAST` is a predicateVersion 2 quorum — grammar 1 is ALL, ANY,
+    /// ALL_OF and ANY_OF, and `WatchContractTests` holds a quorum to being a term this client reads
+    /// without knowing — so on the AT_LEAST watch the browser states "2 of 4 tasks" and this line
+    /// can only count the four. It does **not** fall back to "all 4 tasks": that is a requirement of
+    /// the line's own, said about a condition the card right beside it refuses to show, and the
+    /// watch matches at two. A composite, which this build does read, keeps asking for the whole
+    /// set — the browser's rule for it too.
     public static func thresholdLabel(_ predicate: WatchPredicate, targets: [WatchTarget],
                                       watches: [Watch]) -> String {
         let kind: WatchTargetKind?
@@ -172,10 +181,11 @@ public enum WatchProjection {
         case .allOf, .anyOf, .unknown: kind = nil
         }
         let of = kind.map { k in targets.filter { $0.targetKind == k }.count } ?? targets.count
-        var needed = of
-        if case .any = predicate, of > 0 { needed = 1 }
         let noun = targetNoun(watches, count: of)
         if of == 0 { return "no \(noun)" }
+        guard predicate.isKnown else { return "\(of) \(noun)" }
+        var needed = of
+        if case .any = predicate, of > 0 { needed = 1 }
         if needed == of { return "all \(of) \(noun)" }
         if needed == 1 { return "any 1 of \(of) \(noun)" }
         return "\(needed) of \(of) \(noun)"
