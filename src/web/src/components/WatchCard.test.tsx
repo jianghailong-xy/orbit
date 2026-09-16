@@ -260,6 +260,31 @@ describe('a watch card', { timeout: 30_000 }, () => {
     expect(button('Edit', card)).toBeUndefined();
   });
 
+  it('draws the bar against what the condition asks for, not the target count', async () => {
+    const four = ['T1', 'T2', 'T3', 'T4'];
+    const settled = (met: number) => four.map((id, i) => target(id, i < met ? { state: 'SATISFIED' } : {}));
+    const leaf = { over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' } as const;
+    const rows = [
+      watch({ id: 'W1', predicate: { kind: 'ANY', ...leaf }, targets: settled(1) }),
+      watch({ id: 'W2', predicate: { kind: 'ALL', ...leaf }, targets: settled(2) }),
+      watch({ id: 'W3', predicate: { kind: 'AT_LEAST', count: 2, ...leaf }, targets: settled(1) }),
+    ];
+    serve(
+      { 'GET /watches': () => rows },
+      { T1: 'Task 1', T2: 'Task 2', T3: 'Task 3', T4: 'Task 4' },
+    );
+    await mount(<WatchList />);
+
+    const bar = (id: string) =>
+      container!.querySelector<HTMLElement>(`[data-watch-id="${id}"] .watch-bar > span`)!.style.width;
+    // One target settles an ANY watch, so three of its four still waiting leaves the bar full.
+    expect(bar('W1')).toBe('100%');
+    // An ALL asks for every target: two of four met is half the bar, as it always was.
+    expect(bar('W2')).toBe('50%');
+    // An AT_LEAST is measured against its own quota, not the set it was written over.
+    expect(bar('W3')).toBe('50%');
+  });
+
   it('pauses from the card and redraws it from the answer', async () => {
     let row = watch();
     serve(

@@ -19,6 +19,7 @@ import {
   pauseWatch,
   progressOf,
   resumeWatch,
+  thresholdOf,
   wakeWithdrawn,
   watchErrorMessage,
   watchProblem,
@@ -47,6 +48,8 @@ export function WatchCard({ watch, focused = false }: { watch: WatchView; focuse
   const problem = watchProblem(watch);
   const live = isLiveWatch(watch);
   const progress = progressOf(watch);
+  // What the condition asks for, which is not the target count: one target settles an ANY watch.
+  const needed = thresholdOf(watch.predicate, watch.targets).needed;
   const expiry = expiryLabel(watch, now);
   const lastMatch = watch.matches.at(-1);
   const shown = open ? watch.targets : watch.targets.slice(0, SHOWN_TARGETS);
@@ -93,8 +96,10 @@ export function WatchCard({ watch, focused = false }: { watch: WatchView; focuse
         <dd>
           {live || !lastMatch ? (
             <>
+              {/* Clamped: an AT_LEAST's count can lag the targets that have met it, and a bar past the
+                  whole of its track spills out of the card. */}
               <span className="watch-bar" aria-hidden="true">
-                <span style={{ width: `${progress.total ? Math.round((progress.met / progress.total) * 100) : 0}%` }} />
+                <span style={{ width: `${needed ? Math.min(100, Math.round((progress.met / needed) * 100)) : 0}%` }} />
               </span>
               {describeProgress(progress)}
             </>
