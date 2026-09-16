@@ -1212,7 +1212,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "tasks/tasks.service.ts#deliverMentions", class: "RAW_FENCE", statements: 3 },
   { at: "tasks/tasks.service.ts#deliverOneMention", class: "RAW_FENCE", statements: 1 },
   { at: "tasks/tasks.service.ts#dispatchStalledListForemen", class: "INSERT", statements: 1 },
-  { at: "tasks/tasks.service.ts#fileVerification", class: "INSERT", statements: 2, note: "Legacy verification creates a fresh task; an evidence-bound VERIFICATION request upserts the deterministic task whose id is the request id. Both are durable before any dispatch attempt." },
   { at: "tasks/tasks.service.ts#parkMentionDelivery", class: "RAW_FENCE", statements: 1 },
   { at: "tasks/tasks.service.ts#bindRunRequest", class: "ONE_ROW_CAS", statements: 1, note: "Writes the frozen plan onto the run receipt (0137), fenced on `lease_holder` + `attempt` and on `status = 'OPEN'`. A holder that lost its lease matches nothing and reads back the plan the takeover bound instead of its own." },
   { at: "tasks/tasks.service.ts#completeRunReceipt", class: "ONE_ROW_CAS", statements: 1, note: "Freezes the request's answer, fenced the same way. The value returned is read back from the row, never the local one, so a stale holder cannot answer with a result the database does not have." },

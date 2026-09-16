@@ -212,18 +212,19 @@ export const VERIFICATION_SUBJECT_REQUIRES_PROJECT_ACTION =
  * separate task pointing at it records, and its own run — if its policy gives it one at all — can
  * never produce that. (A `VERIFICATION_PASSED` subject has no run: a manual start is refused and
  * auto-dispatch passes it by. A `MANUAL` one does its own work and still waits for the same PASS,
- * which is why both are refused here.) Nothing on the server files that task for it:
- * `fileVerification` checks work that is already DONE, which a subject never becomes on its own.
- * Inside a project the coordinator files and starts the verification; outside one there is no
- * coordinator and no screen that writes `verifiesTaskId`, so the subject would wait for a check
- * nobody is going to file.
+ * which is why both are refused here.) Nothing on the server files that task for it: nothing here
+ * creates a verifier on its own — not for a subject, and not for anything else. Inside a project
+ * the coordinator files and starts the verification; outside one there is no coordinator and no
+ * screen that writes `verifiesTaskId`, so the subject would wait for a check nobody is going to
+ * file.
  *
  * A rule about what may be written, like `criterionNeedsProjectRefusal` above, but asked of one
  * more write: a project-less EVIDENCE_JUDGMENT row still settles against its own acceptanceCriteria,
  * while a subject taken out of its project is stranded exactly as one declared outside it.
  *
- * A verifier is never refused here. Its own verdict settles it, and `fileVerification` files its
- * `[VERIFY]` tasks in whatever project their subject is in, including none.
+ * A verifier is never refused here. Its own verdict settles it — nothing has to be filed for a
+ * verifier, so a project is not what would rescue it, and one outside every project is no more
+ * stranded than one inside.
  */
 export function verificationSubjectNeedsProjectRefusal(declaration: {
   completionCriterion?: TaskCompletionCriterionValue | null;

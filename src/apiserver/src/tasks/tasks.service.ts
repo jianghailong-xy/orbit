@@ -1209,13 +1209,6 @@ export function autoDispatchStillValid(current: bigint, observed: bigint): boole
 // Past MAX_CONSECUTIVE_FOREMEN the list is left alone until something actually runs in it: a
 // coordinator that has failed this many times is reporting a problem it cannot solve, and the
 // next identical run is not what surfaces it.
-// How many times one task may be sent back by verification before it is left for a human.
-//
-// A rejected verification puts the subject back to IN_PROGRESS, which lets it run again, reach
-// DONE again, and be verified again — an unbounded loop unless something counts. Two rounds is
-// enough for "the agent misread the task the first time" and short of "these two disagree about
-// what done means", which is the case a third identical round does not settle.
-export const MAX_VERIFICATIONS_PER_TASK = 2;
 
 /** What the sweep is allowed to materialise, per runner and per capped list. */
 export interface MaterialisationBudget {
@@ -8380,184 +8373,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * File a run that checks whether `taskId` actually did what it says it did.
-   *
-   * Asynchronous, and it does not gate the DONE it follows: the declared criterion already
-   * derived completion, and a list verification is a second opinion, not a precondition. A rejected check puts
-   * the subject back to IN_PROGRESS through the ordinary task_update the verifier already has —
-   * no separate verdict API, and the rejection is a normal, readable task event.
-   *
-   * Skipped for the tasks that would make it recursive or pointless: a verification run itself, a
-   * foreman, a task whose list has not opted in, and one that has already been checked
-   * MAX_VERIFICATIONS_PER_TASK times.
-   */
-  private async fileVerification(
-    ownerId: string,
-    taskId: string,
-  ): Promise<string | null> {
-    const task = await this.prisma.task.findFirst({
-      where: { id: taskId, ownerId },
-      select: {
-        id: true,
-        title: true,
-        listId: true,
-        projectId: true,
-        isForeman: true,
-        verifiesTaskId: true,
-        list: { select: { verifyOnDone: true } },
-        assignee: { select: { id: true, runnerId: true, deletedAt: true } },
-      },
-    });
-    // A verification of a verification has nothing left to check, and a foreman's output is a
-    // diagnosis rather than a unit of work with an acceptance criterion.
-    if (!task || task.isForeman || task.verifiesTaskId) return null;
-    // A runner-bound assignee that still exists. `deletedAt` matters as much as `runnerId`:
-    // sessions.create refuses a soft-deleted workspace, so filing here would leave an OPEN task
-    // that can never run and reads as pending work forever. Six of those were filed against a
-    // workspace deleted in August before this check existed.
-    if (!task.assignee?.runnerId || task.assignee.deletedAt) return null;
-    // Did anything actually run? `numTurns > 0` and not "has a SUCCEEDED session": at the moment
-    // an EXECUTABLE criterion derives DONE its own session is still RUNNING, so success is not yet recorded —
-    // but its turns are. The task that motivated all of this had 18 sessions and numTurns 0 on
-    // every one of them, and a comment claiming acceptance had passed.
-    const executed = await this.prisma.session.count({
-      where: {
-        taskId,
-        // A run in flight counts as evidence. `numTurns` is incremented when a turn *ends*, and a
-        // an EXECUTABLE task may derive DONE from inside the turn doing the work — so
-        // at this instant the run that just did it still reads zero, and a task that genuinely
-        // executed is indistinguishable from one that never did.
-        //
-        // Without this, every task completing in its first turn earns a verification regardless of
-        // the opt-in. Reproduced directly: a run with five turns behind it, in a list with
-        // verifyOnDone off, still had one filed. It had not yet bitten in production only because
-        // every DONE task here so far was genuinely unevidenced — all twenty verifications on
-        // record correctly caught completions with no run behind them, which is the case this
-        // branch deliberately checks without asking.
-        OR: [{ numTurns: { gt: 0 } }, { status: RunStatus.RUNNING }],
-      },
-    });
-    const unevidenced = executed === 0;
-    // The opt-in governs checking work that demonstrably happened — that is the expensive case,
-    // because it doubles a list's runs. A completion with no execution behind it is neither
-    // expensive nor ambiguous: it is 1.3% of this deployment's DONE tasks (8 of 621), and there
-    // is no run to double. Requiring opt-in for it would mean the one case nobody would decline
-    // is the one that needs asking for.
-    if (!unevidenced && !task.list?.verifyOnDone) return null;
-    // Cancelled checks don't count. The cap exists to stop verify → reject → re-DONE → verify
-    // from looping, and a cancelled verification issued no verdict, so it rejected nothing and is
-    // not part of any loop. Counting it spends a budget it never used — the same reason a
-    // quota-killed run does not spend the auto-run budget. In-flight ones still count, which is
-    // what keeps two from being filed for the same subject at once.
-    const already = await this.prisma.task.count({
-      where: { verifiesTaskId: taskId, status: { not: TaskStatus.CANCELLED } },
-    });
-    if (already >= MAX_VERIFICATIONS_PER_TASK) {
-      this.logger.log(
-        `verification skipped for task ${taskId} — already checked ${already} time(s)`,
-      );
-      return null;
-    }
-    const verificationData: Prisma.TaskUncheckedCreateInput = {
-      title: `[VERIFY] ${task.title}`.slice(0, 200),
-      description: this.buildVerificationBrief(task.title, taskId, unevidenced),
-      ownerId,
-      listId: task.listId,
-        // The subject's project, not none. A check filed outside its subject's project is one
-        // `GET /projects/:id/verifications` cannot see (it filters on the column) and one
-        // `VERIFICATION_PASSED` cannot count — the same rule the deliberate door enforces, which
-        // this path was quietly breaking for every project task it ever checked.
-      projectId: task.projectId,
-      assigneeId: task.assignee?.id ?? null,
-      verifiesTaskId: taskId,
-      // A verifier's verdict is its own completion fact.  This declaration is explicit because
-      // this internal Prisma path intentionally bypasses create()/taskCreateData().
-      completionCriterion: 'VERIFICATION',
-      completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
-      completionPolicy: 'MANUAL',
-      completionCriterionOverrideReason: null,
-        // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.
-      autoRunWhenReady: false,
-      creatorType: CreatorType.USER,
-      creatorId: ownerId,
-    };
-    const verification = await this.prisma.task.create({
-      data: verificationData,
-      select: { id: true },
-    });
-    // The row is durable before dispatch begins. If opening its first Session fails, no
-    // session.created event will exist to reveal it, so announce the fetchable row now.
-    this.publishKnownTaskRows(ownerId, [verification.id]);
-    // The one run this check exists for. A retry of the filing above makes a DIFFERENT task, so
-    // "the first run of this task, at the moment it was filed" names exactly one request for as
-    // long as the row exists.
-    if (task.assignee?.runnerId && !task.assignee.deletedAt) {
-      // The verifier row is announced first, then dispatch failure reaches its caller.
-      await this.execute(
-        ownerId,
-        verification.id,
-        undefined,
-        TASK_RUN_TRIGGER.firstRun(verification.id, await this.dispatchEpochOf(verification.id)),
-      );
-    }
-    this.logger.log(`verification ${verification.id} filed for task ${taskId}`);
-    return verification.id;
-  }
-
-  /**
-   * The verifier's brief.
-   *
-   * It leads with the evidence check because that is the one that has actually caught something
-   * here: a task in this deployment was marked done with a comment claiming acceptance had
-   * passed, while all 18 of its runs had failed without executing a turn. Asking "is there any
-   * trace of this work happening" is cheap, and it is a different question from "is the work
-   * correct" — worth asking first, because a no makes the second question moot.
-   *
-   * It is told to reject by putting the subject back to IN_PROGRESS, which is the state a failed
-   * run already lands on, so a rejected task rejoins the normal flow instead of needing one of
-   * its own.
-   *
-   * The id it carries is spelled base62, the same as the `id` the verifier gets back from
-   * `task_get` — and the same one it has to pass to `task_comment` and `task_update` to land its
-   * verdict on the subject. Prose is the one boundary `PublicIdInterceptor` cannot reach, since
-   * it rewrites response *fields* and a description is not one, so the encode happens here, where
-   * the id becomes text.
-   */
-  private buildVerificationBrief(title: string, taskId: string, unevidenced = false): string {
-    return (
-      `任务「${title}」（id: ${uuidToBase62(taskId)}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
-      (unevidenced
-        ? `⚠️ 系统已先行检查：该任务**没有任何一次运行执行过哪怕一个 turn**。这说明"完成"背后没有执行记录支撑，` +
-          `是很强的存疑信号——但它不是结论，请照下面的顺序查完再判。\n\n`
-        : '') +
-      `这是一次性的验收任务，不要替它把活干了，也不要长时间运行或轮询。\n\n` +
-      `请按以下顺序核实：\n` +
-      `1. 先看「有没有干过的证据」：用 task_get 读该任务的运行记录与评论。没有成功运行记录是重要的存疑信号，` +
-      `它意味着**评论里的自述一律不可采信**，但它本身不构成结论——运行记录只是证据的一种，不是唯一一种。\n` +
-      `2. 再看「产物在不在、对不对」：对照任务描述里的验收标准，亲自检查实际产物（文件是否存在、大小/校验和是否吻合、` +
-      `命令输出、提交等）。**只要声称的完成是可以独立核验的（例如给了文件路径、字节数、SHA-256、命令），就必须亲自去验，** ` +
-      `不要因为第 1 步存疑就跳过——确立事实往往只差一条命令，而这正是验收存在的意义。\n` +
-      `3. 综合判断：产物齐备且符合验收标准 → 通过（即使没有运行记录，也要在结论里写明证据是你亲自核验的，` +
-      `并指出运行记录缺失这一异常）；产物缺失、不符，或根本无从核验 → 不通过。\n\n` +
-      `结论处理：\n` +
-      `- 通过：用 task_evidence_submit 在**本验收任务**提交核验事实信封（claim / criterion / checks / gaps，`
-      + `checks 至少一条要能解析到本任务会话下的行），再用 task_update 给` +
-      `**本验收任务**写 verdict=PASS；不要用评论代替证据，也不要写任何任务的 status=DONE。\n` +
-      `- 不通过：用 task_comment 在**该任务**下写清缺什么、证据是什么，用 task_update 把**该任务**状态改回 IN_PROGRESS，` +
-      `再给**本验收任务**写 verdict=FAIL；不要写 status=DONE。\n\n` +
-      `注意区分两个任务：核实结论写在被验收的任务上，状态回退也改它；本验收任务的 status ` +
-      `由它声明的 completionCriterion 求值产生。`
-    );
-  }
-
-  /**
    * WHICH MOMENT this task is at right now — `task_dispatch_epoch.epoch` (0137).
    *
-   * The one-row read the doors that have no candidate scan need: the verification filer and the
-   * foreman create a task in order to run it once, immediately, so there is no sweep query to ride
-   * on. Both call it on a row they have just created, which is at the epoch its seed trigger gave
-   * it; the read is what makes that a fact this code took from the database rather than a constant
-   * it assumed, so a task ever filed for a first run at a later moment names a different request.
+   * The one-row read the doors that have no candidate scan need: the foreman creates a task in
+   * order to run it once, immediately, so there is no sweep query to ride on. It calls it on a row
+   * it has just created, which is at the epoch its seed trigger gave it; the read is what makes
+   * that a fact this code took from the database rather than a constant it assumed, so a task ever
+   * filed for a first run at a later moment names a different request.
    *
    * The three sweeps do NOT call this — they join the epoch into the statement that selects their
    * candidates, so the epoch they carry is the one every clause of their predicate was evaluated

@@ -68,8 +68,8 @@ function tasksService(db: PrismaClient): TasksService {
       for (const taskId of change.taskIds ?? []) published.push({ ownerId, taskId });
     },
   };
-  // Nothing here dispatches: every fixture task is unassigned, which is what makes `execute` and
-  // `fileVerification` unreachable. A stub that throws would say so loudly if that ever changed.
+  // Nothing here dispatches: every fixture task is unassigned, which is what makes `execute`
+  // unreachable. A stub that throws would say so loudly if that ever changed.
   const sessions = {
     create: () => {
       throw new Error('no fixture in this spec should start a run');

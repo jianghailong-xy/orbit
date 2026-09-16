@@ -121,20 +121,12 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
-    method: 'fileVerification',
-    statements: ['task.create'],
-    holds: [],
-    note:
-      'A bare INSERT with no creator Session and no links. Same argument as create\'s rank-40 ' +
-      'case: the new row is invisible to everyone else. The deterministic-id upsert that stood ' +
-      'beside it was N11\'s and went with the judgment request on 2026-09-02.',
-  },
-  {
-    file: 'tasks.service.ts',
     method: 'dispatchStalledListForemen',
     statements: ['task.create'],
     holds: [],
-    note: 'Identical shape to fileVerification: one INSERT, no links, no creator Session.',
+    note:
+      'A bare INSERT with no creator Session and no links: the new row is invisible to everyone ' +
+      'else, which is the same argument as create\'s rank-40 case, so it takes no rank at all.',
   },
   {
     file: 'tasks.service.ts',

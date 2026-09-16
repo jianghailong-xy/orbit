@@ -445,7 +445,7 @@ test('a subject in a project, and a verifier in none, pass the doors as before',
     tasks: [
       { ref: 'work', title: 'project-less work', completionCriterion: 'EXECUTABLE',
         acceptanceCommand: 'npm test', acceptanceExpectedExitCode: 0 },
-      // The shape `fileVerification` files outside a project: a verifier settles on its own verdict.
+      // A verifier outside any project: it settles on its own verdict, so nothing is stranded.
       { title: '[VERIFY] project-less work', verifiesRef: 'work',
         completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL' },
     ],
