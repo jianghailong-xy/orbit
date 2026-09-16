@@ -610,6 +610,13 @@ type ClaimedSession struct {
 	// `~/.claude/projects/<slug>/` directory, replays it as run events and clears the marker
 	// via POST /runner/sessions/:id/import-result. It does not reach the spawn at all.
 	ImportSourceCwd *string `json:"importSourceCwd,omitempty"`
+	// ImportOnly is set by a control plane whose /import-result parks the session at
+	// AWAITING_INPUT: the claim exists to carry the import and nothing else, so the runner
+	// settles it and releases it without spawning an engine — the spawn belongs to the first
+	// message, which claims the session again. Only this explicit statement may end the claim
+	// early. ImportSourceCwd alone does not imply it: an older control plane leaves the session
+	// RUNNING with no engine to consume its next turn, which is a session nobody can speak to.
+	ImportOnly bool `json:"importOnly,omitempty"`
 	// AgentID/TaskID are injected into the claude process (ORBIT_AGENT_ID/ORBIT_TASK_ID)
 	// so the `orbit mcp` server can attribute task work and resolve the current task.
 	AgentID string `json:"agentId,omitempty"`
@@ -811,8 +818,13 @@ type ReclaimSession struct {
 	MaxSeq           int             `json:"maxSeq"`
 	// ImportSourceCwd, cf. ClaimedSession.ImportSourceCwd: non-nil only while a transcript
 	// import is unfinished, and it names the cwd the runner locates the transcript from.
-	ImportSourceCwd *string         `json:"importSourceCwd,omitempty"`
-	Agent            AgentExecConfig `json:"agent"`
+	ImportSourceCwd *string `json:"importSourceCwd,omitempty"`
+	// ImportOnly, cf. ClaimedSession.ImportOnly: the reclaimed session is an unfinished import
+	// on a control plane that ends the claim with the import, so finishing it here does not
+	// spawn either — a runner that restarted mid-import must not warm an engine for a
+	// conversation nobody has spoken to.
+	ImportOnly bool            `json:"importOnly,omitempty"`
+	Agent      AgentExecConfig `json:"agent"`
 	// WorkDir is claude's cwd for this session, from the session's agent.
 	WorkDir string `json:"workDir,omitempty"`
 	// Injected into the claude process, cf. ClaimedSession.AgentID/TaskID.

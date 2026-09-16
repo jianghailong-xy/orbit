@@ -207,9 +207,11 @@ test('the created row is PENDING, resume-shaped, and marked for import', async (
   assert.equal(row.status, 'PENDING');
   assert.equal(row.provider, 'claude');
   assert.equal(row.providerBuiltin, true);
-  // Resume = numTurns > 0 in the claim payload; the seed turn is skipped for import sessions,
-  // so this 1 is what makes the first spawn a --resume.
-  assert.equal(row.numTurns, 1);
+  // No turn has run here and none can until the first message, so the count stays honest; the
+  // `--resume` the spawn needs is carried by `importedAt` (queue.buildSession), which records
+  // durably what this row is: a conversation that already exists on the caller's disk.
+  assert.equal(row.numTurns, 0);
+  assert.ok(row.importedAt instanceof Date, 'the durable provenance the resume decision reads');
   assert.equal(row.title, 'Imported design session');
   assert.equal(row.assignedRunnerId, 'runner-1');
   assert.equal(row.ownerId, OWNER);

@@ -40,6 +40,7 @@ type runnerStopControlPlane struct {
 	closed       bool
 	completions  []TurnCompleteRequest
 	finalizes    []RunFinalizeRequest
+	imports      []ImportResultRequest
 	holdReleases bool
 	releases     chan struct{}
 	releaseOnce  sync.Once
@@ -101,6 +102,17 @@ func (c *runnerStopControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 			c.closed = true
 			c.mu.Unlock()
 		}
+	case strings.HasSuffix(r.URL.Path, "/import-result"):
+		// Settles as applied, like the real door's CAS on a first ok. Cases that never import
+		// never post here, so what this answers is only ever read by the import ones.
+		var req ImportResultRequest
+		if json.NewDecoder(r.Body).Decode(&req) == nil {
+			c.mu.Lock()
+			c.imports = append(c.imports, req)
+			c.mu.Unlock()
+		}
+		_ = json.NewEncoder(w).Encode(ImportResultResponse{Ok: true, Applied: true})
+		return
 	case strings.HasSuffix(r.URL.Path, "/release-leases"):
 		c.mu.Lock()
 		hold := c.holdReleases
@@ -114,6 +126,13 @@ func (c *runnerStopControlPlane) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, _ = w.Write([]byte(`{}`))
+}
+
+// imports is every /import-result the runner posted, in arrival order.
+func (c *runnerStopControlPlane) importResults() []ImportResultRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]ImportResultRequest(nil), c.imports...)
 }
 
 func (c *runnerStopControlPlane) queue(turn RunInboxResponse) {

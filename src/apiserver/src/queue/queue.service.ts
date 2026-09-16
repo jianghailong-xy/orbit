@@ -286,8 +286,12 @@ export class QueueService {
     // An import session has no prompt to seed (it resumes a conversation that already exists in
     // its transcript), and must not gain one: the runner replays the transcript as events inside
     // its first claim, and a seeded turn would hand the engine an empty "user message" instead.
-    // numTurns was set at create time precisely so resume stays true without this increment.
-    if (!session.importSourceCwd) {
+    // Keyed on the durable provenance and not on importSourceCwd, which /import-result clears as
+    // soon as the replay lands: the claim that carried the import is not the only one that has to
+    // skip this. The claim a first message arrives on is the same session with the same absent
+    // prompt, and a seed there would put an empty turn ahead of the person's own — at seq 1,
+    // which the message has already taken.
+    if (!session.importedAt) {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;
@@ -383,7 +387,12 @@ export class QueueService {
     // numTurns so the runner does a first spawn instead of --resume (which would fail —
     // Claude has no session file for the new id), and force resume=false so the runner
     // doesn't try to pick up a non-existent conversation.
-    let resume = session.numTurns > 0;
+    // An imported session's conversation is already on disk — the runner placed the transcript
+    // as its first claim's work — so the spawn must resume it, and none of this session's claims
+    // has settled a turn (an import settles none, and its own claim spawns no engine). The
+    // durable provenance says so where numTurns=1 used to stand in for it: read there, that fake
+    // turn was indistinguishable from a real one everywhere else numTurns is consulted.
+    let resume = session.numTurns > 0 || session.importedAt != null;
     if (provider === AgentProvider.CLAUDE && !session.runtimeSessionId) {
       const id = randomUUID();
       await this.prisma.session.update({
@@ -433,6 +442,13 @@ export class QueueService {
       // Non-null = import PENDING: the runner performs the transcript import step inside this
       // claim (copy + event replay + /import-result) before spawning the engine.
       importSourceCwd: session.importSourceCwd ?? undefined,
+      // …and this claim is the import and nothing else: /import-result parks the session at
+      // AWAITING_INPUT (the only place that can — this claim carries no turn), so the runner
+      // settles it and goes cold instead of warming an engine nothing has spoken to. Sent
+      // separately from the marker above so a runner meeting an older control plane keeps
+      // spawning: there /import-result does not park, and the engine is what keeps the session
+      // reachable for the next message.
+      importOnly: session.importSourceCwd != null,
       // Injected into the runtime process so the `orbit mcp` server knows its context.
       agentId: session.workspaceId ?? undefined,
       // §13.8: a conversation ABOUT a task needs the same tool context as one executing it — the
