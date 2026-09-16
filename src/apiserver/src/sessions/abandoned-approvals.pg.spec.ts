@@ -50,6 +50,7 @@ import {
 import {
   APPROVAL_ABANDONED_MESSAGE,
   APPROVAL_ABANDONED_STATUS,
+  APPROVAL_ORPHANED_MESSAGE,
   reapApprovalsOfEndedTurns,
 } from './abandoned-approvals';
 import { SessionsService } from './sessions.service';
@@ -289,5 +290,143 @@ test('an approval whose turn ended stops counting, and says so in the row', {
     const row = await approval(unknownOpener.id);
     assert.equal(row.status, 'PENDING', 'an unknown opener is not a dead one');
     assert.equal(row.message, null, 'and nothing was written about it');
+  });
+});
+
+/**
+ * THE OTHER WAY A CARD DIES: ITS READER IS REPLACED, AND ITS TURN RUNS ON.
+ *
+ * 2026-09-16. A create card was raised at 05:53; the runner restarted at 06:01; the turn was
+ * re-delivered to the new process at 06:03 and kept its id, so every fact the reaper above reads
+ * still said "live" — and it was live. The account owner answered at 06:02, on two identical cards
+ * by then, and nothing happened either time: both poll loops had died with the process nine
+ * minutes earlier.
+ *
+ * The cases below are built so that the collection cannot be explained by the turn ending (it does
+ * not end anywhere in this test) nor by a rotation on its own:
+ *
+ *   (1) The card is raised the way `askBeforeCreate` raises one — no `tool_use_id`, the shape that
+ *       neither the client's pairing rule nor `stillBeingAsked` can ever settle — and the
+ *       turn-ended reaper correctly declines to collect it.
+ *   (2) A different process takes the session over. The card is collected, the trace says why, and
+ *       the turn it was raised in is STILL IN FLIGHT at the end of the case.
+ *   (3) A takeover that does not rotate the owner collects nothing: the process reading the card
+ *       is the one that was already reading it.
+ *   (4) A first claim collects nothing. A session whose lease owner was null lost no process, and
+ *       "nobody was supervising it" is not evidence about who is reading its cards.
+ */
+test('a card whose reader is replaced stops counting, while its turn runs on', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'orphan');
+  const predecessor = randomUUID();
+  await db.session.update({
+    where: { id: f.sessionId },
+    data: { inboxLeaseOwner: predecessor, inboxLeaseGeneration: randomUUID() },
+  });
+
+  async function pendingApprovals(): Promise<number> {
+    const rows = await stack.sessions.list(f.ownerId, {});
+    const row = rows.find((s: { id: string }) => s.id === f.sessionId) as
+      | { pendingApprovals: number }
+      | undefined;
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    return row.pendingApprovals;
+  }
+
+  const approval = (id: string) =>
+    db.approval.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, message: true, decidedAt: true, decidedById: true, turnId: true },
+    });
+  const turnIsLive = async () =>
+    (await db.conversationTurn.findUniqueOrThrow({ where: { id: f.turnId } })).status === 'IN_FLIGHT';
+
+  // Raised as `askBeforeCreate` raises one: Orbit's own confirmation card, with no tool_use id to
+  // pair a result against. It is the shape with no other way of ever being settled.
+  const card = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+    toolName: 'orbit_task_create',
+    input: { title: '撤回排队中的唤醒轮次会把它承载的 wake/wakeup 行丢在半空' },
+  });
+
+  await t.test('(1) the turn is live, so the turn-ended reaper leaves it alone', async () => {
+    assert.equal((await approval(card.id)).turnId, f.turnId, 'it records the turn that raised it');
+    assert.equal(await pendingApprovals(), 1, 'and the badge is lit');
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
+      'nothing there is wrong: the turn really is still running');
+  });
+
+  await t.test('(2) a different process takes over: collected, traced, turn still in flight', async () => {
+    const successor = randomUUID();
+    await stack.api.takeoverLeases({ id: f.runnerId }, f.sessionId, {
+      leaseOwner: successor, expectedLeaseOwner: predecessor,
+    } as never);
+
+    assert.ok(await turnIsLive(),
+      'the turn is untouched — this collection cannot be explained by the turn ending');
+    const row = await approval(card.id);
+    assert.equal(row.status, APPROVAL_ABANDONED_STATUS, 'the card is collected');
+    assert.equal(row.message, APPROVAL_ORPHANED_MESSAGE,
+      'and carries the reason nobody will answer it — a trace, not a silent delete');
+    assert.equal(row.decidedAt, null, 'nobody decided anything');
+    assert.equal(row.decidedById, null, 'so it names no decider');
+    assert.equal(await db.approval.count({ where: { sessionId: f.sessionId } }), 1,
+      'the question that was asked stays in the record');
+
+    // The state the account owner was actually in at 06:02, and the only one in which the badge
+    // proves anything: the successor is generating again (a takeover clears `engineTurnActive`,
+    // and `stillBeingAsked` counts nothing at all while it is false), the turn is live, and the
+    // card is still on their screen. Restored by hand because the re-delivery that does it in
+    // production is a different boundary; what is under test is whether the card can be answered.
+    await db.session.update({ where: { id: f.sessionId }, data: { engineTurnActive: true } });
+    assert.equal(await pendingApprovals(), 0, 'the badge is dark: an answer would reach nobody');
+  });
+
+  await t.test('(3) a takeover that rotates nothing collects nothing', async () => {
+    const holder = randomUUID();
+    await db.session.update({ where: { id: f.sessionId }, data: { inboxLeaseOwner: holder } });
+    const live = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+      toolName: 'orbit_task_create',
+      input: { title: '还在问的那张' },
+    });
+
+    await stack.api.takeoverLeases({ id: f.runnerId }, f.sessionId, {
+      leaseOwner: holder, expectedLeaseOwner: holder,
+    } as never);
+
+    assert.equal((await approval(live.id)).status, 'PENDING',
+      'the process reading this card is the one that was already reading it');
+    assert.equal(await pendingApprovals(), 1, 'so it is still a live question');
+  });
+
+  await t.test('(4) a first claim collects nothing — there was no reader to lose', async () => {
+    const g = await fixture(db, 'first-claim');
+    const fresh = await stack.api.createApproval({ id: g.runnerId }, g.sessionId, {
+      toolName: 'orbit_task_create',
+      input: { title: '刚发出的那张' },
+    });
+    assert.equal(
+      (await db.session.findUniqueOrThrow({ where: { id: g.sessionId } })).inboxLeaseOwner,
+      null,
+      'nobody has claimed this session yet — the state the null-predecessor guard is for',
+    );
+
+    await stack.api.takeoverLeases({ id: g.runnerId }, g.sessionId, {
+      leaseOwner: randomUUID(), expectedLeaseOwner: null,
+    } as never);
+
+    assert.equal((await approval(fresh.id)).status, 'PENDING',
+      'a claim with no predecessor says nothing about who is reading this card');
   });
 });

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The owner's rule: nothing is created on their behalf without their saying yes first. These pin
@@ -214,5 +215,85 @@ func TestCLICreateBatchDryRunInsideASessionDoesNotAsk(t *testing.T) {
 	}
 	if len(*hits) != 1 || strings.Contains((*hits)[0], "/approvals") {
 		t.Fatalf("hits = %v, want the preview alone", *hits)
+	}
+}
+
+// A card outlives the door going down. The runner restart and apiserver rebuild that happen under
+// a running session are exactly when a poll fails, and the card is already on the human's screen
+// by then: ending the loop there leaves a live-looking card nothing reads, and the retry the agent
+// then makes files a second one beside it.
+func TestMCPCreateKeepsReadingTheCardThroughADoorOutage(t *testing.T) {
+	restore := approvalPollRetryDelay
+	approvalPollRetryDelay = time.Millisecond
+	t.Cleanup(func() { approvalPollRetryDelay = restore })
+
+	var filed, polls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			polls++
+			if polls <= 2 { // the apiserver is being restarted under us
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte("502 error code: 502"))
+				return
+			}
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`)) // the human answers the card they were shown
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			filed++
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+		default:
+			_, _ = w.Write([]byte(`{"id":"t1"}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+	res := mcp.callTool("task_create", map[string]interface{}{
+		"title": "Fix login redirect", "completionCriterion": "EVIDENCE_JUDGMENT",
+	})
+
+	if res["isError"] == true {
+		t.Fatalf("an outage was reported as a failed create: %#v", res["content"])
+	}
+	if filed != 1 {
+		t.Fatalf("filed %d cards, want the one the human is looking at", filed)
+	}
+	if polls != 3 {
+		t.Fatalf("polled %d times, want the two refusals and the answer", polls)
+	}
+}
+
+// The other direction: a refusal from the door IS an answer about the card, so the loop stops
+// rather than spinning on a row that is gone.
+func TestMCPCreateStopsWhenTheCardIsGone(t *testing.T) {
+	restore := approvalPollRetryDelay
+	approvalPollRetryDelay = time.Millisecond
+	t.Cleanup(func() { approvalPollRetryDelay = restore })
+
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits = append(hits, r.Method+" "+r.URL.Path)
+		switch {
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("no such approval"))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+		default:
+			_, _ = w.Write([]byte(`{"id":"t1"}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+	res := mcp.callTool("task_create", map[string]interface{}{
+		"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT",
+	})
+
+	if res["isError"] != true {
+		t.Fatalf("a card that cannot be read is an error, got %#v", res["content"])
+	}
+	if wroteAnything(hits) {
+		t.Fatalf("wrote without a yes: %v", hits)
 	}
 }

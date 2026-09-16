@@ -21,12 +21,18 @@ function harness(
   owned = true,
   status: RunStatus = RunStatus.AWAITING_INPUT,
   operationState: Record<string, unknown> = {},
+  /** Cards this session has open when the takeover lands — what the collection returns. */
+  pendingApprovals: string[] = [],
 ) {
   const executeCalls: unknown[][] = [];
+  const published: Array<{ type: string; payload: Record<string, unknown> }> = [];
   let queryCalls = 0;
   let notified: string | undefined;
   const tx = {
-    $queryRaw: async () => {
+    // Answered by statement: this boundary runs two, and a fake that hands the session row back
+    // to both would have the approval collection reading a session as a list of cards.
+    $queryRaw: async (...args: unknown[]) => {
+      if (sql(args).includes('UPDATE "approval"')) return pendingApprovals.map((id) => ({ id }));
       queryCalls += 1;
       return owned
         ? [
@@ -58,10 +64,14 @@ function harness(
     notifyInbox: (sessionId: string) => {
       notified = sessionId;
     },
+    publish: (_sessionId: string, frame: { type: string; payload: Record<string, unknown> }) => {
+      published.push(frame);
+    },
   } as never;
   return {
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     executeCalls,
+    published,
     notified: () => notified,
     queryCalls: () => queryCalls,
   };
@@ -342,4 +352,40 @@ test('takeover rejects non-owners and malformed process identities', async () =>
     );
     assert.equal(malformed.queryCalls(), 0);
   }
+});
+
+test('takeover tells the clients that the cards the replaced process was reading are dead', async () => {
+  // The collection itself is pinned against a real database in
+  // sessions/abandoned-approvals.pg.spec.ts. What is here is the half that reaches the phone: a
+  // client drew these cards from the live `approval_request` frame and can see nothing that
+  // changes at a takeover, so without this frame it keeps drawing them with their buttons live —
+  // which on 2026-09-16 is exactly what the account owner pressed, twice, to no effect.
+  const CARD = '66666666-6666-4666-8666-666666666666';
+  const h = harness(OLD_OWNER, GENERATION, true, RunStatus.AWAITING_INPUT, {}, [CARD]);
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: NEW_OWNER,
+    expectedLeaseOwner: OLD_OWNER,
+  });
+
+  assert.deepEqual(
+    h.published.map((frame) => ({ type: frame.type, id: frame.payload.id })),
+    [{ type: 'approval_resolved', id: CARD }],
+    'one frame per collected card, naming it',
+  );
+});
+
+test('a takeover that rotates nothing tells the clients nothing', async () => {
+  // Same owner: no process was replaced, so the cards are being read by whoever was reading them.
+  const h = harness(OLD_OWNER, GENERATION, true, RunStatus.AWAITING_INPUT, {}, [
+    '66666666-6666-4666-8666-666666666666',
+  ]);
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: OLD_OWNER,
+    expectedLeaseOwner: OLD_OWNER,
+  });
+
+  assert.deepEqual(h.published, [], 'nothing died, so nothing is announced');
+  assert.equal(h.executeCalls.length, 0, 'and nothing was written');
 });

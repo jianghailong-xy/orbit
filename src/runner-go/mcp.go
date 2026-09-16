@@ -1088,7 +1088,8 @@ const (
 //
 // Headless (no session) there is nobody to ask and no card to show, so the write goes ahead as it
 // always has. Anything but a yes writes nothing — a denial, an abandoned card, a status this runner
-// does not know — and a transport failure is an error, never a silent yes.
+// does not know — and a transport failure is never a silent yes: it is polled again (see
+// approvalPollIsAnswered), because the card is already in front of a human.
 func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}) (declined string, err error) {
 	if sessionID == "" {
 		return "", nil
@@ -1105,7 +1106,11 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 	for {
 		dec, err := t.pollApproval(context.Background(), sessionID, id)
 		if err != nil {
-			return "", fmt.Errorf("approval poll failed: %w", err)
+			if approvalPollIsAnswered(err) {
+				return "", fmt.Errorf("approval poll failed: %w", err)
+			}
+			time.Sleep(approvalPollRetryDelay)
+			continue
 		}
 		switch dec.Status {
 		case "PENDING":
@@ -1118,6 +1123,29 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 		}
 		return "denied by the user", nil
 	}
+}
+
+// How long to wait before reading a card again after a failure that said nothing about it. Small,
+// because the door is usually back within one restart; a variable so a test can shrink it.
+var approvalPollRetryDelay = 2 * time.Second
+
+// approvalPollIsAnswered says whether a failed poll ANSWERED the question this loop is asking —
+// "is this card still a live question?" — and is therefore a reason to stop reading it.
+//
+// Two cases and no others. A refusal from the door IS that answer: a 404 for a card that is gone, a
+// 403 for a session that is no longer this runner's. Asking again can only repeat it. Everything
+// else — no response at all, a 5xx, a timeout — says nothing about the card, which is still filed
+// and still on somebody's screen with its buttons live.
+//
+// Giving up on that second kind is what 2026-09-16 looked like: one 502 while the apiserver was
+// being restarted ended this loop, the row stayed PENDING with nothing left to read it, and the
+// agent — correctly, having been handed an error — filed a second card. The human then had two
+// identical cards, answered the older one, and nothing happened. So a failure that says nothing
+// leaves the card alone and this loop keeps reading it: the card and the loop that consumes its
+// answer live and die together, which is the property every reader of an approval assumes.
+func approvalPollIsAnswered(err error) bool {
+	httpErr, answered := err.(*transportHTTPError)
+	return answered && httpErr.statusCode >= 400 && httpErr.statusCode < 500
 }
 
 // askBeforeBatch is askBeforeCreate for a batch, whose card carries the server-computed preview:

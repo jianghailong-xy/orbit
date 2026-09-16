@@ -123,7 +123,11 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
-import { reapApprovalsOfEndedTurns } from '../sessions/abandoned-approvals';
+import {
+  APPROVAL_ABANDONED_STATUS,
+  reapApprovalsOfEndedTurns,
+  reapApprovalsOfReplacedSupervisor,
+} from '../sessions/abandoned-approvals';
 import {
   CURRENT_WORK_RUNTIME_REJECTED,
   CURRENT_WORK_SESSION_FINALIZED,
@@ -1710,7 +1714,7 @@ export class RunnerApiController {
     // status — is re-read under the row lock inside the closure, so a re-run judges the state the
     // winning transaction left rather than replaying a takeover decided against a discarded
     // snapshot. `dto` and the parsed generations are computed above and identical on every attempt.
-    const status = await withTransactionRetry(this.prisma, async (tx) => {
+    const taken = await withTransactionRetry(this.prisma, async (tx) => {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
@@ -1754,7 +1758,7 @@ export class RunnerApiController {
       ) {
         throw new ConflictException('runner does not support terminal session handoff');
       }
-      if (currentOwner === leaseOwner) return owned[0].status;
+      if (currentOwner === leaseOwner) return { status: owned[0].status, orphanedApprovals: [] };
       if (
         pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
@@ -1817,10 +1821,30 @@ export class RunnerApiController {
           AND kind IN ('message', 'shell')
           AND status = 'IN_FLIGHT'
       `;
-      return owned[0].status;
+      // The pending approval cards are the same kind of claim about the predecessor: the poll loops
+      // that would carry their answers back ran inside it. Unlike the background shells, a card
+      // keeps a person in front of it — it stays on screen, pressable, and answering it does
+      // nothing at all — so it is collected here rather than left for the turn to end, which for a
+      // turn that is about to be RE-DELIVERED to the new process may be hours away or never.
+      // Only with a predecessor to have lost: see reapApprovalsOfReplacedSupervisor.
+      const orphanedApprovals = currentOwner
+        ? await reapApprovalsOfReplacedSupervisor(tx, sessionId)
+        : [];
+      return { status: owned[0].status, orphanedApprovals };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
+    // After commit, and one frame per card: a client holds these from the `approval_request` it was
+    // sent live, and nothing it can see changes at a takeover, so without this the card it is
+    // drawing stays answerable-looking until the session is next opened from scratch.
+    for (const id of taken.orphanedApprovals) {
+      this.realtime.publish(sessionId, {
+        seq: 0,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id, status: APPROVAL_ABANDONED_STATUS },
+        ts: new Date().toISOString(),
+      });
+    }
     this.realtime.notifyInbox(sessionId);
-    return { ok: true, status: status as SharedRunStatus };
+    return { ok: true, status: taken.status as SharedRunStatus };
   }
 
   /** Activate one freshly reserved engine as this session's sole inbox consumer. */

@@ -84,3 +84,49 @@ export async function reapApprovalsOfEndedTurns(
   });
   return collected.count;
 }
+
+/** The trace, in the row itself, of why a card whose reader was replaced will never be answered. */
+export const APPROVAL_ORPHANED_MESSAGE =
+  'the process that asked this was replaced before it was answered, so nothing is left to receive an answer';
+
+/**
+ * Collect this session's pending approvals when a DIFFERENT process takes the session over. Returns
+ * the ids collected.
+ *
+ * WHY THE PREDICATE ABOVE CANNOT SEE THESE
+ * ----------------------------------------
+ * A runner that restarts mid-turn leaves the turn IN_FLIGHT. It is re-delivered to the process that
+ * takes over, keeps its id and runs on, so every fact `reapApprovalsOfEndedTurns` reads still says
+ * "live" — and it is right, the turn is live. What died is narrower and just as committed: the poll
+ * loops. They ran inside the process being replaced (`orbit mcp` is its child), so an answer to any
+ * card they filed now reaches nobody.
+ *
+ * 2026-09-16 is what that costs when nothing collects them: a create card was raised at 05:53, the
+ * runner restarted at 06:01, and the account owner answered at 06:02 — twice, a second card having
+ * appeared beside the first — with both answers reaching nothing, because both loops had died nine
+ * minutes earlier. The turn was still running the whole time.
+ *
+ * THE FACT IT USES
+ * ----------------
+ * A different process now supervises this session. That is the same committed rotation the takeover
+ * already clears the predecessor's background shells and engine flag on, and the reasoning is
+ * identical: what that process owned went with it. So this takes no view on WHICH turn raised a
+ * card — unlike the reaper above, whose question is per-row ("is the turn that asked still live?")
+ * and which must therefore refuse the rows whose opener is unknown. Here the fact is about the
+ * session's reader, and every pending card of that session was being read by it.
+ *
+ * Called only where the rotation is committed, and only when there WAS a predecessor: a session
+ * whose lease owner was null had no process to lose, and "nobody was supervising it" is not
+ * evidence that nobody is reading these cards.
+ */
+export async function reapApprovalsOfReplacedSupervisor(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+): Promise<string[]> {
+  const collected = await tx.$queryRaw<Array<{ id: string }>>`
+    UPDATE "approval"
+       SET "status" = ${APPROVAL_ABANDONED_STATUS}, "message" = ${APPROVAL_ORPHANED_MESSAGE}
+     WHERE "session_id" = ${sessionId}::uuid AND "status" = 'PENDING'
+    RETURNING "id"`;
+  return collected.map((row) => row.id);
+}
