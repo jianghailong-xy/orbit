@@ -115,6 +115,135 @@ describe('runAtLocalValue — a stored instant as the control’s own value', ()
   });
 });
 
+/**
+ * The forward half of the conversion, on its own. These cases moved here when the project page's
+ * manual task-create dialog — the caller whose own suite used to prove them — was removed; the
+ * function is unchanged and now has exactly one writer, the task panel's Start at editor.
+ */
+describe('runAtIso — a local control value as the UTC wire instant', () => {
+  it('converts the viewer’s local wall clock to the UTC instant, zone by zone', () => {
+    // The SAME wall-clock reading is three different instants in three zones — which is the whole
+    // job of this function, and what a naive `local + 'Z'` would get wrong in two of them.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T01:00:00.000Z');
+    expect(inTimeZone(NEW_YORK, () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T13:00:00.000Z');
+    expect(inTimeZone('UTC', () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T09:00:00.000Z');
+
+    // Across midnight the conversion moves the DATE too, not just the clock: 09:00 in Shanghai on
+    // the 1st is still the previous day in UTC.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T07:30'))).toBe('2026-08-31T23:30:00.000Z');
+
+    // Whatever the zone, what goes on the wire is always canonical UTC ISO-8601 — never a locale
+    // rendering like "9/1/2026, 9:00 AM", which the server reads as no date at all.
+    for (const tz of [SHANGHAI, NEW_YORK, 'UTC']) {
+      expect(inTimeZone(tz, () => runAtIso('2026-09-01T09:00'))).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
+    }
+
+    // Nothing chosen, and a control the reader cleared, are both absence rather than an instant.
+    expect(runAtIso(undefined)).toBeUndefined();
+    expect(runAtIso('')).toBeUndefined();
+  });
+
+  it('refuses a date with no time rather than silently shifting it by the viewer’s offset', () => {
+    // The trap this guards: `new Date('2026-09-01')` is parsed as UTC while
+    // `new Date('2026-09-01T09:00')` is parsed as LOCAL, so letting a date-only value through
+    // would schedule a Shanghai reader's task 8 hours off with no error anywhere.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01'))).toBeUndefined();
+    // Proof the two really do disagree, so the guard above is closing a real gap and not noise.
+    expect(inTimeZone(SHANGHAI, () => new Date('2026-09-01').toISOString())).not.toBe(
+      inTimeZone(SHANGHAI, () => new Date('2026-09-01T00:00').toISOString()),
+    );
+  });
+
+  it('turns half-typed and impossible input into no schedule, never an Invalid Date', () => {
+    // What a partly-filled or hand-edited control can hand back. None of it may reach the wire,
+    // and none of it may throw — the editor stays usable and simply carries no schedule.
+    //
+    // Pinned even though every case here is rejected in EVERY zone: the last two rows do reach the
+    // Date constructor, and a value's fate must never depend on where the suite happens to run.
+    inTimeZone(BERLIN, () => {
+      for (const bad of [
+        'tomorrow',
+        '2026-09-01T09', // hour, no minutes — a picker mid-edit
+        '9/1/2026, 9:00 AM', // a locale rendering, the value that must never be sent
+        '2026-09-01T09:00Z', // an offset spelling the control never produces
+        '2026-13-01T09:00', // no 13th month
+        '2026-09-01T25:00', // no 25th hour
+      ]) {
+        expect(runAtIso(bad)).toBeUndefined();
+      }
+    });
+  });
+
+  it('refuses a date the calendar does not have, rather than rolling it forward', () => {
+    // A calendar is the same everywhere, so none of this depends on the zone — but the whole test
+    // is pinned regardless, because the EXPECTED ISO strings below do, and because a helper that
+    // is only sometimes wrapped is one edit away from being wrapped nowhere.
+    inTimeZone(BERLIN, () => {
+      // The Date constructor NORMALIZES rather than refusing, so Feb 31st is a real instant three
+      // days later — a schedule nobody picked, arriving with no error at all.
+      for (const impossible of ['2026-02-31T12:00', '2026-02-30T09:00', '2026-04-31T10:00']) {
+        expect(runAtIso(impossible)).toBeUndefined();
+      }
+
+      // Proof the rollover is real, so the check above is closing a gap rather than restating the
+      // regex: the raw constructor turns Feb 31st into March.
+      expect(new Date(2026, 1, 31).getMonth()).toBe(2);
+
+      // The last real day of each of those months still goes through untouched.
+      expect(runAtIso('2026-02-28T12:00')).toBe('2026-02-28T11:00:00.000Z');
+      expect(runAtIso('2026-04-30T10:00')).toBe('2026-04-30T08:00:00.000Z');
+      // ...including a leap day in a year that has one.
+      expect(runAtIso('2028-02-29T12:00')).toBe('2028-02-29T11:00:00.000Z');
+      // ...and not in a year that does not.
+      expect(runAtIso('2026-02-29T12:00')).toBeUndefined();
+    });
+  });
+
+  it('refuses a wall time that the reader’s own clock skips on a spring-forward day', () => {
+    // ONE wrapper around every Berlin assertion, rather than one per call. This test is the only
+    // one here whose outcome really does change with the zone — 02:30 on this date is a perfectly
+    // ordinary time in UTC — so a single paired call left outside the wrapper would pass on this
+    // machine and fail on a UTC CI host. Scoping it structurally is what makes that impossible.
+    inTimeZone(BERLIN, () => {
+      // Berlin jumps 02:00 -> 03:00 on 2026-03-29, so 02:30 is a time that does not happen. Left
+      // to normalize it becomes 03:30 — and lands on the SAME instant as a deliberate 03:30, which
+      // is what makes this worse than being merely an hour off: afterwards the two choices are
+      // indistinguishable.
+      expect(runAtIso('2026-03-29T02:30')).toBeUndefined();
+
+      // Either side of the gap is a real time on that same day and converts normally — 01:30 still
+      // on CET (+1), 03:30 already on CEST (+2).
+      expect(runAtIso('2026-03-29T01:30')).toBe('2026-03-29T00:30:00.000Z');
+      expect(runAtIso('2026-03-29T03:30')).toBe('2026-03-29T01:30:00.000Z');
+
+      // The collision the guard prevents: without it, the skipped time and the real one would have
+      // produced one and the same instant.
+      expect(new Date(2026, 2, 29, 2, 30).toISOString()).toBe(
+        new Date(2026, 2, 29, 3, 30).toISOString(),
+      );
+
+      // AMBIGUOUS is not impossible, and must still go through: Berlin falls back on 2026-10-25,
+      // so 02:30 happens twice that day. It reads back as 02:30 either way, so it survives as the
+      // first of the two — refusing it would reject a time the reader's clock really does show.
+      expect(runAtIso('2026-10-25T02:30')).toBe('2026-10-25T00:30:00.000Z');
+    });
+
+    // The same wall time in a zone with no DST at all is untouched by any of this — which is also
+    // what proves the rejection above came from Berlin's rules and not from the value itself.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-03-29T02:30'))).toBe('2026-03-28T18:30:00.000Z');
+  });
+
+  it('refuses a year the constructor would quietly move into the 1900s', () => {
+    // `new Date(26, ...)` means 1926, not the year 26 — the constructor's two-digit-year rule. The
+    // control cannot produce this, but the round-trip is what makes it impossible rather than
+    // merely unlikely.
+    expect(inTimeZone(BERLIN, () => runAtIso('0026-09-01T09:00'))).toBeUndefined();
+    expect(inTimeZone(BERLIN, () => new Date(26, 8, 1, 9, 0, 0).getFullYear())).toBe(1926);
+  });
+});
+
 describe('canSaveTaskSchedule — when Save may fire at all', () => {
   it('refuses an empty draft, so clearing the box never deletes a schedule', () => {
     // Emptying the control is how a reader gets to a blank field, not how they cancel: PATCHing

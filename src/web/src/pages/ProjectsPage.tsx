@@ -1,12 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SessionLifecycleState, type TaskStatus } from '@orbit/shared';
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App as AntApp,
   Button,
   Empty,
-  Input,
   List,
   Modal,
   Popconfirm,
@@ -34,7 +33,6 @@ import {
   type CoordinatorCardLayout,
 } from '../components/ProjectCoordinatorCard';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
-import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
 import { ProjectSections } from '../components/ProjectSections';
 import {
@@ -65,32 +63,20 @@ import {
 } from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
-  providersQuery,
   runnersQuery,
   workspacesQuery,
 } from '../lib/queries';
 import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
-import {
-  RUN_AT_IMPOSSIBLE,
-  runAtIso,
-  runAtProblem,
-  scheduledStart,
-} from '../lib/taskSchedule';
+import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
-import {
-  mergedProviderOptions,
-  modelOptionsForProvider,
-  type ConfiguredProvider,
-} from '../lib/workspaceDefaults';
 
-// Re-exported, not re-implemented: the conversion between an instant and the viewer's wall clock
-// now belongs to lib/taskSchedule, shared with the task panel's own Start at editor. This page
-// keeps the names it has always exported so that everything reading a project's schedule — its
-// rows, its New task dialog, and the tests over both — still has one place to import from.
-export { RUN_AT_IMPOSSIBLE, runAtIso, runAtProblem, scheduledStart };
+// Re-exported, not re-implemented: reading a stored instant on the viewer's wall clock belongs to
+// lib/taskSchedule, shared with the task panel's own Start at editor. This page keeps the name it
+// has always exported so the rows and the tests over them import it from one place.
+export { scheduledStart };
 
 interface Project {
   id: string;
@@ -1207,8 +1193,8 @@ export function replaceProjectCoordinator(projectId: string): Promise<Coordinato
 }
 
 /**
- * What flipping a project's Automatic switch WRITES — held here rather than at the call site for
- * the reason `newProjectTaskBody` is, because the body is the unit and the path is not.
+ * What flipping a project's Automatic switch WRITES — held here rather than at the call site,
+ * because the body is the unit and the path is not.
  *
  * `automationPolicy` rides along only on the way ON, and it is not optional there: the server
  * refuses a bare `coordinatorEnabled: true` with a 400, because turning a project automatic
@@ -1969,9 +1955,6 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
  * of it deciding whether the section renders at all.
  */
 export function ProjectTasks({ projectId }: { projectId: string }) {
-  // The dialog is opened from here rather than owning its own trigger, so the section that lists
-  // the level a new task lands in is also the thing that offers to add one to it.
-  const [creating, setCreating] = useState(false);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
     queryFn: () =>
@@ -1980,15 +1963,7 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography.Title level={4}>Tasks</Typography.Title>
-        {/* Beside the heading, not inside the list: it is still offered on a project whose page
-            of tasks is empty, still loading, or failed to load — none of which says anything
-            about whether another task can be added. */}
-        <Button type="primary" onClick={() => setCreating(true)}>
-          New task
-        </Button>
-      </div>
+      <Typography.Title level={4}>Tasks</Typography.Title>
 
       {tasks.isLoading ? (
         <div style={{ padding: 24, textAlign: 'center' }}>
@@ -2047,12 +2022,6 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
       ) : (
         <Empty description="No top-level tasks yet" />
       )}
-
-      <NewProjectTaskModal
-        projectId={projectId}
-        open={creating}
-        onClose={() => setCreating(false)}
-      />
     </div>
   );
 }
@@ -2286,518 +2255,5 @@ export function ProjectTaskLevel({
       image={Empty.PRESENTED_IMAGE_SIMPLE}
       description="No subtasks — the count on this row is out of date"
     />
-  );
-}
-
-/**
- * What the New task form holds while it is being filled in.
- *
- * Only the title is required. Every other field is `undefined` until it is actually chosen, and
- * that distinction is load-bearing rather than incidental — see `newProjectTaskBody`.
- */
-export interface NewProjectTaskDraft {
-  title: string;
-  description?: string;
-  acceptanceCriteria?: string;
-  completionCriterion?: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED';
-  acceptanceCommand?: string;
-  acceptanceExpectedExitCode?: number;
-  /** Filled only after the server questions the selected criterion. */
-  completionCriterionOverrideReason?: string;
-  assigneeId?: string;
-  provider?: string;
-  model?: string;
-  /** The `datetime-local` control's own value — `YYYY-MM-DDTHH:mm` on the VIEWER's wall clock, and
-   *  never what goes on the wire. Held in that spelling because it is the only one the control can
-   *  be handed back; `runAtIso` is the single place it becomes the UTC instant the API stores. */
-  runAtLocal?: string;
-}
-
-/** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
-export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
-
-export const TASK_CRITERION_SHAPE_ADVICE_CODE = 'TASK_CRITERION_SHAPE_ADVICE';
-
-export interface TaskCriterionShapeAdviceView {
-  declaredCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED';
-  suggestedCriterion: 'EXECUTABLE' | 'VERIFICATION' | 'EVIDENCE_JUDGMENT' | 'OWNER_CONFIRMED';
-  reason: string;
-}
-
-/** Read the server's soft question without reimplementing its keyword heuristic in the browser. */
-export function taskCriterionShapeAdviceFrom(
-  error: Error | null,
-): TaskCriterionShapeAdviceView | null {
-  if (!(error instanceof ApiError)
-    || error.status !== 409
-    || error.code !== TASK_CRITERION_SHAPE_ADVICE_CODE
-    || error.body?.advisory !== true) return null;
-  const declaredCriterion = error.body.declaredCriterion;
-  const suggestedCriterion = error.body.suggestedCriterion;
-  const reason = error.body.reason;
-  const criteria = new Set(['EXECUTABLE', 'VERIFICATION', 'EVIDENCE_JUDGMENT', 'OWNER_CONFIRMED']);
-  if (typeof declaredCriterion !== 'string'
-    || typeof suggestedCriterion !== 'string'
-    || typeof reason !== 'string'
-    || !criteria.has(declaredCriterion)
-    || !criteria.has(suggestedCriterion)) return null;
-  return {
-    declaredCriterion: declaredCriterion as TaskCriterionShapeAdviceView['declaredCriterion'],
-    suggestedCriterion: suggestedCriterion as TaskCriterionShapeAdviceView['suggestedCriterion'],
-    reason,
-  };
-}
-
-/**
- * Whether the dialog's Create button may fire at all.
- *
- * Both halves are "the reader asked for something this form cannot send": a title of nothing but
- * spaces names a task nobody can find again, and an impossible start is a schedule that cannot be
- * honoured. Exported and total, so the disabled state can be asserted directly — the button itself
- * lives behind a portal that a static render produces no markup for.
- */
-export function canCreateProjectTask(draft: NewProjectTaskDraft): boolean {
-  if (draft.title.trim().length === 0 || runAtProblem(draft.runAtLocal) !== null) return false;
-  // A completion criterion is required by `POST /tasks` itself, at both write doors, since the
-  // database stopped supplying one. Leaving the button live for an unselected picker would send a
-  // request the server is certain to refuse — and the picker is deliberately not pre-filled, since
-  // choosing EVIDENCE_JUDGMENT on the reader's behalf is the invented declaration that rule exists
-  // to stop.
-  if (!draft.completionCriterion) return false;
-  if (draft.completionCriterion === 'EXECUTABLE') {
-    return Boolean(draft.acceptanceCommand?.trim())
-      && Number.isInteger(draft.acceptanceExpectedExitCode);
-  }
-  return true;
-}
-
-/**
- * The body `POST /tasks` is given, from a draft and the project it is being created under.
- *
- * What is absent from it is the point. A task with no provider pin inherits its assignee's, and
- * the way to say that is to send no `provider` at all — not `null`, and above all not a copy of
- * whichever provider the assignee happens to use today. Writing that value in would freeze it: the
- * assignee moving to another provider would stop carrying this task along with it, which is the
- * whole difference between inheriting and pinning.
- *
- * `''` is not "unselected" — it is OpenCode's own managed-model choice, a real selection — so what
- * is tested for is null/undefined rather than falsiness. The title is trimmed here, at the one
- * place the wire value is built, so no caller can send the untrimmed one.
- *
- * THROWS on a start that is present and impossible, rather than dropping it. Absence is how this
- * body says "unscheduled", so silently omitting an unconvertible value would spend the reader's
- * explicit choice on its exact opposite — a task created, successfully, with no schedule at all
- * and nothing on screen to say so. Synchronous, so the mutation that calls it rejects and the
- * dialog shows the same sentence the field does. The button is disabled long before this, which is
- * what makes this the invariant rather than the error path: it holds for any caller, including one
- * that never rendered the form.
- */
-export function newProjectTaskBody(
-  projectId: string,
-  draft: NewProjectTaskDraft,
-): Record<string, string | number> {
-  const body: Record<string, string | number> = { projectId, title: draft.title.trim() };
-  const description = draft.description?.trim();
-  if (description) body.description = description;
-  const acceptanceCriteria = draft.acceptanceCriteria?.trim();
-  if (acceptanceCriteria) body.acceptanceCriteria = acceptanceCriteria;
-  if (draft.completionCriterion) {
-    body.completionCriterion = draft.completionCriterion;
-    if (draft.completionCriterion === 'EXECUTABLE') {
-      const command = draft.acceptanceCommand?.trim();
-      if (!command || !Number.isInteger(draft.acceptanceExpectedExitCode)) {
-        throw new Error(
-          'EXECUTABLE requires an acceptance command and integer expected exit code.',
-        );
-      }
-      body.acceptanceCommand = command;
-      body.acceptanceExpectedExitCode = draft.acceptanceExpectedExitCode!;
-    }
-    if (draft.completionCriterion === 'VERIFICATION') {
-      body.completionPolicy = 'VERIFICATION_PASSED';
-    }
-  }
-  const overrideReason = draft.completionCriterionOverrideReason?.trim();
-  if (overrideReason) body.completionCriterionOverrideReason = overrideReason;
-  // Absent unless a time was actually chosen — an empty string here would be a 400, and a local
-  // "9/1/2026, 9:00 AM" would be a schedule the server reads as no date at all. But a value that
-  // is present and unusable is refused outright, never quietly dropped: see above.
-  if (draft.runAtLocal) {
-    const runAt = runAtIso(draft.runAtLocal);
-    if (!runAt) throw new Error(RUN_AT_IMPOSSIBLE);
-    body.runAt = runAt;
-  }
-  if (draft.assigneeId != null) body.assigneeId = draft.assigneeId;
-  if (draft.provider != null) body.provider = draft.provider;
-  if (draft.model != null) body.model = draft.model;
-  return body;
-}
-
-/** Create one TOP-LEVEL task in this project. No `parentTaskId`: a subtask belongs to the row it
- *  hangs under, and this dialog is opened from the section that lists the root level. */
-export function createProjectTask(projectId: string, draft: NewProjectTaskDraft): Promise<unknown> {
-  return api('/tasks', { method: 'POST', body: newProjectTaskBody(projectId, draft) });
-}
-
-/**
- * What a newly created task changes, refreshed together.
- *
- * `['project', projectId]` is a PREFIX of the root-task page's key, so one invalidation covers both
- * the project document — whose total and per-status tallies the new task moved — and the level the
- * task was just added to. `['projects']` carries the same count on the list row, and `['tasks']`
- * is the prefix every other task view in the app reads under (its lists, its counts, its active
- * strip), none of which knows this project page exists.
- *
- * Exported because it is the half of the mutation a static render can never reach: the dialog's
- * button lives behind a portal, so calling this directly is the only way to assert what a
- * successful create actually refreshes.
- */
-export function invalidateAfterProjectTaskCreate(qc: QueryClient, projectId: string): void {
-  void qc.invalidateQueries({ queryKey: ['project', projectId] });
-  void qc.invalidateQueries({ queryKey: ['projects'] });
-  void qc.invalidateQueries({ queryKey: ['tasks'] });
-}
-
-/** As much of a workspace row as this form reads: the name it is picked by, the runner whose
- *  catalogue names its models, and the provider a task with no pin of its own inherits. */
-interface AssigneeRow {
-  id: string;
-  name: string;
-  runnerId?: string | null;
-  provider?: string | null;
-}
-
-/** One labelled control in the form below. */
-function FormRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-        {label}
-      </Typography.Text>
-      {children}
-    </div>
-  );
-}
-
-/**
- * The New task form's fields, in one state.
- *
- * Presentational and exported for the same reason ProjectTaskLevel is — and here it is also the
- * only way: an antd Modal renders through a portal, which a static render produces no markup at
- * all for, so the body has to be mountable on its own to be assertable at all.
- *
- * It does read its own option sources rather than take them as props. They are the same three the
- * task panel's pickers use, at the same keys: the owner's workspaces, the configured (BYOK)
- * providers, and the model catalogue the assignee's runner reported — model ids are per-machine,
- * which is why they come from that runner rather than from a table.
- */
-export function NewProjectTaskForm({
-  projectId,
-  draft,
-  onChange,
-  error,
-  pending,
-}: {
-  /** Unit L7 / AC1: where this create files. Required, not optional — a form that can be rendered
-   *  without saying where the work lands is the form the incident was submitted through. */
-  projectId: string;
-  draft: NewProjectTaskDraft;
-  onChange: (draft: NewProjectTaskDraft) => void;
-  error: Error | null;
-  pending: boolean;
-}) {
-  const workspacesQ = useQuery(workspacesQuery());
-  const providersQ = useQuery(providersQuery());
-  const runnersQ = useQuery(runnersQuery());
-  const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
-  const assignees: AssigneeRow[] = workspacesQ.data ?? [];
-  const assignee = assignees.find((a) => a.id === draft.assigneeId);
-  const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assignee?.runnerId);
-  // The provider whose model space the Model picker lists: this task's own pin when it has one,
-  // otherwise the assignee's — so the models offered always match what the run will use. Read
-  // only to decide what is OFFERED; it is never written into the draft, which is what keeps an
-  // inherited provider inherited rather than pinned at the moment the form was open.
-  const effectiveProvider = draft.provider ?? assignee?.provider ?? null;
-  // Recomputed on every keystroke rather than held in state: it is a pure reading of the draft,
-  // and a copy of it could go stale against the value the field is actually showing.
-  const runAtIssue = runAtProblem(draft.runAtLocal);
-  const criterionAdvice = taskCriterionShapeAdviceFrom(error);
-  // One id for the line under the control, whichever of the two it is currently showing. Generated
-  // rather than written in, so mounting this form twice cannot put the same id in the document
-  // twice — which would silently point both inputs at the first one's text.
-  const runAtHelpId = useId();
-  const modelOptions = useMemo(
-    () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
-    [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
-  );
-
-  return (
-    <>
-      {/* Above the first field, not beside the submit button: the answer to "which project is
-          this going into" has to be visible while the form is being FILLED IN, which is when the
-          reader still has a cheap way to change their mind. */}
-      <ProjectFilingBanner projectId={projectId} />
-      <FormRow label="Title">
-        <Input
-          value={draft.title}
-          placeholder="What needs doing"
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, title: e.target.value })}
-        />
-      </FormRow>
-      <FormRow label="Description">
-        <Input.TextArea
-          rows={3}
-          value={draft.description ?? ''}
-          placeholder="Optional detail"
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, description: e.target.value })}
-        />
-      </FormRow>
-      <FormRow label="Acceptance criteria">
-        <Input.TextArea
-          rows={4}
-          value={draft.acceptanceCriteria ?? ''}
-          placeholder="Optional observable checks that would settle this task"
-          disabled={pending}
-          onChange={(e) => onChange({ ...draft, acceptanceCriteria: e.target.value })}
-        />
-      </FormRow>
-      <FormRow label="Completion criterion">
-        <Select
-          style={{ width: '100%' }}
-          value={draft.completionCriterion}
-          placeholder="Choose how completion is proved"
-          allowClear
-          disabled={pending}
-          options={[
-            { value: 'EXECUTABLE', label: 'EXECUTABLE — command / exit code' },
-            { value: 'VERIFICATION', label: 'VERIFICATION — independent judgment' },
-            { value: 'EVIDENCE_JUDGMENT', label: 'EVIDENCE_JUDGMENT — authority / tradeoff' },
-            { value: 'OWNER_CONFIRMED', label: 'OWNER_CONFIRMED — you confirm it yourself' },
-          ]}
-          onChange={(completionCriterion) => onChange({
-            ...draft,
-            completionCriterion,
-            acceptanceCommand:
-              completionCriterion === 'EXECUTABLE' ? draft.acceptanceCommand : undefined,
-            acceptanceExpectedExitCode:
-              completionCriterion === 'EXECUTABLE'
-                ? draft.acceptanceExpectedExitCode
-                : undefined,
-            completionCriterionOverrideReason: undefined,
-          })}
-        />
-      </FormRow>
-      {draft.completionCriterion === 'EXECUTABLE' ? (
-        <>
-          <FormRow label="Acceptance command">
-            <Input
-              value={draft.acceptanceCommand ?? ''}
-              placeholder="e.g. npm test"
-              disabled={pending}
-              onChange={(e) => onChange({ ...draft, acceptanceCommand: e.target.value })}
-            />
-          </FormRow>
-          <FormRow label="Expected exit code">
-            <Input
-              type="number"
-              value={draft.acceptanceExpectedExitCode ?? ''}
-              disabled={pending}
-              onChange={(e) => onChange({
-                ...draft,
-                acceptanceExpectedExitCode:
-                  e.target.value === '' ? undefined : e.target.valueAsNumber,
-              })}
-            />
-          </FormRow>
-        </>
-      ) : null}
-      {/* After the fields that say WHAT the task is and HOW it is proved, before who and what
-          runs it: when it starts is a property of the task, not of the runtime picked for it. */}
-      <FormRow label="Start at">
-        <Input
-          type="datetime-local"
-          value={draft.runAtLocal ?? ''}
-          disabled={pending}
-          // Marked wrong on the control itself, not only in the text below it — `aria-invalid` is
-          // what carries that to a reader who never sees the red ring.
-          status={runAtIssue ? 'error' : undefined}
-          aria-invalid={runAtIssue ? true : undefined}
-          // `aria-invalid` alone only says THAT something is wrong. This is what lets the reason
-          // be read out with it — and it points at the same line either way, so the hint is
-          // announced on a field that is merely optional, not just the error on a broken one.
-          aria-describedby={runAtHelpId}
-          // '' is what clearing the control hands back, and it is not a time — folding it to
-          // undefined here keeps "unscheduled" spelled one way in the draft, so the body builder
-          // has one absence to read rather than two.
-          onChange={(e) => onChange({ ...draft, runAtLocal: e.target.value || undefined })}
-        />
-        {/* One line, either the hint or the problem. The reader has just picked a time their own
-            clock skips — a browser's datetime-local has no idea about their daylight-saving rules
-            — so what they need here is that sentence, not the general advice they have already
-            read. Inline and immediate: the alternative is finding out on a task that came back
-            with no schedule and nothing saying why. */}
-        {runAtIssue ? (
-          <Typography.Text id={runAtHelpId} type="danger" style={{ fontSize: 12 }}>
-            {runAtIssue}
-          </Typography.Text>
-        ) : (
-          // A datetime-local control shows no placeholder, so what the other optional fields say
-          // in one has to be said out loud here — including the two things the control itself
-          // cannot: whose clock it is read on, and that this fires once rather than repeating.
-          <Typography.Text id={runAtHelpId} type="secondary" style={{ fontSize: 12 }}>
-            Optional, in your own time zone. The task starts once, at that time.
-          </Typography.Text>
-        )}
-      </FormRow>
-      <FormRow label="Assignee">
-        <Select
-          style={{ width: '100%' }}
-          value={draft.assigneeId ?? undefined}
-          placeholder="Unassigned"
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          loading={workspacesQ.isLoading}
-          disabled={pending}
-          options={assignees.map((a) => ({ value: a.id, label: a.name }))}
-          // The model goes with the assignee for the same reason it goes with the provider: an
-          // unpinned task reads its model space off the assignee's provider and its ids off that
-          // assignee's runner, so both halves of what made this model selectable move here. Left
-          // behind, it would submit an id the new assignee's runtime has never heard of.
-          onChange={(val) => onChange({ ...draft, assigneeId: val ?? undefined, model: undefined })}
-        />
-      </FormRow>
-      <FormRow label="Provider">
-        <Select
-          style={{ width: '100%' }}
-          value={draft.provider ?? undefined}
-          // Unpinned is the normal case, so say what it actually does rather than "None".
-          placeholder={assignee ? `Assignee's (${assignee.provider ?? 'claude'})` : "Assignee's"}
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          loading={providersQ.isLoading}
-          disabled={pending}
-          options={mergedProviderOptions(configuredProviders)}
-          // Changing the provider — or clearing it back to the assignee's — drops the model with
-          // it: a model id only means anything inside one provider's model space, so leaving it
-          // behind would submit a stale id against a provider that has never heard of it.
-          onChange={(val) => onChange({ ...draft, provider: val ?? undefined, model: undefined })}
-        />
-      </FormRow>
-      <FormRow label="Model">
-        <Select
-          style={{ width: '100%' }}
-          value={draft.model ?? undefined}
-          placeholder="Provider default"
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          loading={runnersQ.isLoading}
-          disabled={pending}
-          // A model the catalogue doesn't name still has to render as itself rather than vanish
-          // out of the box it is sitting in. Reachable while the dialog is open: these option
-          // sources are live queries, so a runner heartbeat can retire an id already picked.
-          options={
-            draft.model != null && !modelOptions.some((o) => o.value === draft.model)
-              ? [...modelOptions, { value: draft.model, label: draft.model }]
-              : modelOptions
-          }
-          onChange={(val) => onChange({ ...draft, model: val ?? undefined })}
-        />
-      </FormRow>
-
-      {/* The server's own message, inline and verbatim. Actionable because everything that was
-          typed is still on screen beside it and the dialog's own Create button is still live —
-          so the fix is to correct the field it names and press it again, with no second Retry
-          control saying the same thing a few pixels away. */}
-      {criterionAdvice ? (
-        <>
-          <Alert
-            type="warning"
-            showIcon
-            message={`Consider ${criterionAdvice.suggestedCriterion}`}
-            description={criterionAdvice.reason}
-          />
-          <FormRow label={`Why keep ${criterionAdvice.declaredCriterion}?`}>
-            <Input.TextArea
-              rows={3}
-              value={draft.completionCriterionOverrideReason ?? ''}
-              placeholder="Required to override this advice; stored on the task"
-              disabled={pending}
-              onChange={(e) => onChange({
-                ...draft,
-                completionCriterionOverrideReason: e.target.value,
-              })}
-            />
-          </FormRow>
-        </>
-      ) : error ? (
-        <Alert type="error" showIcon message="Task could not be created" description={error.message} />
-      ) : null}
-    </>
-  );
-}
-
-/**
- * The New task dialog: one top-level task in this project, with an optional provider/model pin.
- *
- * `open` is controlled by the section that offers it, so the dialog itself is mounted with the
- * section and its body — and therefore its three option queries — costs nothing until the reader
- * actually asks to add a task.
- */
-export function NewProjectTaskModal({
-  projectId,
-  open,
-  onClose,
-}: {
-  projectId: string;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const qc = useQueryClient();
-  const [draft, setDraft] = useState<NewProjectTaskDraft>(EMPTY_NEW_TASK_DRAFT);
-  const create = useMutation({
-    mutationFn: (values: NewProjectTaskDraft) => createProjectTask(projectId, values),
-    onSuccess: () => {
-      setDraft(EMPTY_NEW_TASK_DRAFT);
-      onClose();
-      invalidateAfterProjectTaskCreate(qc, projectId);
-    },
-  });
-  // A title of nothing but spaces names a task nobody can find again, and an impossible start is a
-  // schedule that cannot be honoured. Both are the reader asking for something this form cannot
-  // send, so both close the button.
-  //
-  // Only the second is also refused by `newProjectTaskBody`, which is why that one holds for a
-  // caller the button never gated. A blank title is trimmed there, not rejected — what catches it
-  // past this point is the server's own `@MinLength(1)`, which the trim is what makes reachable.
-  const creatable = canCreateProjectTask(draft);
-
-  return (
-    <Modal
-      title="New task"
-      open={open}
-      // Cancel keeps what was typed — a mis-clicked Cancel should not cost a filled-in form — but
-      // drops a failed attempt's error, so reopening does not greet the reader with it.
-      onCancel={() => {
-        create.reset();
-        onClose();
-      }}
-      onOk={() => create.mutate(draft)}
-      okText="Create task"
-      confirmLoading={create.isPending}
-      okButtonProps={{ disabled: !creatable }}
-    >
-      <NewProjectTaskForm
-        projectId={projectId}
-        draft={draft}
-        onChange={setDraft}
-        error={create.error}
-        pending={create.isPending}
-      />
-    </Modal>
   );
 }

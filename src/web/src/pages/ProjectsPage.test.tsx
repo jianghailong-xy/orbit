@@ -1,34 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
-import { MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, api } from '../api';
+import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import { QUIET_MS } from '../lib/projectAttention';
 import {
   PANORAMA_BUCKETS,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
+import { runAtIso } from '../lib/taskSchedule';
 import {
-  EMPTY_NEW_TASK_DRAFT,
-  NewProjectTaskForm,
   ProjectDetailPage,
   ProjectTaskLevel,
   PROJECTS_REFRESH_MS,
   ProjectsPage,
   coordinatorSessionPath,
-  createProjectTask,
-  invalidateAfterProjectTaskCreate,
-  newProjectTaskBody,
   openProjectCoordinator,
-  runAtIso,
-  runAtProblem,
   scheduledStart,
-  taskCriterionShapeAdviceFrom,
-  RUN_AT_IMPOSSIBLE,
-  canCreateProjectTask,
   matchesOpenProjectView,
   matchesProjectSearch,
   noMatchDescription,
@@ -39,7 +30,6 @@ import {
   projectsQueryKey,
   projectsReturnPath,
   projectsRoutePath,
-  type NewProjectTaskDraft,
 } from './ProjectsPage';
 
 // react-query never dispatches a fetch during a static (effect-free) render — confirmed by
@@ -238,7 +228,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status and Automatic PATCHes, the coordinator status GET, its three writes, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status and Automatic PATCHes, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if a tenth
@@ -281,9 +271,9 @@ describe('ProjectsPage', () => {
       "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' }",
       // The project's OTHER owner-only write: its Automatic switch, which is `coordinatorEnabled`
       // and the two fields that field cannot be written without. The same PATCH door as the status
-      // write above, and the body is held in `automaticBody` for the same reason the task-create
-      // body is held in `newProjectTaskBody` — what it carries is asserted at runtime, over the
-      // request that leaves the client, in ProjectsPage.automatic.test.tsx.
+      // write above, and the body is held in `automaticBody` rather than spelled out here — what
+      // it carries is asserted at runtime, over the request that leaves the client, in
+      // ProjectsPage.automatic.test.tsx.
       "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: automaticBody(next, configRevision) }",
       // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
       // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
@@ -307,13 +297,10 @@ describe('ProjectsPage', () => {
       // down — base62 has nothing to escape, so the escaping itself is held here — and this list
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
-      // The one write that CREATES anything: a top-level task in this
-      // project. The path is the generic task collection rather than a nested project route —
-      // `projectId` is a field of the body, which is why it is built in one place instead of
-      // interpolated here. What that body carries, and what it deliberately leaves out, is
-      // asserted at runtime further down.
-      "'/tasks', { method: 'POST', body: newProjectTaskBody(projectId, draft) }",
     ]);
+    // Tasks are created by agents, not from this page: the list above is the whole of what it puts
+    // on the wire, so a POST to /tasks reappearing anywhere in the file fails it.
+    expect(source).not.toContain("api('/tasks'");
     // ...that `id` is the normalized route id, not the raw param — the detail URL and the cache
     // key have to agree on one spelling...
     expect(source).toContain('const id = routeId(params.id)');
@@ -321,13 +308,12 @@ describe('ProjectsPage', () => {
     // `/projects/` on the wire the moment the param went missing.
     expect(source).not.toMatch(/routeId\(params\.id\)\s*\?\?/);
     expect(source).toContain('enabled: Boolean(id)');
-    // Workspace and runner reads — used by both the list's New project destination and the New
-    // task form — plus the provider options are shared query factories, not re-spelled here.
+    // The workspace and runner reads behind the list's New project destination are shared query
+    // factories, not re-spelled here.
     expect(source).toContain(
       [
         'import {',
         '  projectCoordinatorStatusQuery,',
-        '  providersQuery,',
         '  runnersQuery,',
         '  workspacesQuery,',
         "} from '../lib/queries';",
@@ -1700,395 +1686,6 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
   });
 });
 
-describe('ProjectDetailPage — creating a top-level task', () => {
-  // The three option sources the form reads, at the shared factories' own keys. Seeded rather than
-  // stubbed, exactly like every other query on this page.
-  const WORKSPACES = [
-    { id: 'w-codex', name: 'Builder', runnerId: 'r1', provider: 'codex' },
-    { id: 'w-plain', name: 'Drafter', runnerId: 'r1', provider: null },
-    { id: 'w-none', name: 'Runnerless', runnerId: null, provider: 'claude' },
-  ];
-  const PROVIDERS = [
-    {
-      slug: 'acme',
-      label: 'Acme',
-      runtime: 'claude',
-      models: [{ value: 'acme-1', label: 'Acme One' }],
-    },
-  ];
-  const RUNNERS = [
-    {
-      id: 'r1',
-      modelCatalog: {
-        codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
-        claude: [{ value: 'claude-opus-5', label: 'Opus 5' }],
-      },
-    },
-  ];
-
-  /** The form on its own, in one state. An antd Modal renders through a portal, which a static
-   *  render produces NO markup for at all — so the body mounted directly is the only place the
-   *  dialog's fields can be read. */
-  function renderForm(
-    draft: NewProjectTaskDraft,
-    over: { error?: Error | null; pending?: boolean; seed?: (qc: QueryClient) => void } = {},
-  ) {
-    const qc = newClient();
-    qc.setQueryData(['workspaces'], WORKSPACES);
-    qc.setQueryData(['providers'], PROVIDERS);
-    qc.setQueryData(['runners'], RUNNERS);
-    over.seed?.(qc);
-    const html = renderToStaticMarkup(
-      <QueryClientProvider client={qc}>
-        <NewProjectTaskForm
-          projectId={P1}
-          draft={draft}
-          onChange={() => {}}
-          error={over.error ?? null}
-          pending={over.pending ?? false}
-        />
-      </QueryClientProvider>,
-    );
-    // The renderer escapes the apostrophe in "Assignee's"; comparing against the text a reader
-    // sees keeps that entity out of the assertions below.
-    return html.replace(/&#x27;/g, "'");
-  }
-
-  /** The one call `createProjectTask` makes, read off the module mock — the same shape the
-   *  coordinator POST is asserted with. */
-  function postOf(projectId: string, draft: NewProjectTaskDraft) {
-    const apiMock = vi.mocked(api);
-    apiMock.mockClear();
-    void createProjectTask(projectId, draft);
-    expect(apiMock).toHaveBeenCalledTimes(1);
-    const [path, init] = apiMock.mock.calls[0];
-    return [path, (init ?? {}) as { method?: string; body?: Record<string, unknown> }] as const;
-  }
-
-  it('offers New task beside the heading, whatever the list underneath is doing', async () => {
-    const listed = newClient();
-    listed.setQueryData(['project', encodeId(P1)], detail());
-    listed.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    // A real button, named by what is written on it, next to the section it adds to.
-    expect(renderDetail(listed, encodeId(P1))).toMatch(
-      /<button[^>]*>[^<]*<span>New task<\/span>/,
-    );
-
-    // A project with no tasks is exactly where this is most needed...
-    const empty = newClient();
-    empty.setQueryData(['project', encodeId(P1)], detail({ _count: { tasks: 0 }, tasksByStatus: {} }));
-    empty.setQueryData(tasksKey(P1), { items: [], nextCursor: null });
-    const emptyOut = renderDetail(empty, encodeId(P1));
-    expect(emptyOut).toContain('No top-level tasks yet');
-    expect(emptyOut).toContain('New task');
-
-    // ...and a page of tasks that failed to load says nothing about whether another can be added.
-    const failed = newClient();
-    failed.setQueryData(['project', encodeId(P1)], detail());
-    await failed.prefetchQuery({
-      queryKey: tasksKey(P1),
-      queryFn: () => Promise.reject(new Error('tasks down')),
-    });
-    const failedOut = renderDetail(failed, encodeId(P1));
-    expect(failedOut).toContain('Tasks could not be loaded');
-    expect(failedOut).toContain('New task');
-
-    // Only the project itself gates it: with nothing to create a task under, there is no offer.
-    expect(renderDetail(newClient(), encodeId(P1))).not.toContain('New task');
-  });
-
-  it('posts one top-level task to /tasks, in this project, carrying every choice made', () => {
-    const [path, init] = postOf(encodeId(P1), {
-      title: 'Ship the pricing page',
-      description: 'Copy is signed off; wire it up',
-      assigneeId: 'w-codex',
-      provider: 'acme',
-      model: 'acme-1',
-    });
-
-    expect(path).toBe('/tasks');
-    expect(init.method).toBe('POST');
-    expect(init.body).toEqual({
-      projectId: encodeId(P1),
-      title: 'Ship the pricing page',
-      description: 'Copy is signed off; wire it up',
-      assigneeId: 'w-codex',
-      provider: 'acme',
-      model: 'acme-1',
-    });
-
-    // The project is fixed by the page, never picked in the form: whatever else the reader
-    // chooses, the task lands under the project whose page they are on.
-    expect(init.body!.projectId).toBe(encodeId(P1));
-    // ...and it is a ROOT task. A `parentTaskId` here would file it under some row instead, which
-    // is a different control on a different unit.
-    expect(init.body).not.toHaveProperty('parentTaskId');
-    // ...and the draft has no field for one, so no caller can reintroduce it through this path.
-    const draftFields = source.match(/export interface NewProjectTaskDraft \{([^}]*)\}/)?.[1] ?? '';
-    expect(draftFields).toContain('title: string;');
-    expect(draftFields).not.toContain('parentTaskId');
-  });
-
-  it('renders criterion-shape advice as a question and sends the audited override on retry', () => {
-    const body = {
-      code: 'TASK_CRITERION_SHAPE_ADVICE',
-      kind: 'ADVISORY',
-      advisory: true,
-      declaredCriterion: 'EVIDENCE_JUDGMENT',
-      suggestedCriterion: 'EXECUTABLE',
-      reason: 'The acceptance prose matched “spec 通过”.',
-    } as const;
-    const error = new ApiError(
-      'Use EXECUTABLE or explain the override.',
-      409,
-      body.code,
-      body,
-    );
-
-    expect(taskCriterionShapeAdviceFrom(error)).toEqual({
-      declaredCriterion: 'EVIDENCE_JUDGMENT',
-      suggestedCriterion: 'EXECUTABLE',
-      reason: body.reason,
-    });
-    const rendered = renderForm({
-      title: 'N17',
-      acceptanceCriteria: 'spec 通过',
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-    }, { error });
-    expect(rendered).toContain('Consider EXECUTABLE');
-    expect(rendered).toContain('Why keep EVIDENCE_JUDGMENT?');
-    expect(rendered).toContain('Required to override this advice; stored on the task');
-
-    expect(newProjectTaskBody(encodeId(P1), {
-      title: 'N17',
-      acceptanceCriteria: '  spec 通过  ',
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-      completionCriterionOverrideReason: '  L0 cannot safely judge its own execution path  ',
-    })).toMatchObject({
-      acceptanceCriteria: 'spec 通过',
-      completionCriterion: 'EVIDENCE_JUDGMENT',
-      completionCriterionOverrideReason: 'L0 cannot safely judge its own execution path',
-    });
-  });
-
-  it('says "inherit" by leaving the field out, never by copying the assignee’s provider', () => {
-    // An assignee that HAS a provider, and no pin of its own. The wire body must carry the
-    // assignee and nothing about providers: absent is what the server reads as "inherit".
-    const body = newProjectTaskBody(encodeId(P1), {
-      title: 'Draft the migration plan',
-      assigneeId: 'w-codex',
-    });
-    expect(body).toEqual({ projectId: encodeId(P1), title: 'Draft the migration plan', assigneeId: 'w-codex' });
-    // Absent, not null and not '': `'provider' in body` is what tells those three apart, and only
-    // the first one inherits — a null would pin "no provider" and an '' would pin an empty slug.
-    expect('provider' in body).toBe(false);
-    expect('model' in body).toBe(false);
-
-    // Nothing at all chosen reduces to the two fields the page itself decides.
-    expect(Object.keys(newProjectTaskBody(encodeId(P1), { title: 'Bare' }))).toEqual([
-      'projectId',
-      'title',
-    ]);
-    // The reset state is that same nothing: reopening the dialog after a create cannot leave a
-    // previous task's pins behind on the next one.
-    expect(EMPTY_NEW_TASK_DRAFT).toEqual({ title: '' });
-
-    // The resolved provider exists in the form, but only to decide which models are OFFERED — it
-    // is never written back into the draft, which is the one way a copy could reach the body.
-    expect(source).toContain(
-      'const effectiveProvider = draft.provider ?? assignee?.provider ?? null;',
-    );
-    expect(source).not.toMatch(/provider:\s*effectiveProvider/);
-    expect(source).not.toMatch(/provider:\s*assignee[?.]/);
-  });
-
-  it('trims the title, drops an empty description, and refuses a title of only spaces', () => {
-    expect(
-      newProjectTaskBody(encodeId(P1), { title: '  Ship the pricing page  ', description: '  ' }),
-    ).toEqual({ projectId: encodeId(P1), title: 'Ship the pricing page' });
-
-    // A description that is really there survives, trimmed.
-    expect(
-      newProjectTaskBody(encodeId(P1), { title: 'x', description: '  wire it up  ' }).description,
-    ).toBe('wire it up');
-
-    // Whitespace-only never gets as far as the body: the dialog's own action is disabled, which a
-    // static render cannot reach (portal) — so what is asserted is the predicate that decides it.
-    // `@MinLength(1)` on the server would happily accept '   ', so the trim is a real check.
-    expect(canCreateProjectTask({ title: '   ' })).toBe(false);
-    expect(canCreateProjectTask({ title: '' })).toBe(false);
-    expect(canCreateProjectTask({
-      title: 'Ship the pricing page', completionCriterion: 'EVIDENCE_JUDGMENT',
-    })).toBe(true);
-    // A criterion is required by `POST /tasks` at both write doors, so an unselected picker closes
-    // the button rather than sending a request the server refuses. Nothing is chosen on the
-    // reader's behalf: the whole point of the server-side rule is that nobody invents one.
-    expect(canCreateProjectTask({ title: 'Ship the pricing page' })).toBe(false);
-    // ...and that the dialog is wired to it, which only the source can show.
-    expect(source).toContain('const creatable = canCreateProjectTask(draft);');
-    expect(source).toContain('okButtonProps={{ disabled: !creatable }}');
-  });
-
-  it('keeps OpenCode’s managed-model choice, which is an empty string rather than no choice', () => {
-    // '' is a real selection in OpenCode's model space ("Managed by OpenCode"), so it has to reach
-    // the wire — dropping it as falsy would silently fall back to inheriting the assignee's model.
-    const chosen = newProjectTaskBody(encodeId(P1), { title: 'x', provider: 'opencode', model: '' });
-    expect(chosen.model).toBe('');
-    expect('model' in chosen).toBe(true);
-    // Where nothing was picked at all, the field stays absent.
-    expect('model' in newProjectTaskBody(encodeId(P1), { title: 'x', provider: 'opencode' })).toBe(false);
-  });
-
-  it('shows Title, Description, Assignee, Provider and Model, holding what it was handed', () => {
-    const out = renderForm({
-      title: 'Ship the pricing page',
-      description: 'Copy is signed off',
-      assigneeId: 'w-codex',
-    });
-
-    expect(out).toContain('>Title<');
-    expect(out).toContain('>Description<');
-    expect(out).toContain('>Assignee<');
-    expect(out).toContain('>Provider<');
-    expect(out).toContain('>Model<');
-
-    // The values are rendered, not merely accepted: a field that dropped what was typed would
-    // still show its label.
-    expect(out).toContain('value="Ship the pricing page"');
-    expect(out).toContain('Copy is signed off');
-    // The assignee is shown by NAME, which can only come from the workspaces the form read.
-    expect(out).toContain('>Builder<');
-  });
-
-  it('lists models from the effective provider and the assignee runner’s own catalogue', () => {
-    // No pin: the model space is the ASSIGNEE's provider (codex), read out of that runner's
-    // catalogue under the codex key. The picker renders the option's LABEL, so a model id that
-    // resolves to its catalogue name is proof the list was built from that catalogue.
-    expect(renderForm({ title: 'x', assigneeId: 'w-codex', model: 'gpt-5.6-sol' })).toContain(
-      '>GPT-5.6 Sol<',
-    );
-
-    // A pin of its own wins over the assignee's: the same assignee with a configured provider
-    // pinned reads that provider's own model list instead, never the runtime's.
-    const pinned = renderForm({ title: 'x', assigneeId: 'w-codex', provider: 'acme', model: 'acme-1' });
-    expect(pinned).toContain('>Acme One<');
-    // ...and the provider box names it, which is only possible if configured providers are merged
-    // in alongside the built-ins.
-    expect(pinned).toContain('>Acme<');
-    expect(source).toContain('options={mergedProviderOptions(configuredProviders)}');
-
-    // A built-in pin resolves to its built-in label, from the same merged list.
-    expect(renderForm({ title: 'x', provider: 'codex' })).toContain('>Codex<');
-
-    // An id the catalogue does not name — one whose runner retired it while the dialog was open
-    // — still renders as itself rather than vanishing out of the box it is sitting in.
-    expect(renderForm({ title: 'x', assigneeId: 'w-codex', model: 'claude-opus-5' })).toContain(
-      '>claude-opus-5<',
-    );
-  });
-
-  it('names the provider a task would inherit instead of pre-selecting it', () => {
-    // An assignee with a provider: the box stays EMPTY and says what would be inherited. A
-    // pre-selected value here would be the copy that turns inheriting into pinning.
-    const inherited = renderForm({ title: 'x', assigneeId: 'w-codex' });
-    expect(inherited).toContain("Assignee's (codex)");
-    expect(inherited).not.toContain('>Codex<');
-    // Named as a hint, never announced as what the box holds. A box holding a real choice reports
-    // it through `title` — the tooltip a user reads off it — as the Assignee box beside it does
-    // with the name it really is holding; a box showing only a placeholder reports nothing. That
-    // is the same distinction antd's private placeholder class draws, read off the accessible
-    // surface instead, so a renamed internal class cannot quietly turn this green.
-    expect(inherited).toContain('title="Builder"');
-    expect(inherited).not.toMatch(/title="[^"]*codex[^"]*"/i);
-
-    // An assignee with no provider of its own inherits the server's own claude fallback...
-    expect(renderForm({ title: 'x', assigneeId: 'w-plain' })).toContain("Assignee's (claude)");
-    // ...and with no assignee there is nothing to name, so it says only whose it will be.
-    const unassigned = renderForm({ title: 'x' });
-    expect(unassigned).toContain("Assignee's");
-    expect(unassigned).not.toContain("Assignee's (");
-    // The model box says the same kind of thing for the same reason.
-    expect(unassigned).toContain('Provider default');
-  });
-
-  it('drops the chosen model whenever the provider OR the assignee changes', () => {
-    // A model id only means anything inside one provider's model space, and an unpinned task takes
-    // that space from its assignee — so both pickers have to carry the model out with them. The
-    // handlers are inline in JSX, which a static render reduces to markup with no way back to the
-    // function, so this reads the one place each transition is written.
-    expect(source).toContain(
-      'onChange={(val) => onChange({ ...draft, provider: val ?? undefined, model: undefined })}',
-    );
-    // Reassigning is the case that would otherwise submit an id from the PREVIOUS assignee's
-    // runner catalogue against the new one's runtime.
-    expect(source).toContain(
-      'onChange={(val) => onChange({ ...draft, assigneeId: val ?? undefined, model: undefined })}',
-    );
-    // The model's own handler must NOT clear back the other way: picking a model says nothing
-    // about who runs it or on what.
-    expect(source).toContain('onChange={(val) => onChange({ ...draft, model: val ?? undefined })}');
-    expect(source).not.toMatch(/model: val \?\? undefined, (provider|assigneeId): undefined/);
-  });
-
-  it('shows the server’s own message inline, leaving everything that was typed on screen', () => {
-    // The real shape of a rejection a reader can act on: it names the field. Summarised into
-    // "failed" it would be unactionable, so it arrives whole.
-    const message = 'provider must be one of the built-in engines or a provider you have enabled';
-    const out = renderForm(
-      { title: 'Ship the pricing page', description: 'Copy is signed off', assigneeId: 'w-codex' },
-      { error: new Error(message) },
-    );
-    expect(out).toContain('Task could not be created');
-    expect(out).toContain(message);
-    // Inline: the draft is still there to correct, which is what makes the dialog's own Create
-    // button the retry — so there is no second Retry control repeating it.
-    expect(out).toContain('value="Ship the pricing page"');
-    expect(out).toContain('Copy is signed off');
-    expect(out).toContain('>Builder<');
-    expect(out).not.toContain('Retry');
-  });
-
-  it('refreshes the level the task landed in, the project’s tallies and the task views', () => {
-    const qc = newClient();
-    qc.setQueryData(['project', encodeId(P1)], detail());
-    qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    qc.setQueryData(['projects', 'OPEN'], []);
-    qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
-    // Another project's page, open in another tab: it must not be dragged along.
-    qc.setQueryData(['project', encodeId(P2)], detail({ id: P2 }));
-    qc.setQueryData(tasksKey(P2), { items: [], nextCursor: null });
-
-    invalidateAfterProjectTaskCreate(qc, encodeId(P1));
-
-    const invalidated = (key: unknown[]) =>
-      qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
-    // The row the new task appears in...
-    expect(invalidated(tasksKey(P1))).toBe(true);
-    // ...the document whose total and per-status tallies it moved...
-    expect(invalidated(['project', encodeId(P1)])).toBe(true);
-    // ...the list row carrying the same count, under whichever status filter is showing —
-    // `['projects']` is the prefix of every filter's entry, which is what makes one invalidation
-    // enough...
-    expect(invalidated(['projects', 'OPEN'])).toBe(true);
-    // ...and the task views elsewhere in the app, which have never heard of this page.
-    expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
-    // Scoped, though: another project's page is left exactly where it was.
-    expect(invalidated(['project', encodeId(P2)])).toBe(false);
-    expect(invalidated(tasksKey(P2))).toBe(false);
-  });
-
-  it('empties the form and closes the dialog once the task exists', () => {
-    // Both live in the mutation's onSuccess, behind a button no static render can press.
-    expect(source).toMatch(
-      /onSuccess: \(\) => \{\s*setDraft\(EMPTY_NEW_TASK_DRAFT\);\s*onClose\(\);\s*invalidateAfterProjectTaskCreate\(qc, projectId\);/,
-    );
-    // The project the task is created under is the page's own normalized id, handed down from the
-    // route — never re-derived, and never picked in the form.
-    expect(source).toContain('<ProjectTasks projectId={id}');
-    expect(source).toContain('projectId={projectId}');
-  });
-});
-
 /**
  * A scheduled start is the one thing on this page whose correct answer depends on WHERE the reader
  * is, so every assertion below runs in a pinned zone rather than the machine's own — otherwise the
@@ -2111,246 +1708,6 @@ function inTimeZone<T>(tz: string, fn: () => T): T {
 // conversion that merely dropped the offset would land on a different day in at least one of them.
 const SHANGHAI = 'Asia/Shanghai'; // UTC+8 year-round
 const NEW_YORK = 'America/New_York'; // UTC-4 in September
-// Pinned for the DST edges alone. Berlin springs forward 02:00 -> 03:00 on 2026-03-29 (so 02:30
-// never happens that day) and falls back on 2026-10-25 (so 02:30 happens twice). Both dates are
-// fixed points in the past/future of a fixed tzdata rule, not "today", so nothing here drifts.
-const BERLIN = 'Europe/Berlin';
-
-describe('scheduling a new task — the local control and the UTC wire value', () => {
-  it('sends no runAt at all when no time was chosen', () => {
-    // Absent, not '' and not null: the server's `@IsOptional() @IsDateString()` rejects an empty
-    // string outright, and absence is the only spelling that means "unscheduled".
-    const bare = newProjectTaskBody('proj1', { title: 'Bare' });
-    expect('runAt' in bare).toBe(false);
-
-    // The other two ways "no time" reaches the body: a draft that holds the field but never got a
-    // value, and one the reader opened and then cleared — the control hands back '' for that.
-    for (const runAtLocal of [undefined, '']) {
-      expect('runAt' in newProjectTaskBody('proj1', { title: 'x', runAtLocal })).toBe(false);
-    }
-    expect(runAtIso(undefined)).toBeUndefined();
-    expect(runAtIso('')).toBeUndefined();
-
-    // And the form's reset state carries no schedule, so a scheduled task cannot leave its start
-    // behind on the next one created from the reopened dialog.
-    expect(EMPTY_NEW_TASK_DRAFT).toEqual({ title: '' });
-    expect('runAtLocal' in EMPTY_NEW_TASK_DRAFT).toBe(false);
-  });
-
-  it('converts the viewer’s local wall clock to the UTC instant, zone by zone', () => {
-    // The SAME wall-clock reading is three different instants in three zones — which is the whole
-    // job of this function, and what a naive `local + 'Z'` would get wrong in two of them.
-    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T01:00:00.000Z');
-    expect(inTimeZone(NEW_YORK, () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T13:00:00.000Z');
-    expect(inTimeZone('UTC', () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T09:00:00.000Z');
-
-    // Across midnight the conversion moves the DATE too, not just the clock: 09:00 in Shanghai on
-    // the 1st is still the previous day in UTC.
-    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T07:30'))).toBe('2026-08-31T23:30:00.000Z');
-
-    // Seconds are accepted (some browsers' pickers emit them) and survive.
-    expect(inTimeZone('UTC', () => runAtIso('2026-09-01T09:00:30'))).toBe('2026-09-01T09:00:30.000Z');
-
-    // Whatever the zone, what goes on the wire is always canonical UTC ISO-8601 — never a locale
-    // rendering like "9/1/2026, 9:00 AM", which the server reads as no date at all.
-    for (const tz of [SHANGHAI, NEW_YORK, 'UTC']) {
-      expect(inTimeZone(tz, () => runAtIso('2026-09-01T09:00'))).toMatch(
-        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-      );
-    }
-  });
-
-  it('refuses a date with no time rather than silently shifting it by the viewer’s offset', () => {
-    // The trap this guards: `new Date('2026-09-01')` is parsed as UTC while
-    // `new Date('2026-09-01T09:00')` is parsed as LOCAL, so letting a date-only value through
-    // would schedule a Shanghai reader's task 8 hours off with no error anywhere.
-    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01'))).toBeUndefined();
-    // Proof the two really do disagree, so the guard above is closing a real gap and not noise.
-    expect(inTimeZone(SHANGHAI, () => new Date('2026-09-01').toISOString())).not.toBe(
-      inTimeZone(SHANGHAI, () => new Date('2026-09-01T00:00').toISOString()),
-    );
-  });
-
-  it('turns half-typed and impossible input into no schedule, never an Invalid Date', () => {
-    // What a partly-filled or hand-edited control can hand back. None of it may reach the wire,
-    // and none of it may throw — the dialog stays usable and simply carries no schedule.
-    //
-    // Pinned even though every case here is rejected in EVERY zone: the last two rows do reach the
-    // Date constructor, and a value's fate must never depend on where the suite happens to run.
-    inTimeZone(BERLIN, () => {
-      for (const bad of [
-        'tomorrow',
-        '2026-09-01T09', // hour, no minutes — a picker mid-edit
-        '9/1/2026, 9:00 AM', // a locale rendering, the value that must never be sent
-        '2026-09-01T09:00Z', // an offset spelling the control never produces
-        '2026-13-01T09:00', // no 13th month
-        '2026-09-01T25:00', // no 25th hour
-      ]) {
-        expect(runAtIso(bad)).toBeUndefined();
-        // Present but unusable: refused outright rather than dropped, so the reader's choice
-        // cannot be spent on its opposite — a task created with no schedule and nothing said.
-        expect(() => newProjectTaskBody('proj1', { title: 'x', runAtLocal: bad })).toThrow(
-          RUN_AT_IMPOSSIBLE,
-        );
-      }
-    });
-  });
-
-  it('refuses a date the calendar does not have, rather than rolling it forward', () => {
-    // A calendar is the same everywhere, so none of this depends on the zone — but the whole test
-    // is pinned regardless, because the EXPECTED ISO strings below do, and because a helper that
-    // is only sometimes wrapped is one edit away from being wrapped nowhere.
-    inTimeZone(BERLIN, () => {
-      // The Date constructor NORMALIZES rather than refusing, so Feb 31st is a real instant three
-      // days later — a schedule nobody picked, arriving with no error at all.
-      for (const impossible of ['2026-02-31T12:00', '2026-02-30T09:00', '2026-04-31T10:00']) {
-        expect(runAtIso(impossible)).toBeUndefined();
-        expect(() => newProjectTaskBody('proj1', { title: 'x', runAtLocal: impossible })).toThrow(
-          RUN_AT_IMPOSSIBLE,
-        );
-      }
-
-      // Proof the rollover is real, so the check above is closing a gap rather than restating the
-      // regex: the raw constructor turns Feb 31st into March.
-      expect(new Date(2026, 1, 31).getMonth()).toBe(2);
-
-      // The last real day of each of those months still goes through untouched.
-      expect(runAtIso('2026-02-28T12:00')).toBe('2026-02-28T11:00:00.000Z');
-      expect(runAtIso('2026-04-30T10:00')).toBe('2026-04-30T08:00:00.000Z');
-      // ...including a leap day in a year that has one.
-      expect(runAtIso('2028-02-29T12:00')).toBe('2028-02-29T11:00:00.000Z');
-      // ...and not in a year that does not.
-      expect(runAtIso('2026-02-29T12:00')).toBeUndefined();
-    });
-  });
-
-  it('refuses a wall time that the reader’s own clock skips on a spring-forward day', () => {
-    // ONE wrapper around every Berlin assertion, rather than one per call. This test is the only
-    // one here whose outcome really does change with the zone — 02:30 on this date is a perfectly
-    // ordinary time in UTC — so a single paired call left outside the wrapper would pass on this
-    // machine and fail on a UTC CI host. Scoping it structurally is what makes that impossible.
-    inTimeZone(BERLIN, () => {
-      // Berlin jumps 02:00 -> 03:00 on 2026-03-29, so 02:30 is a time that does not happen. Left
-      // to normalize it becomes 03:30 — and lands on the SAME instant as a deliberate 03:30, which
-      // is what makes this worse than being merely an hour off: afterwards the two choices are
-      // indistinguishable.
-      expect(runAtIso('2026-03-29T02:30')).toBeUndefined();
-      // ...and the body refuses it rather than carrying no schedule at all: this is the one case
-      // a real browser can actually hand over, so a silent downgrade here would be a schedule the
-      // reader picked and never got.
-      expect(() =>
-        newProjectTaskBody('proj1', { title: 'x', runAtLocal: '2026-03-29T02:30' }),
-      ).toThrow(RUN_AT_IMPOSSIBLE);
-
-      // Either side of the gap is a real time on that same day and converts normally — 01:30 still
-      // on CET (+1), 03:30 already on CEST (+2).
-      expect(runAtIso('2026-03-29T01:30')).toBe('2026-03-29T00:30:00.000Z');
-      expect(runAtIso('2026-03-29T03:30')).toBe('2026-03-29T01:30:00.000Z');
-
-      // The collision the guard prevents: without it, the skipped time and the real one would have
-      // produced one and the same instant.
-      expect(new Date(2026, 2, 29, 2, 30).toISOString()).toBe(
-        new Date(2026, 2, 29, 3, 30).toISOString(),
-      );
-
-      // AMBIGUOUS is not impossible, and must still go through: Berlin falls back on 2026-10-25,
-      // so 02:30 happens twice that day. It reads back as 02:30 either way, so it survives as the
-      // first of the two — refusing it would reject a time the reader's clock really does show.
-      expect(runAtIso('2026-10-25T02:30')).toBe('2026-10-25T00:30:00.000Z');
-    });
-
-    // The same wall time in a zone with no DST at all is untouched by any of this — which is also
-    // what proves the rejection above came from Berlin's rules and not from the value itself.
-    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-03-29T02:30'))).toBe('2026-03-28T18:30:00.000Z');
-  });
-
-  it('never turns a schedule the reader picked into an unscheduled POST', () => {
-    // The downgrade this forbids: 02:30 on Berlin's spring-forward day is a time a real browser
-    // will hand over, and quietly omitting it would create the task successfully with no schedule
-    // — the exact opposite of what was asked for, reported as success.
-    const apiMock = vi.mocked(api);
-    apiMock.mockClear();
-    inTimeZone(BERLIN, () => {
-      expect(() =>
-        createProjectTask(encodeId(P1), { title: 'Run the nightly ingest', runAtLocal: '2026-03-29T02:30' }),
-      ).toThrow(RUN_AT_IMPOSSIBLE);
-    });
-    // Nothing reached the wire at all — in particular, no body with the schedule silently missing.
-    expect(apiMock).not.toHaveBeenCalled();
-
-    // The same draft with the start cleared is a different request, and a perfectly good one.
-    apiMock.mockClear();
-    createProjectTask(encodeId(P1), { title: 'Run the nightly ingest' });
-    expect(apiMock).toHaveBeenCalledTimes(1);
-    expect((apiMock.mock.calls[0][1] as { body: Record<string, unknown> }).body).not.toHaveProperty(
-      'runAt',
-    );
-  });
-
-  it('surfaces the refusal as a failed mutation, which is what the dialog renders', async () => {
-    // The throw is synchronous inside the mutationFn; this is what proves react-query turns that
-    // into the error state the form's inline Alert already reads, rather than letting it escape.
-    //
-    // A calendar-impossible value rather than the DST one on purpose: it is refused in EVERY zone,
-    // so this test needs no pinning and cannot race the zone restore across its await.
-    const apiMock = vi.mocked(api);
-    apiMock.mockClear();
-    const observer = new MutationObserver(newClient(), {
-      mutationFn: (d: NewProjectTaskDraft) => createProjectTask(encodeId(P1), d),
-      retry: false,
-    });
-
-    await observer.mutate({ title: 'x', runAtLocal: '2026-02-31T12:00' }).catch(() => {});
-
-    const result = observer.getCurrentResult();
-    expect(result.isError).toBe(true);
-    // The same sentence the field itself shows — one message, so the two cannot disagree.
-    expect(result.error?.message).toBe(RUN_AT_IMPOSSIBLE);
-    expect(apiMock).not.toHaveBeenCalled();
-  });
-
-  it('refuses a year the constructor would quietly move into the 1900s', () => {
-    // `new Date(26, ...)` means 1926, not the year 26 — the constructor's two-digit-year rule. The
-    // control cannot produce this, but the round-trip is what makes it impossible rather than
-    // merely unlikely.
-    expect(inTimeZone(BERLIN, () => runAtIso('0026-09-01T09:00'))).toBeUndefined();
-    expect(inTimeZone(BERLIN, () => new Date(26, 8, 1, 9, 0, 0).getFullYear())).toBe(1926);
-  });
-
-  it('carries the schedule alongside every other choice, in one POST to /tasks', () => {
-    const apiMock = vi.mocked(api);
-    apiMock.mockClear();
-    inTimeZone(SHANGHAI, () =>
-      createProjectTask(encodeId(P1), {
-        title: 'Run the nightly ingest',
-        description: 'Kick it off before the EU morning',
-        assigneeId: 'w-codex',
-        provider: 'acme',
-        model: 'acme-1',
-        runAtLocal: '2026-09-01T09:00',
-      }),
-    );
-
-    expect(apiMock).toHaveBeenCalledTimes(1);
-    const [path, init] = apiMock.mock.calls[0] as [string, { method?: string; body?: Record<string, unknown> }];
-    expect(path).toBe('/tasks');
-    expect(init.method).toBe('POST');
-    // The schedule is one more field on the same body — it does not replace or disturb any of the
-    // fields that were already there, and it lands as UTC while the control held local.
-    expect(init.body).toEqual({
-      projectId: encodeId(P1),
-      title: 'Run the nightly ingest',
-      description: 'Kick it off before the EU morning',
-      runAt: '2026-09-01T01:00:00.000Z',
-      assigneeId: 'w-codex',
-      provider: 'acme',
-      model: 'acme-1',
-    });
-    // Named `runAt`, never `dueDate`: they are different fields on the server and only one of them
-    // starts anything.
-    expect(init.body).not.toHaveProperty('dueDate');
-  });
-});
 
 /**
  * The one `<time>` element on a row, read as its parts.
@@ -2482,7 +1839,7 @@ describe('ProjectDetailPage — a task’s scheduled start on its row', () => {
     expect(scheduledStart('nope')).toBeNull();
   });
 
-  it('survives a round trip: what the form sent is what the row reads back', () => {
+  it('survives a round trip: what a picked wall time sends is what the row reads back', () => {
     // The two halves of this unit meet here. A reader in Shanghai picks 09:00 on the 1st, the wire
     // carries the UTC instant, the server echoes it back on the task page, and the row has to show
     // that same reader the 09:00 they picked — not 01:00.
@@ -2500,180 +1857,6 @@ describe('ProjectDetailPage — a task’s scheduled start on its row', () => {
     );
     expect(shown).toBe(picked);
     expect(rowIn(SHANGHAI, { runAt: wire })).toContain(`Starts ${shown}`);
-  });
-});
-
-describe('the New task form’s Start at control', () => {
-  /** The form body on its own — an antd Modal renders through a portal, which a static render
-   *  produces no markup for, so this is the only place its fields can be read. */
-  function renderForm(draft: NewProjectTaskDraft, over: { pending?: boolean } = {}) {
-    const qc = newClient();
-    qc.setQueryData(['workspaces'], []);
-    qc.setQueryData(['providers'], []);
-    qc.setQueryData(['runners'], []);
-    return renderToStaticMarkup(
-      <QueryClientProvider client={qc}>
-        <NewProjectTaskForm
-          projectId={P1}
-          draft={draft}
-          onChange={() => {}}
-          error={null}
-          pending={over.pending ?? false}
-        />
-      </QueryClientProvider>,
-    );
-  }
-
-  it('offers one clearly labelled datetime control, empty until a time is chosen', () => {
-    const out = renderForm({ title: 'x' });
-
-    // Named for what it does. "Start at" is a trigger; "Due" would be a deadline, which this page
-    // has no control for at all.
-    expect(out).toContain('>Start at<');
-    expect(out).not.toContain('>Due<');
-    expect(out).not.toContain('>Due date<');
-
-    // A real datetime-local input — a plain text box would accept "next tuesday" and a date-only
-    // input would drop the time this field exists to collect.
-    expect(out).toMatch(/<input[^>]*type="datetime-local"/);
-    // Nothing chosen renders as empty, never as a placeholder string that could be submitted.
-    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*value=""/);
-    // ...and it says whose clock it reads and that it fires once, which the control cannot show
-    // itself (a datetime-local ignores `placeholder`).
-    expect(out).toContain('in your own time zone');
-    expect(out).toContain('starts once');
-  });
-
-  it('holds the local value it was handed, in the control’s own spelling', () => {
-    // The draft keeps the wall-clock string, NOT the UTC instant: handing a `...Z` value back to a
-    // datetime-local control blanks it, silently losing what the reader picked.
-    const out = renderForm({ title: 'x', runAtLocal: '2026-09-01T09:00' });
-    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*value="2026-09-01T09:00"/);
-    expect(out).not.toContain('value="2026-09-01T01:00:00.000Z"');
-  });
-
-  it('goes disabled with the rest of the form while the task is being created', () => {
-    // A schedule changed mid-flight would not reach the request that is already gone.
-    expect(renderForm({ title: 'x', runAtLocal: '2026-09-01T09:00' }, { pending: true })).toMatch(
-      /<input[^>]*type="datetime-local"[^>]*disabled/,
-    );
-    expect(renderForm({ title: 'x', runAtLocal: '2026-09-01T09:00' })).not.toMatch(
-      /<input[^>]*type="datetime-local"[^>]*disabled/,
-    );
-  });
-
-  it('names the problem on the field itself when the picked time cannot happen', () => {
-    // 02:30 on Berlin's spring-forward day: a value the control will genuinely offer, because a
-    // datetime-local knows nothing about the reader's daylight-saving rules.
-    const out = inTimeZone(BERLIN, () => renderForm({ title: 'x', runAtLocal: '2026-03-29T02:30' }));
-
-    // Said inline, in full, where the reader is looking — not swallowed and not deferred to a
-    // task that comes back later with no schedule on it.
-    expect(out).toContain(RUN_AT_IMPOSSIBLE);
-    // Marked wrong on the control, for eyes and for anything reading the accessibility tree.
-    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*aria-invalid="true"/);
-    expect(out).toContain('ant-input-status-error');
-    // What they typed is still there to correct — clearing it for them would lose the choice just
-    // as surely as sending nothing would.
-    expect(out).toMatch(/<input[^>]*value="2026-03-29T02:30"/);
-    // The general hint gives way to the specific problem, rather than stacking two lines.
-    expect(out).not.toContain('The task starts once, at that time.');
-  });
-
-  it('says nothing of the sort while the field is empty or holds a real time', () => {
-    // An empty field is not an error — the whole field is optional, and an unscheduled task is the
-    // normal case. This is the assertion that keeps the message off everyone else's screen.
-    for (const draft of [
-      { title: 'x' },
-      { title: 'x', runAtLocal: undefined },
-      // Either side of the same gap, and an ambiguous fall-back time, are all real choices.
-      { title: 'x', runAtLocal: '2026-03-29T01:30' },
-      { title: 'x', runAtLocal: '2026-03-29T03:30' },
-      { title: 'x', runAtLocal: '2026-10-25T02:30' },
-    ]) {
-      const out = inTimeZone(BERLIN, () => renderForm(draft));
-      expect(out).not.toContain(RUN_AT_IMPOSSIBLE);
-      expect(out).not.toContain('aria-invalid');
-      expect(out).not.toContain('ant-input-status-error');
-      expect(out).toContain('The task starts once, at that time.');
-    }
-  });
-
-  it('closes the Create button on an impossible start, and only while it is impossible', () => {
-    // The button lives behind the Modal's portal, which a static render produces no markup for, so
-    // the predicate that decides it is what gets asserted — the dialog's wiring to it is checked
-    // where the rest of the dialog's wiring is.
-    inTimeZone(BERLIN, () => {
-      // Declared throughout, so what this test varies is the schedule and nothing else.
-      const declared = { completionCriterion: 'EVIDENCE_JUDGMENT' } as const;
-      expect(canCreateProjectTask({ title: 'x', ...declared, runAtLocal: '2026-03-29T02:30' })).toBe(false);
-      // Fixing the time reopens it...
-      expect(canCreateProjectTask({ title: 'x', ...declared, runAtLocal: '2026-03-29T03:30' })).toBe(true);
-      // ...as does clearing it, since no schedule at all was always allowed.
-      expect(canCreateProjectTask({ title: 'x', ...declared })).toBe(true);
-      // A good time cannot rescue a bad title, and vice versa: both gates are real.
-      expect(canCreateProjectTask({ title: '  ', ...declared, runAtLocal: '2026-03-29T03:30' })).toBe(false);
-      expect(canCreateProjectTask({ title: '  ', ...declared, runAtLocal: '2026-03-29T02:30' })).toBe(false);
-
-      // And the predicate agrees with the field, so the button cannot be open on a draft the form
-      // is showing an error for — nor closed on one it is not.
-      for (const local of ['2026-03-29T02:30', '2026-03-29T03:30', '2026-02-31T12:00', undefined]) {
-        expect(canCreateProjectTask({ title: 'x', ...declared, runAtLocal: local })).toBe(
-          runAtProblem(local) === null,
-        );
-      }
-    });
-  });
-
-  it('points the control at the line that explains it, hint and error alike', () => {
-    // `aria-invalid` says THAT the field is wrong; this is what carries WHY. Asserted as an
-    // association rather than against a literal id — the id is generated, and what matters is
-    // that the two ends agree, which is the whole of what a screen reader follows.
-    const described = (html: string) => /<input[^>]*type="datetime-local"[^>]*aria-describedby="([^"]+)"/.exec(html)?.[1];
-    const textAt = (html: string, id: string) =>
-      new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>([^<]*)<`, 'i').exec(html)?.[1];
-
-    // The optional case: the field is fine, and what gets announced with it is the hint that says
-    // whose clock it reads and that it fires once.
-    const ok = inTimeZone(BERLIN, () => renderForm({ title: 'x', runAtLocal: '2026-03-29T03:30' }));
-    const okId = described(ok)!;
-    expect(okId).toBeTruthy();
-    expect(textAt(ok, okId)).toContain('Optional, in your own time zone');
-
-    // The broken case: the SAME association now resolves to the reason it is broken, so the
-    // announcement is the actual problem rather than a bare "invalid".
-    const bad = inTimeZone(BERLIN, () => renderForm({ title: 'x', runAtLocal: '2026-03-29T02:30' }));
-    const badId = described(bad)!;
-    expect(badId).toBeTruthy();
-    expect(textAt(bad, badId)).toBe(RUN_AT_IMPOSSIBLE);
-
-    // Described in both states, not only when it fails — a field that loses its description the
-    // moment it becomes valid is one a reader can never hear the instructions for.
-    expect(described(inTimeZone(BERLIN, () => renderForm({ title: 'x' })))).toBeTruthy();
-
-    // And the id is the form's own, not a constant: two forms in one document must not collide.
-    const two = renderToStaticMarkup(
-      <QueryClientProvider client={newClient()}>
-        <NewProjectTaskForm projectId={P1} draft={{ title: 'a' }} onChange={() => {}} error={null} pending={false} />
-        <NewProjectTaskForm projectId={P1} draft={{ title: 'b' }} onChange={() => {}} error={null} pending={false} />
-      </QueryClientProvider>,
-    );
-    const ids = [...two.matchAll(/type="datetime-local"[^>]*aria-describedby="([^"]+)"/g)].map((m) => m[1]);
-    expect(ids).toHaveLength(2);
-    expect(new Set(ids).size).toBe(2);
-  });
-
-  it('leaves every field that was already there exactly as it was', () => {
-    // The schedule is an addition, not a rearrangement: the five controls this form has always had
-    // still render, still in order, still holding what they were handed.
-    const out = renderForm({ title: 'Ship it', description: 'Copy is signed off' });
-    for (const label of ['>Title<', '>Description<', '>Start at<', '>Assignee<', '>Provider<', '>Model<']) {
-      expect(out).toContain(label);
-    }
-    expect(out.indexOf('>Description<')).toBeLessThan(out.indexOf('>Start at<'));
-    expect(out.indexOf('>Start at<')).toBeLessThan(out.indexOf('>Assignee<'));
-    expect(out).toContain('value="Ship it"');
-    expect(out).toContain('Copy is signed off');
   });
 });
 

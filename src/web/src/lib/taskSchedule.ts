@@ -5,8 +5,8 @@ import type { QueryClient } from '@tanstack/react-query';
  *
  * `runAt` is one instant, stored and sent as UTC. A `datetime-local` control speaks only the
  * VIEWER's wall clock, which is also the only reading a person can sensibly pick. Every conversion
- * between those two lives here — once — so the New task dialog that creates a schedule and the
- * task panel that edits one cannot drift into disagreeing about what a given wall time means.
+ * between those two lives here — once — so the task panel that edits a schedule and the rows that
+ * read one back cannot drift into disagreeing about what a given wall time means.
  *
  * Nothing here touches the network or React; it is all total functions over strings, so the rules
  * below can be tested in a pinned zone without a browser.
@@ -192,9 +192,8 @@ export interface TaskRefreshTarget {
  *
  * One function rather than a list at each call site, because the panel's Run now, the row's Run
  * and the bulk Run all spend a schedule just as surely as cancelling one does, and they must not
- * drift into refreshing different things. Exported for the same reason
- * `invalidateAfterProjectTaskCreate` is: what a write refreshes has to be assertable against a
- * seeded cache, since the buttons that trigger it are behind a mutation.
+ * drift into refreshing different things. Exported because what a write refreshes has to be
+ * assertable against a seeded cache, since the buttons that trigger it are behind a mutation.
  *
  * Returns the refetches rather than firing and forgetting them, and every caller returns it from
  * its `onSuccess` — which is what keeps a mutation PENDING until the views have actually caught

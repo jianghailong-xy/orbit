@@ -505,11 +505,15 @@ test('MCP single and batch creation receive advice and forward the same override
   assert.match(mcp, /TASK_CRITERION_SHAPE_ADVICE questioned it/);
 });
 
-test('web creation preserves the advisory body, renders it as a question, and sends the override', () => {
+// The web is no longer one of this advisory's audiences: the project page's manual New task dialog
+// — the app's only human create door, and the only place this body was ever rendered — was
+// removed, since tasks are created by agents. What remains asserted here is the client's half that
+// a future reader would still need: an ApiError that carries the structured body rather than
+// flattening it to a message. That the page creates nothing is held from the other side, by
+// ProjectsPage.test.tsx's endpoint census.
+test('the web client still preserves a structured advisory body rather than flattening it', () => {
   const api = readFileSync(path.join(repoRoot(), 'src/web/src/api.ts'), 'utf8');
   const web = readFileSync(path.join(repoRoot(), 'src/web/src/pages/ProjectsPage.tsx'), 'utf8');
   assert.match(api, /public readonly body\?: Readonly<Record<string, unknown>>/);
-  assert.match(web, /taskCriterionShapeAdviceFrom/);
-  assert.match(web, /type="warning"/);
-  assert.match(web, /body\.completionCriterionOverrideReason = overrideReason/);
+  assert.doesNotMatch(web, /api\('\/tasks'/);
 });
