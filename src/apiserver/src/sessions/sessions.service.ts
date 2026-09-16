@@ -6017,7 +6017,9 @@ export class SessionsService {
    * already rides the reload (see `acceptsLiveConfig`), so it lands on the next turn all the same.
    * Model, permission mode and effort are not spawn-only: a resident engine can be told about all
    * three, so they travel as `setconfig`, which the inbox hands over mid-turn. A PATCH that moves
-   * both halves queues both, setconfig first.
+   * both halves queues both, setconfig first — unless the provider switch re-resolves the model,
+   * which is the one value a process still on the old endpoint cannot be told (see
+   * `modelCrossesProvider` below).
    *
    * Telling one requires a runtime with a control protocol to hear it, which is claude alone;
    * for the ACP and one-shot runtimes the whole config rides the reload, exactly as it always
@@ -6152,11 +6154,27 @@ export class SessionsService {
       // — so it joins the provider on the spawn-only side even on the runtime that HAS a control
       // channel. (On Codex `acceptsLiveConfig` is false, so this term changes nothing there.)
       const respawns = !acceptsLiveConfig || next.changed || fastModeMoved;
+      // A switch that re-resolves the MODEL must not be said to the running engine, whatever else
+      // moved beside it. Every value on this PATCH was resolved against the provider the session
+      // is moving TO, while the process a control frame reaches is still talking to the one it is
+      // moving FROM — and the CLI answers for the endpoint it is configured against, not for a
+      // model some other provider serves. Measured 2026-09-16 on a live claude session
+      // (anthropic-2 / claude-opus-5) moved to deepseek: the model frame was refused (`Model
+      // 'deepseek-flash' not found`), the runner took the re-spawn its refusal path promises —
+      // applying the committed config to job.Agent, but taking its environment from the reload
+      // turn, which the inbox had not delivered yet — and the engine came up as deepseek-flash
+      // against the ANTHROPIC endpoint. The resumed turn died on that endpoint's 404 ("There's an
+      // issue with the selected model (deepseek-flash)"), the session's run failed, and the switch
+      // the person asked for was left not in effect. `next.changed` queues the reload regardless,
+      // and the reload carries model, permission mode and effort, so nothing is lost by leaving
+      // all three to it.
+      const modelCrossesProvider = next.changed && exec.model !== session.model;
       // …and the control frame goes whenever the live half moved. A PATCH that moved nothing at
       // all still sends one rather than falling silent: re-stating the committed pair is what
       // this kind costs, and it is cheaper than the reload that used to be sent here.
       const setsLiveConfig =
         acceptsLiveConfig &&
+        !modelCrossesProvider &&
         (!respawns ||
           exec.model !== session.model ||
           normalizedPermissionMode !== session.permissionMode ||

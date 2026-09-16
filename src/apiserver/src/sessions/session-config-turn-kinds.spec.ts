@@ -19,6 +19,16 @@ import { SessionsService } from './sessions.service';
  * So each case below is a claim about one direction: the live half alone must NOT produce a
  * reload, the spawn-only half alone must NOT produce a setconfig, and neither assertion means
  * anything without the other — a rule that queued both every time would satisfy either one.
+ *
+ * One shape escapes the pairing, and it is filed as its own claim rather than as an exception to
+ * the two: a switch that re-resolves the MODEL (see the first provider cases) queues the re-spawn
+ * ALONE. The values on such a PATCH were resolved against the provider it moves the session to,
+ * while the process a frame reaches is still on the endpoint it is moving from — and that endpoint
+ * answers for its own models and refuses the rest. The refusal is not free: it costs the runner's
+ * fallback re-spawn, which applies the committed config to job.Agent while its environment waits on
+ * the reload turn, leaving an engine running the new provider's model against the old provider's
+ * endpoint. Measured 2026-09-16, switching a live claude session to deepseek: the resumed turn died
+ * on that endpoint's 404 and the switch never took effect.
  */
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -182,7 +192,7 @@ test('re-sending the provider a session already declares moves nothing either', 
   assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
 });
 
-test('a provider switch alongside an effort change queues both, re-spawn last', async () => {
+test('a provider switch that re-resolves the model is a re-spawn, effort and all', async () => {
   process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
   const { service, turns } = serviceOn({
     modelProvider: {
@@ -196,25 +206,26 @@ test('a provider switch alongside an effort change queues both, re-spawn last', 
 
   await service.updateConfig(OWNER, ID, { provider: 'byok', effort: 'xhigh' });
 
-  // Order is the point: the reload re-spawns with every new flag, so a setconfig ordered after
-  // it would be a control frame for config the fresh process already has. And the effort has to
-  // be on BOTH — the frame moves the turn that is running now, the flag builds the process that
-  // runs next, and a reload that dropped it would come back on the old level.
-  assert.deepEqual(
-    turns.map(({ kind, seq }) => ({ kind, seq })),
-    [
-      { kind: 'setconfig', seq: 1 },
-      { kind: 'reload', seq: 2 },
-    ],
-  );
-  assert.equal(JSON.parse(turns[0].content ?? '{}').effort, 'xhigh');
-  assert.equal(JSON.parse(turns[1].content ?? '{}').effort, 'xhigh');
-  // Only the reload names the provider: it is the one that has to rebuild the process.
-  assert.equal(JSON.parse(turns[0].content ?? '{}').provider, undefined);
-  assert.equal(JSON.parse(turns[1].content ?? '{}').provider, 'byok');
+  // No live frame at all in this shape — not reordered, not emptied, absent. The model this PATCH
+  // resolves to belongs to the provider being moved TO ('byok-large' here), and the process a
+  // frame would reach is still on the endpoint being moved FROM, which answers for its own models
+  // and refuses the rest. Measured 2026-09-16 on a live claude session moved to deepseek:
+  // `Model 'deepseek-flash' not found`, the runner took the re-spawn its refusal path promises —
+  // which applies the committed config to job.Agent but gets its environment from the reload turn,
+  // not delivered yet — and the engine came up as deepseek-flash against the Anthropic endpoint,
+  // where the resumed turn died on a 404. So the frame is the one thing that must not be sent.
+  // Nothing is lost with it: the reload carries the whole committed config, and the process it
+  // builds is what applies an effort anyway.
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.deepEqual(JSON.parse(turns[0].content ?? '{}'), {
+    model: 'byok-large',
+    permissionMode: 'default',
+    effort: 'xhigh',
+    provider: 'byok',
+  });
 });
 
-test('a provider switch alongside a permission-mode change queues both, re-spawn last', async () => {
+test('a provider switch that re-resolves the model says nothing to the engine it is leaving', async () => {
   process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
   // A configured slug on the claude runtime: the one kind of switch a claude session may make,
   // since resolveProviderSwitch refuses to move a session across runtimes.
@@ -230,23 +241,47 @@ test('a provider switch alongside a permission-mode change queues both, re-spawn
 
   await service.updateConfig(OWNER, ID, { provider: 'byok', permissionMode: 'auto' });
 
-  assert.deepEqual(
-    turns.map(({ kind, seq }) => ({ kind, seq })),
-    [
-      { kind: 'setconfig', seq: 1 },
-      { kind: 'reload', seq: 2 },
-    ],
-  );
-  // Only the reload names the provider: it is the one that has to rebuild the process, and the
-  // identity is what tells the inbox to resolve an environment for it.
-  assert.equal(JSON.parse(turns[0].content ?? '{}').provider, undefined);
-  assert.equal(JSON.parse(turns[1].content ?? '{}').provider, 'byok');
-  // Both carry the same committed pair — they were written under one row lock, from one read.
+  // The permission mode moved and would be a frame the running engine can act on — but the model
+  // moved with it, and a frame names the model it is filing under. That one is not servable on the
+  // endpoint this process is still on, so the whole change waits for the process that can serve
+  // it: one turn, the re-spawn, carrying everything. The alternative measured badly (see the
+  // effort case above): the frame is refused, taken as a degradation, and the re-spawn it triggers
+  // comes up on the new model against the old endpoint.
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  const respawn = JSON.parse(turns[0].content ?? '{}');
+  assert.equal(respawn.model, 'byok-large');
+  assert.equal(respawn.permissionMode, 'auto');
+  // The identity is what tells the inbox to resolve a new environment for this turn.
+  assert.equal(respawn.provider, 'byok');
+});
+
+test('a provider switch that keeps the model still speaks to the running engine', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  // The control for the two cases above, and the reason the rule is stated about the MODEL rather
+  // than about switching: a configured row that owns the id the session is already on (a second
+  // account with the same vendor) re-resolves to that same id, so the frame names nothing the
+  // running endpoint refuses — and the mode change beside it lands mid-turn, exactly as it would
+  // without a switch.
+  const { service, turns } = serviceOn({
+    modelProvider: {
+      runtime: 'claude',
+      baseUrl: 'https://byok.example/anthropic',
+      apiKeyEnc: encryptSecret('sk-byok'),
+      defaultModel: 'claude-opus-5',
+      models: [{ value: 'claude-opus-5', label: 'Opus 5' }],
+      enabled: true,
+    },
+  });
+
+  await service.updateConfig(OWNER, ID, { provider: 'byok', permissionMode: 'auto' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig', 'reload']);
   const live = JSON.parse(turns[0].content ?? '{}');
   const respawn = JSON.parse(turns[1].content ?? '{}');
-  assert.equal(live.model, respawn.model);
-  assert.equal(live.permissionMode, respawn.permissionMode);
+  assert.equal(live.model, 'claude-opus-5');
   assert.equal(live.permissionMode, 'auto');
+  assert.equal(respawn.model, 'claude-opus-5');
+  assert.equal(respawn.provider, 'byok');
 });
 
 /**

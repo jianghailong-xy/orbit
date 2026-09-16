@@ -1178,7 +1178,10 @@ export interface ApprovalDecisionResponse {
 // It is deliverable mid-turn for the same reason interrupt is — nothing about it needs the
 // engine to be idle — and like reload it occupies no in-flight slot. When one PATCH moves
 // both halves the server queues both, setconfig first, so the re-spawn that follows carries
-// every new flag rather than re-doing what the control frame just did. Filed for the claude
+// every new flag rather than re-doing what the control frame just did — unless the switch
+// re-resolved the MODEL, which the engine being replaced cannot be told: it is still on the
+// endpoint it is leaving, and that endpoint answers for its own models and refuses the rest.
+// That PATCH queues the reload alone (SessionsService.updateConfig). Filed for the claude
 // runtime alone: the other runtimes' session loops have no arm for the kind (codex and
 // kimi are driven over ACP/JSON-RPC, opencode runs one process per turn), so one sent
 // there would be acked on delivery and applied by nobody. They keep the reload, effort
