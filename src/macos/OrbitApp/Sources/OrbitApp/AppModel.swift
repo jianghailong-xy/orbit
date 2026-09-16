@@ -56,9 +56,29 @@ final class AppModel {
         didSet {
             if selectedSection != .settings { settingsShowingRunners = false }
             if selectedSection != .tasks { taskListsDirectoryPresented = false }
+            // Agents' pushes are section-specific too — the selected session's console and the compose
+            // page both ride the Agents stack, which the compact shell throws away on a switch. Left
+            // set, they come back as a selection with no stack under it: the row draws highlighted
+            // (`List(selection:)`) while the console it points at was never pushed, and tapping it
+            // writes the id the binding already holds, which SwiftUI reads as no change — a row that
+            // can't be opened until the selection moves elsewhere. Only on the compact shell: the
+            // iPad/macOS three-column shells keep the detail pane on screen, where the selection is
+            // what fills it, so clearing there would empty a returning section to "Select a session".
+            // Every navigation into Agents (`route`/`openSession`, `openAgent`, `openRecentSession`,
+            // `openNeedsYouSession`, `composeWithAgent`, `newSessionInCurrentAgent`) sets the section
+            // first and the selection after, so this guard never clears the target they just picked.
+            if usesCompactShell && selectedSection != .agents {
+                selectedAgentSessionID = nil
+                composingAgentSession = false
+            }
             tasks?.setSectionActive(selectedSection == .tasks)
         }
     }
+    /// iOS only: true while the iPhone `CompactShell` (left drawer, one section's stack at a time) is
+    /// the shell on screen, written by the iOS root view from the horizontal size class. It's what the
+    /// section-switch cleanup above and the session list's re-arming tap key off, since both exist to
+    /// repair a torn-down stack — something the regular-width shells never do.
+    var usesCompactShell = false
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false

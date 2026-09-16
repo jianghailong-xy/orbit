@@ -596,6 +596,27 @@ struct AgentPanes: View {
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
         AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open).tag(s.id)
             .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+            // The backstop for a highlighted row that won't open. On the iPhone shell this selection
+            // also pushes the console, so a selection that outlived its stack draws the row selected
+            // with nothing pushed — and the List's own tap then writes the id the binding already
+            // holds, which SwiftUI reads as no change and ignores. Attached ONLY to the row that is
+            // already selected (elsewhere the mask leaves the gesture off), so it can't race the
+            // List's write for any other row, and on the row it does cover, that write is the no-op
+            // it replaces. Never on the regular-width shells: their detail pane shows the selection
+            // without a push, so re-tapping the selected row is meant to do nothing there.
+            .simultaneousGesture(TapGesture().onEnded { _ in reopenSelectedRow(s.id) },
+                                 including: rearmsTap(on: s.id) ? .all : .subviews)
+    }
+
+    private func rearmsTap(on id: String) -> Bool { app.usesCompactShell && selectedSessionID == id }
+
+    /// Re-arm the selection the compact shell pushes the console off: clear it, then set the same id
+    /// back a runloop turn later. The turn matters — SwiftUI has to *see* the cleared selection for
+    /// the re-selection to read as a change worth pushing; both writes in one pass coalesce back into
+    /// the id it already held, which is the no-op this exists to break.
+    private func reopenSelectedRow(_ id: String) {
+        selectedSessionID = nil
+        DispatchQueue.main.async { selectedSessionID = id }
     }
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
