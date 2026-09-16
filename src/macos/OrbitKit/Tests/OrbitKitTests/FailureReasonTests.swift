@@ -12,8 +12,12 @@ import XCTest
 /// until every one of those lines was built from `APIClient.failureReason` instead.
 final class FailureReasonTests: XCTestCase {
 
-    /// The console lines that report a failed press, by the file they live in.
-    private static let console = "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift"
+    /// Every file whose banner reports a failed press. The property the sentence is held in is
+    /// matched in the same pass: `statusMessage` in the console, `message` in the runner control.
+    private static let bannerFiles = [
+        "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift",
+        "src/macos/OrbitApp/Sources/OrbitApp/RunnerControl.swift",
+    ]
 
     func testARefusalIsSaidInTheServersOwnWords() {
         XCTAssertEqual(
@@ -37,28 +41,36 @@ final class FailureReasonTests: XCTestCase {
     }
 
     /// The fence. Nothing in a build catches a banner that went back to printing its error, because
-    /// `\(error)` compiles anywhere — so the check is that no console banner holds one.
-    func testNoConsoleBannerInterpolatesTheRawError() throws {
-        let source = try String(contentsOf: repoRoot().appendingPathComponent(Self.console),
-                                encoding: .utf8)
-        let offenders = source
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .enumerated()
-            .filter { $0.element.contains("statusMessage = ") && $0.element.contains("\\(error)") }
-            .map { "  \(Self.console):\($0.offset + 1):\($0.element.trimmingCharacters(in: .whitespaces))" }
+    /// `\(error)` compiles anywhere — so the check is that no banner holds one.
+    ///
+    /// `\(error.localizedDescription)` is NOT caught, deliberately: that is a sentence, and the one
+    /// place it is still used wraps local `FileManager` calls, where the system's own words are the
+    /// best available and `failureReason` would return the very same string.
+    func testNoBannerInterpolatesTheRawError() throws {
+        var offenders: [String] = []
+        for file in Self.bannerFiles {
+            let source = try String(contentsOf: repoRoot().appendingPathComponent(file),
+                                    encoding: .utf8)
+            for (index, line) in source
+                .split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                let isBanner = line.contains("statusMessage = ") || line.contains("message = ")
+                guard isBanner, line.contains("\\(error)") else { continue }
+                offenders.append("  \(file):\(index + 1):\(line.trimmingCharacters(in: .whitespaces))")
+            }
+        }
 
         XCTAssertTrue(offenders.isEmpty,
-                      "a console banner is interpolating the raw error again — say it with "
+                      "a banner is interpolating the raw error again — say it with "
                       + "APIClient.failureReason(error) instead:\n" + offenders.joined(separator: "\n"))
     }
 
-    /// The repo root, found by walking up from this file until the console is under foot — not a
-    /// fixed number of `..` hops, the way the copy-parity tests find the other end's source.
+    /// The repo root, found by walking up from this file until the first banner file is under foot —
+    /// not a fixed number of `..` hops, the way the copy-parity tests find the other end's source.
     private func repoRoot() throws -> URL {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
             if FileManager.default.fileExists(
-                atPath: dir.appendingPathComponent(Self.console).path) {
+                atPath: dir.appendingPathComponent(Self.bannerFiles[0]).path) {
                 return dir
             }
             dir = dir.deletingLastPathComponent()

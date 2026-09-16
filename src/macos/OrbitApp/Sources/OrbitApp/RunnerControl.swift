@@ -173,7 +173,7 @@ final class RunnerControl {
             }
             message = "Enrollment timed out."
         } catch {
-            message = "Enrollment failed — \(error)"
+            message = "Enrollment failed — \(APIClient.failureReason(error))"
         }
     }
 
