@@ -261,6 +261,12 @@ Orbit app. An agent cannot confirm an OWNER_CONFIRMED task, a coordinator includ
 can. Runner task creation never infers EVIDENCE_JUDGMENT: every task must pass the flag.
 Related verifier, executable, and completion-policy flags do not replace that declaration.
 
+--completion-policy VERIFICATION_PASSED makes this row a pure gate, and a pure gate is NOT
+dispatchable: a manual start is refused (409) and auto-dispatch passes it by, so a row that has
+work of its own passes MANUAL. Nothing on the server files the verifier for you either — the
+check has to come in the SAME call: the MCP task_create carries a "verification" sub-object beside
+its subject, and 'orbit task create-batch' pairs two items with "verifiesRef".
+
 Orbit conservatively compares acceptance-criteria wording with that choice. A mismatch returns
 TASK_CRITERION_SHAPE_ADVICE with a suggestedCriterion and reason; it creates nothing. Either retry
 with the suggested criterion, or deliberately keep the original one and pass a non-blank
@@ -303,6 +309,11 @@ completionPolicy. Nothing is written unless every item is valid.
 Every item must set "completionCriterion" explicitly. EVIDENCE_JUDGMENT remains available when it is
 intended, but omission never selects it on a runner write. Related verifier, executable, and
 completion-policy fields do not replace that declaration.
+
+An item declaring "completionPolicy": "VERIFICATION_PASSED" is a pure gate, and a pure gate is NOT
+dispatchable: a manual start is refused (409) and auto-dispatch passes it by, so an item that has
+work of its own sets "completionPolicy": "MANUAL". Its verifier is the caller's to file, with the
+"verifiesRef" below — the server never writes one for you.
 
 "acceptanceCriteria" states per item what would settle that THAT task is done — the
 observable result somebody else can check — where "description" says what work to
@@ -348,9 +359,11 @@ VERIFICATION_PASSED parent counts:
 
 "verifiesTaskId" is the same link to a subject that already exists; naming both is
 rejected. Filed as two calls instead, the window between them is a parent that can
-never complete. The single door's "verification" sub-object is not an item field
-here: a batch item is paired by verifiesRef, and an item carrying "verification" is
-refused rather than silently filed as the unpaired subject it would be.
+never complete — and nothing on the server files that verifier for you either, so this ref is
+the whole pairing: a subject nothing points at in this same call waits forever. The single
+door's "verification" sub-object is not an item field here: a batch item is paired by
+verifiesRef, and an item carrying "verification" is refused rather than silently filed as the
+unpaired subject it would be.
 
 assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave
 an item unassigned). --tasks-file accepts only '-' (stdin).
