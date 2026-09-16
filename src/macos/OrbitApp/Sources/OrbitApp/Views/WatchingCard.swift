@@ -76,16 +76,17 @@ struct WatchingCardStack: View {
         .accessibilityLabel(WatchProjection.stripLabel)
     }
 
-    /// One target by name, several by count. A target this client holds no name for falls back to
-    /// its short id, never "Task <id>": two nameless watches used to look identical, which is what
-    /// sent the account owner into the detail sheet to tell them apart.
+    /// One target by name; otherwise what the wait is for — a lone watch's own threshold, or the
+    /// targets several watches cover between them. A target this client holds no name for falls
+    /// back to its short id, never "Task <id>": two nameless watches used to look identical, which
+    /// is what sent the account owner into the detail sheet to tell them apart.
     private func stripTarget(_ summary: WatchSessionSummary) -> String {
         if let target = summary.lineTarget {
             return WatchProjection.targetTitle(kind: target.targetKind,
                                                id: target.targetResourceId,
                                                name: targetName(target, model: model))
         }
-        return WatchProjection.targetCount(summary.lineTargetCount)
+        return summary.lineTargetWord
     }
 
     /// The way to the Following page, where Pause and Stop live: the strip itself is read-only.

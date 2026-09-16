@@ -19,11 +19,13 @@ import {
   isLiveWatch,
   linkId,
   progressOf,
+  thresholdOf,
   watchBucket,
   watchHref,
   watchProblem,
   watchesFollowedBy,
   watchesFollowing,
+  type WatchThreshold,
 } from '../lib/watches';
 import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, WatchTargetLink, useNow, useTargetName } from './WatchParts';
@@ -129,6 +131,20 @@ const targetNoun = (watches: readonly WatchView[], count: number): string => {
 };
 
 /**
+ * What one watch's condition asks for, over the targets its leaf can read: every one of them, any
+ * one of them, or a count in between. The count is the predicate's own — an ANY watch over four
+ * targets is done after one — so the middle of the line says what the wait needs, not what it
+ * covers: "all 4 tasks" is four waits, "any 1 of 4 tasks" is one of four.
+ */
+function thresholdLine(t: WatchThreshold, watches: readonly WatchView[]): string {
+  const noun = targetNoun(watches, t.of);
+  if (t.of === 0) return `no ${noun}`;
+  if (t.needed === t.of) return `all ${t.of} ${noun}`;
+  if (t.needed === 1) return `any 1 of ${t.of} ${noun}`;
+  return `${t.needed} of ${t.of} ${noun}`;
+}
+
+/**
  * A session's two relations, in its header: Following — the live watches it is the observer of, so
  * what it is waiting on — and Followed by — the live watches that name it. Each opens its watch rows;
  * Follow creates a watch on this session.
@@ -202,20 +218,26 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   // One line names the target only when there is one name to give: a lone watch over one target
   // that still exists. Anything else counts the distinct targets, so two watches over the same
   // task never read "2 targets".
-  const targets = waitingOn.flatMap((w) =>
-    w.targets.filter((t) => t.state !== 'GONE').map((t) => `${t.targetKind}:${t.targetResourceId}`),
-  );
-  const single =
-    waitingOn.length === 1 && new Set(targets).size === 1 ? waitingOn[0].targets.find((t) => t.state !== 'GONE')! : null;
+  const live = waitingOn.flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'));
+  const targets = live.map((t) => `${t.targetKind}:${t.targetResourceId}`);
+  const single = waitingOn.length === 1 && new Set(targets).size === 1 ? live[0] : null;
   const { name: singleName } = useTargetName(single?.targetKind ?? null, single?.targetResourceId ?? null);
   if (waitingOn.length === 0) return null;
   const deadline = Math.min(...waitingOn.map((w) => Date.parse(w.expiresAt)));
   const left = Number.isFinite(deadline) ? deadline - now : NaN;
-  const time = Number.isFinite(left)
-    ? `${single ? '' : STRIP_EARLIEST}${left <= 0 ? 'now' : formatSpan(left)}`
-    : '';
+  const time = Number.isFinite(left) ? (left <= 0 ? 'now' : `${formatSpan(left)} left`) : null;
   const targetCount = new Set(targets).size;
-  const targetLine = single ? (singleName ?? linkId(single.targetResourceId).slice(0, 8)) : `${targetCount} ${targetCount === 1 ? 'target' : 'targets'}`;
+  const met = new Set(
+    live.filter((t) => t.state === 'SATISFIED').map((t) => `${t.targetKind}:${t.targetResourceId}`),
+  ).size;
+  // What the wait is for: one watch over one target names it, one watch over several states the
+  // threshold its own condition sets, and several watches — no one condition between them — count
+  // the targets they cover.
+  const targetLine = single
+    ? (singleName ?? linkId(single.targetResourceId).slice(0, 8))
+    : waitingOn.length === 1
+      ? thresholdLine(thresholdOf(waitingOn[0].predicate, live), waitingOn)
+      : `${targetCount} ${targetNoun(waitingOn, targetCount)}`;
   return (
     <div className={`watch-strip${open ? ' is-open' : ''}`}>
       <button
@@ -227,7 +249,12 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
         <EyeOutlined className="watch-strip-ico" />
         <span className="watch-strip-title">{STRIP_LABEL}</span>
         <span className="watch-strip-target">{targetLine}</span>
-        {time && <span className="watch-strip-time">{time}</span>}
+        {time && (
+          <span className="watch-strip-time">
+            {waitingOn.length === 1 ? '' : STRIP_EARLIEST}
+            <b className="watch-strip-met">{met}</b> met · {time}
+          </span>
+        )}
         <span className="watch-strip-caret">{open ? '⌄' : '›'}</span>
       </button>
       {open && (

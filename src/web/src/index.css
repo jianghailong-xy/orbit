@@ -12219,6 +12219,11 @@ button.composer-usage:focus-visible {
   flex: none;
   color: var(--text-3);
 }
+/* How far the wait has got, beside how long it has left: the one number on the folded line. */
+.watch-strip-met {
+  color: var(--text-1);
+  font-weight: 600;
+}
 .watch-strip-caret {
   flex: none;
   color: var(--text-3);

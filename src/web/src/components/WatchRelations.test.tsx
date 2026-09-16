@@ -29,6 +29,12 @@ const target = (kind: 'TASK' | 'SESSION', id: string): WatchTargetView => ({
   lastEvaluatedAt: at(-HOUR),
 });
 
+/** The same target once the evaluator has seen it meet the condition. */
+const satisfied = (kind: 'TASK' | 'SESSION', id: string): WatchTargetView => ({
+  ...target(kind, id),
+  state: 'SATISFIED',
+});
+
 // Times in whole minutes: a loaded run takes seconds between building a fixture and drawing it.
 const watch = (id: string, over: Partial<WatchView> = {}): WatchView => ({
   id,
@@ -216,7 +222,7 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     const strip = container!.querySelector('.watch-strip')!;
     expect(strip.querySelector('.watch-strip-title')?.textContent).toBe('Watching');
     expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('A task');
-    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('6h');
+    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('0 met · 6h left');
     expect(strip.querySelector('.watch-strip-caret')?.textContent).toBe('›');
     expect(strip.querySelector('.watch-strip-block')).toBeNull();
   });
@@ -240,8 +246,52 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
     // T1 and T2, not T1, T2 and T2 again: each target is counted once.
-    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('2 targets');
-    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('earliest 29m');
+    expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('2 tasks');
+    expect(strip.querySelector('.watch-strip-time')?.textContent).toBe('earliest 0 met · 29m left');
+  });
+
+  it('counts out what a lone watch’s own condition needs, in the card’s noun', async () => {
+    const four = [target('TASK', 'T1'), target('TASK', 'T2'), target('TASK', 'T3'), target('TASK', 'T4')];
+    const middle = async (predicate: WatchView['predicate']) => {
+      serve([watch('W1', { predicate, targets: four, ...resumes('S_ME') })]);
+      await mount(<SessionWatchStrip sessionId="S_ME" />);
+      return container!.querySelector('.watch-strip-target')?.textContent;
+    };
+    // Four targets, three conditions, three different amounts of work — today all three read
+    // "4 targets", which is the count of what the watch covers and not what it is waiting for.
+    expect(await middle({ kind: 'ANY', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe('any 1 of 4 tasks');
+    expect(await middle({ kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe('all 4 tasks');
+    expect(await middle({ kind: 'AT_LEAST', count: 2, over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' })).toBe(
+      '2 of 4 tasks',
+    );
+  });
+
+  it('counts the targets that met the condition, so 0 met and 2 met never read alike', async () => {
+    const two = [target('TASK', 'T1'), target('TASK', 'T2')];
+    serve([watch('W1', { targets: two, ...resumes('S_ME') })]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const waiting = container!.querySelector('.watch-strip-row')?.textContent ?? '';
+
+    serve([watch('W1', { targets: [satisfied('TASK', 'T1'), satisfied('TASK', 'T2')], ...resumes('S_ME') })]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const met = container!.querySelector('.watch-strip-row')?.textContent ?? '';
+
+    expect(met).not.toBe(waiting);
+    expect(met).toContain('2 met');
+  });
+
+  it('drops "earliest" from a lone watch, whose one deadline is nobody’s earliest', async () => {
+    serve([
+      watch('W1', {
+        targets: [target('TASK', 'T1'), target('TASK', 'T2'), target('TASK', 'T3'), target('TASK', 'T4')],
+        ...resumes('S_ME'),
+      }),
+    ]);
+    await mount(<SessionWatchStrip sessionId="S_ME" />);
+    const time = container!.querySelector('.watch-strip-time')!;
+    // One watch has exactly one deadline, so there is no soonest of several to qualify.
+    expect(time.textContent).toBe('0 met · 20h left');
+    expect(time.textContent).not.toContain('earliest');
   });
 
   it('opens into read-only facts, with no controls and a way to the Following page', async () => {

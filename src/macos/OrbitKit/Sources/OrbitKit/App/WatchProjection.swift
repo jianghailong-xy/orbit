@@ -150,6 +150,37 @@ public enum WatchProjection {
         n == 1 ? "1 target" : "\(n) targets"
     }
 
+    /// The noun a set of targets counts in, the way the browser's `targetNoun` counts it: the one
+    /// kind every target shares ("tasks", "sessions"), and "targets" whenever a watch covers more
+    /// than one. The strip's middle says the same noun the card's rows do.
+    public static func targetNoun(_ watches: [Watch], count: Int) -> String {
+        let kinds = Set(watches.flatMap { $0.targets.map(\.targetKind) })
+        let noun = kinds.count != 1 ? "target" : (kinds.contains(.task) ? "task" : "session")
+        return count == 1 ? noun : "\(noun)s"
+    }
+
+    /// What one watch's condition asks for, over the targets its leaf can read: "all 4 tasks", "any
+    /// 1 of 4 tasks". The count is the predicate's own — an ANY watch over four targets is done
+    /// after one — so the middle of the strip line says what the wait needs, not what it covers.
+    /// The browser's `thresholdLine` over `thresholdOf` reads the same; a composite, a leaf this
+    /// build can't read, or a set it can't see asks for all of them.
+    public static func thresholdLabel(_ predicate: WatchPredicate, targets: [WatchTarget],
+                                      watches: [Watch]) -> String {
+        let kind: WatchTargetKind?
+        switch predicate {
+        case .all(let leaf), .any(let leaf): kind = leaf.targetKind
+        case .allOf, .anyOf, .unknown: kind = nil
+        }
+        let of = kind.map { k in targets.filter { $0.targetKind == k }.count } ?? targets.count
+        var needed = of
+        if case .any = predicate, of > 0 { needed = 1 }
+        let noun = targetNoun(watches, count: of)
+        if of == 0 { return "no \(noun)" }
+        if needed == of { return "all \(of) \(noun)" }
+        if needed == 1 { return "any 1 of \(of) \(noun)" }
+        return "\(needed) of \(of) \(noun)"
+    }
+
     /// The card's first line.
     public static func headline(for watch: Watch) -> String {
         let live = WatchProgress(watch.targets).live
@@ -490,6 +521,17 @@ public struct WatchSessionSummary: Equatable, Sendable {
     /// count branch, so two watches over the same task never read "2 targets".
     public var lineTargetCount: Int { lineTargets.count }
 
+    /// The strip line's middle when it names no lone target: what the wait is for. One watch over a
+    /// set states the threshold its own condition asks for — "all 4 tasks", "any 1 of 4 tasks" —
+    /// and several watches, no one condition between them, count the targets they cover. The web's
+    /// `SessionWatchStrip` reads the same two shapes, so the parity test holds them together.
+    public var lineTargetWord: String {
+        guard watches.count == 1 else {
+            return "\(lineTargetCount) \(WatchProjection.targetNoun(watches, count: lineTargetCount))"
+        }
+        return WatchProjection.thresholdLabel(watches[0].predicate, targets: lineTargets, watches: watches)
+    }
+
     private var lineTargets: [WatchTarget] {
         var seen = Set<String>()
         var targets: [WatchTarget] = []
@@ -500,14 +542,17 @@ public struct WatchSessionSummary: Equatable, Sendable {
         return targets
     }
 
-    /// How long the soonest deadline has left, as the line reads it: "3h", "earliest 4h" — never
-    /// the sentence's "in" prefix. "earliest" only on the count line: a lone watch's own deadline
-    /// needs no qualifier. Nil when no deadline parses.
+    /// How far the wait has got and how long is left, as the line reads it: "0 met · 3h left",
+    /// "earliest 0 met · 4h left" — never the sentence's "in" prefix. "earliest" only when the line
+    /// speaks for several watches: a lone watch has one deadline, so there is no soonest of several
+    /// to qualify. Nil when no deadline parses.
     public func lineTime(now: Date = Date()) -> String? {
         let lefts = watches.compactMap { RelativeTime.parse($0.expiresAt)?.timeIntervalSince(now) }
         guard let earliest = lefts.min() else { return nil }
-        let span = earliest > 0 ? WatchProjection.duration(earliest) : "now"
-        return lineTarget == nil ? "\(WatchProjection.stripEarliest)\(span)" : span
+        let span = earliest > 0 ? "\(WatchProjection.duration(earliest)) left" : "now"
+        let met = lineTargets.filter { $0.state == .satisfied }.count
+        let line = "\(met) met · \(span)"
+        return watches.count == 1 ? line : "\(WatchProjection.stripEarliest)\(line)"
     }
 
     /// The oldest last look among the ACTIVE watches — the least fresh reading is the one to show.

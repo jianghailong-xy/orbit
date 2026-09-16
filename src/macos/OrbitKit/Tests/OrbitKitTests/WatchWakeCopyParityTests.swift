@@ -301,33 +301,58 @@ final class WatchWakeCopyParityTests: XCTestCase {
         XCTAssertEqual(String(WatchProjection.shownTargets), shown)
     }
 
-    /// The line the strip always opens as: the fixed "Watching" title, then the one target by name —
-    /// or, for anything else, the distinct targets by count — and the soonest deadline, "earliest"
-    /// only on the count line since a lone watch's own deadline needs no qualifier.
+    /// The line the strip always opens as: the fixed "Watching" title, then what the wait is for —
+    /// the one target a lone watch over one names, the threshold a lone watch over several asks
+    /// for, or the distinct targets several watches cover — and how far it has got beside the
+    /// soonest deadline, "earliest" only when the line speaks for more than one watch.
     func testTheStripsOneLineMatchesTheBrowsers() throws {
         let web = try flat(Self.webRelations)
         // The title is a constant, not a state word: "Watching" alone, with the target beside it.
         XCTAssertTrue(web.contains("className=\"watch-strip-title\">{STRIP_LABEL}"),
                       "the strip's title drifted: \(Self.webRelations) no longer renders it from "
                           + "STRIP_LABEL — first is WatchProjection.stripLabel.")
-        // The deadline: a lone watch's own, "earliest" before it only when the line counts.
-        XCTAssertTrue(web.contains("${single ? '' : STRIP_EARLIEST}"),
+        // The deadline: "earliest" before it only when the line speaks for several watches. Which
+        // watch count the prefix turns on is the point — one watch has exactly one deadline,
+        // whatever its middle says, so qualifying it would name a soonest that doesn't exist.
+        XCTAssertTrue(web.contains("{waitingOn.length === 1 ? '' : STRIP_EARLIEST}"),
                       "the count line stopped prefixing the soonest deadline with STRIP_EARLIEST, "
-                          + "which this client does through WatchProjection.stripEarliest.")
+                          + "which this client does through WatchProjection.stripEarliest — or it "
+                          + "went back to qualifying a lone watch's own single deadline.")
+        // The middle: a lone watch's own threshold, or the targets several watches cover.
+        XCTAssertTrue(web.contains("thresholdOf(waitingOn[0].predicate, live)"),
+                      "the strip's middle stopped reading the lone watch's own threshold — the "
+                          + "condition's count, not the target set's, is what the line states.")
+        XCTAssertTrue(web.contains("targetNoun(waitingOn, targetCount)"),
+                      "how several watches are counted drifted: \(Self.webRelations) no longer "
+                          + "counts the distinct targets in the same noun the cards use.")
         // Which shape the line takes: one watch over one live target names it, anything else counts.
         let lone = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
             WatchFixture.watch(id: "W1", targets: [WatchFixture.target("T1")]),
         ]))
         XCTAssertNotNil(lone.lineTarget, "a lone watch over one live target names it")
+        // One watch over four, and its condition asks for one of them: "4 targets" is what the
+        // watch covers, "any 1 of 4 tasks" is what it is waiting for.
+        let waitOne = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
+            WatchFixture.watch(id: "W1", predicate: WatchFixture.any("TASK_TERMINAL"),
+                               targets: WatchFixture.tasks(4)),
+        ]))
+        XCTAssertNil(waitOne.lineTarget, "four targets are counted, not named")
+        XCTAssertEqual(waitOne.lineTargetWord, "any 1 of 4 tasks")
+        // The same watch asking for all four, and how far it has got: two of them met.
+        let waitAll = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
+            WatchFixture.watch(id: "W1", targets: WatchFixture.tasks(4, met: 2)),
+        ]))
+        XCTAssertEqual(waitAll.lineTargetWord, "all 4 tasks")
+        XCTAssertEqual(waitAll.lineTime(now: WatchFixture.now), "2 met · 1h left")
         let several = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
             WatchFixture.watch(id: "W1", targets: [WatchFixture.target("T1"), WatchFixture.target("T2")]),
             WatchFixture.watch(id: "W2", targets: [WatchFixture.target("T2")]),
         ]))
         XCTAssertNil(several.lineTarget)
         XCTAssertEqual(several.lineTargetCount, 2, "T1 and T2, not T1, T2 and T2 again")
-        XCTAssertTrue(web.contains("targetCount === 1 ? 'target' : 'targets'"),
-                      "how several watches are counted drifted — this client says "
-                          + "\(several.lineTargetCount) targets.")
+        XCTAssertEqual(several.lineTargetWord, "2 tasks")
+        // Several watches: the soonest deadline is the only one with a qualifier to earn.
+        XCTAssertEqual(several.lineTime(now: WatchFixture.now), "earliest 0 met · 1h left")
     }
 
     // MARK: the wake that is still queued

@@ -81,24 +81,26 @@ final class SessionWatchingTests: XCTestCase {
     }
 
     func testTheStripsOneLineProjectsTheLoneTargetOrTheCount() throws {
-        // One watch over one target that still exists names it, and its own deadline needs no qualifier.
+        // One watch over one target that still exists names it, and its one deadline needs no
+        // "earliest": the line reads how far it has got, which is nothing yet.
         let lone = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(-3 * 3600)),
         ]))
         XCTAssertEqual(lone.lineTarget?.targetResourceId, "T0")
         XCTAssertEqual(lone.lineTargetCount, 1)
-        XCTAssertEqual(lone.lineTime(now: now), "3h")
+        XCTAssertEqual(lone.lineTime(now: now), "0 met · 3h left")
         // And the minutes with it while the hours are few, as the browser's `formatSpan` does.
         XCTAssertEqual(try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(-(3 * 3600 + 20 * 60))),
-        ])).lineTime(now: now), "3h 20m")
+        ])).lineTime(now: now), "0 met · 3h 20m left")
         // A deleted target is out of the set, in the single branch too.
         let gone = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T0"), F.target("G", state: "GONE")]),
         ]))
         XCTAssertEqual(gone.lineTarget?.targetResourceId, "T0")
-        // Anything else counts the distinct targets and prefixes the soonest deadline: T2 appears on
-        // both watches and is counted once, G is gone, and 4h is W1's deadline, not W2's 6h.
+        // Several watches count the distinct targets and prefix the soonest deadline — the one
+        // figure that is a soonest of several: T2 appears on both watches and is counted once, G is
+        // gone, and 4h is W1's deadline, not W2's 6h.
         let several = try XCTUnwrap(summary([
             F.watch(id: "W1", targets: [F.target("T1"), F.target("T2")], expiresAt: F.ago(-4 * 3600)),
             F.watch(id: "W2", targets: [F.target("T2"), F.target("G", state: "GONE")],
@@ -106,10 +108,10 @@ final class SessionWatchingTests: XCTestCase {
         ]))
         XCTAssertNil(several.lineTarget)
         XCTAssertEqual(several.lineTargetCount, 2)
-        XCTAssertEqual(several.lineTime(now: now), "earliest 4h")
+        XCTAssertEqual(several.lineTime(now: now), "earliest 0 met · 4h left")
         // A deadline already reached reads "now", as the web's `left <= 0 ? 'now' : …` does.
         XCTAssertEqual(summary([F.watch(id: "W1", targets: [F.target("T0")], expiresAt: F.ago(5))])?
-            .lineTime(now: now), "now")
+            .lineTime(now: now), "0 met · now")
         // Two watches over the same single target still read as a count: "one" is about the strip.
         XCTAssertNil(summary([
             F.watch(id: "W1", targets: [F.target("T1")]),
