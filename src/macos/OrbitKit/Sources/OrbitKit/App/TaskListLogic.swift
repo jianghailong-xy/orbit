@@ -150,6 +150,11 @@ public enum TaskListLogic {
     /// Web/server Ready semantics. `assigneeHasRunner` is supplied by the detail view because its
     /// compact assignee relation omits runner fields; list rows can use the embedded runner.
     public static func canStart(_ task: TaskItem, assigneeHasRunner: Bool? = nil) -> Bool {
+        // A gate row has no work of its own, so nothing starts a run on it: the server's Ready
+        // predicate excludes the shape and Execute answers 409. `runnable` carries that on list
+        // rows, but the detail payload omits it and the detail action is the one press a reader
+        // can make — so the declaration is asked on every path, exactly as the browser asks it.
+        if TaskJudgment.isGateRow(task) { return false }
         // Incremental row reads carry the complete database predicate (paused/held lists,
         // workspace enablement, aggregate parents and retired attempts included). Those gates are
         // intentionally not all mirrored in the tolerant cross-version DTO, so the server value

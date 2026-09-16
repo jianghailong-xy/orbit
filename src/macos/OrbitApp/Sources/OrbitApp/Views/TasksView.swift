@@ -658,6 +658,10 @@ private struct TaskDetailContent: View {
                         if let error = tasks.errorText { detailErrorBanner(error) }
                         if TaskListLogic.isBlocked(task) { blockedNotice(task) }
                         actions(task)
+                        // A row settled by a check always gets the card — with the check, or with
+                        // the fact that there isn't one. That empty state is where a reader
+                        // otherwise reads the header hint's sentence and finds nothing behind it.
+                        if TaskJudgment.isGateRow(task) || task.verifier != nil { verifierCard(task) }
                         details(task)
                         dependencies(task)
                         if let description = task.description, !description.isEmpty {
@@ -768,6 +772,44 @@ private struct TaskDetailContent: View {
                     Text(relative).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
+            // How this row is judged, which nothing else on the page said.
+            if let chip = TaskJudgment.chip(task) { judgmentChip(chip) }
+        }
+    }
+
+    /// The judgment chip: a gate row reads apart from the method chips, because it says something
+    /// different in kind — not which method settles the row, but that no run of it can.
+    private func judgmentChip(_ chip: TaskJudgmentChip) -> some View {
+        let tone: Color = chip.isGate ? .orange : .secondary
+        return HStack(spacing: 4) {
+            Image(systemName: chip.isGate ? "checkmark.shield" : "checkmark.seal")
+            Text(chip.text)
+        }
+        .font(.orbitMeta)
+        .foregroundStyle(tone)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(tone.opacity(0.15), in: Capsule())
+    }
+
+    /// The check that settles this row, under the row it checks — the relation the database has
+    /// always held and no native surface showed: what the check is called, where it stands, and the
+    /// way into it.
+    private func verifierCard(_ task: TaskItem) -> some View {
+        section(TaskJudgmentCopy.verifierCardHeading) {
+            if let verifier = task.verifier {
+                HStack(spacing: 8) {
+                    Text(verifier.title ?? "Untitled task").font(.orbitLabel).lineLimit(2)
+                    TaskStatusPill(pill: TaskJudgment.pill(verifier))
+                    Spacer(minLength: 8)
+                    Button(TaskJudgmentCopy.verifierCardEntry) { model.route(to: .task(verifier.id)) }
+                        .buttonStyle(.bordered)
+                }
+            } else {
+                Text(TaskJudgmentCopy.verifierCardEmpty)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -775,6 +817,9 @@ private struct TaskDetailContent: View {
     private func actions(_ task: TaskItem) -> some View {
         let busy = tasks.isMutating(task.id)
         let canStart = TaskListLogic.canStart(task, assigneeHasRunner: assigneeHasRunner(task))
+        // A gate row's button says what it cannot do rather than naming the press it will not take:
+        // "Run" on a row where no run exists is the instruction this client is being fixed for.
+        let gate = TaskJudgment.isGateRow(task)
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 10) {
                 ownerConfirmation(task)
@@ -782,8 +827,10 @@ private struct TaskDetailContent: View {
                     Button {
                         Task { _ = await tasks.execute(task.id) }
                     } label: {
-                        Label(task.status == .failed ? "Retry" : "Run",
-                              systemImage: task.status == .failed ? "arrow.clockwise" : "play.fill")
+                        Label(gate ? TaskJudgmentCopy.gateActionLabel
+                                   : (task.status == .failed ? "Retry" : "Run"),
+                              systemImage: gate ? "checkmark.shield"
+                                                : (task.status == .failed ? "arrow.clockwise" : "play.fill"))
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canStart || busy)
@@ -846,6 +893,9 @@ private struct TaskDetailContent: View {
     }
 
     private func runDisabledHint(_ task: TaskItem) -> String? {
+        // Asked first, like the browser's: a gate row is not waiting for a prerequisite or a
+        // workspace, and telling it about one would describe a press it was never going to take.
+        if TaskJudgment.isGateRow(task) { return TaskJudgment.gateHint(task.verificationState) }
         if TaskListLogic.isBlocked(task) {
             return task.dependencyState == "BLOCKED_FAILED"
                 ? "A prerequisite failed or was cancelled — resolve it first."

@@ -44,6 +44,29 @@ final class TaskListLogicTests: XCTestCase {
         XCTAssertEqual(TaskListLogic.filtered([ready, done, failed], .runnable).map(\.id), ["1", "8"])
     }
 
+    /// A gate row — `VERIFICATION_PASSED` with no verifier of its own — has no work, so nothing on
+    /// any surface may offer to start it. The server's Ready predicate excludes the shape and
+    /// Execute answers 409, but the detail payload carries no `runnable` and the detail action
+    /// passes an explicit `assigneeHasRunner`, so this is the path where the client is on its own.
+    func testGateRowIsNeverRunnable() {
+        let gate = task(#"{"id":"1","title":"a","status":"OPEN","completionPolicy":"VERIFICATION_PASSED","assignee":{"id":"a","runner":{"id":"r"}}}"#)
+        // The same shape with a verifier of its own is a check row: it has work, and it runs.
+        let check = task(#"{"id":"2","title":"a","status":"OPEN","completionPolicy":"VERIFICATION_PASSED","verifiesTaskId":"9","assignee":{"id":"a","runner":{"id":"r"}}}"#)
+        // A VERIFICATION criterion says who settles this row, not that it has nothing to run.
+        let work = task(#"{"id":"3","title":"a","status":"OPEN","completionPolicy":"MANUAL","completionCriterion":"VERIFICATION","assignee":{"id":"a","runner":{"id":"r"}}}"#)
+        // An older server that still calls the row runnable does not get to offer the press.
+        let staleRunnable = task(#"{"id":"4","title":"a","status":"OPEN","completionPolicy":"VERIFICATION_PASSED","runnable":true,"assignee":{"id":"a","runner":{"id":"r"}}}"#)
+
+        XCTAssertFalse(TaskListLogic.canStart(gate, assigneeHasRunner: true))
+        XCTAssertFalse(TaskListLogic.canStart(gate, assigneeHasRunner: false))
+        XCTAssertFalse(TaskListLogic.canStart(gate), "the declaration is asked on every path")
+        XCTAssertFalse(TaskListLogic.canStart(staleRunnable, assigneeHasRunner: true))
+        XCTAssertTrue(TaskListLogic.canStart(check, assigneeHasRunner: true))
+        XCTAssertTrue(TaskListLogic.canStart(work, assigneeHasRunner: true))
+        XCTAssertEqual(TaskListLogic.filtered([gate, check, work], .runnable).map(\.id), ["2", "3"])
+        XCTAssertEqual(TaskListLogic.overview([gate, check, work]).runnable, 2)
+    }
+
     func testDetailDerivesBusyAndBlockedFromSessionsAndDependencyState() {
         let pending = task(#"{"id":"1","title":"a","status":"OPEN","sessions":[{"id":"s","status":"PENDING"}]}"#)
         let running = task(#"{"id":"2","title":"a","status":"OPEN","sessions":[{"id":"s","status":"RUNNING"}]}"#)

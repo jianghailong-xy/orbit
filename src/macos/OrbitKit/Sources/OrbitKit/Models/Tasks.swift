@@ -33,6 +33,20 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let createdAt: String?
     public let updatedAt: String?
 
+    // How this row is settled, and — on a row with no work of its own — the check that does it.
+    // Absent on an older server, which reads as "no gate row": the detail only ever asks these
+    // through `TaskJudgment`, and the answer it needs from a missing field is the same one an
+    // unset verdict gives. See `TaskJudgment.isGateRow` for the predicate they spell. The
+    // criterion beside them is declared above, with the payload's other scalars.
+    /// `MANUAL` (this row has work) or `VERIFICATION_PASSED` (a verdict settles it).
+    public let completionPolicy: String?
+    /// `verifies_task_id`: the subject this row checks. Non-null exactly on a check row.
+    public let verifiesTaskId: String?
+    /// Where a subject's check stands: MISSING / PENDING / RUNNING / BLOCKED / FAILED / PASSED.
+    public let verificationState: String?
+    /// The check that currently settles this row, from the detail read.
+    public let verifier: TaskVerifierRef?
+
     // Computed list-view flags (absent on the detail payload).
     public let running: Bool?
     public let queued: Bool?
@@ -62,6 +76,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case completionCriterion
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
+        case completionPolicy, verifiesTaskId, verificationState, verifier
         case running, queued, blocked, dependencyState, runnable
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
@@ -104,6 +119,15 @@ public struct TaskRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String?
     public let status: TaskStatus?
+}
+
+/// The check that currently settles a task, as the detail read returns it. The same current check
+/// the project page's lanes and its graph read, so a card cannot name a different check than the
+/// one that decides the row. `verdict` is the conclusion it wrote, absent until it writes one.
+public struct TaskVerifierRef: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String?
+    public let verdict: String?
 }
 
 /// A dependency edge. `dependsOn` entries carry `dependsOnTask` (the prerequisite); `dependedOnBy`
