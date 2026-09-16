@@ -291,7 +291,17 @@ export class QueueService {
     // skip this. The claim a first message arrives on is the same session with the same absent
     // prompt, and a seed there would put an empty turn ahead of the person's own — at seq 1,
     // which the message has already taken.
-    if (!session.importedAt) {
+    //
+    // And a seed needs a prompt to lay down: the opening turn IS the session's prompt, so a session
+    // with none has nothing to put there. `importSession` is the only creator that writes an empty
+    // prompt — every other path rejects one — so for a transcript imported before `importedAt`
+    // existed to say so durably, that empty prompt is all that is left of what the row is, and
+    // reading it here is what reaches those rows. Without that, the claim a first message arrives
+    // on seeds a turn behind the person's own: a runner slot spent spawning an engine to read an
+    // empty message, and — before the seq below stopped being a constant — a claim that died on
+    // @@unique([sessionId, seq]) for the seq the message had already taken, after committing the
+    // session to RUNNING.
+    if (!session.importedAt && session.prompt !== '') {
       await withTransactionRetry(this.prisma, async (tx) => {
         await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
         const seedClientTurnId = `initial-${session.id}`;
@@ -305,10 +315,20 @@ export class QueueService {
           select: { id: true },
         });
         if (existingSeed) return;
+        // Allocated from the table, never assumed to be 1. This was the only producer of a
+        // conversation turn that hardcoded a seq; every other one reads max(seq)+1 for the same
+        // reason — sessions.insertTurnLocked, the reaper's `end` turn, and the runner's acceptance
+        // shell turn — and the message a first claim arrives on has already taken seq 1 by the time
+        // this runs.
+        const last = await tx.conversationTurn.findFirst({
+          where: { sessionId: session.id },
+          orderBy: { seq: 'desc' },
+          select: { seq: true },
+        });
         const turn = await tx.conversationTurn.create({
           data: {
             sessionId: session.id,
-            seq: 1,
+            seq: (last?.seq ?? 0) + 1,
             clientTurnId: seedClientTurnId,
             kind: 'message',
             content: session.prompt,

@@ -103,8 +103,12 @@ test("every transcript in the directory's history becomes its own pending import
   // Pending import: the runner replays the transcript before the engine spawns. Nothing here waits
   // for that, which is what lets the workspace be usable the moment it is created.
   assert.equal(creates[0].importSourceCwd, '/root/orbit');
-  assert.equal(creates[0].numTurns, 1, 'resume = numTurns > 0, so the spawn carries the context');
-  // Durable provenance, so the removal below has something to select on after the replay lands.
+  // No turn has run here and none can until the first message, so the count stays honest; the
+  // `--resume` the spawn needs is carried by `importedAt` (queue.buildSession), as it is for the
+  // single-transcript path in session-import.spec.
+  assert.equal(creates[0].numTurns, 0);
+  // Durable provenance: what the removal below selects on after the replay lands, and the thing
+  // the claim reads to answer `resume` rather than the fake turn count this used to be.
   assert.ok(creates[0].importedAt instanceof Date, 'an imported session is marked as one');
   assert.equal(
     creates[0].title,
