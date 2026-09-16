@@ -6,6 +6,7 @@ import {
   initialTaskFilter,
   matchesTaskFilter,
   rememberTaskFilter,
+  taskStartOwnedByCompletionDeclaration,
   TASK_FILTER_STORAGE_KEY,
 } from './taskFilters';
 
@@ -143,5 +144,63 @@ describe('task filters', () => {
     expect(matchesTaskFilter({ ...runnable, status: 'IN_PROGRESS' }, 'ONGOING')).toBe(true);
     expect(matchesTaskFilter({ ...runnable, status: 'FAILED' }, 'FAILED')).toBe(true);
     expect(matchesTaskFilter({ ...runnable, status: 'DONE' }, 'ALL')).toBe(true);
+  });
+});
+
+/**
+ * The completion declaration — the row nothing dispatches, because it has no work of its own.
+ *
+ * Cross-layer anchor, web half. The server half is the kill clause in `manualRunnableTaskSql`
+ * (src/apiserver/src/tasks/manual-runnable-task-sql.ts), asserted against the SQL it actually emits
+ * in src/apiserver/src/tasks/verification-subject-guard-removal.spec.ts under "(a) and the Ready
+ * predicate kills the gate row by policy, never by criterion": the clause reads `completion_policy`
+ * and `verifies_task_id`, and never `completion_criterion`. This block is that same rule in the
+ * browser, on the same three rows. The criterion says who settles a task, not whether the row has
+ * work to do — a task can perfectly well run and still need another session to check it — so the
+ * two sides must be read the same way or the Ready tab and this page disagree about one task.
+ * Changing the rule on either side is what reddens that side's anchor.
+ */
+describe('the completion declaration that owns the row', () => {
+  // The three shapes the server distinguishes, each spelled with the criterion present — the field
+  // the two questions used to be confused over.
+  const workRow = {
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'MANUAL',
+    verifiesTaskId: null,
+  };
+  const gateRow = {
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'VERIFICATION_PASSED',
+    verifiesTaskId: null,
+  };
+  const verifierRow = {
+    completionCriterion: 'VERIFICATION',
+    completionPolicy: 'MANUAL',
+    verifiesTaskId: 'subject-1',
+  };
+
+  it('reaches the same three verdicts the server’s Ready predicate reaches', () => {
+    // The gate row: nothing but an independent verdict finishes it, so nothing here is dispatched.
+    expect(taskStartOwnedByCompletionDeclaration({ ...runnable, ...gateRow })).toBe(true);
+    expect(canDispatchTask({ ...runnable, ...gateRow })).toBe(false);
+    expect(canStartTask({ ...runnable, ...gateRow })).toBe(false);
+    // The work row: it declares VERIFICATION and still has work of its own. This is the row that
+    // was undispatachable while the criterion was read as "no work here"; it starts like any other.
+    expect(taskStartOwnedByCompletionDeclaration({ ...runnable, ...workRow })).toBe(false);
+    expect(canDispatchTask({ ...runnable, ...workRow })).toBe(true);
+    expect(canStartTask({ ...runnable, ...workRow })).toBe(true);
+    // The verifier names the task it checks, so it is executable work in its own right.
+    expect(taskStartOwnedByCompletionDeclaration({ ...runnable, ...verifierRow })).toBe(false);
+    expect(canStartTask({ ...runnable, ...verifierRow })).toBe(true);
+  });
+
+  it('asks the criterion nothing, in either direction', () => {
+    // The distinguishing input is a row carrying the two columns and no criterion at all. Asking the
+    // criterion anywhere in the predicate — the `completionCriterion === 'VERIFICATION'` this used
+    // to require — reddens both of these, which is what keeps the browser on the server's rule.
+    expect(canStartTask({ ...runnable, completionPolicy: 'MANUAL', verifiesTaskId: null })).toBe(true);
+    expect(
+      canStartTask({ ...runnable, completionPolicy: 'VERIFICATION_PASSED', verifiesTaskId: null }),
+    ).toBe(false);
   });
 });

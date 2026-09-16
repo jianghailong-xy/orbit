@@ -49,11 +49,17 @@ export interface FilterableTask {
   assignee?: { runner?: { id?: string | null } | null } | null;
 }
 
-/** Browser-side fail-closed mirror of the immutable verification-subject shape. */
+/**
+ * The row a completion declaration owns: nothing dispatches it, because it has no work of its own.
+ *
+ * Read off `completionPolicy` with `verifiesTaskId`, clause for clause the server's Ready predicate
+ * (`manualRunnableTaskSql`). `completionCriterion === 'VERIFICATION'` says an independent verdict
+ * settles the task — who finishes it, not whether it has anything to run — so it is not asked here.
+ * Only `VERIFICATION_PASSED` with no verifier of its own says that nothing here will ever run; every
+ * other row, criterion or not, is work.
+ */
 export function taskStartOwnedByCompletionDeclaration(task: FilterableTask): boolean {
-  return task.completionCriterion === 'VERIFICATION'
-    && task.completionPolicy === 'VERIFICATION_PASSED'
-    && task.verifiesTaskId == null;
+  return task.completionPolicy === 'VERIFICATION_PASSED' && task.verifiesTaskId == null;
 }
 
 /**
@@ -67,8 +73,9 @@ export function canDispatchTask(task: FilterableTask): boolean {
   if (typeof task.runnable === 'boolean') {
     return task.runnable && !task.running && !task.queued && !task.blocked;
   }
-  // Rolling compatibility must fail closed for a completion-owned subject. DependencyState alone
-  // cannot distinguish it from executable work, which is the bug Work overview is repairing.
+  // Rolling compatibility must fail closed for a gate row: it has no work of its own, and
+  // DependencyState alone cannot tell it from executable work — which is the bug Work overview is
+  // repairing. `runnable` above is the server's own answer, so it needs no second look.
   if (taskStartOwnedByCompletionDeclaration(task)) return false;
   return !!task.assignee?.runner?.id && !task.running && !task.queued && !task.blocked;
 }

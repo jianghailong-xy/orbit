@@ -789,9 +789,9 @@ export function TaskDetailPanel({
     .map((t: any) => ({ value: t.id, label: t.title }));
   // Need a responsible workspace to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
-  // A verification subject is an outcome row, not executable work. The API execute gate is
-  // authoritative; this direct declaration check keeps the button honest during a rolling
-  // deployment and before any verifier result arrives.
+  // A gate row — VERIFICATION_PASSED with no verifier of its own — is an outcome row, not
+  // executable work. The API execute gate is authoritative; this direct declaration check keeps the
+  // button honest during a rolling deployment and before any verifier result arrives.
   const completionOwned = taskStartOwnedByCompletionDeclaration(q.data ?? {});
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
   // session. The button shows this state and stays disabled throughout — which also

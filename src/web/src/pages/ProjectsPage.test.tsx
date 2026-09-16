@@ -25,6 +25,7 @@ import {
   noMatchDescription,
   projectFilterFromStatusParam,
   projectOpenViewFromParam,
+  projectTaskWorkStateOf,
   projectsEmptyKind,
   projectsPath,
   projectsQueryKey,
@@ -2012,5 +2013,47 @@ describe('ProjectsPage — badges', () => {
     expect(rules).toContain('var(--brand-strong)');
     expect(rules).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(source).not.toMatch(/project-row-chip[^`]*#[0-9a-f]{3}/i);
+  });
+});
+
+describe('a task’s lane when the API is too old to send one', () => {
+  // The fallback re-derives the lane from the same two columns the server's Ready predicate kills
+  // on, so the project page and the task list cannot answer differently about one row. Parked in
+  // Awaiting verification, a task that does have work of its own is offered no next step anywhere.
+  it('parks only the gate row in Awaiting verification', () => {
+    const gateRow = {
+      completionCriterion: 'VERIFICATION' as const,
+      completionPolicy: 'VERIFICATION_PASSED' as const,
+      verifiesTaskId: null,
+    };
+    expect(projectTaskWorkStateOf(task(gateRow))).toBe('AWAITING_VERIFICATION');
+    // The criterion is not what puts a row in that lane: the policy is, whatever criterion the row
+    // carries — including none at all, which is what a server that stopped sending it looks like.
+    expect(
+      projectTaskWorkStateOf(task({ completionPolicy: 'VERIFICATION_PASSED', verifiesTaskId: null })),
+    ).toBe('AWAITING_VERIFICATION');
+    expect(projectTaskWorkStateOf(task({ ...gateRow, completionCriterion: undefined }))).toBe(
+      'AWAITING_VERIFICATION',
+    );
+    // A task that declares VERIFICATION and does its own work is an ordinary work row.
+    expect(
+      projectTaskWorkStateOf(
+        task({
+          completionCriterion: 'VERIFICATION',
+          completionPolicy: 'MANUAL',
+          verifiesTaskId: null,
+        }),
+      ),
+    ).not.toBe('AWAITING_VERIFICATION');
+    // ...and a verifier is work too, not a lane of its own.
+    expect(
+      projectTaskWorkStateOf(
+        task({
+          completionCriterion: 'VERIFICATION',
+          completionPolicy: 'MANUAL',
+          verifiesTaskId: 'subject-1',
+        }),
+      ),
+    ).not.toBe('AWAITING_VERIFICATION');
   });
 });

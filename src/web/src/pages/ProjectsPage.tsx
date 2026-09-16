@@ -1774,17 +1774,17 @@ export function projectTaskWorkLabel(task: ProjectTask): { text: string; color: 
  * Consume the server lane without recreating readiness in the browser.
  *
  * The fallback exists only for a rolling deployment with an older API. It is deliberately
- * fail-closed: lifecycle terminals stay recognizable and a declared verification subject stays
- * Awaiting verification, but an OPEN row is never promoted to READY from dependency/topology
- * fields. Only the canonical server classifier is allowed to make the "can start now" claim.
+ * fail-closed: lifecycle terminals stay recognizable and a gate row (`VERIFICATION_PASSED` with no
+ * verifier of its own — the policy, not the criterion, since a task that declares VERIFICATION can
+ * still have work of its own) stays Awaiting verification, but an OPEN row is never promoted to
+ * READY from dependency/topology fields. Only the canonical server classifier is allowed to make
+ * the "can start now" claim.
  */
 export function projectTaskWorkStateOf(task: ProjectTask): NonNullable<ProjectTask['workState']> {
   if (task.workState) return task.workState;
-  if (
-    task.completionCriterion === 'VERIFICATION'
-    && task.completionPolicy === 'VERIFICATION_PASSED'
-    && task.verifiesTaskId == null
-  ) return 'AWAITING_VERIFICATION';
+  if (task.completionPolicy === 'VERIFICATION_PASSED' && task.verifiesTaskId == null) {
+    return 'AWAITING_VERIFICATION';
+  }
   if (task.status === 'DONE' || task.status === 'CANCELLED' || task.status === 'FAILED') {
     return task.status;
   }
