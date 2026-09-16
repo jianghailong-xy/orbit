@@ -265,19 +265,20 @@ struct SettingsView: View {
 
 struct AdminUsersView: View {
     @Environment(AppModel.self) private var model
+    /// How this list's rows navigate. Defaults to the three-column shape; the compact shell, whose
+    /// stack knows its own pushes, passes `.push` — which is also what gives the compact section a
+    /// user's record to show at all.
+    var rowNavigation: SessionRowNavigation = .selection
     @State private var showNew = false
 
     var body: some View {
         @Bindable var model = model
         if let admin = model.admin {
-            List(selection: $model.selectedUserID) {
+            // Admin's stack projection — the account on top — and only where there is a detail
+            // column to select into.
+            List(selection: rowNavigation == .selection ? $model.selectedUserID : nil) {
                 ForEach(admin.users) { u in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(u.name?.isEmpty == false ? u.name! : u.email).lineLimit(1)
-                        Text("\(u.email) · \(u.role ?? "MEMBER")")
-                            .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    .tag(u.id)
+                    row(u)
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -298,12 +299,33 @@ struct AdminUsersView: View {
             ProgressView()
         }
     }
+
+    /// One row, wrapped for the container it is in — the three-column `List`'s selection, or the
+    /// compact row's own destination on Admin's stack.
+    @ViewBuilder private func row(_ u: User) -> some View {
+        let row = VStack(alignment: .leading, spacing: 2) {
+            Text(u.name?.isEmpty == false ? u.name! : u.email).lineLimit(1)
+            Text("\(u.email) · \(u.role ?? "MEMBER")")
+                .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+        }
+        switch rowNavigation {
+        case .selection:
+            row.tag(u.id)
+        case .push:
+            NavigationLink(value: NavNode.userDetail(userID: u.id)) {
+                row.foregroundStyle(.primary)
+            }
+        }
+    }
 }
 
 struct AdminUserDetailView: View {
     @Environment(AppModel.self) private var model
+    /// The account to show. The compact stack hands the page the id its own frame carries; the
+    /// three-column detail passes nothing and reads the section's stack instead (the same frame).
+    var userID: String? = nil
     var body: some View {
-        if let admin = model.admin, let id = model.selectedUserID, let u = admin.user(id) {
+        if let admin = model.admin, let id = userID ?? model.selectedUserID, let u = admin.user(id) {
             Form {
                 Section {
                     LabeledContent("Email", value: u.email)

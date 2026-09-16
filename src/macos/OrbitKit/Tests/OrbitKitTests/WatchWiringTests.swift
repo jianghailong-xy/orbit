@@ -98,9 +98,13 @@ final class WatchWiringTests: XCTestCase {
         XCTAssertTrue(content.contains("case .following:\n            FollowingListView()"))
         let detail = try slice(main, from: "struct SectionDetail: View {", to: "struct ComingSoon: View {")
         XCTAssertTrue(detail.contains("case .following:\n            WatchDetailView()"))
+        // Compact: the same list and the same record, on the section's own stack — the row carries
+        // the watch it opens and the record renders the frame it was pushed with. The list is still
+        // Following's list and the detail is still its detail; only the container moved.
         let compact = try slice(source("Views/CompactShell.swift"), from: "case .following:", to: "case .skills:")
-        XCTAssertTrue(compact.contains("FollowingListView()"))
-        XCTAssertTrue(compact.contains("WatchDetailView()"))
+        XCTAssertTrue(compact.contains("FollowingListView(rowNavigation: .push)"))
+        XCTAssertTrue(compact.contains("NavigationStack(path: $model.nav.path)"))
+        XCTAssertTrue(compact.contains("case .watchDetail(let watchID): WatchDetailView(watchID: watchID)"))
     }
 
     func testAWatchRouteOpensTheWatchAndEventsNudgeTheList() throws {

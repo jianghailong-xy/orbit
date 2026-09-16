@@ -146,6 +146,69 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(nav.sectionAtRoot)
     }
 
+    /// Each single-layer section's selection is the record on top of *its own* stack — Following's
+    /// watch, Runners' runner, Admin's account. Nothing else holds it: the three-column list's
+    /// highlight and the compact pushed page are that one read, and switching sections shows the new
+    /// section's root rather than the other one's record.
+    func testEachSingleLayerSectionsSelectionIsTheRecordOnTopOfItsStack() {
+        var nav = NavState(section: .following)
+        XCTAssertNil(nav.selectedWatchID, "the list page shows no record")
+        nav.push(.watchDetail(watchID: "w1"))
+        XCTAssertEqual(nav.selectedWatchID, "w1")
+        XCTAssertFalse(nav.sectionAtRoot, "a record is a page, so the edge goes to the back-swipe")
+
+        nav.section = .runners
+        XCTAssertNil(nav.selectedRunnerID, "Runners shows its own root, not Following's watch")
+        nav.push(.runnerDetail(runnerID: "r1"))
+        XCTAssertEqual(nav.selectedRunnerID, "r1")
+
+        nav.section = .admin
+        XCTAssertNil(nav.selectedUserID)
+        XCTAssertTrue(nav.sectionAtRoot)
+        nav.push(.userDetail(userID: "u1"))
+        XCTAssertEqual(nav.selectedUserID, "u1")
+
+        nav.section = .following
+        XCTAssertEqual(nav.selectedWatchID, "w1", "and each section comes back as you left it")
+        nav.section = .runners
+        XCTAssertEqual(nav.selectedRunnerID, "r1")
+        nav.section = .admin
+        XCTAssertEqual(nav.selectedUserID, "u1")
+    }
+
+    /// The Admin gap, from the value side. Compact Admin had no detail column and no push, so a
+    /// selected user went nowhere and the section answered "at root" whatever the selection said.
+    /// A user's record is a page of the section's stack now, which is what makes pushing it
+    /// expressible — and what hands the left edge back to the system back-swipe while it is up.
+    func testTheAdminSectionCanNowPushAUsersRecord() {
+        var nav = NavState(section: .admin)
+        XCTAssertTrue(nav.sectionAtRoot, "the list page is the root")
+
+        nav.push(.userDetail(userID: "u1"))
+
+        XCTAssertEqual(nav.selectedUserID, "u1", "the account on screen is the account selected")
+        XCTAssertFalse(nav.sectionAtRoot, "and the edge now belongs to the back-swipe")
+
+        nav.pop()
+
+        XCTAssertNil(nav.selectedUserID)
+        XCTAssertTrue(nav.sectionAtRoot)
+        XCTAssertEqual(nav, NavState(section: .admin), "an emptied stack leaves nothing behind")
+    }
+
+    /// A deep link names a watch by its UUID while the list tags rows by public id, so the frame is
+    /// rekeyed in place once the watch is in hand: `replaceTop`, not a second frame stacked over the
+    /// first — backing out of a watch must not walk through the same watch twice.
+    func testAWatchNamedByUUIDIsRekeyedInPlace() {
+        var nav = NavState(section: .following)
+        nav.replaceTop(with: .watchDetail(watchID: "7f3c1d2e-0000-4000-8000-000000000000"))
+        nav.replaceTop(with: .watchDetail(watchID: "w_public"))
+
+        XCTAssertEqual(nav.path, [.watchDetail(watchID: "w_public")])
+        XCTAssertEqual(nav.path.count, 1, "rekeying is not a push")
+        XCTAssertEqual(nav.selectedWatchID, "w_public", "the highlight is that same rekeyed frame")
+    }
+
     /// The needs-you banner excludes "the console you can already see" and the SSE focus streams it.
     /// Both read this, so on a list page — where no console is on screen — it has to be nil, or the
     /// banner silently drops a session that is waiting for you and its stream outlives its console.

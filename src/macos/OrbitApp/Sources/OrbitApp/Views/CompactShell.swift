@@ -272,24 +272,35 @@ private struct CompactSections: View {
                     }
             }
 
-        // RUNNERS — runner list → detail
+        // RUNNERS — runner list → detail. Same single stack as Agents: the rows carry their own
+        // destination and push it, so a deep link (`.runner(id)`) and a row tap are one navigation.
+        // Runners isn't in the drawer rail, so this section is only ever entered by that deep link
+        // or from Settings' own list — neither of which is a `List` selection in this shell.
         case .runners:
-            NavigationSplitView {
-                RunnersListView()
+            NavigationStack(path: $model.nav.path) {
+                RunnersListView(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.runners?.load() }
-            } detail: {
-                RunnerDetailView()
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                        default:                          EmptyView()
+                        }
+                    }
             }
 
         // FOLLOWING — watches → one watch's record
         case .following:
-            NavigationSplitView {
-                FollowingListView()
+            NavigationStack(path: $model.nav.path) {
+                FollowingListView(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.watches?.load() }
-            } detail: {
-                WatchDetailView()
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .watchDetail(let watchID): WatchDetailView(watchID: watchID)
+                        default:                        EmptyView()
+                        }
+                    }
             }
 
         // SKILLS / SETTINGS / ADMIN — single-pane sections, first-class drawer destinations. Admin is
@@ -304,11 +315,21 @@ private struct CompactSections: View {
         case .settings:
             NavigationStack { SettingsView().drawerToggle(open: openDrawer) }
 
+        // Admin used to be a bare `NavigationStack` with no detail column and no push, so a selected
+        // user had nowhere to go — the section was always "at root" whatever the selection said. The
+        // account's record is a page of this section's stack now, so a row tap pushes it like every
+        // other section's row does. The three-column shell is unaffected: it always had the detail.
         case .admin:
-            NavigationStack {
-                AdminUsersView()
+            NavigationStack(path: $model.nav.path) {
+                AdminUsersView(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.admin?.load() }
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .userDetail(let userID): AdminUserDetailView(userID: userID)
+                        default:                      EmptyView()
+                        }
+                    }
             }
         }
     }

@@ -6,18 +6,23 @@ import OrbitKit
 /// control plane, not a process; shells and dev servers stay in each console's Background processes.
 struct FollowingListView: View {
     @Environment(AppModel.self) private var model
+    /// How this list's rows navigate. Defaults to the three-column shape, which is what the split
+    /// shells want; the compact shell (whose stack knows its own pushes) passes `.push`.
+    var rowNavigation: SessionRowNavigation = .selection
 
     var body: some View {
         @Bindable var model = model
         if let store = model.watches {
             // "Last evaluated" and the stale flag are relative to now: redraw between fetches.
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                List(selection: $model.selectedWatchID) {
+                // The selection is Following's stack projection — it reads the record on top and
+                // writes through `replaceTop` — and only in the shell that has a detail column to
+                // select into. The compact rows carry their own destination instead.
+                List(selection: rowNavigation == .selection ? $model.selectedWatchID : nil) {
                     ForEach(WatchProjection.sections(store.watches, now: context.date)) { section in
                         Section(section.group.title) {
                             ForEach(section.watches) { watch in
-                                FollowingRow(watch: watch, now: context.date)
-                                    .tag(watch.id)
+                                row(watch, now: context.date)
                             }
                         }
                     }
@@ -29,6 +34,24 @@ struct FollowingListView: View {
             .task { await store.load() }
         } else {
             ProgressView()
+        }
+    }
+
+    /// One row, wrapped for the container it is in. The row view itself is the same either way; what
+    /// changes is who moves the screen — the three-column `List`'s selection, or the row's own
+    /// destination value on the compact stack. The highlight and the pushed record are the same read
+    /// of the section's stack, so neither shape draws a row it cannot open.
+    @ViewBuilder private func row(_ watch: Watch, now: Date) -> some View {
+        // `.foregroundStyle(.primary)`: a link's label otherwise inherits the accent tint, and the
+        // rows are unchanged by design (only the wrapper is new).
+        let row = FollowingRow(watch: watch, now: now)
+        switch rowNavigation {
+        case .selection:
+            row.tag(watch.id)
+        case .push:
+            NavigationLink(value: NavNode.watchDetail(watchID: watch.id)) {
+                row.foregroundStyle(.primary)
+            }
         }
     }
 }

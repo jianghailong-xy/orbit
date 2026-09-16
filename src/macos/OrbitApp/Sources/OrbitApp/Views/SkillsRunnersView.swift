@@ -69,12 +69,17 @@ struct SkillRow: View {
 
 struct RunnersListView: View {
     @Environment(AppModel.self) private var model
+    /// How this list's rows navigate. Defaults to the three-column shape; the compact shell, whose
+    /// stack knows its own pushes, passes `.push`.
+    var rowNavigation: SessionRowNavigation = .selection
     var body: some View {
         @Bindable var model = model
         if let runners = model.runners {
-            List(selection: $model.selectedRunnerID) {
+            // Runners' stack projection — the record on top — and only where there is a detail
+            // column to select into.
+            List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
                 ForEach(runners.runners) { r in
-                    RunnerRow(runner: r).tag(r.id)
+                    row(r)
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -85,6 +90,20 @@ struct RunnersListView: View {
             .task { await runners.load() }
         } else {
             ProgressView()
+        }
+    }
+
+    /// One row, wrapped for the container it is in — the three-column `List`'s selection, or the
+    /// compact row's own destination on Runners' stack. The row view is the same either way.
+    @ViewBuilder private func row(_ r: Runner) -> some View {
+        let row = RunnerRow(runner: r)
+        switch rowNavigation {
+        case .selection:
+            row.tag(r.id)
+        case .push:
+            NavigationLink(value: NavNode.runnerDetail(runnerID: r.id)) {
+                row.foregroundStyle(.primary)
+            }
         }
     }
 }
@@ -191,8 +210,12 @@ struct RunnerRow: View {
 
 struct RunnerDetailView: View {
     @Environment(AppModel.self) private var model
+    /// The runner to show. The compact stack hands the page the id its own frame carries; the
+    /// three-column detail passes nothing and reads the section's stack instead (the same frame).
+    var runnerID: String? = nil
     var body: some View {
-        if let runners = model.runners, let id = model.selectedRunnerID, let r = runners.runner(id) {
+        if let runners = model.runners, let id = runnerID ?? model.selectedRunnerID,
+           let r = runners.runner(id) {
             RunnerDetailContent(runners: runners, runner: r).id(r.id)
         } else {
             ContentUnavailableView("Select a runner", systemImage: "desktopcomputer",

@@ -8,10 +8,14 @@ import OrbitKit
 /// can name a watch the list doesn't hold — an older one — so a miss fetches it before saying so.
 struct WatchDetailView: View {
     @Environment(AppModel.self) private var model
+    /// The watch to show. The compact stack hands the page the id its own frame carries, so it
+    /// renders what was pushed; the three-column detail passes nothing and reads the section's stack
+    /// instead — `AppModel.selectedWatchID`, which is that same frame, one layer up.
+    var watchID: String? = nil
     @State private var missingID: String?
 
     var body: some View {
-        if let store = model.watches, let id = model.selectedWatchID {
+        if let store = model.watches, let id = watchID ?? model.selectedWatchID {
             if let watch = store.watch(id) {
                 WatchDetailContent(store: store, watch: watch, opensTargets: true)
                     .id(watch.id)

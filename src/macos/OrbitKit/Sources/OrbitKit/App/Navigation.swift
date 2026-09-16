@@ -95,6 +95,32 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    // The three single-layer sections — Following, Runners, Admin — push exactly one kind of page,
+    // so "which record is showing" is the id on top of their own stack. Each one is a total function
+    // of that stack like every other fact here: the list's highlight and the detail pane are the
+    // same read, which is what stops a row drawing as selected while the page under it says
+    // something else. Admin is the one that had nowhere to put this at all — see ``NavNode/userDetail(userID:)``.
+
+    /// `AppModel.selectedWatchID` — the watch record the Following pane shows. Whatever the frame
+    /// carries is what is shown: a push may name a watch by its UUID until the list's spelling
+    /// replaces it in place.
+    public var selectedWatchID: String? {
+        guard case .watchDetail(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows.
+    public var selectedRunnerID: String? {
+        guard case .runnerDetail(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// `AppModel.selectedUserID` — the account the Admin pane shows.
+    public var selectedUserID: String? {
+        guard case .userDetail(let id) = path.last else { return nil }
+        return id
+    }
+
     /// The console page on top, if that is what is showing. Both "which row is current" and "which
     /// console streams" are this one read, so they cannot drift apart.
     private var consoleOnTop: String? {

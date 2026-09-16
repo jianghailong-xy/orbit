@@ -82,9 +82,34 @@ final class AppModel {
             if selectedTaskID != oldValue { tasks?.setSelectedDetailID(selectedTaskID) }
         }
     }
-    var selectedRunnerID: String?
-    /// The watch whose record fills Following's detail: a public id, or the UUID a push names.
-    var selectedWatchID: String?
+    /// The runner whose record fills the Runners pane — the row the three-column list draws as
+    /// selected, and the page the compact stack pushes. A read of the section's stack, kept under
+    /// its old name so its readers needed no change.
+    var selectedRunnerID: String? {
+        get { nav.selectedRunnerID }
+        set {
+            // Selecting in a three-column shell replaces the page the detail pane shows; clearing
+            // pops the record that is there.
+            if let id = newValue {
+                nav.replaceTop(with: .runnerDetail(runnerID: id))
+            } else if case .runnerDetail = nav.path.last {
+                nav.pop()
+            }
+        }
+    }
+    /// The watch whose record fills Following's detail: a public id, or the UUID a push names until
+    /// ``openWatch`` replaces it with the list's spelling (see there). The same projection as the
+    /// runner's, onto Following's own stack.
+    var selectedWatchID: String? {
+        get { nav.selectedWatchID }
+        set {
+            if let id = newValue {
+                nav.replaceTop(with: .watchDetail(watchID: id))
+            } else if case .watchDetail = nav.path.last {
+                nav.pop()
+            }
+        }
+    }
     /// iOS only: whether Tasks has pushed the searchable directory of every named task list.
     /// The drawer shows only a compact preview; this state also tells the shell to leave the
     /// leading edge to the system back-swipe while the directory page is visible.
@@ -125,7 +150,20 @@ final class AppModel {
         if case .compose = nav.path.last { return true }
         return false
     }
-    var selectedUserID: String?
+    /// The account whose record fills the Admin pane. Compact had nowhere to put this: the section
+    /// was a bare `NavigationStack` with no detail column and no push, so a selected user went
+    /// nowhere and `sectionAtRoot` had to claim the section was always at its root. The record is a
+    /// page of the section's stack now, so the shell can push it and the edge follows.
+    var selectedUserID: String? {
+        get { nav.selectedUserID }
+        set {
+            if let id = newValue {
+                nav.replaceTop(with: .userDetail(userID: id))
+            } else if case .userDetail = nav.path.last {
+                nav.pop()
+            }
+        }
+    }
     var menuSummary: MenuBarSummary = .empty
     /// Bumped to ask the visible session list (Open or an agent's scoped list) to
     /// take keyboard focus so ↑/↓ resume switching sessions. The composer raises this on Escape,
@@ -467,16 +505,14 @@ final class AppModel {
 
     /// Reset every navigation/selection field to the signed-out baseline. The ONE place they are
     /// cleared wholesale — when adding a navigation field to this model, add its reset here, or a
-    /// stale selection leaks into the next sign-in.
+    /// stale selection leaks into the next sign-in. The runner / watch / user selections need no
+    /// line of their own: they ARE their section's stack, which `nav = NavState()` clears.
     private func resetNavigation() {
         selectedSection = .agents      // runs the section switch's own housekeeping first
         nav = NavState()               // then clears every section's stack with it
         didResolveDefaultLanding = false
         selectedTaskID = nil
-        selectedRunnerID = nil
         selectedAgentID = nil
-        selectedUserID = nil
-        selectedWatchID = nil
     }
 
     /// Wire up notifications. Call once at launch.
@@ -1234,20 +1270,23 @@ final class AppModel {
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
-    /// no pushed page needs the edge for the system back-swipe. Agents reads its stack; the sections
-    /// still driven by a flat selection answer from that until they move onto theirs.
+    /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
+    /// own stack; Tasks and Settings still answer from the flags their pushes are kept in, until
+    /// they move onto theirs too.
     var sectionAtRoot: Bool {
         switch selectedSection {
         case .tasks:   return selectedTaskID == nil && !taskListsDirectoryPresented
         // Nothing pushed on the Agents stack: no draft, no console — one read, where this used to
         // ask two fields that the stack could disagree with.
         case .agents:  return nav.sectionAtRoot
-        case .runners: return selectedRunnerID == nil
-        case .following: return selectedWatchID == nil
+        // The single-layer sections: a runner / watch / user record is a frame of that section's
+        // own stack, so one read covers both the three-column selection and the compact push.
+        // Skills pushes nothing (always at root); Admin pushes a user's record now, which is what
+        // replaced the unconditional `true` this used to answer with.
+        case .skills, .runners, .following, .admin: return nav.sectionAtRoot
         // Settings pushes its Runners sub-page (iOS); it's at root only when that isn't up, so the
         // pushed runner pages yield the edge to the system back-swipe.
         case .settings: return !settingsShowingRunners
-        case .skills, .admin: return true
         }
     }
 
@@ -1610,7 +1649,11 @@ final class AppModel {
         guard let watches, watches.watch(id) == nil else { return }
         Task { @MainActor [weak self] in
             await watches.fetch(id)
-            guard let self, self.selectedWatchID == id, let watch = watches.watch(id) else { return }
+            // The section guard is load-bearing now that the selection writes through the stack:
+            // `replaceTop` edits whatever section is showing, so without it a fetch landing after
+            // the user has switched away would put a watch frame on top of another section's page.
+            guard let self, self.selectedSection == .following,
+                  self.selectedWatchID == id, let watch = watches.watch(id) else { return }
             self.selectedWatchID = watch.id
         }
     }
