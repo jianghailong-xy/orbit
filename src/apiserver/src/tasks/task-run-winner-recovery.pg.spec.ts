@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { promisify } from 'node:util';
 
+import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
@@ -1367,4 +1368,84 @@ test('the claim travels from execute() all the way into the turn transaction, an
       'and no other run-request turn on that session',
     );
     await door.db.$disconnect();
+  });
+
+test('a revive that loses the claim to a re-dispatched run is a 409, not a raw P2002',
+  { skip, timeout: 120_000 }, async () => {
+    // The shape a person actually meets, end to end on a real PostgreSQL: a run of a task fails,
+    // the task is dispatched again, and somebody presses "Retry now" on the failed run's session —
+    // which is still on their screen. The revive writes a LIVE status onto that terminal row, the
+    // claim index refuses it (the new run holds the task), and what that refusal IS matters: a raw
+    // `P2002` reaches the API as a 500 with a PostgreSQL sentence in it and no way to learn which
+    // session has the task. Nothing here is a double, so the duplicate the classifier reads is the
+    // one prisma 7.10's driver adapter really builds — the shape that has silently turned this
+    // guard off once already (see `conflictingUniqueKey`).
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const services = connect();
+    try {
+      const target = await fixture(services.db, 'claim-revive');
+      const failed = await runNow(services, target, randomUUID());
+      await moveTo(services.db, failed, RunStatus.FAILED);
+      // The row has to be one that RAN. A session that never started is refused earlier and by
+      // name — "this session never ran and cannot be resumed" — and a fixture that stopped there
+      // would be proving that refusal instead of this one.
+      await services.db.session.update({
+        where: { id: failed },
+        data: { startedAt: new Date(), runtimeSessionId: randomUUID(), numTurns: 3 },
+      });
+      // ...and a runner the control plane believes is up. This fixture's runner is created without a
+      // heartbeat, and a revive onto an offline one is refused by name ("the runner is offline; it
+      // must be online to resume this session") — a different refusal than the one under test, and
+      // one this test would otherwise be proving instead of reaching the claim.
+      await services.db.runner.update({
+        where: { id: target.runnerId },
+        data: { lastHeartbeatAt: new Date() },
+      });
+
+      // The re-dispatch. A terminal run occupies nothing, so the task is runnable again and this
+      // press gets its own Session (its own token, so its own derived id) — the exact sequence
+      // that produced this refusal in production.
+      const redispatched = await runNow(services, target, randomUUID());
+      assert.notEqual(redispatched, failed, 'a second press is a second run, not the one that ended');
+
+      const before = await services.db.conversationTurn.count({ where: { sessionId: failed } });
+      const world = await services.db.session.findFirst({
+        where: {
+          taskId: target.taskId,
+          deletedAt: null,
+          status: { in: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+        },
+        select: { id: true, status: true },
+      });
+      let raised: unknown;
+      await services.sessions.resume(
+        target.ownerId,
+        failed,
+        { clientTurnId: randomUUID(), content: 'go on' } as never,
+      ).then(
+        () => assert.fail('the revive must not land while another run holds the task'),
+        (error: unknown) => { raised = error; },
+      );
+
+      assert.ok(raised instanceof ConflictException,
+        `a typed refusal, not ${(raised as Error)?.name}: ${(raised as Error)?.message}`
+          + ` (holder before the press: ${JSON.stringify(world)})`);
+      const body = (raised as ConflictException).getResponse() as Record<string, unknown>;
+      assert.equal(body.code, 'TASK_ALREADY_RUNNING',
+        `refusal was: ${JSON.stringify(body)} — holder before the press: ${JSON.stringify(world)}`);
+      // Named, and named in the ids the API hands out — a raw uuid here would be the one part of
+      // the refusal a client could not hand back to `session_get`.
+      assert.equal(body.conflictingSessionId, uuidToBase62(redispatched));
+      assert.equal(body.taskId, uuidToBase62(target.taskId));
+
+      // And the refused revive wrote nothing: the row is where it was, with no turn behind it.
+      const after = await services.db.session.findUniqueOrThrow({ where: { id: failed } });
+      assert.equal(after.status, RunStatus.FAILED, 'the failed run is still the record of what it did');
+      assert.equal(
+        await services.db.conversationTurn.count({ where: { sessionId: failed } }), before,
+        'and the message the person pressed for was not delivered anywhere',
+      );
+    } finally {
+      await services.db.$disconnect();
+    }
   });

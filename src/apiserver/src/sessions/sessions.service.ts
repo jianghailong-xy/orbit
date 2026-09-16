@@ -59,10 +59,16 @@ import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   TaskWorkFacts,
+  isExecutionClaimConflict,
   isLockNotAvailable,
   taskWorkRefusal,
 } from '../tasks/task-supersession';
-import { TaskRunFenceLost, type TaskRunEffectFence } from '../tasks/task-run-receipt';
+import {
+  TaskRunFenceLost,
+  taskAlreadyRunning,
+  type TaskRunEffectFence,
+} from '../tasks/task-run-receipt';
+import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
@@ -5629,6 +5635,64 @@ export class SessionsService {
     return taskWorkRefusal(facts, uuidToBase62);
   }
 
+  /**
+   * The refusal for a revive that lost 0130's execution claim.
+   *
+   * `session_task_execution_claim_idx` makes "one live Session per task" a property of the database,
+   * and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
+   * a sweep, the auto-run the task list reconciles) refuses the revive at that index. The refusal is
+   * correct; what used to happen with it was not. The raw `P2002` reached the API as a 500 with a
+   * PostgreSQL sentence in it, in front of somebody who pressed "Retry now" on a failed run of a
+   * task that is at that moment running somewhere else, and said nothing about which session has it.
+   *
+   * READ AFTER THE TRANSACTION HAS ROLLED BACK, and that is not a detail: the transaction that
+   * raised this is aborted, so any further statement inside it answers 25P02 rather than a row.
+   * Nothing of the revive was written (the flip is the last thing the transaction does), so this
+   * read is of the world the refusal is about.
+   *
+   * The predicate is the index's own (`TASK_OCCUPYING` is its four statuses, character for
+   * character) rather than "the newest" or "the live one": a reader narrower than the index it
+   * explains answers "nothing holds the claim" for rows that do.
+   */
+  private async refuseReviveOntoAHeldClaim(
+    id: string,
+    taskId: string | null,
+    workspaceId: string | null,
+  ): Promise<never> {
+    if (taskId !== null) {
+      // `NOT: { id }` is belt-and-braces — every path here arrives with THIS row terminal, so it
+      // cannot be in the index — and it is what keeps the sentence from naming the caller's own
+      // session if that ever stops being true.
+      const holder = await this.prisma.session.findFirst({
+        where: { taskId, deletedAt: null, status: { in: TASK_OCCUPYING }, NOT: { id } },
+        select: {
+          id: true,
+          status: true,
+          workspaceId: true,
+          startsTaskWork: true,
+          cancelRequestedAt: true,
+        },
+      });
+      if (holder) {
+        throw taskAlreadyRunning({
+          taskPublicId: uuidToBase62(taskId),
+          sessionPublicId: uuidToBase62(holder.id),
+          sessionStatus: holder.status,
+          onAnotherAgent: holder.workspaceId != null && holder.workspaceId !== workspaceId,
+          ending: holder.cancelRequestedAt != null,
+          notWork: holder.startsTaskWork === false,
+        });
+      }
+    }
+    // No holder: the claim was taken and released between the failed write and this read, or this
+    // row was never in a position to lose one. Nothing of this request landed either way, and a
+    // retry does not meet what refused it.
+    throw new ConflictException(
+      'this session could not be revived: its task\'s execution claim was taken and released '
+        + 'while the revive was being written — nothing was changed; retry',
+    );
+  }
+
   async resume(
     ownerId: string,
     id: string,
@@ -6070,7 +6134,16 @@ export class SessionsService {
         wasCompleted: (current.completedAt ?? current.archivedAt) != null,
         wasRevived: true,
       };
-    }, loggedRetry(this.logger, 'sessions.resume'));
+    }, loggedRetry(this.logger, 'sessions.resume'))
+      // The one duplicate key this UPDATE can reach — another live Session already holds this task's
+      // execution claim (0130) — answered as the refusal it is instead of as the 500 a bare P2002
+      // becomes. Caught outside the transaction, because naming the holder means reading, and the
+      // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
+      // fact and goes on being thrown as it is.
+      .catch((error: unknown) => {
+        if (!isExecutionClaimConflict(error)) throw error;
+        return this.refuseReviveOntoAHeldClaim(id, session.taskId, session.workspaceId);
+      });
     // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
     // and signal the control plane, so every other client moves the row out of Completed and
     // into Open without polling.

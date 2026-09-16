@@ -287,6 +287,73 @@ export function isLockNotAvailable(error: unknown): boolean {
 }
 
 /**
+ * 0130's execution claim, by name: the partial unique index over `session ("task_id")` for the four
+ * live statuses (`TASK_OCCUPYING`). One live Session per task is a property of the database because
+ * of this index, and every reader that has to explain a lost claim reads it from here.
+ */
+export const EXECUTION_CLAIM_INDEX = 'session_task_execution_claim_idx';
+
+/**
+ * WHICH unique key a duplicate came from, wherever this stack happens to have put it.
+ *
+ * The duplicate-key sibling of `postgresSqlState` above, and it lives here for the same reason:
+ * more than one door loses to the same key, and a parser each of them carries privately is a parser
+ * that gets fixed in one place. It was: this classifier read `meta.target` and nothing else, and
+ * **Prisma 7 with `@prisma/adapter-pg` — what this deployment runs — does not set it**. So every
+ * lost execution claim failed the test and the raw `P2002` was rethrown — not only the terminal and
+ * paused winners the task door set out to repair, but every one of them, arriving at the API as a
+ * 500 with a PostgreSQL sentence in it. Only a real server can show that; the shape is invisible to
+ * a double.
+ *
+ * There are three shapes, and a predicate that knows fewer than all of them is a guard that works
+ * in one place and silently does not in another:
+ *
+ *  - Prisma before the driver adapter: `meta.target`, the conflicting column list;
+ *  - Prisma 7.9 with the pg adapter: `meta.driverAdapterError.cause.constraint.fields`;
+ *  - Prisma 7.10 with the pg adapter: `constraint.fields` is GONE, replaced by
+ *    `constraint.index` — the index's name rather than the columns under it.
+ *
+ * Every one of them also names the index inside `originalMessage`, which is why all four sources
+ * are joined and matched together rather than picked between: the caller cannot know which client
+ * raised the error, and a release that moves the field must not silently turn the guard off.
+ *
+ * The rendered `error.message` is deliberately NOT consulted: Prisma renders a code frame into it,
+ * so matching there would classify on whatever the surrounding source happens to say.
+ */
+export function conflictingUniqueKey(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return '';
+  const candidate = error as {
+    meta?: {
+      target?: unknown;
+      driverAdapterError?: {
+        cause?: { constraint?: { fields?: unknown; index?: unknown }; originalMessage?: unknown };
+      };
+    };
+  };
+  const adapter = candidate.meta?.driverAdapterError?.cause;
+  const parts: string[] = [];
+  for (const source of [candidate.meta?.target, adapter?.constraint?.fields]) {
+    if (Array.isArray(source)) parts.push(source.join(','));
+    else if (typeof source === 'string') parts.push(source);
+  }
+  for (const source of [adapter?.constraint?.index, adapter?.originalMessage]) {
+    if (typeof source === 'string') parts.push(source);
+  }
+  return parts.join('|');
+}
+
+/**
+ * Was this duplicate the execution claim — i.e. is another live Session already doing this task?
+ *
+ * Narrow on purpose, and only for a caller whose write can reach this key and no other: an UPDATE
+ * of an existing Session row cannot collide on the primary key or on `share_token`, so a duplicate
+ * that names the claim index is the whole answer rather than one of several.
+ */
+export function isExecutionClaimConflict(error: unknown): boolean {
+  return conflictingUniqueKey(error).includes(EXECUTION_CLAIM_INDEX);
+}
+
+/**
  * §13.6 SU6, derived: a task the control loop must stop treating as outstanding.
  *
  * Two ways in, and the second is the one that kept being missed. A task is obsolete when it was

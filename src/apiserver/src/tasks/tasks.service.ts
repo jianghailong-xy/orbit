@@ -103,6 +103,8 @@ import {
 import {
   TASK_SUPERSEDABLE_STATUSES,
   TASK_SUPERSESSION_MAX_HOPS,
+  EXECUTION_CLAIM_INDEX,
+  conflictingUniqueKey,
   successorChain,
   supersededByAbsentReason,
   supersessionRefusal,
@@ -711,53 +713,8 @@ function isTaskRunClaimConflict(error: unknown): boolean {
   // moment the client moved — `session_task_execution_claim_idx` contains neither `task_id` nor
   // a standalone `id` — and every lost claim went back to reaching the API as a 500. Both
   // releases put the index name in `originalMessage`, so matching on it holds either way.
-  return /session_task_execution_claim_idx/.test(named) || /session_pkey/.test(named)
+  return named.includes(EXECUTION_CLAIM_INDEX) || /session_pkey/.test(named)
     || /task_id/.test(named) || /\bid\b/.test(named);
-}
-
-/**
- * WHICH unique key a duplicate came from, wherever this stack happens to have put it.
- *
- * There are three shapes, and a predicate that knows fewer than all of them is a guard that works
- * in one place and silently does not in another — the same lesson `postgresSqlState` learned, at
- * the same cost. This classifier read `meta.target` and nothing else, and **Prisma 7 with
- * `@prisma/adapter-pg` — what this deployment runs — does not set it**. So every lost execution
- * claim failed the test and the raw `P2002` was rethrown: not only the terminal and paused winners
- * this unit set out to repair, but every one of them, arriving at the API as a 500 with a
- * PostgreSQL sentence in it. Only a real server can show that; the shape is invisible to a double.
- *
- *  - Prisma before the driver adapter: `meta.target`, the conflicting column list;
- *  - Prisma 7.9 with the pg adapter: `meta.driverAdapterError.cause.constraint.fields`;
- *  - Prisma 7.10 with the pg adapter: `constraint.fields` is GONE, replaced by
- *    `constraint.index` — the index's name rather than the columns under it.
- *
- * Every one of them also names the index inside `originalMessage`, which is why all four sources
- * are joined and matched together rather than picked between: the caller cannot know which client
- * raised the error, and a release that moves the field must not silently turn the guard off.
- *
- * The rendered `error.message` is deliberately NOT consulted: Prisma renders a code frame into it,
- * so matching there would classify on whatever the surrounding source happens to say.
- */
-function conflictingUniqueKey(error: unknown): string {
-  if (typeof error !== 'object' || error === null) return '';
-  const candidate = error as {
-    meta?: {
-      target?: unknown;
-      driverAdapterError?: {
-        cause?: { constraint?: { fields?: unknown; index?: unknown }; originalMessage?: unknown };
-      };
-    };
-  };
-  const adapter = candidate.meta?.driverAdapterError?.cause;
-  const parts: string[] = [];
-  for (const source of [candidate.meta?.target, adapter?.constraint?.fields]) {
-    if (Array.isArray(source)) parts.push(source.join(','));
-    else if (typeof source === 'string') parts.push(source);
-  }
-  for (const source of [adapter?.constraint?.index, adapter?.originalMessage]) {
-    if (typeof source === 'string') parts.push(source);
-  }
-  return parts.join('|');
 }
 
 const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
