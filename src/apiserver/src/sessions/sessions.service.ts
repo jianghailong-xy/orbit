@@ -16,7 +16,8 @@ import {
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
-import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { appendScheduledWakeupContext } from '../runner-api/scheduled-wakeup';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -3933,7 +3934,11 @@ export class SessionsService {
           placement: await this.turnPlacement(tx, id, joined),
           wakeQueue: false,
           wakeInbox: false,
-          idempotent: true,
+          // No new turn, but not the replay above either: the hook wrote something onto the turn it
+          // joined — a second job's wake, a wakeup that came due — and `listQueuedTurns` now shows
+          // that turn saying it. `idempotent` is read for exactly one decision, whether to tell
+          // focused clients the queue moved, and this is a queue that moved.
+          idempotent: false,
         };
       }
       // §13.6 SU6: a turn that carries the TASK's prompt is the task's work, whatever this row was
@@ -4424,25 +4429,38 @@ export class SessionsService {
     });
     const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
+    const wakeContent = await this.queuedWakeContent(id, turns);
     const classified = turns
-      // A background job's wake turn carries nobody's words (runner-api/background-job-wake.ts): it
-      // is not a message anyone queued, and the transcript shows what it said once it is delivered.
-      .filter((turn) => turn.clientTurnId !== initialClientTurnId && !isBackgroundWakeTurn(turn.clientTurnId))
+      // A background job's wake turn carries nobody's words (runner-api/background-job-wake.ts) and
+      // is not a message anyone queued — but it IS a row waiting to be delivered, and a client that
+      // cannot see it cannot say the session is about to be woken. So it is listed with the block it
+      // will be delivered with (queuedWakeContent), and left out exactly where it has nothing to
+      // show: no wakes filed on it, or already leased, where the transcript is what shows it.
+      .filter((turn) => turn.clientTurnId !== initialClientTurnId
+        && (!isBackgroundWakeTurn(turn.clientTurnId) || wakeContent.has(turn.id)))
       .map((turn) => ({
         turn,
+        content: wakeContent.get(turn.id) ?? turn.content ?? '',
+        // A wake is never the `accepted` head, whichever seq it sits at: `accepted` says the runner
+        // has this one, so web represents it as the person's own message bridged into the
+        // transcript (queuedTurnFromActiveSnapshot) and the queue-only view drops it. Neither is
+        // true of a wake. `headExecutableId` above still counts it, so its genuinely queued
+        // successor is not promoted into the place it vacates.
         placement: (turn.kind === 'steer'
           ? 'steer'
-          : turn.id === headExecutableId
-            ? 'accepted'
-            : 'queued') as TurnPlacement,
+          : isBackgroundWakeTurn(turn.clientTurnId)
+            ? 'queued'
+            : turn.id === headExecutableId
+              ? 'accepted'
+              : 'queued') as TurnPlacement,
       }));
     if (view !== 'active') {
       return classified
         .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted')
-        .map(({ turn }) => ({
+        .map(({ turn, content }) => ({
           turnId: turn.id,
           kind: turn.kind,
-          content: turn.content ?? '',
+          content,
           attachments: turn.attachments.map((attachment) => ({
             id: attachment.id,
             mimeType: attachment.mimeType,
@@ -4494,7 +4512,7 @@ export class SessionsService {
         if (turn.deliveryStatus === 'UNCONFIRMED') return true;
         return !announcedTurnIds.has(turn.id);
       })
-      .map(({ turn, placement }) => ({
+      .map(({ turn, placement, content }) => ({
         turnId: turn.id,
         kind: turn.kind,
         placement,
@@ -4509,7 +4527,7 @@ export class SessionsService {
                 : {}),
             }
           : {}),
-        content: turn.content ?? '',
+        content,
         createdAt: turn.createdAt.toISOString(),
         attachments: turn.attachments.map((attachment) => ({
           id: attachment.id,
@@ -4520,6 +4538,38 @@ export class SessionsService {
     // unrelated UUID would reorder the executable head behind its queued successor in a recovered
     // snapshot.
     return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /** What each of the session's still-queued wake turns has to say, by turn id.
+   *
+   *  A wake turn's own `content` is empty and stays empty: what it says lives beside it, in the
+   *  rows the claim transaction reads to build the block it hands the runner — a job's wakes
+   *  (background-job-wake.ts) and the wakeups that came due (scheduled-wakeup.ts). That is what
+   *  keeps a turn nobody typed out of `last_user_text`, out of auto-retry's re-send and out of
+   *  every other read of the person's words; none of them reads this list.
+   *
+   *  Both sets of rows are written in the same transaction that files the turn, so they can be
+   *  read while it is still queued — and they are read HERE by the very functions delivery calls,
+   *  not by a second rendering of them. The card a client draws while the wake waits is therefore
+   *  the block that will be delivered, with no copy of it to drift.
+   *
+   *  Only while the turn is PENDING: once a runner has leased it the block has been delivered and
+   *  the transcript is what shows it. A turn with nothing to say is absent from the map and left
+   *  out of the list — that empty row is what listing every wake turn would otherwise produce. */
+  private async queuedWakeContent(
+    sessionId: string,
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null; status: string }>,
+  ): Promise<Map<string, string>> {
+    const wakeContent = new Map<string, string>();
+    for (const turn of turns) {
+      if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
+      if (!isBackgroundWakeTurn(turn.clientTurnId)) continue;
+      const { clientTurnId } = turn;
+      const jobs = await appendBackgroundWakeContext(this.prisma, sessionId, clientTurnId, '');
+      const block = await appendScheduledWakeupContext(this.prisma, sessionId, clientTurnId, jobs);
+      if (block) wakeContent.set(turn.id, block);
+    }
+    return wakeContent;
   }
 
   /** Withdraw a queued user message or `!cmd` shell turn. Only a still-PENDING one can be
