@@ -16,9 +16,9 @@ import Foundation
 // `@Observable` — the same layering `Transcript/SessionStore.swift` states, which keeps this
 // testable on Linux where SwiftUI doesn't exist.
 
-/// How a page got pushed, carried by the frame that needs it. Today this is the shadow variable
-/// `recentsConsoleSessionID`, kept true by an assignment-ordering convention ("set it *before* the
-/// selection so its observer preserves it") that only a comment enforces.
+/// How a page got pushed, carried by the frame that needs it. It used to be a shadow variable kept
+/// true by an assignment-ordering convention ("set it *before* the selection so its observer
+/// preserves it") that only a comment enforced.
 public enum NavOrigin: Hashable, Sendable {
     /// A row in the section's own list.
     case list
@@ -59,25 +59,33 @@ public struct NavState: Equatable, Sendable {
     }
 
     /// The stack on screen: the current section's, which is what a `NavigationStack(path:)` binds to.
-    public var path: [NavNode] { stacks[section] ?? [] }
+    ///
+    /// Writable because that is exactly how a `NavigationStack(path:)` reports back — a back button,
+    /// an edge swipe, or a row's own link appending to it. Writes go through the same normalization
+    /// the transitions use, so an emptied stack still drops its key and two states showing the same
+    /// screens stay equal (SwiftUI writes back `[]`, not "no value").
+    public var path: [NavNode] {
+        get { stacks[section] ?? [] }
+        set { stacks[section] = newValue.isEmpty ? nil : newValue }
+    }
 
     // MARK: - Derived facts
     //
     // Each one is a read of `path`. There is nothing else to keep in step with it.
 
     /// `AppModel.sectionAtRoot` — nothing pushed, so the compact shell can give the left screen edge
-    /// to its drawer gesture. Today this asks the selection instead of the stack, which is how a
-    /// stranded selection also costs you the drawer swipe on the list page.
+    /// to its drawer gesture. Asking the selection instead of the stack was also how a stranded
+    /// selection cost you the drawer swipe on the list page.
     public var sectionAtRoot: Bool { path.isEmpty }
 
     /// `AppModel.focusedConsoleSessionID` — the session that should be live-streaming. Its doc
-    /// promises "backing out to a list stops the stream", a promise nothing enforces today because
-    /// the pop happens inside SwiftUI's private stack and only a write-back would tell the model.
+    /// promises "backing out to a list stops the stream"; the pop that does it happens inside
+    /// SwiftUI's private stack, which reports back by writing the emptied path into ``path``.
     public var focusedConsoleSessionID: String? { consoleOnTop }
 
     /// The session row drawn as selected. Deliberately the same read as ``focusedConsoleSessionID``:
-    /// the bug this layer exists to remove is that today the highlight is stored *separately* from
-    /// the push, so the two can disagree and the highlighted row stops opening.
+    /// storing the highlight *separately* from the push is what let the two disagree, leaving a row
+    /// that drew as selected and could not be opened.
     public var highlightedSessionID: String? { consoleOnTop }
 
     /// `AppModel.consoleFromRecents` — you came from the drawer, so the left edge returns you there.
@@ -118,6 +126,20 @@ public struct NavState: Equatable, Sendable {
     public mutating func replaceTop(with node: NavNode) {
         withPath {
             if $0.isEmpty { $0.append(node) } else { $0[$0.count - 1] = node }
+        }
+    }
+
+    /// The session's console is gone — completed, trashed or purged out from under it — so nothing
+    /// is left on screen streaming a session the server no longer has. This is the one edit that
+    /// replaced three hand-cleared optionals: the selection, the Recents marker and the compose
+    /// page's in-place console were three copies of "the console showing", and a frame is dropped
+    /// here whether it was the top one or buried under a later push.
+    public mutating func removeConsole(_ sessionID: String) {
+        withPath { frames in
+            frames.removeAll {
+                if case .console(let id, _) = $0 { return id == sessionID }
+                return false
+            }
         }
     }
 

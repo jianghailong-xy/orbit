@@ -89,14 +89,10 @@ private struct RootView: View {
     var body: some View {
         if model.signedIn {
             Group {
+                // Either shell drives the same navigation state: one section's `NavigationStack`
+                // bound to its stack here, or a three-column split whose column selection is a
+                // projection of that same stack. Neither has to tell the model which one it is.
                 if hSize == .compact { CompactShell() } else { MainView() }
-            }
-            // Which shell is up is a fact the model needs: only the compact one renders a single
-            // section's stack and tears it down on a switch, so only there may a section's pushes be
-            // dropped behind it (`AppModel.selectedSection`). Mirrored on every width change — an iPad
-            // split into a compact column becomes the drawer shell too.
-            .onChange(of: hSize, initial: true) { _, size in
-                model.usesCompactShell = size == .compact
             }
             // Register for "needs your reply" pushes once signed in (idempotent).
             .task { model.enablePush() }

@@ -91,6 +91,61 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.focusedConsoleSessionID, "s2")
     }
 
+    /// The draft's page becomes the console's page. Both shells render the frame on the stack, so the
+    /// composer a session was created from is *replaced* — one frame, no pop and no push — which is
+    /// what the compact shell's local `@State` copy of the created session used to do by hand while a
+    /// second mechanism pushed the split's detail over it.
+    func testADraftIsReplacedInPlaceByTheConsoleItCreated() {
+        var nav = NavState(section: .agents)
+        nav.push(.compose(agentID: "a1"))
+        XCTAssertNil(nav.focusedConsoleSessionID, "a draft streams nothing")
+        XCTAssertFalse(nav.sectionAtRoot)
+
+        nav.replaceTop(with: .console(sessionID: "s1", origin: .list))
+
+        XCTAssertEqual(nav.path.count, 1, "the page you were on is the page you stay on")
+        XCTAssertEqual(nav.focusedConsoleSessionID, "s1", "and it streams now")
+        XCTAssertEqual(nav.highlightedSessionID, "s1")
+        XCTAssertFalse(nav.consoleFromRecents, "a console you created is not one you came back to")
+    }
+
+    /// A session that is completed / trashed / purged takes its console off the stack — wherever on
+    /// the stack it is. This is the one edit that replaced three hand-cleared fields (the selection,
+    /// the Recents marker, and the compose page's in-place console), each of which named the same
+    /// session in a different place.
+    func testASessionThatGoesAwayTakesItsConsoleOffTheStack() {
+        var nav = NavState(section: .agents)
+        nav.push(.console(sessionID: "s1", origin: .list))
+        nav.push(.console(sessionID: "s2", origin: .list))
+
+        nav.removeConsole("s1")
+
+        XCTAssertEqual(nav.path, [.console(sessionID: "s2", origin: .list)],
+                       "a buried console goes without disturbing what is on top")
+
+        nav.removeConsole("s2")
+        XCTAssertTrue(nav.sectionAtRoot, "and the list is back")
+        XCTAssertNil(nav.highlightedSessionID)
+        XCTAssertNil(nav.focusedConsoleSessionID)
+        XCTAssertEqual(nav, NavState(section: .agents), "nothing left behind")
+    }
+
+    /// The stack is a *binding*: a `NavigationStack(path:)` writes back into it — the back button,
+    /// the edge swipe, a row's own link. What it writes back for a popped root is an empty array, so
+    /// that has to normalize to "no stack" like every other transition, or two states showing the
+    /// same screens stop comparing equal (and the key sits there empty forever).
+    func testWhatTheShellWritesBackIntoAnEmptiedPathLeavesNothingBehind() {
+        var nav = NavState(section: .agents)
+        nav.path = [.console(sessionID: "s1", origin: .list)]
+        XCTAssertEqual(nav.stacks[.agents], [.console(sessionID: "s1", origin: .list)])
+
+        nav.path = []
+
+        XCTAssertNil(nav.stacks[.agents], "an emptied stack drops its key")
+        XCTAssertEqual(nav, NavState(section: .agents))
+        XCTAssertTrue(nav.sectionAtRoot)
+    }
+
     /// The needs-you banner excludes "the console you can already see" and the SSE focus streams it.
     /// Both read this, so on a list page — where no console is on screen — it has to be nil, or the
     /// banner silently drops a session that is waiting for you and its stream outlives its console.

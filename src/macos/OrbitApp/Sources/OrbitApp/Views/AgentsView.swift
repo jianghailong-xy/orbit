@@ -180,10 +180,25 @@ struct AgentRowView: View {
     }
 }
 
+/// How this list's rows navigate — a fact about the container the list is in, not about the rows
+/// (they are the same rows in both shells; see `AgentPanes.sessionRow`).
+enum SessionRowNavigation {
+    /// Three-column (macOS / iPad regular): `.tag(id)`, and the `List`'s selection — a projection of
+    /// the section's stack — fills the detail pane that is always on screen.
+    case selection
+    /// Compact (iPhone): `NavigationLink(value:)`, so each row carries its own destination and
+    /// pushes it. A plain `List` in a `NavigationStack` doesn't take selection taps at all in
+    /// non-edit mode, so a `.tag`-only row there is a row that cannot be opened.
+    case push
+}
+
 /// Content (middle) column for the Agents section: the selected agent's sessions, with a toolbar
 /// gear to edit the agent. Selecting a session drives the console in the detail column.
 struct AgentContentColumn: View {
     @Environment(AppModel.self) private var app
+    /// How this column's rows navigate. Defaults to the three-column shape, which is what the
+    /// split shells want; the compact shell (whose stack knows its own pushes) passes `.push`.
+    var rowNavigation: SessionRowNavigation = .selection
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -206,7 +221,7 @@ struct AgentContentColumn: View {
         Group {
             if let agents = app.agents, let id = app.selectedAgentID, let a = agents.agent(id) {
                 AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID,
-                           searchQuery: $searchQuery)
+                           searchQuery: $searchQuery, rowNavigation: rowNavigation)
                     .id(a.id)
                     .navigationTitle(a.name)
                     #if os(iOS)
@@ -267,6 +282,9 @@ struct AgentPanes: View {
     /// The search field's text. The field itself lives on `AgentContentColumn` (which is why this is
     /// a binding and not local state — see the comment on that column's `body`).
     @Binding var searchQuery: String
+    /// How the rows navigate — see `SessionRowNavigation`. Passed down from the column, which got it
+    /// from the shell that put this list in a container.
+    let rowNavigation: SessionRowNavigation
     @State private var view: SessionView = .open
     @State private var showSettings = false
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
@@ -294,7 +312,11 @@ struct AgentPanes: View {
         // Option B: the column is just the session list. The scope switcher and New-session action
         // live in the window toolbar (below) — like Finder/Mail hosting view controls in the toolbar
         // rather than stacking chrome bands above the list.
-        List(selection: $selectedSessionID) {
+        //
+        // The selection is for the three-column shape only: it is what fills the detail pane beside
+        // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
+        // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
+        List(selection: listSelection) {
             #if os(iOS)
             // ChatGPT-style recency sections (Pinned / Today / Yesterday / Previous 7 Days / …) — a
             // deliberate divergence from web's flat list, grouping the tall iOS session column by
@@ -355,10 +377,6 @@ struct AgentPanes: View {
                     agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
                     systemImage: "bubble.left.and.bubble.right")
             }
-        }
-        // Picking a session leaves the compose state (the console takes over the detail pane).
-        .onChange(of: selectedSessionID) { _, new in
-            if new != nil { app.composingAgentSession = false }
         }
         #if os(iOS)
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
@@ -461,6 +479,13 @@ struct AgentPanes: View {
         }
         // Load the owner's tag library when the pane appears so the picker + chips are populated.
         .task { await app.loadSessionTags() }
+    }
+
+    /// What the List's selection is bound to: the projection onto the section's stack in the
+    /// three-column shape, nothing at all in the compact one (whose rows carry their own
+    /// destinations). Written as its own property so its type is decided here, not at the call site.
+    private var listSelection: Binding<String?>? {
+        rowNavigation == .selection ? $selectedSessionID : nil
     }
 
     #if os(iOS)
@@ -593,30 +618,24 @@ struct AgentPanes: View {
     }
     #endif
 
+    /// One row, wrapped for the container it is in. The row view itself is the same either way; what
+    /// changes is who moves the screen — the three-column shell's `List` selection, or the row's own
+    /// destination value on the compact stack. There is no third state for "highlighted but not
+    /// openable" to live in: the highlight IS the pushed console in both shapes, so a tap always
+    /// either selects a row that isn't the page showing or pushes the one that is.
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
-        AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open).tag(s.id)
+        let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
             .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
-            // The backstop for a highlighted row that won't open. On the iPhone shell this selection
-            // also pushes the console, so a selection that outlived its stack draws the row selected
-            // with nothing pushed — and the List's own tap then writes the id the binding already
-            // holds, which SwiftUI reads as no change and ignores. Attached ONLY to the row that is
-            // already selected (elsewhere the mask leaves the gesture off), so it can't race the
-            // List's write for any other row, and on the row it does cover, that write is the no-op
-            // it replaces. Never on the regular-width shells: their detail pane shows the selection
-            // without a push, so re-tapping the selected row is meant to do nothing there.
-            .simultaneousGesture(TapGesture().onEnded { _ in reopenSelectedRow(s.id) },
-                                 including: rearmsTap(on: s.id) ? .all : .subviews)
-    }
-
-    private func rearmsTap(on id: String) -> Bool { app.usesCompactShell && selectedSessionID == id }
-
-    /// Re-arm the selection the compact shell pushes the console off: clear it, then set the same id
-    /// back a runloop turn later. The turn matters — SwiftUI has to *see* the cleared selection for
-    /// the re-selection to read as a change worth pushing; both writes in one pass coalesce back into
-    /// the id it already held, which is the no-op this exists to break.
-    private func reopenSelectedRow(_ id: String) {
-        selectedSessionID = nil
-        DispatchQueue.main.async { selectedSessionID = id }
+        switch rowNavigation {
+        case .selection:
+            row.tag(s.id)
+        case .push:
+            // `.foregroundStyle(.primary)`: a link's label otherwise inherits the accent tint, and
+            // the rows are unchanged by design (only the wrapper is new).
+            NavigationLink(value: NavNode.console(sessionID: s.id, origin: .list)) {
+                row.foregroundStyle(.primary)
+            }
+        }
     }
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {

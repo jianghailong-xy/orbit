@@ -245,26 +245,31 @@ private struct CompactSections: View {
         // AGENTS — the agent is picked in the drawer, so the section root is that agent's *sessions*
         // (no intermediate agent-list page); selecting one pushes its console. Backing out of the
         // console lands on the session list, where the left-edge swipe reopens the drawer.
+        //
+        // The path here IS the section's stack (`NavState` keeps one per section), so every
+        // navigation — a row's own value link, the back button, the edge swipe — is a write to the
+        // one state that also draws the row and names the streaming session. That is what replaced
+        // the collapsed split's flat selection: two navigation mechanisms on one private stack, and
+        // the highlight that could outlive the push and leave a row that would not open.
         case .agents:
-            NavigationSplitView {
-                AgentContentColumn()
+            NavigationStack(path: $model.nav.path) {
+                AgentContentColumn(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
-                    // New session is *pushed* full-screen over the sessions list (not a bottom sheet):
-                    // it leads into the session rather than back to a list, so a push reads more
-                    // naturally and flows straight into the console once the first message is sent
-                    // (the completion below arms `selectedAgentSessionID`, which the collapsed split
-                    // pushes as the detail — the same path the console already takes). Attached to the
-                    // content column so it rides that column's stack; compact-only since this whole
-                    // shell is (iPad keeps `AgentConsoleDetail`'s inline draft).
-                    .navigationDestination(isPresented: $model.composingAgentSession) {
-                        AgentComposePush()
+                    // New session is a page of its own (not a bottom sheet): it leads into the
+                    // session rather than back to a list, so a push reads more naturally and flows
+                    // straight into the console once the first message is sent. One destination per
+                    // frame type — the draft and a console are two frames of the same stack, which is
+                    // why creating a session swaps the page you are on rather than pushing a second
+                    // mechanism's page over it. (The iPad/macOS shells render the same two values
+                    // inline in the detail pane: `AgentConsoleDetail`.)
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .compose(let agentID):      AgentComposePage(agentID: agentID)
+                        case .console(let sessionID, _): AgentConsolePage(sessionID: sessionID)
+                        // The other sections' pages ride their own stacks, not this one.
+                        default:                         EmptyView()
+                        }
                     }
-            } detail: {
-                AgentConsoleDetail()
-                    // A Recents-opened console frees the left edge for the drawer-open swipe: turn off
-                    // the system back-swipe here (the nav-bar back button still returns to the list) so
-                    // the two gestures don't fight on the same edge. Scoped to this compact shell.
-                    .background { SwipeBackGestureToggle(enabled: !model.consoleFromRecents) }
             }
 
         // RUNNERS — runner list → detail
@@ -922,59 +927,62 @@ private extension View {
     }
 }
 
-/// The new-session draft composer, pushed full-screen onto the compact Agents stack. The regular-width
-/// shell renders this same `NewSessionView` inline in the Agents detail pane; the collapsed compact
-/// split can't reach that pane from a boolean, so we push it as its own page here. The system back
-/// button abandons the draft (clearing the `isPresented` binding).
+/// The new-session draft composer, pushed onto the compact Agents stack — the `.compose` frame. The
+/// regular-width shell renders this same `NewSessionView` inline in its Agents detail pane, off the
+/// same frame value; only the container differs. The system back button abandons the draft (a pop
+/// SwiftUI writes back into the path).
 ///
-/// Once the draft creates a session this page swaps the composer for that session's live console **in
-/// place** — it does *not* pop itself and push the detail column. Driving the console off
-/// `selectedAgentSessionID` (the split's detail push) while simultaneously clearing
-/// `composingAgentSession` (this page's `isPresented` push) meant two navigation mechanisms racing on
-/// the one collapsed stack: after enough push/pop churn (opening then closing ~10+ sessions) the
-/// detail intermittently landed with a nil selection, i.e. the "Select a session" empty state. Keeping
-/// the whole transition on this single page removes the race — there's nothing to pop, and the console
-/// never depends on the list selection. The created session is still registered into the agent list so
-/// it's there (selected on tap) once the user backs out to it.
-private struct AgentComposePush: View {
+/// Once the draft creates a session, `AppModel.openCreatedAgentSession` replaces this frame with that
+/// session's console: the page you are on *becomes* the console, with nothing to pop and no local
+/// copy of the created session to keep in step. That is the whole transition now — where it used to
+/// be one page hosting the console in local `@State` while a second mechanism pushed the split's
+/// detail, and the two raced on the one collapsed stack after enough push/pop churn (~10+ sessions:
+/// the detail intermittently landed on the "Select a session" empty state). The created session is
+/// still registered into the agent list, so it is there (and selectable) once you back out to it.
+private struct AgentComposePage: View {
     @Environment(AppModel.self) private var model
-    /// Non-nil once the draft creates a session: the page renders its console instead of the composer.
-    @State private var created: Session?
+    /// The agent this draft is composing for — carried by the frame showing it, so the page renders
+    /// what the stack says rather than reading a second selection that could have moved on.
+    let agentID: String
 
     var body: some View {
-        Group {
-            if let registry = model.consoleRegistry, let agents = model.agents,
-               let id = model.selectedAgentID, let agent = agents.agent(id) {
-                if let created {
-                    ConsoleView(sessionID: created.id, agentID: id, registry: registry)
-                } else {
-                    NewSessionView(agent: agent, registry: registry,
-                                   defaultModel: agents.effectiveDefaultModel(for: agent),
-                                   configuredProviders: agents.configuredProviders,
-                                   configuredProvidersLoaded: agents.configuredProvidersLoaded,
-                                   modelCatalog: agents.modelCatalog(for: agent.runnerId),
-                                   defaultEffort: model.user?.preferences?.defaultEffort) { session in
-                        model.registerCreatedAgentSession(session)
-                        created = session
-                        // Mark it the focused console so the shell starts its SSE stream — the
-                        // page keeps `composingAgentSession` true, under which the normal focus
-                        // rule streams nothing.
-                        model.composedConsoleSessionID = session.id
-                    }
-                    .navigationTitle(agent.name)
-                    // Rebuild for in-place Agent execution-default changes as well as switching.
-                    .id(newSessionDraftIdentity(agent))
-                }
-            } else {
-                ContentUnavailableView("Select a workspace", systemImage: "folder")
+        if let registry = model.consoleRegistry, let agents = model.agents,
+           let agent = agents.agent(agentID) {
+            NewSessionView(agent: agent, registry: registry,
+                           defaultModel: agents.effectiveDefaultModel(for: agent),
+                           configuredProviders: agents.configuredProviders,
+                           configuredProvidersLoaded: agents.configuredProvidersLoaded,
+                           modelCatalog: agents.modelCatalog(for: agent.runnerId),
+                           defaultEffort: model.user?.preferences?.defaultEffort) { session in
+                model.openCreatedAgentSession(session)
             }
+            .navigationTitle(agent.name)
+            // Rebuild for in-place Agent execution-default changes as well as switching.
+            .id(newSessionDraftIdentity(agent))
+            .navigationBarTitleDisplayMode(.inline)
+        } else {
+            ContentUnavailableView("Select a workspace", systemImage: "folder")
+                .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationBarTitleDisplayMode(.inline)
-        // Leaving the page (system back, or the section/agent changing out from under it) ends the
-        // compose console: drop the focus override so its stream stops and focus falls back to the
-        // list. Guarded so a stale disappear can't clear a newer compose.
-        .onDisappear {
-            if model.composedConsoleSessionID == created?.id { model.composedConsoleSessionID = nil }
+    }
+}
+
+/// A session's console, pushed onto the compact Agents stack — the `.console` frame, reached from a
+/// list row, a Recents row, the needs-you banner or a deep link. The same `ConsoleView` the
+/// three-column detail pane shows for the same frame; what the frame carries is where it came from,
+/// which is what the edge does here: a Recents-opened console hands the left screen edge to the
+/// drawer-open swipe (you came from the drawer, so the edge returns you there) and turns the system
+/// back-swipe off, while every other console keeps the edge to swipe back to the list.
+private struct AgentConsolePage: View {
+    @Environment(AppModel.self) private var model
+    let sessionID: String
+
+    var body: some View {
+        if let registry = model.consoleRegistry {
+            ConsoleView(sessionID: sessionID,
+                        agentID: model.agentID(for: sessionID) ?? model.selectedAgentID,
+                        registry: registry)
+                .background { SwipeBackGestureToggle(enabled: !model.consoleFromRecents) }
         }
     }
 }
