@@ -231,9 +231,12 @@ struct ToolApprovalCard: View {
                 OrbitAskBody(impact: [],
                              note: create.prose,
                              detail: create.criteria.isEmpty ? "" : "Done when",
-                             rows: create.criteria,
+                             // The same Markdown web assembles: a project's stated criteria become
+                             // a list, a task's are already one Markdown block.
+                             rows: create.isProject ? create.criteria.map { "- \($0)" } : create.criteria,
                              more: 0,
-                             mono: false)
+                             mono: false,
+                             markdown: true)
             } else {
                 ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                                tone: .orange, badge: approval.toolName ?? "Tool")
@@ -300,11 +303,21 @@ private struct OrbitAskBody: View {
     let more: Int
     /// Tree rows are drawn with box glyphs, which only line up in a monospaced face.
     var mono: Bool = false
+    /// The note and rows are the agent's own prose — a create's description and its acceptance
+    /// criteria, written as Markdown — so they render as Markdown, the way web draws both with its
+    /// Markdown component. The batch and DAG slots are sentences this app generates itself and stay
+    /// literal (web draws the DAG note as a plain paragraph too).
+    var markdown: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !note.isEmpty {
-                Text(note).font(.orbitProse).frame(maxWidth: .infinity, alignment: .leading)
+                if markdown {
+                    MarkdownView(source: note).font(.orbitProse)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text(note).font(.orbitProse).frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             ForEach(impact, id: \.self) { line in
                 Text(line)
@@ -315,10 +328,22 @@ private struct OrbitAskBody: View {
             if !detail.isEmpty {
                 Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
             }
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                Text(mono ? row : "• \(row)")
-                    .font(mono ? .orbitMono : .orbitLabel).foregroundStyle(.secondary)
+            if markdown, !rows.isEmpty {
+                // The criteria are one Markdown document, not a row each: a task's acceptance
+                // criteria arrive verbatim and a project's stated criteria as a list, which is the
+                // same string web hands its Markdown component — so a multi-line criterion reads as
+                // its own list instead of as one bullet holding its raw markup. A `- [ ]` item
+                // renders as a plain bullet: the block parser keeps the text and drops the
+                // checkbox, where web's remark-gfm draws a real one.
+                MarkdownView(source: rows.joined(separator: "\n"), base: .aside, ink: .secondary)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    Text(mono ? row : "• \(row)")
+                        .font(mono ? .orbitMono : .orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             if more > 0 {
                 Text("+\(more) more").font(.orbitLabel).foregroundStyle(.secondary)
