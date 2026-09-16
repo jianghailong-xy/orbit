@@ -59,6 +59,12 @@ struct WatchingCardStack: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                // Where that one target stands, so the folded line answers "is it even running"
+                // without being opened. Only when the line names one target: several of them have
+                // no one status, and the count beside it is what the line says instead.
+                if let target = summary.lineTarget, let pill = targetPill(target, model: model) {
+                    TaskStatusPill(pill: pill)
+                }
                 if let time = summary.lineTime(now: now) {
                     Text(time)
                         .font(.orbitMeta)
@@ -114,6 +120,17 @@ private func targetName(_ target: WatchTarget, model: AppModel) -> String? {
     case .task: return model.tasks?.item(target.targetResourceId)?.title
     case .unknown: return nil
     }
+}
+
+/// Where a target itself stands, as the task list says it (`TaskListLogic.pill`) — one task reads
+/// the same word and colour wherever it is shown, and the browser's strip says it in the same place
+/// (`WatchTargetLink`'s status chip). Nothing for a task this model has not listed, and nothing for
+/// a session: the strip names what it holds rather than guessing at it.
+@MainActor
+private func targetPill(_ target: WatchTarget, model: AppModel) -> TaskPill? {
+    guard target.targetKind == .task,
+          let task = model.tasks?.item(target.targetResourceId) else { return nil }
+    return TaskListLogic.pill(task)
 }
 
 /// One watch's facts in the opened strip, read-only: Until / Progress / Watching / Then / Expires,
@@ -188,13 +205,20 @@ private struct WatchingCard: View {
         let title = WatchProjection.targetTitle(kind: target.targetKind,
                                                 id: target.targetResourceId,
                                                 name: targetName(target, model: model))
-        if let destination = route(for: target) {
-            Button { model.route(to: destination) } label: {
-                Text(title).font(.orbitMeta).foregroundStyle(.tint).lineLimit(1)
+        HStack(spacing: 6) {
+            if let destination = route(for: target) {
+                Button { model.route(to: destination) } label: {
+                    Text(title).font(.orbitMeta).foregroundStyle(.tint).lineLimit(1)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(title).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
             }
-            .buttonStyle(.plain)
-        } else {
-            Text(title).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+            // One word per target, and it is the task's own. What the evaluator last recorded about
+            // it is not said per row: the Progress row above counts what has been met.
+            if let pill = targetPill(target, model: model) {
+                TaskStatusPill(pill: pill)
+            }
         }
     }
 

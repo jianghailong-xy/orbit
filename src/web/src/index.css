@@ -12255,6 +12255,44 @@ button.composer-usage:focus-visible {
 .watch-target.is-satisfied .watch-target-state {
   color: var(--success);
 }
+/* Where a target says where it itself stands, in the strip: the task list's own chip, so one task
+   reads the same word and colour wherever it is shown (`taskOutcomeChip`). Sized between the kind
+   tag beside it and the badge on a task's own page. */
+.watch-target-status {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  white-space: nowrap;
+}
+.watch-target-status.tone-blue {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.watch-target-status.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-solid);
+}
+.watch-target-status.tone-red {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-solid);
+}
+.watch-target-status.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.watch-target-status.tone-muted {
+  border-color: var(--bg-hover-strong);
+  background: var(--bg-hover);
+  color: var(--text-3);
+}
 .watch-target.is-gone .watch-target-name {
   color: var(--text-3);
   text-decoration: line-through;

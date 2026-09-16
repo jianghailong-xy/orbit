@@ -615,7 +615,7 @@ export const taskRowQuery = (taskId: string) =>
   queryOptions({
     queryKey: ['task-row', taskId] as const,
     queryFn: () =>
-      api<{ id: string; title?: string; status?: string }>(
+      api<{ id: string; title?: string; status?: string; terminalReason?: string | null }>(
         `/tasks/${encodeURIComponent(taskId)}/row`,
       ),
     staleTime: 5 * 60_000,

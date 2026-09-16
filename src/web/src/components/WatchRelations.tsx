@@ -223,7 +223,13 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const live = waitingOn.flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'));
   const targets = live.map((t) => `${t.targetKind}:${t.targetResourceId}`);
   const single = waitingOn.length === 1 && new Set(targets).size === 1 ? live[0] : null;
-  const { name: singleName } = useTargetName(single?.targetKind ?? null, single?.targetResourceId ?? null);
+  // The same read the line's name comes from, so the status beside it costs no second request. It
+  // is only there for a lone target: several of them have no one status, and asking for all of
+  // their rows to say so would be a read per target on a line that is folded shut.
+  const { name: singleName, chip: singleStatus } = useTargetName(
+    single?.targetKind ?? null,
+    single?.targetResourceId ?? null,
+  );
   if (waitingOn.length === 0) return null;
   const deadline = Math.min(...waitingOn.map((w) => Date.parse(w.expiresAt)));
   const left = Number.isFinite(deadline) ? deadline - now : NaN;
@@ -251,6 +257,9 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
         <EyeOutlined className="watch-strip-ico" />
         <span className="watch-strip-title">{STRIP_LABEL}</span>
         <span className="watch-strip-target">{targetLine}</span>
+        {singleStatus && (
+          <span className={`watch-target-status tone-${singleStatus.tone}`}>{singleStatus.label}</span>
+        )}
         {time && (
           <span className="watch-strip-time">
             {waitingOn.length === 1 ? '' : STRIP_EARLIEST}
@@ -305,9 +314,12 @@ function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: num
             key={`${t.targetKind}:${t.targetResourceId}`}
             kind={t.targetKind}
             id={t.targetResourceId}
-            // Only the satisfied ones are worded: a word on every unmet target is the Progress row
-            // read out one row per target, which says nothing while they are all the same.
+            // Each target says where it itself stands, which is what the reader came for. `met` is
+            // not repeated per target: the Progress row above counts them, and the satisfied ones
+            // are sorted first, so the order says which they are. Kept for a session target, which
+            // has no status chip of its own.
             state={t.state === 'SATISFIED' ? t.state : undefined}
+            showsStatus
           />
         ))}
         {hidden > 0 && (

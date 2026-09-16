@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { sessionQuery, taskRowQuery } from '../lib/queries';
+import { taskOutcomeChip, type OutcomeChip } from '../lib/taskOutcome';
 import { linkId, targetHref, watchStateCopy } from '../lib/watches';
 
 /** A clock for the relative times on a watch ("checked 12s ago") that keeps them moving on screen. */
@@ -29,7 +30,7 @@ export function WatchStatePill({ state }: { state: string }) {
 export function useTargetName(
   kind: string | null,
   id: string | null,
-): { name: string | null; status: string | null; missing: boolean } {
+): { name: string | null; status: string | null; chip: OutcomeChip | null; missing: boolean } {
   const session = useQuery({
     ...sessionQuery(kind === 'SESSION' ? id : null),
     retry: false,
@@ -40,10 +41,18 @@ export function useTargetName(
     return {
       name: session.data?.title ?? null,
       status: session.data?.runState ?? session.data?.status ?? null,
+      chip: null,
       missing: session.isError,
     };
   }
-  return { name: task.data?.title ?? null, status: task.data?.status ?? null, missing: task.isError };
+  return {
+    name: task.data?.title ?? null,
+    status: task.data?.status ?? null,
+    // The list row's own chip, so one task reads the same word and colour wherever it is shown.
+    // `terminalReason` rides along in the same row, so a replaced attempt says Superseded here too.
+    chip: task.data?.status ? taskOutcomeChip(task.data) : null,
+    missing: task.isError,
+  };
 }
 
 const TARGET_NOUN: Record<string, string> = { SESSION: 'Session', TASK: 'Task' };
@@ -53,11 +62,30 @@ const TARGET_STATE_WORD: Record<string, string> = {
   GONE: 'deleted',
 };
 
-/** One target by name, linked to its own page, with what the watch last recorded about it. */
-export function WatchTargetLink({ kind, id, state }: { kind: string; id: string; state?: string }) {
-  const { name, missing } = useTargetName(kind, id);
+/**
+ * One target by name, linked to its own page, with one word after it.
+ *
+ * Which word, when `showsStatus` is set: the target's own status rather than what the watch last
+ * recorded about it. Two words would need a rule — `met` is the watch's verdict and `Done` is the
+ * task's state, and a reader asked to hold both has to be told which governs — so the row carries
+ * the one a reader came for and `met` is said once, in the Progress row above. A session target
+ * has no chip and keeps the recorded word.
+ */
+export function WatchTargetLink({
+  kind,
+  id,
+  state,
+  showsStatus = false,
+}: {
+  kind: string;
+  id: string;
+  state?: string;
+  showsStatus?: boolean;
+}) {
+  const { name, chip, missing } = useTargetName(kind, id);
   const noun = TARGET_NOUN[kind] ?? kind;
   const shown = linkId(id);
+  const status = showsStatus ? chip : null;
   return (
     <Link
       className={`watch-target${state ? ` is-${state.toLowerCase()}` : ''}`}
@@ -68,8 +96,12 @@ export function WatchTargetLink({ kind, id, state }: { kind: string; id: string;
       <span className="watch-target-name">
         {name ?? (missing ? `Deleted ${noun.toLowerCase()}` : `${shown.slice(0, 8)}…`)}
       </span>
-      {state && (
-        <span className="watch-target-state">{TARGET_STATE_WORD[state] ?? state.toLowerCase()}</span>
+      {status ? (
+        <span className={`watch-target-status tone-${status.tone}`}>{status.label}</span>
+      ) : (
+        state && (
+          <span className="watch-target-state">{TARGET_STATE_WORD[state] ?? state.toLowerCase()}</span>
+        )
       )}
     </Link>
   );
