@@ -245,6 +245,31 @@ final class WatchProjectionTests: XCTestCase {
                                 endDeliveries: [F.end("REVOKED", delivery: F.delivery("DEAD_LETTER"))])
         XCTAssertEqual(WatchProjection.attention(for: endFailed, now: now), [.deliveryFailed(nil), .revoked])
         XCTAssertEqual(WatchAttention.deliveryFailed(nil).text, "Delivery failed")
+        // Nobody waits on a notify watch, so its expiry is delivered to no one: this line is all that says it ran out.
+        let ranOut = F.watch(state: "EXPIRED", action: "NOTIFY_USER")
+        XCTAssertEqual(WatchProjection.attention(for: ranOut, now: now), [.expiredUnheard])
+        XCTAssertEqual(WatchAttention.expiredUnheard.text,
+                       "Expired before its condition held: no notification was sent")
+        // A resume watch's expiry reaches the session that was waiting, so it is history, not a thing to act on.
+        XCTAssertEqual(WatchProjection.attention(for: F.watch(state: "EXPIRED", action: "RESUME_SESSION"), now: now), [])
+    }
+
+    /// Every ended watch is filed by the contract's `attention` rule, which `WatchAttentionRule` transcribes and
+    /// `GET /watches?needsAttention=true` picks by (`WatchContractTests` holds the transcription to the file).
+    /// The app reads that route beside the newest list, so a watch it hands back and this filed under History
+    /// would be one fetched on purpose and then put where nobody looks — which is how the expiry of a notify
+    /// watch went missing. The web pins the same table in `src/web/src/lib/watches.test.ts`.
+    func testEveryEndedWatchIsFiledWhereTheContractSaysItBelongs() {
+        for state in WatchStateMachine.terminal {
+            for action in WatchAction.allCases where action != .unknown {
+                let needed = WatchAttentionRule.states.contains(state)
+                    || (state == .expired && WatchAttentionRule.expiredActions.contains(action))
+                let watch = F.watch(state: state.rawValue, action: action.rawValue)
+                XCTAssertEqual(WatchProjection.group(of: watch, now: now),
+                               needed ? .needsAttention : .history,
+                               "\(state.rawValue) \(action.rawValue)")
+            }
+        }
     }
 
     func testSectionsPutAttentionFirstThenLiveThenHistoryInArrivalOrder() {

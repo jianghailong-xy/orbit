@@ -174,6 +174,24 @@ final class WatchContractTests: XCTestCase {
         XCTAssertEqual(quiet, WatchDeadLetter.quietCodes)
     }
 
+    /// The other two ways into Needs attention, beside a dead letter: the contract's `attention.states` and
+    /// `attention.expiredActions`, which `GET /watches?needsAttention=true` picks by and shared transcribes for
+    /// the web. A state or an action added there and not here would leave this app holding a watch the server
+    /// hands it under that read and filing it away in History.
+    func testTheEndsThatNeedAttentionMatchTheContract() throws {
+        let attention = try object(contract()["attention"], "attention")
+        XCTAssertEqual(Set(try strings(attention["states"], "attention.states")),
+                       Set(WatchAttentionRule.states.map(\.rawValue)))
+        XCTAssertEqual(Set(try strings(attention["expiredActions"], "attention.expiredActions")),
+                       Set(WatchAttentionRule.expiredActions.map(\.rawValue)))
+        // Filed by its state only once it has ended: a live watch is read whole by its own state instead.
+        let terminal = Set(try strings(try object(try object(contract()["states"], "states")["watch"],
+                                                  "states.watch")["terminal"], "states.watch.terminal"))
+        for state in WatchAttentionRule.states {
+            XCTAssertTrue(terminal.contains(state.rawValue), "\(state.rawValue) is terminal")
+        }
+    }
+
     // MARK: limits
 
     func testLimitsMatchTheContract() throws {

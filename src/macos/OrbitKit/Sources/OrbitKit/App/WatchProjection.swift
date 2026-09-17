@@ -61,6 +61,8 @@ public enum WatchAttention: Equatable, Sendable {
     case revoked
     /// Every target was deleted, so the condition can never be decided.
     case unresolvable
+    /// It ran out with nobody told: no session waits on a NOTIFY_USER watch, so no end of it is delivered.
+    case expiredUnheard
     /// ACTIVE, but evaluation isn't keeping up.
     case stale
 
@@ -75,6 +77,8 @@ public enum WatchAttention: Equatable, Sendable {
             return "Stopped: access to its targets was revoked"
         case .unresolvable:
             return "Stopped: every target was deleted"
+        case .expiredUnheard:
+            return "Expired before its condition held: no notification was sent"
         case .stale:
             return "Not evaluated recently"
         }
@@ -109,6 +113,10 @@ public enum WatchProjection {
         watch.matches.flatMap(\.deliveries) + watch.expiryDeliveries.map(\.delivery)
     }
 
+    /// Why this watch is somebody's to look at, in the order the card says it. An ended watch is filed by the
+    /// contract's `attention` rule (`WatchAttentionRule`, `WatchDeadLetter.needsAttention`) — the same rule
+    /// `GET /watches?needsAttention=true` reads by, so a watch the server hands back under that read is one this
+    /// puts under Needs attention. `.stale` is this client's own reading of a watch that is still live.
     public static func attention(for watch: Watch, now: Date = Date()) -> [WatchAttention] {
         let all = deliveries(of: watch)
         var reasons: [WatchAttention] = []
@@ -120,6 +128,9 @@ public enum WatchProjection {
         }
         if watch.state == .revoked { reasons.append(.revoked) }
         if watch.state == .unresolvable { reasons.append(.unresolvable) }
+        if watch.state == .expired, WatchAttentionRule.expiredActions.contains(watch.action) {
+            reasons.append(.expiredUnheard)
+        }
         if WatchFreshness.of(watch, now: now) == .stale { reasons.append(.stale) }
         return reasons
     }

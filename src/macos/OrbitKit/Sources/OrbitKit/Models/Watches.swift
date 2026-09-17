@@ -302,6 +302,21 @@ public enum WatchDeadLetter {
     }
 }
 
+/// The ends a watch needs attention for by its state alone, transcribed from the contract's `attention` (§3) —
+/// the same two lists `@orbit/shared` transcribes for the web, and the same ones
+/// `GET /watches?needsAttention=true` picks by. `WatchContractTests` holds both to the contract file, so the
+/// server, the browser and this app file one watch the same way. A dead letter is the third way in, and
+/// `WatchDeadLetter.needsAttention` answers for it.
+public enum WatchAttentionRule {
+    /// It stopped because it lost a target it could no longer read, or because every target was deleted: either
+    /// way it could not go on watching, and nothing reported on the targets.
+    public static let states: Set<WatchState> = [.revoked, .unresolvable]
+
+    /// The actions whose watch needs attention once it EXPIRED: nobody waits on a NOTIFY_USER watch, so no end
+    /// of it is delivered to anyone and nothing would say it ran out.
+    public static let expiredActions: Set<WatchAction> = [.notifyUser]
+}
+
 /// A Match: the condition held at one moment (contract §1). Immutable — a fact, not a notification.
 public struct WatchMatch: Codable, Equatable, Sendable, Identifiable {
     public let id: String
