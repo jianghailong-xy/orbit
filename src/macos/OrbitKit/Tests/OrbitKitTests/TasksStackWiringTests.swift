@@ -88,13 +88,17 @@ final class TasksStackWiringTests: XCTestCase {
         let selectionBranch = try XCTUnwrap(row.range(of: "case .selection:"))
         let pushBranch = try XCTUnwrap(row.range(of: "case .push:"), "the compact branch")
         let tag = try XCTUnwrap(row.range(of: ".tag(task.id)"), "the three-column row stays tag-driven")
-        let link = try XCTUnwrap(
-            row.range(of: "NavigationLink(value: NavNode.taskDetail(taskID: task.id))"),
+        let pushed = try XCTUnwrap(
+            row.range(of: "Button { model.push(.taskDetail(taskID: task.id)) } label: {"),
             "the compact row carries its destination")
         XCTAssertLessThan(tag.lowerBound, pushBranch.lowerBound,
                           "`.tag` belongs to the selection branch, not the pushing one")
-        XCTAssertLessThan(pushBranch.lowerBound, link.lowerBound,
-                          "and the link belongs to the pushing branch")
+        XCTAssertLessThan(pushBranch.lowerBound, pushed.lowerBound,
+                          "and the push belongs to the pushing branch")
+        XCTAssertFalse(row.contains("NavigationLink"),
+                       "the compact row is not a link: the disclosure indicator a "
+                       + "`NavigationLink(value:)` draws cannot be hidden on iOS 17/18, so the row "
+                       + "pushes its frame through `AppModel.push` instead")
         XCTAssertLessThan(selectionBranch.lowerBound, pushBranch.lowerBound)
         XCTAssertEqual(row.components(separatedBy: "TaskRowView(task: task").count - 1, 1,
                        "the row itself is built once and shared by both branches")
@@ -147,9 +151,9 @@ final class TasksStackWiringTests: XCTestCase {
         XCTAssertTrue(directory.contains("nav.pop()"),
                       "which picking a list closes by popping back onto the list")
 
-        // The one door SwiftUI's own pushes and pops come through: a row's link and the back button
-        // move the stack directly, so the binding's setter is where the store has to follow — the
-        // pushed page reads it the moment it appears.
+        // The one door SwiftUI's own pushes and pops come through: the back button and the edge
+        // swipe move the stack directly, so the binding's setter is where the store has to follow —
+        // the pushed page reads it the moment it appears.
         let stack = code(try slice(app, from: "var taskStack: [NavNode] {",
                                    to: "/// Follow the stack's task page into the model"))
         XCTAssertTrue(stack.contains("nav.path = newValue"),
@@ -159,6 +163,15 @@ final class TasksStackWiringTests: XCTestCase {
         let sync = code(try slice(app, from: "private func syncTaskDetailStore() {", to: "\n    }"))
         XCTAssertTrue(sync.contains("tasks?.setSelectedDetailID(selectedTaskID)"),
                       "the detail store's single slot mirrors the stack, nothing else")
+
+        // A row pushes by hand now (`AppModel.push`) rather than through the binding, so that door
+        // has to follow the store too — and only for this stack: the store is read off the stack on
+        // screen, so syncing under another section would name nil and strand this one's page.
+        let push = code(try slice(app, from: "func push(_ node: NavNode) {", to: "\n    }"))
+        XCTAssertTrue(push.contains("nav.push(node)"),
+                      "a compact row's tap is a stack transition like any other")
+        XCTAssertTrue(push.contains("if nav.section == .tasks { syncTaskDetailStore() }"),
+                      "and the task page it puts up names itself in the store as it lands")
 
         let root = code(try slice(app, from: "var sectionAtRoot: Bool {",
                                   to: "/// ⌘D: complete the open"))

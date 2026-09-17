@@ -49,16 +49,19 @@ if [ -n "$boolean_pushes" ]; then
 
   Why this is blocked: on iOS a \`List(selection:)\` only answers a click inside a
   NavigationSplitView sidebar/content — a plain NavigationStack list does not — so the compact
-  shell pushes rows with \`NavigationLink(value:)\` + \`navigationDestination(for:)\` and the stack
+  shell pushes rows itself, with one \`navigationDestination(for:)\` per stack, and the stack
   itself is the only copy of what is on screen. An \`isPresented\` boolean is a second copy of that,
   kept outside the stack: with two of them on one stack the page landed with a nil selection after
   enough push/pop churn, and a selected row could be drawn highlighted while the tap went nowhere.
 
-  Write instead: push a NavNode through the section's own stack — AppModel's \`nav.push(...)\` /
+  Write instead: push a NavNode through the section's own stack — AppModel's \`push(_:)\` /
   \`nav.replaceTop(...)\` (the section projections), reached via \`route(to:)\` or one of the named
-  entry points (\`openSession\`, \`composeWithAgent\`, \`openWatch\`, …). A row that carries its own
-  destination uses \`NavigationLink(value:)\` with one \`navigationDestination(for: NavNode.self)\`
-  per stack.
+  entry points (\`openSession\`, \`composeWithAgent\`, \`openWatch\`, …). A list row that carries its
+  own destination is a \`Button\` calling \`AppModel.push(_:)\`, with one
+  \`navigationDestination(for: NavNode.self)\` per stack: \`NavigationLink(value:)\` pushes the same
+  frame but also draws the platform's disclosure indicator, which iOS 17/18 gives no usable way to
+  hide. (Settings' form keeps its \`NavigationLink(value:)\` on purpose — a form row beside a
+  hand-drawn chevron, not one of the compact list rows.)
 
   Hits:
 $(printf '%s\n' "$boolean_pushes" | sed 's/^/    /')

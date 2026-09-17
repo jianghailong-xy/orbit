@@ -101,7 +101,11 @@ struct RunnersListView: View {
         case .selection:
             row.tag(r.id)
         case .push:
-            NavigationLink(value: NavNode.runnerDetail(runnerID: r.id)) {
+            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
+            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
+            // a button's label otherwise inherits the accent tint, and the row is unchanged by
+            // design (only the wrapper is new).
+            Button { model.push(.runnerDetail(runnerID: r.id)) } label: {
                 row.foregroundStyle(.primary)
             }
         }
@@ -121,8 +125,11 @@ struct RunnersSettingsList: View {
             if let runners = model.runners {
                 List {
                     ForEach(runners.runners) { r in
-                        NavigationLink(value: NavNode.runnerDetail(runnerID: r.id)) {
-                            RunnerRow(runner: r)
+                        // The same shape as the Runners section's row — a `Button` pushing the frame
+                        // by hand, so the list looks the same in both places (`AppModel.push`).
+                        // `.foregroundStyle(.primary)`: a button's label otherwise inherits tint.
+                        Button { model.push(.runnerDetail(runnerID: r.id)) } label: {
+                            RunnerRow(runner: r).foregroundStyle(.primary)
                         }
                     }
                 }

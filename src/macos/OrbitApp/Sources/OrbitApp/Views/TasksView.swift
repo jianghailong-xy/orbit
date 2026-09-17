@@ -8,9 +8,9 @@ struct TasksListView: View {
     @Environment(AppModel.self) private var model
     /// How this list's rows navigate — the container fact the Agents column already names
     /// (`SessionRowNavigation`): a plain `List` in a `NavigationStack` takes no selection taps at
-    /// all in non-edit mode, so the compact shell's rows carry their own destination values and
-    /// push them, while the three-column shells keep the `List`'s selection. Defaults to the
-    /// selection shape, which is what the split shells want.
+    /// all in non-edit mode, so the compact shell's rows carry their own destinations and push
+    /// them (`AppModel.push`), while the three-column shells keep the `List`'s selection. Defaults
+    /// to the selection shape, which is what the split shells want.
     var rowNavigation: SessionRowNavigation = .selection
     @State private var taskToDelete: TaskItem?
 
@@ -278,9 +278,12 @@ struct TasksListView: View {
         case .selection:
             row.tag(task.id)
         case .push:
-            // `.foregroundStyle(.primary)`: a link's label otherwise inherits the accent tint, and
-            // the row is unchanged by design (only the wrapper is new).
-            NavigationLink(value: NavNode.taskDetail(taskID: task.id)) {
+            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
+            // usable hiding place on iOS 17/18 (see `AppModel.push` — which also keeps the detail
+            // store in step with the page this puts up). `.foregroundStyle(.primary)`: a button's
+            // label otherwise inherits the accent tint, and the row is unchanged by design (only
+            // the wrapper is new).
+            Button { model.push(.taskDetail(taskID: task.id)) } label: {
                 row.foregroundStyle(.primary)
             }
         }

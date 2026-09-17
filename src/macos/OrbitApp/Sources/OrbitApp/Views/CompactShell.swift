@@ -15,9 +15,10 @@ import OrbitKit
 ///
 /// Under the hood the drawer just drives `selectedSection`, and `CompactSections` renders that one
 /// section's `NavigationStack` — each section keeps its own, so switching between them does not cost
-/// either one its depth. The rows here carry their destinations themselves (`NavigationLink(value:)`);
-/// the iPad/macOS shells keep the `List(selection:)` sidebar + detail pair, bound to a projection of
-/// that same stack.
+/// either one its depth. The rows here carry their own destinations and push them by hand — a
+/// `Button` calling `AppModel.push`, since a `NavigationLink(value:)` would draw the platform's
+/// disclosure indicator (see `AppModel.push`); the iPad/macOS shells keep the `List(selection:)`
+/// sidebar + detail pair, bound to a projection of that same stack.
 struct CompactShell: View {
     @Environment(AppModel.self) private var model
 

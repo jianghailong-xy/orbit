@@ -82,13 +82,17 @@ final class AgentsStackWiringTests: XCTestCase {
         let selectionBranch = try XCTUnwrap(row.range(of: "case .selection:"))
         let pushBranch = try XCTUnwrap(row.range(of: "case .push:"), "the compact branch")
         let tag = try XCTUnwrap(row.range(of: ".tag(s.id)"), "the three-column row stays tag-driven")
-        let link = try XCTUnwrap(
-            row.range(of: "NavigationLink(value: NavNode.console(sessionID: s.id, origin: .list))"),
+        let pushed = try XCTUnwrap(
+            row.range(of: "Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {"),
             "the compact row carries its destination")
         XCTAssertLessThan(tag.lowerBound, pushBranch.lowerBound,
                           "`.tag` belongs to the selection branch, not the pushing one")
-        XCTAssertLessThan(pushBranch.lowerBound, link.lowerBound,
-                          "and the link belongs to the pushing branch")
+        XCTAssertLessThan(pushBranch.lowerBound, pushed.lowerBound,
+                          "and the push belongs to the pushing branch")
+        XCTAssertFalse(row.contains("NavigationLink"),
+                       "the compact row is not a link: the disclosure indicator a "
+                       + "`NavigationLink(value:)` draws cannot be hidden on iOS 17/18, so the row "
+                       + "pushes its frame through `AppModel.push` instead")
         XCTAssertLessThan(selectionBranch.lowerBound, pushBranch.lowerBound)
         XCTAssertEqual(row.components(separatedBy: "AgentSessionRow(session: s").count - 1, 1,
                        "the row itself is built once and shared by both branches")

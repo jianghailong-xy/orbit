@@ -130,8 +130,11 @@ final class SettingsStackWiringTests: XCTestCase {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
                                           to: "/// How a `RunnersModel` list shows its load outcome"))
-        XCTAssertTrue(settingsList.contains("NavigationLink(value: NavNode.runnerDetail(runnerID: r.id))"),
-                      "the row carries its destination as a value")
+        XCTAssertTrue(settingsList.contains("Button { model.push(.runnerDetail(runnerID: r.id)) } label: {"),
+                      "the row carries its destination and pushes it by hand, like the Runners section's")
+        XCTAssertFalse(settingsList.contains("NavigationLink"),
+                       "and is not a link — a disclosure indicator here would be the odd one out "
+                       + "against the section's identical list")
         XCTAssertFalse(settingsList.contains("NavigationLink {"),
                        "a destination closure can only ever be this one page")
 
@@ -139,6 +142,22 @@ final class SettingsStackWiringTests: XCTestCase {
                                    to: "// FOLLOWING"))
         XCTAssertTrue(shell.contains("case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)"),
                       "the Runners section renders that same frame — the reuse is the frame type")
+    }
+
+    /// The one row that keeps the platform's disclosure indicator, deliberately. Every *list* row
+    /// pushes its frame by hand now (see `AppModel.push`) because that arrow cannot be hidden on
+    /// iOS 17/18 — but the `Runners` row of Settings' own form sits directly above the Admin row,
+    /// which carries a hand-drawn `chevron.forward` because it switches section rather than
+    /// pushing. A pair with one arrow and one without reads worse than two arrows, so this row
+    /// stays a `NavigationLink(value:)` and keeps drawing one. Pinned here so a later sweep that
+    /// "unifies the spelling" has to argue with it rather than quietly take the arrow away.
+    func testTheSettingsFormsOwnRunnersRowKeepsThePlatformArrow() throws {
+        let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
+                                  from: "struct SettingsView: View {", to: "// MARK: - Admin"))
+        XCTAssertTrue(form.contains("NavigationLink(value: NavNode.settingsRunners)"),
+                      "the form's Runners row is the one push left as a link, and its arrow is kept")
+        XCTAssertTrue(form.contains("Image(systemName: \"chevron.forward\")"),
+                      "beside the section-switching Admin row that draws its own")
     }
 
     /// What the acceptance for this step greps for: the flag is gone from the whole app, not just from

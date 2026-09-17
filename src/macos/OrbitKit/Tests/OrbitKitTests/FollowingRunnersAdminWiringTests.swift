@@ -86,19 +86,19 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
     /// differs is who moves the screen: the three-column `List`'s selection, or the compact row's own
     /// destination value. Both read the same stack, so neither shape draws a row it cannot open.
     func testEveryListBuildsOneRowAndOnlyTheCompactContainerPushes() throws {
-        let cases: [(view: String, start: String, end: String, tag: String, link: String)] = [
+        let cases: [(view: String, start: String, end: String, tag: String, push: String)] = [
             ("Views/FollowingView.swift",
              "@ViewBuilder private func row(_ watch: Watch, now: Date) -> some View {",
              "/// One watch as a Following row", ".tag(watch.id)",
-             "NavigationLink(value: NavNode.watchDetail(watchID: watch.id))"),
+             "Button { model.push(.watchDetail(watchID: watch.id)) } label: {"),
             ("Views/SkillsRunnersView.swift",
              "@ViewBuilder private func row(_ r: Runner) -> some View {",
              "#if os(iOS)", ".tag(r.id)",
-             "NavigationLink(value: NavNode.runnerDetail(runnerID: r.id))"),
+             "Button { model.push(.runnerDetail(runnerID: r.id)) } label: {"),
             ("Views/SettingsAdminView.swift",
              "@ViewBuilder private func row(_ u: User) -> some View {",
              "struct AdminUserDetailView: View {", ".tag(u.id)",
-             "NavigationLink(value: NavNode.userDetail(userID: u.id))"),
+             "Button { model.push(.userDetail(userID: u.id)) } label: {"),
         ]
         for c in cases {
             let row = code(try slice(try appSource(c.view), from: c.start, to: c.end))
@@ -106,13 +106,17 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
             let pushBranch = try XCTUnwrap(row.range(of: "case .push:"), "\(c.view): the compact branch")
             let tag = try XCTUnwrap(row.range(of: c.tag),
                                     "\(c.view): the three-column row stays tag-driven")
-            let link = try XCTUnwrap(row.range(of: c.link),
-                                     "\(c.view): the compact row carries its destination")
+            let pushed = try XCTUnwrap(row.range(of: c.push),
+                                       "\(c.view): the compact row carries its destination")
             XCTAssertLessThan(selectionBranch.lowerBound, pushBranch.lowerBound, c.view)
             XCTAssertLessThan(tag.lowerBound, pushBranch.lowerBound,
                               "\(c.view): `.tag` belongs to the selection branch, not the pushing one")
-            XCTAssertLessThan(pushBranch.lowerBound, link.lowerBound,
-                              "\(c.view): and the link belongs to the pushing branch")
+            XCTAssertLessThan(pushBranch.lowerBound, pushed.lowerBound,
+                              "\(c.view): and the push belongs to the pushing branch")
+            XCTAssertFalse(row.contains("NavigationLink"),
+                           "\(c.view): the compact row is not a link — the disclosure indicator a "
+                           + "`NavigationLink(value:)` draws cannot be hidden on iOS 17/18, so the "
+                           + "row pushes its frame through `AppModel.push` instead")
         }
 
         // Who gets which shape: each compact section asks for the pushing one, and the three-column
@@ -236,7 +240,7 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
         // A row tap has somewhere to go now — the gap was that nothing rendered the selection.
         let users = code(try slice(try appSource("Views/SettingsAdminView.swift"),
                                    from: "struct AdminUsersView: View {", to: "struct AdminUserDetailView: View {"))
-        XCTAssertTrue(users.contains("NavigationLink(value: NavNode.userDetail(userID: u.id))"))
+        XCTAssertTrue(users.contains("Button { model.push(.userDetail(userID: u.id)) } label: {"))
         // Three-column unchanged: same view, still handed nothing by the shell that has the detail.
         let main = code(try appSource("Views/MainView.swift"))
         XCTAssertTrue(main.contains("case .admin:\n            AdminUserDetailView()"),

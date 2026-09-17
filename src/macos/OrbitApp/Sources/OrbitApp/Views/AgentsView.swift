@@ -186,9 +186,10 @@ enum SessionRowNavigation {
     /// Three-column (macOS / iPad regular): `.tag(id)`, and the `List`'s selection — a projection of
     /// the section's stack — fills the detail pane that is always on screen.
     case selection
-    /// Compact (iPhone): `NavigationLink(value:)`, so each row carries its own destination and
-    /// pushes it. A plain `List` in a `NavigationStack` doesn't take selection taps at all in
-    /// non-edit mode, so a `.tag`-only row there is a row that cannot be opened.
+    /// Compact (iPhone): the row is a `Button` that pushes its own destination (`AppModel.push`) —
+    /// the frame the three-column shell would have selected. A plain `List` in a `NavigationStack`
+    /// doesn't take selection taps at all in non-edit mode, so a `.tag`-only row there is a row
+    /// that cannot be opened.
     case push
 }
 
@@ -630,9 +631,11 @@ struct AgentPanes: View {
         case .selection:
             row.tag(s.id)
         case .push:
-            // `.foregroundStyle(.primary)`: a link's label otherwise inherits the accent tint, and
-            // the rows are unchanged by design (only the wrapper is new).
-            NavigationLink(value: NavNode.console(sessionID: s.id, origin: .list)) {
+            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
+            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
+            // a button's label otherwise inherits the accent tint, and the rows are unchanged by
+            // design (only the wrapper is new).
+            Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {
                 row.foregroundStyle(.primary)
             }
         }

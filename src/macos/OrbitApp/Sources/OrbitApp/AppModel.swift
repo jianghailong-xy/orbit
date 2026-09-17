@@ -1660,6 +1660,23 @@ final class AppModel {
 
     // MARK: routing + notification intents
 
+    /// What a compact list row does when it is tapped: put `node` on top of the section's stack.
+    ///
+    /// The rows used to be `NavigationLink(value:)` — the same push, except the link also draws the
+    /// platform's disclosure indicator, and iOS 17/18 has no usable way to hide one (the
+    /// `.navigationLinkIndicatorVisibility` modifier is documented from 17.0 but reads an
+    /// environment key that 18.5 and earlier don't have, so referencing it crashes at launch).
+    /// A row calling this keeps the one push mechanism — the stack is still the only truth — with
+    /// no arrow, and every pushing row spells it the same way.
+    func push(_ node: NavNode) {
+        nav.push(node)
+        // Every write to the Tasks stack keeps its detail store in step (see `taskStack`), and a
+        // frame a row pushed by hand is still a write to it. Guarded by the section because that
+        // store is read off the stack *on screen*: syncing while another section is up would name
+        // nil and drop the detail the still-pushed task page is about to read.
+        if nav.section == .tasks { syncTaskDetailStore() }
+    }
+
     /// Put `node` on screen in the Agents section — the one transition every Agents entry point
     /// lands on, which is why each of them is now a single line naming the page it opens.
     ///

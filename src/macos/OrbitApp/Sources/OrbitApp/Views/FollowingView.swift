@@ -42,14 +42,16 @@ struct FollowingListView: View {
     /// destination value on the compact stack. The highlight and the pushed record are the same read
     /// of the section's stack, so neither shape draws a row it cannot open.
     @ViewBuilder private func row(_ watch: Watch, now: Date) -> some View {
-        // `.foregroundStyle(.primary)`: a link's label otherwise inherits the accent tint, and the
-        // rows are unchanged by design (only the wrapper is new).
         let row = FollowingRow(watch: watch, now: now)
         switch rowNavigation {
         case .selection:
             row.tag(watch.id)
         case .push:
-            NavigationLink(value: NavNode.watchDetail(watchID: watch.id)) {
+            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
+            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
+            // a button's label otherwise inherits the accent tint, and the rows are unchanged by
+            // design (only the wrapper is new).
+            Button { model.push(.watchDetail(watchID: watch.id)) } label: {
                 row.foregroundStyle(.primary)
             }
         }

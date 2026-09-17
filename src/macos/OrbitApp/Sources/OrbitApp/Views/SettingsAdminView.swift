@@ -311,7 +311,11 @@ struct AdminUsersView: View {
         case .selection:
             row.tag(u.id)
         case .push:
-            NavigationLink(value: NavNode.userDetail(userID: u.id)) {
+            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
+            // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
+            // a button's label otherwise inherits the accent tint, and the row is unchanged by
+            // design (only the wrapper is new).
+            Button { model.push(.userDetail(userID: u.id)) } label: {
                 row.foregroundStyle(.primary)
             }
         }
