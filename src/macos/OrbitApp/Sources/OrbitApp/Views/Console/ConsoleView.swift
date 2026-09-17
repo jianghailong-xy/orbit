@@ -933,23 +933,28 @@ private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
-    @State private var lastOffset: CGFloat = 0
-    // Within this many points of the bottom still counts as pinned (web uses 80px).
-    private let nearBottom: CGFloat = 80
-
-    private struct Metrics: Equatable { let distance: CGFloat; let offset: CGFloat }
+    /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
+    /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
+    /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
+    /// needs the difference to tell a drag up from the clamp a row that shrank forces.
+    @State private var readerDriven = false
 
     func body(content: Content) -> some View {
         if #available(macOS 15, iOS 18, *) {
-            content.onScrollGeometryChange(for: Metrics.self) { geo in
-                Metrics(distance: geo.contentSize.height - geo.visibleRect.maxY, offset: geo.contentOffset.y)
-            } action: { _, m in
-                if m.distance <= nearBottom { atBottom = true }
-                else if m.offset < lastOffset - 1 { atBottom = false }   // genuine upward scroll
-                lastOffset = m.offset
-                ruler.contentOffset = m.offset
-                recompute()
-            }
+            content
+                .onScrollPhaseChange { _, phase in
+                    readerDriven = phase != .idle && phase != .animating
+                }
+                .onScrollGeometryChange(for: TailScrollSample.self) { geo in
+                    TailScrollSample(offset: Double(geo.contentOffset.y),
+                                     contentHeight: Double(geo.contentSize.height),
+                                     bottomGap: Double(geo.contentSize.height - geo.visibleRect.maxY))
+                } action: { was, now in
+                    atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
+                                                  readerDriven: readerDriven)
+                    ruler.contentOffset = CGFloat(now.offset)
+                    recompute()
+                }
         } else {
             content
         }
