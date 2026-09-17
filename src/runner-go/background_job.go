@@ -124,6 +124,9 @@ type bgJobSpec struct {
 	ScratchDir  string // where its output file lives — runner-owned, outside the checkout
 	Description string
 	Env         map[string]string
+	// The session this job belongs to, as the RUNNER knows it — never as the caller claims it.
+	// Set from `job.SessionID` where the service is wired, and spent below on `ORBIT_SESSION_ID`.
+	SessionID string
 	// WakeOnExit and WakeOnOutput ask the control plane to wake the session when the job exits, or
 	// when it has written something new (bgWakeOutputWindow, bgWakeOutputInterval).
 	WakeOnExit   bool
@@ -323,7 +326,25 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	}
 	cmd.WaitDelay = 0
 	cmd.Dir = spec.Dir
+	// `envWithAgent` strips session context from BOTH the inherited environment and the caller's
+	// env, and that stays true: an agent may not CLAIM a session it is not. The session is then put
+	// back from what the runner itself knows, which is a different fact and the only one this job
+	// can be about.
+	//
+	// It goes back because a job without it is not "headless" — it only looks that way to the gated
+	// CLI writes, which read `ORBIT_SESSION_ID` to decide whether there is anybody to ask
+	// (`askBeforeCreate`). Empty, `orbit task create` and `orbit project resolve-blocker` take the
+	// terminal path and write without a card. The job never lost the AUTHORITY to write — it holds
+	// the runner token through ORBIT_HOME either way — so stripping the id removed only the ability
+	// to ASK, turning "put this in front of the owner" into "do it". 2026-09-17: that is how a
+	// blocker a person was asked to rule on was resolved by an agent with no card ever shown.
 	cmd.Env = envWithAgent(spec.Env)
+	if spec.SessionID != "" {
+		// Base62, like every other injection site (`public_id_env_test.go` scans for exactly this):
+		// an id a job reads is an id it will hand back to the API and print to a person, and the
+		// raw UUID is not the spelling anything else here speaks.
+		cmd.Env = append(cmd.Env, "ORBIT_SESSION_ID="+publicID(spec.SessionID))
+	}
 	cmd.Stdout = f
 	cmd.Stderr = f
 	if err := cmd.Start(); err != nil {

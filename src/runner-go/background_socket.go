@@ -69,6 +69,9 @@ type bgJobService struct {
 	// is deliberately outside the checkout so attachments stay out of git.
 	extraDirs []string
 	env       map[string]string
+	// The session this service serves, carried onto every job it starts so a gated write inside
+	// one still reaches the owner (see `bgJobSpec.SessionID`).
+	sessionID string
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -188,6 +191,7 @@ func (s *bgJobService) handle(req bgSocketRequest) bgSocketResponse {
 			ScratchDir:   s.scratchDir,
 			Description:  getString(args, "description"),
 			Env:          mergedBgEnv(s.env, args["env"]),
+			SessionID:    s.sessionID,
 			WakeOnExit:   wakeOnExit,
 			WakeOnOutput: wakeOnOutput,
 		})
@@ -347,6 +351,7 @@ func startSessionBgJobService(ctx context.Context, bg *bgTailer, job *ClaimedSes
 		scratchDir: scratchDir,
 		extraDirs:  []string{uploadsDir(job.SessionID)},
 		env:        job.Agent.Env,
+		sessionID:  job.SessionID,
 	}
 	return startBgJobService(ctx, svc, bgSocketPath(job.SessionID), bgTokenPath(job.SessionID))
 }

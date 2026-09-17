@@ -115,6 +115,74 @@ func TestBgJobSocketRunsAndReadsAJob(t *testing.T) {
 	}
 }
 
+// A job runs inside its session, and the gated writes have to be able to tell.
+//
+// `envWithAgent` strips session context from the inherited environment and from the caller's `env`
+// alike, which is right: an agent may not CLAIM a session. But nothing used to put back the one the
+// runner KNOWS, so every job ran with `ORBIT_SESSION_ID` empty — and empty is exactly what
+// `askBeforeCreate` reads as "there is nobody to ask", the terminal case. `orbit task create`,
+// `orbit task create-batch`, `orbit project create` and `orbit project resolve-blocker` therefore
+// wrote with no confirmation card at all from inside a job.
+//
+// The job never lacked the AUTHORITY for those writes — it reaches the runner token through
+// ORBIT_HOME either way — so what the stripping removed was only the ability to ASK. On 2026-09-17
+// that turned "put this blocker in front of the owner" into "resolve it", with no card ever shown.
+func TestBgJobCarriesTheSessionTheRunnerKnowsSoGatedWritesStillAsk(t *testing.T) {
+	svc, _, stop := newTestBgJobService(t)
+	defer stop()
+	// The runner holds sessions as UUIDs; everything an agent reads or types is base62, so the job
+	// is handed the same spelling every other injection site uses. The expected value is written
+	// out rather than computed with `publicID`, which would only assert that one function agrees
+	// with itself.
+	svc.sessionID = "01a0b054-0e51-730d-8025-958b250fcf35"
+	const sessionPublicID = "34QUYxDhxmt3NInyOJmmj"
+	socket := filepath.Join(t.TempDir(), "bg.sock")
+	token := filepath.Join(t.TempDir(), "bg.token")
+	stopService, err := startBgJobService(context.Background(), svc, socket, token)
+	if err != nil {
+		t.Fatalf("service did not start: %v", err)
+	}
+	defer stopService()
+
+	raw, err := bgSocketCall(socket, "test-token", "run", map[string]interface{}{
+		"command": `printf 'SESSION=[%s]\n' "$ORBIT_SESSION_ID"`,
+		"kind":    bgKindJob,
+		// The caller's own claim, which must lose to the runner's knowledge rather than win over it.
+		"env": map[string]interface{}{"ORBIT_SESSION_ID": "session-the-agent-claims"},
+	})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	var started bgJobStatus
+	if err := json.Unmarshal(raw, &started); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	var out bgJobOutput
+	for time.Now().Before(deadline) {
+		raw, err = bgSocketCall(socket, "test-token", "output", map[string]interface{}{"jobId": started.JobID})
+		if err != nil {
+			t.Fatalf("output failed: %v", err)
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Status != bgStatusRunning {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if out.Status != bgStatusCompleted {
+		t.Fatalf("job status = %q, want it to have finished", out.Status)
+	}
+	if !strings.Contains(out.Output, "SESSION=["+sessionPublicID+"]") {
+		t.Fatalf("job environment = %q, want SESSION=[%s] — an empty one is the terminal case, and "+
+			"gated writes take it without asking anybody; the raw UUID is a spelling nothing else "+
+			"here speaks", strings.TrimSpace(out.Output), sessionPublicID)
+	}
+}
+
 // kind is required and has no default. Guessing it is how a six-hour build gets
 // treated as a restartable dev server, so the door refuses rather than assumes.
 func TestBgJobSocketRefusesAJobWithoutAKind(t *testing.T) {
