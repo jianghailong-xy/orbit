@@ -14,8 +14,10 @@ import OrbitKit
 /// closes it. The current section is highlighted.
 ///
 /// Under the hood the drawer just drives `selectedSection`, and `CompactSections` renders that one
-/// section's navigation stack. Every existing `List(selection:)` sidebar + detail pair from the iPad
-/// shell is reused verbatim.
+/// section's `NavigationStack` — each section keeps its own, so switching between them does not cost
+/// either one its depth. The rows here carry their destinations themselves (`NavigationLink(value:)`);
+/// the iPad/macOS shells keep the `List(selection:)` sidebar + detail pair, bound to a projection of
+/// that same stack.
 struct CompactShell: View {
     @Environment(AppModel.self) private var model
 
@@ -221,8 +223,9 @@ struct CompactShell: View {
 /// was tried first (to keep every section's stack alive across switches) but its *programmatic*
 /// selection didn't move the pane on device — tapping a drawer row closed the drawer without
 /// navigating. Rendering one section at a time via a plain `switch` (like the iPad `MainView`) makes
-/// the drawer and deep links switch reliably. The trade: switching away resets the *other* sections'
-/// stacks; drilling *within* the current section is still preserved.
+/// the drawer and deep links switch reliably. The trade is the *view*, not the navigation: switching
+/// away tears down the other sections' views, but every stack lives in `NavState`, so each section
+/// comes back at the depth you left it.
 private struct CompactSections: View {
     @Environment(AppModel.self) private var model
     let openDrawer: () -> Void
@@ -935,9 +938,9 @@ private struct NavigationDrawer: View {
         .drawerRow()
     }
 
-    /// Jump straight to an agent from the drawer: mirror the Agents-list selection (clear stale
-    /// session / compose state), enter the Agents section, and close the drawer. The compact split
-    /// then surfaces that agent's sessions.
+    /// Jump straight to an agent from the drawer: mirror the Agents-list selection (a real switch
+    /// empties the Agents stack), enter the Agents section, and close the drawer. The shell then
+    /// surfaces that agent's sessions.
     private func openAgent(_ id: String) {
         model.openAgent(id)
         close()

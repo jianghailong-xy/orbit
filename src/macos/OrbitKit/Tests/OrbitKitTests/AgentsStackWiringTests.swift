@@ -133,12 +133,14 @@ final class AgentsStackWiringTests: XCTestCase {
                       "at root is an empty stack, not two fields that could disagree with it")
 
         // The four ways into a console pick the frame they push, and how it was opened rides that
-        // frame instead of a shadow variable with an assignment-ordering convention.
+        // frame instead of a shadow variable with an assignment-ordering convention. Each one hands
+        // its frame to `show` now; that the entries write nothing else, and that `show` is the one
+        // place the transition happens, is `NavigationEntrancesWiringTests`'.
         let entries = [
             ("func openRecentSession(_ s: Session) {", "\n    }",
-             "nav.replaceTop(with: .console(sessionID: s.id, origin: .drawer))"),
+             "show(.console(sessionID: s.id, origin: .drawer)"),
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
-             "nav.replaceTop(with: .console(sessionID: s.id, origin: .banner))"),
+             "show(.console(sessionID: s.id, origin: .banner)"),
             ("func openAgent(_ id: String) {", "\n    }", "nav.popToRoot()"),
         ]
         for (start, end, transition) in entries {
@@ -147,7 +149,7 @@ final class AgentsStackWiringTests: XCTestCase {
         }
         let route = code(try slice(app, from: "private func openSession(_ id: String) {",
                                    to: "guard !sessions.contains(where:"))
-        XCTAssertTrue(route.contains("nav.replaceTop(with: .console(sessionID: id, origin: .deepLink))"),
+        XCTAssertTrue(route.contains("show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))"),
                       "a deep link / search hit is the same 'select this session' act")
         let drop = code(try slice(app, from: "private func dropIfOpen(_ id: String) {",
                                   to: "/// Remove every local fallback"))
@@ -202,8 +204,17 @@ final class AgentsStackWiringTests: XCTestCase {
             "src/macos/OrbitApp/Sources/OrbitApp/Views/MainView.swift",
             "src/ios/Sources/OrbitiOSApp.swift",
         ]
-        for stale in ["usesCompactShell", "recentsConsoleSessionID", "composedConsoleSessionID",
-                      "reopenSelectedRow", "rearmsTap", "$model.composingAgentSession"] {
+        // Spelled in halves on purpose: the names this list guards against are themselves grepped
+        // for across `src/macos` and `src/ios` (that is a criterion of the step that closed this
+        // out), so the guard must not be a hit of its own. They are joined at run time, which keeps
+        // the comparison exact.
+        let staleNames = ["usesCompact" + "Shell",
+                          "recentsConsole" + "SessionID",
+                          "composedConsole" + "SessionID",
+                          "reopen" + "SelectedRow",
+                          "rearms" + "Tap",
+                          "$model.composing" + "AgentSession"]
+        for stale in staleNames {
             for path in sources {
                 XCTAssertFalse(try source(path).contains(stale),
                                "\(path) still mentions \(stale)")

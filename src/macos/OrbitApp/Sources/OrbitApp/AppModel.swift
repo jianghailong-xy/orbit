@@ -64,11 +64,10 @@ final class AppModel {
             nav.section = newValue
             // Switching sections tears down the other sections' *views* (the compact shell renders
             // one at a time), but not their navigation: each section keeps its own stack, so coming
-            // back lands where you left instead of at the root. Nothing needs dropping here any
-            // more — every push lives on its section's stack now, and a stack survives its view
-            // being rebuilt where a boolean could not (the Tasks directory and Settings' runners
-            // were the last two flags this switch had to clear).
-            tasks?.setSectionActive(newValue == .tasks)
+            // back lands where you left instead of at the root. Nothing is dropped here — this
+            // setter writes which section is showing and nothing else, and no push has to be
+            // registered with it by hand.
+            tasks?.setSectionActive(newValue == .tasks)   // the data layer's poll, not navigation
         }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
@@ -542,10 +541,14 @@ final class AppModel {
         lastNeedsYou = nil
     }
 
-    /// Reset every navigation/selection field to the signed-out baseline. The ONE place they are
-    /// cleared wholesale — when adding a navigation field to this model, add its reset here, or a
-    /// stale selection leaks into the next sign-in. The runner / watch / user selections need no
-    /// line of their own: they ARE their section's stack, which `nav = NavState()` clears.
+    /// Reset navigation to the signed-out baseline. Navigation itself is one value, so this is
+    /// `NavState()` and then only what is *not* a page: the agent the pane is on (whose memory
+    /// survives as the persisted default, not as this field) and the landing latch — everything the
+    /// runtime/watch/user panes show is a stack, cleared with it.
+    ///
+    /// `selectedTaskID` earns a line of its own despite being a read of the stack, because clearing
+    /// it is not a no-op: the write lands in the Tasks model's single detail slot, which would
+    /// otherwise go on serving the task that was on screen before the sign-out.
     private func resetNavigation() {
         selectedSection = .agents      // runs the section switch's own housekeeping first
         nav = NavState()               // then clears every section's stack with it
@@ -1206,13 +1209,14 @@ final class AppModel {
     /// Mirrors the "New session" button in `AgentPanes`.
     func newSessionInCurrentAgent() {
         guard let id = currentAgentID else { return }
-        selectedSection = .agents
-        selectedAgentID = id
-        startComposingSession()
+        show(.compose(agentID: id), agent: id)
     }
 
     /// Open the draft composer for the agent pane already on screen (the "New session" toolbar
     /// button): the draft replaces whatever the detail column was showing / pushes onto the stack.
+    /// Deliberately not an entry point — it leaves the pane's agent where it is (a draft for the
+    /// agent you are looking at, falling back to the first one), so unlike ``show`` it does not move
+    /// the section or the agent, only the page.
     func startComposingSession() {
         guard let id = currentAgentID else { return }
         nav.replaceTop(with: .compose(agentID: id))
@@ -1223,9 +1227,7 @@ final class AppModel {
     /// this swaps the draft's own frame for one naming `id`, so the pushed/inline `NewSessionView`
     /// just rebuilds for it (a fresh draft via its `.id(agent.id)`).
     func composeWithAgent(_ id: String) {
-        selectedSection = .agents
-        selectedAgentID = id
-        nav.replaceTop(with: .compose(agentID: id))
+        show(.compose(agentID: id), agent: id)
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
@@ -1233,6 +1235,9 @@ final class AppModel {
     /// that section's stack, so its pane opens on the session list (the console and the draft on it
     /// belong to the agent you just left); re-selecting the current agent keeps the stack — a pushed
     /// console stays pushed.
+    ///
+    /// The one entry point that opens no page, which is why it does not go through ``show``: a real
+    /// switch *empties* the section's stack instead of naming the frame to put on top of it.
     func openAgent(_ id: String) {
         selectedSection = .agents
         if selectedAgentID != id {
@@ -1241,19 +1246,16 @@ final class AppModel {
         }
     }
 
-    /// Open a **Recents** row from the drawer: jump into the session's owning agent and select it so
-    /// the Agents pane pushes its console. The Open list nests the agent, so there's no fetch (unlike
-    /// a cold deep link — see `openSession`). A no-op agent switch keeps an already-pushed console; a
-    /// real switch clears the prior agent's session/compose state before selecting this session.
+    /// Open a **Recents** row from the drawer: jump into the session's owning agent and put its
+    /// console on screen. The Open list nests the agent, so there's no fetch (unlike a cold deep link
+    /// — see ``openSession``). A no-op agent switch leaves the page where it is; a real one replaces
+    /// it, which is also the whole of "clear the prior agent's session/compose state": both were
+    /// pages of this one stack, and a page cannot outlive the frame it was.
     func openRecentSession(_ s: Session) {
-        selectedSection = .agents
-        if let agentID = s.agent?.id ?? s.agentId, selectedAgentID != agentID {
-            selectedAgentID = agentID
-        }
         // The frame records where it came from — a Recents drawer row — so the compact shell frees
         // the left edge for the drawer-open swipe on that console (see `NavState.consoleFromRecents`).
         // Nothing to set first, and no observer with an ordering convention to preserve it.
-        nav.replaceTop(with: .console(sessionID: s.id, origin: .drawer))
+        show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)
     }
 
     /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
@@ -1268,11 +1270,7 @@ final class AppModel {
     /// the system back-swipe instead of yielding the edge to the drawer gesture. An earlier Recents
     /// tap's origin can't linger either — it rode the frame that tap pushed, and this one replaces it.
     func openNeedsYouSession(_ s: Session) {
-        selectedSection = .agents
-        if let agentID = s.agent?.id ?? s.agentId, selectedAgentID != agentID {
-            selectedAgentID = agentID
-        }
-        nav.replaceTop(with: .console(sessionID: s.id, origin: .banner))
+        show(.console(sessionID: s.id, origin: .banner), agent: s.agent?.id ?? s.agentId)
     }
 
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents
@@ -1662,6 +1660,25 @@ final class AppModel {
 
     // MARK: routing + notification intents
 
+    /// Put `node` on screen in the Agents section — the one transition every Agents entry point
+    /// lands on, which is why each of them is now a single line naming the page it opens.
+    ///
+    /// The two writes beside it are what those entries used to spell out for themselves: enter the
+    /// section, and point its pane at the agent the page belongs to. Five hand-rolled copies of them
+    /// is five chances to leave one out, and the one that gets left out is silent — the page opens
+    /// under a pane still showing another agent's list. A no-op agent switch leaves the frame alone,
+    /// so re-opening a session you are already on does not disturb the page beneath it.
+    private func show(_ node: NavNode, agent agentID: String? = nil) {
+        selectedSection = .agents
+        if let agentID, selectedAgentID != agentID { selectedAgentID = agentID }
+        nav.replaceTop(with: node)
+    }
+
+    /// The app's only door for navigation that arrives from *outside* it: an `orbit://` URL, a
+    /// notification's tap, a `[title](orbit-session:<id>)` link in a transcript, the ⌘K palette, the
+    /// menu bar. In-app affordances (a list row, the drawer's Recents and Workspace rows, the
+    /// needs-you banner, ⌘N, ⌘1…⌘9) call their entry point directly instead: a `Route` carries
+    /// neither an origin nor an agent, and a frame pushed for a drawer row has to say both.
     func route(to route: Route) {
         selectedSection = AppSection.forRoute(route)
         switch route {
@@ -1709,10 +1726,7 @@ final class AppModel {
         // A route replaces what the detail pane / stack top is showing (a draft included) — the same
         // "select this session" act as a list row, so the three-column shells land exactly where
         // they did when this was a selection write.
-        nav.replaceTop(with: .console(sessionID: id, origin: .deepLink))
-        if let aid = agentID(for: id) {
-            selectedAgentID = aid
-        }
+        show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))
         // The Open snapshot is already control-plane refreshed. Everything else (including an old
         // detail-cache hit) gets an exact refresh so repeated search/deep-link navigation cannot
         // resurrect stale lifecycle or capability state.
