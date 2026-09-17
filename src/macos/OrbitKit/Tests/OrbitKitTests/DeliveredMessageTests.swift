@@ -165,15 +165,20 @@ final class DeliveredMessageTests: XCTestCase {
             from: "struct UserBubbleView: View", to: "struct AssistantBubbleView: View")
         let bubble = try section(view, from: "if let attached = bubble.attached {",
                                  to: ".background(.tint.opacity(0.15)")
-        let entry = try section(view, from: "private func attachedEntry", to: "\n    }\n")
+        // The entry itself moved out of the bubble when a turn nobody typed needed to draw the same
+        // one inside its card (`AttachedNoteEntry`); what it says is still what is asserted here.
+        let entry = try section(
+            try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/AttachedNoteView.swift"),
+            from: "struct AttachedNoteEntry", to: "struct BackgroundJobsNoteView")
 
-        XCTAssertTrue(bubble.contains("GridRow { attachedEntry(attached) }"),
+        XCTAssertTrue(bubble.contains("GridRow { AttachedNoteEntry(attached: attached) }"),
                       "the entry is drawn inside the tinted bubble, not under it")
         XCTAssertTrue(bubble.contains(".gridCellUnsizedAxes(.horizontal)"),
                       "parted from the words by a rule that does not widen a bubble hugging its text")
-        XCTAssertTrue(entry.contains(#"Text("⊕ Orbit attached: \(attached.kind)")"#),
+        XCTAssertTrue(entry.contains(#""⊕ Orbit attached: \(attached.kind)""#),
                       "signed as web signs it, with the kind its note was named")
-        XCTAssertTrue(entry.contains("Text(attached.text)"), "and opening to the text the model read")
+        XCTAssertTrue(entry.contains("verbatim(attached.text)"),
+                      "and opening to the text the model read")
         XCTAssertFalse(view.contains("bubble.injected"),
                        "the entry is what the apiserver recorded and nothing else: the bubble carries "
                            + "no second reading of its own text to draw from")

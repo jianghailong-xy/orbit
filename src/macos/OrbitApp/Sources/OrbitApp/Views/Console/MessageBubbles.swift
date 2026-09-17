@@ -16,7 +16,6 @@ struct UserBubbleView: View {
     /// Nil for every settled/inline bubble, so the Cancel affordance shows on queued turns alone.
     var onCancelQueued: (() -> Void)? = nil
     @State private var expanded = false
-    @State private var showInjected = false
     @State private var hovering = false
     @State private var copied = false
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
@@ -69,7 +68,7 @@ struct UserBubbleView: View {
                                 .padding(.top, 6).padding(.bottom, 5)
                                 .gridCellUnsizedAxes(.horizontal)
                         }
-                        GridRow { attachedEntry(attached) }
+                        GridRow { AttachedNoteEntry(attached: attached) }
                     }
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
@@ -107,27 +106,6 @@ struct UserBubbleView: View {
             .font(.orbitProse)
             .textSelection(.enabled)
             .environment(\.previewOwnerID, bubble.id)
-    }
-
-    /// The entry under the person's words: one line naming what was attached, opened by a tap — a
-    /// phone has no hover to hang a tooltip on — to the text the model read, verbatim.
-    private func attachedEntry(_ attached: (kind: String, text: String)) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button {
-                showInjected.toggle()
-            } label: {
-                Text("⊕ Orbit attached: \(attached.kind)")
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            if showInjected {
-                Text(attached.text)
-                    .font(.orbitLabel.monospaced())
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .textSelection(.enabled)
-            }
-        }
     }
 
     // Wrapping row of attachment chips (web's flex-wrap `.chat-files`): flows onto multiple lines so

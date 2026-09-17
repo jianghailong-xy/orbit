@@ -19,6 +19,12 @@ struct BackgroundWakeCardView: View {
     let wake: BackgroundWake
     var ts: String?
     var undelivered: Bool = false
+    /// Whatever else the same note carried, as its own folded entry.
+    ///
+    /// It rides in the card because nobody typed this turn: delivery appends to a turn whose content
+    /// is empty, so handing the leftover block back to a user bubble drew an empty bubble under the
+    /// card — a message with no words in it, signed with the reader's own name.
+    var attached: (kind: String, text: String)?
     /// Cancels a wake that is still queued. Nil once a runner has taken it, and on every settled
     /// card. Unlike a watch's wake this is an ordinary cancel — nothing ever re-sends it — so it
     /// asks nothing first and uses the words a queued message already uses.
@@ -58,6 +64,7 @@ struct BackgroundWakeCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
             raw
+            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)

@@ -332,11 +332,24 @@ public enum BackgroundWakeCard {
 
     /// The fold the original text stays behind.
     public static let rawSummary = "What the agent received"
+
+    /// Whether the turn this card draws is also somebody's message.
+    ///
+    /// A wake turn's own content is empty — the block IS the turn — so anything else the same note
+    /// carried (the inventory a returning engine is handed, a coordinator's standing role) used to
+    /// be handed back to a user bubble, which drew a bubble with no words in it under the card,
+    /// signed with the reader's own name. The leftover is the card's now (`attached`), and a bubble
+    /// is drawn only where somebody actually typed something. Web parity: `Transcript.tsx` draws the
+    /// bubble on `node.text.trim() !== ''` alone.
+    public static func drawsBubble(text: String) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 /// A compiled pattern, handing back the groups of its first match the way the TypeScript's `exec`
-/// does: nil for a group that did not take part.
-private struct Pattern {
+/// does: nil for a group that did not take part. Shared with the reading of the inventory block
+/// (`BackgroundJobsText`), which reads the same lines with the same kind of pattern.
+struct Pattern {
     private let re: NSRegularExpression?
 
     init(_ pattern: String) { re = try? NSRegularExpression(pattern: pattern) }

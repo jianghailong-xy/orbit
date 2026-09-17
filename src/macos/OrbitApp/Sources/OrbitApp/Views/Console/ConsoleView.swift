@@ -1027,14 +1027,17 @@ struct TranscriptItemView: View {
                 // A turn the control plane opened for a background job's news, or for a wakeup
                 // coming due, is nobody's message either: the block IS the turn, so it is read off
                 // the recorded note rather than the person's words, which are empty. Only the wake
-                // blocks become the card — anything else the same note carried stays the folded
-                // entry it has always been, under it.
+                // blocks become the card — anything else the same note carried (the inventory a
+                // returning engine is handed, a coordinator's standing role) is a folded entry in
+                // the same card, because it is the control plane's too. It used to be an entry in a
+                // user bubble under the card, which drew an empty bubble: a message with no words
+                // in it, in the reader's own name.
                 VStack(alignment: .leading, spacing: 6) {
                     BackgroundWakeCardView(wake: background, ts: b.ts,
-                                           undelivered: b.undelivered || b.delivery == "failed")
-                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || !background.rest.isEmpty {
-                        UserBubbleView(bubble: withNote(b, background.rest))
+                                           undelivered: b.undelivered || b.delivery == "failed",
+                                           attached: attachedRest(background))
+                    if BackgroundWakeCard.drawsBubble(text: b.text) {
+                        UserBubbleView(bubble: withoutNote(b))
                     }
                 }
             } else {
@@ -1069,11 +1072,17 @@ struct TranscriptItemView: View {
         }
     }
 
-    /// The same bubble with only what the wake card did NOT take left on its note, so a mixed note
-    /// still shows its other blocks under the card instead of repeating the wake beneath it.
-    private func withNote(_ bubble: UserBubble, _ note: String) -> UserBubble {
-        var rest = bubble
-        rest.note = note.isEmpty ? nil : note
-        return rest
+    /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
+    /// its other blocks instead of repeating the wake beneath the card.
+    private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
+        wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+    }
+
+    /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here
+    /// would draw it a second time under the card that already holds it.
+    private func withoutNote(_ bubble: UserBubble) -> UserBubble {
+        var bare = bubble
+        bare.note = nil
+        return bare
     }
 }
