@@ -40,6 +40,9 @@ public enum NavNode: Hashable, Sendable {
     case taskListsDirectory
     case runnerDetail(runnerID: String)
     case watchDetail(watchID: String)
+    /// Settings' second layer: the runners list, pushed from Settings' own form. A runner's record is
+    /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
+    /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsRunners
     case userDetail(userID: String)
 }

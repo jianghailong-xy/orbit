@@ -185,7 +185,8 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
         // At root is an empty stack, for every section that pushes.
         let root = code(try slice(app, from: "var sectionAtRoot: Bool {",
                                   to: "/// ⌘D: complete the open"))
-        XCTAssertTrue(root.contains("case .skills, .runners, .following, .admin: return nav.sectionAtRoot"))
+        XCTAssertTrue(root.contains("case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot"),
+                      "Settings joined the stack-reading arm when both of its pushes became frames")
         XCTAssertFalse(root.contains("case .skills, .admin: return true"),
                        "Admin is no longer unconditionally at its root: it has a page to push")
         XCTAssertFalse(root.contains("selectedRunnerID == nil") || root.contains("selectedWatchID == nil"))

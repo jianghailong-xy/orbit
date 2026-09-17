@@ -196,6 +196,39 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav, NavState(section: .admin), "an emptied stack leaves nothing behind")
     }
 
+    /// Settings is the one section that goes genuinely deep — three layers, and until this step the
+    /// only stack built from *two* push mechanisms chained: a boolean `navigationDestination
+    /// (isPresented:)` for the runners list, then a destination-closure `NavigationLink` for a
+    /// runner's record. Both are frames now, so the depth SwiftUI draws and the depth the model holds
+    /// are one value, and the left screen edge follows it at every layer rather than only the first.
+    func testTheSettingsStackHoldsAllThreeLayers() {
+        var nav = NavState(section: .settings)
+        XCTAssertEqual(nav.path, [], "the form is the bottom of the stack")
+        XCTAssertTrue(nav.sectionAtRoot, "so the drawer's edge gesture is free on it")
+
+        nav.push(.settingsRunners)
+        XCTAssertEqual(nav.path, [.settingsRunners], "the runners list is the second layer")
+        XCTAssertFalse(nav.sectionAtRoot, "a pushed page owns that edge for the back-swipe")
+
+        nav.push(.runnerDetail(runnerID: "r1"))
+        XCTAssertEqual(nav.path.count, 2, "a runner's record is the third layer")
+        XCTAssertFalse(nav.sectionAtRoot, "still two deep, so still not at the root")
+        // The frame type is shared with the Runners section; what separates the two is the stack it
+        // rides — pushing it from Settings must leave Runners' own stack alone.
+        XCTAssertNil(nav.stacks[.runners], "Settings' frames are Settings'")
+
+        nav.pop()
+        XCTAssertEqual(nav.path, [.settingsRunners], "the first pop lands on the runners list")
+        XCTAssertFalse(nav.sectionAtRoot, "which is one deep, not the root")
+
+        nav.pop()
+        XCTAssertEqual(nav, NavState(section: .settings), "the second leaves nothing behind")
+        XCTAssertTrue(nav.sectionAtRoot)
+
+        nav.pop()
+        XCTAssertEqual(nav, NavState(section: .settings), "and the root cannot be popped past")
+    }
+
     /// A deep link names a watch by its UUID while the list tags rows by public id, so the frame is
     /// rekeyed in place once the watch is in hand: `replaceTop`, not a second frame stacked over the
     /// first — backing out of a watch must not walk through the same watch twice.

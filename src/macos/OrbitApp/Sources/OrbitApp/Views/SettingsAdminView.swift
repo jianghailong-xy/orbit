@@ -36,24 +36,14 @@ struct SettingsView: View {
         @Bindable var model = model
         return Form {
             #if os(iOS)
-            // Runners moved off the drawer rail into Settings; push the list within this stack. The
-            // push is tracked on the model (`settingsShowingRunners`) so the shell knows Settings is
-            // no longer at root — see `sectionAtRoot`.
+            // Runners moved off the drawer rail into Settings; this row pushes the list onto the
+            // stack this form is in. A frame of the section's own stack, like every other push — so
+            // `sectionAtRoot` reads the depth off the stack instead of a flag beside it. The
+            // destination is registered below, where iPad regular finds it too.
             Section {
-                Button {
-                    model.settingsShowingRunners = true
-                } label: {
-                    HStack {
-                        Label("Runners", systemImage: AppSection.runners.systemImage)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Image(systemName: "chevron.forward")
-                            .font(.orbitMeta)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
+                NavigationLink(value: NavNode.settingsRunners) {
+                    Label("Runners", systemImage: AppSection.runners.systemImage)
                 }
-                .buttonStyle(.plain)
 
                 // Admin is off the compact drawer rail, and the account footer that used to link it
                 // is gone — so this is its entry point on iPhone. It switches section (rather than
@@ -157,8 +147,17 @@ struct SettingsView: View {
             #endif
         }
         #if os(iOS)
-        .navigationDestination(isPresented: $model.settingsShowingRunners) {
-            RunnersSettingsList()
+        // The two pages this form pushes: the runners list, and — from that list — a runner's
+        // record. Registered here rather than in the compact shell because iPad regular reaches this
+        // same form and pushes the same two pages from it, so one registration serves both shells.
+        // A runner's record is the very frame the Runners section pushes (`NavNode.runnerDetail`):
+        // the frame type is shared, the stack it rides is what differs.
+        .navigationDestination(for: NavNode.self) { node in
+            switch node {
+            case .settingsRunners:            RunnersSettingsList()
+            case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+            default:                          EmptyView()
+            }
         }
         #endif
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form

@@ -64,11 +64,10 @@ final class AppModel {
             nav.section = newValue
             // Switching sections tears down the other sections' *views* (the compact shell renders
             // one at a time), but not their navigation: each section keeps its own stack, so coming
-            // back lands where you left instead of at the root. Tasks used to be the exception —
-            // its pushed list directory was a boolean the switch had to clear, because a boolean
-            // cannot survive its view being rebuilt the way a stack can. What still has to be
-            // dropped here is the state those shells keep outside a stack.
-            if newValue != .settings { settingsShowingRunners = false }
+            // back lands where you left instead of at the root. Nothing needs dropping here any
+            // more — every push lives on its section's stack now, and a stack survives its view
+            // being rebuilt where a boolean could not (the Tasks directory and Settings' runners
+            // were the last two flags this switch had to clear).
             tasks?.setSectionActive(newValue == .tasks)
         }
     }
@@ -158,10 +157,6 @@ final class AppModel {
             syncTaskDetailStore()
         }
     }
-    /// iOS only: whether Settings has pushed its Runners sub-page (Runners was moved off the drawer
-    /// rail into Settings). Drives the `.settings` branch of `sectionAtRoot` so the pushed runner
-    /// pages yield the screen edge to the system back-swipe.
-    var settingsShowingRunners = false
     /// Written through to `lastAgentKey` on every non-nil set so the launch default can restore your
     /// last agent (see `loadAgentsThenLand`); a nil (navigation reset) must not erase the memory.
     var selectedAgentID: String? {
@@ -1314,9 +1309,9 @@ final class AppModel {
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
-    /// no pushed page needs the edge for the system back-swipe. Tasks, Agents and the single-layer
-    /// sections read their own stacks; Settings still answers from the flag its push is kept in,
-    /// until it moves onto its stack too.
+    /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
+    /// own stack — Tasks (a detail, then the list directory), Agents (a draft, then a console),
+    /// Runners, Following, Admin, and Settings (its runners list, then a runner's record).
     var sectionAtRoot: Bool {
         switch selectedSection {
         // Nothing pushed on the Tasks stack: not a task's detail, not the list directory — one
@@ -1326,14 +1321,11 @@ final class AppModel {
         // Nothing pushed on the Agents stack: no draft, no console — one read, where this used to
         // ask two fields that the stack could disagree with.
         case .agents:  return nav.sectionAtRoot
-        // The single-layer sections: a runner / watch / user record is a frame of that section's
-        // own stack, so one read covers both the three-column selection and the compact push.
-        // Skills pushes nothing (always at root); Admin pushes a user's record now, which is what
-        // replaced the unconditional `true` this used to answer with.
-        case .skills, .runners, .following, .admin: return nav.sectionAtRoot
-        // Settings pushes its Runners sub-page (iOS); it's at root only when that isn't up, so the
-        // pushed runner pages yield the edge to the system back-swipe.
-        case .settings: return !settingsShowingRunners
+        // The sections whose pages are frames of their own stack: one read covers both the
+        // three-column selection and the compact push. Skills pushes nothing (always at root); Admin
+        // pushes a user's record now, which is what replaced the unconditional `true` this used to
+        // answer with; Settings pushes two (its runners list, then a runner's record).
+        case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
         }
     }
 

@@ -317,8 +317,7 @@ private struct CompactSections: View {
                     }
             }
 
-        // SKILLS / SETTINGS / ADMIN — single-pane sections, first-class drawer destinations. Admin is
-        // reachable only for admins (the drawer hides it otherwise), so it needs no extra role gate.
+        // SKILLS — a single-pane section, a first-class drawer destination.
         case .skills:
             NavigationStack {
                 SkillsView()
@@ -326,13 +325,23 @@ private struct CompactSections: View {
                     .refreshable { await model.runners?.load() }
             }
 
+        // SETTINGS — the one stack that goes genuinely deep: the form → the runners list → a runner's
+        // record. Both pushes are frames of this stack now, the deepest in the app and the last place
+        // two mechanisms were chained on one stack (a boolean `isPresented` for the list, a
+        // destination closure for the record). Settings registers both destinations itself — see
+        // `SettingsView` — because iPad regular pushes the same two pages from the same form, so one
+        // registration serves both shells.
         case .settings:
-            NavigationStack { SettingsView().drawerToggle(open: openDrawer) }
+            NavigationStack(path: $model.nav.path) {
+                SettingsView().drawerToggle(open: openDrawer)
+            }
 
-        // Admin used to be a bare `NavigationStack` with no detail column and no push, so a selected
-        // user had nowhere to go — the section was always "at root" whatever the selection said. The
-        // account's record is a page of this section's stack now, so a row tap pushes it like every
-        // other section's row does. The three-column shell is unaffected: it always had the detail.
+        // ADMIN — a single-pane section, a first-class drawer destination, reachable only for admins
+        // (the drawer hides it otherwise), so it needs no extra role gate. It used to be a bare
+        // `NavigationStack` with no detail column and no push, so a selected user had nowhere to go —
+        // the section was always "at root" whatever the selection said. The account's record is a
+        // page of this section's stack now, so a row tap pushes it like every other section's row
+        // does. The three-column shell is unaffected: it always had the detail.
         case .admin:
             NavigationStack(path: $model.nav.path) {
                 AdminUsersView(rowNavigation: .push)
