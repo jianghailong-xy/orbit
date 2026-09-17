@@ -68,7 +68,12 @@ struct WorkspaceNavigationRow: View {
                         workspaceName
                         disabledBadge
                     }
-                    Text(runnerLabel)
+                    // Offline is said in words here, not left to the folder's corner badge: that
+                    // badge is a small muted glyph on a dark row and reads as texture rather than
+                    // as state. This line has the width for it, and saying it costs no contrast —
+                    // dimming the whole row, the other obvious option, would drag this subtitle
+                    // under 3:1. The badge stays on as the second channel.
+                    Text(offline ? "\(runnerLabel) · Offline" : runnerLabel)
                         .font(.orbitListSubtitle)
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
@@ -94,7 +99,9 @@ struct WorkspaceNavigationRow: View {
                     .background(Color.orange.opacity(0.15), in: Capsule())
                     .accessibilityLabel("\(count) waiting for you")
             } else if status == .running {
-                SpinnerGlyph(color: .blue)
+                // Same reading as the session row's cue: background work stays neutral so the
+                // amber count above is the only thing in this column asking for you.
+                SpinnerGlyph(color: .secondary)
                     .accessibilityLabel("Session running")
             }
         }
@@ -1183,7 +1190,12 @@ struct SessionLiveIndicator: View {
     @ViewBuilder var body: some View {
         let glyph = SessionStatusGlyph.make(for: session)
         switch (glyph.shape, glyph.tone) {
-        case (.spinner, _): SpinnerGlyph(color: .blue)
+        // Working is the one live state that does *not* want you — the row is making progress on
+        // its own. Amber (needs you) and red (failed) are the two that do, so the working cue is
+        // deliberately the quietest of the three and leaves blue to mean selection and
+        // tappability: it used to sit inches from a blue tag chip on the same row, two unrelated
+        // meanings in one hue.
+        case (.spinner, _): SpinnerGlyph(color: .secondary)
         case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
         case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
         default:            EmptyView()
