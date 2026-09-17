@@ -122,16 +122,23 @@ async function click(el: Element) {
 
 /**
  * How every appended block must read once it is known to be Orbit's: last in the person's bubble,
- * under their words, named for its kind, folded until clicked, the block verbatim once open, and
+ * under their words, named for its kind, folded until clicked, what the model read once open, and
  * folded again on a second click.
+ *
+ * Two of them open as something other than their own text — the inventory a returning engine is
+ * handed, and the tasks a person named with `#` (`card`, whose title is the link the block's id
+ * could only be read as). Everything else opens verbatim, which is the whole of what this says
+ * about it.
  */
-async function expectFoldedEntry({ typed, block, kind, count, marker }: {
+async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
   typed: string;
   block: string;
   kind: string;
-  /** What the inventory block adds to its own name once shut (BackgroundJobsNote); '' for the rest. */
+  /** What a block that opens as rows or cards adds to its own name once shut; '' for the rest. */
   count: string;
   marker: string;
+  /** The one card a `#`-reference opens as, for the block that opens as one. */
+  card?: { title: string; href: string };
 }) {
   const toggle = attachedToggle();
   expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
@@ -148,8 +155,16 @@ async function expectFoldedEntry({ typed, block, kind, count, marker }: {
   await click(toggle!);
 
   expect(toggle!.getAttribute('aria-expanded')).toBe('true');
-  const original = [...entry.querySelectorAll('*')].find((el) => el.textContent === block);
-  expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
+  if (card) {
+    const link = entry.querySelector('a.reftask-title');
+    expect(link?.textContent, `the opened entry is not a card:\n${container.innerHTML}`).toBe(card.title);
+    expect(link?.getAttribute('href')).toBe(card.href);
+    // The table is what the card replaced, the sentence addressed to the agent with it.
+    expect(entry.textContent).not.toContain('详情请用 task_get 自取');
+  } else {
+    const original = [...entry.querySelectorAll('*')].find((el) => el.textContent === block);
+    expect(original, `the opened entry does not show the block verbatim:\n${container.innerHTML}`).toBeTruthy();
+  }
   expect(words()).toBe(typed);
 
   await click(toggle!);
@@ -162,13 +177,17 @@ describe.each([
   { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', count: ' · 1 ended, exit 0', marker: 'bgj_3a1af2b50428' },
   { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', count: '', marker: '累计 47 次' },
   { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', count: '', marker: '的协调会话' },
-  { tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK, kind: 'referenced task', count: '', marker: '详情请用 task_get 自取' },
-])('$tag', ({ typed, block, kind, count, marker }) => {
-  it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to its original text', async () => {
+  {
+    tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK,
+    kind: 'referenced task', count: ' · OPEN', marker: '回填历史 user 事件的 controlPlaneNote',
+    card: { title: '回填历史 user 事件的 controlPlaneNote', href: '/tasks/34MQb2AXbj3QAkZko92ob' },
+  },
+])('$tag', ({ typed, block, kind, count, marker, card }) => {
+  it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to what the model read', async () => {
     const appended = `\n\n${block}`;
     await mount([userEvent(`${typed}${appended}`, appended)]);
 
-    await expectFoldedEntry({ typed, block, kind, count, marker });
+    await expectFoldedEntry({ typed, block, kind, count, marker, card });
   });
 
   it('with no note: someone who typed the same characters sees them in their bubble as typed, and nothing is folded away', async () => {

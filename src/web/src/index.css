@@ -5575,6 +5575,68 @@ button.composer-usage:focus-visible {
   word-break: break-word;
 }
 
+/* The `#`-referenced tasks opened as cards (ReferencedTaskNote): the background-jobs row language
+   (.bgjobs-*), since the two sit one above the other in the same fold whenever a note carries both.
+   The title is the link, so the task is one click from the message that referenced it. */
+.reftask {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.reftask-task {
+  padding: 6px 8px;
+  border-radius: 8px;
+  /* Translucent: the bubble this sits in is already tinted, and an opaque panel lands as a hole. */
+  background: var(--fill-inset);
+}
+.reftask-task + .reftask-task {
+  margin-top: 4px;
+}
+.reftask-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.reftask-head .status-pill {
+  flex: none;
+}
+/* What the status line said after the status: the kind of task it is, not its lifecycle. */
+.reftask-suffix {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+}
+/* The title is the row. Two lines of it — a task title runs long and the id is under it. */
+.reftask-title {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.reftask-title:hover {
+  color: var(--brand);
+}
+.reftask-outcome {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+.reftask-meta {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  overflow-wrap: anywhere;
+}
+
 /* A `#`-reference in a message, styled to read as the same object the composer chipped — the
    user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it
    sits mid-sentence and must not disturb the line box. */

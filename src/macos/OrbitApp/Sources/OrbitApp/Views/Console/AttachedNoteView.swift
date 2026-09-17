@@ -6,10 +6,12 @@ import OrbitKit
 /// one line as Orbit's rather than the person's, and opened by a tap (a phone has no hover to hang a
 /// tooltip on) to exactly what the model read.
 ///
-/// The inventory a returning engine is handed is the one block whose lines are a list of outcomes,
-/// so it opens as rows (`BackgroundJobsNoteView`) and its count goes on the line that names it shut:
-/// "background jobs" alone never said whether opening it was worth the tap. Any other block opens as
-/// it always has, verbatim.
+/// Two of the blocks open as something other than their own text: the inventory a returning engine
+/// is handed, whose lines are a list of outcomes (`BackgroundJobsNoteView`), and the tasks a person
+/// named with `#`, whose table holds an id nobody could tap (`ReferencedTaskNoteView`). One note can
+/// carry both, so each reading is handed what the one before it did not take and what is left over
+/// is drawn as it always was. Their counts go on the line that names the note shut: "background
+/// jobs" alone never said whether opening it was worth the tap.
 ///
 /// Drawn under the person's words in their bubble (`UserBubbleView`), and inside the card on a turn
 /// nobody typed (`BackgroundWakeCardView`). Web parity: `Transcript.tsx`'s `ControlPlaneNote`.
@@ -19,20 +21,23 @@ struct AttachedNoteEntry: View {
 
     var body: some View {
         let jobs = BackgroundJobsText.parse(attached.text)
+        let tasks = ReferencedTaskText.parse(jobs?.rest ?? attached.text)
+        let rest = tasks?.rest ?? jobs?.rest ?? attached.text
         return VStack(alignment: .leading, spacing: 4) {
             Button {
                 open.toggle()
             } label: {
-                Text(head(jobs))
+                Text(head(jobs, tasks))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
             }
             .buttonStyle(.plain)
             if open {
-                if let jobs {
-                    BackgroundJobsNoteView(jobs: jobs)
-                    // Another block the same note carried is not this one's to draw as rows.
-                    if !jobs.rest.isEmpty { verbatim(jobs.rest) }
+                if tasks != nil || jobs != nil {
+                    if let tasks { ReferencedTaskNoteView(tasks: tasks.tasks) }
+                    if let jobs { BackgroundJobsNoteView(jobs: jobs) }
+                    // Another block the same note carried is neither reading's to draw as rows.
+                    if !rest.isEmpty { verbatim(rest) }
                 } else {
                     verbatim(attached.text)
                 }
@@ -41,10 +46,11 @@ struct AttachedNoteEntry: View {
     }
 
     /// "⊕ Orbit attached: background jobs · 2 running, 1 failed".
-    private func head(_ jobs: BackgroundJobs?) -> String {
-        let line = "⊕ Orbit attached: \(attached.kind)"
-        guard let jobs else { return line }
-        return line + " · " + BackgroundJobsNote.summary(jobs)
+    private func head(_ jobs: BackgroundJobs?, _ tasks: ReferencedTasks?) -> String {
+        var line = "⊕ Orbit attached: \(attached.kind)"
+        if let tasks { line += " · " + ReferencedTaskNote.summary(tasks.tasks) }
+        if let jobs { line += " · " + BackgroundJobsNote.summary(jobs) }
+        return line
     }
 
     private func verbatim(_ text: String) -> some View {
@@ -150,5 +156,69 @@ struct BackgroundJobsNoteView: View {
         case .running:
             Image(systemName: "clock").font(.orbitLabel).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// The tasks a person named with `#`, as cards rather than as the block's own plain-text table
+/// (OrbitKit's `ReferencedTaskText.parse`) — which is what a reader met before: five labelled lines
+/// per task, eight of them in one note, and on the first of them an id they could see and not tap.
+///
+/// The card language is the block-rows' (`BackgroundJobsNoteView`), since the two sit one above the
+/// other in the same fold whenever a note carries both: the lifecycle pill for how it stands, the
+/// title as the row, the last run on the right, the ids under it. The title is the link — it opens
+/// the task through the same `orbit-task:` scheme a `#`-reference in prose is written as, which both
+/// app shells route (`ReferenceLink`).
+///
+/// Web parity: `ReferencedTaskNote.tsx`. The words are OrbitKit's `ReferencedTaskNote`, which
+/// `ReferencedTaskCopyParityTests` holds to the web's.
+struct ReferencedTaskNoteView: View {
+    let tasks: [ReferencedTask]
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(tasks, id: \.id) { card($0) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One task's card: how it stands, what it is called, how its last run came out, and the ids.
+    private func card(_ task: ReferencedTask) -> some View {
+        let outcome = ReferencedTaskNote.outcome(task)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                TaskStatusPill(pill: ReferencedTaskNote.pill(task))
+                // `DONE · 验收任务`: what kind of task it is, which its lifecycle does not say.
+                ForEach(task.suffixes, id: \.self) { suffix in
+                    Text(suffix)
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                }
+                // The title is the row, and tapping it opens the task the block could only name.
+                Button {
+                    if let url = ReferencedTaskNote.link(task) { openURL(url) }
+                } label: {
+                    Text(task.title)
+                        .font(.orbitLabel)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
+                if !outcome.isEmpty {
+                    Text(outcome)
+                        .font(.orbitMonoFine).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                }
+            }
+            Text(ReferencedTaskNote.meta(task))
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
     }
 }
