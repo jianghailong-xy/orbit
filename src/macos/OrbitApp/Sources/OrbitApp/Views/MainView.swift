@@ -6,20 +6,40 @@ import OrbitKit
 /// and Manage; macOS preserves its disclosure-style source list.
 struct MainView: View {
     @Environment(AppModel.self) private var model
+    /// Whether the first column is on screen. It routes — app sections plus a workspace picker —
+    /// rather than being a level you read through, and every section swaps both columns to its
+    /// right, so holding it resident spends width the detail pane never gets back. iPad starts it
+    /// collapsed; macOS keeps its source list open. Either way the last choice is remembered, and
+    /// SwiftUI keeps the toggle on the leading edge of whichever column is leftmost, so the way
+    /// back is always on screen.
+    #if os(iOS)
+    @AppStorage("shell.sidebarVisible") private var sidebarVisible = false
+    #else
+    @AppStorage("shell.sidebarVisible") private var sidebarVisible = true
+    #endif
+    /// `.doubleColumn` hides only the sidebar — `.detailOnly` would take the session list with it.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .doubleColumn
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             SectionSidebar(isAdmin: model.user?.role == "ADMIN")
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
+                // Wide enough that a workspace and its runner subtitle both survive: two rows can
+                // share a name ("orbit" on two different runners) and the runner is what tells
+                // them apart, so truncating it costs the only distinguishing text on the row.
+                .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 360)
         } content: {
             SectionContent(section: model.selectedSection)
                 .orbitPaneBackground()
                 #if os(iOS)
                 // The regular-iPad session column carries a visible three-way scope control and
-                // two-line rows. Give it a little more preferred room than the desktop pane while
-                // leaving SwiftUI free to collapse the split when the window narrows.
-                .navigationSplitViewColumnWidth(min: 260, ideal: 330, max: 420)
+                // two-line rows — but SwiftUI reads *this column's own* width for the size class
+                // the column sees. At the previous 330 ideal it settled near 282pt and reported
+                // `.compact`, which quietly routed the column through the iPhone layout: large
+                // title instead of inline, no scope control, iPhone row density. Ask for width
+                // that clears the regular threshold, and leave SwiftUI free to collapse the split
+                // when the window narrows.
+                .navigationSplitViewColumnWidth(min: 320, ideal: 420, max: 480)
                 #else
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
                 #endif
@@ -28,6 +48,8 @@ struct MainView: View {
                 .orbitPaneBackground()
         }
         .task { model.startPolling() }
+        .onAppear { columnVisibility = sidebarVisible ? .all : .doubleColumn }
+        .onChange(of: columnVisibility) { _, now in sidebarVisible = (now == .all) }
         // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the
         // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
         .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
