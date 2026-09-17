@@ -210,6 +210,51 @@ final class WatchWakeCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains(" is now ${t.status}"), "what a changed target is now drifted")
     }
 
+    // MARK: the bar pinned to the top of the transcript
+
+    /// What the bar over the conversation calls this turn, on both ends.
+    ///
+    /// The bar names the turn the answer in view belongs to, and it looked for the person's own
+    /// bubbles: iOS found the wake among them and drew "↑ Your question" with the payload's raw
+    /// UUID beside it — directly above this card reading "not typed by you" — while the browser
+    /// walked past it and named an unrelated earlier question. Both now name it off
+    /// `StickySummary`, which takes the two words from this card, so the bar cannot say one thing
+    /// while the card under it says another. The browser's half of that is the pair of attributes
+    /// the card stamps on its root for `WorkspaceView`'s scanner to read.
+    func testTheStickyBarNamesAWakeInThisCardsOwnWords() throws {
+        let card = try flat(Self.webWakeCard)
+        for (attribute, what) in [("data-sticky-label={watchWakeTitle(wake.kind)}", "label"),
+                                  ("data-sticky-text={watchWakeWhy(wake)}", "line")] {
+            XCTAssertTrue(card.contains(attribute),
+                          "the \(what) the bar takes from this card drifted: \(Self.webWakeCard) no "
+                              + "longer stamps \(attribute.debugDescription) on the card's root, so "
+                              + "the browser's bar is back to skipping the wake and naming an "
+                              + "earlier question in its place.")
+        }
+        // Taken from the same two functions the card itself draws, which is what makes them the
+        // card's own words rather than a second wording of them.
+        XCTAssertTrue(card.contains("<EyeOutlined /> {watchWakeTitle(wake.kind)}")
+                          && card.contains("className=\"watch-wake-why\">{watchWakeWhy(wake)}"),
+                      "the card stopped drawing its own title and line through the functions the "
+                          + "bar reads, so the two can now drift apart inside the browser itself.")
+
+        let web = try flat(Self.webWorkspace)
+        XCTAssertTrue(web.contains("[data-sticky-label]:not(.is-queued)"),
+                      "the browser's scanner no longer reaches the wake's card — it is back to "
+                          + "`.chat-user` bubbles alone, which a wake is not.")
+        XCTAssertTrue(web.contains("cur.getAttribute('data-sticky-text')"),
+                      "the browser's bar stopped reading the wake's line off the card and is back "
+                          + "to scraping rendered markdown a wake's card does not have.")
+        // The one label that is not a card's title, and the arrow every label opens with.
+        assertWritten(web, prefix: "const STICKY_LABEL = ",
+                      String(StickySummary.yourQuestion.dropFirst(StickySummary.arrow.count)),
+                      "what the bar calls a turn the person typed", Self.webWorkspace)
+        XCTAssertTrue(web.contains("className=\"chat-sticky-label\">\(StickySummary.arrow){stuck.label}"),
+                      "the bar's label drifted: \(Self.webWorkspace) no longer opens it with "
+                          + "\(StickySummary.arrow.debugDescription) — first is StickySummary.arrow, "
+                          + "which this client puts in front of every one of these labels.")
+    }
+
     // MARK: the span both the card's EXPIRES row and the strip count off
 
     /// How long is left, in units. This pair had already drifted: the browser said "3h 20m" and this

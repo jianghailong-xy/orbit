@@ -19,6 +19,19 @@ const WHY: Record<Exclude<WatchWake['kind'], 'MATCHED'>, string> = {
   UNRESOLVABLE: 'Every target it watched was deleted, so its condition can never be decided.',
 };
 
+/** What happened, at a glance. */
+export function watchWakeTitle(kind: WatchWake['kind']): string {
+  return TITLE[kind];
+}
+
+/** Why the watch queued this turn: a Match's own account of the condition, or the sentence one of
+ *  the three ends is. The sticky bar at the top of the transcript reads it too, so the turn it
+ *  names says the same there as on the card it points at. */
+export function watchWakeWhy(wake: WatchWake): string {
+  if (wake.kind !== 'MATCHED') return WHY[wake.kind];
+  return wake.reason ? describeReason(wake.reason) : 'Its condition held.';
+}
+
 /**
  * A turn a watch queued into this session (lib/watches `parseWatchWake`), drawn as the watch's rather
  * than as a message the user typed: what happened, what changed, and a way to the watch. The words the
@@ -53,17 +66,19 @@ export function WatchWakeCard({
   const more = wake.changedTargets.length - changed.length;
   return (
     <div className="watch-wake-wrap">
-      <div className={`watch-wake is-${wake.kind.toLowerCase()}${queued ? ' is-queued' : ''}`} data-seq={seq}>
+      {/* The sticky bar at the top of the transcript names this turn off these two attributes: it
+          scans for user bubbles and would otherwise either skip the wake (naming an earlier
+          question instead, and scrolling to it) or, as iOS did, call it the person's own. */}
+      <div
+        className={`watch-wake is-${wake.kind.toLowerCase()}${queued ? ' is-queued' : ''}`}
+        data-seq={seq}
+        data-sticky-label={watchWakeTitle(wake.kind)}
+        data-sticky-text={watchWakeWhy(wake)}
+      >
         <div className="watch-wake-title">
-          <EyeOutlined /> {TITLE[wake.kind]}
+          <EyeOutlined /> {watchWakeTitle(wake.kind)}
         </div>
-        <div className="watch-wake-why">
-          {wake.kind === 'MATCHED'
-            ? wake.reason
-              ? describeReason(wake.reason)
-              : 'Its condition held.'
-            : WHY[wake.kind]}
-        </div>
+        <div className="watch-wake-why">{watchWakeWhy(wake)}</div>
         {changed.length > 0 && (
           <ul className="watch-wake-changed">
             {changed.map((t) => (

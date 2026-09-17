@@ -31,22 +31,28 @@ function title(wake: BackgroundWake): string {
   return isFailed(jobs[0]) ? 'Background job failed' : 'Background job finished';
 }
 
-/** The one line under it that says how it came out. */
-function summary(wake: BackgroundWake): ReactNode {
+/** The one line under it that says how it came out, in words — which is also what the sticky bar at
+ *  the top of the transcript names this turn with, so the two say the same thing. */
+function summaryText(wake: BackgroundWake): string {
   const { jobs } = wake;
   if (jobs.length === 0) return wake.wakeups[0]?.reason ?? 'It came due.';
-  if (jobs.length === 1) {
-    return (
-      <>
-        <strong>{jobs[0].description || jobs[0].command}</strong> {outcome(jobs[0])}.
-      </>
-    );
-  }
+  if (jobs.length === 1) return `${jobs[0].description || jobs[0].command} ${outcome(jobs[0])}.`;
   const failed = jobs.filter(isFailed);
   if (failed.length > 0) return `${failed.length} of ${jobs.length} failed.`;
   return jobs.every((job) => job.exitCode === 0)
     ? `All ${jobs.length} exited 0.`
     : `All ${jobs.length} finished.`;
+}
+
+/** That same line as the card draws it, with the lone job's name in bold. */
+function summary(wake: BackgroundWake): ReactNode {
+  const { jobs } = wake;
+  if (jobs.length !== 1) return summaryText(wake);
+  return (
+    <>
+      <strong>{jobs[0].description || jobs[0].command}</strong> {outcome(jobs[0])}.
+    </>
+  );
 }
 
 /**
@@ -83,9 +89,14 @@ export function BackgroundWakeCard({
   const showReason = wake.jobs.length > 0 || wake.wakeups.length > 1;
   return (
     <div className="bgwake-wrap">
+      {/* The sticky bar at the top of the transcript names this turn off these two attributes: it
+          scans for user bubbles and would otherwise either skip the wake (naming an earlier
+          question instead, and scrolling to it) or, as iOS did, call it the person's own. */}
       <div
         className={`bgwake ${failed ? 'is-failed' : 'is-ok'}${queued ? ' is-queued' : ''}`}
         data-seq={seq}
+        data-sticky-label={title(wake)}
+        data-sticky-text={summaryText(wake)}
       >
         <div className="bgwake-title">
           {wake.jobs.length === 0 ? <ClockCircleOutlined /> : <CodeOutlined />} {title(wake)}
