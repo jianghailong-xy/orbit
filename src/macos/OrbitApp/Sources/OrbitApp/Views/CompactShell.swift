@@ -230,16 +230,30 @@ private struct CompactSections: View {
     var body: some View {
         @Bindable var model = model
         switch model.selectedSection {
-        // TASKS — task list → detail
+        // TASKS — task list → detail, or the directory of every named list
+        //
+        // Same shape as Agents below, for the same reason: the path here IS the section's stack, so
+        // the row that draws as selected and the page that is showing are one value. The collapsed
+        // split it replaced answered "what is pushed?" with a flat selection, which is how a task
+        // deleted under the viewer could leave the shell on a spinner under a non-nil selection.
         case .tasks:
-            NavigationSplitView {
-                TasksListView()
+            NavigationStack(path: $model.taskStack) {
+                TasksListView(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
                     .refreshable {
                         await model.tasks?.refresh()
                     }
-            } detail: {
-                TaskDetailView()
+                    // One destination per frame type. The list directory is the second page this
+                    // section pushes, and it used to be a boolean destination (`isPresented`) raised
+                    // over the list — a navigation mechanism of its own on the same private stack.
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)
+                        case .taskListsDirectory:     TaskListsDirectoryPage()
+                        // The other sections' pages ride their own stacks, not this one.
+                        default:                      EmptyView()
+                        }
+                    }
             }
 
         // AGENTS — the agent is picked in the drawer, so the section root is that agent's *sessions*

@@ -6,10 +6,15 @@ import OrbitKit
 /// mobile-native menus/search/swipes instead of squeezing the desktop table onto an iPhone.
 struct TasksListView: View {
     @Environment(AppModel.self) private var model
+    /// How this list's rows navigate — the container fact the Agents column already names
+    /// (`SessionRowNavigation`): a plain `List` in a `NavigationStack` takes no selection taps at
+    /// all in non-edit mode, so the compact shell's rows carry their own destination values and
+    /// push them, while the three-column shells keep the `List`'s selection. Defaults to the
+    /// selection shape, which is what the split shells want.
+    var rowNavigation: SessionRowNavigation = .selection
     @State private var taskToDelete: TaskItem?
 
     var body: some View {
-        @Bindable var model = model
         if let tasks = model.tasks {
             @Bindable var tasks = tasks
             VStack(spacing: 0) {
@@ -21,15 +26,10 @@ struct TasksListView: View {
                 toolbar(tasks)
                 Divider()
                 #endif
-                taskList(tasks, selection: $model.selectedTaskID)
+                taskList(tasks, selection: listSelection)
             }
             .navigationTitle(tasks.scopeTitle)
             .searchable(text: $tasks.searchText, prompt: "Search tasks")
-            #if os(iOS)
-            .navigationDestination(isPresented: $model.taskListsDirectoryPresented) {
-                TaskListsDirectoryView(tasks: tasks)
-            }
-            #endif
             .task { await navigationRefreshLoop(tasks) }
             .task(id: tasks.queryKey) { await listRefreshLoop(tasks) }
             .confirmationDialog("Delete this task?", isPresented: deletePresented,
@@ -134,6 +134,17 @@ struct TasksListView: View {
         )
     }
 
+    /// What the List's selection is bound to: the projection onto the Tasks stack in the
+    /// three-column shape — the same projection the Agents column binds — and nothing at all in the
+    /// compact one, whose rows carry their own destinations. Written as its own property so its
+    /// type is decided here, not at the call site.
+    private var listSelection: Binding<String?>? {
+        guard rowNavigation == .selection else { return nil }
+        return Binding(
+            get: { model.selectedTaskID },
+            set: { model.selectedTaskID = $0 })
+    }
+
     private func scopeBinding(_ tasks: TasksModel) -> Binding<TaskScope> {
         Binding(
             get: { tasks.scope },
@@ -205,7 +216,7 @@ struct TasksListView: View {
         .padding(.vertical, 7)
     }
 
-    private func taskList(_ tasks: TasksModel, selection: Binding<String?>) -> some View {
+    private func taskList(_ tasks: TasksModel, selection: Binding<String?>?) -> some View {
         List(selection: selection) {
             #if os(iOS)
             // The progress overview scrolls with the content instead of permanently consuming
@@ -217,21 +228,7 @@ struct TasksListView: View {
             }
             #endif
             ForEach(tasks.visible) { task in
-                TaskRowView(task: task)
-                    .tag(task.id)
-                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                        if TaskListLogic.canStart(task) {
-                            runButton(tasks, task)
-                                .tint(task.status == .failed ? .orange : .blue)
-                        }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) { taskToDelete = task } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        .disabled(tasks.isMutating(task.id))
-                    }
-                    .contextMenu { rowMenu(tasks, task) }
+                taskRow(tasks, task)
             }
             if tasks.hasMore {
                 Button {
@@ -254,6 +251,39 @@ struct TasksListView: View {
         .listStyle(.plain)
         #endif
         .overlay { emptyOverlay(tasks) }
+    }
+
+    /// One row, wrapped for the container it is in — the same shape as `AgentPanes.sessionRow`. The
+    /// row view itself is the same either way, actions included; what changes is who moves the
+    /// screen: the three-column `List`'s selection, or the row's own destination value on the
+    /// compact stack. There is no third state for "highlighted but not openable" to live in, because
+    /// the highlight IS the pushed detail in both shapes.
+    @ViewBuilder
+    private func taskRow(_ tasks: TasksModel, _ task: TaskItem) -> some View {
+        let row = TaskRowView(task: task)
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                if TaskListLogic.canStart(task) {
+                    runButton(tasks, task)
+                        .tint(task.status == .failed ? .orange : .blue)
+                }
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) { taskToDelete = task } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .disabled(tasks.isMutating(task.id))
+            }
+            .contextMenu { rowMenu(tasks, task) }
+        switch rowNavigation {
+        case .selection:
+            row.tag(task.id)
+        case .push:
+            // `.foregroundStyle(.primary)`: a link's label otherwise inherits the accent tint, and
+            // the row is unchanged by design (only the wrapper is new).
+            NavigationLink(value: NavNode.taskDetail(taskID: task.id)) {
+                row.foregroundStyle(.primary)
+            }
+        }
     }
 
     @ViewBuilder
@@ -352,7 +382,7 @@ struct TasksListView: View {
 #if os(iOS)
 /// The complete task-list directory lives one level deeper than the drawer. This keeps the drawer
 /// useful as a quick switcher while giving large workspaces a native searchable, grouped surface.
-private struct TaskListsDirectoryView: View {
+struct TaskListsDirectoryView: View {
     @Environment(AppModel.self) private var model
     let tasks: TasksModel
     @State private var query = ""
@@ -475,10 +505,27 @@ private struct TaskListsDirectoryView: View {
                             + (running ? ", running" : completed ? ", completed" : ""))
     }
 
+    /// Picking a list closes the directory onto it. The close is a pop of this page off the Tasks
+    /// stack now, so the list you pick is the page underneath rather than a boolean being lowered
+    /// over whatever the shell happened to be showing.
     private func open(_ scope: TaskScope) {
         model.selectedTaskID = nil
         tasks.selectScope(scope)
         model.taskListsDirectoryPresented = false
+    }
+}
+
+/// The directory of every named task list, pushed onto the compact Tasks stack — the
+/// `.taskListsDirectory` frame. Its one entry point is the drawer's "View All Lists" row.
+struct TaskListsDirectoryPage: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let tasks = model.tasks {
+            TaskListsDirectoryView(tasks: tasks)
+        } else {
+            ProgressView()
+        }
     }
 }
 #endif
@@ -633,6 +680,23 @@ struct TaskDetailView: View {
         } else {
             ContentUnavailableView("Select a task", systemImage: "checklist",
                                    description: Text("Task details appear here."))
+        }
+    }
+}
+
+/// One task's detail, pushed onto the compact Tasks stack — the `.taskDetail` frame. The
+/// three-column shells render the same content inline in the detail pane (`TaskDetailView`); the
+/// container is what differs, not the page, so this one renders the task the frame carries instead
+/// of reading a second selection back out of the stack.
+struct TaskDetailPage: View {
+    @Environment(AppModel.self) private var model
+    let taskID: String
+
+    var body: some View {
+        if let tasks = model.tasks {
+            TaskDetailContent(tasks: tasks, taskID: taskID).id(taskID)
+        } else {
+            ProgressView()
         }
     }
 }

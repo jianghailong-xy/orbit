@@ -63,24 +63,56 @@ final class AppModel {
         set {
             nav.section = newValue
             // Switching sections tears down the other sections' *views* (the compact shell renders
-            // one at a time), but no longer their navigation: each section keeps its own stack, so
-            // coming back lands where you left instead of at the root. What still has to be dropped
-            // here is the state those shells keep outside a stack.
+            // one at a time), but not their navigation: each section keeps its own stack, so coming
+            // back lands where you left instead of at the root. Tasks used to be the exception —
+            // its pushed list directory was a boolean the switch had to clear, because a boolean
+            // cannot survive its view being rebuilt the way a stack can. What still has to be
+            // dropped here is the state those shells keep outside a stack.
             if newValue != .settings { settingsShowingRunners = false }
-            if newValue != .tasks { taskListsDirectoryPresented = false }
             tasks?.setSectionActive(newValue == .tasks)
         }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
+    /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
+    /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
+    /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
+    /// off the Tasks stack: the pushed page *is* the selection, so a task deleted under the viewer
+    /// takes its own page with it instead of leaving a spinner under a non-nil selection.
+    /// Writable because that is what the three-column shells' `List(selection:)` writes.
     var selectedTaskID: String? {
-        didSet {
-            // The detail store is a single slot. Clear it synchronously on every selection change
-            // so an A response cannot paint under B, and a deleted task cannot leave compact iOS
-            // navigation stuck on a spinner with a non-nil selection.
-            if selectedTaskID != oldValue { tasks?.setSelectedDetailID(selectedTaskID) }
+        get { nav.taskDetailOnTop }
+        set {
+            // Selecting in a three-column shell replaces the page the detail pane shows; clearing
+            // pops the task page that is there — never the directory beneath it.
+            if let id = newValue {
+                nav.replaceTop(with: .taskDetail(taskID: id))
+            } else if case .taskDetail = nav.path.last {
+                nav.pop()
+            }
+            syncTaskDetailStore()
         }
+    }
+    /// The Tasks stack, as the compact shell binds it.
+    ///
+    /// A row's own `NavigationLink` and the back button move this stack *inside* SwiftUI, so those
+    /// pushes and pops arrive here rather than through ``selectedTaskID`` — and the detail store
+    /// follows them in the same write. A turn later would be too late: the pushed page reads the
+    /// store the moment it appears (`TasksModel.loadDetail` refuses a task that isn't the selected
+    /// one), so a late sync is a detail page stuck on its spinner.
+    var taskStack: [NavNode] {
+        get { nav.path }
+        set {
+            nav.path = newValue
+            syncTaskDetailStore()
+        }
+    }
+    /// Follow the stack's task page into the model that serves it. The store is a single slot —
+    /// what a background refresh re-reads, and whose 404 is how a task deleted under the viewer
+    /// closes — so it has to name the page on screen and nothing else.
+    private func syncTaskDetailStore() {
+        tasks?.setSelectedDetailID(selectedTaskID)
     }
     /// The runner whose record fills the Runners pane — the row the three-column list draws as
     /// selected, and the page the compact stack pushes. A read of the section's stack, kept under
@@ -111,9 +143,21 @@ final class AppModel {
         }
     }
     /// iOS only: whether Tasks has pushed the searchable directory of every named task list.
-    /// The drawer shows only a compact preview; this state also tells the shell to leave the
-    /// leading edge to the system back-swipe while the directory page is visible.
-    var taskListsDirectoryPresented = false
+    /// The drawer shows only a compact preview; the directory is the second page this section
+    /// pushes, and pushing it is what leaves the leading edge to the system back-swipe while it is
+    /// visible (`sectionAtRoot` reads the stack, not this). Kept under its old name because that is
+    /// what its callers write — the drawer row that opens it, and the list pick that closes it.
+    var taskListsDirectoryPresented: Bool {
+        get { nav.taskListsDirectoryOnTop }
+        set {
+            if newValue {
+                nav.push(.taskListsDirectory)
+            } else if case .taskListsDirectory = nav.path.last {
+                nav.pop()
+            }
+            syncTaskDetailStore()
+        }
+    }
     /// iOS only: whether Settings has pushed its Runners sub-page (Runners was moved off the drawer
     /// rail into Settings). Drives the `.settings` branch of `sectionAtRoot` so the pushed runner
     /// pages yield the screen edge to the system back-swipe.
@@ -1270,12 +1314,15 @@ final class AppModel {
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
-    /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
-    /// own stack; Tasks and Settings still answer from the flags their pushes are kept in, until
-    /// they move onto theirs too.
+    /// no pushed page needs the edge for the system back-swipe. Tasks, Agents and the single-layer
+    /// sections read their own stacks; Settings still answers from the flag its push is kept in,
+    /// until it moves onto its stack too.
     var sectionAtRoot: Bool {
         switch selectedSection {
-        case .tasks:   return selectedTaskID == nil && !taskListsDirectoryPresented
+        // Nothing pushed on the Tasks stack: not a task's detail, not the list directory — one
+        // read, where this used to ask two fields that the stack could disagree with (the ask ran
+        // the other way round, too: "did the drawer not open?" answered with "is a task selected?").
+        case .tasks:   return nav.sectionAtRoot
         // Nothing pushed on the Agents stack: no draft, no console — one read, where this used to
         // ask two fields that the stack could disagree with.
         case .agents:  return nav.sectionAtRoot
@@ -1631,6 +1678,8 @@ final class AppModel {
         case .task(let id):
             // A deep link or dependency jump may target a task outside the currently selected
             // named list. Aggregate scope guarantees the row and detail can resolve together.
+            // Both of the next two lines are stack edits now: the directory page comes off, and the
+            // task's own page takes the top — so a route lands one page deep, whatever was showing.
             taskListsDirectoryPresented = false
             tasks?.selectScope(.all)
             tasks?.filter = .all

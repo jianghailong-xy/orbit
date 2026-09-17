@@ -225,4 +225,82 @@ final class NavigationTests: XCTestCase {
         nav.push(.compose(agentID: "a1"))
         XCTAssertNil(nav.focusedConsoleSessionID, "a draft composer is not a console either")
     }
+
+    // MARK: - Tasks
+    //
+    // This section already had an incident of the kind this project is about: "a deleted task cannot
+    // leave compact iOS navigation stuck on a spinner with a non-nil selection". The fix at the time
+    // was to clear the detail store by hand, which left the selection and the pushed page free to
+    // disagree. These are the same facts for Tasks, read the same way.
+
+    /// What the list highlights is the detail page that is showing. Backing out to the list leaves no
+    /// task current, so the row cannot be left drawn as selected with nothing behind it — and the
+    /// left screen edge goes back to the drawer gesture with it.
+    func testTheTaskListHighlightsTheDetailPageThatIsShowing() {
+        var nav = NavState(section: .tasks)
+        XCTAssertNil(nav.taskDetailOnTop, "the list page has no task on screen")
+
+        nav.replaceTop(with: .taskDetail(taskID: "t1"))
+        XCTAssertEqual(nav.taskDetailOnTop, "t1")
+        XCTAssertFalse(nav.sectionAtRoot)
+
+        nav.replaceTop(with: .taskDetail(taskID: "t2"))
+        XCTAssertEqual(nav.path.count, 1, "selecting again swaps the page rather than stacking on it")
+        XCTAssertEqual(nav.taskDetailOnTop, "t2")
+
+        nav.pop()
+
+        XCTAssertNil(nav.taskDetailOnTop, "no task stays current once the list is back")
+        XCTAssertTrue(nav.sectionAtRoot)
+        XCTAssertEqual(nav, NavState(section: .tasks), "an emptied stack leaves nothing behind")
+    }
+
+    /// Re-opening the same task after backing out. The value the binding receives equals the one it
+    /// holds only if a selection is kept beside the stack — which is the dead tap this section's
+    /// history predicts, and why there is nowhere left for such a state to live.
+    func testReopeningTheSameTaskAfterBackingOutOpensItAgain() {
+        var nav = NavState(section: .tasks)
+        nav.replaceTop(with: .taskDetail(taskID: "t1"))
+        nav.pop()
+        nav.replaceTop(with: .taskDetail(taskID: "t1"))
+
+        XCTAssertEqual(nav.path, [.taskDetail(taskID: "t1")])
+        XCTAssertEqual(nav.taskDetailOnTop, "t1")
+        XCTAssertFalse(nav.sectionAtRoot)
+    }
+
+    /// The second page this section pushes: the searchable directory of every named list. It is a
+    /// frame, so "the directory is showing" and "a task is selected" cannot both be true, and picking
+    /// a list closes it by landing back on the list underneath.
+    func testTheTaskListDirectoryIsASecondPageOnTheSameStack() {
+        var nav = NavState(section: .tasks)
+        nav.push(.taskListsDirectory)
+
+        XCTAssertTrue(nav.taskListsDirectoryOnTop)
+        XCTAssertNil(nav.taskDetailOnTop, "the directory is not a task's detail")
+        XCTAssertFalse(nav.sectionAtRoot, "a pushed page still owns the screen edge")
+
+        nav.pop()
+
+        XCTAssertFalse(nav.taskListsDirectoryOnTop, "picking a list lands on the list")
+        XCTAssertTrue(nav.sectionAtRoot)
+        XCTAssertEqual(nav, NavState(section: .tasks), "an emptied stack leaves nothing behind")
+    }
+
+    /// Leaving the section and coming back. The directory used to be the one push that did *not*
+    /// survive this — `selectedSection`'s `didSet` dropped it by hand, because a boolean cannot ride
+    /// a view being rebuilt the way a frame on a stack can. Now Tasks lands where you left it, like
+    /// every other section.
+    func testTheTaskListDirectorySurvivesLeavingTheSection() {
+        var nav = NavState(section: .tasks)
+        nav.push(.taskListsDirectory)
+
+        nav.section = .agents
+        XCTAssertTrue(nav.sectionAtRoot, "Agents shows its own root")
+
+        nav.section = .tasks
+
+        XCTAssertEqual(nav.path, [.taskListsDirectory], "coming back lands on the page you left")
+        XCTAssertFalse(nav.sectionAtRoot, "and the left edge still belongs to that page")
+    }
 }

@@ -128,6 +128,23 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
+    /// `AppModel.selectedTaskID` — the task whose detail is showing, which in the three-column shell
+    /// is also the row drawn as selected. Read off the stack like every other fact here: while a
+    /// flat `selectedTaskID` sat beside the stack, a task deleted under the viewer could leave the
+    /// pane drawing a selection whose page was never pushed, on a spinner that never resolved.
+    public var taskDetailOnTop: String? {
+        guard case .taskDetail(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// `AppModel.taskListsDirectoryPresented` — the searchable directory of every named task list is
+    /// the second thing this section pushes (the compact drawer's "View All Lists" row). It is a
+    /// frame, not a boolean beside the stack, so opening it cannot disagree with what is on screen.
+    public var taskListsDirectoryOnTop: Bool {
+        if case .taskListsDirectory = path.last { return true }
+        return false
+    }
+
     // MARK: - Transitions
 
     /// Go one page deeper in the current section.
