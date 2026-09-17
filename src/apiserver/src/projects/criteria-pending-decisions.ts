@@ -534,8 +534,12 @@ export interface SettledCriterionEntry {
  * WHAT IT STILL CANNOT SAY. `content_hash` covers the assertion and its verification method (0233)
  * and not the advisory `completionCriterionOverrideReason`, so a proposal that moved only that
  * third field is counted here among the restated ones. The pending card judges all three because it
- * holds both sides to judge them on; this holds a hash of two of them. Task B's stored diff is what
- * closes it.
+ * holds both sides to judge them on; this holds a hash of two of them.
+ *
+ * Closed for every decision recorded since 0279, which stores the diff it was answered against
+ * (`SettledDecisionDiff`) and therefore holds both sides of all three fields. NOT closed for the
+ * ones before it, whose before-words were never written down — this is what those still have, and
+ * it is why this path stays.
  */
 export interface SettledProposalMaterial {
   /** Everything the proposal moved: its own criteria in proposed order, then the ones it drops. */
@@ -676,6 +680,37 @@ export function settledProposalMaterial(
 }
 
 /**
+ * THE DIFF ONE ANSWER WAS GIVEN AGAINST — or, when the row carries none, WHY IT CARRIES NONE.
+ *
+ * A snapshot and not a derivation: `project_criteria_decision.diff_snapshot` (0279) is written
+ * inside the deciding transaction, off the definitions that were in force at that instant, because
+ * an APPROVE overwrites them and no later read can recover what they said.
+ *
+ * The two absent states are deliberately NOT one, and neither is an empty diff. `PREDATES_SNAPSHOT`
+ * is a fact about WHEN the decision was answered — before the column existed, so its before-words
+ * were never written down and never will be — and a card that drew that as "nothing moved" would be
+ * stating something about the decision instead of about the record. Those rows are exactly the ones
+ * `settledProposalMaterial` is still for, which is why both travel together on the same answer.
+ */
+export type SettledDecisionDiff =
+  | { state: 'SNAPSHOT'; diff: CriteriaProposalDiff }
+  | { state: 'PREDATES_SNAPSHOT' }
+  | { state: 'UNREADABLE' };
+
+/**
+ * The stored snapshot, read. The column is JSONB and does not have to agree with the type the
+ * writer put in it, so a value this reader cannot open is `UNREADABLE` rather than `PREDATES_
+ * SNAPSHOT`: only a NULL column says the decision is older than the column.
+ */
+export function settledDecisionDiff(snapshot: unknown): SettledDecisionDiff {
+  if (snapshot === null || snapshot === undefined) return { state: 'PREDATES_SNAPSHOT' };
+  if (typeof snapshot !== 'object' || Array.isArray(snapshot)) return { state: 'UNREADABLE' };
+  const candidate = snapshot as Partial<CriteriaProposalDiff>;
+  if (!Array.isArray(candidate.entries)) return { state: 'UNREADABLE' };
+  return { state: 'SNAPSHOT', diff: candidate as CriteriaProposalDiff };
+}
+
+/**
  * One proposal that WAS a question and has been answered: which answer, what it did to the seal,
  * and what it asked for.
  *
@@ -713,6 +748,13 @@ export interface SettledCriteriaDecision {
    * reader that. Null for a proposal whose `action` this reader could not make sense of.
    */
   proposal: SettledProposalMaterial | null;
+  /**
+   * And the OTHER side of it, for a decision recorded since 0279: the words each rewrite replaced,
+   * as they stood when the answer was given. This is what makes an answered card a before-and-after
+   * rather than a list — `proposal` above states one side, and it states it for the decisions that
+   * predate the column, which is every one this can only say `PREDATES_SNAPSHOT` about.
+   */
+  diff: SettledDecisionDiff;
 }
 
 /**
@@ -1062,7 +1104,12 @@ export async function recentlySettledCriteriaDecisions(
     // order rather than in whichever order the scan found them.
     orderBy: [{ decidedAt: 'desc' }, { intentId: 'desc' }],
     take: SETTLED_CRITERIA_DECISIONS_LIMIT,
-    select: { intentId: true, decision: true, decidedAt: true, baseSeal: true, resultingSeal: true },
+    select: {
+      intentId: true, decision: true, decidedAt: true, baseSeal: true, resultingSeal: true,
+      // The diff the answer was given against, for the rows that have one. Selected here rather
+      // than fetched per card: it is on the row the answer is already being read off.
+      diffSnapshot: true,
+    },
   });
   if (rows.length === 0) return [];
   const intents = await tx.projectRatifiedActionIntent.findMany({
@@ -1089,10 +1136,14 @@ export async function recentlySettledCriteriaDecisions(
   // 0249's CHECK is what makes the cast a fact: `decision` is APPROVE or REJECT on every row.
   // A missing or unreadable proposal is `null` rather than a dropped answer: what happened is the
   // fact the card exists to carry, and it is still true of a row this reader cannot open.
-  return rows.map((row) => ({
+  // The snapshot is destructured OUT of the spread rather than carried by it: the column's raw
+  // JSONB is not what this read publishes, and a spread that let it through would put an
+  // unvalidated second copy of the diff on the wire beside the one below.
+  return rows.map(({ diffSnapshot, ...row }) => ({
     ...row,
     decision: row.decision as CriteriaDecision,
     proposal: proposals.get(row.intentId) ?? null,
+    diff: settledDecisionDiff(diffSnapshot),
   }));
 }
 

@@ -3,13 +3,16 @@ import { describe, expect, it } from 'vitest';
 import {
   CRITERIA_DECISION_RECORDED_HEADING,
   CriteriaDecisionReceipt,
+  INLINE_DIFF_LEGEND,
   SETTLED_APPROVED_LEAD,
   SETTLED_DROPPED_WORDS_GONE,
   SETTLED_NOTHING_APPLIED,
   SETTLED_NO_BEFORE_WORDS,
   SETTLED_REFUSED_LEAD,
   settledSummary,
+  type CriteriaProposalDiff,
   type SettledCriteriaDecision,
+  type SettledDecisionDiff,
   type SettledProposalMaterial,
 } from './CriteriaDecisionCard';
 
@@ -71,6 +74,7 @@ function threeMoves(): SettledProposalMaterial {
 function answered(
   decision: 'APPROVE' | 'REJECT',
   proposal: SettledProposalMaterial | null,
+  diff?: SettledDecisionDiff,
 ): SettledCriteriaDecision {
   return {
     intentId: INTENT,
@@ -79,7 +83,53 @@ function answered(
     baseSeal: SEAL,
     resultingSeal: decision === 'APPROVE' ? MOVED_SEAL : SEAL,
     proposal,
+    ...(diff ? { diff } : {}),
   };
+}
+
+/**
+ * THE OTHER HALF, STORED: the words each rewrite replaced, as the decision recorded them.
+ *
+ * A decision answered since 0279 carries the diff it was given — the same shape the live card is
+ * drawn from, cut into runs by the server. The cut below is one criterion rewritten in the middle:
+ * two words kept on either end, a phrase dropped, a phrase put in its place.
+ */
+const WORDS_ON_RECORD = '每条迁移都在装载过的库上重放过';
+const WORDS_PROPOSED = '每条迁移在有人问起时重放过';
+
+function storedDiff(): SettledDecisionDiff {
+  const diff: CriteriaProposalDiff = {
+    entries: [
+      {
+        change: 'CHANGED',
+        definitionId: 'def-5',
+        ordinal: 5,
+        proposed: {
+          text: WORDS_PROPOSED, verificationMethod: 'EXECUTABLE',
+          completionCriterionOverrideReason: null,
+        },
+        onRecord: {
+          text: WORDS_ON_RECORD, verificationMethod: 'EXECUTABLE',
+          completionCriterionOverrideReason: null,
+        },
+        changed: ['text'],
+        rewrites: [{
+          field: 'text',
+          segments: [
+            { side: 'KEPT', text: '每条迁移' },
+            { side: 'REMOVED', text: '都在装载过的库上' },
+            { side: 'ADDED', text: '在有人问起时' },
+            { side: 'KEPT', text: '重放过' },
+          ],
+        }],
+      },
+    ],
+    sameCount: 13,
+    changedCount: 1,
+    newCount: 0,
+    removedCount: 0,
+  };
+  return { state: 'SNAPSHOT', diff };
 }
 
 const render = (settled: SettledCriteriaDecision): string =>
@@ -166,6 +216,55 @@ describe('the receipt of a refused proposal', () => {
 
   it('is the only one of the two that claims nothing was applied', () => {
     expect(render(answered('APPROVE', oneRewording()))).not.toContain(SETTLED_NOTHING_APPLIED);
+  });
+});
+
+describe('the receipt of a decision that stored the diff it was answered against', () => {
+  it('draws the two versions as one line, struck through and underlined', () => {
+    const html = render(answered('APPROVE', oneRewording(), storedDiff()));
+
+    // The point of the whole exercise: the words that were REPLACED are on the screen, in the
+    // same two elements and the same two class names the live card marks them with.
+    expect(html).toContain('criteria-decision-cut');
+    expect(html).toContain('criteria-decision-add');
+    expect(html).toContain('<del class="criteria-decision-cut"');
+    expect(html).toContain('<ins class="criteria-decision-add"');
+    expect(html).toContain('都在装载过的库上');
+    expect(html).toContain('在有人问起时');
+    // And the marks are explained, by the one line that says what a strikethrough means.
+    expect(html).toContain(INLINE_DIFF_LEGEND);
+    // This card is not the one-sided list, so the sentence that admits to being one would be a
+    // false statement here: the before-words are right there, cut against the after-words.
+    expect(html).not.toContain(SETTLED_NO_BEFORE_WORDS);
+    // Still a receipt, still folded.
+    expect(html).toContain(CRITERIA_DECISION_RECORDED_HEADING);
+    expect(html).not.toContain('<details open');
+    expect(html).toContain('<summary>What this approved · 1 reworded, 13 unchanged</summary>');
+  });
+
+  it('says of a refusal that none of it was applied, with the same comparison', () => {
+    const html = render(answered('REJECT', oneRewording(), storedDiff()));
+
+    expect(html).toContain(SETTLED_REFUSED_LEAD);
+    expect(html).toContain(SETTLED_NOTHING_APPLIED);
+    expect(html).toContain('criteria-decision-cut');
+    expect(html).toContain('criteria-decision-add');
+  });
+
+  it('falls back to the one-sided list for an answer given before the diff was stored', () => {
+    // `PREDATES_SNAPSHOT` is not an empty diff and must not be drawn as one: those decisions have
+    // no before-words anywhere, which is exactly what task A's display exists to say.
+    for (const settled of [
+      answered('APPROVE', oneRewording(), { state: 'PREDATES_SNAPSHOT' }),
+      answered('APPROVE', oneRewording(), { state: 'UNREADABLE' }),
+      answered('APPROVE', oneRewording()),
+    ]) {
+      const html = render(settled);
+      expect(html).toContain(SETTLED_NO_BEFORE_WORDS);
+      expect(html).toContain(REWORDED_TEXT);
+      expect(html).not.toContain('criteria-decision-cut');
+      expect(html).not.toContain('criteria-decision-add');
+    }
   });
 });
 

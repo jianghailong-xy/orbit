@@ -2378,6 +2378,21 @@ model ProjectCriteriaDecision {
   /// What the owner wanted a later reader to know. Optional: most answers are just an answer.
   note String?
 
+  /// THE DIFF AS IT STOOD WHEN THIS ANSWER WAS WRITTEN — the proposal read against the criteria
+  /// that were in force at that instant, which is the shape the pending card was drawn from
+  /// (`criteriaProposalDiff`, `criteria-pending-decisions.ts`).
+  ///
+  /// A SNAPSHOT, NOT A DERIVATION, and that is the entire reason for the column: an APPROVE
+  /// overwrites the definitions this was taken from, and nothing else keeps their words — the
+  /// proposal states only what it asks for, the sealed baseline holds `(definitionId, revision,
+  /// contentHash)`, and authorship records who wrote a revision rather than what it said. So no
+  /// later read of any table can reproduce this, and no reader may recompute it.
+  ///
+  /// Null exactly for a decision recorded before 0279, which is a fact about WHEN it was answered
+  /// and not a value to backfill. The read publishes those as `PREDATES_SNAPSHOT` rather than as an
+  /// empty diff, and goes on placing their criteria by content hash the way it always did.
+  diffSnapshot Json? @map("diff_snapshot")
+
   decidedAt DateTime @default(now()) @map("decided_at") @db.Timestamptz(6)
 
   @@index([projectId, decidedAt(sort: Desc)], map: "project_criteria_decision_recent_idx")

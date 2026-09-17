@@ -756,6 +756,23 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        nothing, names none of the six preserved triggers or functions, and is not a second writer
   //        of the DONE fence. Nothing it creates uses the `project_acceptance_` prefix or the word
   //        `judgment`.
+  //   0279 added `project_criteria_decision.diff_snapshot`, the diff an answered criteria proposal
+  //        was decided against, written in the same INSERT as the answer because an APPROVE
+  //        overwrites the definitions it was taken from and nothing else keeps their words. Read
+  //        against every claim above: it ALTERs exactly one table, `project_criteria_decision`,
+  //        which is not a preserved relation and is not reachable from one, by exactly one
+  //        `ADD COLUMN` — nullable, with no default, so the ADD is catalog-only and no stored row
+  //        is rewritten. No column is dropped anywhere. The only other statement is a
+  //        `COMMENT ON COLUMN` on that same new column, which is catalog prose and touches no row.
+  //        It names no `task`, `project` or `project_acceptance_criterion_definition` object, so
+  //        the 0177 pair, `task_executable_acceptance_pair` and every stored task and criterion row
+  //        are out of its reach, and no criterion's `text` or `verification_method` can move by one
+  //        byte — this column RECORDS what those said and is written by nobody who could change
+  //        them. It creates no table, enum, type, function or trigger, carries no `ALTER TYPE` and
+  //        no `DROP TYPE`, so the three `task_completion_criterion` labels survive with 0267's
+  //        fourth beside them, and it is not another writer of the DONE fence. It has no INSERT,
+  //        UPDATE or DELETE, so no preserved row is read or written, and no backfill is attempted:
+  //        a decision recorded before this migration has no snapshot and never will.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -799,7 +816,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0275_claude_history_import',
       '0276_task_list_pause_epoch',
       '0277_drop_run_event_duplicate_index',
-      '0278_project_open_item'],
+      '0278_project_open_item',
+      '0279_criteria_decision_diff_snapshot'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

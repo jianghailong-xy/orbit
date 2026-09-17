@@ -193,6 +193,24 @@ export interface SettledCriterionEntry {
   text: string | null;
 }
 
+/**
+ * THE DIFF ONE ANSWER WAS GIVEN AGAINST, when the record still holds it.
+ *
+ * `SNAPSHOT` carries both sides — the words on record and the words that replaced them — because
+ * the deciding transaction wrote them down before the approval overwrote the definitions they came
+ * off (`project_criteria_decision.diff_snapshot`, 0279). It is the same shape the live card is
+ * drawn from, so an answered card is the question, not a second rendering of it.
+ *
+ * `PREDATES_SNAPSHOT` is a decision answered before that column existed: its before-words were
+ * never written down and never will be, which is a fact about WHEN it was answered rather than a
+ * value that could be fetched. Those are the cards `SettledProposalMaterial` above is for, and the
+ * sentence they have to carry is `SETTLED_NO_BEFORE_WORDS`.
+ */
+export type SettledDecisionDiff =
+  | { state: 'SNAPSHOT'; diff: CriteriaProposalDiff }
+  | { state: 'PREDATES_SNAPSHOT' }
+  | { state: 'UNREADABLE' };
+
 /** What one answered proposal asked for: what it moved, and how much it left alone. */
 export interface SettledProposalMaterial {
   changed: SettledCriterionEntry[];
@@ -235,6 +253,13 @@ export interface SettledCriteriaDecision {
    * shape — an empty disclosure promises something behind it.
    */
   proposal?: SettledProposalMaterial | null;
+  /**
+   * And the other side of it, for an answer recorded since 0279: the words each rewrite REPLACED,
+   * as they stood when the answer was given. When this is a `SNAPSHOT` the receipt draws the same
+   * word-by-word comparison the question did; when it is anything else — including absent, from a
+   * server older than this bundle — the card falls back to `proposal` and says what it cannot show.
+   */
+  diff?: SettledDecisionDiff;
 }
 
 /** The derived read: every proposal of one project that is still a question, oldest first. */
@@ -1062,6 +1087,43 @@ function SettledProposal({ settled }: { settled: SettledCriteriaDecision }): JSX
   );
 }
 
+/**
+ * THE RECEIPT AS A BEFORE-AND-AFTER, which is what the owner asked for and what the record now
+ * allows.
+ *
+ * `SettledProposal` above shows the proposal's own side and has to say so, because for every
+ * decision older than 0279 that is the only side anybody kept. A decision recorded since then
+ * carries the diff it was answered against, so this draws the live card's own components over it:
+ * the same merged line per rewritten criterion, the same `<del>`/`<ins>` runs, the same legend for
+ * the two marks. One vocabulary and one layout between the question and its answer — a receipt
+ * rendered a second way would be a second thing to keep in step.
+ *
+ * `SETTLED_NO_BEFORE_WORDS` is deliberately absent here. It is true of the fallback and false of
+ * this: the words the rewrite replaced are on the screen, struck through.
+ */
+function SettledDiff({
+  settled,
+  diff,
+}: {
+  settled: SettledCriteriaDecision;
+  diff: CriteriaProposalDiff;
+}): JSX.Element {
+  return (
+    <details className="criteria-decision-unchanged">
+      <summary>{`${settledLead(settled.decision)} · ${changeSummary(diff)}`}</summary>
+      {hasRewrite(diff)
+        ? <span className="criteria-decision-legend">{INLINE_DIFF_LEGEND}</span>
+        : null}
+      <ProposedChanges diff={diff} />
+      {/* The same half a refusal has to say first on the other path: these are words that were
+          turned down, and the ruler they are cut against is still the ruler in force. */}
+      {settled.decision === 'REJECT'
+        ? <p className="criteria-decision-hold">{SETTLED_NOTHING_APPLIED}</p>
+        : null}
+    </details>
+  );
+}
+
 export function CriteriaDecisionReceipt({
   settled,
   reply = null,
@@ -1087,8 +1149,15 @@ export function CriteriaDecisionReceipt({
         <ReplyReceipt reply={reply} />
       </p>
       {/* In the live card's own body, so the fold sits under the same padding and the same 360px
-          cap the diff it is a record of was read in. */}
-      {settled.proposal ? (
+          cap the diff it is a record of was read in.
+
+          The stored diff is preferred whenever there is one: it is the comparison the owner was
+          shown, and `proposal` is the half that could be recovered without it. */}
+      {settled.diff?.state === 'SNAPSHOT' ? (
+        <div className="approval-body criteria-decision-body">
+          <SettledDiff settled={settled} diff={settled.diff.diff} />
+        </div>
+      ) : settled.proposal ? (
         <div className="approval-body criteria-decision-body">
           <SettledProposal settled={settled} />
         </div>

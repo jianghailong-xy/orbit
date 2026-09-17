@@ -58,6 +58,7 @@ import {
   CRITERIA_DECISION_ALREADY_SETTLED,
   CRITERIA_DECISION_BASE_SEAL_MOVED,
   criteriaDecisionRecorded,
+  criteriaProposalDiff,
   readPendingCriteriaDecisionsForOwner,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
@@ -1623,6 +1624,19 @@ export class ProjectsService {
         });
       }
 
+      // ── THE DIFF, TAKEN BEFORE ANYTHING IS APPLIED ───────────────────────────────────────────
+      // Not a sixth gate — the numbered steps above are the refusals, and this refuses nothing.
+      // It is the last moment the words a
+      // rewrite REPLACES exist anywhere: `replaceAcceptanceDefinitions` below overwrites them,
+      // the proposal states only what it asks for, and the sealed baseline holds hashes. Off
+      // `before` — the definitions this transaction has already read for the seal — so the
+      // snapshot costs no second read and is taken from the very rows the seal was compared
+      // against. The same call the pending card was drawn from, so the receipt and the question
+      // are one comparison rather than two that could disagree.
+      const diffSnapshot = criteriaProposalDiff(
+        action.request.proposed, criteriaFromDefinitions(before),
+      );
+
       // ── APPROVE: apply, re-read the seal, record — all three or none of them ─────────────────
       let resultingSeal = currentSeal;
       if (decision === 'APPROVE') {
@@ -1672,6 +1686,10 @@ export class ProjectsService {
           baseSeal: currentSeal,
           resultingSeal,
           note,
+          // On BOTH answers. A refusal's snapshot is what the words that were turned down would
+          // have done to the ruler standing at the time — the only record of what was refused,
+          // and the one a reader asking "what did we decide not to do" has nothing else to go on.
+          diffSnapshot: diffSnapshot as unknown as Prisma.InputJsonValue,
         },
         select: { decision: true, decidedAt: true, decidedById: true, baseSeal: true, resultingSeal: true },
       });
