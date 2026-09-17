@@ -15,9 +15,9 @@ import type { PrismaService } from '../prisma/prisma.service';
  * The read serves each blocker's kind, what it asks for (`required_action`) and its `detail`
  * (display only, as 0125 declares it, and where the paths a delivery is blocked on live), beside the
  * title of the task it is about. The door lets the account owner end ANY open blocker, and only with
- * a written reason: the row records resolved_by = USER, the reason and who gave it, and 0125's
- * `project_blocker_resolution_final` trigger — widened to both by 0269 — keeps all of it from being
- * rewritten afterwards.
+ * a written reason: the row records who ended it, the reason and — for the owner — who gave it, and
+ * 0125's `project_blocker_resolution_final` trigger — widened to both by 0269 — keeps all of it from
+ * being rewritten afterwards.
  *
  * Blockers whose condition goes away end without anybody: the unit that raises a delivery's
  * blocker resolves it once that work lands (`WakeDispositionService.resolveLandedBlockers`).
@@ -130,7 +130,19 @@ export async function readProjectBlockers(
 }
 
 /**
- * The account owner ending one open blocker on their project, with the reason it no longer blocks.
+ * WHO is ending the episode, which is not the same question as who authorized it.
+ *
+ * `USER` is a person at their own door, in their own words. `COORDINATOR` is an agent at the runner
+ * door (`POST /runner/projects/:id/blockers/:blockerId/resolve`), which it may only reach after the
+ * account owner has answered its confirmation card — but the owner answered yes/no to a sentence the
+ * AGENT wrote, and recording that as `USER` would put the agent's reasoning in the owner's mouth.
+ * The two stay apart so "who decided this was no longer blocking" survives in the audit, and so
+ * `resolved_by_user_id` keeps meaning what 0269 says it means: the owner who wrote the reason.
+ */
+export type BlockerResolver = 'USER' | 'COORDINATOR';
+
+/**
+ * Ending one open blocker on a project, with the reason it no longer blocks.
  *
  * One conditional UPDATE decides it: the row must be this project's, the project this owner's, and
  * the blocker still open. Nothing that matches none of that is written, and what the caller is told
@@ -139,7 +151,14 @@ export async function readProjectBlockers(
  */
 export async function resolveProjectBlocker(
   prisma: Pick<PrismaService, '$queryRaw'>,
-  input: { ownerId: string; projectId: string; blockerId: string; reason: unknown },
+  input: {
+    ownerId: string;
+    projectId: string;
+    blockerId: string;
+    reason: unknown;
+    /** Omitted is the owner's own door; see `BlockerResolver`. */
+    resolvedBy?: BlockerResolver;
+  },
 ): Promise<ProjectBlockerView> {
   const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
   if (reason === '') {
@@ -151,11 +170,14 @@ export async function resolveProjectBlocker(
     );
   }
 
+  const resolvedBy: BlockerResolver = input.resolvedBy ?? 'USER';
   const now = new Date();
   const written = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     UPDATE "project_blocker" blocker
-       SET "resolved_at" = ${now}, "resolved_by" = 'USER'::"project_blocker_resolved_by",
-           "resolution_note" = ${reason}, "resolved_by_user_id" = ${input.ownerId}::uuid,
+       SET "resolved_at" = ${now},
+           "resolved_by" = ${resolvedBy}::"project_blocker_resolved_by",
+           "resolution_note" = ${reason},
+           "resolved_by_user_id" = ${resolvedBy === 'USER' ? input.ownerId : null}::uuid,
            "updated_at" = ${now}
      WHERE blocker."id" = ${input.blockerId}::uuid
        AND blocker."project_id" = ${input.projectId}::uuid

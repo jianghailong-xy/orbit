@@ -106,6 +106,7 @@ for (const method of [
   'getProject',
   'updateProject',
   'removeProject',
+  'resolveBlocker',
 ] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
@@ -136,6 +137,60 @@ test('removeProject is exposed as DELETE projects/:id', () => {
   const handler = RunnerProjectsController.prototype.removeProject;
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.DELETE);
+});
+
+test('resolveBlocker is exposed as POST projects/:id/blockers/:blockerId/resolve', () => {
+  const handler = RunnerProjectsController.prototype.resolveBlocker;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/blockers/:blockerId/resolve');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+// The blocker id is the second id on this route, and it arrives base62 like every other: an
+// undecoded one reaches a `@db.Uuid` column and answers a legitimate id with a 500.
+test('the blocker id is resolved through PublicIdPipe on resolveBlocker', () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'resolveBlocker') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  const blockerArg = Object.values(args ?? {}).find((arg) => arg.data === 'blockerId');
+  assert.ok(blockerArg, 'no blockerId param on resolveBlocker');
+  assert.ok(
+    (blockerArg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+    'blockerId does not resolve through PublicIdPipe',
+  );
+});
+
+/**
+ * An agent ending a blocker writes into the runner's owner and is recorded as the COORDINATOR.
+ *
+ * Both halves matter and they are different properties. The owner scope is the same one every write
+ * here has: the credential names a machine, and the only tenant a machine writes into is the one
+ * that owns it. The provenance is what keeps the audit honest — the account owner authorized this
+ * by answering the runner's confirmation card, but the reason on the row is the agent's sentence,
+ * and a row claiming `USER` would be attributing the agent's argument to the person who read it.
+ */
+test('resolveBlocker ends the blocker in the runner owner scope, recorded as COORDINATOR', async () => {
+  const seen: unknown[] = [];
+  const projects = {
+    resolveBlocker: async (...args: unknown[]) => {
+      seen.push(args);
+      return { id: 'blocker-1', resolvedBy: 'COORDINATOR' };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    projects,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+  );
+
+  const resolved = await controller.resolveBlocker(RUNNER, 'project-1', 'blocker-1', {
+    reason: '这条豁免的活已经合进 main，不再需要人裁定。',
+  });
+
+  assert.deepEqual(seen, [[
+    'owner-1', 'project-1', 'blocker-1', '这条豁免的活已经合进 main，不再需要人裁定。', 'COORDINATOR',
+  ]]);
+  assert.deepEqual(resolved, { id: 'blocker-1', resolvedBy: 'COORDINATOR' });
 });
 
 // An agent's project write is the runner owner's project, exactly as its task writes are — the
@@ -468,6 +523,11 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     'listProjectHandoffs',
     'recordMergeEvidence',
     'removeProject',
+    // A blocker is this project's OWN wait, which is why it has a write where the crossing above
+    // has none: the person it waits on is this account's owner, and the runner puts the agent's
+    // argument in front of them as a card before anything here is called. Nobody signs for anybody
+    // else, so the reason that keeps `listProjectHandoffs` a GET does not apply.
+    'resolveBlocker',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -484,6 +544,7 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     listProjectHandoffs: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    resolveBlocker: RequestMethod.POST,
     updateProject: RequestMethod.PATCH,
   });
 });

@@ -164,7 +164,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"crossings", "merge-evidence",
+		"crossings", "merge-evidence", "resolve-blocker",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -196,7 +196,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. Unit L7's read is here — what has been asked
 	// about work crossing this project's line. It has no companion that WRITES, and that absence
 	// is the point. Migration 0229 took the four acceptance-judgment entries with the judgment.
-	if len(specs) != 6 {
+	// The seventh is `resolve-blocker`, which DOES write: a blocker is this project's own wait,
+	// and the owner it waits on answers a card before the write rather than being sent to go and
+	// click the same thing in the web UI.
+	if len(specs) != 7 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

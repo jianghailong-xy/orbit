@@ -64,6 +64,10 @@ test('the table separates the cheap acts from the irreversible ones', () => {
   // well as refute one, inside the evidence version its conclusion names.
   assert.equal(COORDINATOR_AUTHORITY.CONCLUDE_VERDICT_PASS, 'COORDINATOR_BOUNDED');
   assert.equal(COORDINATOR_AUTHORITY.SETTLE_PROJECT_DONE, 'AUTOMATIC');
+  // Ending a blocker is bounded by the owner's answer to a card, not by a rule here — and not
+  // HUMAN_ONLY, which would claim the act happens on an owner-authenticated door when it happens
+  // on the runner's. See the row's own comment for why that distinction is the whole grading.
+  assert.equal(COORDINATOR_AUTHORITY.RESOLVE_PROJECT_BLOCKER, 'COORDINATOR_BOUNDED');
 });
 
 // §0's replacement claim, as a property of the source rather than of one call: the rules cannot

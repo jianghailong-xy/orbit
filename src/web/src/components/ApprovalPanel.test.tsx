@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel } from './ApprovalPanel';
+import { ApprovalPanel, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDecisionCard';
@@ -117,6 +117,72 @@ describe('single create approval', () => {
     }
     // The same render of an ordinary tool still offers it, so the absence above is the card's doing.
     expect(render(create('Read', { file_path: '/x' }))).toContain('Always allow');
+  });
+});
+
+describe('blocker resolution approval', () => {
+  const resolve = (over: Record<string, unknown> = {}): ApprovalInfo =>
+    ({
+      id: 'r1',
+      toolName: 'orbit_blocker_resolve',
+      input: {
+        projectId: 'p1',
+        projectTitle: 'Checkout rewrite',
+        blockerId: 'blk-1',
+        reason: '这条豁免的活已经合进 **main**，判据按原样满足了。',
+        blocker: {
+          id: 'blk-1',
+          kind: 'HUMAN_DECISION_REQUIRED',
+          owner: 'USER',
+          requiredAction: '请读那段豁免理由并裁定它成不成立，再决定合不合入。',
+          subjectType: 'TASK',
+          subjectTitle: 'Port the payment form',
+        },
+        ...(over.input as object),
+      },
+      ...over,
+    }) as ApprovalInfo;
+
+  it('shows what the blocker asked for, then what the agent says has changed', () => {
+    const html = render(resolve());
+
+    expect(html).toContain('Confirm: this no longer blocks Checkout rewrite?');
+    expect(html).toContain('About Port the payment form');
+    // The blocker's own sentence — the thing a person was asked to do — is on the card. Without it
+    // the owner is answering "resolve blk-1?", which is not a question anyone can rule on.
+    expect(html).toContain('请读那段豁免理由并裁定它成不成立');
+    // And the agent's claim is marked as the agent's, because it is what is being judged.
+    expect(html).toContain('The agent says it no longer blocks');
+    expect(html).toContain('<strong>main</strong>');
+    expect(html).toContain('Resolve it');
+    // Declining is "not this, and here is what instead", as it is on Orbit's other asks.
+    expect(html).toContain('Chat about this');
+    expect(html).not.toContain('orbit_blocker_resolve');
+  });
+
+  it('offers no standing yes', () => {
+    // "Always let this session clear whatever stops its project" is the one rule that would make
+    // every card after it a formality.
+    expect(render(resolve())).not.toContain('Always allow');
+  });
+
+  it('names the kind when the blocker is about no task of this project', () => {
+    // A provider's blocker has no task to name. The line above the sentence says what kind of wait
+    // it is instead, rather than disappearing and leaving the sentence to arrive from nowhere.
+    const html = render(
+      resolve({
+        input: {
+          blocker: { kind: 'PROVIDER_UNAVAILABLE', requiredAction: 'claude 的额度用完了。' },
+        },
+      }),
+    );
+
+    expect(html).toContain('PROVIDER_UNAVAILABLE');
+    expect(html).not.toContain('About ');
+  });
+
+  it('says what is being left alone when it is declined', () => {
+    expect(decliningPrefix('orbit_blocker_resolve')).toBe('Leaving this open: ');
   });
 });
 

@@ -48,7 +48,11 @@ function UnanswerableNote(): JSX.Element {
  * half is `Approvals.decliningPrefix` / `declinePlaceholder` (OrbitKit).
  */
 export const decliningPrefix = (toolName: string | null | undefined): string =>
-  toolName === 'orbit_dag_change' ? 'Leaving the graph alone: ' : 'Not creating: ';
+  toolName === 'orbit_dag_change'
+    ? 'Leaving the graph alone: '
+    : toolName === 'orbit_blocker_resolve'
+      ? 'Leaving this open: '
+      : 'Not creating: ';
 
 /** What the empty composer asks for while a decline is armed. */
 export const DECLINE_PLACEHOLDER = 'Say what to do instead…';
@@ -112,6 +116,41 @@ interface CreateInput {
   criteria: string;
 }
 
+/**
+ * Orbit's ask before an agent ends a project blocker.
+ *
+ * The one card here that is not about creating something: a blocker is the project saying it needs
+ * a person, and `requiredAction` is addressed to the one reading this. So the card leads with what
+ * the blocker asked for and puts the agent's argument that it no longer applies underneath — the
+ * two sentences the decision is actually between.
+ */
+const isBlockerResolve = (a: ApprovalInfo): boolean => a.toolName === 'orbit_blocker_resolve';
+
+interface BlockerResolveInput {
+  projectTitle: string;
+  /** What the blocker asks for — the sentence written for a person to act on. */
+  requiredAction: string;
+  /** Why the agent says it no longer blocks. */
+  reason: string;
+  kind: string;
+  /** The task it is about, when it is about one. */
+  subjectTitle: string;
+}
+
+function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
+  if (!isBlockerResolve(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const blocker = (obj.blocker ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  return {
+    projectTitle: text(obj.projectTitle),
+    requiredAction: text(blocker.requiredAction),
+    reason: text(obj.reason),
+    kind: text(blocker.kind),
+    subjectTitle: text(blocker.subjectTitle),
+  };
+}
+
 function createInput(a: ApprovalInfo): CreateInput | null {
   const project = isProjectCreate(a);
   if (!project && !isTaskCreate(a)) return null;
@@ -161,8 +200,10 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
   // whole point of the card is that each batch releases a different set of tasks.
   if (a.toolName === 'AskUserQuestion' || isPlan(a) || isDagChange(a) || isBatch(a)) return [];
-  // Nor does a single create: a standing yes would be the owner's rule switched off.
-  if (isTaskCreate(a) || isProjectCreate(a)) return [];
+  // Nor does a single create: a standing yes would be the owner's rule switched off. Nor ending a
+  // blocker — "always let this session clear whatever stops its project" is the one rule that would
+  // make every card after it a formality.
+  if (isTaskCreate(a) || isProjectCreate(a) || isBlockerResolve(a)) return [];
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'
@@ -282,6 +323,7 @@ export function ApprovalPanel({
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
+  const blocker = blockerResolveInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -291,7 +333,9 @@ export function ApprovalPanel({
       ? `${batch.taskCount ?? 0} new task${batch.taskCount === 1 ? '' : 's'}`
       : create
         ? create.title
-        : null;
+        : blocker
+          ? (blocker.subjectTitle || blocker.kind || 'this blocker')
+          : null;
   return (
     <div className="approval-card">
       <div className="approval-head">
@@ -305,10 +349,12 @@ export function ApprovalPanel({
                 ? isProjectCreate(approval)
                   ? `📁 Confirm: create project “${create.title}”?`
                   : `📝 Confirm: create task “${create.title}”?`
-                : `🔓 Approve tool call: ${approval.toolName}`}
+                : blocker
+                  ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
+                  : `🔓 Approve tool call: ${approval.toolName}`}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown remarkPlugins={[remarkGfm]}>{plan}</Markdown>
         ) : dag ? (
@@ -317,6 +363,8 @@ export function ApprovalPanel({
           <BatchCreateBody preview={batch} />
         ) : create ? (
           <CreateBody input={create} />
+        ) : blocker ? (
+          <BlockerResolveBody input={blocker} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
@@ -328,7 +376,17 @@ export function ApprovalPanel({
           disabled={!answerable}
           onClick={() => onDecide(approval.id, 'allow')}
         >
-          {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : batch ? 'Create them' : create ? 'Create it' : 'Approve'}
+          {isPlan(approval)
+            ? 'Approve & run'
+            : dag
+              ? 'Apply changes'
+              : batch
+                ? 'Create them'
+                : create
+                  ? 'Create it'
+                  : blocker
+                    ? 'Resolve it'
+                    : 'Approve'}
           {armed && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {rules.length > 0 && (
@@ -362,6 +420,29 @@ export function ApprovalPanel({
           {isPlan(approval) ? 'Keep planning' : declineSubject !== null ? '💬 Chat about this' : 'Reject'}
         </CardActionButton>
       </CardActions>
+    </div>
+  );
+}
+
+/**
+ * What is being ended, and what the agent says has changed.
+ *
+ * Two sentences, in the order the decision is made in: what this blocker asked a person to do, then
+ * the argument that it is no longer needed. The agent's reason is second and marked as the agent's,
+ * because it is a claim being judged rather than a fact being reported — and it is the text that
+ * stays on the row afterwards as the resolution note.
+ */
+function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Element {
+  // What this wait is about, in one line: the task when it is about one, and otherwise the kind —
+  // a blocker about a provider or the project itself has no task to name, and a card that then
+  // said nothing at all above the sentence would read as though it came from nowhere.
+  const about = input.subjectTitle ? `About ${input.subjectTitle}` : input.kind;
+  return (
+    <div className="dag-approval">
+      {about && <p className="dag-approval-caption">{about}</p>}
+      <Markdown remarkPlugins={[remarkGfm]}>{input.requiredAction}</Markdown>
+      <p className="dag-approval-caption">The agent says it no longer blocks</p>
+      <Markdown remarkPlugins={[remarkGfm]}>{input.reason}</Markdown>
     </div>
   );
 }

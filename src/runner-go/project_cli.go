@@ -35,6 +35,7 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 Usage:
   orbit project get PROJECT_ID [--json]
   orbit project crossings PROJECT_ID [--state STATE] [--json]
+  orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
   orbit project create --title TITLE [options]
   orbit project update PROJECT_ID [options]
@@ -79,6 +80,28 @@ revision), instructions, project status, coordinator binding, and task distribut
 
 Returns the shape of the project, not its tasks — use ` + "`orbit task list`" + ` for those.
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
+`,
+	"resolve-blocker": `orbit project resolve-blocker — end one open blocker, saying why it no longer blocks
+
+Usage:
+  orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]
+
+Options:
+  --blocker-id ID   the blocker to end, as 'orbit project get' spells it in blockers.open[].id
+  --reason TEXT     why this no longer blocks — what changed (required)
+  --json            emit compact JSON
+
+The write half of what ` + "`orbit project get`" + ` shows. Read it first: blockers.open carries each
+blocker's id, its kind, and the one sentence it is asking for (requiredAction).
+
+Run from inside a session, this first puts the blocker and your reason on a confirmation card and
+waits for the account owner's answer; nothing is written if they decline. Typed at a terminal
+outside one there is no session and nobody to ask, and the resolution is written straight away —
+that caller is the owner.
+
+The reason stays on the row as its resolution note, and a resolution is final: an already-resolved
+blocker is refused rather than resolved twice. A condition that comes back raises a new episode
+rather than reopening this one.
 `,
 	"merge-evidence": `orbit project merge-evidence — record what a target branch was observed to contain
 
@@ -230,6 +253,7 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
+	{Tool: "project_blocker_resolve", Argv: []string{"orbit", "project", "resolve-blocker"}, Usage: "orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "--blocker-id <id> (required; as 'orbit project get' spells it in blockers.open[].id)", "--reason <text> (required; why this no longer blocks)", "--json"}, Description: "End one of a project's open blockers, saying why it no longer blocks — the write half of what `orbit project get` shows in blockers.open. Run from inside a session it first puts the blocker and your reason on a confirmation card and waits for the account owner's answer: nothing is written if they decline, and the reason they give says what they want instead. Typed at a terminal outside a session there is nobody to ask and the resolution is written straight away, because that caller is the owner. Resolve one when you can say what changed — the work landed, the question was answered elsewhere, the condition no longer holds — and not to get past a wait you disagree with: a HUMAN_DECISION_REQUIRED blocker is the project asking for a judgment, and the card is where you argue for it rather than a formality around it. An agent's resolution records resolved_by = COORDINATOR with the reason it gave; a resolution is final, so an already-resolved blocker is refused rather than restated, and a condition that returns raises a new episode.", Mutates: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is created if they decline. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and the server opens THAT project its own coordinator in the same workspace and says so — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one.", Mutates: true},
 	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; only a tightening lands immediately, and [] drops every criterion, which is held)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. The integration line — where this project's finished tasks land, MAIN or PROJECT_BRANCH, with the project branch and upstream as full refs and the check run on the combined tree before a landing — is the account owner's to choose, so it is accepted at a terminal and refused for an agent session; unchosen, it is decided at the first integration (code tasks that depend on one another go through a project branch), and locked from then on. Structured acceptance items are a whole-collection replacement, and only a tightening edit lands immediately — adding an item, reordering, or stepping an item's verificationMethod up the HUMAN → VERIFICATION → EXECUTABLE ladder. Any other edit (dropping an item, rewriting an item's text, or rewording verificationMethod any other way) is held as a proposal for the account owner to decide, reported as acceptanceCriteriaHold with the criteria left as they were; so [] drops every criterion rather than clearing the collection, and is held whenever there is one to drop. Every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
@@ -273,6 +297,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectDelete(args[1:], out)
 	case "crossings":
 		return cliProjectCrossings(args[1:], out)
+	case "resolve-blocker":
+		return cliProjectResolveBlocker(args[1:], out)
 	case "merge-evidence":
 		return cliProjectMergeEvidence(args[1:], in, out)
 	default:
@@ -333,6 +359,54 @@ func cliProjectCrossings(args []string, out io.Writer) error {
 	raw, err := t.getProjectHandoffs(id, *state)
 	if err != nil {
 		return fmt.Errorf("get project crossings: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliProjectResolveBlocker ends one open blocker with the reason it no longer blocks.
+//
+// The same card the MCP tool raises, through the same helper: an agent that shells out instead of
+// calling the tool meets the identical question, because a gate one door wide is not a gate. What
+// differs is only where the session comes from — the env var the runner injects, rather than the
+// server object — and headless there is none, so the write goes straight through to the owner's own
+// machine, as every create here does.
+func cliProjectResolveBlocker(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project resolve-blocker")
+	blockerID := fs.String("blocker-id", "", "the blocker to end, as 'orbit project get' spells it")
+	reason := fs.String("reason", "", "why this no longer blocks")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	if strings.TrimSpace(*blockerID) == "" {
+		return fmt.Errorf("--blocker-id is required: read 'orbit project get %s' for the open ones", id)
+	}
+	if strings.TrimSpace(*reason) == "" {
+		return fmt.Errorf("--reason is required: say why this blocker is no longer blocking")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, declined, err := resolveBlockerWithApproval(
+		t,
+		strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
+		id,
+		strings.TrimSpace(*blockerID),
+		strings.TrimSpace(*reason),
+	)
+	if err != nil {
+		return fmt.Errorf("resolve blocker: %w", err)
+	}
+	if declined != "" {
+		return fmt.Errorf("resolve blocker: the human left this blocker open: %s", declined)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

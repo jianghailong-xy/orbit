@@ -163,6 +163,14 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// entitled to know what it is waiting on; it is not entitled to answer the crossing
 			// (§7 RB2 — the approver is the account owner, never the target project's coordinator).
 			"project_crossings",
+			// The write project_get's `blockers.open` had no companion for: an agent could read what
+			// had stopped its project and had to ask a person to go and click it. It is HERE, rather
+			// than beside project_crossings above, because the two are different questions. A
+			// crossing is one project signing for another, and nothing an agent is told makes it the
+			// other project's owner. A blocker is this project's own wait, and the person it is
+			// waiting on is the account owner — who answers `blockerResolveApprovalToolName` before
+			// anything is written, which is what keeps this a proposal rather than a self-release.
+			"project_blocker_resolve",
 		} {
 			if !seen[want] {
 				t.Fatalf("%s missing from the tools", want)

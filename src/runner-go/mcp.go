@@ -495,6 +495,26 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_blocker_resolve":
+		id := getString(args, "projectId")
+		blockerID := getString(args, "blockerId")
+		if id == "" || blockerID == "" {
+			return toolResult("projectId and blockerId are required", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why this blocker is no longer blocking. It "+
+				"is what the owner is deciding on, and it stays on the row afterwards", true)
+		}
+		raw, declined, err := resolveBlockerWithApproval(s.t, s.sessionID, id, blockerID, reason)
+		if err != nil {
+			return toolResult("resolve blocker failed: "+err.Error(), true)
+		}
+		if declined != "" {
+			return toolResult("the human left this blocker open: "+declined, false)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_delete":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -1082,6 +1102,14 @@ const (
 	projectCreateApprovalToolName = "orbit_project_create"
 )
 
+// blockerResolveApprovalToolName keys the card that ends a project blocker.
+//
+// Not a create, and here for the opposite reason the creates are: a blocker is the project SAYING it
+// needs a person, and `required_action` is addressed to one. So the agent's part is to argue that the
+// condition is gone and the owner's part is to agree or not — which is what this card is, and why the
+// tool cannot be reached without one.
+const blockerResolveApprovalToolName = "orbit_blocker_resolve"
+
 // askBeforeCreate files a card for a create and blocks until the human answers it. It returns
 // declined == "" for a yes, and otherwise the reason to hand back in place of the write. The MCP
 // tools and the CLI both call it, so an agent refused at one door does not find the other open.
@@ -1189,6 +1217,85 @@ func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]inter
 			crossProjectCrossingGuidance(err), true)
 	}
 	return toolResult(prettyJSON(raw), false)
+}
+
+// One open blocker as the confirmation card reads it, taken from the project read. Only the fields
+// a person decides on: what kind of wait this is, what it asked for, and what it is about.
+type blockerCardFacts struct {
+	ID             string `json:"id"`
+	Kind           string `json:"kind"`
+	Owner          string `json:"owner"`
+	Severity       string `json:"severity"`
+	RequiredAction string `json:"requiredAction"`
+	SubjectType    string `json:"subjectType"`
+	SubjectTitle   string `json:"subjectTitle"`
+	FirstSeenAt    string `json:"firstSeenAt"`
+}
+
+// resolveBlockerWithApproval ends one open blocker, and only after the account owner says so.
+//
+// The card is built from the project read rather than from what the caller typed: an agent that
+// passes the wrong id would otherwise put a card in front of a person that names a blocker nobody
+// can see, and "resolve 3x1o4llO…?" is not a question anyone can answer. So the blocker is looked up
+// first, the card carries what it asked for beside the agent's argument that it no longer applies,
+// and an id that names no OPEN blocker is refused here — before a human is interrupted with it.
+//
+// Headless there is no session, no card and nobody to ask, and the write goes straight through: that
+// caller is the owner operating their own machine, which is the same rule every create here follows.
+func resolveBlockerWithApproval(t *Transport, sessionID, projectID, blockerID, reason string) (raw json.RawMessage, declined string, err error) {
+	if sessionID != "" {
+		facts, projectTitle, err := openBlockerFacts(t, projectID, blockerID)
+		if err != nil {
+			return nil, "", err
+		}
+		declined, err := askBeforeCreate(t, sessionID, blockerResolveApprovalToolName, map[string]interface{}{
+			"projectId":    projectID,
+			"projectTitle": projectTitle,
+			"blockerId":    blockerID,
+			"reason":       reason,
+			"blocker":      facts,
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		if declined != "" {
+			return nil, declined, nil
+		}
+	}
+	raw, err = t.resolveProjectBlocker(projectID, blockerID, map[string]interface{}{"reason": reason})
+	return raw, "", err
+}
+
+// openBlockerFacts finds one still-open blocker in the project read, by the id spelling that read
+// returns. A resolved one and an unknown one are told apart because they are different mistakes: the
+// first already ended (and 0125 makes that final), the second is an id to go and check.
+func openBlockerFacts(t *Transport, projectID, blockerID string) (*blockerCardFacts, string, error) {
+	raw, err := t.getProject(projectID)
+	if err != nil {
+		return nil, "", fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	var project struct {
+		Title    string `json:"title"`
+		Blockers struct {
+			Open     []blockerCardFacts `json:"open"`
+			Resolved []blockerCardFacts `json:"resolved"`
+		} `json:"blockers"`
+	}
+	if err := json.Unmarshal(raw, &project); err != nil {
+		return nil, "", fmt.Errorf("read project %s: %w", projectID, err)
+	}
+	for i := range project.Blockers.Open {
+		if project.Blockers.Open[i].ID == blockerID {
+			return &project.Blockers.Open[i], project.Title, nil
+		}
+	}
+	for i := range project.Blockers.Resolved {
+		if project.Blockers.Resolved[i].ID == blockerID {
+			return nil, "", fmt.Errorf("blocker %s is already resolved, and a resolution is final", blockerID)
+		}
+	}
+	return nil, "", fmt.Errorf("no open blocker %s on project %s: pass an id from that project's "+
+		"blockers.open, spelled as the project read spells it", blockerID, projectID)
 }
 
 // dagApprovalToolName is what the approval is filed under, and what the web keys its typed card
@@ -1973,7 +2080,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"(instructions), its status, the session and workspace it is coordinated from, and " +
 				"how its tasks are distributed (_count and tasksByStatus). This is what a project " +
 				"coordinator works FROM — read it before deciding what to file or whether the work " +
-				"is finished, because none of it is repeated in a task's description. Returns the " +
+				"is finished, because none of it is repeated in a task's description. It also " +
+				"carries `blockers`: every structured reason this project did not move, each with " +
+				"the one sentence it is asking for (`requiredAction`) — read `blockers.open` when " +
+				"the work is stopped and you cannot see why, and end one with " +
+				"project_blocker_resolve when you can say what changed. Returns the " +
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
 				"project_create and project_update.",
@@ -2233,6 +2344,41 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"has.",
 				},
 			}, "projectId"),
+		},
+		{
+			"name": "project_blocker_resolve",
+			"description": "End one of a project's open blockers, saying why it no longer blocks. " +
+				"The write half of what project_get shows: its `blockers.open` is where the id, the " +
+				"kind and the `requiredAction` come from, and this is how one of those rows ends " +
+				"when the condition behind it is gone. " +
+				"It first puts the blocker and your reason on a confirmation card and BLOCKS until " +
+				"the account owner answers — nothing is written if they decline, and a decline is an " +
+				"answer (the blocker stays open and the reason they give says what they want " +
+				"instead), so do not resolve it another way. Resolve one when you can say what " +
+				"changed: the work landed, the question was answered elsewhere, the condition no " +
+				"longer holds. Do NOT use it to get past a wait you simply disagree with — a " +
+				"HUMAN_DECISION_REQUIRED blocker is the project asking for a judgment that is not " +
+				"yours to make, and the card is where you ARGUE for it, not a formality around it. " +
+				"The row records resolved_by = COORDINATOR (this agent, with your reason on it) " +
+				"rather than USER: the owner authorized the write, and the sentence is yours. " +
+				"A resolution is final — an already-resolved blocker is refused rather than " +
+				"restated — and a condition that comes back raises a new episode of its own.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project the blocker is on, as shown in its web UI URL (/projects/<id>).",
+				},
+				"blockerId": map[string]interface{}{
+					"type":        "string",
+					"description": "The blocker to end, spelled as project_get spells it in blockers.open[].id.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this no longer blocks — what changed, in one or two sentences. " +
+						"This is what the owner decides on, and it stays on the row as the " +
+						"resolution note afterwards.",
+				},
+			}, "projectId", "blockerId", "reason"),
 		},
 		{
 			"name": "project_delete",

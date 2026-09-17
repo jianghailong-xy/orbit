@@ -87,6 +87,7 @@ export const COORDINATOR_ACTIONS = [
   'CONFIRM_ACCEPTANCE_CRITERIA',
   'CONCLUDE_VERDICT_PASS',
   'SETTLE_PROJECT_DONE',
+  'RESOLVE_PROJECT_BLOCKER',
 ] as const;
 export type CoordinatorAction = (typeof COORDINATOR_ACTIONS)[number];
 
@@ -126,6 +127,22 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   // 2026-09-08 this row described an intention rather than the server — see that file's header for
   // the decision it was built on, and `refuseProjectStatusWrite` below for what a session may ask.
   SETTLE_PROJECT_DONE: 'AUTOMATIC',
+  // Ending a `project_blocker` episode: since `project_blocker_resolve`, an act a coordinator can
+  // perform, which is why it is graded here at all.
+  //
+  // BOUNDED, and the bound is NOT a rule this server enforces — read that as the row's content
+  // rather than as a gap in it. The runner puts the blocker, what it asked for and the agent's
+  // reason on a confirmation card and writes nothing until the account owner answers
+  // (`resolveBlockerWithApproval`); the door itself takes the machine credential, which is the
+  // owner's, so a second check here would be the owner asking themselves for permission. What the
+  // server holds instead is the provenance: the row records `resolved_by = COORDINATOR` and names
+  // no user, so an agent's resolution is never indistinguishable from a person's.
+  //
+  // Not HUMAN_ONLY, and the 2026-09-08 A2 review (`docs/human-only-authority.md`) is why: that tier
+  // means the act itself happens on an owner-authenticated door, because an answered card cannot
+  // name the write it would authorize. Calling this HUMAN_ONLY would claim exactly the property
+  // that review found the approval row does not have.
+  RESOLVE_PROJECT_BLOCKER: 'COORDINATOR_BOUNDED',
 };
 
 /**

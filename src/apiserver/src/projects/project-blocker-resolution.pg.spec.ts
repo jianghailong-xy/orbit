@@ -581,6 +581,53 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
         assert.equal(row.resolvedBy, 'USER');
         assert.equal(row.resolvedByUserId, f.ownerId);
       });
+
+    // The runner door (`POST /runner/projects/:id/blockers/:blockerId/resolve`) reaches the same
+    // service with the same owner scope, and differs in exactly one thing: who it says ended the
+    // episode. The owner authorized it by answering the agent's card, but the sentence on the row
+    // is the AGENT's, so the row must not claim a person wrote it — otherwise the audit cannot tell
+    // the two apart afterwards, which is the only thing that separates a resolution the owner
+    // reasoned through from one they clicked past.
+    await t.test('an agent ends one as COORDINATOR, with its reason and nobody’s name on it',
+      async () => {
+        const byAgent = await insertBlocker(stack, {
+          projectId: f.projectId,
+          kind: 'HUMAN_DECISION_REQUIRED',
+          subjectType: 'TASK',
+          subjectId: taskId,
+          dedupeKey: `HUMAN_DECISION_REQUIRED:TASK:${taskId}:agent`,
+        });
+        const agentReason = '这条豁免的活已经合进 main，判据按原样满足了，不再需要人裁定。';
+
+        const view = await stack.projects.resolveBlocker(
+          f.ownerId, f.projectId, byAgent, agentReason, 'COORDINATOR',
+        );
+        assert.equal(view.resolvedBy, 'COORDINATOR');
+
+        const row = await resolutionOf(stack, byAgent);
+        assert.ok(row.resolvedAt instanceof Date, 'the resolution was not written');
+        assert.equal(row.resolvedBy, 'COORDINATOR');
+        assert.equal(row.resolutionNote, agentReason);
+        assert.equal(row.resolvedByUserId, null,
+          'an agent’s resolution names an account owner as the person who wrote it');
+
+        // Final on the same terms the owner's is: 0125's trigger does not care which door wrote it.
+        await assert.rejects(
+          stack.sql.query(
+            `UPDATE "project_blocker" SET "resolved_by" = 'USER' WHERE "id" = $1::uuid`,
+            [byAgent],
+          ),
+          /BLOCKER_RESOLVED_IMMUTABLE/,
+          'an agent’s resolution could be rewritten into the owner’s afterwards',
+        );
+
+        // Another project's owner cannot reach it through this door either: the scope is the same
+        // conditional UPDATE, and the runner's credential names an owner exactly as a JWT does.
+        await assert.rejects(
+          stack.projects.resolveBlocker(randomUUID(), f.projectId, byAgent, 'not mine', 'COORDINATOR'),
+          /not found/,
+        );
+      });
   });
 
 // (b) -----------------------------------------------------------------------------------------

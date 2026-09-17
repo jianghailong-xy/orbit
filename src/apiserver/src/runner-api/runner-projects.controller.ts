@@ -17,6 +17,7 @@ import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
   RecordMergeEvidenceDto,
+  ResolveProjectBlockerDto,
   UpdateProjectDto,
 } from '../projects/dto';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
@@ -218,6 +219,38 @@ export class RunnerProjectsController {
   ) {
     RunnerProjectsController.refuseGovernance(dto);
     return this.projects.update(runner.ownerId, id, dto, sessionId);
+  }
+
+  /**
+   * End one of this project's blockers, saying why it no longer blocks.
+   *
+   * The read half has always been here — `GET projects/:id` carries the open blockers — and until
+   * this route the write half existed only behind a user JWT, so an agent could see what had stopped
+   * its project and had no door to act through: the only way out was to tell the owner to go and
+   * click it. That is not a boundary being enforced, it is a boundary with nothing behind it; the
+   * work still stops, and it stops on a person who was told about it in prose.
+   *
+   * The boundary that IS enforced sits one layer up, in the runner: `project_blocker_resolve` puts
+   * the blocker and the reason on a confirmation card and blocks until the account owner answers, so
+   * nothing here is written without their yes. This is the same shape as `task_create` — the agent
+   * proposes, the owner decides, the runner performs — and the reason it is not ALSO checked here is
+   * the reason it is not checked there: this door takes the machine's own credential, which is the
+   * owner's, so a server-side check would be the owner asking themselves for permission. What the
+   * server does keep is the provenance: an agent's resolution records `resolved_by = COORDINATOR`
+   * and names no user, because the sentence on the row is the agent's own.
+   *
+   * Contrast `GET projects/:id/handoffs` above, which is read-only on purpose. A cross-project
+   * crossing is one PROJECT signing for another, and no card makes an agent the other project's
+   * owner. A blocker is this project's own wait, and its owner is the person this card reaches.
+   */
+  @Post('projects/:id/blockers/:blockerId/resolve')
+  resolveBlocker(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('blockerId', PublicIdPipe) blockerId: string,
+    @Body() dto: ResolveProjectBlockerDto,
+  ) {
+    return this.projects.resolveBlocker(runner.ownerId, id, blockerId, dto.reason, 'COORDINATOR');
   }
 
   /**

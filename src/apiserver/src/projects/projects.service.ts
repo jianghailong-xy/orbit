@@ -124,7 +124,11 @@ import {
   type ProjectIntegrationView,
   readProjectCodebase,
 } from './project-integration-line';
-import { readProjectBlockers, resolveProjectBlocker } from './project-blocker-resolution';
+import {
+  readProjectBlockers,
+  resolveProjectBlocker,
+  type BlockerResolver,
+} from './project-blocker-resolution';
 import {
   readCriterionIndependence,
   type CriterionIndependenceAnswer,
@@ -2311,9 +2315,19 @@ export class ProjectsService {
     );
   }
 
-  /** The account owner ending one of this project's blockers with a written reason. */
-  resolveBlocker(ownerId: string, projectId: string, blockerId: string, reason: unknown) {
-    return resolveProjectBlocker(this.prisma, { ownerId, projectId, blockerId, reason });
+  /**
+   * Ending one of this project's blockers with a written reason — the account owner at their own
+   * door, or an agent at the runner door once the owner has said yes to its card (`BlockerResolver`
+   * is where the difference is recorded).
+   */
+  resolveBlocker(
+    ownerId: string,
+    projectId: string,
+    blockerId: string,
+    reason: unknown,
+    resolvedBy?: BlockerResolver,
+  ) {
+    return resolveProjectBlocker(this.prisma, { ownerId, projectId, blockerId, reason, resolvedBy });
   }
 
   /**

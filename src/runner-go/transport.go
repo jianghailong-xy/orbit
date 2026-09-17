@@ -1132,6 +1132,26 @@ func (t *Transport) getProjectHandoffs(id, state string) (json.RawMessage, error
 	return out, err
 }
 
+// resolveProjectBlocker ends one open blocker on a project, with the reason it no longer blocks.
+//
+// The write half of what `getProject` has always shown. The server records it as resolved by the
+// COORDINATOR rather than by a person, because the reason travelling with it is the agent's: the
+// owner's part is the confirmation card the caller raises before reaching this (`askBeforeCreate`),
+// and their yes authorizes the write without putting their name on the sentence.
+func (t *Transport) resolveProjectBlocker(projectID, blockerID string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(projectID); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(blockerID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST",
+		"/runner/projects/"+url.PathEscape(projectID)+"/blockers/"+url.PathEscape(blockerID)+"/resolve",
+		body, &out, taskOpTimeout)
+	return out, err
+}
+
 // recordProjectMergeEvidence records what a target branch was observed to CONTAIN.
 //
 // The runner is the side that can actually look — it has the checkout. contentHash is a sha256 of
