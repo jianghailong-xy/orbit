@@ -9,6 +9,7 @@ import type { CriteriaDecision } from './dto';
 import {
   type StatedAcceptanceCriterion,
   criteriaFromDefinitions,
+  sha256,
   standardSetVersion,
 } from './project-acceptance';
 
@@ -495,8 +496,113 @@ export interface PendingCriteriaDecision {
   decidability: CriteriaDecisionDecidability;
 }
 
+/** What an answered proposal did to one criterion, in the vocabulary both cards say it in. */
+export type SettledCriterionChange = 'REWORDED' | 'ADDED' | 'DROPPED';
+
 /**
- * One proposal that WAS a question and has been answered: which answer, and what it did to the seal.
+ * One criterion an answered proposal moved — the half of it the record still holds.
+ *
+ * DELIBERATELY NOT `CriteriaProposalChangeEntry`, which carries `onRecord` beside `proposed` and a
+ * cut of the two. The words a rewrite REPLACED are stored nowhere: the proposal states only what it
+ * asks for, and the baseline it names records the set it was composed against as
+ * `(definitionId, revision, contentHash)` — enough to say THAT a criterion moved, never what it
+ * said before. So this shape states one side, and the names differ from the pending diff's because
+ * the shapes do: a reader who found `onRecord` missing from something called the same thing would
+ * reasonably read it as a field that failed to load.
+ */
+export interface SettledCriterionEntry {
+  change: SettledCriterionChange;
+  /** The definition this is about; null for one the proposal was ADDING, which names none. */
+  definitionId: string | null;
+  /** Its place in the proposed set. Null for a DROPPED one: a proposal states no place for a
+   *  criterion it does not restate, and the sealed baseline carries no ordinals. */
+  ordinal: number | null;
+  /** The words the answer was given about. Null for DROPPED, for the same reason: what was
+   *  dropped is entirely words-before, and those are the ones nothing kept. */
+  text: string | null;
+}
+
+/**
+ * WHAT ONE ANSWERED PROPOSAL ASKED FOR, DERIVED FROM THE PROPOSAL ROW AND NOTHING ELSE
+ * ------------------------------------------------------------------------------------
+ * A weakening edit restates the WHOLE collection, so the proposal alone cannot say which of its
+ * fourteen criteria the decision was actually about. `action.baseline.material` can: it is the set
+ * the proposal was composed against, as `(definitionId, revision, contentHash)`, in the same JSONB
+ * blob — so which criteria moved is a comparison of hashes taken here, with no second read and no
+ * dependency on definitions that have since moved on.
+ *
+ * ON THE ASSERTION TEXT, WHICH IS THE WHOLE OF WHAT THE SEALED HASH COVERS.
+ * `project_acceptance_definition_normalize` (0178) computes `content_hash` from `btrim(text)` and
+ * from nothing else, so a proposal that rewrote only a verification method is counted here among
+ * the restated ones. That is a floor of this derivation and not a claim about the edit: the pending
+ * card judges all three fields because it has both sides to judge them on, and a settled one has a
+ * hash. Task B's stored diff is what closes it; until then this says only what the hash can prove.
+ */
+export interface SettledProposalMaterial {
+  /** Everything the proposal moved: its own criteria in proposed order, then the ones it drops. */
+  changed: SettledCriterionEntry[];
+  rewordedCount: number;
+  addedCount: number;
+  droppedCount: number;
+  /** How many the proposal restated with the assertion the seal already held. Counted rather than
+   *  implied by a list length, so a card may fold them away without claiming a number of its own. */
+  unchangedCount: number;
+}
+
+/**
+ * The proposal material of one filed row, or null for a row whose `action` this reader cannot read.
+ *
+ * Exported so the question can be asked of a stored action without a database, the way
+ * `criteriaProposalDiff` is — and so the read below and the spec that pins it call one function.
+ */
+export function settledProposalMaterial(action: unknown): SettledProposalMaterial | null {
+  const stored = storedAction(action);
+  if (!stored) return null;
+  // The type says the material is there; the column is JSONB and does not have to agree. An id
+  // with nothing sealed under it is then read as ADDED — the same conclusion the pending diff
+  // draws about an id that resolves to nothing, and the same one a reader would draw from a
+  // proposal that names a criterion its own baseline never had.
+  const material = Array.isArray(stored.baseline.material) ? stored.baseline.material : [];
+  const sealed = new Map(material.map((version) => [version.definitionId, version.contentHash]));
+  const restated = new Set<string>();
+  const changed: SettledCriterionEntry[] = [];
+  let unchangedCount = 0;
+
+  stored.request.proposed.forEach((criterion, index) => {
+    const ordinal = criterion.ordinal > 0 ? criterion.ordinal : index + 1;
+    const text = criterion.text.trim();
+    const was = criterion.id === null ? undefined : sealed.get(criterion.id);
+    if (was === undefined) {
+      changed.push({ change: 'ADDED', definitionId: criterion.id, ordinal, text });
+      return;
+    }
+    restated.add(criterion.id!);
+    if (was === sha256(text)) {
+      unchangedCount += 1;
+      return;
+    }
+    changed.push({ change: 'REWORDED', definitionId: criterion.id, ordinal, text });
+  });
+
+  for (const version of material) {
+    if (restated.has(version.definitionId)) continue;
+    changed.push({ change: 'DROPPED', definitionId: version.definitionId, ordinal: null, text: null });
+  }
+
+  const counted = (change: SettledCriterionChange): number =>
+    changed.filter((entry) => entry.change === change).length;
+  return {
+    changed,
+    rewordedCount: counted('REWORDED'),
+    addedCount: counted('ADDED'),
+    droppedCount: counted('DROPPED'),
+    unchangedCount,
+  };
+}
+
+/**
+ * One proposal that WAS a question and has been answered: which answer, what it did to the seal,
+ * and what it asked for.
  *
  * WHY THE ANSWER IS PART OF THIS READ
  * -----------------------------------
@@ -507,8 +613,14 @@ export interface PendingCriteriaDecision {
  * (`project_criteria_decision`), so it is derived here like everything else on the card rather than
  * remembered by the client that pressed.
  *
- * NOT THE PROPOSAL. The outcome and the two seals the door compared, and nothing else: a settled
- * proposal's words stay unpublished, so a stale card still keeps no diff.
+ * AND THE PROPOSAL, WHICH IT WITHHELD UNTIL 2026-09-17. This row carried the outcome and the two
+ * seals and nothing else, so pressing Approve replaced a card showing a word-by-word diff with a
+ * single line of receipt — the account owner's report: "after approving, I can no longer see what
+ * the change was". The proposal it withheld was never gone: the filed intent row is immutable and
+ * still holds the restatement that was applied, so `proposal` below republishes it (see
+ * `settledProposalMaterial`). What stays unpublished is what a rewrite REPLACED, because nothing
+ * ever stored it — which is why this is material for a one-sided list and not for a diff, and why
+ * a card built on it has to say so.
  */
 export interface SettledCriteriaDecision {
   /** The proposal that was answered — the same address `pending[].intentId` gave it. */
@@ -519,6 +631,13 @@ export interface SettledCriteriaDecision {
   baseSeal: string;
   /** The seal standing afterwards: `baseSeal` again for a REJECT, moved by an APPROVE. */
   resultingSeal: string;
+  /**
+   * What the proposal asked for — on an APPROVE the version that took effect, on a REJECT the one
+   * that did not. It is the same material either way and `decision` is what says which: the record
+   * of a refusal is a record of words nobody adopted, and only the answer beside it can tell a
+   * reader that. Null for a proposal whose `action` this reader could not make sense of.
+   */
+  proposal: SettledProposalMaterial | null;
 }
 
 /**
@@ -841,14 +960,22 @@ async function settledIntentIds(
 }
 
 /**
- * The answers `settled` carries, newest first — off the decision door's own rows.
+ * The answers `settled` carries, newest first — off the decision door's own rows, with the
+ * proposals those answers were about.
  *
  * `project_criteria_decision` and not the union `settledIntentIds` takes: the decision row is where
  * both outcomes land together with the two seals the door compared, while a commit written by
  * 0195's generic machine carries neither an answer nor seals — a card for one says only that it was
  * answered. Read down `project_criteria_decision_recent_idx` (0249), which is this order.
+ *
+ * TWO READS, AND THE SECOND IS BOUNDED BY THE FIRST. The proposals are fetched by the ids this
+ * caller already holds — at most `SETTLED_CRITERIA_DECISIONS_LIMIT` of them, down the intent
+ * table's primary key — and not by asking which of this project's intents were ever answered,
+ * which is the same read over the project's whole history. One query for all of them rather than
+ * one per row: what each card needs is in that row's own `action` JSONB, so there is nothing for a
+ * per-row read to fetch that this one did not already bring back.
  */
-async function recentlySettledCriteriaDecisions(
+export async function recentlySettledCriteriaDecisions(
   tx: Prisma.TransactionClient,
   ownerId: string,
   projectId: string,
@@ -861,8 +988,21 @@ async function recentlySettledCriteriaDecisions(
     take: SETTLED_CRITERIA_DECISIONS_LIMIT,
     select: { intentId: true, decision: true, decidedAt: true, baseSeal: true, resultingSeal: true },
   });
+  if (rows.length === 0) return [];
+  const proposals = new Map(
+    (await tx.projectRatifiedActionIntent.findMany({
+      where: { ownerId, projectId, id: { in: rows.map((row) => row.intentId) } },
+      select: { id: true, action: true },
+    })).map((row) => [row.id, settledProposalMaterial(row.action)]),
+  );
   // 0249's CHECK is what makes the cast a fact: `decision` is APPROVE or REJECT on every row.
-  return rows.map((row) => ({ ...row, decision: row.decision as CriteriaDecision }));
+  // A missing or unreadable proposal is `null` rather than a dropped answer: what happened is the
+  // fact the card exists to carry, and it is still true of a row this reader cannot open.
+  return rows.map((row) => ({
+    ...row,
+    decision: row.decision as CriteriaDecision,
+    proposal: proposals.get(row.intentId) ?? null,
+  }));
 }
 
 /**

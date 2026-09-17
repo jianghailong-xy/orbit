@@ -44,7 +44,9 @@ import { pendingCriteriaDecisionsQuery } from '../lib/queries';
  * displayed them would be displaying a frozen copy — the exact thing this card does not keep. What
  * is left is the address, what happened to it, and two buttons that cannot be pressed. For a
  * proposal answered at another end, "what happened" includes WHICH answer: the read publishes the
- * recent answers beside the questions (`settled`) — the outcome and its seals, never the proposal.
+ * recent answers beside the questions (`settled`) — the outcome, its seals, and what the proposal
+ * asked for. The last of those is the RECEIPT's, not this card's: a card whose question has moved
+ * on is not the place to lay out words nobody is being asked about any more.
  */
 
 /** One criterion as the proposal states it. `id` is null for one the proposal is adding. */
@@ -172,14 +174,50 @@ export interface PendingCriteriaDecisionRow {
   decidability: CriteriaDecisionDecidability;
 }
 
+/** What an answered proposal did to one criterion, in the vocabulary both ends say it in. */
+export type SettledCriterionChange = 'REWORDED' | 'ADDED' | 'DROPPED';
+
 /**
- * One proposal the read says WAS answered: which answer, and what it did to the seal.
+ * One criterion an answered proposal moved — the half of it the record still holds.
+ *
+ * Not `CriteriaProposalChangeEntry`: there is no `onRecord` side and no cut, because the words a
+ * rewrite REPLACED were never stored. `ordinal` and `text` are both null on a DROPPED one for that
+ * same reason — what was dropped is entirely words-before.
+ */
+export interface SettledCriterionEntry {
+  change: SettledCriterionChange;
+  definitionId: string | null;
+  /** Its place in the proposed set. Null for a DROPPED one, which the proposal gives no place. */
+  ordinal: number | null;
+  /** The words the answer was given about. Null for DROPPED. */
+  text: string | null;
+}
+
+/** What one answered proposal asked for: what it moved, and how much it left alone. */
+export interface SettledProposalMaterial {
+  changed: SettledCriterionEntry[];
+  rewordedCount: number;
+  addedCount: number;
+  droppedCount: number;
+  /** How many criteria the proposal restated with the words already sealed. */
+  unchangedCount: number;
+}
+
+/**
+ * One proposal the read says WAS answered: which answer, what it did to the seal, and what it asked
+ * for.
  *
  * Only the card that was pressed is handed the door's response. Every other card for the same
  * proposal used to go stale knowing only that somebody had answered — the account owner refused one
  * in a browser on 2026-09-11 and found the phone's card dimmed with no way to tell which answer it
  * had been given. The answer is a committed row, so it arrives on the same derived read as the rest
- * of the card. Never the proposal's words: a stale card still shows no diff.
+ * of the card.
+ *
+ * `proposal` is the words, which this read withheld until 2026-09-17 — so approving turned a card
+ * showing a word-by-word diff into one line of receipt, and the account owner's report was the
+ * plain consequence: after approving, what the change had been was no longer anywhere. It is one
+ * side only: what a rewrite replaced is stored nowhere, so a card built on this must not be read as
+ * a before-and-after, and `SETTLED_NO_BEFORE_WORDS` below is where it says so.
  */
 export interface SettledCriteriaDecision {
   intentId: string;
@@ -189,6 +227,12 @@ export interface SettledCriteriaDecision {
   baseSeal: string;
   /** The seal standing afterwards: `baseSeal` again for a refusal, moved by an approval. */
   resultingSeal: string;
+  /**
+   * What the answer was about — the version that took effect on an approval, the one that did not
+   * on a refusal. Absent from a server older than this bundle, and null for a proposal row the
+   * server could not read; either way the receipt draws its line and no fold.
+   */
+  proposal?: SettledProposalMaterial | null;
 }
 
 /** The derived read: every proposal of one project that is still a question, oldest first. */
@@ -884,6 +928,138 @@ function ReplyReceipt({ reply }: { reply: CriteriaDecisionReply | null }): JSX.E
   return null;
 }
 
+/**
+ * WHAT A RECEIPT SAYS THE DECISION WAS ABOUT.
+ *
+ * The receipt was one line — `Decision recorded`, `✓ Approved by you at 09:15` — and pressing the
+ * button was therefore the moment the change became unreadable: the card above it had the diff, and
+ * the receipt that replaced it had the outcome. The account owner's words, 2026-09-17: after
+ * approving, you can no longer see what the change was.
+ *
+ * So the receipt carries the proposal's own side of it, folded. `What this approved` leads, because
+ * an approval and a refusal publish the SAME material and only the answer says whether any of it
+ * took effect — a list of criteria under a refusal, unled, reads as what the project now states.
+ */
+export const SETTLED_APPROVED_LEAD = 'What this approved';
+export const SETTLED_REFUSED_LEAD = 'What this refused';
+/** And the tail of that line: how much of the ruler the decision left exactly as it was. */
+export const SETTLED_UNCHANGED_ONE = 'criterion unchanged';
+export const SETTLED_UNCHANGED_MANY = 'criteria unchanged';
+
+/**
+ * THE SENTENCE THAT KEEPS THIS FROM BEING READ AS A DIFF.
+ *
+ * Nothing stores the words a rewrite replaced: the proposal states what it asks for, and the
+ * baseline it names records the set it was composed against as hashes. So the fold can say WHICH
+ * criteria moved and what they say now, and cannot say what they said before — and a reader shown
+ * one version of a sentence, on a card whose live form shows two, will read it as both unless it
+ * is told otherwise. It is one quiet line rather than a warning, because this is a limit of the
+ * record and not a fault of the decision.
+ */
+export const SETTLED_NO_BEFORE_WORDS =
+  'This is the proposal’s own wording. The words it replaced were never stored, so what is here is '
+  + 'one side of the change and not a before-and-after.';
+/** The half a refusal has to say first: these words are on record, and nothing else is. */
+export const SETTLED_NOTHING_APPLIED =
+  'None of this was applied — the criteria on record stayed exactly as they were.';
+/** A dropped criterion's row, which has no words of its own to show. */
+export const SETTLED_DROPPED_WORDS_GONE = 'its words are not on record';
+
+/** Which lead the fold carries, which is the whole of how a refusal reads differently. */
+export function settledLead(decision: CriteriaDecision): string {
+  return decision === 'APPROVE' ? SETTLED_APPROVED_LEAD : SETTLED_REFUSED_LEAD;
+}
+
+/** One entry's badge, in the same three words the live card's summary counts them in. */
+export function settledChangeWord(change: SettledCriterionChange): string {
+  switch (change) {
+    case 'REWORDED':
+      return CRITERION_REWORDED_WORD;
+    case 'ADDED':
+      return CRITERION_ADDED_WORD;
+    case 'DROPPED':
+      return CRITERION_DROPPED_WORD;
+  }
+}
+
+/**
+ * The folded line: which answer this was, what it moved, and how much it left alone.
+ *
+ * A decision that moved exactly ONE criterion names it — `criterion 5 reworded` — because that is
+ * the whole answer and a count of one is a worse way of saying it. Anything more is counted, the
+ * way the live card's `changeSummary` counts, and the ordinals are one disclosure away.
+ */
+export function settledSummary(settled: SettledCriteriaDecision): string {
+  const proposal = settled.proposal;
+  const lead = settledLead(settled.decision);
+  if (!proposal) return lead;
+  const only = proposal.changed.length === 1 ? proposal.changed[0] : null;
+  const counts: string[] = [];
+  if (proposal.rewordedCount > 0) counts.push(`${proposal.rewordedCount} ${CRITERION_REWORDED_WORD}`);
+  if (proposal.droppedCount > 0) counts.push(`${proposal.droppedCount} ${CRITERION_DROPPED_WORD}`);
+  if (proposal.addedCount > 0) counts.push(`${proposal.addedCount} ${CRITERION_ADDED_WORD}`);
+  const moved = only && only.ordinal !== null
+    ? `criterion ${only.ordinal} ${settledChangeWord(only.change)}`
+    : counts.length === 0 ? CHANGE_SUMMARY_NOTHING_MOVES : counts.join(', ');
+  const unchanged = proposal.unchangedCount === 1 ? SETTLED_UNCHANGED_ONE : SETTLED_UNCHANGED_MANY;
+  return `${lead} · ${moved} · ${proposal.unchangedCount} ${unchanged}`;
+}
+
+/**
+ * The proposal a receipt was about, folded away by default.
+ *
+ * `<details>` and not a piece of state, for the same reason `ProposedChanges` is one: a receipt
+ * drawn from the read on every render has no business keeping a second thing across renders, and
+ * the element opens and closes without this component knowing about it. Closed by default because
+ * the receipt's job is to say the decision was recorded; what it was about is the question a reader
+ * asks second.
+ *
+ * TWO LISTS, AND THE SECOND ONE IS NOT NUMBERED. `value` on an `<li>` is the SERVER's ordinal — the
+ * criterion's place in the proposed set — so `2.`, `4.` says which of fourteen moved, exactly as on
+ * the live card. A dropped criterion has no place in that set at all, and putting it in the
+ * numbered list would hand it the next number going: a position in the very collection it was being
+ * taken out of.
+ */
+function SettledProposal({ settled }: { settled: SettledCriteriaDecision }): JSX.Element | null {
+  const proposal = settled.proposal;
+  if (!proposal) return null;
+  const placed = proposal.changed.filter((entry) => entry.ordinal !== null);
+  const dropped = proposal.changed.filter((entry) => entry.ordinal === null);
+  return (
+    <details className="criteria-decision-unchanged">
+      <summary>{settledSummary(settled)}</summary>
+      {placed.length > 0 ? (
+        <ol className="criteria-decision-proposed">
+          {placed.map((entry, index) => (
+            <li
+              key={entry.definitionId ?? `placed-${index}`}
+              value={entry.ordinal ?? undefined}
+              className="criteria-decision-entry"
+            >
+              <span className="criteria-decision-text">{entry.text ?? ''}</span>
+              <span className="criteria-decision-new">{settledChangeWord(entry.change)}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {dropped.length > 0 ? (
+        <ul className="criteria-decision-proposed">
+          {dropped.map((entry, index) => (
+            <li key={entry.definitionId ?? `dropped-${index}`} className="criteria-decision-entry">
+              <span className="criteria-decision-text">{SETTLED_DROPPED_WORDS_GONE}</span>
+              <span className="criteria-decision-new">{settledChangeWord(entry.change)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="criteria-decision-hold">
+        {settled.decision === 'REJECT' ? `${SETTLED_NOTHING_APPLIED} ` : ''}
+        {SETTLED_NO_BEFORE_WORDS}
+      </p>
+    </details>
+  );
+}
+
 export function CriteriaDecisionReceipt({
   settled,
   reply = null,
@@ -908,6 +1084,13 @@ export function CriteriaDecisionReceipt({
         <span className="criteria-decision-verdict">{criteriaVerdictReceipt(settled)}</span>
         <ReplyReceipt reply={reply} />
       </p>
+      {/* In the live card's own body, so the fold sits under the same padding and the same 360px
+          cap the diff it is a record of was read in. */}
+      {settled.proposal ? (
+        <div className="approval-body criteria-decision-body">
+          <SettledProposal settled={settled} />
+        </div>
+      ) : null}
     </div>
   );
 }
