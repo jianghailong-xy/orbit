@@ -12368,9 +12368,14 @@ button.composer-usage:focus-visible {
   color: var(--brand);
   font-size: 12px;
 }
+/* Carries its own vertical margin rather than living off its neighbour's: two wakes in a row —
+   one watch firing twice, or two watches at once — have no message bubble between them to lend
+   theirs, and used to touch. 8px is what .chat-msg uses, and adjacent margins collapse, so a wake
+   next to a message keeps the spacing it already had. */
 .watch-wake-wrap {
   display: flex;
   justify-content: flex-end;
+  margin: 8px 0;
 }
 .watch-wake {
   width: min(560px, 88%);
@@ -12462,10 +12467,12 @@ button.composer-usage:focus-visible {
    (BackgroundWakeCard). Same shape and the same two tones as a watch's wake — brand for a job that
    finished, warning for one that failed or was killed, as Watch triggered and Watch expired take
    them — so the transcript reads one way whoever queued the turn. Each job gets a raised row of its
-   own: one wake can carry six. */
+   own: one wake can carry six. Its wrap carries its own margin for the same reason a watch's does:
+   two wakes in a row have no message bubble between them to lend one. */
 .bgwake-wrap {
   display: flex;
   justify-content: flex-end;
+  margin: 8px 0;
 }
 .bgwake {
   width: min(560px, 88%);
