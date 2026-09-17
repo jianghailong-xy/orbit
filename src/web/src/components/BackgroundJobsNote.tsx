@@ -16,8 +16,10 @@ export function BackgroundJobsNote({ jobs }: { jobs: BackgroundJobs }) {
     <div className="bgjobs">
       <Section title="Still running" jobs={jobs.running} />
       <Section title="Ended while you were away" jobs={jobs.ended} />
+      {/* "The block" rather than "what the agent received", which is what a wake's own fold says: on
+          a wake turn this entry sits inside that card, and two folds with one name read as a bug. */}
       <details className="bgjobs-raw">
-        <summary>What the agent received</summary>
+        <summary>The block, verbatim</summary>
         <pre>{jobs.text}</pre>
       </details>
     </div>

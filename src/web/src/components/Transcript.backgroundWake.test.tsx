@@ -28,8 +28,9 @@ import type { RunEvent } from './Transcript';
  * agent read one native disclosure away. Two things are held here that a card drawn only for what
  * ships today would break: the 73 turns already in the record carry the wording that shipped until
  * 2026-09-15 and are not migrated (fixtures copied verbatim out of this deployment's `run_event`
- * rows), and a note that carries a wake AND something else keeps that something else where it has
- * always been — the folded entry under the card, not swallowed by it.
+ * rows), and a note that carries a wake AND something else keeps that something else — as a folded
+ * entry in the card, not swallowed by it, and not in a bubble of its own: nobody typed this turn,
+ * so a bubble here is an empty one, signed with the reader's name.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -248,7 +249,7 @@ describe('a wake turn in the transcript', { timeout: 30_000 }, () => {
     ]);
   });
 
-  it('takes only the wake out of a note that carried more, and leaves the rest its own entry', async () => {
+  it('takes only the wake out of a note that carried more, and keeps the rest its own entry inside the card', async () => {
     await mount([wakeEvent(ZH_WAKE_WITH_COORDINATOR_CONTEXT)]);
 
     // The card is the wake alone — the coordinator's standing role is not part of what woke anybody.
@@ -257,13 +258,16 @@ describe('a wake turn in the transcript', { timeout: 30_000 }, () => {
     expect(raw.textContent?.startsWith('<background-job-wake>')).toBe(true);
     expect(raw.textContent).not.toContain('orbit_project_coordinator_context');
 
-    // The rest stays exactly the entry it has always been, named for what it is.
+    // The rest is still an entry of its own, named for what it is — inside the card, since it is
+    // the control plane's too and this turn has no words of anybody's to sit under.
     const toggle = [...container.querySelectorAll('button')].find((b) =>
       b.textContent?.startsWith('⊕ Orbit attached:'),
     );
     expect(toggle, `no entry for the rest of the note:\n${container.innerHTML}`).toBeTruthy();
     expect(toggle!.textContent).toBe('⊕ Orbit attached: project coordinator context');
-    expect(container.querySelector('.chat-user')?.textContent).not.toContain('bgj_');
+    expect(card().contains(toggle!), 'the entry was left outside the card').toBe(true);
+    // And no bubble: an empty one here reads as a message the person sent without words.
+    expect(container.querySelector('.chat-user')).toBeNull();
 
     await act(async () => {
       toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -271,6 +275,30 @@ describe('a wake turn in the transcript', { timeout: 30_000 }, () => {
     const opened = toggle!.parentElement!.querySelector('pre')!;
     expect(opened.textContent?.startsWith('<orbit_project_coordinator_context>')).toBe(true);
     expect(opened.textContent).not.toContain('bgj_');
+  });
+
+  // The shape that raised this: 16 of this deployment's `<background-jobs>` notes ride a turn whose
+  // content is empty, and every one of them is a wake — 15 a job's, 1 a scheduled wakeup's. Delivery
+  // appends the inventory to the wake's own turn, so both blocks arrive on a turn nobody typed.
+  it('draws no empty bubble when the same wake turn also carries the inventory block', async () => {
+    const inventory = [
+      '<background-jobs>',
+      '  Ended while you were away:',
+      '    bgj_41314cd48e66｜job｜swift test｜completed｜exit code 0｜output /root/.orbit/runs/x/bgj_41314cd48e66.output',
+      '  The control plane recorded this for you; the user did not say it. The output files belong to the runner, so they are still there after an engine change.',
+      '  Read output with mcp__orbit__bg_output by id; mcp__orbit__bg_list gives the whole list.',
+      '</background-jobs>',
+    ].join('\n');
+
+    await mount([wakeEvent(`${ZH_JOB_DONE}\n\n${inventory}`)]);
+
+    expect(container.querySelector('.chat-user')).toBeNull();
+    const toggle = [...card().querySelectorAll('button')].find((b) =>
+      b.textContent?.startsWith('⊕ Orbit attached:'),
+    );
+    expect(toggle?.textContent).toBe('⊕ Orbit attached: background jobs · 1 ended, exit 0');
+    // The wake itself is still the card's own subject, not one of the entry's rows.
+    expect(card().querySelector('.bgwake-title')?.textContent?.trim()).toBe('Background job finished');
   });
 
   it('keeps the card, and the words behind a native disclosure, in an exported transcript', () => {

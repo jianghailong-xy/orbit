@@ -936,7 +936,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       // A turn the control plane opened for a background job's news, or for a wakeup coming due, is
       // nobody's message either: the block IS the turn, so it is read off the recorded note rather
       // than the person's words, which are empty. Only the wake blocks become the card — anything
-      // else the same note carried stays the folded entry it has always been, under it.
+      // else the same note carried (the inventory a returning engine is handed, a coordinator's
+      // standing role) is a folded entry in the same card, because it is the control plane's too.
+      // It used to be an entry in a user bubble under the card, which drew an empty bubble: a
+      // message with no words in it, in the reader's own name.
       const background = parseBackgroundWake(node.note);
       if (background) {
         return (
@@ -946,10 +949,13 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
               seq={node.seq}
               ts={node.ts}
               undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+              attached={
+                background.rest !== '' && (
+                  <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
+                )
+              }
             />
-            {(node.text.trim() !== '' || background.rest !== '') && (
-              <UserBubble node={{ ...node, note: background.rest || undefined }} />
-            )}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
           </>
         );
       }

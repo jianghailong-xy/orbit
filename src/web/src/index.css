@@ -12674,6 +12674,14 @@ button.composer-usage:focus-visible {
   margin-top: 6px;
   font-size: 12px;
 }
+/* Whatever else the same note carried, folded inside the card rather than in a bubble of its own. */
+.bgwake > .chat-injected {
+  margin-top: 8px;
+  border-top-color: var(--brand-border);
+}
+.bgwake.is-failed > .chat-injected {
+  border-top-color: var(--warning-border);
+}
 .bgwake-raw summary {
   color: var(--text-2);
   cursor: pointer;
