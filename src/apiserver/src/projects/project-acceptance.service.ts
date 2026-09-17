@@ -160,7 +160,9 @@ export class ProjectAcceptanceService {
    * Deliberately not in a transaction and deliberately taking no project lock. An edit landing
    * between the comparison and the INSERT can only make the row it writes non-current, which the
    * read above already reports honestly: the row says which version was confirmed, and it is the
-   * read, never the write, that decides whether that version is the one standing.
+   * read, never the write, that decides whether that version is the one standing. The same holds
+   * for the second statement, which starts the project: each is idempotent on its own, so the two
+   * being non-atomic with each other costs a re-issued request nothing.
    */
   async confirmStandardSet(
     ownerId: string,
@@ -201,6 +203,31 @@ export class ProjectAcceptanceService {
         // with the database rather than a widening.
         criteriaMaterial: currentVersion.material as unknown as Prisma.InputJsonValue,
       },
+    });
+
+    // And the same act STARTS the project. Saying what would settle this project is what
+    // authorizes work on it, so `coordinatorEnabled` — which `create` no longer writes — is turned
+    // on here, by the one person who may answer the question. Nothing about the gate moves: the
+    // refusal above is still the whole authority check, so a call that cannot record a
+    // confirmation cannot reach this line either.
+    //
+    // ONE statement, and deliberately outside any transaction for this method's stated reason. It
+    // is a compare-and-set on the value rather than a blind write because writing `true` over
+    // `true` is not a change and must not be recorded as one: the predicate is what makes a second
+    // confirmation — of a set that moved, or a re-issued request — match no row, bump no
+    // `configRevision`, and fire neither of the two triggers an UPDATE of this column carries
+    // (`project_dispatch_authority_fanout` rewrites every task's dispatch authority; the
+    // completion contract is re-derived). The bump is not optional when it DOES change: this
+    // column is one of `ProjectsService.AUTHORIZATION_FIELDS`, and every write of one of those
+    // bumps the revision by one so that an action racing an authorization change stays a
+    // comparison rather than an archaeology.
+    //
+    // A throw here leaves a confirmation on record with the project still not started, which is
+    // the failure this order is chosen for: the caller is told the authorization did not land, and
+    // confirming again is safe — the INSERT appends, and this statement is the same statement.
+    await this.prisma.project.updateMany({
+      where: { id: projectId, ownerId, coordinatorEnabled: false },
+      data: { coordinatorEnabled: true, configRevision: { increment: 1 } },
     });
 
     // The confirmation is one of the two inputs `project-done-derived.ts` projects `status` from,

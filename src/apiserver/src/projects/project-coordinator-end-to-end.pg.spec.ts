@@ -220,8 +220,22 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
       },
       { sessionId: seedSessionId, workspaceId },
     );
-    assert.equal(project.coordinatorEnabled, true);
+    // A project is created un-started: `create` does not write `coordinator_enabled`, so it lands
+    // on the column default and the coordinator may do nothing. What turns it on is the owner
+    // confirming what would settle the project — so T8 replays the product's order, which now has
+    // that confirmation in front of the first dispatch rather than behind the last task.
+    assert.equal(project.coordinatorEnabled, false, 'a project nobody has confirmed coordinates nothing');
     assert.equal(project.coordinatorWorkspaceId, workspaceId);
+    const standing = await stack.acceptance.standardSetConfirmation(ownerId, project.id);
+    await stack.acceptance.confirmStandardSet(ownerId, project.id, {
+      criteriaDigest: standing.currentVersion.digest,
+    });
+    const started = await stack.db.project.findUniqueOrThrow({
+      where: { id: project.id },
+      select: { coordinatorEnabled: true },
+    });
+    assert.equal(started.coordinatorEnabled, true,
+      'confirming the standard set is what authorises the work below');
     await establishProjectContractForPgTest(db, ownerId, project.id, 'T8 integrated replay');
 
     // Create the edge before releasing it. The production signoff service owns the instant

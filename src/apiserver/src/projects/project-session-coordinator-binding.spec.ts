@@ -319,9 +319,10 @@ test('both halves of the binding are part of the insert, not a second write', as
   // `members` and `runtime` are nested writes of the SAME statement, and they are here for the
   // same reason the two columns are: the coordinating identity and the project's runtime row must
   // never be a follow-up write that can fail on its own and leave a project half-bound.
+  // `coordinatorEnabled` is not among them and belongs to no statement here: a project is created
+  // un-started and is turned on by the owner confirming what would settle it.
   assert.deepEqual(Object.keys(f.creates[0]).sort(), [
     'automationPolicy',
-    'coordinatorEnabled',
     'coordinatorSessionId',
     'coordinatorWorkspaceId',
     'goal',

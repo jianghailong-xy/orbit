@@ -36,6 +36,14 @@
  * whole point — an edit lands and the confirmation stops counting, with no flag anybody had to
  * remember to clear.
  *
+ * WHAT ELSE THE CONFIRMATION DOES
+ * -------------------------------
+ * It starts the project. `ProjectsService.create` no longer writes `coordinator_enabled`, so a new
+ * project lands on the column's false and the coordinator may do nothing until a person has said
+ * what would settle it — which makes this door the one authorization to work on a project, and its
+ * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. `(5)` asserts both
+ * halves on the row itself.
+ *
  * WHY THIS IS A `.pg.spec`
  * ------------------------
  * Every fact here is produced the way the product produces it. Criteria are stated and edited
@@ -370,5 +378,69 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     assert.equal(standing.confirmed, false,
       'a set whose evidence procedure changed is not the set that was confirmed');
     assert.equal(standing.state, 'STALE');
+  });
+
+  // ═══ (5) the confirmation is also the authorization to START the project ═══════════════════════
+
+  await t.test('(5) a project is created un-started, and confirming the standard set starts it', async () => {
+    // Created through the product's own door rather than `prisma.project.create`: the claim is
+    // about what `ProjectsService.create` writes, and a fixture that wrote the row itself would be
+    // asserting its own arithmetic.
+    const created = await projects.create(ownerId, {
+      title: 'The project whose start is authorised',
+      acceptanceCriteriaItems: [{ text: FIRST, verificationMethod: METHOD }],
+    } as never) as { id: string };
+
+    /** The two columns off the row, never off a projection that could agree with itself. */
+    async function authorization(): Promise<{ enabled: boolean; revision: string }> {
+      const { rows } = await sql.query<{ coordinator_enabled: boolean; config_revision: string }>(
+        `SELECT "coordinator_enabled", "config_revision"::text AS "config_revision"
+           FROM "project" WHERE "id" = $1::uuid`,
+        [created.id],
+      );
+      assert.equal(rows.length, 1, 'the project this subtest created is not there');
+      return { enabled: rows[0].coordinator_enabled, revision: rows[0].config_revision };
+    }
+
+    // A project nobody has answered "what would settle this" for coordinates nothing: `create`
+    // writes the column no more, so it lands on the database's own false.
+    assert.deepEqual(await authorization(), { enabled: false, revision: '0' },
+      'a new project must not dispatch agents before a person has said what done means');
+
+    // The gate is exactly as strong as it was. An acting session cannot confirm — and since
+    // confirming is now also STARTING, that one refusal is what keeps an agent from authorising
+    // its own project. Asserted on the column, so "refused" means the start did not happen either.
+    const standing = await acceptance.standardSetConfirmation(ownerId, created.id);
+    const sessionId = await actingSession(
+      SessionDispatchOrigin.USER, 'an agent trying to start its own project',
+    );
+    const { status, body } = await refused(() => acceptance.confirmStandardSet(
+      ownerId, created.id, { criteriaDigest: standing.currentVersion.digest }, sessionId,
+    ));
+    assert.equal(status, 403);
+    assert.equal(body.code, 'PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY');
+    assert.equal(body.tier, 'HUMAN_ONLY');
+    assert.deepEqual(await authorization(), { enabled: false, revision: '0' },
+      'a refused confirmation started the project anyway');
+
+    // The owner's confirmation, through the same method: it records the version AND starts the
+    // project. `coordinatorEnabled` is one of the authorization fields, so the change is also
+    // readable as a revision move rather than only as a new value.
+    const after = await acceptance.confirmStandardSet(
+      ownerId, created.id, { criteriaDigest: standing.currentVersion.digest },
+    );
+    assert.equal(after.state, 'CONFIRMED');
+    assert.deepEqual(await authorization(), { enabled: true, revision: '1' },
+      'confirming the standard set is what authorises work on the project');
+
+    // And it is idempotent. Re-issuing the confirmation appends a second row naming the same
+    // version — that much is (3)'s behaviour — but writes nothing to the project: `true` over
+    // `true` is not a change, and recording it as one would move a revision other readers compare
+    // against and re-fire this column's fanout over every task of the project.
+    await acceptance.confirmStandardSet(
+      ownerId, created.id, { criteriaDigest: standing.currentVersion.digest },
+    );
+    assert.deepEqual(await authorization(), { enabled: true, revision: '1' },
+      'a second confirmation of the same version moved the authorization set');
   });
 });

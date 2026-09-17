@@ -1837,9 +1837,12 @@ model Project {
   /// they chose, and they would have to remember it to get back.
   ///
   /// FALSE at the database, which is what makes the migration safe: every project that existed
-  /// before this column stays exactly as silent as it was. A project created AFTER it is written
-  /// `true` explicitly by the service, so the two populations differ by a decision rather than by
-  /// when they happened to be created.
+  /// before this column stays exactly as silent as it was. A project created AFTER it lands on the
+  /// same false, and is turned on by the one act that says what would settle it — the owner
+  /// confirming its acceptance standard set (`ProjectAcceptanceService.confirmStandardSet`). So
+  /// the two populations differ by a decision rather than by when they happened to be created, and
+  /// the decision is a person's: a project nobody has answered "what is done" for coordinates
+  /// nothing.
   coordinatorEnabled  Boolean                 @default(false) @map("coordinator_enabled")
   /// How far it may go when it does run (see ProjectAutomationPolicy).
   ///

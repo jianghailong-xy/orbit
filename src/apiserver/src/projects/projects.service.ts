@@ -1772,15 +1772,26 @@ export class ProjectsService {
             ownerId,
             goal: ProjectsService.blankToNull(dto.goal),
             instructions: ProjectsService.blankToNull(dto.instructions),
-            // The defaults for a NEW project, written here rather than left to the column defaults —
-            // and they are different values. The columns default to `false` / MANUAL because that is
-            // what every project that existed before this feature has to keep; a project created
-            // now is one somebody is recording in order to have it coordinated, so it starts
-            // coordinated, at the guarded level. Doing it the other way round (new-project values as
-            // the column defaults, old rows rewritten by the migration) turns every project created
-            // between the migration and this code into an automatic one, and rewrites exactly the
-            // rows nobody asked about.
-            coordinatorEnabled: dto.coordinatorEnabled ?? true,
+            // HOW FAR the coordinator may go is a default for a NEW project, written here rather
+            // than left to the column default — and they are different values. The column defaults
+            // to MANUAL because that is what every project that existed before this feature has to
+            // keep; a project created now is one somebody is recording in order to have it
+            // coordinated, so it starts at the guarded level. Doing it the other way round
+            // (new-project values as the column defaults, old rows rewritten by the migration)
+            // turns every project created between the migration and this code into an automatic
+            // one, and rewrites exactly the rows nobody asked about.
+            //
+            // WHETHER it may run at all is not written here, and that is the difference between
+            // the two: it is an authorization rather than a setting, and the person who gives it
+            // is the one who confirms what would settle this project
+            // (`ProjectAcceptanceService.confirmStandardSet`, which turns the column on). So a new
+            // project lands on the column default, false, and stays there until somebody has said
+            // what done means — a project nobody has answered that for is not one to dispatch
+            // agents into. A caller that names the field explicitly still gets what it asked for;
+            // that door is owner-only and unchanged (the runner boundary refuses it).
+            ...(dto.coordinatorEnabled !== undefined
+              ? { coordinatorEnabled: dto.coordinatorEnabled }
+              : {}),
             automationPolicy: dto.automationPolicy ?? ProjectAutomationPolicy.GUARDED_AUTO,
             ...(dto.maxConcurrentTasks !== undefined
               ? { maxConcurrentTasks: dto.maxConcurrentTasks }

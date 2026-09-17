@@ -139,16 +139,25 @@ function makeService(fx: Fixture = {}) {
 
 // ── What a new project starts as, and what an old one keeps (§12.1 G1) ────────────────────────
 
-test('a new project is created coordinated, at the guarded level, with its runtime row', async () => {
+test('a new project is created un-started, at the guarded level, with its runtime row', async () => {
   const f = makeService();
 
   const project = await f.service.create(OWNER_ID, { title: 'Ship it' } as never);
 
-  // Written EXPLICITLY rather than left to the column defaults, which say the opposite. That pair
-  // is what keeps the migration from turning every project that already exists into an automatic
-  // one, while still making "somebody recorded this to have it coordinated" the new default.
-  assert.equal(f.projectWrites[0].coordinatorEnabled, true);
+  // HOW FAR it may go is written EXPLICITLY rather than left to the column default, which says the
+  // opposite: that pair is what keeps the migration from turning every project that already exists
+  // into an automatic one, while still making "somebody recorded this to have it coordinated" the
+  // new default.
   assert.equal(f.projectWrites[0].automationPolicy, 'GUARDED_AUTO');
+  // WHETHER it may run at all is not written here at all. It is an authorization rather than a
+  // setting, and the person who gives it is the one who confirms what would settle this project —
+  // so the insert names no value and the row lands on the column's false.
+  assert.equal('coordinatorEnabled' in f.projectWrites[0], false);
+  // An owner naming the field in the create request still gets what they asked for; that door is
+  // unchanged, and it is the only way a project is born already started.
+  const named = makeService();
+  await named.service.create(OWNER_ID, { title: 'Ship it', coordinatorEnabled: true } as never);
+  assert.equal(named.projectWrites[0].coordinatorEnabled, true);
   // The control loop's row comes with the project, so "does this project have one" is never a
   // question a later reader has to answer with a fallback.
   assert.deepEqual(f.projectWrites[0].runtime, { create: {} });
@@ -177,7 +186,7 @@ test('a project recorded from a session is coordinated by that session’s agent
   });
 });
 
-test('the column defaults are the opposite of the new-project defaults, and nothing rewrites them', () => {
+test('the migration lands false and MANUAL, and switches no existing project on', () => {
   const sql = readFileSync(
     path.resolve(__dirname, '../../prisma/migrations/0111_project_coordinator_identity/migration.sql'),
     'utf8',
