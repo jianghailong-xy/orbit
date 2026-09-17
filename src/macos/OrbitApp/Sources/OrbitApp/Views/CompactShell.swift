@@ -484,6 +484,9 @@ private struct NavigationDrawer: View {
 
     var body: some View {
         let isAdmin = model.user?.role == "ADMIN"
+        // Following earns a drawer row only while a watch needs a person — see
+        // `AppSection.visible(isAdmin:followingNeedsAttention:)` for why it is conditional at all.
+        let followingNeedsAttention = WatchProjection.needsAttentionCount(model.watches?.watches ?? []) > 0
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Orbit")
@@ -511,7 +514,8 @@ private struct NavigationDrawer: View {
                 // Runners is dropped from the drawer rail on iOS (it lives under Settings); Settings is
                 // the action bar's gear below, and Admin sits inside Settings. Workspaces occupy the
                 // former Agents destination directly, with Runner demoted to same-line metadata.
-                ForEach(AppSection.visible(isAdmin: isAdmin).filter { ![.runners, .settings, .admin].contains($0) }) { section in
+                ForEach(AppSection.visible(isAdmin: isAdmin, followingNeedsAttention: followingNeedsAttention)
+                    .filter { ![.runners, .settings, .admin].contains($0) }) { section in
                     // The Agents nav row is replaced in place by first-level Workspace rows.
                     if section == .agents {
                         agentsRows

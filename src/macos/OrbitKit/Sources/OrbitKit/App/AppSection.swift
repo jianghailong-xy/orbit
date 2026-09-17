@@ -37,18 +37,30 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     public var adminOnly: Bool { self == .admin }
 
     /// Sections to show in the nav, in display order. Runners leads; Skills is intentionally omitted
-    /// (its detail view still exists but is no longer a top-level destination). Following — the
-    /// watches kept on sessions and tasks — follows Tasks. Admin is gated by role.
-    public static func visible(isAdmin: Bool) -> [AppSection] {
-        let order: [AppSection] = [.runners, .agents, .tasks, .following, .settings, .admin]
-        return order.filter { !$0.adminOnly || isAdmin }
+    /// (its detail view still exists but is no longer a top-level destination).
+    ///
+    /// The last two rows are the conditional ones, so that a row appearing or going never shifts a
+    /// row a reader navigates by position. Admin is gated by role. Following is gated by whether any
+    /// watch needs a person (`WatchProjection.needsAttentionCount`): nearly every watch is one session
+    /// waiting on the server for another, which the session's own header and row already say, and a
+    /// permanent row could not tell a reader whether it held anything worth opening. The Following
+    /// destination itself stays reachable either way — a watch notification deep-links into it
+    /// (``forRoute(_:)``), and a session's watches are read where they belong, on the session.
+    public static func visible(isAdmin: Bool, followingNeedsAttention: Bool) -> [AppSection] {
+        let order: [AppSection] = [.runners, .agents, .tasks, .settings, .following, .admin]
+        return order.filter { section in
+            if section.adminOnly { return isAdmin }
+            if section == .following { return followingNeedsAttention }
+            return true
+        }
     }
 
     /// Destinations shown below the regular-width iPad sidebar's first-class Workspace group.
-    /// Keep this derived from ``visible(isAdmin:)`` so role gating and the cross-client navigation
-    /// order stay authoritative in one place while the iPad renderer supplies the group boundary.
-    public static func managementSections(isAdmin: Bool) -> [AppSection] {
-        visible(isAdmin: isAdmin).filter { $0 != .agents }
+    /// Keep this derived from ``visible(isAdmin:followingNeedsAttention:)`` so role gating, the
+    /// Following condition and the cross-client navigation order stay authoritative in one place
+    /// while the iPad renderer supplies the group boundary.
+    public static func managementSections(isAdmin: Bool, followingNeedsAttention: Bool) -> [AppSection] {
+        visible(isAdmin: isAdmin, followingNeedsAttention: followingNeedsAttention).filter { $0 != .agents }
     }
 
     /// The section a deep-link / notification `Route` lands in. There's no aggregate Open view

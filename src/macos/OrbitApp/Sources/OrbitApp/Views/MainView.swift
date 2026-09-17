@@ -74,6 +74,12 @@ struct SectionSidebar: View {
     @State private var agentsExpanded = true
     #endif
 
+    /// Following earns a row only while a watch needs a person — see
+    /// ``AppSection/visible(isAdmin:followingNeedsAttention:)`` for why it is conditional at all.
+    private var followingNeedsAttention: Bool {
+        WatchProjection.needsAttentionCount(model.watches?.watches ?? []) > 0
+    }
+
     /// Bridge the two model fields (`selectedSection` + `selectedAgentID`) to the List's single
     /// selection. A Workspace is the only `.agents` destination that carries a detail; on macOS the
     /// disclosure parent remains untagged, while iPad presents these same tagged rows directly.
@@ -112,7 +118,7 @@ struct SectionSidebar: View {
             }
 
             Section {
-                ForEach(AppSection.managementSections(isAdmin: isAdmin)) { section in
+                ForEach(AppSection.managementSections(isAdmin: isAdmin, followingNeedsAttention: followingNeedsAttention)) { section in
                     Label(section.title, systemImage: section.systemImage)
                         .tag(SidebarSelection.section(section))
                 }
@@ -120,7 +126,7 @@ struct SectionSidebar: View {
                 Text("Manage").textCase(nil)
             }
             #else
-            ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
+            ForEach(AppSection.visible(isAdmin: isAdmin, followingNeedsAttention: followingNeedsAttention)) { section in
                 if section == .agents {
                     agentsDisclosure(shortcutIndex: shortcutIndex)
                 } else {

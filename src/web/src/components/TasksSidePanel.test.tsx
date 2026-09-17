@@ -69,7 +69,7 @@ describe('TasksSidePanel nav', () => {
     expect(projectsShortcutLabel(true)).toBe('⌘P');
     expect(projectsShortcutLabel(false)).toBe('Ctrl P');
     expect(source).toContain('className="tp-count tp-nav-shortcut"');
-    expect(source).toContain("title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}");
+    expect(source).toContain("${t.shortcut ? `  ${t.shortcut}` : ''}`}");
     expect(styles).toMatch(
       /\.tp-workspace-shortcut,\s*\.tp-nav-shortcut\s*\{[\s\S]*?display:\s*none;/,
     );
@@ -83,20 +83,52 @@ describe('TasksSidePanel nav', () => {
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
     // The judgment inbox stood first here until migration 0229 removed the project acceptance
-    // judgment: the page it opened read an endpoint that is no longer served. Following is the
-    // watches page (docs/watch-contract.md): what you and your sessions are waiting on.
-    expect(keys).toEqual(['projects', 'following', 'runners', 'providers']);
+    // judgment: the page it opened read an endpoint that is no longer served. Following left this
+    // list next — it is conditional now, not fixed; see the Following tests below.
+    expect(keys).toEqual(['projects', 'runners', 'providers']);
     expect(source).not.toContain('tp-workspaces-head');
     expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });
 
-  it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
-    // The rail maps TOP directly; the expanded section maps navItems, which starts from TOP —
-    // so a TOP entry reaches both surfaces without either render site needing its own list.
+  it('offers Following only for the watches that need a person, counted, after the fixed rows', () => {
+    // A watch is nearly always one session waiting on another, which its own session page narrates.
+    // Only the ones needing a person justify a nav row, so the row is built from that count alone
+    // and is absent at zero — a permanent row could not tell a reader whether it was worth opening.
+    const topBlock =
+      source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
+    expect(topBlock).not.toContain("key: 'following'");
     expect(source).toMatch(
-      /const navItems(?:\s*:\s*TopNavItem\[\])?\s*=\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.TOP,/,
+      /const followingNavItem = \(needsAttention: number\): TopNavItem => \(\{[\s\S]*?key: 'following',[\s\S]*?badge: needsAttention,/,
     );
-    expect(source).toContain('{TOP.map((t) => (');
+    // Built from the dedicated needs-attention read, not counted out of the full watch list.
+    expect(source).toContain('const watchAttention = useQuery(watchAttentionQuery());');
+    expect(source).toContain('const watchesNeedingAttention = watchAttention.data?.length ?? 0;');
+    // Zero means no row at all; otherwise it trails TOP so the fixed rows never shift under it.
+    expect(source).toMatch(
+      /watchesNeedingAttention > 0 \? \[\.\.\.TOP, followingNavItem\(watchesNeedingAttention\)\] : TOP;/,
+    );
+    // The count reads as the same kind of urgent a Workspace row uses for sessions blocked on you.
+    expect(source).toMatch(/t\.badge !== undefined &&[\s\S]*?className="tp-count needs-you"/);
+    expect(styles).toMatch(/\.tp-count\.needs-you\s*\{/);
+  });
+
+  it('keeps /following routable even with no nav row pointing at it', () => {
+    // The row is conditional; the destination is not. A wake card deep-links to one watch by id
+    // (`/following?watch=<id>`), and that link has to open whether or not anything needs attention.
+    const app = readFileSync(fileURLToPath(new URL('../App.tsx', import.meta.url)), 'utf8');
+    expect(app).toMatch(/path="following"/);
+    const watches = readFileSync(fileURLToPath(new URL('../lib/watches.ts', import.meta.url)), 'utf8');
+    expect(watches).toContain('/following?watch=');
+  });
+
+  it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
+    // Both surfaces build from TOP through fixedNav: the rail maps fixedNav, the expanded section
+    // maps navItems, which starts from fixedNav — so a TOP entry reaches both without either render
+    // site keeping its own list. Admin is the one row the rail leaves out, so it joins after.
+    expect(source).toMatch(
+      /const navItems(?:\s*:\s*TopNavItem\[\])?\s*=\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.fixedNav,/,
+    );
+    expect(source).toContain('{fixedNav.map((t) => (');
     expect(source).toContain('{navItems.map((t) => (');
   });
 

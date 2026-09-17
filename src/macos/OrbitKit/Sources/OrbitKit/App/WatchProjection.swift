@@ -140,6 +140,13 @@ public enum WatchProjection {
         return WatchStateMachine.isLive(watch.state) ? .active : .history
     }
 
+    /// How many of these need a person. This is what a nav row carries when it offers Following at all
+    /// (`AppSection.visible(isAdmin:followingNeedsAttention:)`): counted by the same ``group(of:now:)``
+    /// the page files by, so the row and the section it opens can never disagree about what is there.
+    public static func needsAttentionCount(_ watches: [Watch], now: Date = Date()) -> Int {
+        watches.filter { group(of: $0, now: now) == .needsAttention }.count
+    }
+
     /// The non-empty sections in display order, each keeping the order `watches` came in.
     public static func sections(_ watches: [Watch], now: Date = Date()) -> [WatchSection] {
         let grouped = Dictionary(grouping: watches) { group(of: $0, now: now) }

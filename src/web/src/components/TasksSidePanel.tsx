@@ -31,7 +31,7 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
+import { workspaceSessionCountsQuery, meQuery, sessionQuery, watchAttentionQuery } from '../lib/queries';
 import {
   groupWorkspacesByRunner,
   orderWorkspaceGroupsByRunners,
@@ -92,6 +92,8 @@ interface TopNavItem {
   icon: ReactNode;
   label: string;
   shortcut?: string;
+  /** How many things on this destination are waiting on a person. Absent when the row is a plain link. */
+  badge?: number;
 }
 
 // Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
@@ -103,13 +105,28 @@ const TOP: TopNavItem[] = [
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
-  // What you and your sessions are waiting on: watches, which wait on the server, not in a process.
-  { key: 'following', icon: <EyeOutlined />, label: 'Following' },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
   { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
 ];
+
+/**
+ * Following is not a fixed destination. Nearly every watch is one session waiting on the server for
+ * another — machinery the session's own page already narrates (`SessionWatchStrip`, and
+ * `TaskFollowedBy` on a task), and which asks its reader for nothing. The exception is a watch that
+ * needs a person: one that ended where nothing is delivered, lost its target, or failed to deliver.
+ * Those are exactly what nobody would otherwise hear about, so they are the only ones worth a row —
+ * and a row that is absent when the count is zero says more than a permanent one that cannot say
+ * whether it is worth opening. Everything else is reached from the watch strip where it belongs.
+ * `/following` stays routable regardless: a wake card deep-links to a single watch by id.
+ */
+const followingNavItem = (needsAttention: number): TopNavItem => ({
+  key: 'following',
+  icon: <EyeOutlined />,
+  label: 'Following',
+  badge: needsAttention,
+});
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
 const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
@@ -225,11 +242,18 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
   const { mode, setMode } = useThemeMode();
+  // The watches that need a person — the only ones Following is offered for (see `followingNavItem`).
+  const watchAttention = useQuery(watchAttentionQuery());
+  const watchesNeedingAttention = watchAttention.data?.length ?? 0;
+  // Following trails the fixed rows rather than sitting among them, so a row that comes and goes
+  // never shifts the ones a reader navigates by position.
+  const fixedNav: TopNavItem[] =
+    watchesNeedingAttention > 0 ? [...TOP, followingNavItem(watchesNeedingAttention)] : TOP;
   // Admins get an extra top-nav entry: user management.
   const navItems: TopNavItem[] =
     me.data?.role === 'ADMIN'
-      ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
-      : TOP;
+      ? [...fixedNav, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
+      : fixedNav;
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -536,7 +560,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           task lists) have no icon form, so they fold away — expand to bring them back. The
           workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
-        {TOP.map((t) => (
+        {fixedNav.map((t) => (
           <div
             key={t.key}
             className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
@@ -545,7 +569,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             role="link"
             tabIndex={0}
             aria-current={sel === t.key ? 'page' : undefined}
-            title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
+            // The rail has no room for a count, so the tooltip carries it — the icon being here at
+            // all is the signal, since a row with nothing to say is not rendered.
+            title={`${t.label}${t.badge ? ` — ${t.badge} need attention` : ''}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
           </div>
@@ -599,6 +625,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
+              {t.badge !== undefined && (
+                // Same count treatment a Workspace row uses for the sessions blocked on you: this
+                // asks for a person in the same way, and should not read as a second kind of urgent.
+                <span className="tp-count needs-you" title={`${t.badge} need attention`}>
+                  {t.badge}
+                </span>
+              )}
               {t.shortcut && (
                 <kbd
                   className="tp-count tp-nav-shortcut"

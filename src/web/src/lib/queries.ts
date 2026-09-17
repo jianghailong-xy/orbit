@@ -601,6 +601,21 @@ export const watchesQuery = () =>
   });
 
 /**
+ * Only the watches that need attention (`?needsAttention=true`, contract `attention`) — the one thing
+ * a watch asks of a reader that its own session or task page cannot ask for it, and so the one reason
+ * the sidebar offers Following at all. Read on its own rather than counted out of `watchesQuery`: the
+ * sidebar is on every page, and the full read is four requests to answer a number. On a page holding
+ * both this repeats that read's fourth request — one request a minute to keep three off every other
+ * page. Under the `['watches']` prefix, so the control-plane nudges re-read it with the rest.
+ */
+export const watchAttentionQuery = () =>
+  queryOptions({
+    queryKey: ['watches', 'attention'] as const,
+    queryFn: () => api<WatchView[]>('/watches?needsAttention=true'),
+    refetchInterval: 60_000,
+  });
+
+/**
  * One watch by id, for a link to one no list above holds — a wake card names the watch that queued
  * it, however old. Under the `['watches']` prefix, so whatever re-reads the list re-reads it too.
  */
