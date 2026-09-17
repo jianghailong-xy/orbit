@@ -112,7 +112,54 @@
 #
 # A spec FAILS if node exits non-zero for any reason — a failing assertion, a crash, a timeout, or a
 # process that will not exit because something left a handle open. The timeout is a backstop and
-# never a pass; the script exits non-zero if anything was red.
+# never a pass.
+#
+# A RED IS CONFIRMED BEFORE IT IS COUNTED
+# =======================================
+# On 2026-09-16/17 the same bare worktree, on the same spec sources, reported two different red
+# lists. At load 39-93 (8 cores, 13 concurrent agent sessions) the baseline run came back with 12
+# specs red; at load 7-9 that run and the changed one both came back `spec-level-red=0`, all 161
+# lines identical, and the sixteen specs that had been red in one of those runs came back 169/169
+# green under both scripts. Every one of those specs was red on its first run and clean on the next,
+# in both directions, with nothing changed but the host — the load, not the branch.
+#
+# They arrived in exactly the shape a product red arrives in: the same `RED: <spec>: rc=1` line, the
+# same non-zero ending, the same footer, under a header that said every one of them was real. A
+# session nearly filed one as a main red on 2026-09-16, and what stopped it was re-running the spec
+# by hand — which is the work this section now does, and writes down.
+#
+# So a spec whose outcome is not clean is run a SECOND time, on its own fresh clone of the template,
+# before anything is reported about it:
+#
+#   * CLEAN THE SECOND TIME — the failure did not reproduce. The line says so, and under it go the
+#     host load at the time, the claim `NOT REPRODUCED`, and the tail of the first run's own TAP
+#     output (`pg_matrix_failure_tail`, whose header says what each shape prints), so that a timeout
+#     or a refused connection is VISIBLE as that rather than as a failed assertion the reader has to
+#     take on faith. That tail is then read, and the sentence the line carries is derived from it and
+#     not chosen: whether the child failed a case at all (`pg_matrix_failure_failed_a_case`), and if
+#     it did, whether the text names a timeout or a connection (`pg_matrix_failure_is_load_shaped`).
+#     These specs are counted as `not-reproduced`, they are listed as `NOT REPRODUCED:` at the end,
+#     and they are NOT in `spec-level-red`: the first run did fail, and what it said is printed.
+#   * RED AGAIN — counted in `spec-level-red`, and the spec's line and its `RED:` entry both carry
+#     `REPRODUCED`, so a reader can tell it from the ones that were red only once.
+#
+# The confirmation run is not an allowlist, not a subset, and not a second chance. Nothing here is
+# excused and no spec is skipped by it; a skip is still red, and a spec that skipped is not re-run at
+# all — the `skip: !URL` conditions in this tree read an environment variable and not a clock, so a
+# skip that did not reproduce is not a thing this script has seen. What the second run costs is one
+# more run of a spec that was already not clean, which is nothing at all on a run that has none.
+#
+# The exit code carries the distinction, for a caller that reads no further than that:
+#
+#   0  everything clean.
+#   1  at least one spec was red twice, or skipped, or printed no summary this script can vouch for.
+#      This is a verdict on the branch, and it is the only code that is one.
+#   3  no spec was red twice, but at least one did not come back clean on the first run and did on
+#      the second. The run is NOT a verdict on the branch and not a green either: the host made it,
+#      and the specs named at the end have to be re-run alone on a quiet one.
+#
+# `fail=` in the footer counts the FIRST runs and is not a verdict of its own: node exits non-zero
+# when a case fails, so every spec it counts is in one of the two lists the footer prints.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -213,39 +260,97 @@ cd "$API"
 # Taken once, and empty is fatal: a loop that never runs reports the same zeroes as a clean run.
 SPECS="$(ls build/**/*.pg.spec.js 2>/dev/null | sort)"
 [ -n "$SPECS" ] || die "no build/**/*.pg.spec.js to run — the test tree compiled nothing"
-n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; MISSING=0; RED=()
-for f in $SPECS; do
-  n=$((n+1)); DB="pcc_matrix_s$n"; base="$(basename "$f")"
-  psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null
-  psql_admin "CREATE DATABASE $DB TEMPLATE $TMPL" >/dev/null
-  URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
-  child=(COORDINATOR_PG_EXPECTED_DATABASE="$DB"
-         COORDINATOR_PG_EXPECTED_USER="$ADMIN"
-         COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
-         COORDINATOR_PG_CONTAINER="$CONTAINER"
-         COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER"
-         ORBIT_DB_CONFLICT_ORIGIN=fault_injection
-         NODE_OPTIONS="$(pg_matrix_child_node_options)")
+# --- one spec, one database, and whether it has to be asked twice ---------------------------------
+# Each call clones the template into the database it is given and drops it again, so the second run
+# of a spec starts from what the first one started from and neither leaves anything behind.
+SPEC_OUT=''; SPEC_RC=0
+run_spec_once() {  # $1 = compiled spec, $2 = database name
+  psql_admin "DROP DATABASE IF EXISTS $2" >/dev/null
+  psql_admin "CREATE DATABASE $2 TEMPLATE $TMPL" >/dev/null
+  local url="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$2"
+  local child=(COORDINATOR_PG_EXPECTED_DATABASE="$2"
+               COORDINATOR_PG_EXPECTED_USER="$ADMIN"
+               COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID"
+               COORDINATOR_PG_CONTAINER="$CONTAINER"
+               COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER"
+               ORBIT_DB_CONFLICT_ORIGIN=fault_injection
+               NODE_OPTIONS="$(pg_matrix_child_node_options)")
   [ "$CONTROL" = "omit-url" ] ||
-    child+=(COORDINATOR_PG_URL="$URL" ORBIT_TEST_PG_URL="$URL" WORK_OVERVIEW_PG_URL="$URL")
-  out=$(env "${child[@]}" \
-        timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$f" 2>&1)
-  rc=$?
+    child+=(COORDINATOR_PG_URL="$url" ORBIT_TEST_PG_URL="$url" WORK_OVERVIEW_PG_URL="$url")
+  SPEC_OUT=$(env "${child[@]}" \
+             timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$1" 2>&1)
+  SPEC_RC=$?
+  psql_admin "DROP DATABASE IF EXISTS $2" >/dev/null
+}
+
+# Why a spec is not clean, in one line, or nothing at all when it is. The wording is the one this
+# script has always printed; the caller appends what the second run made of it.
+spec_verdict() {  # $1 rc, $2 skipped, $3 unreadable-summary reason
+  local why=""
+  if [ "$1" = "124" ] || [ "$1" = "137" ]; then why="TIMEOUT/KILLED rc=$1 (hang or leaked handle)"
+  elif [ "$1" != "0" ]; then why="rc=$1"; fi
+  [ -n "$3" ] && why="${why:+$why; }$3"
+  # The silence this script used to print and pass on: see "A SKIP IS RED" in the header.
+  [ "$2" -gt 0 ] && why="${why:+$why; }$2 SKIPPED — those assertions were not witnessed"
+  printf '%s' "$why"
+}
+
+# Is this outcome the shape a saturated host produces — so, worth asking a second time? A child that
+# exited 0 did what it was asked and said what it found, so a skip in it is a statement about the
+# environment and not a race: it is red, and it is not re-run.
+wants_confirmation() { [ "$1" != "0" ] || [ -n "$2" ]; }
+
+n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; MISSING=0; RED=(); NOT_REPRODUCED=()
+for f in $SPECS; do
+  n=$((n+1)); base="$(basename "$f")"
+  run_spec_once "$f" "pcc_matrix_s$n"
+  rc="$SPEC_RC"; out="$SPEC_OUT"
   IFS=$'\t' read -r t p fl sk unreadable < <(printf '%s\n' "$out" | pg_matrix_summary)
   TOTAL=$((TOTAL+t)); PASS=$((PASS+p)); FAIL=$((FAIL+fl)); SKIP=$((SKIP+sk))
-  why=""
-  if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then why="TIMEOUT/KILLED rc=$rc (hang or leaked handle)"
-  elif [ "$rc" != "0" ]; then why="rc=$rc"; fi
-  if [ -n "$unreadable" ]; then MISSING=$((MISSING+1)); why="${why:+$why; }$unreadable"; fi
-  # The silence this script used to print and pass on: see "A SKIP IS RED" in the header.
-  [ "$sk" -gt 0 ] && why="${why:+$why; }$sk SKIPPED — those assertions were not witnessed"
-  [ -n "$why" ] && RED+=("$base: $why")
+  [ -n "$unreadable" ] && MISSING=$((MISSING+1))
+  why="$(spec_verdict "$rc" "$sk" "$unreadable")"
+  tail_text=''; note=''
+  if [ -n "$why" ]; then
+    tail_first="$(printf '%s\n' "$out" | pg_matrix_failure_tail)"
+    if wants_confirmation "$rc" "$unreadable"; then
+      run_spec_once "$f" "pcc_matrix_s${n}r"
+      IFS=$'\t' read -r _ _ _ sk2 unreadable2 < <(printf '%s\n' "$SPEC_OUT" | pg_matrix_summary)
+      why2="$(spec_verdict "$SPEC_RC" "$sk2" "$unreadable2")"
+      if [ -n "$why2" ]; then
+        why="$why; REPRODUCED on a second run ($why2)"
+        RED+=("$base: $why")
+        tail_text="$(printf '%s\n' "$SPEC_OUT" | pg_matrix_failure_tail)"
+        note="  REPRODUCED on a second run, on its own clone of the template:"
+      else
+        # What the first run said, read into one sentence by the library that also reads its counts.
+        # This picks a sentence; it does not excuse anything — the spec is named at the end of the
+        # run either way, and its first run's own words are printed right here.
+        shape="$(printf '%s\n' "$tail_first" | pg_matrix_failure_shape)"
+        why="$why; NOT REPRODUCED on a second run"
+        NOT_REPRODUCED+=("$base: $why — $shape (host load $(cut -d' ' -f1 /proc/loadavg) when it ran)")
+        tail_text="$tail_first"
+        note="  NOT REPRODUCED: a second run on its own clone of the template was clean, so this is not
+  counted in spec-level-red. The first run was not clean, and what it said was ($shape):"
+      fi
+      [ -n "${PCC_PG_LOG_DIR:-}" ] && printf '%s\n' "$SPEC_OUT" > "$PCC_PG_LOG_DIR/$base.rerun.txt"
+    else
+      RED+=("$base: $why")
+      tail_text="$tail_first"
+      note="  what it said:"
+    fi
+  fi
   printf '%-58s tests=%-4s pass=%-4s fail=%-3s skip=%-3s %s\n' "$base" "$t" "$p" "$fl" "$sk" "$why"
-  [ -n "${PCC_PG_LOG_DIR:-}" ] && echo "$out" > "$PCC_PG_LOG_DIR/$base.txt"
-  psql_admin "DROP DATABASE IF EXISTS $DB" >/dev/null
+  [ -n "$note" ] && printf '%s\n' "$note"
+  [ -n "$tail_text" ] && printf '%s\n' "$tail_text" | sed 's/^/    /'
+  [ -n "${PCC_PG_LOG_DIR:-}" ] && printf '%s\n' "$out" > "$PCC_PG_LOG_DIR/$base.txt"
 done
 
-echo "==== tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP missing-summary=$MISSING spec-level-red=${#RED[@]} ===="
+echo "==== tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP missing-summary=$MISSING spec-level-red=${#RED[@]} not-reproduced=${#NOT_REPRODUCED[@]} load=$(cut -d' ' -f1-3 /proc/loadavg) on $(nproc) cpus ===="
 for r in "${RED[@]:-}"; do [ -n "$r" ] && echo "RED: $r"; done
-if [ "$FAIL" -gt 0 ] || [ "${#RED[@]}" -gt 0 ]; then exit 1; fi
+for r in "${NOT_REPRODUCED[@]:-}"; do [ -n "$r" ] && echo "NOT REPRODUCED: $r"; done
+if [ "${#RED[@]}" -gt 0 ]; then exit 1; fi
+if [ "${#NOT_REPRODUCED[@]}" -gt 0 ]; then
+  echo "==> not a verdict on the branch: ${#NOT_REPRODUCED[@]} spec(s) above were not clean once and were clean the second time. Re-run them alone on a quiet host before believing anything about them."
+  exit 3
+fi
 echo "==> OK"

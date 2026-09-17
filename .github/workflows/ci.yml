@@ -146,9 +146,11 @@ jobs:
         run: npm run prisma:generate
       - name: Run every pg spec against a real PostgreSQL
         env:
-          # The matrix prints one summary line per spec and keeps each child's own output only if
-          # told where to put it. Without this a red reads `fail=6` and nothing else — which
-          # assertion, and what it saw, would be in a buffer the run threw away.
+          # The matrix prints one summary line per spec, and under any line that is not clean the
+          # tail of that child's own TAP output (`pg_matrix_failure_tail`) — which is where the
+          # failing case, or the absence of one, is written down. What is kept only if told where to
+          # put it is each child's WHOLE output: every case that passed, and the first run of any
+          # spec a second run then cleared.
           PCC_PG_LOG_DIR: ${{ runner.temp }}/pg-spec-logs
         run: mkdir -p "$PCC_PG_LOG_DIR" && bash scripts/project-pg-matrix.sh
       - name: Keep the failing specs' output

@@ -71,7 +71,61 @@ check 'a whole summary reads back' $'7\t3\t1\t2\t' "$(record "$TAP_OK")"
 check "a spec's own output does not shadow the summary" $'7\t3\t1\t2\t' \
   "$(record "$(printf '# tests 999\n%s\n' "$TAP_OK")")"
 
-# 8. The reporter is the harness's to choose, so the caller's `--test*` options go and the rest stay.
+# 8. What a spec that is not clean has to say for itself, and whether its own words read as the host.
+#    The matrix re-runs a spec that was not clean and only counts it as red if the failure comes
+#    back; these two readers are what the line under it is made of.
+TAP_FAILURE=$'TAP version 13\nok 1 - the first thing\nnot ok 2 - the second thing\n  ---\n  duration_ms: 1.2\n  error: |-\n    Error: Timed out fetching a new connection from the pool\n  code: ERR_TEST_FAILURE\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 20'
+TAP_ASSERTION=$'TAP version 13\nnot ok 1 - the second thing\n  ---\n  error: |-\n    AssertionError [ERR_ASSERTION]: expected 3 to equal 4\n  code: ERR_ASSERTION\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0'
+fail_tail()  { printf '%s\n' "$1" | pg_matrix_failure_tail; }
+fail_tail3() { printf '%s\n' "$1" | pg_matrix_failure_tail 3; }
+shaped() { if printf '%s\n' "$1" | pg_matrix_failure_is_load_shaped; then echo 'load-shaped'; else echo 'product-shaped'; fi; }
+
+check 'a failure reads back as its case, its diagnostics and the summary' \
+  $'not ok 2 - the second thing\n  ---\n  duration_ms: 1.2\n  error: |-\n    Error: Timed out fetching a new connection from the pool\n  code: ERR_TEST_FAILURE\n  ...\n# tests 2\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0' \
+  "$(fail_tail "$TAP_FAILURE")"
+# A child killed by the backstop, or one that died on load, has no `not ok` at all — and the reader
+# has to be told that, because "no failing case" is exactly what an assertion failure is not.
+TAP_DIED=$'TAP version 13\nok 1 - the first thing\nok 2 - the second thing'
+check 'a child that died before a case reads back as its last lines, and says so' \
+  $'... (no `not ok` line: the child died before it failed a case — these are its last 40 lines)\nTAP version 13\nok 1 - the first thing\nok 2 - the second thing' \
+  "$(fail_tail "$TAP_DIED")"
+check 'the tail is bounded' \
+  $'not ok 2 - the second thing\n  ---\n  duration_ms: 1.2\n... (truncated at 3 lines)' \
+  "$(fail_tail3 "$TAP_FAILURE")"
+check 'a passing case cannot answer for a failing one' \
+  $'not ok 2 - the second thing\n  ---\n  duration_ms: 1.2\n  error: |-\n    Error: Timed out fetching a new connection from the pool\n  code: ERR_TEST_FAILURE\n  ...\n# tests 2\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0' \
+  "$(printf '%s\n' "$TAP_FAILURE" | sed 's/^ok 1 - the first thing$/ok 1 - deadlock_timeout is pinned per party/' | pg_matrix_failure_tail)"
+check 'a timeout names the host' 'load-shaped' "$(shaped "$TAP_FAILURE")"
+check 'a wrong value does not' 'product-shaped' "$(shaped "$TAP_ASSERTION")"
+# The form this host actually produces most: Prisma's deadline for STARTING an interactive
+# transaction. It is a timeout with the word "timeout" nowhere in it, and it was the text two specs
+# carried in the first full run this reader was used on — one of them labelled `read it`, the other
+# matching only because a stack frame under it happened to be named `listOnTimeout`.
+TAP_TX_DEADLINE=$'not ok 1 - a case\n  ---\n  error: \'Transaction API error: Unable to start a transaction in the given time.\'\n  code: \'ERR_TEST_FAILURE\'\n  ...\n# tests 2\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0'
+check 'a transaction-start deadline names the host' 'load-shaped' "$(shaped "$TAP_TX_DEADLINE")"
+check 'and the child it happened to is known to have failed a case' 'yes' \
+  "$(printf '%s\n' "$TAP_TX_DEADLINE" | pg_matrix_failure_failed_a_case && echo yes || echo no)"
+# Which is not true of a child that was killed: it made no claim about the product, and the sentence
+# under its line has to say the tail is not a failed assertion rather than that it is a strange one.
+check 'a killed child failed no case' 'no' \
+  "$(printf '%s\n' "$TAP_DIED" | pg_matrix_failure_failed_a_case && echo yes || echo no)"
+shape() { printf '%s\n' "$1" | pg_matrix_failure_tail | pg_matrix_failure_shape; }
+check 'the sentence for a failed case that names the host' \
+  'load-shaped failure text: a timeout or a connection, not a failed assertion' "$(shape "$TAP_TX_DEADLINE")"
+check 'the sentence for a failed case that does not' \
+  'its failure text is NOT timeout/connection-shaped — read it' "$(shape "$TAP_ASSERTION")"
+check 'the sentence for a child that was killed' \
+  'the child was killed before it failed a case — none of what it left behind is an assertion failure' \
+  "$(shape "$TAP_DIED")"
+check 'and a child that printed nothing at all gets the same one' \
+  'the child was killed before it failed a case — none of what it left behind is an assertion failure' \
+  "$(shape '')"
+# Which is why the classifier is handed the TAIL and not the transcript: the passing case above is
+# named after a timeout, and read whole it would answer for the case that actually failed.
+check 'the whole transcript would have answered for it' 'load-shaped' \
+  "$(shaped "$(printf '%s\n' "$TAP_FAILURE" | sed 's/^ok 1 - the first thing$/ok 1 - deadlock_timeout is pinned per party/')")"
+
+# 9. The reporter is the harness's to choose, so the caller's `--test*` options go and the rest stay.
 scrubbed() { NODE_OPTIONS="$1" pg_matrix_child_node_options; }
 check 'unset NODE_OPTIONS scrubs to nothing'   ''                       "$(pg_matrix_child_node_options)"
 check 'joined --test-reporter is dropped'      ''                       "$(scrubbed '--test-reporter=spec')"
@@ -82,7 +136,7 @@ check 'other options are the caller’s to keep' '--max-old-space-size=4096' \
 check 'a kept option keeps its own value'      '--max-old-space-size 4096' \
   "$(scrubbed '--test-name-pattern foo --max-old-space-size 4096')"
 
-# 9. A real child, under every node binary offered, run exactly the way the matrix runs one: the
+# 10. A real child, under every node binary offered, run exactly the way the matrix runs one: the
 #    same argv, the same scrubbed NODE_OPTIONS, a hostile reporter in the caller's environment.
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 cat > "$TMP/child.test.js" <<'JS'
