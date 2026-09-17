@@ -5608,19 +5608,23 @@ button.composer-usage:focus-visible {
   background: var(--fill-inset);
   color: var(--text-2);
 }
-/* The title is the row. Two lines of it — a task title runs long and the id is under it. */
-.reftask-title {
+/* The title is the row, and the row is the link. Two lines of it — a task title runs long and the
+   id is under it. Named twice so it wins over `.chat-user a`, which underlines links in a person's
+   own message: this one is a whole row rather than a link mid-sentence, and the `#`-pill in the
+   same bubble (.md-reference) drops the underline for the same reason. */
+.reftask .reftask-title {
   display: -webkit-box;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: var(--text-1);
+  color: var(--brand);
+  text-decoration: none;
   overflow-wrap: anywhere;
 }
-.reftask-title:hover {
-  color: var(--brand);
+.reftask .reftask-title:hover {
+  text-decoration: underline;
 }
 .reftask-outcome {
   flex: none;
