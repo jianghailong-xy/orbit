@@ -173,9 +173,12 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 { task: { id, projectId, verifiesTaskId, pinnedRevision, codeless,
           attemptGeneration, inheritedKnownGoodSha, dependsOnTaskIds },
   codebase: ProjectCodebase | null,
+  integrationLineHasLanding: boolean,
   subjectCandidate: { taskId, commitSha } | null,
   prerequisiteCheckpoints: Array<{ taskId, commitSha, kind }> }
 ```
+
+`integrationLineHasLanding`（v1.1 新增）是**本项目**在自己集成线上是否已有落地回执，由调用方从回执表读出后传入；它只被 P5 读（见 4.1 的 P5 行）。它是一个**关于项目的事实**，不是关于机器的事实：加进来的是"这条线上有没有东西"，不是"这台机器的 HEAD 在哪"，所以 SR17 禁的那五个字段仍然不可表达。
 
 **SR18（解析结论自带理由）**：返回值必须携带 `reason`：命中了哪一条优先级、依据的输入是什么。一个说不出为什么的基线，用户无法在 UI 上得到"这次运行为什么从这里开始"的回答（Project AC7）。
 
@@ -191,7 +194,9 @@ resolveSource(input: SourceResolutionInput) -> SourceSelector | Refusal
 | **P2** | `pinnedRevision != null` | `PINNED_REVISION` | 该 SHA，或该 ref 在权威处的解析结果 | SHA 值或 ref 值 |
 | **P3** | `attemptGeneration > 0` ∧ `inheritedKnownGoodSha != null` | `TASK_KNOWN_GOOD` | 该 SHA | SHA 值 |
 | **P4** | 存在 ≥1 个**代码**前置任务 | `DEPENDENCY_CLOSURE` | `integrationRef` 的 tip，且 `requiredContains` = 所有前置的 accepted checkpoint SHA | ref 值 + 包含约束 |
-| **P5** | 以上皆否 | `PROJECT_UPSTREAM` | `upstreamRef` 的 tip | ref 值 |
+| **P5** | 以上皆否 | `PROJECT_UPSTREAM` | `integrationLineHasLanding` 为真 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip | ref 值 |
+
+P5 的两个取值不是回退（SR19 说的回退是"换一序"），而是**同一序下同一条线的两种写法**：`docs/project-integration-line-contract.md` §1.5 L10 第一行，项目分支要等第一条落地回执才被创建，在那之前它与 upstream 逐字节是同一棵树；第一条落地之后，upstream 就少了本项目已完成的每一件工作，再从它起跑等于让新任务把兄弟们解过的问题重解一遍。所以基线仍然只有一条——项目集成的那条线——只是它在被创建之前只能用 upstream 的名字称呼。`MAIN` 线项目两个 ref 相等，这条规则对它无差别。
 
 **SR19（拒绝不回退）**：命中某一序后，若该序的输入不可用（P1 的 subject 没有 candidate、P3 的 SHA 不可达、P4 的前置没有 accepted checkpoint），**结果是拒绝，不是落到下一序**。回退会让一次本该停下来的运行拿到一个"看起来能跑"的基线 —— 这正是 §0 那三个降级分支的形状。
 
@@ -612,3 +617,4 @@ v1 冻结时这一条读作"尚未落地"，自检那时断言的是它的**缺�
 ## 16. 修订记录（非规范）
 
 - **v1**（2026-08-25）：首版。冻结 SR1–SR53、十个错误码、五级优先级、六级准入闸、四状态机。
+- **v1.1**（2026-09-17）：SR17 的封闭输入集增加 `integrationLineHasLanding: boolean`，§4.1 的 P5 行随之改为「本项目集成线上已有落地回执 → `integrationRef` 的 tip；否则 `upstreamRef` 的 tip」。理由是 `docs/project-integration-line-contract.md` §1.5 L10 第一行，那条契约的实现任务（`34PAfnnE8wgD9kOGvgwwU`）按 SR17「加字段即契约变更」先改本文再改代码。优先级序、错误码表、闸门与状态机不变；被加进来的是关于项目的事实，不是关于机器的事实，SR1/SR2 禁的字段仍不可表达。

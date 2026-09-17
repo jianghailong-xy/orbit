@@ -29,7 +29,11 @@ import { SingleFlight } from '../common/single-flight';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
-import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
+import {
+  DependencyState,
+  dependencyStateFromCounts,
+  prerequisiteLandedSql,
+} from '../tasks/task-dependencies';
 import {
   DEFAULT_TASK_PAGE_SIZE,
   MAX_TASK_PAGE_SIZE,
@@ -269,6 +273,8 @@ interface ProjectTaskDependencyRow extends Omit<ProjectTaskDependencyFields, 'de
   prerequisiteCount: number;
   terminalCount: number;
   doneCount: number;
+  /** How many of them are finished code work that is not on the project's line yet (§2.5 J9). */
+  unlandedCount: number;
 }
 
 /** A task with no edges at all — also the shape a row falls back to, so no key ever goes missing. */
@@ -2517,7 +2523,11 @@ export class ProjectsService {
          WHERE t."owner_id" = ${ownerId}::uuid AND t."project_id" = ${projectId}::uuid
       ),
       "inbound" AS (
-        SELECT d."task_id" AS "id", COALESCE(p."status"::text, 'FAILED') AS "status"
+        SELECT d."task_id" AS "id", COALESCE(p."status"::text, 'FAILED') AS "status",
+               -- §2.5 J9, the same predicate the dispatch gate reads. Without it this tally says
+               -- READY about a task every door that starts it calls BLOCKED, which is one screen
+               -- telling a person to wonder why nothing is starting.
+               ${Prisma.raw(prerequisiteLandedSql('p'))} AS "landed"
           FROM "task_dependency" d
           JOIN "scoped" s ON s."id" = d."task_id"
           LEFT JOIN "task" p
@@ -2529,7 +2539,8 @@ export class ProjectsService {
                COUNT(*)::int AS "prerequisiteCount",
                COUNT(*) FILTER (WHERE "status" NOT IN ('DONE', 'CANCELLED'))::int AS "unmetCount",
                COUNT(*) FILTER (WHERE "status" IN ('CANCELLED', 'FAILED'))::int AS "terminalCount",
-               COUNT(*) FILTER (WHERE "status" = 'DONE')::int AS "doneCount"
+               COUNT(*) FILTER (WHERE "status" = 'DONE')::int AS "doneCount",
+               COUNT(*) FILTER (WHERE NOT "landed")::int AS "unlandedCount"
           FROM "inbound"
          GROUP BY "id"
       ),
@@ -2566,7 +2577,8 @@ export class ProjectsService {
              COALESCE(p."topoLevel", 0) AS "topoLevel",
              COALESCE(t."prerequisiteCount", 0) AS "prerequisiteCount",
              COALESCE(t."terminalCount", 0) AS "terminalCount",
-             COALESCE(t."doneCount", 0) AS "doneCount"
+             COALESCE(t."doneCount", 0) AS "doneCount",
+             COALESCE(t."unlandedCount", 0) AS "unlandedCount"
         FROM "scoped" s
         LEFT JOIN "tally" t ON t."id" = s."id"
         LEFT JOIN "outbound" o ON o."id" = s."id"
@@ -2584,6 +2596,7 @@ export class ProjectsService {
             prerequisites: row.prerequisiteCount,
             terminal: row.terminalCount,
             done: row.doneCount,
+            unlanded: row.unlandedCount,
           }),
         },
       ]),

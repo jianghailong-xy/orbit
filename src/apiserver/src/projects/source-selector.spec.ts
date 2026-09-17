@@ -44,6 +44,7 @@ const CODEBASE = {
 function input(overrides: {
   task?: Partial<SourceResolutionInput['task']>;
   codebase?: SourceResolutionInput['codebase'];
+  integrationLineHasLanding?: boolean;
   subjectCandidate?: SourceResolutionInput['subjectCandidate'];
   prerequisiteCheckpoints?: SourceResolutionInput['prerequisiteCheckpoints'];
 } = {}): SourceResolutionInput {
@@ -60,6 +61,7 @@ function input(overrides: {
       ...overrides.task,
     },
     codebase: overrides.codebase === undefined ? CODEBASE : overrides.codebase,
+    integrationLineHasLanding: overrides.integrationLineHasLanding ?? false,
     subjectCandidate: overrides.subjectCandidate ?? null,
     prerequisiteCheckpoints: overrides.prerequisiteCheckpoints ?? [],
   };
@@ -78,15 +80,29 @@ test("P0': no binding and codeless both resolve UNBOUND, and neither refuses", (
   assert.equal(optedOut.reason.rank, "P0'");
 });
 
-test('P5: an ordinary project code task starts from the upstream ref, not the integration ref', () => {
+test('P5: an ordinary project code task starts from the upstream ref until this project lands on its line', () => {
   const resolved = resolveSource(input());
   assert.equal(resolved.state, 'SELECTED');
   assert.equal(resolved.selector.kind, 'PROJECT_UPSTREAM');
-  // Where the line comes FROM, not where it goes TO. The two are different columns precisely
-  // because a project can integrate somewhere other than it branches from, and reading the wrong
-  // one would start every ordinary task on the release branch.
+  // `docs/project-integration-line-contract.md` §1.5 L10, first row: the integration line is
+  // CREATED by the first landing on it, so before that there is no such ref to start from and
+  // upstream is the same tree by construction.
   assert.equal(resolved.selector.ref, 'refs/heads/main');
   assert.equal(resolved.selector.revisionSha, null);
+  assert.deepEqual(resolved.selector.requiredContains, []);
+});
+
+test('P5: once this project has landed on its line, an ordinary task starts from the line', () => {
+  const resolved = resolveSource(input({ integrationLineHasLanding: true }));
+  assert.equal(resolved.state, 'SELECTED');
+  // Still P5 — the same row of the table, reading the same one line. What changed is that the line
+  // now exists AND upstream is missing every task this project has finished, so starting there
+  // would hand the run a baseline its own siblings have already moved past.
+  assert.equal(resolved.reason.rank, 'P5');
+  assert.equal(resolved.selector.kind, 'PROJECT_UPSTREAM');
+  assert.equal(resolved.selector.ref, 'refs/heads/release/next');
+  assert.equal(resolved.selector.revisionSha, null);
+  // Still no containment requirement: P4 is what states one, and this task waits on nothing.
   assert.deepEqual(resolved.selector.requiredContains, []);
 });
 

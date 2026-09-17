@@ -150,6 +150,13 @@ export async function decideSessionSource(
   const closure = codebase && !task.codeless
     ? await prerequisiteLandingCommits(prisma, task.id, codebase)
     : { dependsOnTaskIds: [] as string[], checkpoints: [] as PrerequisiteCommit[] };
+  // P5's one input (§1.5 L10). Asked only where the answer can change a baseline: a project whose
+  // integration line IS its upstream resolves the same ref either way, and no other row of §4.1
+  // reads it — so the read is skipped rather than made and discarded.
+  const integrationLineHasLanding = codebase && !task.codeless && task.projectId
+    && codebase.integrationRef !== codebase.upstreamRef
+    ? await integrationLineHasLandingReceipt(prisma, task.projectId, codebase.integrationRef)
+    : false;
   const resolution = resolveSource({
     task: {
       id: task.id,
@@ -174,10 +181,39 @@ export async function decideSessionSource(
           configRevision: codebase.configRevision,
         }
       : null,
+    integrationLineHasLanding,
     subjectCandidate: null,
     prerequisiteCheckpoints: closure.checkpoints,
   });
   return { columns: sourceCreateColumns(resolution), reason: resolution.reason };
+}
+
+/**
+ * Does this project's integration line exist as a branch yet — §1.5 L10's first row?
+ *
+ * A branch is created by the merge that first lands on it, and a receipt is where that is
+ * recorded. Scoped to the project, because the question is about ITS line: two projects of the
+ * same repository have different ones, and a neighbour's landing would otherwise send this
+ * project's runs at a branch nobody has created.
+ *
+ * `findMany` with `take: 1` rather than `findFirst`, because the existence of one row is the whole
+ * answer and this file already reads this model that way.
+ */
+async function integrationLineHasLandingReceipt(
+  prisma: PrismaService,
+  projectId: string,
+  integrationRef: string,
+): Promise<boolean> {
+  const landed = await prisma.sessionMergeReceipt.findMany({
+    where: {
+      projectId,
+      result: { in: [...LANDED_RESULTS] },
+      targetBranch: branchName(integrationRef),
+    },
+    select: { id: true },
+    take: 1,
+  });
+  return landed.length > 0;
 }
 
 /** One prerequisite's product, in the shape §4's closure reads (SR25). */

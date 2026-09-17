@@ -117,9 +117,22 @@ export function dependencyStateFromCounts(counts: {
   terminal: number;
   /** Of those, how many are DONE. */
   done: number;
+  /**
+   * Of those, how many still have work to land (§2.5 J9) — the tally of `landed === false`.
+   *
+   * Additive, and absent reads as zero, which is what a caller that counts nothing but statuses
+   * has always meant. It is counted over ALL prerequisites rather than over the DONE ones, because
+   * that is the cheaper thing to count in SQL and the two cannot differ: a prerequisite that is
+   * not DONE already makes this BLOCKED through `done`.
+   */
+  unlanded?: number;
 }): DependencyState {
   if (counts.prerequisites === 0) return 'NONE';
   if (counts.terminal > 0) return 'BLOCKED_FAILED';
+  // A wait and not a refusal, for the reason `computeDependencyState` gives one clause over: the
+  // platform lands the prerequisite and the landing receipt releases this task (J10), so there is
+  // nothing for a person to go and fix.
+  if ((counts.unlanded ?? 0) > 0) return 'BLOCKED';
   return counts.done === counts.prerequisites ? 'READY' : 'BLOCKED';
 }
 

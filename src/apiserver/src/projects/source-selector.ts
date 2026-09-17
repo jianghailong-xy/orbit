@@ -53,6 +53,13 @@ export interface SourceResolutionInput {
     dependsOnTaskIds: readonly string[];
   };
   codebase: SourceCodebaseInput | null;
+  /**
+   * Has THIS project already landed anything on its own integration line? P5's one input (v1.1).
+   *
+   * A fact about the project, never about the machine: it says whether that line exists as a
+   * branch yet, not where any checkout currently is, so SR17's forbidden five stay unrepresentable.
+   */
+  integrationLineHasLanding: boolean;
   /** The commit a verification is judging: its subject's newest ACCEPTED checkpoint (SR43). */
   subjectCandidate: { taskId: string; commitSha: string } | null;
   /** Prerequisite products. Only `ACCEPTED` rows may enter the closure (SR25). */
@@ -254,19 +261,27 @@ export function resolveSource(input: SourceResolutionInput): SourceResolution {
     };
   }
 
-  // P5 — an ordinary project code task: the line's upstream tip.
+  // P5 — an ordinary project code task: the tip of the line this project integrates into.
+  //
+  // Two spellings of ONE line (§1.5 L10, first row), not a fallback. A project branch is created
+  // by the first landing on it, so until then it is not a ref anybody can start from and upstream
+  // is the same tree by construction. After it, upstream is missing every task this project has
+  // finished, and starting there hands the run a baseline its own siblings have already moved past.
+  const ref = input.integrationLineHasLanding ? codebase.integrationRef : codebase.upstreamRef;
   return {
     state: 'SELECTED',
     selector: {
       ...base,
       kind: 'PROJECT_UPSTREAM',
-      ref: codebase.upstreamRef,
+      ref,
       revisionSha: null,
       requiredContains: [],
     },
     reason: {
       rank: 'P5',
-      because: `it is an ordinary task of this project's code line, which starts from ${codebase.upstreamRef}`,
+      because: ref === codebase.integrationRef
+        ? `it is an ordinary task of this project's code line, which starts from ${ref}`
+        : `it is an ordinary task of this project's code line, which starts from ${ref} until something lands on ${codebase.integrationRef}`,
     },
   };
 }

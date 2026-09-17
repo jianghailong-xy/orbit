@@ -51,15 +51,23 @@ test('a FAILED prerequisite escalates to BLOCKED_FAILED (needs a human, like CAN
 /**
  * The tally form is the one the project task page uses, because counting in SQL is what keeps a
  * 118-node project to one query. Two spellings of a rule are two rules unless something holds them
- * together, so this walks every multiset of prerequisite statuses up to four long and requires the
+ * together, so this walks every multiset of prerequisite facts up to three long and requires the
  * two to agree on all of them.
+ *
+ * A fact is a status AND whether that prerequisite's work is on the project's integration line
+ * (§2.5 J9): the landing is the second dimension this rule reads, and a sweep over statuses alone
+ * agreed on every multiset for months while the graph drew READY on tasks the dispatcher refused.
  */
 test('dependencyStateFromCounts agrees with computeDependencyState on every multiset', () => {
   const statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.FAILED];
-  const multisets: TaskStatus[][] = [[]];
-  for (let size = 0; size < 4; size += 1) {
+  // `undefined` is its own case, not a synonym for `true`: it is what every caller that gathers no
+  // landing facts sends, and what the rule promises to read as "nothing to land".
+  const landings = [true, false, undefined];
+  const facts = statuses.flatMap((status) => landings.map((landed) => ({ status, landed })));
+  const multisets: { status: TaskStatus; landed?: boolean }[][] = [[]];
+  for (let size = 0; size < 3; size += 1) {
     for (const prefix of multisets.filter((m) => m.length === size)) {
-      for (const status of statuses) multisets.push([...prefix, status]);
+      for (const fact of facts) multisets.push([...prefix, fact]);
     }
   }
 
@@ -67,17 +75,35 @@ test('dependencyStateFromCounts agrees with computeDependencyState on every mult
     assert.equal(
       dependencyStateFromCounts({
         prerequisites: prerequisites.length,
-        terminal: prerequisites.filter((s) => s === TaskStatus.CANCELLED || s === TaskStatus.FAILED).length,
-        done: prerequisites.filter((s) => s === TaskStatus.DONE).length,
+        terminal: prerequisites.filter((p) => p.status === TaskStatus.CANCELLED || p.status === TaskStatus.FAILED).length,
+        done: prerequisites.filter((p) => p.status === TaskStatus.DONE).length,
+        // Exactly what the graph query counts: `landed = false`, over every prerequisite.
+        unlanded: prerequisites.filter((p) => p.landed === false).length,
       }),
-      // `statusPrerequisites`, not the bare status array: this rule now reads a verification
-      // gate beside each status, and a plain array reaches it as four facts with no `status` at
-      // all — which answers BLOCKED for every multiset and would have made this agreement test
-      // pass by accident on nothing.
-      computeDependencyState(statusPrerequisites(prerequisites)),
-      prerequisites.join(',') || '(no prerequisites)',
+      // Objects with a `status` key, never a bare status array: this rule reads a verification
+      // gate and a landing beside each status, and a plain array reaches it as facts with no
+      // `status` at all — which answers BLOCKED for every multiset and would have made this
+      // agreement test pass by accident on nothing.
+      computeDependencyState(prerequisites),
+      prerequisites.map((p) => `${p.status}/${p.landed ?? 'unknown'}`).join(',') || '(no prerequisites)',
     );
   }
+});
+
+/** The two spellings are not vacuously equal: the landing dimension moves both of them. */
+test('a DONE prerequisite that has not landed is BLOCKED in both spellings', () => {
+  assert.equal(
+    computeDependencyState([{ status: TaskStatus.DONE, landed: false }]),
+    'BLOCKED',
+  );
+  assert.equal(
+    dependencyStateFromCounts({ prerequisites: 1, terminal: 0, done: 1, unlanded: 1 }),
+    'BLOCKED',
+  );
+  assert.equal(
+    dependencyStateFromCounts({ prerequisites: 1, terminal: 0, done: 1, unlanded: 0 }),
+    'READY',
+  );
 });
 
 test('self-dependency is a cycle', () => {
