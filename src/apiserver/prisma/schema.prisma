@@ -1538,7 +1538,6 @@ model RunEvent {
   ingestedUnderLeaseGeneration String? @map("ingested_under_lease_generation") @db.Uuid
 
   @@unique([sessionId, seq])
-  @@index([sessionId, seq])
   @@index([turnId])
   @@map("run_event")
 }

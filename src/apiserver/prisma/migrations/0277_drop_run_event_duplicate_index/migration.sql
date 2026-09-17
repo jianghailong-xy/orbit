@@ -1,0 +1,18 @@
+-- Drops an index the schema has declared twice since the snake_case rename.
+--
+-- `run_event` carries BOTH `run_event_session_id_seq_key` (UNIQUE, declared by
+-- `@@unique([sessionId, seq])`) and `run_event_session_id_seq_idx` (`@@index([sessionId, seq])`) —
+-- the same two columns, in the same order, in the same table. Every lookup the second could serve,
+-- PostgreSQL serves from the first; the deployment's own statistics say so: `idx_scan` is 0 for
+-- `run_event_session_id_seq_idx` and 13,756,977 for the unique one (2026-09-16).
+--
+-- What keeping it costs: 598 MB of disk, and one more b-tree insert on EVERY stored event — this
+-- deployment stores ~3.1M events a day, and the ingest path is already its busiest write. It is
+-- also one more index for every autovacuum pass over a 4.4 GB table.
+--
+-- Nothing is archived, because an index holds no data of its own: it is derived from columns that
+-- stay exactly as they are. The unique constraint is NOT what is being dropped — `session_id, seq`
+-- remains unique through `run_event_session_id_seq_key`, which is also the arbiter the ingest
+-- path's `ON CONFLICT DO NOTHING` names. Reversing this is re-adding `@@index([sessionId, seq])`
+-- to the schema, i.e. a plain CREATE INDEX.
+DROP INDEX "run_event_session_id_seq_idx";

@@ -726,6 +726,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `ALTER TYPE` and no `DROP TYPE`, so the three `task_completion_criterion` labels survive
   //        with 0267's fourth beside them, and it is not another writer of the DONE fence. It has
   //        no INSERT, UPDATE or DELETE, so no preserved row is read or written.
+  //   0277 dropped `run_event_session_id_seq_idx`, the plain index the RunEvent model declared
+  //        beside its `@@unique([sessionId, seq])` on the same two columns in the same order: one
+  //        `DROP INDEX`, nothing else. Read against every claim above: an index holds no data of
+  //        its own, so no row of `run_event` — a preserved relation, and the one this file names
+  //        by that name — is read, rewritten or lost; what is removed is a derived structure over
+  //        columns that stay exactly as they are, and the unique index
+  //        `run_event_session_id_seq_key` (the ingest path's `ON CONFLICT` arbiter) is untouched,
+  //        so `session_id, seq` remains unique. It names no `task`, `project` or
+  //        `project_acceptance_criterion_definition` object, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored task and criterion row are out of
+  //        its reach, and no criterion's `text` or `verification_method` can move by one byte. It
+  //        creates no table, column, enum, type, function or trigger, carries no `ALTER TYPE`,
+  //        `DROP TYPE`, `INSERT`, `UPDATE` or `DELETE`, and has no `CREATE OR REPLACE FUNCTION`
+  //        at all, so it is not another writer of the DONE fence. The production catalog was read
+  //        before the drop: the index had never been scanned (`idx_scan = 0`) while its unique
+  //        twin carried 13.7M.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -767,7 +783,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0273_drop_workspace_clone_provisioning',
       '0274_session_import_source',
       '0275_claude_history_import',
-      '0276_task_list_pause_epoch'],
+      '0276_task_list_pause_epoch',
+      '0277_drop_run_event_duplicate_index'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
