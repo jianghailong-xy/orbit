@@ -435,6 +435,31 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     expect(container!.innerHTML).toBe('');
   });
+
+  it('counts a notifying watch out, though the session is named as its observer', async () => {
+    // The runner door files every watch an agent makes with that session as its observer, and that
+    // includes NOTIFY_USER — "tell the person when this task is over" waits on the person, not on
+    // this session. Drawn here it would say the session is waiting on something that never wakes it,
+    // and the block's constant Then row would promise a resume this watch never sends. macOS's
+    // `WatchIndex.observing` has always left it out; this is the web reading the same set.
+    serve([
+      watch('NOTIFYING', {
+        action: 'NOTIFY_USER',
+        observerType: 'SESSION',
+        observerSessionId: 'S_ME',
+        targets: [target('TASK', 'T1')],
+      }),
+    ]);
+    await mount(
+      <>
+        <SessionWatchStrip sessionId="S_ME" />
+        <SessionWatchBadges sessionId="S_ME" />
+      </>,
+    );
+    expect(container!.querySelector('.watch-strip'), 'no strip: it waits on the person').toBeNull();
+    // The header's chip counts the same set, so it must not count this one either: only Follow left.
+    expect(buttons(container!)).toEqual(['Follow']);
+  });
 });
 
 describe('a live watch older than the newest 100', { timeout: 30_000 }, () => {

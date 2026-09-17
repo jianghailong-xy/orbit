@@ -397,6 +397,17 @@ describe('who follows whom', () => {
       targets: [target(uuidToBase62(TASK_UUID))],
     });
     const other = watch({ id: 'other', targets: [target('somethingElse')] });
+    // Notifying watches are out however they are spelled: the calling session is their observer
+    // (the runner door files every watch an agent makes that way), but what they trigger is a
+    // notification to the person, not a resume of this session.
+    const notifying = watch({
+      id: 'notifying',
+      action: 'NOTIFY_USER',
+      observerType: 'SESSION',
+      observerSessionId: uuidToBase62(SESSION_UUID),
+      targets: [target(uuidToBase62(TASK_UUID))],
+    });
+    expect(watchesFollowing([waiting, notifying], SESSION_UUID).map((w) => w.id)).toEqual(['waiting']);
     expect(watchesFollowing([waiting, other], SESSION_UUID).map((w) => w.id)).toEqual(['waiting']);
     expect(watchesFollowing([waiting, other], uuidToBase62(SESSION_UUID)).map((w) => w.id)).toEqual(['waiting']);
     expect(watchesFollowedBy([waiting, other], 'TASK', TASK_UUID).map((w) => w.id)).toEqual(['waiting']);

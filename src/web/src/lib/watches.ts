@@ -41,10 +41,25 @@ export const isLiveWatch = (w: Pick<WatchView, 'state'>): boolean =>
 // failing to match — a pasted link or an older server spells it that way.
 const normId = (id: string): string => (id.includes('-') ? (routeId(id) ?? id) : id);
 
-/** The watches a session is waiting on: it is their observer, and what they trigger resumes it. */
+/**
+ * The watches a session is waiting on: it is their observer, and what they trigger resumes it.
+ *
+ * Both halves are needed. The runner door files every watch an agent makes with that session as its
+ * observer, `NOTIFY_USER` included — and a notifying watch waits on the *person*, not on this
+ * session, so counting it here says the session is waiting for something no wake will ever arrive
+ * for. It also made the strip's constant Then row ("Resume this session") a promise the watch never
+ * makes. macOS has always read it this way: `WatchIndex.observing` is "the live RESUME_SESSION
+ * watches that will resume this session", and the two ends drawing one strip from two different sets
+ * is a drift `WatchStripCopyParityTests` cannot see, because it compares words and not membership.
+ */
 export function watchesFollowing(watches: readonly WatchView[], sessionId: string): WatchView[] {
   const key = normId(sessionId);
-  return watches.filter((w) => w.observerSessionId != null && normId(w.observerSessionId) === key);
+  return watches.filter(
+    (w) =>
+      w.action === 'RESUME_SESSION' &&
+      w.observerSessionId != null &&
+      normId(w.observerSessionId) === key,
+  );
 }
 
 /** Whether two ids name the same row, whichever way each is spelled. */

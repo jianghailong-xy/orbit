@@ -167,12 +167,18 @@ final class SessionWatchingTests: XCTestCase {
         let watches = [
             F.watch(id: "ended", state: "MATCHED", observer: sessionID),
             F.watch(id: "notify", action: "NOTIFY_USER", observer: nil),
+            // The shape the runner door actually files: every watch an agent makes names the calling
+            // session as its observer, NOTIFY_USER included. A notifying watch waits on the person,
+            // not on this session, so it is out for the same reason the observer-less one is — and
+            // this is the case the browser's set used to include, drawing a strip for a wait that
+            // would never wake it.
+            F.watch(id: "notify-mine", action: "NOTIFY_USER", observer: sessionID),
             F.watch(id: "other", observer: PublicID.newToken()),
             // The same session, spelled as its UUID.
             F.watch(id: "mine", observer: try XCTUnwrap(PublicID.toUUID(sessionID))),
         ]
         XCTAssertEqual(WatchIndex.observing(sessionID: sessionID, in: watches).map(\.id), ["mine"])
-        XCTAssertNil(summary(Array(watches.prefix(2)), for: sessionID))
+        XCTAssertNil(summary(Array(watches.prefix(3)), for: sessionID))
         let index = WatchIndex.summariesByObserver(watches)
         XCTAssertEqual(index[PublicID.storageKey(sessionID)]?.watches.map(\.id), ["mine"])
         XCTAssertEqual(index.count, 2)   // "mine" and "other"
