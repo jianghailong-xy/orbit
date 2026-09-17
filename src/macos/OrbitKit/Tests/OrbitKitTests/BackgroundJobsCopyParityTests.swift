@@ -250,7 +250,10 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
         // What the fold opens to: rows for the inventory, and whatever else the note held under them.
         assertBuilt(note, "<BackgroundJobsNote jobs={jobs} />", "the rows the fold opens to",
                     Self.webTranscript)
-        assertBuilt(note, "jobs.rest !== ''", "another block the same note carried",
+        // Since the `#`-references landed as cards, the leftover is what BOTH readings handed on
+        // rather than this one's own `rest` — the inventory reads the note first and the references
+        // read what it left (ReferencedTaskCopyParityTests holds the other half of that chain).
+        assertBuilt(note, "rest !== ''", "another block the same note carried",
                     Self.webTranscript)
     }
 

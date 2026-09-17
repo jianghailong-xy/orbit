@@ -58,10 +58,12 @@ import { SameOriginLink } from './SameOriginLink';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
+import { ReferencedTaskNote } from './ReferencedTaskNote';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
 import { parseWatchWake } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
+import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -2022,10 +2024,15 @@ function useThrottled(value: string, ms: number): string {
 function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
-  // The inventory a returning engine is handed is the one block whose lines are a list of outcomes,
-  // so it opens as rows. Its count goes on the line that names it shut: "background jobs" alone
-  // never said whether opening it was worth the click. Any other block opens as it always has.
+  // Two of the blocks open as something other than their own text: the inventory a returning engine
+  // is handed, whose lines are a list of outcomes, and the tasks a person named with `#`, whose
+  // table holds an id nobody could click. One note can carry both, so each reading is handed what
+  // the one before it did not take and what is left over is drawn as it always was. Their counts go
+  // on the line that names the note shut: "background jobs" alone never said whether opening it was
+  // worth the click.
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
+  const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
+  const rest = tasks ? tasks.rest : jobs ? jobs.rest : text;
   return (
     <div className="chat-injected">
       <button
@@ -2035,13 +2042,15 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
         onClick={() => setOpen((o) => !o)}
       >
         {`⊕ Orbit attached: ${kind}`}
+        {tasks && ` · ${summarizeReferencedTasks(tasks.tasks)}`}
         {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
       </button>
       {open &&
-        (jobs ? (
+        (tasks || jobs ? (
           <>
-            <BackgroundJobsNote jobs={jobs} />
-            {jobs.rest !== '' && <pre className="chat-injected-body">{jobs.rest}</pre>}
+            {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
+            {jobs && <BackgroundJobsNote jobs={jobs} />}
+            {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
           </>
         ) : (
           <pre className="chat-injected-body">{text}</pre>
