@@ -5,6 +5,7 @@
 #
 #   bash scripts/worktree-overlay.sh
 #   cd src/apiserver && rm -rf build && npm test
+#   cd src/web && npx vitest run
 #
 # It needs no container and no network, it is idempotent (a second run re-links what moved, skips
 # the ~75MB copy and the generate, and costs a `tsc -p src/shared`), everything it writes is under
@@ -59,6 +60,16 @@
 #     checkout's client straight back, which on a branch that adds a model compiles into
 #     `Property 'x' does not exist on type 'PrismaService'` — the same class of harness red as the
 #     shared dist, so it gets the same answer.
+#   * `src/web/node_modules` likewise a real directory, for `@orbit/shared` and for the two vite
+#     caches. Borrowed whole it is the same red wearing a different face: the main checkout's copy
+#     has no `@orbit/shared` at all, so vitest falls back through it to the root's, and the stale
+#     dist arrives during COLLECTION — `TypeError: Cannot read properties of undefined (reading
+#     'maxTargetsPerWatch')` out of `WATCH_LIMITS`, one whole-file `(0 test)` rather than a failing
+#     assertion. Two entries have to be ours and the rest are linked: `@orbit/shared` -> this tree's
+#     src/shared, and `.vite`/`.vite-temp`, which vite puts under the web package's node_modules and
+#     which ~150 worktrees would otherwise share one of. `@types/react-dom` is why the link loop
+#     copies EVERY entry rather than the ones that look interesting: it is installed only here, the
+#     root's `@types` does not carry it, and `tsc -b` goes red without it.
 #
 # WHAT IT DOES NOT DO
 # ===================
@@ -162,17 +173,41 @@ echo "==> building @orbit/shared"
 mkdir -p "$REPO/src/node_modules/@orbit"
 link "$REPO/src/shared" "$REPO/src/node_modules/@orbit/shared"
 
+# --- this tree's src/web node_modules -------------------------------------------------------------
+# The apiserver's treatment one package along, and for the same reason: see the header. The borrowed
+# directory is undone and rebuilt as one symlink per entry — every entry, `@types/react-dom` being
+# installed only here — so that `@orbit/shared` and vite's two cache directories can be ours.
+if [ "$MAIN" != "$REPO" ]; then
+  WEB_NM="$REPO/src/web/node_modules"; MAIN_WEB_NM="$MAIN/src/web/node_modules"
+  [ -L "$WEB_NM" ] && rm -f "$WEB_NM"
+  mkdir -p "$WEB_NM/@orbit"
+  for d in "$MAIN_WEB_NM"/* "$MAIN_WEB_NM"/.[!.]*; do
+    [ -e "$d" ] || continue
+    # `.vite` (the pre-bundled deps) and `.vite-temp` (the bundled vite.config) are caches keyed by
+    # nothing that tells one tree's sources from another's, and not linking them is worth more than
+    # the red: at load 61, ProjectsPage.test.tsx cost 165.7s filling this tree's own pair and 45.8s
+    # reading it back — where against the main checkout's shared pair it costs 107-180s every time.
+    case "$(basename "$d")" in .vite|.vite-temp|@orbit) continue ;; esac
+    link "$d" "$WEB_NM/$(basename "$d")"
+  done
+  link "$REPO/src/shared" "$WEB_NM/@orbit/shared"
+fi
+
 # --- the self-check ---------------------------------------------------------------------------
-# Asked of node, from the directory the specs run in, because every piece above exists to move this
-# one answer. A print alone would be a line nobody reads in a log nobody opens on a green run, so it
-# is a refusal too: an overlay that did not take is worth more as an exit 2 here than as fifty
-# whole-file `not ok`s twenty minutes from now.
-RESOLVED="$(cd "$API" && node -e "console.log(require.resolve('@orbit/shared'))" 2>&1)" ||
-  die "node cannot resolve @orbit/shared from $API: $RESOLVED"
-echo "==> require.resolve('@orbit/shared') = $RESOLVED"
-case "$RESOLVED" in
-  "$REPO"/*) ;;
-  *) die "@orbit/shared still resolves outside this tree — the overlay did not take" ;;
-esac
+# Asked of node, from the two directories the specs run in, because every piece above exists to move
+# these answers. A print alone would be a line nobody reads in a log nobody opens on a green run, so
+# it is a refusal too: an overlay that did not take is worth more as an exit 2 here than as fifty
+# whole-file `not ok`s twenty minutes from now. It is asked twice because the two fail apart — the
+# apiserver's answer comes through `src/node_modules` and the web's through `src/web/node_modules`,
+# so either block can stop laying its half down while the other keeps answering correctly.
+for sub in src/apiserver src/web; do
+  RESOLVED="$(cd "$REPO/$sub" && node -e "console.log(require.resolve('@orbit/shared'))" 2>&1)" ||
+    die "node cannot resolve @orbit/shared from $sub: $RESOLVED"
+  echo "==> require.resolve('@orbit/shared') from $sub = $RESOLVED"
+  case "$RESOLVED" in
+    "$REPO"/*) ;;
+    *) die "@orbit/shared still resolves outside this tree from $sub — the overlay did not take" ;;
+  esac
+done
 echo "==> OK: $REPO is ready to build and test"
 exit 0
