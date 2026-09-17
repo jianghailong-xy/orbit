@@ -20,14 +20,14 @@ const WHY: Record<Exclude<WatchWake['kind'], 'MATCHED'>, string> = {
 };
 
 /** What happened, at a glance. */
-export function watchWakeTitle(kind: WatchWake['kind']): string {
+function watchWakeTitle(kind: WatchWake['kind']): string {
   return TITLE[kind];
 }
 
 /** Why the watch queued this turn: a Match's own account of the condition, or the sentence one of
  *  the three ends is. The sticky bar at the top of the transcript reads it too, so the turn it
  *  names says the same there as on the card it points at. */
-export function watchWakeWhy(wake: WatchWake): string {
+function watchWakeWhy(wake: WatchWake): string {
   if (wake.kind !== 'MATCHED') return WHY[wake.kind];
   return wake.reason ? describeReason(wake.reason) : 'Its condition held.';
 }
