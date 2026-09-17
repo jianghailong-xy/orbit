@@ -154,7 +154,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
         // follows the task's lifecycle; see `shouldEndTerminalTask`.
         startsTaskWork: true,
-        task: { select: { status: true } },
+        // `autoRunWhenReady` is read for the offline branch below: it is the column every
+        // auto-run candidate scan requires, so it is the column that says whether the retry
+        // this reaper stands aside for exists at all.
+        task: { select: { status: true, autoRunWhenReady: true } },
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
       },
     });
@@ -240,20 +243,37 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               requireRunnerStillOffline: true,
               // Losing the runner says nothing about the work — the same message succeeds on
               // a plain re-send — so this is the one finalize here that auto-retry can undo
-              // by itself. A task-bound session is deliberately excluded: reclaimStalledTask
-              // just put its task back in the actionable pool, and the task scheduler picking
-              // it up again IS its retry. Arming here too would race that with a second one.
+              // by itself. A task-bound session stands aside for the task scheduler instead:
+              // reclaimStalledTask just put its task back in the actionable pool, and the
+              // scheduler picking it up again IS its retry. Arming both would be two of them.
               //
-              // That substitute is CONDITIONAL, and the condition is not checked here: all three
-              // auto-run candidate scans require `t.auto_run_when_ready = true` (tasks.service.ts
-              // AUTO_RUN_READY_SQL, PROJECT_INDEPENDENT_READY_SQL, AUTO_RUN_RETRY_CANDIDATE_SQL),
-              // so a reclaimed task that does not opt in is retried by nobody — not here, because
-              // of this line, and not there, because it is not a candidate. Two of the four
+              // That substitute is CONDITIONAL, and this is where the condition is checked. All
+              // three auto-run candidate scans require `t.auto_run_when_ready = true`
+              // (tasks.service.ts AUTO_RUN_READY_SQL, PROJECT_INDEPENDENT_READY_SQL,
+              // AUTO_RUN_RETRY_CANDIDATE_SQL), as does the instant edge that dispatches a
+              // dependent when its prerequisite completes — so a reclaimed task that does not
+              // opt in is retried by NOBODY. It used to be excluded here for having a task at
+              // all, which handed it to a scheduler that would never select it: two of the four
               // sessions reaped on 2026-09-15 were left that way, one of them holding 88
-              // uncommitted lines. Whether to arm on `!s.task?.autoRunWhenReady` instead is a
-              // retry-policy decision with its own double-dispatch question, so it is filed
-              // rather than taken here.
-              armRetry: !s.taskId,
+              // uncommitted lines that only a hand-exported patch saved. The stand-down now
+              // names the retry it is standing aside for, and happens only when there is one.
+              //
+              // Arming the other case does NOT put two retries on one task if the opt-in flips
+              // to true in between. `session_task_execution_claim_idx` (migration 0130) is a
+              // partial UNIQUE index on `session(task_id)` over exactly the TASK_OCCUPYING
+              // statuses, so a task can hold ONE live session and no more: whichever starts
+              // first is seen by the scans' own `NOT EXISTS (occupying session)` clause, and a
+              // resume that races past that read loses at the index — a 23505 the transaction
+              // classifier calls permanent, so auto-retry takes its ordinary backoff rather than
+              // spinning. Neither §13.6 SU6 nor §13.1 AG6 answers this one; they are about
+              // supersession and aggregate parents, and neither looks at who else is running.
+              //
+              // Arming is also the outcome that keeps the work. Auto-retry resumes THIS session,
+              // and the runner keys a checkout by session id (runner-go/worktree.go), so it
+              // re-attaches the same worktree on the same branch; a fresh dispatch is a new
+              // session id, and therefore a new worktree and a new branch, with the uncommitted
+              // work left behind in the old one.
+              armRetry: !s.taskId || !s.task?.autoRunWhenReady,
             });
           }
           continue;
