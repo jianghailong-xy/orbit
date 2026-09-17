@@ -633,10 +633,9 @@ struct AgentPanes: View {
     /// either selects a row that isn't the page showing or pushes the one that is.
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
         switch rowNavigation {
         case .selection:
-            row.tag(s.id)
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }).tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
@@ -645,6 +644,11 @@ struct AgentPanes: View {
             Button { app.push(.console(sessionID: s.id, origin: .list)) } label: {
                 row.foregroundStyle(.primary)
             }
+            // The row's actions attach to the *row*, not to what the row is made of: `.swipeActions`
+            // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
+            // does not pass them up from its label — which is where this wrapper used to leave them,
+            // and why a swipe or a long press on a compact session row did nothing.
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
         }
     }
 

@@ -261,6 +261,28 @@ struct TasksListView: View {
     @ViewBuilder
     private func taskRow(_ tasks: TasksModel, _ task: TaskItem) -> some View {
         let row = TaskRowView(task: task)
+        switch rowNavigation {
+        case .selection:
+            rowActions(row, tasks, task).tag(task.id)
+        case .push:
+            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
+            // usable hiding place on iOS 17/18 (see `AppModel.push` — which also keeps the detail
+            // store in step with the page this puts up). `.foregroundStyle(.primary)`: a button's
+            // label otherwise inherits the accent tint, and the row is unchanged by design (only
+            // the wrapper is new).
+            Button { model.push(.taskDetail(taskID: task.id)) } label: {
+                row.foregroundStyle(.primary)
+            }
+            .rowActions(tasks, task)
+        }
+    }
+
+    /// The row's swipe actions and long-press menu, attached to the row itself rather than to the
+    /// row's content: `.swipeActions` and `.contextMenu` are read off the view the `List` hosts as
+    /// its row, and a `Button` does not pass them up from its label — leaving them inside the
+    /// compact row's label (where they were) is a swipe and a long press that do nothing.
+    private func rowActions<V: View>(_ row: V, _ tasks: TasksModel, _ task: TaskItem) -> some View {
+        row
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 if TaskListLogic.canStart(task) {
                     runButton(tasks, task)
@@ -274,19 +296,6 @@ struct TasksListView: View {
                 .disabled(tasks.isMutating(task.id))
             }
             .contextMenu { rowMenu(tasks, task) }
-        switch rowNavigation {
-        case .selection:
-            row.tag(task.id)
-        case .push:
-            // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
-            // usable hiding place on iOS 17/18 (see `AppModel.push` — which also keeps the detail
-            // store in step with the page this puts up). `.foregroundStyle(.primary)`: a button's
-            // label otherwise inherits the accent tint, and the row is unchanged by design (only
-            // the wrapper is new).
-            Button { model.push(.taskDetail(taskID: task.id)) } label: {
-                row.foregroundStyle(.primary)
-            }
-        }
     }
 
     @ViewBuilder

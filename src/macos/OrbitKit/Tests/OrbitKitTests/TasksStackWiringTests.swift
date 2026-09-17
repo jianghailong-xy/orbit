@@ -103,6 +103,21 @@ final class TasksStackWiringTests: XCTestCase {
         XCTAssertEqual(row.components(separatedBy: "TaskRowView(task: task").count - 1, 1,
                        "the row itself is built once and shared by both branches")
 
+        // ...and its actions attach to the row, never to what the row is made of. `.swipeActions`
+        // and `.contextMenu` are read off the view the `List` hosts as its row; a `Button` does not
+        // pass them up from its label, so holding them inside that label — which is where the
+        // compact row carried them — leaves a task row that cannot be swiped or long-pressed.
+        // The actions therefore follow the `Button`'s closing brace, at the row's own level.
+        let push = code(String(row[pushBranch.lowerBound...]))
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let actions = try XCTUnwrap(push.firstIndex(of: ".rowActions(tasks, task)"),
+                                    "the compact row attaches its own actions")
+        XCTAssertGreaterThan(actions, 0)
+        XCTAssertTrue(push[actions - 1].hasSuffix("}"),
+                      "attached to the row from outside the `Button`'s label, not nested inside it")
+
         // Who gets which shape: the compact shell asks for the pushing one, and the three-column
         // shell takes the default. `MainView` reaches the list through `SectionContent`, so the
         // default is what it gets.
