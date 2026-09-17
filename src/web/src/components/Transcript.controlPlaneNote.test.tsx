@@ -125,15 +125,17 @@ async function click(el: Element) {
  * under their words, named for its kind, folded until clicked, the block verbatim once open, and
  * folded again on a second click.
  */
-async function expectFoldedEntry({ typed, block, kind, marker }: {
+async function expectFoldedEntry({ typed, block, kind, count, marker }: {
   typed: string;
   block: string;
   kind: string;
+  /** What the inventory block adds to its own name once shut (BackgroundJobsNote); '' for the rest. */
+  count: string;
   marker: string;
 }) {
   const toggle = attachedToggle();
   expect(toggle, `no entry signed ${LABEL}:\n${container.innerHTML}`).not.toBeNull();
-  expect(toggle!.textContent).toBe(`${LABEL} ${kind}`);
+  expect(toggle!.textContent).toBe(`${LABEL} ${kind}${count}`);
   const entry = toggle!.parentElement!;
   expect(bubble().lastElementChild, 'the entry closes the person’s own bubble').toBe(entry);
   // Everything else the bubble says is exactly what the person typed.
@@ -157,16 +159,16 @@ async function expectFoldedEntry({ typed, block, kind, marker }: {
 }
 
 describe.each([
-  { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', marker: 'bgj_3a1af2b50428' },
-  { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', marker: '累计 47 次' },
-  { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', marker: '的协调会话' },
-  { tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK, kind: 'referenced task', marker: '详情请用 task_get 自取' },
-])('$tag', ({ typed, block, kind, marker }) => {
+  { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', count: ' · 1 ended, exit 0', marker: 'bgj_3a1af2b50428' },
+  { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', count: '', marker: '累计 47 次' },
+  { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', count: '', marker: '的协调会话' },
+  { tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK, kind: 'referenced task', count: '', marker: '详情请用 task_get 自取' },
+])('$tag', ({ typed, block, kind, count, marker }) => {
   it('with the note recorded: only the typed words are the bubble’s own, and the block is a folded entry under them that opens to its original text', async () => {
     const appended = `\n\n${block}`;
     await mount([userEvent(`${typed}${appended}`, appended)]);
 
-    await expectFoldedEntry({ typed, block, kind, marker });
+    await expectFoldedEntry({ typed, block, kind, count, marker });
   });
 
   it('with no note: someone who typed the same characters sees them in their bubble as typed, and nothing is folded away', async () => {
@@ -197,7 +199,9 @@ describe('the exported transcript', () => {
     const exported = new DOMParser().parseFromString(html, 'text/html').querySelector('.chat-user');
     const toggle = [...(exported?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.startsWith(LABEL));
 
-    expect(toggle?.textContent, `no entry signed ${LABEL} in the exported bubble:\n${html}`).toBe(`${LABEL} background jobs`);
+    expect(toggle?.textContent, `no entry signed ${LABEL} in the exported bubble:\n${html}`).toBe(
+      `${LABEL} background jobs · 1 ended, exit 0`,
+    );
     expect(toggle!.getAttribute('aria-expanded')).toBe('true');
     expect([...exported!.querySelectorAll('*')].some((el) => el.textContent === BACKGROUND_JOBS)).toBe(true);
     expect(exported!.textContent!.replace(toggle!.parentElement!.textContent!, '').trim()).toBe('已经部署，请帮我测试');

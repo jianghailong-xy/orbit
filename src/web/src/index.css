@@ -5488,6 +5488,92 @@ button.composer-usage:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* The background-jobs block opened as rows (BackgroundJobsNote): the wake card's own row language
+   (.bgwake-job*), one step quieter, because this sits inside someone's bubble rather than standing
+   as a card of its own. */
+.bgjobs {
+  margin-top: 6px;
+}
+.bgjobs-group {
+  margin-bottom: 4px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.bgjobs-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.bgjobs-job {
+  padding: 6px 8px;
+  border-radius: 8px;
+  /* Translucent: the bubble this sits in is already tinted, and an opaque panel lands as a hole. */
+  background: var(--fill-inset);
+}
+.bgjobs-job + .bgjobs-job {
+  margin-top: 4px;
+}
+.bgjobs-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.bgjobs-mark {
+  flex: none;
+}
+.bgjobs-mark.is-ok {
+  color: var(--success-solid);
+}
+.bgjobs-mark.is-failed {
+  color: var(--error-solid);
+}
+.bgjobs-mark.is-running {
+  color: var(--text-3);
+}
+/* The command is the row. Two lines of it, because a job's command can be a whole heredoc and the
+   fold below holds the rest. */
+.bgjobs-name {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  overflow-wrap: anywhere;
+}
+.bgjobs-outcome {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+/* The ids line up under the command, not under its icon. */
+.bgjobs-meta {
+  margin-top: 2px;
+  padding-left: 20px;
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  overflow-wrap: anywhere;
+}
+.bgjobs-raw summary {
+  color: var(--text-3);
+  cursor: pointer;
+}
+.bgjobs-raw pre {
+  max-height: 320px;
+  margin: 4px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* A `#`-reference in a message, styled to read as the same object the composer chipped — the
    user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it
