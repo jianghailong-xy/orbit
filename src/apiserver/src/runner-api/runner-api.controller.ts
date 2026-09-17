@@ -34,6 +34,11 @@ import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
+  INTEGRATION_RESULT_REFUSAL_STATUS,
+  IntegrationJobRefused,
+  IntegrationJobRelay,
+} from './integration-job-relay';
+import {
   AgentProvider,
   AgentExecConfig,
   ActivateTurnLeasesRequest,
@@ -50,6 +55,9 @@ import {
   apiErrorRetryAt,
   isAsyncAgentLaunchAck,
   isRetryableApiErrorText,
+  IntegrationJobProgressRequest,
+  IntegrationJobResultRequest,
+  IntegrationJobResultResponse,
   isUsageLimitErrorText,
   parseQuotaResetAt,
   planUsageBlockedUntil,
@@ -146,6 +154,7 @@ import {
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { type TaskFailure, recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
+import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
@@ -415,6 +424,22 @@ export function runnerSupportsCapability(
   );
 }
 
+/**
+ * An integration-job refusal as HTTP (contract §2.3): 409 for a claim that moved on or a job already
+ * written down, 404 for one this runner cannot see, 400 for a body that is not a result. Anything
+ * else is a real fault and is raised as it is, so it is logged as one rather than answered as a
+ * refusal the runner would stop on.
+ */
+function integrationJobHttpError(error: unknown): unknown {
+  if (error instanceof IntegrationJobRefused) {
+    return new HttpException(
+      { code: error.refusal, message: error.message },
+      INTEGRATION_RESULT_REFUSAL_STATUS[error.refusal],
+    );
+  }
+  return error;
+}
+
 /** A heartbeat capability header is a declarative machine report, never an authorization token. */
 export function parseRunnerCapabilities(
   header: string | string[] | undefined,
@@ -549,6 +574,15 @@ export class RunnerApiController {
      * this list: the specs that build this controller by hand pass what their case is about.
      */
     @Optional() private readonly openItems?: ProjectOpenItemService,
+    /**
+     * The heartbeat's half of the integration queue (contract §2.2, §2.3). `@Optional()` for the
+     * same reason as everything else down here: the specs that construct this controller directly
+     * pass none, and a required parameter would make every one of them a compile error about a
+     * queue they do not exercise. RunnerApiModule provides it, so production always has it — and
+     * the two routes that need it say so rather than answering as though a runner had nothing to
+     * report.
+     */
+    @Optional() private readonly integrationJobs?: IntegrationJobRelay,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -854,6 +888,22 @@ export class RunnerApiController {
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: codex reset relay skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
+    // The platform's own git work, claimed the same way and for the same reason: the claim is a
+    // compare-and-set on a row, so a job named here is already RUNNING and is nobody else's to take
+    // (contract §2.3 J-T2). On its own try, like the relay above — a failure costs this beat's jobs,
+    // which the next beat claims again from the queue.
+    let integrationJobs: RunnerHeartbeatResponse['integrationJobs'];
+    try {
+      const claimed = (await this.integrationJobs?.dispatch({
+        runnerId: runner.id,
+        leaseOwner: heartbeatLeaseOwner,
+        draining: dto?.draining === true,
+        capabilities: reportedCapabilities,
+      })) ?? [];
+      if (claimed.length > 0) integrationJobs = claimed;
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: integration jobs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
@@ -1062,7 +1112,79 @@ export class RunnerApiController {
       // Same reasoning as the reset command above: present only while somebody is actually waiting
       // on an answer, so a runner that never asked sees the response shape it always had.
       ...(claudeHistoryRequest ? { claudeHistoryRequest } : {}),
+      // Present only when this beat claimed something, for the same reason.
+      ...(integrationJobs ? { integrationJobs } : {}),
     };
+  }
+
+  /** The queue, or the reason a request about one cannot be answered without it. */
+  private integrationQueue(): IntegrationJobRelay {
+    if (!this.integrationJobs) {
+      throw new HttpException(
+        { code: 'INTEGRATION_QUEUE_UNAVAILABLE', message: 'this control plane runs no integration queue' },
+        503,
+      );
+    }
+    return this.integrationJobs;
+  }
+
+  /**
+   * A claimed integration job is still being worked on (contract §2.3, §2.2 J-T4): the phase it
+   * reached, and the lease renewal that keeps another runner from taking it over. Fenced on
+   * (leaseOwner, claimGeneration) and on the runner token, so a process whose claim was taken over
+   * gets 409 STALE_CLAIM and stops rather than reporting into a job that is no longer its.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('integration-jobs/:jobId/progress')
+  @HttpCode(200)
+  async integrationJobProgress(
+    @CurrentRunner() runner: { id: string },
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() body: IntegrationJobProgressRequest,
+  ) {
+    try {
+      return await this.integrationQueue().progress(runner.id, jobId, body);
+    } catch (error) {
+      throw integrationJobHttpError(error);
+    }
+  }
+
+  /**
+   * What one claimed integration job came to (§2.2 J-T5 to J-T7).
+   *
+   * Everything the result implies is written in the transaction that writes the state: the receipt
+   * for a landing, the exception item for a failure. What follows the commit — delivering that item
+   * and dispatching the tasks the landing released — happens here, after it, and is re-derivable
+   * from the committed rows by the next receipt or the 60-second sweep if this process dies first.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('integration-jobs/:jobId/result')
+  @HttpCode(200)
+  async integrationJobResult(
+    @CurrentRunner() runner: { id: string },
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() body: IntegrationJobResultRequest,
+  ): Promise<IntegrationJobResultResponse> {
+    let applied: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>;
+    try {
+      applied = await this.integrationQueue().applyResult(jobId, runner.id, body);
+    } catch (error) {
+      throw integrationJobHttpError(error);
+    }
+    const after = applied.after;
+    if (after) {
+      // J10: the receipt is the fact the tasks downstream were waiting for, and the item is what
+      // somebody has to look at. Both are announcements of rows that are already committed, so a
+      // failure here is logged and never raised — the runner's result was taken either way.
+      await this.mergeReceipts
+        ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskId)
+        .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
+      if (after.openItemTaskIds.length > 0) {
+        await this.openItems?.deliverForTasks(after.openItemTaskIds)
+          .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
+      }
+    }
+    return applied.answer;
   }
 
   /**
@@ -3436,6 +3558,13 @@ export class RunnerApiController {
       // database exactly once. Still this transaction, so the FAILED and the project's record of
       // it commit together or not at all (contract §4.3 A).
       if (acceptanceFailure) await recordTaskFailure(tx, acceptanceFailure);
+      // And the mirror of it, for the comparison that PASSED: a code task whose acceptance held on
+      // the merged tree is what the platform integrates, and the queueing happens in the same
+      // transaction as the DONE so the two commit together (contract §2.3 J-T1a). Outside the
+      // comparison block for the same reason `recordTaskFailure` is.
+      if (acceptanceTaskCompleted && current.taskId) {
+        await enqueueForDoneTask(tx, current.ownerId, current.taskId);
+      }
       // A successful model turn on a task with L0 acceptance queues exactly one existing shell
       // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
       // boundary: either both commit or neither does, so retrying /turn-complete cannot run the

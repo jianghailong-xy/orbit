@@ -101,6 +101,17 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'runner-api/integration-job-relay.ts#applyIntegrationJobResult',
+    shape: 'TX_RETRIED',
+    locks: 'project_integration_job (rank 60) by primary key, then whatever the writes it implies take: session_merge_receipt (rank 60) for a landing, project_open_item (rank 60) for a failure. Nothing above rank 60 is locked — the foreign keys of both children take `session`, `task` and `project` FOR KEY SHARE, which no status write conflicts with, and the job row itself is the only thing two runners could both want.',
+    identity: "The job, and the claim it was reported under: `(id, claim_lease_owner, claim_generation)`. A result from a process whose claim was taken over matches no row and is refused STALE_CLAIM; a result whose response was lost and is resent finds the job already terminal and is answered `accepted: false` rather than applied twice. The receipt below it carries its own key (`mr:v1` over session, source SHA, target branch and result), so even a second application would add no second receipt.",
+    isolation: '',
+    attempts: 4,
+    replay: "Everything is re-read inside the closure: the job row, its lease, and whether it is already terminal. A re-run after a conflict therefore re-decides against the committed world rather than replaying a decision made outside it. The two writes it implies are idempotent in their own right — `createMany({ skipDuplicates })` on the receipt, and the partial unique index over OPEN items on the exception — so a rolled-back attempt leaves neither and a re-run adds neither twice.",
+    effects: 'None inside. The receipt and the item are rows; delivering the item and dispatching what the landing released happen in the controller, after this commits, and both are re-derivable from the committed rows.',
+    answer: 'Typed 503 from the global boundary, which the runner treats as "not delivered" and resends. The work itself already happened in the repository, so nothing is lost by making it say so again; what the resend must not do is land a second time, and the terminal check above is what stops it.',
+  },
+  {
     at: 'projects/attempt-ended-unsettled.producer.ts#raiseHumanSignal',
     shape: 'TX_RETRIED',
     locks: 'An unlocked task read discovers the owner, then user FOR UPDATE (rank 10, the owner graph mutex), project FOR NO KEY UPDATE (rank 40, project tasks only), task FOR NO KEY UPDATE (rank 50), then project_blocker and task_comment (rank 60). The authoritative task/path read is after every lock; both branches only descend.',
@@ -981,6 +992,13 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // item's turn off a conversation's queue — so its lock order is that caller's: the Session (rank 30)
   // and the Task (rank 50) are already held, and these add item and delivery rows (rank 60) whose
   // foreign keys take `project` and `task` FOR KEY SHARE, which no status write conflicts with.
+  // The integration line's own writers (`docs/project-integration-line-contract.md` §2). Each runs
+  // inside a transaction its caller owns, and each takes only rank-60 child rows: the queue row in
+  // the transaction that wrote a task's DONE, the exception item and the receipt in the transaction
+  // that wrote a job's terminal state.
+  { at: 'projects/project-integration-job.ts#queueLandTask', under: 'runnerApi.turnComplete, taskCompletionEvidence.decide, taskOwnerConfirmation.confirm and tasks aggregation — the transaction that wrote the task DONE, which already holds the rank-50 task and the rank-55 project_codebase the line was started under' },
+  { at: 'projects/project-open-item.ts#recordIntegrationFailure', under: "runnerApi.integrationJobResult through applyIntegrationJobResult — the transaction that wrote the job's CONFLICT, CHECK_FAILED or ERROR; one project_open_item child row (rank 60) whose project and task foreign keys take FOR KEY SHARE" },
+  { at: 'sessions/merge-receipt.service.ts#fromIntegrationJob', under: "runnerApi.integrationJobResult through applyIntegrationJobResult — the transaction that wrote the job's LANDED or ALREADY_LANDED, so the landing and its receipt commit together or not at all" },
   { at: 'projects/project-open-item.ts#recordTaskFailure', under: 'runnerApi.turnComplete and runnerApi.finalize, realtime reaper.forceFinalize (all three through reclaimStalledTask), tasks.update — the transaction that wrote the failure' },
   { at: 'projects/project-open-item.ts#returnQueuedTurns', under: 'runnerApi turn-complete/finalize, sessions end/interrupt/cancelQueuedTurn and realtime reaper — each caller already owns the rank-30 Session transaction that takes the item turn off the queue unrun' },
   { at: 'projects/project-open-item.service.ts#acknowledgeDelivery', under: "sessions.createTurn — the delivery's ledger row is written in the turn's own transaction, under the Session lock it already holds" },
@@ -1129,6 +1147,7 @@ export interface StatementUnit {
  * whose writes are not atomic with each other.
  */
 export const STATEMENT_UNITS: readonly StatementUnit[] = [
+  { at: "runner-api/integration-job-relay.ts#receiveIntegrationJobProgress", class: "ONE_ROW_CAS", statements: 1, note: "A claimed integration job's lease renewal and the step it reached (contract §2.2 J-T4). One conditional UPDATE whose predicate is the job, this runner, RUNNING, and the exact (leaseOwner, claimGeneration) the report names: a process whose claim was taken over matches no row and is told STALE_CLAIM, which is how it learns to stop rather than going on working against a job that is no longer its. Deliberately no transaction — it writes two columns of one row, holds nothing, and a renewal that does not arrive costs only the lease, whose expiry is the takeover this fence exists to make safe." },
   { at: "attachments/attachments.service.ts#create", class: "INSERT", statements: 1 },
   { at: "attachments/attachments.service.ts#removeTaskInput", class: "MANY_ROWS", statements: 1, note: "Deletes at most one row — the id is a primary key — but written as a filtered deleteMany because the tenancy and scope predicates (`owner_id`, `task_id IS NOT NULL`) are what make a foreign id and a transcript's image indistinguishable 404s. The selection can overlap no other writer: a task input is deleted by its owner or by its task's CASCADE, and both remove the same row." },
   { at: "auth/auth.service.ts#bootstrap", class: "INSERT", statements: 1 },
@@ -1338,6 +1357,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"project_codebase","trigger":"project_codebase_config_guard","event":"BEFORE INSERT OR UPDATE","kind":"ROW/STATEMENT","since":"0231_project_codebase_session_source","takes":[]},
   {"table":"project_codebase","trigger":"project_codebase_integration_lock","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0270_project_integration_line","takes":[]},
   {"table":"project_handoff_approval","trigger":"project_handoff_approval_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0155_project_handoff_approval","takes":[]},
+  {"table":"project_integration_job","trigger":"project_integration_job_terminal_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0281_project_integration_job","takes":[]},
   {"table":"project_member","trigger":"project_member_ratification_project_lock","event":"BEFORE INSERT OR UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0195_project_owner_ratification","takes":["project LOCK"]},
   {"table":"project_member","trigger":"zz_project_completion_contract_member","event":"AFTER INSERT OR UPDATE OR DELETE","kind":"CONSTRAINT","since":"0195_project_owner_ratification","takes":["project LOCK","project_completion_contract LOCK","project_completion_contract WRITE"]},
   {"table":"project_open_item","trigger":"project_open_item_terminal_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0278_project_open_item","takes":[]},

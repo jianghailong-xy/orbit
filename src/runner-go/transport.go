@@ -70,6 +70,7 @@ func init() {
 		sessionCodexCoordinatorContextV1,
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
+		integrationJobCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -585,6 +586,23 @@ func retryActivateTurnLeases(ctx context.Context, activate func(context.Context)
 // mergeResult reports the outcome of a heartbeat-delivered MergeCommand back to the server.
 func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
+}
+
+// integrationJobProgress renews a claimed job's lease and records the step it reached. Short
+// timeout and a plain error: a progress report that does not arrive costs nothing but the lease,
+// and the job's own work carries on regardless (docs/project-integration-line-contract.md §2.3).
+func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgressRequest) error {
+	return t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, nil, 15*time.Second)
+}
+
+// integrationJobResult reports what a claimed job came to. The answer says whether the control
+// plane took it; a 409 means this process's claim had already moved on and it must stop.
+func (t *Transport) integrationJobResult(jobID string, b IntegrationJobResultRequest) (*IntegrationJobResultResponse, error) {
+	var out IntegrationJobResultResponse
+	if err := t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/result", b, &out, 30*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // importResult settles a session's pending transcript import; the receipt says whether the

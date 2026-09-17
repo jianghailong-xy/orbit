@@ -379,6 +379,11 @@
           "symbol": "fromRunnerMergeResult",
           "authority": "RUNNER_RECEIPT_INGRESS"
         },
+{
+          "path": "src/apiserver/src/sessions/merge-receipt.service.ts",
+          "symbol": "fromIntegrationJob",
+          "authority": "PLATFORM_INTEGRATION_RECEIPT_INGRESS"
+        },
         {
           "path": "src/apiserver/src/sessions/merge-receipt.ts",
           "symbol": "mergeReceiptIdempotencyKey",

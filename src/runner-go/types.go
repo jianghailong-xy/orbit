@@ -293,6 +293,94 @@ type HeartbeatResponse struct {
 	// operation is claimed for it; nothing acts on it until this binary declares
 	// codex-rate-limit-reset-v1.
 	CodexRateLimitResetRequest *CodexRateLimitResetCommand `json:"codexRateLimitResetRequest,omitempty"`
+	// Integration jobs this process has just been handed: the platform's own git work, putting a
+	// task's branch onto its project's integration line
+	// (docs/project-integration-line-contract.md §2.3). Each entry is already RUNNING in the
+	// control plane, claimed for this leaseOwner — the claim is what serialises them, so a job
+	// named here is nobody else's to do. Nil from older control planes and whenever this beat
+	// claimed nothing; nothing acts on it until this binary declares integration-job/v1.
+	IntegrationJobs []IntegrationJobCommand `json:"integrationJobs,omitempty"`
+}
+
+// IntegrationJobCommand mirrors @orbit/shared: one claimed integration job, carrying everything
+// the runner needs to do it without reading the control plane's database — the three refs, the
+// checkout to borrow, the checks to run on the combined tree, and the lease its result is fenced
+// to (docs/project-integration-line-contract.md §2.3).
+type IntegrationJobCommand struct {
+	JobID string `json:"jobId"`
+	Kind  string `json:"kind"`
+	// Echoed back on every progress and result; a report under a generation that has moved is
+	// refused STALE_CLAIM, which is how a takeover retires the process it took over from.
+	ClaimGeneration string `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	// The checkout this job borrows. The throwaway worktree is made beside it and removed after.
+	WorkDir      string `json:"workDir"`
+	RemoteName   string `json:"remoteName"`
+	RefAuthority string `json:"refAuthority"`
+	TargetRef    string `json:"targetRef"`
+	UpstreamRef  string `json:"upstreamRef"`
+	SourceRef    string `json:"sourceRef"`
+	// The anchor a rebase replays from, when the source session recorded one.
+	SessionBaseSha  string                 `json:"sessionBaseSha,omitempty"`
+	Checks          []IntegrationCheckSpec `json:"checks"`
+	CancelRequested bool                   `json:"cancelRequested"`
+}
+
+// IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
+type IntegrationCheckSpec struct {
+	Name             string `json:"name"`
+	Command          string `json:"command"`
+	ExpectedExitCode int    `json:"expectedExitCode"`
+	TimeoutSeconds   int    `json:"timeoutSeconds"`
+}
+
+// IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
+// produced one — it could not start, or its budget killed it.
+type IntegrationCheckResult struct {
+	Name             string `json:"name"`
+	Command          string `json:"command"`
+	ExpectedExitCode int    `json:"expectedExitCode"`
+	ExitCode         *int   `json:"exitCode"`
+	TimedOut         bool   `json:"timedOut"`
+	DurationMs       int64  `json:"durationMs"`
+	OutputTail       string `json:"outputTail"`
+}
+
+// IntegrationJobProgressRequest renews the lease and says which step the job reached.
+type IntegrationJobProgressRequest struct {
+	ClaimGeneration string `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	Phase           string `json:"phase"`
+}
+
+// IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
+// that what landed is what was tested.
+type IntegrationJobResultRequest struct {
+	ClaimGeneration string                   `json:"claimGeneration"`
+	LeaseOwner      string                   `json:"leaseOwner"`
+	State           string                   `json:"state"`
+	Phase           string                   `json:"phase,omitempty"`
+	SourceSha       string                   `json:"sourceSha,omitempty"`
+	TargetShaBefore string                   `json:"targetShaBefore,omitempty"`
+	UpstreamSha     string                   `json:"upstreamSha,omitempty"`
+	MainSyncSha     string                   `json:"mainSyncSha,omitempty"`
+	TestedSha       string                   `json:"testedSha,omitempty"`
+	TestedTreeSha   string                   `json:"testedTreeSha,omitempty"`
+	LandedSha       string                   `json:"landedSha,omitempty"`
+	LandedTreeSha   string                   `json:"landedTreeSha,omitempty"`
+	AheadOfUpstream *int                     `json:"aheadOfUpstream,omitempty"`
+	Checks          []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts       []string                 `json:"conflicts,omitempty"`
+	ErrorCode       string                   `json:"errorCode,omitempty"`
+	ErrorDetail     map[string]any           `json:"errorDetail,omitempty"`
+}
+
+// IntegrationJobResultResponse is the control plane's answer: whether it took the result.
+type IntegrationJobResultResponse struct {
+	Accepted   bool     `json:"accepted"`
+	State      string   `json:"state"`
+	ReceiptIDs []string `json:"receiptIds"`
+	OpenItemID *string  `json:"openItemId"`
 }
 
 // RepoCleanupCommand mirrors @orbit/shared: repair the shared checkout at Root — rescue whatever

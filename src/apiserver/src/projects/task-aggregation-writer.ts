@@ -28,6 +28,7 @@ import {
   PlannedTaskAggregation,
 } from './task-aggregation';
 import { taskRetirement } from '../tasks/task-supersession';
+import { enqueueForDoneTask } from './project-integration-job';
 
 /** The closure reads tasks and nothing else; `task.findMany` is the whole of its surface. */
 export type AggregationScopeTransaction = TransactionSurface<{ task: ['findMany'] }>;
@@ -195,7 +196,17 @@ export async function applyTaskAggregations(
          AND "status" = ${aggregation.from}::"task_status"
          AND "status" IS DISTINCT FROM ${aggregation.to}::"task_status"
     `);
-    if (rows > 0) moved.push(aggregation.taskId);
+    if (rows > 0) {
+      moved.push(aggregation.taskId);
+      // A task this pass completed is a DONE write like any other, and a code task's DONE queues
+      // its landing (docs/project-integration-line-contract.md §2.3 J-T1a). A PARENT rolled up from
+      // its children is not excluded by a list here but by the predicate itself: a parent has no
+      // work session and therefore no branch, so `enqueueForDoneTask` answers NOT_A_CODE_TASK. The
+      // one this reaches is the subject a verification passed, which does have one.
+      if (aggregation.to === 'DONE') {
+        await enqueueForDoneTask(db, ownerId, aggregation.taskId);
+      }
+    }
   }
   return moved;
 }

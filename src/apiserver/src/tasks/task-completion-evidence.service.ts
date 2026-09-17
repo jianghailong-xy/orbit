@@ -34,6 +34,7 @@ import {
 import { TasksService } from './tasks.service';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
+import { enqueueForDoneTask } from '../projects/project-integration-job';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -758,6 +759,12 @@ export class TaskCompletionEvidenceService {
           data: { status: completed },
         });
         settled = changed.count > 0;
+      }
+      // A code task the owner just confirmed is work the platform integrates. Queued in the
+      // transaction that wrote the DONE, so the fact and the queueing commit together
+      // (docs/project-integration-line-contract.md §2.3 J-T1a).
+      if (settled && completed === TaskStatus.DONE) {
+        await enqueueForDoneTask(tx, ownerId, taskId);
       }
       return { decision: decisionResponse(written), completed: settled };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));

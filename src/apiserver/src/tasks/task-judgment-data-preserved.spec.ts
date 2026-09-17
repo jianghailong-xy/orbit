@@ -788,6 +788,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        — a new name, created rather than replaced — so it is not another writer of the DONE
   //        fence, and it drops no trigger or function at all. Nothing it creates uses the
   //        `project_acceptance_` prefix or the word `judgment`.
+  //   0281 added `project_integration_job` — one row per attempt the platform makes to put a branch
+  //        onto a project's integration line — plus the foreign key 0278 left waiting on
+  //        `project_open_item.integration_job_id`. Read against every claim above: the table is its
+  //        own, and the only preserved relations it names are `project`, `project_codebase`, `task`
+  //        and `session`, each reached by a foreign key pointed at a unique key they already had. A
+  //        referential action is not a write, and the two it declares on preserved rows are
+  //        `SET NULL` on its OWN columns (`task_id`, `session_id`), never on theirs. It carries no
+  //        DML of any kind — no `INSERT INTO`, no `UPDATE ... SET`, no `DELETE FROM` — so no stored
+  //        task, criterion or acceptance row moves by one byte, and it creates no type and alters
+  //        none, so the 0177 pair and the `task_completion_criterion` labels are out of its reach.
+  //        Its one function and trigger, `project_integration_job_terminal_guard`, is BEFORE UPDATE
+  //        on its own new table and refuses rewrites of a finished job: it writes nothing, names none
+  //        of the six preserved triggers or functions, and is not a second writer of the DONE fence.
+  //        Nothing it creates uses the `project_acceptance_` prefix or the word `judgment`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -833,7 +847,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0277_drop_run_event_duplicate_index',
       '0278_project_open_item',
       '0279_criteria_decision_diff_snapshot',
-      '0280_task_list_task_count'],
+      '0280_task_list_task_count',
+      '0281_project_integration_job'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

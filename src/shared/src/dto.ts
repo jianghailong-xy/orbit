@@ -647,6 +647,14 @@ export interface RunnerHeartbeatResponse {
    *  POST /runner/claude-history-result. Absent on older control planes, and whenever nobody is
    *  waiting on an answer — the new-workspace form is the only thing that asks. */
   claudeHistoryRequest?: ClaudeHistoryCommand;
+  /** Integration jobs this runner has just claimed: the platform's own git work, putting a task's
+   *  branch onto its project's integration line
+   *  (docs/project-integration-line-contract.md §2.3 J-T2). Sent only to a process that declared
+   *  `integration-job/v1`, heartbeats with a leaseOwner and is not draining. At most
+   *  two per beat with distinct serial keys, because the claim is what serialises them — a job
+   *  named here is already RUNNING in the database and is nobody else's to take. Answered via
+   *  POST /runner/integration-jobs/:jobId/{progress,result}. Absent on older control planes. */
+  integrationJobs?: IntegrationJobCommand[];
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */
@@ -1858,4 +1866,111 @@ export interface EventSearchResponse {
   /** Newest first: the matches nearest what the user is reading come first, and the tail of a
    *  long list is the part that gets cut. */
   hits: EventSearchHit[];
+}
+
+// ── integration jobs (docs/project-integration-line-contract.md §2) ────────────────────────────
+
+/** What a job is putting where. Only LAND_TASK has a producer today; promotions are §3. */
+export type IntegrationJobKind = 'LAND_TASK' | 'CHECK_PROMOTION' | 'LAND_PROMOTION';
+
+/** Where a job is, or stopped. The three failures differ because they need different people. */
+export type IntegrationJobState =
+  | 'QUEUED' | 'RUNNING' | 'LANDED' | 'ALREADY_LANDED' | 'READY'
+  | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR' | 'CANCELLED' | 'SUPERSEDED';
+
+/** The step the runner is on, or the one it stopped at. */
+export type IntegrationJobPhase =
+  'FETCH' | 'MAIN_SYNC' | 'REBASE' | 'MERGE' | 'CHECK' | 'VERIFY' | 'PUSH';
+
+/** One command run on the combined tree before anything is pushed (§2.4 J-S5). */
+export interface IntegrationCheckSpec {
+  /** TASK_ACCEPTANCE is the task's own acceptance command; MERGE_CHECK is the project's. */
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  command: string;
+  expectedExitCode: number;
+  timeoutSeconds: number;
+}
+
+/** What one check came to. `exitCode` is null when the command never produced one. */
+export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  /** The last 16 KB of combined output — what a person reads to know why it is red. */
+  outputTail: string;
+}
+
+/**
+ * Control plane → runner: one claimed integration job (§2.3).
+ *
+ * Everything the runner needs is here, because the runner does not read the database: the refs, the
+ * working directory whose checkout it borrows, the checks to run, and the lease the result is fenced
+ * to.
+ */
+export interface IntegrationJobCommand {
+  /** The job row's UUID, echoed byte-for-byte (never a public id). */
+  jobId: string;
+  kind: IntegrationJobKind;
+  /** Increases on every claim or takeover; results are fenced to (leaseOwner, claimGeneration). */
+  claimGeneration: string;
+  /** The process this claim belongs to: the heartbeat's own `leaseOwner`. */
+  leaseOwner: string;
+  /** The checkout to work from. The job builds a throwaway worktree beside it and removes it. */
+  workDir: string;
+  remoteName: string;
+  refAuthority: 'REMOTE' | 'RUNNER_LOCAL';
+  /** All three full names (`refs/heads/…`). */
+  targetRef: string;
+  upstreamRef: string;
+  sourceRef: string;
+  /** LAND_TASK: the source session's baseSha, the anchor a rebase replays from. */
+  sessionBaseSha?: string;
+  checks: IntegrationCheckSpec[];
+  /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
+  cancelRequested: boolean;
+}
+
+/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). */
+export interface IntegrationJobProgressRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+  phase: IntegrationJobPhase;
+  /** Upstream moved under the job while it worked, for a reader of the timeline. */
+  upstreamMoved?: { from: string; to: string };
+}
+
+/** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */
+export interface IntegrationJobResultRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+  /** A terminal state. QUEUED and RUNNING are refused: a result is a result. */
+  state: IntegrationJobState;
+  phase?: IntegrationJobPhase;
+  sourceSha?: string | null;
+  targetShaBefore?: string | null;
+  upstreamSha?: string | null;
+  mainSyncSha?: string | null;
+  /** What the checks ran on, and its tree. A LANDED result must carry both. */
+  testedSha?: string | null;
+  testedTreeSha?: string | null;
+  /** What ended up on the branch, and its tree. The control plane refuses a LANDED whose landed
+   *  tree differs from the tested one — the database refuses it too (J2). */
+  landedSha?: string | null;
+  landedTreeSha?: string | null;
+  aheadOfUpstream?: number | null;
+  checks?: IntegrationCheckResult[];
+  conflicts?: string[];
+  errorCode?: string | null;
+  errorDetail?: Record<string, unknown> | null;
+}
+
+/** Control plane → runner: whether the result was taken, and what it derived. */
+export interface IntegrationJobResultResponse {
+  /** false when the claim had already moved on (STALE_CLAIM) or the job was already final. */
+  accepted: boolean;
+  state: IntegrationJobState;
+  /** Receipts written for a landing, so a runner's log can name them. */
+  receiptIds: string[];
+  /** The exception item a failure opened, when it opened one. */
+  openItemId: string | null;
 }

@@ -550,6 +550,80 @@ export class MergeReceiptService {
     });
   }
 
+  /**
+   * The receipt for a landing the PLATFORM made (contract §2.5 J8).
+   *
+   * A third door beside the runner's own merge and the agent's own record, and the only one whose
+   * caller can say what tree it verified: the job row carries `testedTreeSha` and `landedTreeSha`,
+   * the database refuses a LANDED row where they differ (J2), and both are written into `detail` so
+   * a reader of the receipt can re-check that claim without joining back to the job.
+   *
+   * Returns the receipt ids — the job row keeps them, so "what did this job write" is a column
+   * rather than a key somebody has to re-derive.
+   */
+  static async fromIntegrationJob(
+    tx: Prisma.TransactionClient,
+    args: {
+      ownerId: string;
+      sessionId: string;
+      taskId: string | null;
+      projectId: string | null;
+      jobId: string;
+      state: 'LANDED' | 'ALREADY_LANDED';
+      sourceBranch: string;
+      targetBranch: string;
+      sourceSha: string | null;
+      targetShaBefore: string | null;
+      landedSha: string | null;
+      rebaseBaseSha: string | null;
+      testedTreeSha: string | null;
+      landedTreeSha: string | null;
+      mainSyncSha: string | null;
+    },
+  ): Promise<string[]> {
+    const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
+    if (!sourceSha) throw new BadRequestException('an integration receipt needs the source SHA');
+    const result: MergeReceiptResult = args.state === 'LANDED' ? 'MERGED' : 'ALREADY_MERGED';
+    // ALREADY_MERGED names no `targetShaAfter`: nothing moved, and a SHA here would claim it did.
+    const targetShaAfter = result === 'MERGED' ? normalizeSha(args.landedSha, 'landedSha') : null;
+    if (result === 'MERGED' && !targetShaAfter) {
+      throw new BadRequestException('a landed integration must name where the target ended up');
+    }
+    const created = await tx.sessionMergeReceipt.createManyAndReturn({
+      data: [{
+        ownerId: args.ownerId,
+        sessionId: args.sessionId,
+        taskId: args.taskId,
+        projectId: args.projectId,
+        result,
+        sourceBranch: args.sourceBranch,
+        sourceSha,
+        targetBranch: args.targetBranch,
+        targetShaBefore: normalizeSha(args.targetShaBefore, 'targetShaBefore'),
+        targetShaAfter,
+        rebaseBaseSha: normalizeSha(args.rebaseBaseSha, 'rebaseBaseSha'),
+        conflicts: [],
+        recordedBy: 'RUNNER',
+        detail: {
+          source: 'integration-job',
+          integrationJobId: args.jobId,
+          ...(args.testedTreeSha ? { testedTreeSha: args.testedTreeSha } : {}),
+          ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
+          ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),
+        } as Prisma.InputJsonValue,
+        idempotencyKey: mergeReceiptIdempotencyKey({
+          sessionId: args.sessionId,
+          sourceSha,
+          targetBranch: args.targetBranch,
+          result,
+        }),
+      }],
+      skipDuplicates: true,
+      select: { id: true },
+    });
+    return created.map((row) => row.id);
+  }
+
   private static errorText(input: RecordMergeReceiptInput): string | null {
     const detail = input.detail ?? {};
     const message = (detail as Record<string, unknown>).message;

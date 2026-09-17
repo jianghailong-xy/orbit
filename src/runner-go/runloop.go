@@ -886,6 +886,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		mergeOutcomes := map[manualWorktreeOperationKey]mergeOutcome{}
 		commitOutcomes := map[manualWorktreeOperationKey]commitOutcome{}
 		artifactNow := map[string]bool{}
+		// Integration jobs this process has in flight. A claim is already exclusive in the control
+		// plane, but the heartbeat that carries it is at-least-once: without this, a redelivery
+		// after a slow claim would stage a second worktree for the same job.
+		integratingNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		runHeartbeatTicks(hbStop, ticker.C, func() {
@@ -988,6 +992,38 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}
 				return
+			}
+			// The platform's own git work: put a task's branch onto its project's integration
+			// line (docs/project-integration-line-contract.md §2.4). Each job is already claimed
+			// for THIS process in the control plane — the claim is the serialisation — so the map
+			// below only guards against the heartbeat's at-least-once redelivery of one claim.
+			// Its own goroutine for the reason the merges have one: a job runs the task's whole
+			// acceptance command on the merged tree, which can take an hour, and the heartbeat
+			// that keeps the reaper off this runner's sessions cannot wait for it.
+			for _, job := range resp.IntegrationJobs {
+				if job.LeaseOwner != "" && t.leaseOwner != "" && job.LeaseOwner != t.leaseOwner {
+					logln("ignoring integration job claimed for another process:", job.JobID)
+					continue
+				}
+				mergeMu.Lock()
+				busy := integratingNow[job.JobID]
+				if !busy {
+					integratingNow[job.JobID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(job IntegrationJobCommand) {
+					defer heartbeatOps.Done()
+					defer func() {
+						mergeMu.Lock()
+						delete(integratingNow, job.JobID)
+						mergeMu.Unlock()
+					}()
+					runIntegrationJobAndReport(t, job)
+				}(job)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on
 			// our local repo and report the outcome. Each runs once (guarded against the

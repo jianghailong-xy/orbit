@@ -113,9 +113,14 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job',
     modes: 'INSERT/UPDATE/DELETE only',
-    why: 'Child rows whose FK parents are already held by this point, so they add no wait edge of their own.',
+    why:
+      'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
+      + 'own. `project_integration_job` is here rather than at a rank of its own for that reason: '
+      + 'enqueue runs in the transaction that wrote a Task DONE (50) and locked the codebase row '
+      + '(55), and inserts here last; the claim path is an autocommit statement that takes this '
+      + 'table alone (FOR UPDATE SKIP LOCKED over one candidate) and reaches for nothing below.',
   },
   {
     rank: 70,

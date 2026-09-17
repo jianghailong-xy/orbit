@@ -65,6 +65,8 @@ export function toUuid(idOrPublicId: string): string {
  *  and every foreign key to one. Accepted in either spelling on the way in (`PublicIdPipe` /
  *  `IsPublicId`); to be rendered base62 on the way out. */
 export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
+  'codebaseId',
   'id',
   'ownerId',
   'userId',

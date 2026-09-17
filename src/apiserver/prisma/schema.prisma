@@ -1285,6 +1285,8 @@ model Session {
   mergeReceipts         SessionMergeReceipt[]
   /// Exception items queued on this conversation (migration 0278).
   openItemDeliveries    ProjectOpenItemDelivery[]
+  /// Integration jobs whose source branch is this session's (migration 0281).
+  integrationJobs       ProjectIntegrationJob[]
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
@@ -1932,6 +1934,9 @@ model Project {
   openItems          ProjectOpenItem[]
   openItemDeliveries ProjectOpenItemDelivery[]
 
+  /// Every attempt the platform made to land work on this project's integration line (migration 0281).
+  integrationJobs ProjectIntegrationJob[]
+
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off, cf. `task_id_owner_id_key`.
   @@unique([id, ownerId], map: "project_id_owner_id_key")
@@ -2032,6 +2037,9 @@ model ProjectCodebase {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// The integration jobs run against this binding (migration 0281).
+  integrationJobs ProjectIntegrationJob[]
+
   /// SR7: one binding per slot per project.
   @@unique([projectId, slot], map: "project_codebase_project_slot_key")
   @@index([ownerId], map: "project_codebase_owner_idx")
@@ -2043,6 +2051,94 @@ model ProjectCodebase {
   @@index([projectId], map: "project_codebase_project_idx")
   @@index([authorityRunnerId], map: "project_codebase_authority_runner_idx")
   @@map("project_codebase")
+}
+
+/// One attempt the platform makes to put a source branch onto a project's integration line
+/// (docs/project-integration-line-contract.md §2.1, migration 0281).
+///
+/// Not a session: nothing here starts an engine. A runner claims the row over its heartbeat, does the
+/// git work and runs the checks in a throwaway worktree, and reports back — the whole of it is
+/// mechanical, which is why it is a queue and not a conversation.
+///
+/// Two constraints carry the contract and neither can be spelled here: the partial unique index over
+/// `serialKey` WHERE state = 'RUNNING' (J1 — one integration at a time per repository and target ref,
+/// across runners), and the CHECK that a LANDED row's `landedTreeSha` equals its `testedTreeSha` (J2 —
+/// what landed is what was tested). `kind`, `state` and `phase` are closed sets held by CHECKs and
+/// spelled in `projects/project-integration-job.ts`; a finished row is final
+/// (`project_integration_job_terminal_guard`).
+model ProjectIntegrationJob {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  ownerId   String  @map("owner_id") @db.Uuid
+  project   Project @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+
+  codebaseId String          @map("codebase_id") @db.Uuid
+  codebase   ProjectCodebase @relation(fields: [codebaseId], references: [id], onDelete: Cascade)
+
+  kind String
+  /// Which attempt this is at the same work. The platform never retries a failure by itself (J5): a
+  /// second generation exists because somebody asked for one, or because the task branch moved.
+  generation Int @default(1)
+
+  /// SET NULL, not CASCADE: the audit of what the platform pushed outlives the row that asked for it.
+  taskId      String?  @map("task_id") @db.Uuid
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  sessionId   String?  @map("session_id") @db.Uuid
+  session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  promotionId String?  @map("promotion_id") @db.Uuid
+
+  /// J1's key: the canonical repository URL and the target ref, so two PROJECTS landing into one
+  /// branch of one repository serialise against each other too.
+  serialKey   String @map("serial_key")
+  targetRef   String @map("target_ref")
+  /// Frozen from the codebase row at enqueue: what "main" meant when this job was queued.
+  upstreamRef String @map("upstream_ref")
+  sourceRef   String @map("source_ref")
+
+  state String  @default("QUEUED")
+  /// How far it got, or where it stopped.
+  phase String?
+
+  runnerId String? @map("runner_id") @db.Uuid
+  /// The lease, in the shape `CodexRateLimitResetOperation` already uses: a claim is a CAS on
+  /// `claimGeneration`, and a result reported under a generation that has moved is refused STALE_CLAIM.
+  claimLeaseOwner   String?   @map("claim_lease_owner")
+  claimGeneration   BigInt    @default(0) @map("claim_generation")
+  claimedAt         DateTime? @map("claimed_at") @db.Timestamptz(3)
+  heartbeatAt       DateTime? @map("heartbeat_at") @db.Timestamptz(3)
+  cancelRequestedAt DateTime? @map("cancel_requested_at") @db.Timestamptz(3)
+
+  /// The three tips this job froze, and the merge commit that absorbed upstream into the target.
+  sourceSha       String? @map("source_sha") @db.Char(40)
+  targetShaBefore String? @map("target_sha_before") @db.Char(40)
+  upstreamSha     String? @map("upstream_sha") @db.Char(40)
+  mainSyncSha     String? @map("main_sync_sha") @db.Char(40)
+  /// What the checks ran on, and what ended up on the branch. J2 compares the two trees.
+  testedSha       String? @map("tested_sha") @db.Char(40)
+  testedTreeSha   String? @map("tested_tree_sha") @db.Char(40)
+  landedSha       String? @map("landed_sha") @db.Char(40)
+  landedTreeSha   String? @map("landed_tree_sha") @db.Char(40)
+  aheadOfUpstream Int?    @map("ahead_of_upstream")
+
+  /// `[{ name, command, expectedExitCode, exitCode, timedOut, durationMs, outputTail }]`.
+  checks      Json     @default("[]")
+  conflicts   String[] @default([])
+  errorCode   String?  @map("error_code")
+  errorDetail Json?    @map("error_detail")
+  /// The receipts this job wrote, so a reader of the job can find them without guessing the key.
+  receiptIds  String[] @default([]) @map("receipt_ids")
+
+  /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact.
+  idempotencyKey String @unique(map: "project_integration_job_idempotency_key") @map("idempotency_key")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt  DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([state, createdAt, id], map: "project_integration_job_queued_idx")
+  @@index([projectId, createdAt], map: "project_integration_job_project_idx")
+  @@map("project_integration_job")
 }
 
 /// An exception somebody has to act on (docs/project-integration-line-contract.md §4.1, migration
@@ -3638,6 +3734,8 @@ model Task {
   @@index([runAt], map: "task_run_at_idx")
   /// The exception items about this task (migration 0278).
   openItems ProjectOpenItem[]
+  /// Every attempt the platform made to land this task's branch (migration 0281).
+  integrationJobs ProjectIntegrationJob[]
 
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this

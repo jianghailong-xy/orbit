@@ -32,6 +32,7 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
+import { IntegrationJobRelay } from './integration-job-relay';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
 
@@ -91,6 +92,7 @@ import { WatchesModule } from '../watches/watches.module';
     },
     ServiceTokenAuthorizer,
     WorkspacesService,
+    IntegrationJobRelay,
   ],
 })
 export class RunnerApiModule {}

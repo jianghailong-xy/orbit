@@ -27,6 +27,7 @@ import {
   type OwnerDecisionValue,
 } from './task-owner-confirmation';
 import { TasksService } from './tasks.service';
+import { enqueueForDoneTask } from '../projects/project-integration-job';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -166,6 +167,11 @@ export class TaskOwnerConfirmationService {
           data: { status: completed },
         });
         settled = changed.count > 0;
+      }
+      // Same fact, a different door: the owner pressing Confirm done is a DONE write, and a code
+      // task's DONE is what queues its landing (§2.3 J-T1a).
+      if (settled && completed === TaskStatus.DONE) {
+        await enqueueForDoneTask(tx, ownerId, taskId);
       }
       return receiptOf(written, {
         completed: settled,

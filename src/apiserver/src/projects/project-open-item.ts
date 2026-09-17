@@ -277,6 +277,89 @@ export async function recordTaskFailure(
   return { itemId: created.id, projectId: task.projectId, taskId: failure.taskId, assignee };
 }
 
+/** An integration that stopped, as the transaction that finished the job knows it (§2.6). */
+export interface IntegrationFailure {
+  projectId: string;
+  ownerId: string;
+  jobId: string;
+  taskId: string | null;
+  sessionId: string | null;
+  /** The job's terminal state, which decides the kind: CONFLICT, CHECK_FAILED or ERROR. */
+  state: 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  title: string;
+  dedupeKey: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Open the item for an integration that did not land, in the transaction that wrote the job's
+ * terminal state (§2.6, §4.2).
+ *
+ * The platform does not retry a conflict or a red check by itself (J5), so this item IS the retry
+ * mechanism: it names somebody, and what they decide is what happens next. Never escalated past the
+ * coordinator by this function — a conflict has no chain limit, because there is no chain: one
+ * failed job is one generation, and a second generation only exists because somebody asked.
+ *
+ * Returns null when the partial unique index already holds this key, which is how a result the
+ * runner reported twice opens one item.
+ */
+export async function recordIntegrationFailure(
+  tx: Prisma.TransactionClient,
+  failure: IntegrationFailure,
+): Promise<RecordedOpenItem | null> {
+  const project = await tx.project.findUnique({
+    where: { id: failure.projectId },
+    select: {
+      coordinatorEnabled: true,
+      coordinatorSessionId: true,
+      exceptionEscalationSeconds: true,
+      coordinatorSession: { select: SESSION_ENDING_SELECT },
+    },
+  });
+  if (!project) return null;
+
+  const coordinator = project.coordinatorEnabled && project.coordinatorSessionId
+    ? project.coordinatorSession
+    : null;
+  const [assignee, assigneeReason]: [OpenItemAssignee, OpenItemAssigneeReason] =
+    !coordinator ? ['OWNER', 'NO_COORDINATOR']
+      : sessionHasEnded(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
+        : ['COORDINATOR', 'DEFAULT'];
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: failure.projectId,
+      ownerId: failure.ownerId,
+      kind: (failure.state === 'CONFLICT' ? 'INTEGRATION_CONFLICT'
+        : failure.state === 'CHECK_FAILED' ? 'INTEGRATION_CHECK_FAILED'
+          : 'INTEGRATION_ERROR') satisfies OpenItemKind,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee,
+      assigneeReason,
+      taskId: failure.taskId,
+      sessionId: failure.sessionId,
+      integrationJobId: failure.jobId,
+      dedupeKey: failure.dedupeKey,
+      title: failure.title,
+      payload: failure.payload as unknown as Prisma.InputJsonValue,
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: assignee === 'COORDINATOR'
+        ? new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000)
+        : null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created || !failure.taskId) return null;
+  return {
+    itemId: created.id,
+    projectId: failure.projectId,
+    taskId: failure.taskId,
+    assignee,
+  };
+}
+
 /**
  * The chain this task is one attempt in (§4.5 X-C1), and what has already failed on it.
  *
