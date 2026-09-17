@@ -139,7 +139,7 @@ final class TasksStackWiringTests: XCTestCase {
                       "with the detail store following it in the same write")
 
         let directory = code(try slice(app, from: "var taskListsDirectoryPresented: Bool {",
-                                       to: "/// iOS only: whether Settings has pushed"))
+                                       to: "/// Written through to `lastAgentKey`"))
         XCTAssertTrue(directory.contains("get { nav.taskListsDirectoryOnTop }"),
                       "the directory is a frame like any other, not a flag beside the stack")
         XCTAssertTrue(directory.contains("nav.push(.taskListsDirectory)"),
