@@ -229,8 +229,10 @@ export interface SettledCriteriaDecision {
   resultingSeal: string;
   /**
    * What the answer was about — the version that took effect on an approval, the one that did not
-   * on a refusal. Absent from a server older than this bundle, and null for a proposal row the
-   * server could not read; either way the receipt draws its line and no fold.
+   * on a refusal. Absent from a server older than this bundle, and null when the server could not
+   * say: a proposal row it could not read, or one whose criteria it could not place on either side
+   * of "did this move". Either way the receipt draws its line and no fold, which is the honest
+   * shape — an empty disclosure promises something behind it.
    */
   proposal?: SettledProposalMaterial | null;
 }

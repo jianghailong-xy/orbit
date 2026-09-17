@@ -9,7 +9,6 @@ import type { CriteriaDecision } from './dto';
 import {
   type StatedAcceptanceCriterion,
   criteriaFromDefinitions,
-  sha256,
   standardSetVersion,
 } from './project-acceptance';
 
@@ -523,20 +522,20 @@ export interface SettledCriterionEntry {
 }
 
 /**
- * WHAT ONE ANSWERED PROPOSAL ASKED FOR, DERIVED FROM THE PROPOSAL ROW AND NOTHING ELSE
- * ------------------------------------------------------------------------------------
+ * WHAT ONE ANSWERED PROPOSAL ASKED FOR, DERIVED FROM THE PROPOSAL ROW
+ * -------------------------------------------------------------------
  * A weakening edit restates the WHOLE collection, so the proposal alone cannot say which of its
  * fourteen criteria the decision was actually about. `action.baseline.material` can: it is the set
- * the proposal was composed against, as `(definitionId, revision, contentHash)`, in the same JSONB
- * blob — so which criteria moved is a comparison of hashes taken here, with no second read and no
- * dependency on definitions that have since moved on.
+ * the proposal was composed against, as `(definitionId, revision, contentHash)` in the same JSONB
+ * blob. Which criteria the proposal ADDS and which it DROPS falls straight out of those ids. Which
+ * ones it REWRITES is a comparison of content hashes — and see `sealedContentHashes` for the one
+ * thing this file must not do with that hash.
  *
- * ON THE ASSERTION TEXT, WHICH IS THE WHOLE OF WHAT THE SEALED HASH COVERS.
- * `project_acceptance_definition_normalize` (0178) computes `content_hash` from `btrim(text)` and
- * from nothing else, so a proposal that rewrote only a verification method is counted here among
- * the restated ones. That is a floor of this derivation and not a claim about the edit: the pending
- * card judges all three fields because it has both sides to judge them on, and a settled one has a
- * hash. Task B's stored diff is what closes it; until then this says only what the hash can prove.
+ * WHAT IT STILL CANNOT SAY. `content_hash` covers the assertion and its verification method (0233)
+ * and not the advisory `completionCriterionOverrideReason`, so a proposal that moved only that
+ * third field is counted here among the restated ones. The pending card judges all three because it
+ * holds both sides to judge them on; this holds a hash of two of them. Task B's stored diff is what
+ * closes it.
  */
 export interface SettledProposalMaterial {
   /** Everything the proposal moved: its own criteria in proposed order, then the ones it drops. */
@@ -544,18 +543,87 @@ export interface SettledProposalMaterial {
   rewordedCount: number;
   addedCount: number;
   droppedCount: number;
-  /** How many the proposal restated with the assertion the seal already held. Counted rather than
+  /** How many the proposal restated with the words the seal already held. Counted rather than
    *  implied by a list length, so a card may fold them away without claiming a number of its own. */
   unchangedCount: number;
 }
 
 /**
- * The proposal material of one filed row, or null for a row whose `action` this reader cannot read.
+ * THE CONTENT HASH OF EACH PROPOSED CRITERION, ASKED OF POSTGRES — WHICH IS THE ONLY PLACE IT
+ * CAN BE ASKED.
+ * ==============================================================================================
+ * `content_hash` is not `sha256(text)` and has not been since 0233: the definition's BEFORE trigger
+ * writes `project_acceptance_definition_content_hash(btrim(text), btrim(verification_method))`, and
+ * that function hashes the TEXT RENDERING OF A JSONB OBJECT of the two fields. Reproducing it in
+ * TypeScript means reproducing jsonb's key order, its separators and its escaping, exactly, in
+ * another language — and a reproduction that is one byte off does not fail loudly: every restated
+ * criterion simply stops matching its own hash, so a proposal that moved one line out of fourteen
+ * reports all fourteen as rewritten. The decision door already refuses to do this on the way in
+ * ("READ BACK, never recomputed in TypeScript" — `ProjectsService.decideCriteriaChange`); this is
+ * the same refusal on the way out.
  *
- * Exported so the question can be asked of a stored action without a database, the way
- * `criteriaProposalDiff` is — and so the read below and the spec that pins it call one function.
+ * So the recipe is not restated here in any form. This composes the database's own two steps — the
+ * trigger's `btrim`, then the trigger's hash function — and lets the database apply them, which is
+ * what makes a later redefinition of that function something this read follows rather than
+ * something it drifts from. `criteria-settled-proposal.pg.spec.ts` is the check that it does: real
+ * rows, their stored `content_hash`, and this query's answer for the same words.
+ *
+ * ONE QUERY FOR EVERY ANSWER THE READ CARRIES, not one per proposal and not one per criterion: the
+ * words go down as three arrays and come back as one result set. Deduplicated by the caller, so two
+ * proposals restating the same criterion cost one row.
  */
-export function settledProposalMaterial(action: unknown): SettledProposalMaterial | null {
+export async function sealedContentHashes(
+  tx: Prisma.TransactionClient,
+  wordings: ReadonlyArray<{ text: string; verificationMethod: string }>,
+): Promise<Array<string | undefined>> {
+  if (wordings.length === 0) return [];
+  const rows = await tx.$queryRaw<Array<{ at: number; hash: string }>>`
+    SELECT w."at" AS "at",
+           project_acceptance_definition_content_hash(btrim(w."text"), btrim(w."method")) AS "hash"
+      FROM unnest(
+             ${wordings.map((_, at) => at)}::int[],
+             ${wordings.map((wording) => wording.text)}::text[],
+             ${wordings.map((wording) => wording.verificationMethod)}::text[]
+           ) AS w("at", "text", "method")`;
+  // Left UNDEFINED where no row came back, never filled with a placeholder: an empty string is a
+  // value that compares unequal to every sealed hash, so a wording the database did not answer for
+  // would arrive looking exactly like a criterion that had been rewritten. `undefined` is the only
+  // spelling of "not answered" that the caller cannot mistake for an answer.
+  const hashes = new Array<string | undefined>(wordings.length).fill(undefined);
+  for (const row of rows) hashes[Number(row.at)] = row.hash;
+  return hashes;
+}
+
+/**
+ * The two fields the sealed hash is taken over, as one key a caller can look a hash up by.
+ *
+ * Length-prefixed rather than joined on a separator: an assertion may contain any character a
+ * criterion may contain, so every printable separator is one a criterion could carry — and the
+ * unprintable one that is not, NUL, is a byte this stack refuses in several other places and has
+ * no business being typed into a source file to save two characters here. The length says where
+ * the first field ends, and no text can lie about it.
+ */
+export function sealedWordingKey(
+  wording: { text: string; verificationMethod: string },
+): string {
+  return `${wording.text.length}:${wording.text}:${wording.verificationMethod}`;
+}
+
+/**
+ * The proposal material of one filed row: what it adds, drops and rewrites, and how much it leaves
+ * alone. Null for a row whose `action` this reader cannot read — and null, too, when a criterion it
+ * restates has no hash to compare, because "this reader cannot say what this proposal did" is one
+ * state and the card already draws it as itself.
+ *
+ * `sealedHash` answers, for one proposed wording, what the definitions table WOULD store as its
+ * content hash. It is a parameter and not a computation because that answer is Postgres's (see
+ * `sealedContentHashes`) — which also lets this, the part that is only bookkeeping over ids and
+ * counts, be asked without a database.
+ */
+export function settledProposalMaterial(
+  action: unknown,
+  sealedHash: (wording: { text: string; verificationMethod: string }) => string | undefined,
+): SettledProposalMaterial | null {
   const stored = storedAction(action);
   if (!stored) return null;
   // The type says the material is there; the column is JSONB and does not have to agree. An id
@@ -568,25 +636,32 @@ export function settledProposalMaterial(action: unknown): SettledProposalMateria
   const changed: SettledCriterionEntry[] = [];
   let unchangedCount = 0;
 
-  stored.request.proposed.forEach((criterion, index) => {
+  for (const [index, criterion] of stored.request.proposed.entries()) {
     const ordinal = criterion.ordinal > 0 ? criterion.ordinal : index + 1;
     const text = criterion.text.trim();
     const was = criterion.id === null ? undefined : sealed.get(criterion.id);
     if (was === undefined) {
       changed.push({ change: 'ADDED', definitionId: criterion.id, ordinal, text });
-      return;
+      continue;
     }
     restated.add(criterion.id!);
-    if (was === sha256(text)) {
+    const now = sealedHash(criterion);
+    // Rather than guess. A restated criterion with no hash beside it is one this read cannot place
+    // on either side of "did it move", and a count that quietly put it on one of them would be the
+    // card stating something nobody derived.
+    if (now === undefined) return null;
+    if (was === now) {
       unchangedCount += 1;
-      return;
+      continue;
     }
     changed.push({ change: 'REWORDED', definitionId: criterion.id, ordinal, text });
-  });
+  }
 
   for (const version of material) {
     if (restated.has(version.definitionId)) continue;
-    changed.push({ change: 'DROPPED', definitionId: version.definitionId, ordinal: null, text: null });
+    changed.push({
+      change: 'DROPPED', definitionId: version.definitionId, ordinal: null, text: null,
+    });
   }
 
   const counted = (change: SettledCriterionChange): number =>
@@ -968,12 +1043,13 @@ async function settledIntentIds(
  * 0195's generic machine carries neither an answer nor seals — a card for one says only that it was
  * answered. Read down `project_criteria_decision_recent_idx` (0249), which is this order.
  *
- * TWO READS, AND THE SECOND IS BOUNDED BY THE FIRST. The proposals are fetched by the ids this
- * caller already holds — at most `SETTLED_CRITERIA_DECISIONS_LIMIT` of them, down the intent
- * table's primary key — and not by asking which of this project's intents were ever answered,
- * which is the same read over the project's whole history. One query for all of them rather than
- * one per row: what each card needs is in that row's own `action` JSONB, so there is nothing for a
- * per-row read to fetch that this one did not already bring back.
+ * THREE READS, AND EACH IS BOUNDED BY THE ONE BEFORE IT. The proposals are fetched by the ids the
+ * answers already named — at most `SETTLED_CRITERIA_DECISIONS_LIMIT` of them, down the intent
+ * table's primary key — and not by asking which of this project's intents were ever answered, which
+ * is a read over its whole history. Their content hashes are then asked for in one query over the
+ * distinct wordings those proposals state (`sealedContentHashes`), not one query per proposal and
+ * not one per criterion. Everything else each card needs is in the row's own `action` JSONB, so
+ * there is nothing left for a per-row read to fetch.
  */
 export async function recentlySettledCriteriaDecisions(
   tx: Prisma.TransactionClient,
@@ -989,12 +1065,27 @@ export async function recentlySettledCriteriaDecisions(
     select: { intentId: true, decision: true, decidedAt: true, baseSeal: true, resultingSeal: true },
   });
   if (rows.length === 0) return [];
-  const proposals = new Map(
-    (await tx.projectRatifiedActionIntent.findMany({
-      where: { ownerId, projectId, id: { in: rows.map((row) => row.intentId) } },
-      select: { id: true, action: true },
-    })).map((row) => [row.id, settledProposalMaterial(row.action)]),
+  const intents = await tx.projectRatifiedActionIntent.findMany({
+    where: { ownerId, projectId, id: { in: rows.map((row) => row.intentId) } },
+    select: { id: true, action: true },
+  });
+  // Every wording these proposals state, asked for once. Deduplicated because a weakening edit
+  // restates the criteria it does not touch as well, so twenty answers about one project are
+  // mostly the same fourteen sentences over and over.
+  const wordings = new Map<string, { text: string; verificationMethod: string }>();
+  for (const intent of intents) {
+    for (const criterion of storedAction(intent.action)?.request.proposed ?? []) {
+      wordings.set(sealedWordingKey(criterion), criterion);
+    }
+  }
+  const asked = [...wordings.values()];
+  const hashes = new Map(
+    (await sealedContentHashes(tx, asked)).map((hash, at) => [sealedWordingKey(asked[at]!), hash]),
   );
+  const proposals = new Map(intents.map((row) => [
+    row.id,
+    settledProposalMaterial(row.action, (wording) => hashes.get(sealedWordingKey(wording))),
+  ]));
   // 0249's CHECK is what makes the cast a fact: `decision` is APPROVE or REJECT on every row.
   // A missing or unreadable proposal is `null` rather than a dropped answer: what happened is the
   // fact the card exists to carry, and it is still true of a row this reader cannot open.

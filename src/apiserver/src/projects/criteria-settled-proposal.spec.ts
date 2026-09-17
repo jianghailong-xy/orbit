@@ -8,22 +8,25 @@
  *
  * The words were never gone. A filed proposal is immutable (0195's BEFORE UPDATE OR DELETE
  * trigger), so the restatement that was applied is still in its `action` JSONB, and so is the
- * baseline it was composed against — which is what makes "WHICH of the fourteen moved" a question
- * the row can answer on its own. This file pins that it does, on both answers, and pins the two
+ * baseline it was composed against. This file pins what the read makes of the two, and pins the
  * things it must not pretend to:
  *
  *   * a REJECT publishes the same material as an APPROVE, with `decision` the only thing saying
- *     that none of it took effect — a reader shown the words with no answer beside them would read
- *     a refusal as a record of what the project now says;
+ *     that none of it took effect;
  *   * a row whose `action` this reader cannot open comes back as an answer with no material, and
- *     does not take the other answers down with it. What happened is still true of a row nobody
- *     can parse.
+ *     does not take the other answers down with it;
+ *   * a restated criterion whose content hash the database did not answer for leaves the whole
+ *     proposal unpublished, rather than being guessed onto one side of "did it move".
  *
- * NO DATABASE. The read is driven over a stub that records what it was asked, because the claim
- * here is partly about the SHAPE of the asking: the proposals are fetched once, by the ids the
- * decision rows already named, rather than per row or over the project's whole history.
- * `criteria-pending-decisions.pg.spec.ts` is where the same derivation goes through the real write
- * path, which is a different claim.
+ * WHOSE HASH IT IS, WHICH IS THE POINT OF THE STUB BELOW. `content_hash` is not `sha256(text)` and
+ * has not been since 0233: the definition's BEFORE trigger writes
+ * `project_acceptance_definition_content_hash(btrim(text), btrim(verification_method))`, which
+ * hashes the text rendering of a jsonb object. Nothing in TypeScript may reproduce that — a
+ * reproduction one byte off reports every restated criterion as rewritten — so the read asks
+ * Postgres, and this file's fake Postgres answers with a recipe that is deliberately NOT a hash at
+ * all. Every assertion still lands, which is the claim: this code compares what the database said
+ * and assumes nothing about how it said it. `criteria-settled-proposal.pg.spec.ts` is where the
+ * real recipe is checked against real rows.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -31,6 +34,7 @@ import type { Prisma } from '@prisma/client';
 
 import {
   recentlySettledCriteriaDecisions,
+  sealedWordingKey,
   settledProposalMaterial,
   type SettledCriterionEntry,
 } from './criteria-pending-decisions';
@@ -48,56 +52,57 @@ const REWORDED = 'aaaaaaaa-0000-4000-8000-000000000002';
 const DROPPED = 'aaaaaaaa-0000-4000-8000-000000000003';
 const SEAL_AFTER = 'f'.repeat(64);
 
-/** The three criteria in force when the proposal was composed. */
+const KEPT_TEXT = '每次成功回合结束都跑一次判据命令';
+const WAS_TEXT = '两个新测试文件都存在且都真的跑过用例并全绿';
+const NOW_TEXT = '两个新测试文件都存在且至少跑过一个用例';
+const DROPPED_TEXT = '判据命令在本 worktree 根执行，退出码 0';
+const ADDED_TEXT = '卡片展开后能看出这次批准了什么';
+
+/**
+ * THE FAKE POSTGRES: `btrim` and then a rendering that is not a hash and not a digest of anything.
+ *
+ * `btrim` with one argument strips ASCII SPACE and nothing else — not a tab, not `　` — which
+ * is the half of the database's behaviour this stub has to keep, because a restatement that differs
+ * only in spaces IS the same criterion to the definitions table. The rest is deliberately unlike
+ * any hash: if a single assertion below needed the answer to look like sha256 of something, that
+ * would be this code assuming the recipe.
+ */
+const btrim = (value: string): string => value.replace(/^ +| +$/g, '');
+const asPostgresWouldSay = (text: string, method: string): string =>
+  `pg(${btrim(text)}|${btrim(method)})`;
+
+/** The three criteria in force when the proposal was composed, with the hashes the trigger wrote. */
 const ON_RECORD = [
   {
-    id: KEPT,
-    ordinal: 1,
-    text: '每次成功回合结束都跑一次判据命令',
-    verificationMethod: 'EXECUTABLE',
-    revision: 3,
+    id: KEPT, ordinal: 1, text: KEPT_TEXT, verificationMethod: 'EXECUTABLE', revision: 3,
+    contentHash: asPostgresWouldSay(KEPT_TEXT, 'EXECUTABLE'),
   },
   {
-    id: REWORDED,
-    ordinal: 2,
-    text: '两个新测试文件都存在且都真的跑过用例并全绿',
-    verificationMethod: 'EXECUTABLE',
-    revision: 1,
+    id: REWORDED, ordinal: 2, text: WAS_TEXT, verificationMethod: 'EXECUTABLE', revision: 1,
+    contentHash: asPostgresWouldSay(WAS_TEXT, 'EXECUTABLE'),
   },
   {
-    id: DROPPED,
-    ordinal: 3,
-    text: '判据命令在本 worktree 根执行，退出码 0',
-    verificationMethod: 'EXECUTABLE',
-    revision: 2,
+    id: DROPPED, ordinal: 3, text: DROPPED_TEXT, verificationMethod: 'EXECUTABLE', revision: 2,
+    contentHash: asPostgresWouldSay(DROPPED_TEXT, 'EXECUTABLE'),
   },
 ];
 
 /**
- * The proposal that was answered: it rewords criterion 2, adds a fourth, drops the third, and
- * restates the first word for word — which is the ordinary shape, since a criteria edit is a
+ * The proposal that was answered: it rewords criterion 2, adds a third, drops the one on record at
+ * 3, and restates the first word for word — the ordinary shape, since a criteria edit is a
  * whole-collection replacement and most of what it carries is the words already on record.
  */
 const PROPOSED: ProposedCriterion[] = [
   {
-    id: KEPT,
-    ordinal: 1,
-    text: '每次成功回合结束都跑一次判据命令',
-    verificationMethod: 'EXECUTABLE',
+    id: KEPT, ordinal: 1, text: KEPT_TEXT, verificationMethod: 'EXECUTABLE',
     completionCriterionOverrideReason: null,
   },
   {
-    id: REWORDED,
-    ordinal: 2,
-    text: '两个新测试文件都存在且至少跑过一个用例',
-    verificationMethod: 'EXECUTABLE',
+    id: REWORDED, ordinal: 2, text: NOW_TEXT, verificationMethod: 'EXECUTABLE',
     completionCriterionOverrideReason: null,
   },
   {
-    id: null,
-    ordinal: 3,
-    text: '卡片展开后能看出这次批准了什么',
-    verificationMethod: 'OWNER_CONFIRMED',
+    id: null, ordinal: 3, text: ADDED_TEXT, verificationMethod: 'OWNER_CONFIRMED',
     completionCriterionOverrideReason: null,
   },
 ];
@@ -111,6 +116,10 @@ function filedAction(proposed: ProposedCriterion[] = PROPOSED): CriteriaWeakenin
     supersedes: null,
   };
 }
+
+/** The lookup the read gets from the database, here answered by the fake above. */
+const postgresAnswers = (wording: { text: string; verificationMethod: string }): string =>
+  asPostgresWouldSay(wording.text, wording.verificationMethod);
 
 interface DecisionRow {
   intentId: string;
@@ -132,14 +141,23 @@ function answered(intentId: string, decision: 'APPROVE' | 'REJECT'): DecisionRow
 }
 
 /**
- * The two tables the read touches, and a record of how it touched the second one.
+ * The two tables the read touches and the one function it asks Postgres to apply, with a record of
+ * how it asked.
  *
  * The intent read filters on the ids it was given, because half of what is asserted below is that
- * those are the ids it asks for: a stub that ignored the filter could not tell a read bounded by
- * the answers from one that walked the project's whole history of proposals.
+ * those are the ids it asks for. `$queryRaw` is a tagged template, so the three arrays the read
+ * sends down arrive as its interpolated values; the stub hashes them the way the fake Postgres
+ * above does and hands back `(at, hash)` rows IN A SHUFFLED ORDER — a read that matched them up by
+ * position rather than by `at` would pass on a real database most days and lie on the others.
  */
-function ledger(decisions: DecisionRow[], intents: Array<{ id: string; action: unknown }>) {
+function ledger(
+  decisions: DecisionRow[],
+  intents: Array<{ id: string; action: unknown }>,
+  /** Wordings the fake Postgres returns no row for — a result set short of what was asked. */
+  unanswered: readonly string[] = [],
+) {
   const intentQueries: Array<{ where?: { id?: { in?: string[] } } }> = [];
+  const hashQueries: Array<{ texts: string[]; methods: string[] }> = [];
   const tx = {
     projectCriteriaDecision: {
       findMany: async (args: { take?: number }) => decisions.slice(0, args.take ?? decisions.length),
@@ -151,8 +169,16 @@ function ledger(decisions: DecisionRow[], intents: Array<{ id: string; action: u
         return intents.filter((row) => wanted.includes(row.id));
       },
     },
+    $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+      const [ats, texts, methods] = values as [number[], string[], string[]];
+      hashQueries.push({ texts, methods });
+      return ats
+        .filter((_, index) => !unanswered.includes(texts[index]!))
+        .map((at) => ({ at, hash: asPostgresWouldSay(texts[at]!, methods[at]!) }))
+        .reverse();
+    },
   };
-  return { tx: tx as unknown as Prisma.TransactionClient, intentQueries };
+  return { tx: tx as unknown as Prisma.TransactionClient, intentQueries, hashQueries };
 }
 
 function entry(
@@ -196,13 +222,13 @@ test('an approved proposal publishes which criteria moved, with the words that t
     const reworded = entry(proposal.changed, 'REWORDED');
     assert.equal(reworded.ordinal, 2);
     assert.equal(reworded.definitionId, REWORDED);
-    assert.equal(reworded.text, '两个新测试文件都存在且至少跑过一个用例',
+    assert.equal(reworded.text, NOW_TEXT,
       'the words that took effect are the proposal\'s, published verbatim');
 
     const added = entry(proposal.changed, 'ADDED');
     assert.equal(added.ordinal, 3);
     assert.equal(added.definitionId, null, 'a criterion being added names no definition yet');
-    assert.equal(added.text, '卡片展开后能看出这次批准了什么');
+    assert.equal(added.text, ADDED_TEXT);
 
     // A dropped criterion is entirely words-before, and those are the ones nothing kept: the row
     // says WHICH definition went and refuses to invent a place or a sentence for it.
@@ -231,11 +257,76 @@ test('a refused proposal publishes the same material, with the answer that says 
     // can read; without the answer beside it, it reads as what the project now says.
     assert.ok(answer.proposal, 'a refusal publishes what was asked for');
     assert.equal(answer.proposal.rewordedCount, 1);
-    assert.equal(entry(answer.proposal.changed, 'REWORDED').text,
-      '两个新测试文件都存在且至少跑过一个用例');
+    assert.equal(entry(answer.proposal.changed, 'REWORDED').text, NOW_TEXT);
     assert.equal(answer.resultingSeal, answer.baseSeal,
       'nothing was applied, so the ruler stands where it stood');
   });
+
+test('whether a criterion moved is the database\'s answer, not a comparison of the words',
+  () => {
+    // Two restatements of the same criterion that differ as STRINGS: one pads the ends with ASCII
+    // spaces, which `btrim` takes off, so the definitions table would store the row it already has.
+    // The read is told so by the hash and says "unchanged" — a comparison of the two texts would
+    // have called it a rewrite, and a hash this file computed for itself would have agreed with the
+    // texts rather than with the database.
+    const padded = settledProposalMaterial(
+      filedAction([{ ...PROPOSED[0]!, text: `  ${KEPT_TEXT}  ` }]), postgresAnswers,
+    );
+
+    assert.ok(padded);
+    assert.equal(padded.rewordedCount, 0, 'spaces the database strips are not an edit');
+    assert.equal(padded.unchangedCount, 1);
+
+    // And the positive control, so the line above can fail: one character of the assertion moved is
+    // a rewrite. A `　` is a character — `btrim` does NOT take it off — which is why the
+    // comparison cannot be JavaScript's idea of trimming either.
+    const ideographic = settledProposalMaterial(
+      filedAction([{ ...PROPOSED[0]!, text: `　${KEPT_TEXT}` }]), postgresAnswers,
+    );
+
+    assert.equal(ideographic?.rewordedCount, 1,
+      'an ideographic space is part of the assertion, and the database says so');
+    assert.equal(ideographic?.unchangedCount, 0);
+  });
+
+test('a rewrite of only the verification method is a rewrite', () => {
+  // `content_hash` covers the assertion AND how it is judged (0233), so this is not a hole in the
+  // way `completionCriterionOverrideReason` — which the hash does not cover — still is.
+  const material = settledProposalMaterial(
+    filedAction([{ ...PROPOSED[0]!, verificationMethod: 'OWNER_CONFIRMED' }]), postgresAnswers,
+  );
+
+  assert.equal(material?.rewordedCount, 1);
+  assert.equal(material?.unchangedCount, 0);
+  assert.equal(entry(material!.changed, 'REWORDED').definitionId, KEPT);
+});
+
+test('a restated criterion the database did not answer for leaves the proposal unpublished', () => {
+  // Not a guess in either direction. "This reader cannot say what this proposal did" is a state the
+  // card already draws — as the receipt line and no fold — and putting an unmeasured criterion into
+  // `unchangedCount` would make the folded line assert something nobody derived.
+  assert.equal(settledProposalMaterial(filedAction(), () => undefined), null);
+
+  // The criterion being ADDED needs no hash: there is nothing on record for it to differ from.
+  const onlyAdded = settledProposalMaterial(filedAction([PROPOSED[2]!]), () => undefined);
+  assert.equal(onlyAdded?.addedCount, 1);
+});
+
+test('a wording the database returned no row for leaves that proposal unpublished', async () => {
+  // The result set came back one row short. Nothing in the answer says WHICH criterion that was, so
+  // the read must not fill the gap: an empty string compares unequal to every sealed hash, and a
+  // placeholder would have arrived looking exactly like a criterion that had been rewritten.
+  const { tx } = ledger(
+    [answered('intent-short', 'APPROVE')],
+    [{ id: 'intent-short', action: filedAction() }],
+    [KEPT_TEXT],
+  );
+
+  const [answer] = await recentlySettledCriteriaDecisions(tx, OWNER, PROJECT);
+
+  assert.equal(answer.decision, 'APPROVE', 'the answer itself is still published');
+  assert.equal(answer.proposal, null);
+});
 
 test('an answer whose proposal cannot be read is still an answer, and does not take the others down',
   async () => {
@@ -269,48 +360,53 @@ test('an answer whose proposal row is gone publishes the answer and no material'
   assert.equal(answer.proposal, null);
 });
 
-test('the proposals are read once, for exactly the answers this read carries', async () => {
-  const { tx, intentQueries } = ledger(
-    [answered('intent-a', 'APPROVE'), answered('intent-b', 'REJECT')],
-    [{ id: 'intent-a', action: filedAction() }, { id: 'intent-b', action: filedAction() }],
-  );
+test('the proposals and their hashes are read once, for exactly the answers this read carries',
+  async () => {
+    const { tx, intentQueries, hashQueries } = ledger(
+      [answered('intent-a', 'APPROVE'), answered('intent-b', 'REJECT')],
+      [{ id: 'intent-a', action: filedAction() }, { id: 'intent-b', action: filedAction() }],
+    );
 
-  await recentlySettledCriteriaDecisions(tx, OWNER, PROJECT);
+    const settled = await recentlySettledCriteriaDecisions(tx, OWNER, PROJECT);
 
-  // One query for both, and bounded by the ids the decision rows named: a read that asked which of
-  // this project's intents were ever answered would be a walk of its whole history, on a read the
-  // card polls every twenty seconds.
-  assert.equal(intentQueries.length, 1);
-  assert.deepEqual(intentQueries[0]?.where?.id?.in, ['intent-a', 'intent-b']);
-});
+    // One query for both proposals, bounded by the ids the decision rows named: a read that asked
+    // which of this project's intents were ever answered would be a walk of its whole history, on a
+    // read the card polls every twenty seconds.
+    assert.equal(intentQueries.length, 1);
+    assert.deepEqual(intentQueries[0]?.where?.id?.in, ['intent-a', 'intent-b']);
+    // And ONE query for every hash, over the DISTINCT wordings: two answers about the same three
+    // criteria ask about three, not six.
+    assert.equal(hashQueries.length, 1);
+    assert.deepEqual(hashQueries[0]?.texts, [KEPT_TEXT, NOW_TEXT, ADDED_TEXT]);
+    assert.deepEqual(hashQueries[0]?.methods, ['EXECUTABLE', 'EXECUTABLE', 'OWNER_CONFIRMED']);
+    // The stub hands its rows back reversed, so this also says the read matches them up by `at`.
+    assert.equal(settled[0]?.proposal?.rewordedCount, 1);
+    assert.equal(settled[1]?.proposal?.unchangedCount, 1);
+  });
 
 test('a project with no answers asks the intent table nothing', async () => {
-  const { tx, intentQueries } = ledger([], [{ id: 'intent-a', action: filedAction() }]);
+  const { tx, intentQueries, hashQueries } = ledger([], [{ id: 'intent-a', action: filedAction() }]);
 
   assert.deepEqual(await recentlySettledCriteriaDecisions(tx, OWNER, PROJECT), []);
   assert.equal(intentQueries.length, 0);
+  assert.equal(hashQueries.length, 0);
 });
-
-test('the comparison is the sealed hash, which covers the assertion and not the procedure',
-  () => {
-    // The floor this derivation stands on, pinned so that closing it is a deliberate act: 0178's
-    // `project_acceptance_definition_normalize` computes `content_hash` from `btrim(text)` alone,
-    // so a proposal that rewrote only a verification method is counted among the restated ones.
-    // The pending card judges all three fields because it holds both sides; a settled one holds a
-    // hash. Task B's stored diff is what changes this line.
-    const methodOnly = PROPOSED.map((criterion) => criterion.id === REWORDED
-      ? { ...criterion, text: ON_RECORD[1]!.text, verificationMethod: 'OWNER_CONFIRMED' }
-      : criterion);
-
-    const material = settledProposalMaterial(filedAction(methodOnly));
-
-    assert.ok(material);
-    assert.equal(material.rewordedCount, 0);
-    assert.equal(material.unchangedCount, 2);
-  });
 
 test('a stored action of the wrong shape yields no material rather than a throw', () => {
   for (const action of [null, undefined, 'a string', [], {}, { request: {}, baseline: {} }]) {
-    assert.equal(settledProposalMaterial(action), null);
+    assert.equal(settledProposalMaterial(action, postgresAnswers), null);
   }
+});
+
+test('one wording is one key, and two are two', () => {
+  // What the read looks a hash up by. Both fields, because both are in the hash — and a separator
+  // that cannot appear in either, so two criteria cannot collide into one answer.
+  assert.equal(
+    sealedWordingKey({ text: 'a', verificationMethod: 'b' }),
+    sealedWordingKey({ text: 'a', verificationMethod: 'b' }),
+  );
+  assert.notEqual(
+    sealedWordingKey({ text: 'a', verificationMethod: 'b' }),
+    sealedWordingKey({ text: 'a', verificationMethod: 'c' }),
+  );
 });
