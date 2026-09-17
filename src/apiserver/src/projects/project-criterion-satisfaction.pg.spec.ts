@@ -176,6 +176,31 @@ function sourceFiles(dir: string): string[] {
   return found;
 }
 
+/**
+ * What makes one of those files a READER: a module specifier that resolves to `MODULE`.
+ *
+ * Membership used to be "the file's text contains `project-criterion-satisfaction`", and on
+ * 2026-09-17 that turned main red for two files that read nothing. The background-jobs
+ * conversation fixtures — `src/web/src/lib/backgroundJobs.fixtures.ts` and its macOS twin — quote
+ * a real `bg_run` command line verbatim, and that command line names this spec's own path. Quoted
+ * transcript is what those fixtures are FOR, so the census is the side that had to move: a name
+ * occurring inside a chat log is not a consumer of anything, and neither is this comment.
+ *
+ * Matching the module's exported SYMBOLS instead would have been looser, not stricter, in the
+ * same direction: `coordinator-wake.ts`, `criteria-settlement-seal.pg.spec.ts` and
+ * `tasks.service.ts` all name `readCriterionSatisfaction` in prose while importing nothing, and
+ * `ProjectAcceptanceCard.tsx` declares its own `CriterionUnmetReason` for the wire. All four would
+ * have arrived here as readers they are not.
+ *
+ * What this does NOT relax is the reason the census exists. An import is caught whatever the
+ * importer then does with the answer, so a new consumer still cannot arrive without somebody
+ * coming here to write down what it does — held to that by the control in the task's comments: a
+ * temporary file carrying that same command line leaves this case green, and one line of `import`
+ * in the same file turns it red.
+ */
+const IMPORTS_MODULE =
+  /\b(?:from|import|require)\s*\(?\s*['"][^'"\n]*project-criterion-satisfaction(?:\.[cm]?[jt]s)?['"]/u;
+
 test('T3: a criterion is satisfied by three clauses, and says which one is missing', {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
@@ -574,18 +599,24 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     // file that has not been committed yet — the one state in which a new gate would be invisible.
     const mentions = [...sourceFiles(path.join(REPO_ROOT, 'src')),
       ...sourceFiles(path.join(REPO_ROOT, 'scripts'))]
-      .filter((file) => readFileSync(file, 'utf8').includes('project-criterion-satisfaction'))
       .map((file) => path.relative(REPO_ROOT, file))
+      // The definition itself is admitted by name, because no import can find it: a module does
+      // not import itself. It is picked out of the same walk rather than appended to the result,
+      // so a `MODULE` that was moved or deleted leaves the census one short here instead of being
+      // asserted into existence.
+      .filter((file) => file === MODULE
+        || IMPORTS_MODULE.test(readFileSync(path.join(REPO_ROOT, file), 'utf8')))
       .sort();
     assert.deepEqual(
       mentions,
       [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
         SERVICE, SERVICE_SPEC, DONE_PROJECTION].sort(),
-      'the readers of the derivation are exactly these, each named above with what it does with '
-        + 'the answer: four tests of it, one read endpoint that serves it, that endpoint’s own '
-        + 'test, and — since the owner’s 2026-09-08 re-deliberation of 0229 — one projection that '
-        + 'folds it into `project.status`. Not one of them is a gate: none refuses anybody’s '
-        + 'write, and a file arriving here is a consumer somebody has to come and write down');
+      'the readers of the derivation — the module itself, and every file that imports it — are '
+        + 'exactly these, each named above with what it does with the answer: four tests of it, '
+        + 'one read endpoint that serves it, that endpoint’s own test, and — since the owner’s '
+        + '2026-09-08 re-deliberation of 0229 — one projection that folds it into '
+        + '`project.status`. Not one of them is a gate: none refuses anybody’s write, and a file '
+        + 'arriving here is a consumer somebody has to come and write down');
 
     const source = readFileSync(path.join(REPO_ROOT, MODULE), 'utf8');
     assert.doesNotMatch(
