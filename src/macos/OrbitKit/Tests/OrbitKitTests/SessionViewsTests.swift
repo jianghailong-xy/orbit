@@ -32,7 +32,10 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertTrue(regular.showsPersistentScope)
     }
 
-    func testCompactListTimeIsHiddenExactlyWhileWorkingSpinnerIsVisible() throws {
+    /// An older control plane sends no `currentTurnStartedAt`. Falling back to `lastTurnAt` here is
+    /// what the row must never do: that field is rewritten on every state move, so it would print
+    /// "just now" against every spinner in the list at once. Bare is the honest answer.
+    func testAWorkingRowStaysBareWhenTheServerDoesNotDateTheTurn() throws {
         let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
         let running = Session(id: "run", title: "Running", status: .running,
                               agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
@@ -45,6 +48,42 @@ final class SessionViewsTests: XCTestCase {
 
         XCTAssertNil(SessionListTime.format(for: running, now: now))
         XCTAssertNil(SessionListTime.format(for: selfDriven, now: now))
+    }
+
+    /// The point of the whole field: with several rows spinning at once, this is what separates a
+    /// turn that just started from one that has been stuck for forty minutes. Both fixtures carry a
+    /// seconds-old `lastTurnAt` — the clock that cannot tell them apart.
+    func testAWorkingRowReportsHowLongThisTurnHasBeenGoing() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
+        let fresh = Session(id: "fresh", title: "Fresh", status: .running,
+                            agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                            branch: nil, updatedAt: nil,
+                            lastTurnAt: "2026-08-26T11:59:55Z",
+                            currentTurnStartedAt: "2026-08-26T11:59:12Z")
+        let wedged = Session(id: "wedged", title: "Wedged", status: .running,
+                             agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                             branch: nil, updatedAt: nil,
+                             lastTurnAt: "2026-08-26T11:59:58Z",
+                             currentTurnStartedAt: "2026-08-26T11:20:00Z")
+
+        XCTAssertEqual(SessionListTime.format(for: fresh, now: now), "48s")
+        XCTAssertEqual(SessionListTime.format(for: wedged, now: now), "40m")
+        // Same two rows, one clock apart: lastTurnAt would have called both of them "just now".
+        XCTAssertEqual(RelativeTime.format(try XCTUnwrap(fresh.lastTurnAt), now: now), "just now")
+        XCTAssertEqual(RelativeTime.format(try XCTUnwrap(wedged.lastTurnAt), now: now), "just now")
+    }
+
+    /// A settled row is unaffected: it still dates its last activity, and a stale
+    /// `currentTurnStartedAt` left over from a finished turn must not leak into it.
+    func testASettledRowIgnoresTheTurnClock() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-08-26T12:00:00Z"))
+        let done = Session(id: "done", title: "Done", status: .awaitingInput,
+                           agentId: nil, assignedRunnerId: nil, pendingApprovals: nil,
+                           branch: nil, updatedAt: nil,
+                           lastTurnAt: "2026-08-26T11:57:00Z",
+                           currentTurnStartedAt: "2026-08-26T11:20:00Z")
+
+        XCTAssertEqual(SessionListTime.format(for: done, now: now), "3m ago")
     }
 
     func testCompactListTimeRemainsForRowsWithoutWorkingSpinner() throws {

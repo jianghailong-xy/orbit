@@ -16,6 +16,20 @@ public enum RelativeTime {
         return monthDay.string(from: date)
     }
 
+    /// How long something has been going, for a row that is still doing it: "8s", "12m", "2h",
+    /// "3d". Deliberately not `format`'s wording — "12m ago" would date a finished event, while
+    /// this is a duration that is still running. No "just now" floor either: the first minute is
+    /// where a turn that is about to come straight back looks different from one settling in.
+    public static func elapsed(_ iso: String, now: Date = Date()) -> String? {
+        guard let date = parse(iso) else { return nil }
+        let diff = max(0, now.timeIntervalSince(date))
+        let min = 60.0, hour = 3600.0, day = 86_400.0
+        if diff < min  { return "\(Int(diff))s" }
+        if diff < hour { return "\(Int(diff / min))m" }
+        if diff < day  { return "\(Int(diff / hour))h" }
+        return "\(Int(diff / day))d"
+    }
+
     // Formatters are built ONCE and reused. Each `ISO8601DateFormatter()` spins up an ICU date
     // parser, which is orders of magnitude more expensive than the parse itself — and these sit on
     // the app's hottest paths: the recency sort behind the drawer's Recents (which called this from

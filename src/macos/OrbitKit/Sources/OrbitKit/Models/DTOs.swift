@@ -219,6 +219,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// never-run (queued) session — mirroring web's client-side sort. See `SessionFilter`.
     public let createdAt: String?
     public let lastTurnAt: String?
+    /// When the turn now in flight was handed to the runner (ISO-8601), or nil when the session is
+    /// not mid-turn. Distinct from `lastTurnAt`, which the server rewrites on every state move and
+    /// so reads as a few seconds old on *every* running session — a list of them all says "just
+    /// now" and cannot tell a session that started eight seconds ago from one wedged for forty
+    /// minutes. nil from an older control plane, in which case the row shows no elapsed time.
+    public let currentTurnStartedAt: String?
     /// When this session was pinned to the top of its list (ISO-8601 string), or nil if unpinned.
     /// The list payload already sorts pinned sessions first; the row draws a leading accent bar to
     /// mark the state at rest, mirroring web's `.session-row.pinned`.
@@ -340,6 +346,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
         createdAt = try values.decodeIfPresent(String.self, forKey: .createdAt)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        currentTurnStartedAt = try values.decodeIfPresent(String.self, forKey: .currentTurnStartedAt)
         pinnedAt = try values.decodeIfPresent(String.self, forKey: .pinnedAt)
         model = try values.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try values.decodeIfPresent(String.self, forKey: .permissionMode)
@@ -376,6 +383,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
+                currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil) {
         self.id = id
         self.title = title
@@ -413,6 +421,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt
         self.lastTurnAt = lastTurnAt
+        self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
     }
 }

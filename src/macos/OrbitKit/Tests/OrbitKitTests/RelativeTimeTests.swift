@@ -36,4 +36,29 @@ final class RelativeTimeTests: XCTestCase {
     func testInvalidStringReturnsNil() {
         XCTAssertNil(RelativeTime.format("not-a-date"))
     }
+
+    /// `elapsed` is a duration still running, so it carries no "ago" and no "just now" floor —
+    /// the first minute is exactly where a turn about to come straight back differs from one
+    /// settling in, and a bucket named "just now" would erase that.
+    func testElapsedReportsADurationRatherThanAnAge() {
+        let now = at("2026-06-26T12:00:00Z")
+        XCTAssertEqual(RelativeTime.elapsed("2026-06-26T11:59:52Z", now: now), "8s")
+        XCTAssertEqual(RelativeTime.elapsed("2026-06-26T11:48:00Z", now: now), "12m")
+        XCTAssertEqual(RelativeTime.elapsed("2026-06-26T10:00:00Z", now: now), "2h")
+        XCTAssertEqual(RelativeTime.elapsed("2026-06-23T12:00:00Z", now: now), "3d")
+        for out in [RelativeTime.elapsed("2026-06-26T11:59:52Z", now: now),
+                    RelativeTime.elapsed("2026-06-26T11:48:00Z", now: now)] {
+            XCTAssertFalse(try! XCTUnwrap(out).hasSuffix("ago"))
+        }
+    }
+
+    /// Clock skew between the runner and the device must not render as a negative age.
+    func testElapsedClampsAFutureStart() {
+        let now = at("2026-06-26T12:00:00Z")
+        XCTAssertEqual(RelativeTime.elapsed("2026-06-26T12:00:30Z", now: now), "0s")
+    }
+
+    func testElapsedRejectsAnInvalidString() {
+        XCTAssertNil(RelativeTime.elapsed("not-a-date"))
+    }
 }

@@ -62,12 +62,21 @@ public enum SessionListPresentation: Equatable, Sendable {
     public var showsPersistentScope: Bool { self == .regular }
 }
 
-/// The relative timestamp at the trailing edge of a compact session-list row. While the row's
-/// live cue is a spinner, the cue already says the session is active and its continuously fresh
-/// `lastTurnAt` would only add a row of identical "just now" labels beside the spinners.
+/// The relative timestamp at the trailing edge of a session-list row. A settled row dates its last
+/// activity ("3m ago"); a working row reports how long the turn in flight has been going ("12m").
+///
+/// The two cannot come from the same clock. `lastTurnAt` is rewritten on every state move, so on a
+/// running session it always sits seconds behind now: reading it beside a spinner produced a column
+/// of identical "just now" labels, which is why the working row used to show nothing at all. But
+/// showing nothing loses the one thing worth knowing when six rows are spinning at once — which of
+/// them has been at it for forty minutes. `currentTurnStartedAt` is that clock, and an older
+/// control plane that doesn't send it leaves the row bare exactly as before.
 public enum SessionListTime {
     public static func format(for session: Session, now: Date = Date()) -> String? {
-        if case .spinner = SessionStatusGlyph.make(for: session, now: now).shape { return nil }
+        if case .spinner = SessionStatusGlyph.make(for: session, now: now).shape {
+            guard let started = session.currentTurnStartedAt else { return nil }
+            return RelativeTime.elapsed(started, now: now)
+        }
         guard let timestamp = session.lastTurnAt ?? session.createdAt else { return nil }
         return RelativeTime.format(timestamp, now: now)
     }

@@ -2350,6 +2350,7 @@ export class SessionsService {
       title: string;
       createdAt: Date;
       lastTurnAt: Date | null;
+      currentTurnStartedAt: Date | null;
       startedAt: Date | null;
       numTurns: number;
       costUsd: number;
@@ -2402,6 +2403,20 @@ export class SessionsService {
         s.id, s.status, s.title,
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
+        -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
+        -- it is rewritten on every state move (turn delivered, awaiting input, the reaper's
+        -- idle-clock reset), so on a running session it sits seconds behind now and a list of
+        -- them all reads "just now". This is the one clock that separates a session eight
+        -- seconds into a turn from one wedged for forty minutes. Gated on the states that can be
+        -- mid-turn so the subquery is skipped for the settled rows that make up most of a list;
+        -- answered_at IS NULL is what makes it the *current* turn.
+        -- (No backticks in here: this whole statement is a JS template literal.)
+        CASE WHEN s.status IN ('RUNNING', 'PENDING') THEN (
+          SELECT max(ct.delivered_at)
+            FROM conversation_turn ct
+           WHERE ct.session_id = s.id
+             AND ct.answered_at IS NULL
+        ) END AS "currentTurnStartedAt",
         s.started_at      AS "startedAt",
         s.num_turns       AS "numTurns",
         s.cost_usd        AS "costUsd",
@@ -2537,6 +2552,7 @@ export class SessionsService {
         title: r.title,
         createdAt: r.createdAt,
         lastTurnAt: r.lastTurnAt,
+        currentTurnStartedAt: r.currentTurnStartedAt,
         startedAt: r.startedAt,
         numTurns: r.numTurns,
         costUsd: r.costUsd,
