@@ -39,6 +39,13 @@ import {
   type ReferenceMap,
 } from '../lib/composerRefs';
 import { settleThinking } from '../lib/thinkingDraft';
+import {
+  READER_INPUT_GRACE_MS,
+  TAIL_SAMPLE_ZERO,
+  pinnedToTail,
+  sampleTail,
+  type TailScrollSample,
+} from '../lib/tailPinning';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
@@ -1446,9 +1453,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Render mirror of atBottomRef: drives the floating "jump to bottom" button, which shows
   // only while the user has scrolled up off the live tail. (The ref alone can't re-render.)
   const [atBottom, setAtBottom] = useState(true);
-  // Last observed scrollTop, so the scroll handler can tell a genuine user scroll-up from a
-  // programmatic re-pin or a late scroll event fired after streaming grew the container.
-  const lastTopRef = useRef(0);
+  // Last observed scroll geometry, so the scroll handler can tell a genuine user scroll-up from a
+  // programmatic re-pin, a late scroll event fired after streaming grew the container, or the
+  // scrollTop the browser clamps when content gets SHORTER (see tailPinning.ts).
+  const lastSampleRef = useRef<TailScrollSample>(TAIL_SAMPLE_ZERO);
+  // When the reader last had their own hand on the scroller (wheel, finger, scrollbar, arrow key).
+  // The browser reports no scroll phase, so this is the evidence that a falling scrollTop is theirs.
+  const readerInputAtRef = useRef(0);
   // Tail-first lazy loading: pull in the next older page when the user scrolls near the top.
   // Guarded to one request in flight; prepends the page and stamps prependAnchorRef so the
   // layout effect below holds the viewport steady while older content grows above it.
@@ -1508,14 +1519,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return;
     }
     const top = el.scrollTop;
-    // Pin to the bottom while at (or near) it; un-pin only when the user scrolls UP. A long
-    // transcript replays as a flood of one-event-at-a-time renders, and each programmatic
-    // scrollTo fires its scroll event asynchronously — by which time newer events have grown
-    // the container, so a position-only check reads a large gap and wrongly un-pins, stranding
-    // the view above the bottom. Gating the un-pin on a downward scrollTop delta ignores that.
-    if (el.scrollHeight - top - el.clientHeight < 80) atBottomRef.current = true;
-    else if (top < lastTopRef.current - 1) atBottomRef.current = false;
-    lastTopRef.current = top;
+    // Pin to the bottom while at (or near) it; un-pin only when the READER scrolls up. Both the
+    // reasoning behind that and the clients' copy of the rule live in tailPinning.ts.
+    const sample = sampleTail(el);
+    atBottomRef.current = pinnedToTail(
+      atBottomRef.current,
+      lastSampleRef.current,
+      sample,
+      performance.now() - readerInputAtRef.current < READER_INPUT_GRACE_MS,
+    );
+    lastSampleRef.current = sample;
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
@@ -2555,7 +2568,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return {};
     });
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
-    lastTopRef.current = 0;
+    lastSampleRef.current = TAIL_SAMPLE_ZERO;
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
     // Reset tail-first lazy-loading state for the session being opened.
     prependAnchorRef.current = null;
@@ -3175,6 +3188,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!el) return;
     const onScroll = (): void => measure();
     el.addEventListener('scroll', onScroll, { passive: true });
+    // The reader's own hand on the scroller — a wheel, a finger, the scrollbar, an arrow key.
+    // Without it a scrollTop that falls because a reasoning row folded is indistinguishable from
+    // one that falls because they dragged up, and the transcript stops following the live reply
+    // (tailPinning.ts). `pointerdown` is what catches a scrollbar drag, which fires none of the rest.
+    const onReaderInput = (): void => {
+      readerInputAtRef.current = performance.now();
+    };
+    const readerEvents = ['wheel', 'touchmove', 'pointerdown', 'keydown'] as const;
+    for (const type of readerEvents) el.addEventListener(type, onReaderInput, { passive: true });
     // The events-driven pin above only re-scrolls when the transcript's *content* changes, so
     // it misses growth the container itself causes. On mobile the conversation pane is
     // display:none until a session is opened, so the open-time scroll runs against a
@@ -3195,6 +3217,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     el.addEventListener('load', onLoad, { capture: true });
     return () => {
       el.removeEventListener('scroll', onScroll);
+      for (const type of readerEvents) el.removeEventListener(type, onReaderInput);
       el.removeEventListener('load', onLoad, { capture: true });
       ro.disconnect();
     };

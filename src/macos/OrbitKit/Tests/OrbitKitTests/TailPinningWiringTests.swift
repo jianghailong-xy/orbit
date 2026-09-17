@@ -68,4 +68,23 @@ final class TailPinningWiringTests: XCTestCase {
                        "nothing may un-pin the tail beside TailPinning — that inline branch read "
                         + "the clamp from a row that shrank as a reader scrolling up")
     }
+
+    /// Web decides the same question in `tailPinning.ts`, and the two got here by drifting apart:
+    /// both carried the gap-plus-direction rule, so both stopped following a reply when a reasoning
+    /// row folded. Asserted piece by piece rather than as one expression, so reflowing that line
+    /// isn't what turns this red — and if the file is gone, `source` throws instead of skipping.
+    func testWebDecidesItWithTheSameRule() throws {
+        let web = try source("src/web/src/lib/tailPinning.ts")
+        let rule = try section(web, from: "export function pinnedToTail(", to: "\n}")
+
+        XCTAssertTrue(web.contains("NEAR_BOTTOM = 80"),
+                      "the same slack as TailPinning.nearBottom (\(Int(TailPinning.nearBottom)))")
+        XCTAssertTrue(rule.contains("bottomGap <= NEAR_BOTTOM"), "a small gap re-pins")
+        XCTAssertTrue(rule.contains("offset < previous.offset - 1"), "only a fall can un-pin")
+        XCTAssertTrue(rule.contains("contentHeight !== previous.contentHeight"),
+                      "and it must know whether the content resized in the same breath")
+        XCTAssertTrue(rule.contains("readerDriven || !resized"),
+                      "with the reader's own input overriding that, or a drag up during a "
+                        + "streaming reply could never un-pin")
+    }
 }
