@@ -497,10 +497,19 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
 
     public let id: String
     public let acceptanceCriteriaItems: [Item]?
+    /// What the confirmation card's meta line names this project by. Optional: a server older than
+    /// this build answers the same read without it, and the id is then what the card says.
+    public let title: String?
+    /// The status the confirmation card's own condition turns on — a project that is not OPEN is
+    /// not one anybody is about to start.
+    public let status: String?
 
-    public init(id: String, acceptanceCriteriaItems: [Item]? = nil) {
+    public init(id: String, acceptanceCriteriaItems: [Item]? = nil,
+                title: String? = nil, status: String? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
+        self.title = title
+        self.status = status
     }
 }
 
@@ -1017,83 +1026,68 @@ public enum CriteriaDecisions {
 
 // MARK: - the settlement confirmation
 
-/// One line of the confirmation card's body: something that holds, or the one thing that does not.
-public struct AcceptanceConfirmationCheck: Equatable, Sendable, Identifiable {
-    /// True draws the green tick; false the amber question mark. It is NOT a pass/fail verdict —
-    /// the open line is the question being asked, not a failure.
-    public let ok: Bool
-    public let text: String
-    public var id: String { text }
-
-    public init(ok: Bool, text: String) {
-        self.ok = ok
-        self.text = text
-    }
-}
-
 /// The confirmation card's words and states — this client's half of the card the browser draws as
 /// `AcceptanceConfirmationCard.tsx`. Both ends draw it in the same place: the coordinator
 /// conversation, which is where the question was delivered.
+///
+/// The question is asked BEFORE the work rather than after it: confirming the set is what starts
+/// the project, so the one press says "this is what done means" and "go". Asked at the end — the
+/// moment every criterion was already met — answering "no" annulled work already done, so the card
+/// could only ever be agreed with.
 public enum AcceptanceConfirmations {
 
-    public static let title = "Confirm what done means?"
-    public static let confirmLabel = "Confirm — this is what done means"
-    public static let notYetLabel = "Not yet"
+    public static let title = "When is this project done?"
+    /// The primary action. One press: it records the confirmation AND starts the project, because
+    /// saying what would settle a project is what authorises work on it.
+    public static let startLabel = "Start the project"
+    /// The reading toggle once the criteria are shown whole.
+    public static let showLessLabel = "Show less"
 
-    /// The fold's label. It carries the count because the count is the thing being confirmed: a
+    /// The reading toggle's label. It carries the count because the count is the thing confirmed: a
     /// person is agreeing that THESE N conditions, together, express the goal.
     public static func readLabel(count: Int) -> String {
-        "Read the \(count) criteri\(count == 1 ? "on" : "a")"
+        "Read all \(count) in full"
     }
 
-    /// The meta line, in the same shape the weakening card's carries: who is asking, about which
-    /// version, and what is being held on the answer.
-    public static func meta(_ standing: StandardSetConfirmationStanding?) -> String {
+    /// Where the project stands, as the meta line's third field says it. Confirming is starting, so
+    /// the standing is what answers this and there is nothing else to read it off.
+    public static let notStarted = "not started"
+    public static let started = "started"
+    public static let changedSinceStarted = "changed since it started"
+
+    /// Which project, how many conditions, where it stands, and which version of them — in that
+    /// order. The seal is last because it answers a question nobody has until they have read the
+    /// rest: it names the version a press binds, and proves nothing about having read it.
+    public static func meta(_ standing: StandardSetConfirmationStanding?,
+                            projectTitle: String) -> String {
         guard let standing else {
-            return "\(CriteriaDecisions.provenanceLabel) — the standing could not be read just now."
+            return "\(projectTitle) — the standing could not be read just now."
         }
         let count = standing.currentVersion.material.count
         let seal = CriteriaDecisions.shortSeal(standing.currentVersion.digest)
-        var out = "\(CriteriaDecisions.provenanceLabel) — the set of \(count) at seal \(seal). "
-        out += "Settlement is held on this."
-        return out
+        let stands: String
+        switch standing.state {
+        case .confirmed: stands = started
+        case .stale: stands = changedSinceStarted
+        case .unconfirmed: stands = notStarted
+        }
+        return "\(projectTitle) · \(count) criteria · \(stands) · seal \(seal)"
     }
 
-    /// The body: what holds, and the one thing that does not.
-    ///
-    /// The open line is never dropped, whatever the state — it is the mechanism, and it is the
-    /// reason the card exists: nobody derives DONE from criteria alone.
-    public static func checks(_ standing: StandardSetConfirmationStanding) -> [AcceptanceConfirmationCheck] {
-        let count = standing.currentVersion.material.count
-        var rows: [AcceptanceConfirmationCheck] = []
-        switch standing.state {
-        case .unconfirmed:
-            let text = "Nobody has confirmed that these \(count) express this project’s goal."
-            rows.append(AcceptanceConfirmationCheck(ok: false, text: text))
-        case .stale:
-            var text = "The criteria changed after they were confirmed, so that confirmation no "
-            text += "longer stands."
-            if let prior = standing.confirmation {
-                text += " It named seal \(CriteriaDecisions.shortSeal(prior.criteriaDigest))."
-            }
-            rows.append(AcceptanceConfirmationCheck(ok: false, text: text))
-        case .confirmed:
-            var text = "These \(count) were confirmed to express this project’s goal, and the "
-            text += "wording that stands now is the wording that was confirmed."
-            rows.append(AcceptanceConfirmationCheck(ok: true, text: text))
-        }
-        // The mechanism, never dropped: nobody derives DONE from criteria alone, and that is the
-        // whole reason this card is in front of a person.
-        if standing.state == .confirmed {
-            rows.append(AcceptanceConfirmationCheck(
-                ok: true,
-                text: "Editing any criterion ends this confirmation and Orbit will ask again."))
-        } else {
-            var text = "Orbit will not derive DONE until you say this set of \(count) is what "
-            text += "“done” means here."
-            rows.append(AcceptanceConfirmationCheck(ok: false, text: text))
-        }
-        return rows
+    /// How a stale standing's first line opens.
+    public static let changedSince =
+        "The criteria changed after they were confirmed, so that confirmation no longer stands."
+    public static let editEndsIt =
+        "Editing any criterion ends this confirmation and Orbit will ask again."
+
+    /// The one paragraph the card keeps: what starting binds the project to, and what ends it. It is
+    /// never dropped — it is the mechanism, and the reason this card is asked before the work rather
+    /// than after it. A stale standing says first why it is being asked a second time.
+    public static func startExplanation(count: Int,
+                                        standing: StandardSetConfirmationStanding?) -> String {
+        let again = standing?.state == .stale ? "\(changedSince) " : ""
+        return "\(again)Once this starts, Orbit derives done from these \(count) and from nothing "
+            + "else. " + editEndsIt
     }
 
     /// Whether the confirm button may be pressed. Both un-confirmed states offer it and it always
@@ -1104,9 +1098,10 @@ public enum AcceptanceConfirmations {
         return standing.state != .confirmed
     }
 
-    /// Whether the confirmation is still a question — the same distinction the other card draws:
-    /// a standing that could not be read is unanswerable and open, because a failed read is this
-    /// device's problem and not an answer.
+    /// Whether this project has still not been started — what the needs-you bar counts. Confirming
+    /// IS starting, so the standing is the whole of it and there is nothing else to read it off; a
+    /// standing that could not be read leaves the project not started, because a failed read is
+    /// this device's problem and not an answer.
     public static func isOpen(_ standing: StandardSetConfirmationStanding?) -> Bool {
         guard let standing else { return true }
         return standing.state != .confirmed
@@ -1137,11 +1132,38 @@ public enum AcceptanceConfirmations {
         return out
     }
 
-    /// What a confirmation leaves behind where it was made.
+    /// What a press on this card leaves where its actions were.
     public static func confirmedLine(_ standing: StandardSetConfirmationStanding) -> String {
         let count = standing.currentVersion.material.count
         let seal = CriteriaDecisions.shortSeal(standing.currentVersion.digest)
-        return "You confirmed the standard set — \(count) criteria at seal \(seal)"
+        return "You started the project on \(count) criteria at seal \(seal)"
+    }
+
+    // MARK: talking about the plan before starting it
+
+    /// What the composer's bar says it is about to talk about, ahead of the project's own title.
+    public static let planChangePrefix = "Talking about this plan: "
+    /// What the armed composer asks for. A message, not an answer: no door is waiting on it.
+    public static let planChangePlaceholder = "What should done mean instead?"
+
+    /// What the next send carries ahead of the typed message: the plan as it stands, named by its
+    /// seal.
+    ///
+    /// The other three armed replies answer a call that is blocking on them, so their door already
+    /// knows what the reply is about. This one starts an ordinary turn at an idle agent, which knows
+    /// none of it — so the version being discussed rides with the message rather than being looked
+    /// up, and the seal is in it so a reply about a set that has since moved can be told apart from
+    /// one about this one.
+    public static func planChangeContext(projectTitle: String, criteriaDigest: String,
+                                         criteria: [String]) -> String {
+        let numbered = criteria.enumerated()
+            .map { "\($0.offset + 1). \($0.element)" }
+            .joined(separator: "\n")
+        let seal = CriteriaDecisions.shortSeal(criteriaDigest)
+        var out = "About the acceptance criteria of “\(projectTitle)” — the \(criteria.count) that "
+        out += "stand now, at seal \(seal), which nobody has confirmed and which "
+        out += "no work has started against:\n\n\(numbered)"
+        return out
     }
 }
 

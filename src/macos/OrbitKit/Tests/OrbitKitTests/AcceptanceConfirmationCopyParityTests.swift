@@ -15,22 +15,28 @@ import XCTest
 /// part that matters most: a missing counterpart is a FAILURE and never an `XCTSkip`. A check that
 /// quietly opts out reports green on exactly the day the thing it watches goes missing.
 ///
-/// Every sentence is compared whole: a line with a count or a seal in it is rendered here with
-/// sentinel values, which are then put back as the web template's own interpolations. One thing is
-/// NOT compared, deliberately: the browser card's `FROM ORBIT` badge and its tooltip, which that
-/// end draws in the card's head the way its other two Orbit cards do. This end has no badge on this
-/// card, and its provenance rides the meta line — which both ends print, and which is compared.
+/// Every sentence is compared whole: a line with a title, a count or a seal in it is rendered here
+/// with sentinel values, which are then put back as the web template's own interpolations. One
+/// thing is NOT compared, deliberately: the browser card's `FROM ORBIT` badge and its tooltip,
+/// which that end draws in the card's head the way its other two Orbit cards do. This end has no
+/// badge on this card, and nothing else about the card differs.
+///
+/// The second action's word is compared next door and on purpose: both ends take it from the one
+/// constant three other controls already use (`Approvals.chatAction` here,
+/// `OWNER_SEND_BACK_ACTION` there, pinned by `OwnerConfirmationCopyParityTests`). What is asserted
+/// here is only that this card still reaches for that shared word rather than declaring a fourth
+/// name for the same thing.
 final class AcceptanceConfirmationCopyParityTests: XCTestCase {
 
     private static let webCard = "src/web/src/components/AcceptanceConfirmationCard.tsx"
-    private static let nativeCard = "src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift"
     private static let console = "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift"
 
     /// Sentinels that cannot occur inside each other or inside any sentence: a count with no digit
-    /// the copy uses, and two seals made of letters only.
+    /// the copy uses, two seals made of letters only, and a project title made of neither.
     private static let count = 23
     private static let current = "deadbeefcafe" + String(repeating: "d", count: 52)
     private static let prior = "facadebeaded" + String(repeating: "f", count: 52)
+    private static let project = "Aurora"
 
     /// The repo root, found by walking up from this file until the web card is under foot.
     /// Not a fixed number of `..` hops: the depth of this file is not the thing being asserted.
@@ -57,7 +63,7 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                     + "test file. OrbitKit's settlement confirmation is one half of a pair; if the web "
                     + "half moved, move this check with it rather than deleting it."
             case .missing(let relative):
-                return "\(relative) was not found. The native card keeps two of its words outside "
+                return "\(relative) was not found. The native card keeps one of its words outside "
                     + "OrbitKit; if it moved, move this check with it rather than deleting it."
             }
         }
@@ -103,8 +109,8 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                       file: file, line: line)
     }
 
-    private func standing(_ state: StandardSetConfirmationStanding.State,
-                          namingPrior: Bool = true) -> StandardSetConfirmationStanding {
+    private func standing(_ state: StandardSetConfirmationStanding.State)
+        -> StandardSetConfirmationStanding {
         let material = (0..<Self.count).map {
             ConfirmedCriterionVersion(definitionId: "d\($0)", revision: 1, contentHash: "h\($0)")
         }
@@ -116,7 +122,7 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
             state: state,
             confirmed: state == .confirmed,
             currentVersion: StandardSetVersion(digest: Self.current, material: material),
-            confirmation: state == .unconfirmed || !namingPrior ? nil : recorded)
+            confirmation: state == .unconfirmed ? nil : recorded)
     }
 
     private var count: String { "\(Self.count)" }
@@ -130,60 +136,72 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
 
         assertDeclares(web, "ACCEPTANCE_CONFIRMATION_TITLE", AcceptanceConfirmations.title,
                        "the card's title")
-        assertDeclares(web, "ACCEPTANCE_CONFIRM_LABEL", AcceptanceConfirmations.confirmLabel,
-                       "the confirm action")
-        assertDeclares(web, "ACCEPTANCE_NOT_YET_LABEL", AcceptanceConfirmations.notYetLabel,
-                       "the action that puts the question down")
-        // Both forms: English is the only thing that makes them two, and the end that changed one
-        // and not the other would say "Read the 1 criteria".
+        assertDeclares(web, "ACCEPTANCE_START_LABEL", AcceptanceConfirmations.startLabel,
+                       "the action that starts the project")
+        assertDeclares(web, "ACCEPTANCE_SHOW_LESS_LABEL", AcceptanceConfirmations.showLessLabel,
+                       "the reading toggle once the criteria are open")
         assertTemplate(web, AcceptanceConfirmations.readLabel(count: Self.count),
-                       [(count, "${count}")], "the reading toggle for several criteria")
-        assertTemplate(web, AcceptanceConfirmations.readLabel(count: 1),
-                       [("1", "${count}")], "the reading toggle for one criterion")
+                       [(count, "${count}")], "the reading toggle")
+
+        // The second action, at both ends, is the word three other controls already use. A card
+        // that declared its own would be the fourth name for one thing.
+        XCTAssertTrue(web.contains("{OWNER_SEND_BACK_ACTION}"),
+                      "the web card no longer takes its second action's word from the constant the "
+                          + "other composer handoffs share (`Approvals.chatAction` at this end)")
+        XCTAssertEqual(OwnerConfirmations.sendBackAction, Approvals.chatAction,
+                       "and that constant is the one this end's card reaches for")
     }
 
-    /// The line that says who is asking, about which version, and what is held on the answer — and
-    /// the one it says instead when the standing could not be read.
+    /// The line that says which project, how many conditions, where it stands and which version —
+    /// and the one it says instead when the standing could not be read.
     func testTheMetaLineMatchesTheWebCardWhole() throws {
         let web = try flatWebCard()
 
-        assertDeclares(web, "ACCEPTANCE_PROVENANCE", CriteriaDecisions.provenanceLabel,
-                       "the provenance the meta line opens with")
-        assertTemplate(web, AcceptanceConfirmations.meta(standing(.unconfirmed)),
-                       [(CriteriaDecisions.provenanceLabel, "${ACCEPTANCE_PROVENANCE}"),
-                        (currentSeal, "${seal}"), (count, "${count}")],
+        assertDeclares(web, "ACCEPTANCE_NOT_STARTED", AcceptanceConfirmations.notStarted,
+                       "where an unconfirmed project stands")
+        assertDeclares(web, "ACCEPTANCE_STARTED", AcceptanceConfirmations.started,
+                       "where a confirmed project stands")
+        assertDeclares(web, "ACCEPTANCE_CHANGED_SINCE_STARTED",
+                       AcceptanceConfirmations.changedSinceStarted,
+                       "where a project whose criteria moved under it stands")
+        // The count before the state before the seal: order is the copy here, not just the words.
+        assertTemplate(web, AcceptanceConfirmations.meta(standing(.unconfirmed),
+                                                        projectTitle: Self.project),
+                       [(Self.project, "${projectTitle}"), (count, "${count}"),
+                        (AcceptanceConfirmations.notStarted, "${stands}"),
+                        (currentSeal, "${shortSeal(standing.currentVersion.digest)}")],
                        "the meta line")
-        assertTemplate(web, AcceptanceConfirmations.meta(nil),
-                       [(CriteriaDecisions.provenanceLabel, "${ACCEPTANCE_PROVENANCE}")],
+        assertTemplate(web, AcceptanceConfirmations.meta(nil, projectTitle: Self.project),
+                       [(Self.project, "${projectTitle}")],
                        "the meta line of a standing that could not be read")
     }
 
-    /// What holds and what does not, in each of the server's three states.
-    func testTheBodyLinesMatchTheWebCardInEachState() throws {
+    /// The one paragraph the card keeps: what starting binds the project to, and what ends it.
+    func testTheParagraphAboutStartingMatchesTheWebCard() throws {
         let web = try flatWebCard()
 
-        let open = AcceptanceConfirmations.checks(standing(.unconfirmed))
-        XCTAssertEqual(open.count, 2)
-        assertTemplate(web, open[0].text, [(count, "${count}")],
-                       "the line saying nobody has confirmed the set")
-        assertTemplate(web, open[1].text, [(count, "${count}")],
-                       "the line saying DONE waits on the answer")
+        assertDeclares(web, "CONFIRMATION_CHANGED_SINCE", AcceptanceConfirmations.changedSince,
+                       "the sentence saying a confirmation no longer stands")
+        assertDeclares(web, "CONFIRMATION_EDIT_ENDS_IT", AcceptanceConfirmations.editEndsIt,
+                       "the sentence saying an edit ends the confirmation")
 
-        let staleBare = AcceptanceConfirmations.checks(standing(.stale, namingPrior: false))
-        assertDeclares(web, "CONFIRMATION_CHANGED_SINCE", staleBare[0].text,
-                       "the line saying the confirmation no longer stands")
-        let staleNamed = AcceptanceConfirmations.checks(standing(.stale))
-        assertTemplate(web, staleNamed[0].text,
-                       [(staleBare[0].text, "${CONFIRMATION_CHANGED_SINCE}"),
-                        (priorSeal, "${shortSeal(prior.criteriaDigest)}")],
-                       "the seal a stale confirmation named")
+        // The middle, which the browser writes as one template with those two round it: the tail is
+        // taken off here so what is compared is the sentence and not the seam.
+        let whole = AcceptanceConfirmations.startExplanation(count: Self.count,
+                                                            standing: standing(.unconfirmed))
+        XCTAssertTrue(whole.hasSuffix(AcceptanceConfirmations.editEndsIt), whole)
+        let middle = String(whole.dropLast(AcceptanceConfirmations.editEndsIt.count))
+        assertTemplate(web, "AGAIN" + middle, [("AGAIN", "${again}"), (count, "${count}")],
+                       "what starting binds the project to")
 
-        let confirmed = AcceptanceConfirmations.checks(standing(.confirmed))
-        XCTAssertEqual(confirmed.count, 2)
-        assertTemplate(web, confirmed[0].text, [(count, "${count}")],
-                       "the line saying the set was confirmed")
-        assertDeclares(web, "CONFIRMATION_EDIT_ENDS_IT", confirmed[1].text,
-                       "the line saying an edit ends the confirmation")
+        // And a second asking opens by saying why, with the space that separates the two sentences.
+        XCTAssertTrue(
+            AcceptanceConfirmations.startExplanation(count: Self.count, standing: standing(.stale))
+                .hasPrefix(AcceptanceConfirmations.changedSince + " "),
+            "a stale standing must open by saying why it is being asked again")
+        XCTAssertTrue(web.contains("`${CONFIRMATION_CHANGED_SINCE} `"),
+                      "the web card no longer opens a stale card with that sentence, or has lost "
+                          + "the space that keeps it from running into the next one")
     }
 
     /// The two explanations over a dead button: they are the sentences a reader acts on when the
@@ -207,19 +225,42 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                        "the line a confirmation leaves where it was pressed")
     }
 
-    // MARK: the two words the native card keeps outside OrbitKit
+    // MARK: the words the second action hands to the composer
 
-    /// The reading toggle once it is open, and what a refused press says: written into the SwiftUI
-    /// card and the console rather than into `AcceptanceConfirmations`, and on both cards all the same.
-    func testTheTwoWordsKeptOutsideOrbitKitMatchTheWebCard() throws {
+    /// What the composer says while a plan change is armed, and what the next send carries in front
+    /// of the typed message. Neither is on the card, and both are copy: the carried paragraph is
+    /// what an idle agent reads before the question.
+    func testThePlanChangeWordsMatchTheWebCard() throws {
         let web = try flatWebCard()
-        let card = try source(Self.nativeCard)
+
+        assertDeclares(web, "ACCEPTANCE_PLAN_CHANGE_PREFIX",
+                       AcceptanceConfirmations.planChangePrefix,
+                       "what the composer's bar says it is talking about")
+        assertDeclares(web, "ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER",
+                       AcceptanceConfirmations.planChangePlaceholder,
+                       "what the armed composer asks for")
+
+        // One criterion, so the numbered list the paragraph ends on is a single line: it is put
+        // back as the web's own `${numbered}` before the count is, because it is the only other
+        // place a digit occurs.
+        let carried = AcceptanceConfirmations.planChangeContext(
+            projectTitle: Self.project, criteriaDigest: Self.prior, criteria: ["alpha"])
+        assertTemplate(web, carried,
+                       [(Self.project, "${plan.projectTitle}"),
+                        ("\n\n1. alpha", "\\n\\n${numbered}"),
+                        ("1", "${plan.criteria.length}"),
+                        (priorSeal, "${shortSeal(plan.criteriaDigest)}")],
+                       "the plan the next send carries")
+    }
+
+    // MARK: the word the native card keeps outside OrbitKit
+
+    /// What a refused press says: written into the console rather than into
+    /// `AcceptanceConfirmations`, and on both cards all the same.
+    func testTheWordKeptOutsideOrbitKitMatchesTheWebCard() throws {
+        let web = try flatWebCard()
         let console = try source(Self.console)
 
-        XCTAssertTrue(card.contains("\"Hide the criteria\""),
-                      "the native card no longer calls its open reading toggle \"Hide the criteria\"")
-        assertDeclares(web, "ACCEPTANCE_HIDE_CRITERIA_LABEL", "Hide the criteria",
-                       "the open reading toggle")
         // The words, not the tail: what follows the dash is the reason prose, which both ends build
         // from their own error (`APIClient.failureReason` here, `error.message` in the browser).
         XCTAssertTrue(console.contains("\"That confirmation was not recorded — "),

@@ -1405,12 +1405,19 @@ private struct EvidenceDecisionReceiptCard: View {
     }
 }
 
-/// The settlement gate: whether this set of criteria, together, is what "done" means here.
+/// The settlement gate: whether this set of criteria, together, is what "done" means here — asked
+/// at the moment the answer is still cheap, which is before the project is started rather than
+/// after every criterion has been met by its work.
 ///
 /// Blue and question-shaped — the same shape as `A question for you` and `Review this plan`, and
 /// with no badge — because that is what it is: a question about meaning, which no machine answers.
-/// The two ticks above the actions are not a verdict on the work; they say what holds and what is
-/// still open, and the open one is the question itself.
+///
+/// TWO ACTIONS, AND THE READING TOGGLE IS NEITHER OF THEM
+/// -----------------------------------------------------
+/// Start, and talk about it first. Both go in the same action row every other card uses, at its
+/// own sizes, and neither carries a subtitle. The criteria are on the card already, so opening
+/// them whole is a reading control and sits with the text it unfolds rather than in that row; it
+/// writes nothing and is never disabled, as on the browser's card.
 private struct AcceptanceConfirmationCard: View {
     let console: ConsoleModel
     @State private var confirming = false
@@ -1424,15 +1431,10 @@ private struct AcceptanceConfirmationCard: View {
             ApprovalHeader(symbol: "checkmark.seal.fill",
                            title: AcceptanceConfirmations.title,
                            tone: .blue)
-            Text(AcceptanceConfirmations.meta(standing))
+            Text(AcceptanceConfirmations.meta(standing, projectTitle: console.projectTitle))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let standing {
-                ForEach(AcceptanceConfirmations.checks(standing)) { check in
-                    checkRow(check)
-                }
-            }
             if let stale = AcceptanceConfirmations.staleExplanation(standing) {
                 Text(stale)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -1442,53 +1444,61 @@ private struct AcceptanceConfirmationCard: View {
                                 in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             }
             criteria
+            Text(AcceptanceConfirmations.startExplanation(count: items.count, standing: standing))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Three stacked actions, at the system's default height — the shape signed off on
-            // 2026-08-14, where `.controlSize(.large)`'s 50pt bars read as bulky three deep.
+            // Two stacked actions, at the system's default height. `.controlSize(.large)`'s 50pt
+            // bars were turned down on 2026-08-14 for reading as bulky three deep; there are two
+            // here now, which is what that note was asking for.
             ApprovalActions {
-                confirmButton(standing)
-                readButton
-                notYetButton
+                startButton(standing)
+                chatButton(standing)
             }
         }
         .approvalChrome(.blue, dimmed: AcceptanceConfirmations.isDimmed(standing))
-    }
-
-    private func checkRow(_ check: AcceptanceConfirmationCheck) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: check.ok ? "checkmark" : "questionmark")
-                .font(.orbitGlyph)
-                .foregroundStyle(check.ok ? Color.green : Color.orange)
-            Text(check.text).font(.orbitProse).foregroundStyle(.primary)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var items: [ProjectCriteriaDocument.Item] {
         console.projectCriteria.sorted { $0.ordinal < $1.ordinal }
     }
 
-    /// The set itself, opened by the middle action. Load-bearing rather than decorative: this card
-    /// sits alone in a transcript, and confirming a set the reader cannot read is exactly the
-    /// "signed unread" the version digest exists to prevent. The web card is under the project
-    /// page's own criteria list, which is where its reader reads them; a phone has to carry them.
+    /// The set itself, open. Load-bearing rather than decorative: a folded list is an invitation to
+    /// sign what was never opened, and the version digest proves only WHICH wording was signed. The
+    /// web card is under the project page's own criteria list, which is where its reader reads
+    /// them; a phone has to carry them. Each condition is clamped to two lines so N of them stay
+    /// one card; the toggle under them takes the clamp off.
     @ViewBuilder private var criteria: some View {
-        if criteriaOpen {
+        if !items.isEmpty {
             ForEach(items) { item in
                 HStack(alignment: .top, spacing: 8) {
                     Text("\(item.ordinal)")
                         .font(.orbitMonoFine).foregroundStyle(.secondary)
                         .frame(minWidth: 14, alignment: .trailing)
-                    Text(item.text).font(.orbitProse)
+                    Text(item.text).font(.orbitProse).lineLimit(criteriaOpen ? nil : 2)
                     Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // A reading control, not a decision: it writes nothing, is never disabled, and stays
+            // out of the action row so the card has the two answers the browser's has.
+            Button {
+                PlatformHaptics.tap()
+                criteriaOpen.toggle()
+            } label: {
+                Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
+                                  : AcceptanceConfirmations.readLabel(count: items.count))
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.blue)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func confirmButton(_ standing: StandardSetConfirmationStanding?) -> some View {
+    /// One press: it records the confirmation AND starts the project, because saying what would
+    /// settle a project is what authorises work on it.
+    private func startButton(_ standing: StandardSetConfirmationStanding?) -> some View {
         Button {
             guard AcceptanceConfirmations.answerable(standing), !confirming else { return }
             PlatformHaptics.tap()
@@ -1498,39 +1508,25 @@ private struct AcceptanceConfirmationCard: View {
                 confirming = false
             }
         } label: {
-            Text(AcceptanceConfirmations.confirmLabel).approvalActionLabel()
+            Text(AcceptanceConfirmations.startLabel).approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
         .disabled(confirming || !AcceptanceConfirmations.answerable(standing))
     }
 
-    /// Opens the set this card is about, in place. Not a navigation: there is no project screen on
-    /// this client to navigate TO, and a question about a set is best answered beside it. Absent
-    /// while the criteria could not be read, because a control that would open nothing is not one.
-    @ViewBuilder private var readButton: some View {
-        if !items.isEmpty {
-            Button {
-                PlatformHaptics.tap()
-                criteriaOpen.toggle()
-            } label: {
-                Text(criteriaOpen ? "Hide the criteria"
-                                  : AcceptanceConfirmations.readLabel(count: items.count))
-                    .approvalActionLabel()
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    /// Writes nothing: the standing is a derived read and the question stays open, so this sets the
-    /// card aside for this sitting rather than answering it. Never disabled — putting a question
-    /// down is available whatever the server says about it.
-    private var notYetButton: some View {
-        Button(role: .cancel) {
+    /// Say what should change first. The same control, and the same word for it, as the other three
+    /// cards that hand a reply to the composer (`Approvals.chatAction`): the card stays and `Start
+    /// the project` stays live. Dead only where there is no version to talk about — a standing that
+    /// could not be read names none.
+    private func chatButton(_ standing: StandardSetConfirmationStanding?) -> some View {
+        Button {
+            guard let standing else { return }
             PlatformHaptics.tap()
-            console.setAsideConfirmation()
+            console.startPlanChangeReply(standing)
         } label: {
-            Text(AcceptanceConfirmations.notYetLabel).approvalActionLabel()
+            Text(Approvals.chatAction).approvalActionLabel()
         }
         .buttonStyle(.bordered)
+        .disabled(standing == nil)
     }
 }

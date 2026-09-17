@@ -22,7 +22,9 @@ import XCTest
 ///  - declining one of Orbit's own asks arms the composer, while a plain tool `Deny` stays one
 ///    press and done;
 ///  - an armed reply is dropped when its question is answered elsewhere, but NOT when a read
-///    merely failed.
+///    merely failed;
+///  - the settlement card arms the composer with the plan it is about, and the send that consumes
+///    that one starts an ordinary turn rather than reaching a door.
 ///
 /// The same instrument, and the same limits, as `EvidenceDecisionWiringTests`: it cannot see layout.
 final class ComposerHandoffWiringTests: XCTestCase {
@@ -183,5 +185,74 @@ final class ComposerHandoffWiringTests: XCTestCase {
         let unread = OwnerConfirmations.standing(nil, sessionID: "s", requestID: "r")
         XCTAssertTrue(OwnerConfirmations.isOpen(unread), "an unread standing is still a question")
         XCTAssertFalse(unread.answerable, "and still not answerable — which is why they differ here")
+    }
+
+    // MARK: 5 — the fourth control, which hands its reply to the composer through no door
+
+    /// The settlement card's `Chat about this`: it arms the composer with the plan as it stands and
+    /// keeps no sentence of its own, like the three above it — and then differs in the one way that
+    /// matters, which is that the send it arms answers nothing. The agent has finished writing the
+    /// criteria and is idle, so the send is an ordinary turn with the plan carried in front of the
+    /// message; a branch that grew a door here would be this card answering a call nobody made.
+    ///
+    /// Written so that UNDOING the handoff is what turns it red: a card that opened a box of its
+    /// own, or a send routed through `decideOwnerConfirmation`, fails here.
+    func testTheSettlementCardArmsTheComposerAndItsSendReachesNoDoor() throws {
+        let file = try source(Self.cardPath)
+        guard let at = file.range(of: "private struct AcceptanceConfirmationCard: View") else {
+            throw WiringError.missing("AcceptanceConfirmationCard")
+        }
+        let card = String(file[at.lowerBound...])
+
+        // The press's own body, read as STATEMENTS: a commented-out call still contains its own
+        // words, so a `contains` over the file would stay green on exactly the day the handoff was
+        // undone — which is the one day this check exists for.
+        let press = try section(card, from: "private func chatButton(", to: "\n    }")
+        let statements = press.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+        XCTAssertTrue(statements.contains("console.startPlanChangeReply(standing)"),
+                      "the press must hand the reply to the composer, with the standing it was "
+                          + "drawn for; without it there is no version to talk about")
+        XCTAssertTrue(statements.contains(".disabled(standing == nil)"),
+                      "and a card whose standing could not be read names no plan to talk about")
+
+        // No box, and no draft of its own: the composer's is the sentence.
+        XCTAssertFalse(card.contains("TextField"),
+                       "the settlement card must not take text: the composer does")
+        let states = card.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("@State") }
+        XCTAssertEqual(states, ["@State private var confirming = false",
+                                "@State private var criteriaOpen = false"],
+                       "the card keeps whether a press is in flight and whether the criteria are "
+                           + "unfolded, and nothing else — a draft of its own would be a second "
+                           + "place to type the sentence the composer already takes")
+
+        let console = try source(Self.consolePath)
+        XCTAssertTrue(console.contains("AcceptanceConfirmations.planChangeContext("),
+                      "the plan the send carries is built in OrbitKit, where its words are the "
+                          + "browser's too (`AcceptanceConfirmationCopyParityTests`)")
+
+        let reroute = try section(console, from: "// An armed reply answers a question",
+                                  to: "// Resume eligibility depends on")
+        XCTAssertTrue(reroute.contains("case .planChange(let context):"),
+                      "nothing in the send handles an armed plan change")
+        guard let branchAt = reroute.range(of: "case .planChange(let context):") else {
+            throw WiringError.missing("the send's plan-change branch")
+        }
+        let branch = String(reroute[branchAt.upperBound...])
+        let sent = branch.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+        XCTAssertTrue(
+            sent.contains(
+                "await send(authoritative: authoritative, overrideText: \"\\(context)\\n\\n\\(text)\")"),
+            "the typed message must go out as an ordinary turn with the plan in front of it")
+        for door in ["decideOwnerConfirmation", "replyToQuestion", "confirmStandardSet", "api."] {
+            XCTAssertFalse(branch.contains(door),
+                           "a plan change was routed through \(door): it answers no call, so it "
+                               + "starts an ordinary turn and nothing else")
+        }
     }
 }

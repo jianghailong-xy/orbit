@@ -42,6 +42,10 @@ struct QuestionReply: Equatable, Sendable {
         case approval(id: String)
         /// The confirmation waiting in this session, sent back with the typed text as its reason.
         case ownerConfirmation(OwnerConfirmationWaiting)
+        /// The plan a project has not been started on. The one target that answers no door: the
+        /// next send is an ordinary turn, with this plan carried in front of the typed message
+        /// because nothing in the session holds it.
+        case planChange(context: String)
     }
 
     let target: Target
@@ -621,6 +625,11 @@ final class ConsoleModel {
             let standing = OwnerConfirmations.standing(ownerConfirmation, sessionID: sessionID,
                                                        requestID: waiting.requestId)
             if !OwnerConfirmations.isOpen(standing) { replyContext = nil }
+        case .planChange:
+            // Nothing answers a plan change another way: no call is pending on it, so there is no
+            // question that can go out from under the reader mid-sentence. It stays armed until it
+            // is sent or the bar is dismissed.
+            break
         }
     }
 
@@ -1223,6 +1232,10 @@ final class ConsoleModel {
         // An armed reply answers a question rather than starting a turn, so it goes to that
         // question's own door. (Mirrors the web reroute.)
         if let reply = replyContext {
+            // A plan change carries the typed sentence and nothing else — an attachment cannot say
+            // what should change — so an empty composer leaves the bar armed rather than sending
+            // the plan back with no question attached (web: `if (!c) return`).
+            if case .planChange = reply.target, text.isEmpty { return }
             if fromComposer { composerText = "" }
             replyContext = nil
             switch reply.target {
@@ -1235,6 +1248,12 @@ final class ConsoleModel {
             case .ownerConfirmation(let waiting):
                 localSendTick &+= 1   // an answer is a send too — pin the transcript to the tail
                 await decideOwnerConfirmation(waiting, .sendBack, note: text)
+            // Talking about a plan before it is started reaches no door: this is an ordinary turn
+            // at an idle agent, with the project, its criteria and their seal carried in front of
+            // the message. Handed back to `send` whole, with the composer already cleared above —
+            // the card that armed it is untouched, and its own Start is still the other way out.
+            case .planChange(let context):
+                await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)")
             }
             return
         }
@@ -1793,6 +1812,21 @@ final class ConsoleModel {
             placeholder: OwnerConfirmations.sendBackLabel)
     }
 
+    /// Talk about a plan before the project is started on it: the next composer send is an ordinary
+    /// turn saying what should change, with the plan carried in front of it. Unlike the three above
+    /// it answers nothing — the agent has finished writing the criteria and is waiting — so no door
+    /// is named here. The card stays until then, with `Start the project` still live.
+    func startPlanChangeReply(_ standing: StandardSetConfirmationStanding) {
+        let criteria = projectCriteria.sorted { $0.ordinal < $1.ordinal }.map(\.text)
+        replyContext = QuestionReply(
+            target: .planChange(context: AcceptanceConfirmations.planChangeContext(
+                projectTitle: projectTitle,
+                criteriaDigest: standing.currentVersion.digest,
+                criteria: criteria)),
+            banner: AcceptanceConfirmations.planChangePrefix + projectTitle,
+            placeholder: AcceptanceConfirmations.planChangePlaceholder)
+    }
+
     func cancelChatReply() { replyContext = nil }
 
     /// Resolve a pending question conversationally (deny + the typed text → claude reads it as
@@ -1852,9 +1886,16 @@ final class ConsoleModel {
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
     /// Whether the account owner has confirmed the standard set as it stands.
     private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
-    /// The criteria themselves, for the fold on the confirmation card: confirming a set the reader
+    /// The criteria themselves, carried on the confirmation card: confirming a set the reader
     /// cannot read is the "signed unread" the whole path exists to prevent.
     private(set) var projectCriteria: [ProjectCriteriaDocument.Item] = []
+    /// What the confirmation card's meta line calls this project — its own title, or the id when
+    /// the read answered without one (web: `document?.title || project`).
+    var projectTitle: String { projectDocumentTitle ?? projectID ?? "" }
+    private var projectDocumentTitle: String?
+    /// The project's status, as the same read publishes it: one of the three facts the card's
+    /// condition turns on.
+    private var projectStatus: String?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -1968,24 +2009,25 @@ final class ConsoleModel {
         }
         if let document = try? await api.projectCriteria(projectID: projectID) {
             projectCriteria = document.acceptanceCriteriaItems ?? []
+            projectDocumentTitle = document.title
+            projectStatus = document.status
         }
         if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
         lastRulerRead = Date()
     }
 
-    /// Whether the owner's confirmation is the LAST thing settlement is waiting on.
+    /// Whether this project is waiting to be started on a plan nobody has confirmed.
     ///
-    /// The confirmation is deliberately lazy — it is asked at the last moment rather than the first
-    /// — so a card offered while half the criteria are unmet would be a standing interruption in
-    /// every coordinator conversation from the day it was created. The condition is read off the
-    /// project document (every stated criterion met by its work) and is knowingly WEAKER than the
-    /// server's own `PROJECT_ACCEPTANCE_LANDED`, which also requires a merge receipt this client
-    /// cannot read: weaker means this card can appear a little early, never late, and confirming
-    /// early is not wrong — a confirmation binds to a VERSION, and any later edit ends it.
+    /// Three facts and no fourth: the project is OPEN, it states criteria, and the set standing now
+    /// has not been confirmed. `satisfied` is deliberately absent — waiting for every criterion to
+    /// be met by its work put the question at the moment it could only be agreed with, because
+    /// answering "no" then annuls work already done; asked here the answer is cheap, the plan is
+    /// written and nothing has run. Web reads the same three off the same two documents
+    /// (`settlementHeldOnConfirmation` in `AcceptanceConfirmationCard.tsx`).
     private var settlementHeldOnConfirmation: Bool {
         guard AcceptanceConfirmations.answerable(acceptanceConfirmation) else { return false }
-        guard !projectCriteria.isEmpty else { return false }
-        return projectCriteria.allSatisfy { $0.satisfied == true }
+        guard projectStatus == "OPEN" else { return false }
+        return !projectCriteria.isEmpty
     }
 
     /// Put a question into this conversation once, anchored where OrbitKit's rule puts it: where it
@@ -2210,13 +2252,6 @@ final class ConsoleModel {
             statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
             await refreshRulerQuestions(force: true)
         }
-    }
-
-    /// "Not yet": set the question aside for this sitting. It writes nothing — the standing is a
-    /// derived read and the question is still open — so it comes back when this console is opened
-    /// again, which is what "not yet" means and what a written-down "no" would not.
-    func setAsideConfirmation() {
-        close(.acceptanceConfirmation)
     }
 
     private func close(_ kind: DeliveredDecisionCard.Kind) {

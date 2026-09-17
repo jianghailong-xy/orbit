@@ -73,6 +73,27 @@ final class CriteriaDecisionWiringTests: XCTestCase {
         return String(file[start.lowerBound...])
     }
 
+    /// What one card hands to `ApprovalActions` — the row itself, and not the buttons' own bodies
+    /// further down the file, which is what a bare `contains` would answer with.
+    private func actionRow(_ card: String) throws -> String {
+        guard let start = card.range(of: "ApprovalActions {"),
+              let end = card.range(of: "\n            }",
+                                   range: start.upperBound..<card.endIndex) else {
+            throw WiringError.missing("an ApprovalActions row in this card")
+        }
+        return String(card[start.upperBound..<end.lowerBound])
+    }
+
+    /// One declaration's own body, cut at the brace that closes it at its own indentation, so a
+    /// fact asserted about this condition cannot be answered by the one below it.
+    private func body(_ file: String, of declaration: String) throws -> String {
+        guard let start = file.range(of: declaration),
+              let end = file.range(of: "\n    }", range: start.upperBound..<file.endIndex) else {
+            throw WiringError.missing(declaration)
+        }
+        return String(file[start.upperBound..<end.lowerBound])
+    }
+
     // MARK: the rule this project stated
 
     func testBothActionsOnTheWeakeningCardAreDisabledByTheDerivedStanding() throws {
@@ -105,8 +126,63 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                       "confirming is offered exactly while the server says the set is unconfirmed "
                           + "or stale — never for a set already confirmed, and never when the "
                           + "standing could not be read at all")
-        XCTAssertTrue(card.contains("AcceptanceConfirmations.checks(standing)"),
-                      "and the body is the server's standing rather than a sentence composed here")
+        XCTAssertTrue(card.contains("AcceptanceConfirmations.startExplanation("),
+                      "and the body is OrbitKit's paragraph rather than a sentence composed here")
+    }
+
+    /// TWO ACTIONS, AND THE READING TOGGLE IS NEITHER OF THEM.
+    ///
+    /// Start, and talk about it first. The third — `Not yet` — went with the moment the question
+    /// used to be asked at: putting it down meant "ask me once the work settles", and asked before
+    /// anything has run it would mean waiting for nothing. Growing the row back, or moving the
+    /// reading toggle into it, is what turns this red.
+    func testTheConfirmationCardOffersExactlyTwoActions() throws {
+        let card = try confirmationCard()
+        let actions = try actionRow(card)
+        let pressed = actions.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+        XCTAssertEqual(pressed, ["startButton(standing)", "chatButton(standing)"],
+                       "the card's action row is start, then talk about it first — and nothing else")
+
+        for gone in ["notYetButton", "setAsideConfirmation", "notYetLabel", "Not yet"] {
+            XCTAssertFalse(card.contains(gone),
+                           "\(gone) is the action that put the question down; it went with the "
+                               + "moment the question was asked at")
+        }
+        XCTAssertTrue(card.contains("Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel"),
+                      "the reading toggle is still here — it just is not one of the two answers")
+    }
+
+    /// The second action says what the other three composer handoffs say, from the one constant
+    /// they share. A literal here would be a fourth name for one thing, which is what that
+    /// constant's own note forbids.
+    func testTheSecondActionTakesItsWordFromTheSharedConstant() throws {
+        let card = try confirmationCard()
+        XCTAssertTrue(card.contains("Text(Approvals.chatAction).approvalActionLabel()"),
+                      "the second action must be labelled from `Approvals.chatAction`")
+        XCTAssertFalse(card.contains("\"Chat"),
+                       "a card that spells the word itself has stopped sharing it")
+    }
+
+    /// THE CARD ARRIVES WHEN THE PLAN IS WRITTEN, NOT WHEN THE WORK IS DONE.
+    ///
+    /// `satisfied` in this condition is the bug this project was filed for: it put the question at
+    /// the moment answering "no" annulled work already done, so the card could only ever be agreed
+    /// with. Three facts and no fourth — and reading `satisfied` again is what turns this red.
+    func testTheConfirmationCardIsDeliveredOnAPlanNobodyHasConfirmed() throws {
+        let console = try source(Self.consolePath)
+        let held = try body(console, of: "private var settlementHeldOnConfirmation: Bool {")
+
+        XCTAssertTrue(held.contains("AcceptanceConfirmations.answerable(acceptanceConfirmation)"),
+                      "the set standing now must be one nobody has confirmed")
+        XCTAssertTrue(held.contains("projectStatus == \"OPEN\""),
+                      "and the project must be one that is still open")
+        XCTAssertTrue(held.contains("!projectCriteria.isEmpty"),
+                      "and it must state criteria: there is nothing to confirm otherwise")
+        XCTAssertFalse(held.contains("satisfied"),
+                       "waiting for every criterion to be met is the timing this card was moved "
+                           + "away from — an answer that annuls finished work is not an answer")
     }
 
     /// Dimmed whole, by OrbitKit's rule, in one place. Unhooking either card from its rule — or

@@ -688,13 +688,22 @@ final class CriteriaDecisionTests: XCTestCase {
             confirmation: state == .unconfirmed ? nil : prior)
     }
 
-    func testTheConfirmationCardNamesTheSetAndTheVersionSettlementIsHeldOn() {
-        let meta = AcceptanceConfirmations.meta(confirmation(.unconfirmed))
-        XCTAssertTrue(meta.hasPrefix(CriteriaDecisions.provenanceLabel), meta)
-        XCTAssertTrue(meta.contains("the set of 10 at seal 9c4f7a1bb001"), meta)
-        XCTAssertTrue(meta.contains("Settlement is held on this"), meta)
-        XCTAssertEqual(AcceptanceConfirmations.readLabel(count: 10), "Read the 10 criteria")
-        XCTAssertEqual(AcceptanceConfirmations.readLabel(count: 1), "Read the 1 criterion")
+    func testTheConfirmationCardNamesTheProjectTheCountAndTheVersionAPressWouldBind() {
+        let meta = AcceptanceConfirmations.meta(confirmation(.unconfirmed), projectTitle: "Aurora")
+        XCTAssertTrue(meta.hasPrefix("Aurora"), meta)
+        XCTAssertTrue(meta.contains("10 criteria"), meta)
+        XCTAssertTrue(meta.contains("seal 9c4f7a1bb001"), meta)
+        // Where it stands, which is the thing a confirmation now decides: confirming is starting.
+        XCTAssertTrue(meta.contains(AcceptanceConfirmations.notStarted), meta)
+        XCTAssertTrue(AcceptanceConfirmations.meta(confirmation(.confirmed), projectTitle: "Aurora")
+                        .contains(AcceptanceConfirmations.started))
+        XCTAssertTrue(AcceptanceConfirmations.meta(confirmation(.stale), projectTitle: "Aurora")
+                        .contains(AcceptanceConfirmations.changedSinceStarted))
+        // A standing this device could not read names the project and says so, rather than
+        // reporting a state it does not have.
+        XCTAssertEqual(AcceptanceConfirmations.meta(nil, projectTitle: "Aurora"),
+                       "Aurora — the standing could not be read just now.")
+        XCTAssertEqual(AcceptanceConfirmations.readLabel(count: 10), "Read all 10 in full")
     }
 
     func testBothUnconfirmedStatesOfferTheButtonAndAConfirmedOneDoesNot() {
@@ -709,19 +718,28 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertNotNil(AcceptanceConfirmations.staleExplanation(confirmation(.confirmed)))
     }
 
-    func testTheOpenQuestionIsNeverDroppedFromTheBodyWhileItIsStillOpen() {
-        for state in [StandardSetConfirmationStanding.State.unconfirmed, .stale] {
-            let checks = AcceptanceConfirmations.checks(confirmation(state))
-            XCTAssertEqual(checks.count, 2)
-            XCTAssertTrue(checks.allSatisfy { !$0.ok }, "nothing holds while the set is unconfirmed")
-            XCTAssertTrue(checks.last!.text.contains("will not derive DONE"), checks.last!.text)
-            XCTAssertTrue(checks.last!.text.contains("this set of 10"), checks.last!.text)
+    /// The mechanism is never dropped, whatever the state — it is the reason the card exists, and
+    /// the reason it is in front of a person before the work rather than after it.
+    func testTheParagraphAlwaysSaysWhatStartingBindsAndWhatEndsIt() {
+        for state in [StandardSetConfirmationStanding.State.unconfirmed, .stale, .confirmed] {
+            let text = AcceptanceConfirmations.startExplanation(count: 10,
+                                                                standing: confirmation(state))
+            XCTAssertTrue(text.contains("derives done from these 10 and from nothing else"), text)
+            XCTAssertTrue(text.hasSuffix(AcceptanceConfirmations.editEndsIt), text)
         }
-        // Confirmed: the same two lines, both holding, and the mechanism is now the warning that a
-        // single edit ends it.
-        let done = AcceptanceConfirmations.checks(confirmation(.confirmed))
-        XCTAssertTrue(done.allSatisfy(\.ok))
-        XCTAssertTrue(done.last!.text.contains("Editing any criterion ends this confirmation"))
+        // A card asked a second time opens by saying why, and only that card does.
+        XCTAssertTrue(
+            AcceptanceConfirmations.startExplanation(count: 10, standing: confirmation(.stale))
+                .hasPrefix(AcceptanceConfirmations.changedSince))
+        for state in [StandardSetConfirmationStanding.State.unconfirmed, .confirmed] {
+            XCTAssertFalse(
+                AcceptanceConfirmations.startExplanation(count: 10, standing: confirmation(state))
+                    .contains(AcceptanceConfirmations.changedSince))
+        }
+        // A standing that could not be read still says what starting would bind: the paragraph is
+        // about the criteria on the card, which this device does have.
+        XCTAssertTrue(AcceptanceConfirmations.startExplanation(count: 10, standing: nil)
+                        .hasPrefix("Once this starts"))
     }
 
     func testAConfirmedSetIsNoLongerAQuestionAndAnUnreadableOneStillIs() {
@@ -739,9 +757,15 @@ final class CriteriaDecisionTests: XCTestCase {
                        "a standing this device could not read is not a card known to be dead")
     }
 
-    func testAStaleConfirmationSaysWhichVersionWasConfirmedBefore() {
-        let checks = AcceptanceConfirmations.checks(confirmation(.stale))
-        XCTAssertTrue(checks[0].text.contains("no longer stands"), checks[0].text)
-        XCTAssertTrue(checks[0].text.contains("6b1d02ea1122"), checks[0].text)
+    /// A confirmation that has gone stale is a project to start again on the wording standing now,
+    /// so the card says the old one no longer stands and offers the current version — it never
+    /// names the superseded seal, which is not a version anybody can press for.
+    func testAStaleConfirmationSaysTheOldOneNoLongerStandsAndOffersTheCurrentVersion() {
+        let stale = confirmation(.stale)
+        let text = AcceptanceConfirmations.startExplanation(count: 10, standing: stale)
+        XCTAssertTrue(text.contains("no longer stands"), text)
+        XCTAssertFalse(text.contains("6b1d02ea1122"), text)
+        XCTAssertTrue(AcceptanceConfirmations.answerable(stale))
+        XCTAssertEqual(stale.currentVersion.digest, "9c4f7a1bb001")
     }
 }
