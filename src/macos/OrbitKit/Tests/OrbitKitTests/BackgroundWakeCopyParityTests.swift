@@ -245,15 +245,20 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     func testHowTheJobsCameOutIsSummarisedInTheSameWords() throws {
         let web = try flat(Self.webCard)
-        let summary = try section(web, from: "function summary(", to: "\n}", Self.webCard)
+        // The browser writes the line twice over: once in words, which is what this client returns
+        // and what the sticky bar at the top of the transcript names the turn with, and once as the
+        // card draws it, with the lone job's name in bold. The words are the contract, so they are
+        // asserted against the first; only the bolding is asserted against the second.
+        let summary = try section(web, from: "function summaryText(", to: "\n}", Self.webCard)
+        let bolded = try section(web, from: "function summary(", to: "\n}", Self.webCard)
 
         assertWritten(summary, BackgroundWakeCard.summary(wake(jobs: [])),
                       "what a wakeup carrying no reason says", Self.webCard)
         // One job's line is its name and what became of it, full stop.
         XCTAssertEqual(BackgroundWakeCard.summary(wake(jobs: [job(description: "upgrade")])),
                        "upgrade exited 0.")
-        assertBuilt(summary, "</strong> {outcome(jobs[0])}.", "one job's own line", Self.webCard)
-        assertBuilt(summary, "jobs[0].description || jobs[0].command",
+        assertBuilt(bolded, "</strong> {outcome(jobs[0])}.", "one job's own line", Self.webCard)
+        assertBuilt(summary, "${jobs[0].description || jobs[0].command} ${outcome(jobs[0])}.",
                     "what one job's line calls it", Self.webCard)
         XCTAssertEqual(BackgroundWakeCard.summary(wake(jobs: [job(), job(status: "failed", exitCode: 1)])),
                        "1 of 2 failed.")
@@ -266,6 +271,25 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
                        "All 2 finished.")
         assertBuilt(summary, "All ${jobs.length} finished.",
                     "several jobs that finished without all naming an exit code", Self.webCard)
+    }
+
+    /// What the bar pinned to the top of the transcript calls this turn. Same rule as a watch's
+    /// wake, for the same reason — nobody typed this one either — so the bar takes this card's own
+    /// title and line (`StickySummary`), and the browser's half of that is the pair of attributes
+    /// the card stamps on its root for `WorkspaceView`'s scanner to read.
+    func testTheStickyBarNamesTheTurnInThisCardsOwnWords() throws {
+        let web = try flat(Self.webCard)
+        let root = try section(web, from: "className={`bgwake ", to: "\n      >", Self.webCard)
+
+        assertBuilt(root, "data-sticky-label={title(wake)}", "the label the bar takes from this card",
+                    Self.webCard)
+        assertBuilt(root, "data-sticky-text={summaryText(wake)}", "the line the bar takes from this card",
+                    Self.webCard)
+        // The card's own line falls back to that same function, so the bar and the card under it
+        // cannot come out saying two different things.
+        assertBuilt(try section(web, from: "function summary(", to: "\n}", Self.webCard),
+                    "return summaryText(wake);", "the card's line reading the words the bar reads",
+                    Self.webCard)
     }
 
     func testTheCardsOwnLinesMatchTheWebCard() throws {

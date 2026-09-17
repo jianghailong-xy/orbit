@@ -577,6 +577,10 @@ const OLDER_PAGE = 200;
 const RESEED_AFTER_STALLED_RECONNECTS = 3;
 // Distance from the top (px) at which scrolling up pulls in the next older page.
 const LOAD_OLDER_AT = 400;
+// What the sticky bar calls a turn the person typed. A wake carries its own label on its card
+// instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
+// screen contradicting itself — which is what the account owner photographed on 2026-09-17.
+const STICKY_LABEL = 'Your question';
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
 // the cached shells instead of re-running that scan — see bgCacheRef.
@@ -1444,9 +1448,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     swipeRef.current = null;
     setSwipeDrag(null);
   };
-  // The user's prompt for the turn currently in view, surfaced as a sticky bar when a long
-  // answer has pushed that bubble off the top — so what was asked stays findable. null hides it.
-  const [stuck, setStuck] = useState<{ seq: string | null; text: string; loading?: boolean } | null>(null);
+  // The turn the answer currently in view belongs to, surfaced as a sticky bar when a long answer
+  // has pushed it off the top — so what is being answered stays findable. null hides it. `label`
+  // says whose turn it was: the person's, or the wake's own title where nobody typed it.
+  const [stuck, setStuck] = useState<
+    { seq: string | null; label: string; text: string; loading?: boolean } | null
+  >(null);
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
@@ -1533,8 +1540,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
+    // A turn a watch or the control plane queued is one of these too — it is where the answer under
+    // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
+    // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
+    // twin in the tail is skipped like any queued turn: it hasn't been asked yet.
     const bubbles = Array.from(
-      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued)'),
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
     let cur: HTMLElement | null = null;
     for (const b of bubbles) {
@@ -1542,16 +1553,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       else break;
     }
     if (cur) {
+      const label = cur.getAttribute('data-sticky-label');
       // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
       // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
       // textContent would splice those labels in front of the question.
-      setStuck({ seq: cur.getAttribute('data-seq'), text: cur.querySelector('.md')?.textContent || '' });
+      setStuck({
+        seq: cur.getAttribute('data-seq'),
+        label: label ?? STICKY_LABEL,
+        text: label === null
+          ? cur.querySelector('.md')?.textContent || ''
+          : cur.getAttribute('data-sticky-text') || '',
+      });
     } else if (hasMoreOlderRef.current) {
       // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
       // the content now in view is in an unloaded page. Don't blank the bar — show a loading
       // state and pull the earlier page in (no-op if one is already in flight), so measure
       // re-runs after the prepend and resolves the real question.
-      setStuck({ seq: null, text: '', loading: true });
+      setStuck({ seq: null, label: STICKY_LABEL, text: '', loading: true });
       loadOlder();
     } else {
       setStuck(null);
@@ -5845,11 +5863,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               const seq = stuck?.seq;
               if (!seq) return;
               scrollRef.current
-                ?.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`)
+                ?.querySelector<HTMLElement>(
+                  `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
+                )
                 ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
             }}
           >
-            <span className="chat-sticky-label">↑ Your question</span>
+            {/* The arrow points up at the turn the bar names, whoever's turn it was. */}
+            <span className="chat-sticky-label">↑ {stuck.label}</span>
             <span className="chat-sticky-text">
               {stuck.loading ? 'Loading earlier messages…' : stuck.text}
             </span>

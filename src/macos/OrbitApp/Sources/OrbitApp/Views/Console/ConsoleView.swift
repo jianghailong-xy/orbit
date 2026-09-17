@@ -563,12 +563,17 @@ struct TranscriptView: View {
         }
     }
 
-    // Sticky header that names the last question and scrolls back to it — web's `.chat-sticky-question`
-    // (muted "↑ Your question" label + a single ellipsized line of the text). `anchor: .top` lands the
-    // bubble just under this header (it's a safe-area inset, so the scroll region starts below it).
+    // Sticky header that names the turn above the fold and scrolls back to it — web's
+    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`).
+    // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
+    // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
+        // What this turn was and what it said. A wake is still the turn the bar points back at, but
+        // it is not the person's question: it gets its card's own title and line (`StickySummary`),
+        // so the bar can't say "your question" above a card reading "not typed by you".
+        let summary = StickySummary.of(text: bubble.text, note: bubble.note)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
-        CoastingButton {
+        return CoastingButton {
             #if os(iOS)
             // Same coast fix as the jump-to-latest disc: cancel the momentum so `proxy.scrollTo` isn't
             // swallowed by the deceleration, then scroll to the question row on the next runloop.
@@ -581,9 +586,13 @@ struct TranscriptView: View {
             #endif
         } label: { _ in
             HStack(spacing: 8) {
-                Text("↑ Your question")
-                    .font(.orbitLabel).foregroundStyle(.secondary).fixedSize()
-                Text(bubble.text)
+                // Priority, not `fixedSize()`: the label is served first, so the line beside it is
+                // what gives way — but a label as long as "Watch stopped: every target is gone"
+                // truncates itself rather than pushing the line off the row entirely.
+                Text(summary.label)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+                Text(summary.text)
                     .font(.orbitSubtext).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
