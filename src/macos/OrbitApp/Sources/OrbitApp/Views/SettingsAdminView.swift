@@ -9,6 +9,11 @@ import OrbitKit
 /// Single-pane settings: account info, theme/default permission preferences,
 /// and change-password. Lives in the middle column; the detail stays a neutral hint.
 struct SettingsView: View {
+    /// Which of the form's sections to render. `nil` is all of them, which is what the iPhone
+    /// drawer, the macOS Settings window and the macOS middle column each want. A regular-width
+    /// iPad passes one category instead, because there the list of categories is the middle column
+    /// and this view is the detail beside it. Defaulted so `SettingsView()` still means the form.
+    var category: SettingsCategory? = nil
     @Environment(AppModel.self) private var model
     #if os(macOS)
     @EnvironmentObject private var updater: UpdaterModel   // Sparkle; iOS updates via the App Store
@@ -32,6 +37,9 @@ struct SettingsView: View {
     @State private var newPw = ""
     @State private var pwMessage: String?
 
+    /// Whole-form mode shows everything; a category shows only itself.
+    private func shows(_ c: SettingsCategory) -> Bool { category == nil || category == c }
+
     var body: some View {
         @Bindable var model = model
         return Form {
@@ -40,109 +48,121 @@ struct SettingsView: View {
             // stack this form is in. A frame of the section's own stack, like every other push — so
             // `sectionAtRoot` reads the depth off the stack instead of a flag beside it. The
             // destination is registered below, where iPad regular finds it too.
-            Section {
-                NavigationLink(value: NavNode.settingsRunners) {
-                    Label("Runners", systemImage: AppSection.runners.systemImage)
-                }
-
-                // Admin is off the compact drawer rail, and the account footer that used to link it
-                // is gone — so this is its entry point on iPhone. It switches section (rather than
-                // pushing) exactly as that menu item did.
-                if hSize == .compact, model.user?.role == "ADMIN" {
-                    Button {
-                        model.selectedSection = .admin
-                    } label: {
-                        HStack {
-                            Label(AppSection.admin.title, systemImage: AppSection.admin.systemImage)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Image(systemName: "chevron.forward")
-                                .font(.orbitMeta)
-                                .foregroundStyle(.tertiary)
-                        }
-                        .contentShape(Rectangle())
+            if category == nil {
+                Section {
+                    NavigationLink(value: NavNode.settingsRunners) {
+                        Label("Runners", systemImage: AppSection.runners.systemImage)
                     }
-                    .buttonStyle(.plain)
+
+                    // Admin is off the compact drawer rail, and the account footer that used to link it
+                    // is gone — so this is its entry point on iPhone. It switches section (rather than
+                    // pushing) exactly as that menu item did.
+                    if hSize == .compact, model.user?.role == "ADMIN" {
+                        Button {
+                            model.selectedSection = .admin
+                        } label: {
+                            HStack {
+                                Label(AppSection.admin.title, systemImage: AppSection.admin.systemImage)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.forward")
+                                    .font(.orbitMeta)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             #endif
 
-            Section("Account") {
-                if let u = model.user {
-                    LabeledContent("Email", value: u.email)
-                    if let name = u.name, !name.isEmpty { LabeledContent("Name", value: name) }
-                    if let role = u.role { LabeledContent("Role", value: role) }
-                }
-                #if os(iOS)
-                if hSize == .compact {
-                    Button("Sign out", role: .destructive) { model.logout() }
-                }
-                #endif
-            }
-
-            Section("Preferences") {
-                Picker("Theme", selection: $theme) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                }
-                Picker("Default permission", selection: $permMode) {
-                    ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
-                }
-                #if os(macOS)
-                // iOS auto-saves on change (see `.onChange` below); macOS keeps an explicit commit.
-                Button("Save preferences") {
-                    Task { await model.savePreferences(preferencesPatch) }
-                }
-                #endif
-            }
-
-            // Orchestration is granted per agent — the server reads that agent's own switch on
-            // every claim and every spawn, so it stays revocable one agent at a time. What lives
-            // here is the paperwork: a default for the agents made next, and a way to set the ones
-            // that exist all at once instead of opening every agent's editor in turn.
-            Section("Session orchestration") {
-                Toggle("Grant it to new agents", isOn: $grantOrchestrationToNew)
-                Text("An agent you create from now on starts able to spawn and manage other "
-                     + "sessions via the orbit MCP session tools. Existing agents are untouched.")
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-
-                Text(orchestrationStatus)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                Button("Turn on for all") { confirmGrantAll = true }
-                    .disabled(agentCount == 0 || applyingOrchestration)
-                // No confirmation on the way out: this is the account's kill switch, and one you
-                // have to argue with is one you can't reach in a hurry.
-                Button("Turn off for all", role: .destructive) {
-                    Task { await applyOrchestrationToAll(false) }
-                }
-                .disabled(orchestratingCount == 0 || applyingOrchestration)
-                if let m = orchestrationMessage {
-                    Text(m).font(.orbitLabel).foregroundStyle(.secondary)
+            if shows(.account) {
+                Section("Account") {
+                    if let u = model.user {
+                        LabeledContent("Email", value: u.email)
+                        if let name = u.name, !name.isEmpty { LabeledContent("Name", value: name) }
+                        if let role = u.role { LabeledContent("Role", value: role) }
+                    }
+                    #if os(iOS)
+                    if hSize == .compact {
+                        Button("Sign out", role: .destructive) { model.logout() }
+                    }
+                    #endif
                 }
             }
 
-            Section("Change password") {
-                SecureField("Current password", text: $curPw)
-                SecureField("New password (min 6)", text: $newPw)
-                Button("Change password") {
-                    Task {
-                        let err = await model.changePassword(current: curPw, new: newPw)
-                        pwMessage = err ?? "Password changed."
-                        if err == nil { curPw = ""; newPw = "" }
+            if shows(.preferences) {
+                Section("Preferences") {
+                    Picker("Theme", selection: $theme) {
+                        Text("System").tag("system")
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                    }
+                    Picker("Default permission", selection: $permMode) {
+                        ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
+                    }
+                    #if os(macOS)
+                    // iOS auto-saves on change (see `.onChange` below); macOS keeps an explicit commit.
+                    Button("Save preferences") {
+                        Task { await model.savePreferences(preferencesPatch) }
+                    }
+                    #endif
+                }
+            }
+
+            if shows(.orchestration) {
+                // Orchestration is granted per agent — the server reads that agent's own switch on
+                // every claim and every spawn, so it stays revocable one agent at a time. What lives
+                // here is the paperwork: a default for the agents made next, and a way to set the ones
+                // that exist all at once instead of opening every agent's editor in turn.
+                Section("Session orchestration") {
+                    Toggle("Grant it to new agents", isOn: $grantOrchestrationToNew)
+                    Text("An agent you create from now on starts able to spawn and manage other "
+                         + "sessions via the orbit MCP session tools. Existing agents are untouched.")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+
+                    Text(orchestrationStatus)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    Button("Turn on for all") { confirmGrantAll = true }
+                        .disabled(agentCount == 0 || applyingOrchestration)
+                    // No confirmation on the way out: this is the account's kill switch, and one you
+                    // have to argue with is one you can't reach in a hurry.
+                    Button("Turn off for all", role: .destructive) {
+                        Task { await applyOrchestrationToAll(false) }
+                    }
+                    .disabled(orchestratingCount == 0 || applyingOrchestration)
+                    if let m = orchestrationMessage {
+                        Text(m).font(.orbitLabel).foregroundStyle(.secondary)
                     }
                 }
-                .disabled(curPw.isEmpty || newPw.count < 6)
-                if let m = pwMessage {
-                    Text(m).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+
+            if shows(.password) {
+                Section("Change password") {
+                    SecureField("Current password", text: $curPw)
+                    SecureField("New password (min 6)", text: $newPw)
+                    Button("Change password") {
+                        Task {
+                            let err = await model.changePassword(current: curPw, new: newPw)
+                            pwMessage = err ?? "Password changed."
+                            if err == nil { curPw = ""; newPw = "" }
+                        }
+                    }
+                    .disabled(curPw.isEmpty || newPw.count < 6)
+                    if let m = pwMessage {
+                        Text(m).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
                 }
             }
 
             #if os(macOS)
-            Section("Updates") {
-                Toggle("Receive beta updates", isOn: $updater.betaChannel)
-                Text("Beta releases ship earlier and may be less stable.")
-                    .font(.orbitLabel).foregroundStyle(.secondary)
+            if shows(.updates) {
+                Section("Updates") {
+                    Toggle("Receive beta updates", isOn: $updater.betaChannel)
+                    Text("Beta releases ship earlier and may be less stable.")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                }
             }
             #endif
         }
@@ -162,7 +182,9 @@ struct SettingsView: View {
         #endif
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
-        .navigationTitle("Settings")
+        // In whole-form mode this is the section's title; in a detail column the form *is* one
+        // category, and repeating "Settings" beside the list that already says it wastes the line.
+        .navigationTitle(category?.title ?? "Settings")
         .confirmationDialog("Let all \(agentCount) agents orchestrate?",
                             isPresented: $confirmGrantAll, titleVisibility: .visible) {
             Button("Turn on for all") { Task { await applyOrchestrationToAll(true) } }

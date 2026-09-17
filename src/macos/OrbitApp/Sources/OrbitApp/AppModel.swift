@@ -73,6 +73,11 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
+    /// Which Settings category the detail column renders on a regular-width iPad. Deliberately not
+    /// a navigation frame: the categories are that section's middle-column *content*, the way
+    /// sessions are the Agents column's content — `settingsRunners` is the push, and it stays one.
+    /// The single-column shells render the whole form and never read this.
+    var settingsCategory: SettingsCategory = .account
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read

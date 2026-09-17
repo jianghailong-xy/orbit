@@ -273,7 +273,14 @@ struct SectionContent: View {
         case .runners:
             RunnersListView()
         case .settings:
+            #if os(iOS)
+            // Settings is two columns here like every other section: its categories in this one,
+            // whichever is current in the pane beside it. This shell is only ever regular-width —
+            // the compact one renders the whole form from its own stack.
+            SettingsCategoryList()
+            #else
             SettingsView()
+            #endif
         case .admin:
             AdminUsersView()
         }
@@ -297,8 +304,17 @@ struct SectionDetail: View {
             RunnerDetailView()
         case .admin:
             AdminUserDetailView()
-        case .skills, .settings:
-            // Single-pane sections render everything in the middle column.
+        case .settings:
+            #if os(iOS)
+            SettingsDetail()
+            #else
+            // macOS leaves this pane a placeholder on purpose: ⌘, opens the real Settings window,
+            // and the middle column here is the whole form already.
+            ContentUnavailableView(section.title, systemImage: section.systemImage,
+                                   description: Text("Browse \(section.title.lowercased()) in the list."))
+            #endif
+        case .skills:
+            // Still single-pane: Skills is a browse-only list with nothing to select into.
             ContentUnavailableView(section.title, systemImage: section.systemImage,
                                    description: Text("Browse \(section.title.lowercased()) in the list."))
         }

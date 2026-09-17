@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import OrbitKit
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Settings
 /// section to the source it now *is*: **the section's stack in `NavState` is the only copy of how
@@ -72,6 +73,62 @@ final class SettingsStackWiringTests: XCTestCase {
         text.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")
+    }
+
+    /// Settings now fills both columns of the split shell, like every other section: its categories
+    /// in the middle one, whichever is current in the pane beside it. What stood in that pane before
+    /// was `ContentUnavailableView` — a sentence occupying the larger half of the screen to say the
+    /// content is in the smaller half, while the whole form crowded into that smaller half.
+    func testTheIPadSettingsFillsBothColumns() throws {
+        let main = code(try appSource("Views/MainView.swift"))
+        let content = try slice(main, from: "struct SectionContent: View {",
+                                to: "struct SectionDetail: View {")
+        let detail = try slice(main, from: "struct SectionDetail: View {",
+                               to: "struct ComingSoon: View {")
+
+        XCTAssertTrue(content.contains("SettingsCategoryList()"),
+                      "the middle column lists the categories")
+        XCTAssertTrue(detail.contains("SettingsDetail()"),
+                      "and the pane beside it renders the current one")
+        // Skills keeps the placeholder: it is a browse-only list with nothing to select into, which
+        // is what that branch was always for. Splitting it out is the point — the two sections were
+        // sharing an arm for different reasons.
+        XCTAssertTrue(detail.contains("case .skills:"), "Skills keeps its own arm")
+        XCTAssertFalse(detail.contains("case .skills, .settings:"),
+                       "Settings no longer shares the single-pane placeholder")
+    }
+
+    /// Every shell that wants the whole form still gets it from a no-argument initializer — the
+    /// category is an opt-in for the one shell that has a column to put the list in.
+    func testTheWholeFormRemainsTheDefault() throws {
+        let settings = code(try appSource("Views/SettingsAdminView.swift"))
+        XCTAssertTrue(settings.contains("var category: SettingsCategory? = nil"),
+                      "whole-form mode is the default, so SettingsView() keeps meaning the form")
+        let compact = code(try appSource("Views/CompactShell.swift"))
+        XCTAssertTrue(compact.contains("SettingsView().drawerToggle(open: openDrawer)"),
+                      "the iPhone drawer still renders the entire form")
+    }
+
+    /// The column's rows are labelled with the form's own section headings. Renaming a `Section`
+    /// without renaming its category would leave the list naming a heading that no longer exists —
+    /// and nothing else would catch it, since the two live in different modules.
+    func testEachCategoryNamesASectionTheFormActuallyRenders() throws {
+        let settings = code(try appSource("Views/SettingsAdminView.swift"))
+        for category in SettingsCategory.allCases {
+            XCTAssertTrue(settings.contains("Section(\"\(category.title)\")"),
+                          "the form renders no Section(\"\(category.title)\") for .\(category.rawValue)")
+        }
+    }
+
+    /// The categories gate their sections; whole-form mode must still emit all of them.
+    func testEachSectionIsGatedOnItsOwnCategory() throws {
+        let settings = code(try appSource("Views/SettingsAdminView.swift"))
+        for category in SettingsCategory.allCases {
+            XCTAssertTrue(settings.contains("if shows(.\(category.rawValue))"),
+                          "Section \(category.title) is not gated on .\(category.rawValue)")
+        }
+        XCTAssertTrue(settings.contains("category == nil || category == c"),
+                      "whole-form mode shows every section")
     }
 
     /// The compact Settings section moves a `NavigationStack` whose path IS the section's stack, so
