@@ -154,7 +154,7 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        console.replyContext != nil ? "Type your reply to Claude…" : "Message…"
+        console.replyContext?.placeholder ?? "Message…"
     }
 
     private var showsCompletedResumeNotice: Bool {
@@ -214,8 +214,7 @@ struct ComposerView: View {
             if let reply = console.replyContext {
                 HStack(spacing: 6) {
                     Image(systemName: "bubble.left.and.bubble.right.fill").foregroundStyle(.blue)
-                    Text(reply.question.isEmpty ? "Replying to Claude’s question"
-                                                : "Replying to Claude’s question: \(reply.question)")
+                    Text(reply.banner)
                         .font(.orbitLabel).lineLimit(1)
                     Spacer()
                     Button { console.cancelChatReply() } label: { Image(systemName: "xmark.circle.fill") }

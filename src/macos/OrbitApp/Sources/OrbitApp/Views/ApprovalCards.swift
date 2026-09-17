@@ -276,12 +276,38 @@ struct ToolApprovalCard: View {
         }
         .buttonStyle(.bordered)
     }
+    /// Saying no. To a tool call that is one press and done. To one of Orbit's own proposals it is
+    /// the press plus what to do instead: the refusal arms the composer and rides back with the
+    /// next send as one deny+message, because "not these tasks" without a sentence leaves the agent
+    /// knowing only that it was refused.
     private var denyButton: some View {
-        Button(role: .destructive) { decide(console, approval, .deny) } label: {
-            Text(batch != nil ? "Create nothing" : create != nil ? "Don't create" : dag != nil ? "Leave the graph alone" : "Deny")
+        // Red for a refusal, plain for a conversation: the words are the question card's own on an
+        // Orbit ask, and the same sentence cannot be red on one card and blue on the next.
+        Button(role: Approvals.isOrbitAsk(toolName: approval.toolName ?? "") ? nil : .destructive) {
+            let tool = approval.toolName ?? ""
+            guard Approvals.isOrbitAsk(toolName: tool) else {
+                decide(console, approval, .deny)
+                return
+            }
+            PlatformHaptics.tap()
+            console.startDeclineReply(approvalID: approval.id, toolName: tool,
+                                      subject: declineSubject)
+        } label: {
+            // Orbit's own asks say what the question card says, because the press does what the
+            // question card's press does. Only a plain tool call still says Deny: that one is
+            // refused where it stands, with nothing to discuss.
+            Text(Approvals.isOrbitAsk(toolName: approval.toolName ?? "") ? Approvals.chatAction : "Deny")
                 .approvalActionLabel()
         }
         .buttonStyle(.bordered)
+    }
+
+    /// What the composer's bar names as the thing not being done: the proposal's own subject.
+    private var declineSubject: String {
+        if let create { return create.title }
+        if let batch { return "\(batch.taskCount) new task\(batch.taskCount == 1 ? "" : "s")" }
+        if let dag { return dag.listTitle }
+        return approval.toolName ?? ""
     }
 }
 
@@ -810,10 +836,6 @@ private struct OwnerConfirmationCardView: View {
     /// The report this card was drawn for — the door's compare-and-set.
     let requestID: String
     @State private var deciding = false
-    /// The send-back's whole state, as one value OrbitKit owns the rules of — including the one that
-    /// matters: it cannot be sent without a reason, because the door refuses a SEND_BACK carrying
-    /// none and writes nothing at all.
-    @State private var sendBack = OwnerSendBackState()
 
     private var standing: OwnerConfirmationStanding { console.ownerStanding(taskID, requestID) }
 
@@ -854,9 +876,6 @@ private struct OwnerConfirmationCardView: View {
                 confirmButton(standing)
                 sendBackButton(standing)
             }
-            // Below the actions rather than inside them: on macOS those are one row, and a growing
-            // reason box wedged into it would push Confirm off its line.
-            if sendBack.open { reasonBox(standing) }
         }
         .approvalChrome(.blue, dimmed: !OwnerConfirmations.isOpen(standing))
     }
@@ -886,40 +905,23 @@ private struct OwnerConfirmationCardView: View {
         .disabled(deciding || !standing.answerable)
     }
 
+    /// The reason does not get a box here: the press hands it to the main composer, which is where
+    /// a message to this session is typed anyway, and the door's "no reason, no write" rule is then
+    /// the composer's own refusal to send an empty line.
     private func sendBackButton(_ standing: OwnerConfirmationStanding) -> some View {
         Button {
+            guard let waiting = standing.waiting else { return }
             PlatformHaptics.tap()
-            sendBack.open.toggle()
+            console.startOwnerSendBackReply(waiting,
+                                            title: console.ownerConfirmation?.title ?? taskID)
         } label: {
             Text(OwnerConfirmations.sendBackAction).approvalActionLabel()
         }
         .buttonStyle(.bordered)
         .disabled(deciding || !standing.answerable)
-    }
-
-    private func reasonBox(_ standing: OwnerConfirmationStanding) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(OwnerConfirmations.sendBackLabel)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            TextField("", text: $sendBack.note, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .font(.orbitControl)
-                .lineLimit(3...6)
-                .disabled(deciding || !standing.answerable)
-            Text(OwnerConfirmations.sendBackHint)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                decide(standing, .sendBack, note: sendBack.trimmedNote)
-            } label: {
-                Text(OwnerConfirmations.sendAction).approvalActionLabel()
-            }
-            .buttonStyle(.bordered)
-            // A send-back with no reason is refused by the door and writes nothing at all, so the
-            // control that would send one is not pressable until there is one.
-            .disabled(deciding || !standing.answerable || !sendBack.canSend)
-        }
+        // What the press promises, where the card no longer prints it: the reason becomes this
+        // session's next message and the task stays open.
+        .help(OwnerConfirmations.sendBackHint)
     }
 
     /// The press re-checks what the buttons were rendered from, so a race between a render and a tap

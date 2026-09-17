@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Composer handoff — mockup</title>
+<style>
+  :root { --blue:#0A84FF; --orange:#FF9F0A; --label:#fff; --label-2:rgba(235,235,245,.6);
+          --label-3:rgba(235,235,245,.3); --sep:rgba(84,84,88,.55); --surface:#000; --bar:#1c1c1e;
+          --chip:#2c2c2e; --nav:#3a3128; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:44px 34px 70px; background:#ececef; color:#16161a;
+         font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Noto Sans CJK SC",
+         "Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:27px; letter-spacing:-.02em; margin:0 0 8px; }
+  .lede { color:#55555e; max-width:1620px; margin:0 0 4px; } .lede b { color:#16161a; }
+  .row { display:flex; gap:34px; align-items:flex-start; margin-top:34px; }
+  figure { margin:0; width:393px; }
+  figcaption { margin-top:15px; font-size:13.5px; line-height:1.55; color:#55555e; }
+  figcaption b:first-child { display:block; font-size:14.5px; color:#16161a; margin-bottom:3px; }
+  figcaption b { color:#16161a; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:9px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  .phone { width:393px; height:852px; border-radius:44px; overflow:hidden; background:var(--surface);
+           color:var(--label); display:flex; flex-direction:column; position:relative; font-size:15px;
+           box-shadow:0 2px 4px rgba(0,0,0,.18), 0 16px 40px rgba(0,0,0,.22); }
+  .status { height:54px; display:flex; align-items:flex-end; justify-content:space-between;
+            padding:0 26px 6px; font-size:15.5px; font-weight:600; background:var(--nav); }
+  .status .right { display:flex; gap:6px; align-items:center; font-size:13px; }
+  .navbar { background:var(--nav); padding:6px 16px 12px; display:flex; align-items:center; gap:12px; }
+  .navbtn { width:44px; height:44px; border-radius:22px; background:rgba(255,255,255,.14);
+            display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .navtitle { flex:1; min-width:0; text-align:center; }
+  .navtitle .t { font-size:17px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .navtitle .s { font-size:12.5px; color:rgba(255,255,255,.62); white-space:nowrap; overflow:hidden;
+                 text-overflow:ellipsis; margin-top:1px; }
+  .openq { background:var(--nav); padding:10px 18px 14px; display:flex; align-items:center; gap:10px;
+           font-size:16px; font-weight:600; }
+  .dot { width:9px; height:9px; border-radius:5px; background:var(--orange); flex:0 0 auto; }
+  .scroll { flex:1; overflow:hidden; padding:12px 14px 0; display:flex; flex-direction:column;
+            justify-content:flex-end; gap:10px; }
+  .card { background:rgba(10,132,255,.12); border:1px solid rgba(10,132,255,.32); border-radius:14px;
+          padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .card.orange { background:rgba(255,159,10,.11); border-color:rgba(255,159,10,.34); }
+  .cardhead { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .chip { width:26px; height:26px; border-radius:8px; background:rgba(255,159,10,.22);
+          display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+  .ch-t { font-size:16px; font-weight:600; flex:1; min-width:0; }
+  .badge { font-size:11px; color:var(--label-2); border:1px solid var(--sep); border-radius:6px;
+           padding:1px 6px; }
+  .prose { font-size:14.5px; line-height:1.5; }
+  .detail { font-size:13px; color:var(--label-2); }
+  .rows { font-size:13.5px; color:var(--label-2); line-height:1.6; }
+  .box { background:rgba(255,255,255,.055); border-radius:10px; padding:10px 11px; }
+  .box .h { font-size:11px; font-weight:700; letter-spacing:.07em; color:var(--label-2); margin-bottom:5px; }
+  .box .b { font-size:14.5px; line-height:1.5; }
+  .fade { position:relative; max-height:132px; overflow:hidden; }
+  .fade:after { content:''; position:absolute; left:0; right:0; bottom:0; height:34px;
+                background:linear-gradient(to bottom, rgba(14,14,16,0), rgba(19,25,33,.92)); }
+  .showall { font-size:15px; margin-top:9px; display:flex; align-items:center; gap:5px; }
+  .btn { min-height:50px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+         gap:8px; font-size:17px; font-weight:500; }
+  .btn.primary { background:var(--blue); color:#fff; font-weight:600; }
+  .card.orange .btn.primary { background:var(--orange); color:#3a2a00; }
+  .btn.bordered { background:rgba(120,140,170,.16); color:var(--blue); }
+  .card.orange .btn.bordered { color:#FFB340; }
+  .btn.dead { background:rgba(120,140,170,.10); color:rgba(235,235,245,.28); }
+  .actions { display:flex; flex-direction:column; gap:10px; }
+  .reason { display:flex; flex-direction:column; gap:7px; }
+  .reason .lbl { font-size:14px; color:var(--label-2); }
+  .reason .field { height:104px; background:#000; border:1px solid var(--sep); border-radius:8px; }
+  .reason .hint { font-size:13.5px; color:var(--label-2); line-height:1.45; }
+  .composer { border-top:1px solid var(--sep); padding:10px 14px 0; display:flex; flex-direction:column;
+              gap:7px; background:var(--surface); }
+  .replybar { display:flex; align-items:center; gap:7px; background:rgba(10,132,255,.16);
+              border-radius:999px; padding:7px 10px; }
+  .replybar .t { font-size:13.5px; flex:1; min-width:0; white-space:nowrap; overflow:hidden;
+                 text-overflow:ellipsis; }
+  .cbox { display:flex; align-items:center; gap:10px; background:var(--bar); border-radius:26px;
+          padding:10px 12px; min-height:52px; }
+  .cbox.focused { border:1.5px solid var(--blue); box-shadow:0 0 0 3px rgba(10,132,255,.18);
+                  padding:8.5px 10.5px; }
+  .cbox .ph { flex:1; color:var(--label-3); font-size:17px; }
+  .cbox .ph.caret:after { content:''; display:inline-block; width:2px; height:19px; background:var(--blue);
+                          vertical-align:-3px; margin-left:1px; }
+  .send { width:34px; height:34px; border-radius:17px; background:var(--chip); display:flex;
+          align-items:center; justify-content:center; flex:0 0 auto; }
+  .modelbar { display:flex; align-items:center; gap:16px; font-size:14px; color:var(--label-2);
+              padding:2px 4px 0; }
+  .modelbar .sp { flex:1; }
+  .home { height:26px; display:flex; align-items:center; justify-content:center; }
+  .home:after { content:''; width:140px; height:5px; border-radius:3px; background:rgba(255,255,255,.35); }
+  svg { display:block; }
+  .ic { width:18px; height:18px; flex:0 0 auto; }
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-7px -6px; border:2px dashed var(--orange);
+                 border-radius:14px; pointer-events:none; }
+</style>
+<body>
+<h1>两张卡片，同一个改动：理由交给主输入框</h1>
+<p class="lede"><b>按钮文案一个字不改。</b>改的是按下之后：卡片不再自己长出输入框，而是接管底部的主输入框——上方出现一条说明这次要答什么的横条，<b>下一次发送就是这次作答</b>。确认卡走确认门的 <b>SEND_BACK + note</b>，创建卡走 <b>deny + message</b>（和问题卡的 Chat about this 同一条路）。</p>
+<div class="row">
+<figure><div class="tag now">现状</div><div class="phone">
+      <div class="status"><span>7:14</span><span class="right">••ıl &nbsp;ᯤ&nbsp; 96</span></div>
+      <div class="navbar">
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg></div>
+        <div class="navtitle"><div class="t">执行任务：OWNER_CONFI…</div><div class="s">Waiting for your confirmation · Open · 4m…</div></div>
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg></div>
+      </div>
+      <div class="openq"><span class="dot"></span><span style="flex:1">1 open question below</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"
+             stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div><div class="scroll"><div class="card">
+          <div class="box"><div class="h">WHAT THE RUN REPORTED · 7:10</div>
+            <div class="b fade">收：未修改仓库任何文件、未提交，工作树保持在 da3b4e698 (main)。 现在结束回合，服务端应记下一条等待确认 (task_owner_confirmation_request)。 请所有者在 iPhone 的 Orbit app 里核对：会话行与控制台头部字幕为 Waiting for your confirmation，会话末尾出现确认卡（任务标…</div>
+            <div class="showall">Show all <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div></div>
+          <div class="actions">
+            <div class="btn primary">Confirm done</div>
+            <div class="btn bordered mark" style="margin-top:2px">Send back…</div>
+          </div>
+          <div class="reason mark">
+            <div class="lbl">What's missing?</div>
+            <div class="field"></div>
+            <div class="hint">Sent to this session as your next message. The task stays open.</div>
+            <div class="btn dead">Send back</div>
+          </div></div></div><div class="composer"><div class="cbox"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.6)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="ph">Message…</span><div class="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.5)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg></div></div><div class="modelbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span><span class="sp"></span><span>6%</span></div><div class="home"></div></div></div><figcaption><b>确认卡 · 现在</b>按 <b>Send back…</b>，卡片就地展开「What's missing?」+ 文本框 + 第二颗 <b>Send back</b>。屏幕上同时有<b>两个</b>能打字的地方，而卡片自己的提示语写的正是「Sent to this session as your next message」——说的就是下面那个输入框。</figcaption></figure>
+<figure><div class="tag new">改后（按下 Send back… 之后）</div><div class="phone">
+      <div class="status"><span>7:14</span><span class="right">••ıl &nbsp;ᯤ&nbsp; 96</span></div>
+      <div class="navbar">
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg></div>
+        <div class="navtitle"><div class="t">执行任务：OWNER_CONFI…</div><div class="s">Waiting for your confirmation · Open · 4m…</div></div>
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg></div>
+      </div>
+      <div class="openq"><span class="dot"></span><span style="flex:1">1 open question below</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"
+             stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div><div class="scroll"><div class="card">
+          <div class="box"><div class="h">WHAT SETTLES IT</div>
+            <div class="b">所有者在 iPhone 上核对确认卡的长相与文案，并按下 Confirm done。</div></div>
+          <div class="box"><div class="h">WHAT THE RUN REPORTED · 7:10</div>
+            <div class="b fade">收：未修改仓库任何文件、未提交，工作树保持在 da3b4e698 (main)。 现在结束回合，服务端应记下一条等待确认 (task_owner_confirmation_request)。 请所有者在 iPhone 的 Orbit app 里核对：会话行与控制台头部字幕为 Waiting for your confirmation，会话末尾出现确认卡（任务标…</div>
+            <div class="showall">Show all <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div></div>
+          <div class="actions">
+            <div class="btn primary">Confirm done</div>
+            <div class="btn bordered" style="margin-top:2px; box-shadow:0 0 0 2px var(--blue) inset">Send back…</div>
+          </div></div></div><div class="composer"><div class="replybar mark"><svg class="ic" viewBox="0 0 24 24" fill="var(--blue)" stroke="none"><path d="M3 8.5a3 3 0 0 1 3-3h7a3 3 0 0 1 3 3v3a3 3 0 0 1-3 3H8l-4 3v-3a3 3 0 0 1-1-2.2z"/><path d="M17.6 9.5H18a3 3 0 0 1 3 3v2.6a3 3 0 0 1-1 2.2v2.7l-3-2.5h-3.6a4.5 4.5 0 0 0 2.2-3.8z"/></svg><span class="t">Sending back to this run: 验证 OWNER_CONFIRMED 的等待确认回执</span><svg class="ic" viewBox="0 0 24 24" fill="rgba(235,235,245,.45)"><circle cx="12" cy="12" r="10"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#1c1c1e" stroke-width="2" stroke-linecap="round"/></svg></div><div class="cbox focused"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.6)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="ph caret">What's missing?</span><div class="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.5)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg></div></div><div class="modelbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span><span class="sp"></span><span>6%</span></div><div class="home"></div></div></div><figcaption><b>确认卡 · 改后</b><b>按钮文案一个字没动</b>，动的是它做什么：不再开卡内输入框，而是接管主输入框——上方出现 <b>Sending back to this run: &lt;任务标题&gt;</b>，占位符变成 <b>What's missing?</b>，光标自动落进去。这一次发送走确认门的 <b>SEND_BACK + note</b>，发完卡片变成 <b>Sent back</b> 回执。空输入发不出去（门本来就拒收没有理由的 send back）；点 <b>✕</b> 或按 <b>Confirm done</b> 都能退出。省下的高度还给内容框：<b>WHAT SETTLES IT</b> 不用滚就能看见。</figcaption></figure>
+<figure><div class="tag now">现状</div><div class="phone">
+      <div class="status"><span>7:14</span><span class="right">••ıl &nbsp;ᯤ&nbsp; 96</span></div>
+      <div class="navbar">
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg></div>
+        <div class="navtitle"><div class="t">新会话</div><div class="s">Waiting for approval · Open · 1m…</div></div>
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg></div>
+      </div>
+      <div class="openq"><span class="dot"></span><span style="flex:1">1 open question below</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"
+             stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div><div class="scroll"><div class="card orange">
+          <div class="cardhead">
+            <span class="chip">📝</span>
+            <span class="ch-t">Create task “修好 iOS 上的确认卡回执”?</span>
+            <span class="badge">new task</span>
+          </div>
+          <div class="prose">把 OWNER_CONFIRMED 的回执补齐：run 结束回合后，会话行与控制台头部都要显示
+            Waiting for your confirmation。</div>
+          <div class="detail">Done when</div>
+          <div class="rows">• 会话行字幕为 Waiting for your confirmation<br>• 会话末尾出现确认卡<br>• 按下后写出一条决定行</div>
+          <div class="actions">
+            <div class="btn primary">Create it</div>
+            <div class="btn bordered mark">Don't create</div>
+          </div>
+        </div></div><div class="composer"><div class="cbox"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.6)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="ph">Message…</span><div class="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.5)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg></div></div><div class="modelbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span><span class="sp"></span><span>6%</span></div><div class="home"></div></div></div><figcaption><b>创建卡 · 现在</b>按 <b>Don't create</b> 当场拒绝，然后什么也不说。agent 只知道「被拒了」，不知道为什么、也不知道该改成什么——想补一句，得自己再去输入框重打一遍。</figcaption></figure>
+<figure><div class="tag new">改后（按下 Don't create 之后）</div><div class="phone">
+      <div class="status"><span>7:14</span><span class="right">••ıl &nbsp;ᯤ&nbsp; 96</span></div>
+      <div class="navbar">
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg></div>
+        <div class="navtitle"><div class="t">新会话</div><div class="s">Waiting for approval · Open · 1m…</div></div>
+        <div class="navbtn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg></div>
+      </div>
+      <div class="openq"><span class="dot"></span><span style="flex:1">1 open question below</span>
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"
+             stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div><div class="scroll"><div class="card orange">
+          <div class="cardhead">
+            <span class="chip">📝</span>
+            <span class="ch-t">Create task “修好 iOS 上的确认卡回执”?</span>
+            <span class="badge">new task</span>
+          </div>
+          <div class="prose">把 OWNER_CONFIRMED 的回执补齐：run 结束回合后，会话行与控制台头部都要显示
+            Waiting for your confirmation。</div>
+          <div class="detail">Done when</div>
+          <div class="rows">• 会话行字幕为 Waiting for your confirmation<br>• 会话末尾出现确认卡<br>• 按下后写出一条决定行</div>
+          <div class="actions">
+            <div class="btn primary">Create it</div>
+            <div class="btn bordered mark" style="box-shadow:0 0 0 2px var(--blue) inset">Don't create</div>
+          </div>
+        </div></div><div class="composer"><div class="replybar mark"><svg class="ic" viewBox="0 0 24 24" fill="var(--blue)" stroke="none"><path d="M3 8.5a3 3 0 0 1 3-3h7a3 3 0 0 1 3 3v3a3 3 0 0 1-3 3H8l-4 3v-3a3 3 0 0 1-1-2.2z"/><path d="M17.6 9.5H18a3 3 0 0 1 3 3v2.6a3 3 0 0 1-1 2.2v2.7l-3-2.5h-3.6a4.5 4.5 0 0 0 2.2-3.8z"/></svg><span class="t">Not creating: 修好 iOS 上的确认卡回执</span><svg class="ic" viewBox="0 0 24 24" fill="rgba(235,235,245,.45)"><circle cx="12" cy="12" r="10"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="#1c1c1e" stroke-width="2" stroke-linecap="round"/></svg></div><div class="cbox focused"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.6)" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="ph caret">Say what to do instead…</span><div class="send"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="rgba(235,235,245,.5)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg></div></div><div class="modelbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span><span class="sp"></span><span>6%</span></div><div class="home"></div></div></div><figcaption><b>创建卡 · 改后</b><b>不加第三颗按钮</b>：<b>Don't create</b> 本身变成「不创建 + 说说怎么改」。按下后输入框上方出现 <b>Not creating: &lt;标题&gt;</b>，占位符 <b>Say what to do instead…</b>，下一次发送把<b>拒绝和理由一起</b>送回（deny + message，和问题卡的 Chat about this 同一条路）。依赖图那张说的是 <b>Leaving the graph alone:</b>。普通工具调用的 <b>Reject</b> 不变——拒一条 shell 命令不该先交作文。</figcaption></figure>
+</div>
+</body>
+</html>

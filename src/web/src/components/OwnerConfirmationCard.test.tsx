@@ -16,7 +16,6 @@ import {
   OWNER_CONFIRMATION_SHOW_ALL,
   OWNER_CONFIRMED_HEADING,
   OWNER_CONFIRM_ACTION,
-  OWNER_SEND_ACTION,
   OWNER_SEND_BACK_ACTION,
   OWNER_SEND_BACK_HINT,
   OWNER_SEND_BACK_LABEL,
@@ -126,7 +125,7 @@ function buttons(html: string): Array<{ tag: string; text: string }> {
 
 const isDisabled = (tag: string): boolean => /\sdisabled(?:=|\s|>)/u.test(tag);
 
-function card(over: { busy?: boolean; waiting?: OwnerConfirmationWaiting; view?: OwnerConfirmationView } = {}): string {
+function card(over: { busy?: boolean; waiting?: OwnerConfirmationWaiting; view?: OwnerConfirmationView; onSendBack?: () => void } = {}): string {
   const v = over.view ?? view();
   return renderToStaticMarkup(
     <OwnerConfirmationCard
@@ -134,6 +133,7 @@ function card(over: { busy?: boolean; waiting?: OwnerConfirmationWaiting; view?:
       waiting={over.waiting ?? v.waiting ?? waiting()}
       busy={over.busy}
       onDecide={() => {}}
+      onSendBack={over.onSendBack ?? (() => {})}
     />,
   );
 }
@@ -156,7 +156,7 @@ function sessionCard(read: OwnerConfirmationView | null, sessionId = SESSION_ID,
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <SessionOwnerConfirmationCard sessionId={sessionId} taskId={taskId} />
+        <SessionOwnerConfirmationCard sessionId={sessionId} taskId={taskId} onSendBack={() => {}} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -201,14 +201,6 @@ async function press(button: HTMLElement): Promise<void> {
   await act(async () => new Promise((done) => setTimeout(done, 0)));
 }
 
-async function type(field: HTMLTextAreaElement, text: string): Promise<void> {
-  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-  await act(async () => {
-    setValue.call(field, text);
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-}
-
 describe('the confirmation card', () => {
   it('asks in its own frame, with the task, what settles it and what the run reported', () => {
     const html = card();
@@ -229,7 +221,7 @@ describe('the confirmation card', () => {
     expect(html).toContain(`data-owner-confirmation="${REQUEST_ID}"`);
   });
 
-  it('has exactly two answers, Confirm done and Send back…, and both can be pressed', () => {
+  it('has exactly two answers, Confirm done and Chat about this, and both can be pressed', () => {
     const answers = buttons(card()).filter((button) => button.text !== OWNER_CONFIRMATION_SHOW_ALL);
     expect(answers.map((button) => button.text)).toEqual([OWNER_CONFIRM_ACTION, OWNER_SEND_BACK_ACTION]);
     expect(answers.map((button) => isDisabled(button.tag))).toEqual([false, false]);
@@ -312,34 +304,43 @@ describe('what a press sends', () => {
     expect(ownerDecisionRefusal(Object.assign(new Error('x'), { code: 'OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER' })).stale).toBe(false);
   });
 
-  it('Send back… opens the reason, which has to be written before it can be sent', async () => {
+  it('Chat about this hands the reason to the composer, and presses nothing itself', async () => {
     const qc = newClient();
     qc.setQueryData(ownerConfirmationQuery(TASK_ID).queryKey, view());
-    apiMock.mockResolvedValue({ id: 'decision-1', decision: 'SEND_BACK' });
+    const armed: Array<[string, string]> = [];
     const scope = await mount(
       <QueryClientProvider client={qc}>
         <MemoryRouter>
-          <SessionOwnerConfirmationCard sessionId={SESSION_ID} taskId={TASK_ID} />
+          <SessionOwnerConfirmationCard
+            sessionId={SESSION_ID}
+            taskId={TASK_ID}
+            onSendBack={(w, title) => armed.push([w.requestId, title])}
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );
+    // The card takes no text — that is the whole change. It never did before the press either, so
+    // the assertion that means something is the one after it.
     expect(scope.querySelector('textarea')).toBeNull();
+
     await press(buttonIn(scope, OWNER_SEND_BACK_ACTION));
 
-    expect(scope.textContent).toContain(OWNER_SEND_BACK_LABEL);
-    expect(scope.textContent).toContain(OWNER_SEND_BACK_HINT);
-    const send = buttonIn(scope, OWNER_SEND_ACTION);
-    expect(send.disabled).toBe(true);
-    await type(scope.querySelector('textarea')!, '   ');
-    expect(buttonIn(scope, OWNER_SEND_ACTION).disabled).toBe(true);
-    await type(scope.querySelector('textarea')!, '  The 09-17 invoice still has no amount.  ');
-    expect(buttonIn(scope, OWNER_SEND_ACTION).disabled).toBe(false);
+    // Still no box, and nothing was sent: the door is pressed by the send that follows, at the
+    // composer, with whatever is typed there.
+    expect(scope.querySelector('textarea')).toBeNull();
+    expect(apiMock).not.toHaveBeenCalled();
+    // What the composer is handed is the request this card was drawn for, and the task's own title
+    // for its bar — not the task id, which names nothing a reader recognises.
+    expect(armed).toEqual([[REQUEST_ID, TITLE]]);
+  });
 
-    await press(buttonIn(scope, OWNER_SEND_ACTION));
-    expect(apiMock).toHaveBeenCalledWith(`/tasks/${TASK_ID}/owner-confirmation`, {
-      method: 'POST',
-      body: { decision: 'SEND_BACK', requestId: REQUEST_ID, note: 'The 09-17 invoice still has no amount.' },
-    });
+  it('says what the press promises where the reason box used to say it', () => {
+    // The sentence did not survive as a line under a box, because there is no box. It survives as
+    // the button's own tooltip, so "the task stays open" is still readable before pressing.
+    const html = card();
+    expect(html).toContain(escaped(OWNER_SEND_BACK_HINT));
+    // And the reason's label is still declared, because the composer asks with it.
+    expect(OWNER_SEND_BACK_LABEL).toBe("What's missing?");
   });
 
   it('Confirm done posts the owner\'s decision about the report on the card, and re-reads', async () => {
@@ -350,7 +351,7 @@ describe('what a press sends', () => {
     const scope = await mount(
       <QueryClientProvider client={qc}>
         <MemoryRouter>
-          <SessionOwnerConfirmationCard sessionId={SESSION_ID} taskId={TASK_ID} />
+          <SessionOwnerConfirmationCard sessionId={SESSION_ID} taskId={TASK_ID} onSendBack={() => {}} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -388,12 +389,18 @@ describe('the list row and the pinned line only signal', () => {
 
   it('puts no way to answer on the session list: the view mounts the card, and nothing that decides', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/WorkspaceView.tsx'), 'utf8');
-    // The only piece of the card the list's own file takes is the card itself, mounted in the
-    // conversation, plus the words and the read. The press, its request and its labels are not there.
-    expect(source).not.toMatch(/\bsendOwnerDecision\b|\bownerDecisionRequest\b/u);
+    // No second control that decides: not the card's actions, not its two labels, and exactly one
+    // card mounted. That is what "one place to answer" means and it is unchanged.
     expect(source).not.toMatch(/\bOWNER_CONFIRM_ACTION\b|\bOWNER_SEND_BACK_ACTION\b|OwnerConfirmationActions/u);
-    expect(source).not.toMatch(/['"`]Confirm done['"`]|['"`]Send back…['"`]/u);
+    expect(source).not.toMatch(/['"`]Confirm done['"`]/u);
+    expect(source).not.toMatch(/\bownerDecisionRequest\b/u);
     expect(source.match(/<SessionOwnerConfirmationCard\b/gu)?.length).toBe(1);
+    // What this file DOES press is the send the composer completes, and it may only ever send a
+    // report back. A confirmation from here would be the second answer this rule exists to prevent
+    // — the card's own Confirm done is the only one — so `'CONFIRM'` must not appear beside it.
+    expect(source.match(/\bsendOwnerDecision\b/gu)?.length).toBe(2); // the import, and the one call
+    expect(source).toMatch(/decision: 'SEND_BACK'/u);
+    expect(source).not.toMatch(/decision: 'CONFIRM'/u);
   });
 
   it('pins one line that points at the card in its own words, and answers nothing', () => {

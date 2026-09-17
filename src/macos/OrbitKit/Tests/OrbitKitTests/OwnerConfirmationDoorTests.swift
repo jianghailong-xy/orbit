@@ -190,7 +190,7 @@ final class OwnerConfirmationDoorTests: XCTestCase {
                       "the key is present and null, so the door is told which question this answers")
     }
 
-    /// `Send back…` sends the same two bindings with the reason beside them, trimmed.
+    /// A send-back sends the same two bindings with the reason beside them, trimmed.
     func testSendBackPostsTheTrimmedReasonBesideTheBindings() async throws {
         let recorder = OwnerDoorRecorder()
         OwnerDoorURLProtocol.handler = { request in
@@ -255,15 +255,13 @@ final class OwnerConfirmationDoorTests: XCTestCase {
                                                   note: "  说清缺什么  ")?.note,
                        "说清缺什么")
 
-        // The control that would send one follows the same rule, so the button cannot be lit while
-        // no answer could succeed. The card disables it on `canSend` AND the standing's
-        // `answerable`; the first is the reason string, the second is the question.
-        var box = OwnerSendBackState(open: true)
-        XCTAssertFalse(box.canSend, "an open box is not a reason")
-        box.note = "  \n "
-        XCTAssertFalse(box.canSend, "whitespace is not a reason either")
-        box.note = "把 iOS 的 job 结论贴上"
-        XCTAssertTrue(box.canSend)
+        // The card no longer holds the reason — the composer does, and its own "nothing typed,
+        // nothing sends" rule is what keeps a reasonless send-back from ever being built. This
+        // request builder is the second gate, and the one that survives on any path to the door:
+        // whatever the composer let through, a blank still makes no request.
+        XCTAssertNil(OwnerConfirmations.request(waiting: asked, decision: .sendBack,
+                                                note: "\u{00A0}"),
+                     "a non-breaking space is not a reason either")
     }
 
     // MARK: 3 — where a delivered card stands
