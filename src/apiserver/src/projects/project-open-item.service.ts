@@ -13,6 +13,7 @@ import {
   openItemTurnId,
   sessionHasEnded,
 } from './project-open-item';
+import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 
 /** One exception item, as a reader of the project sees it (§4.8). */
 export interface OpenItemRow {
@@ -36,7 +37,7 @@ export interface OpenItemRow {
     at: Date | null;
   };
   /** Doors that exist today. An action nobody can perform is not offered. */
-  actions: Array<'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK'>;
+  actions: Array<'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK' | 'RESUME'>;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -339,11 +340,13 @@ export class ProjectOpenItemService {
               : handed
                 ? { state: 'DELIVERED', sessionId: sent.sessionId, at: handed }
                 : { state: 'QUEUED', sessionId: sent.sessionId, at: sent.createdAt },
-        actions: row.taskId
-          ? row.assignee === 'COORDINATOR'
-            ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
-            : ['OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
-          : [],
+        actions: row.fuseEpisodeId
+          ? ['RESUME']
+          : row.taskId
+            ? row.assignee === 'COORDINATOR'
+              ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
+              : ['OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
+            : [],
       };
     });
     return {
@@ -446,6 +449,9 @@ function unique(ids: ReadonlyArray<string | null | undefined>): string[] {
 
 /** The line under an item's title, in the words of the fact (English: this is UI copy). */
 function detailLine(kind: string, payload: unknown): string {
+  // A pause writes its own, because what it has to say is not "something failed" but what the
+  // coordinator spent, what is still running without it, and what resuming does and does not do.
+  if (kind === 'FUSE_PAUSED') return fusePausedDetailLine(payload as FusePausedPayload);
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
     how?: string;

@@ -831,6 +831,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        no trigger and drops none, so it names none of the six preserved triggers or functions
   //        and is not a second writer of the DONE fence. Nothing it creates uses the
   //        `project_acceptance_` prefix or the word `judgment`.
+  //   0284 added `project_fuse_episode` and `project_fuse_held_action` — a coordinator's spend fuse
+  //        having blown, and what it held while it had — and gave `project_open_item.fuse_episode_id`
+  //        the foreign key 0278 said would come with them. Read against every claim above: the two
+  //        tables are its own, and the only preserved relation it touches is `project_open_item`,
+  //        which it reaches by ADDing a constraint to a column that already exists and is NULL in
+  //        every row ever written. It drops and retypes nothing, carries no DML of any kind, and
+  //        creates no type — so no stored task, criterion or acceptance row can move by one byte, and
+  //        the 0177 pair and the `task_completion_criterion` labels are out of its reach. Its one
+  //        function and trigger, `project_fuse_episode_resumed_guard`, is BEFORE UPDATE on its own
+  //        new table and refuses rewrites of a resumed episode: it writes nothing, names none of the
+  //        six preserved triggers or functions, and is not a second writer of the DONE fence. Nothing
+  //        it creates uses the `project_acceptance_` prefix or the word `judgment`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -879,7 +891,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0280_task_list_task_count',
       '0281_project_integration_job',
       '0282_project_task_status_count',
-      '0283_task_project_assignee_idx'],
+      '0283_task_project_assignee_idx',
+      '0284_project_fuse_pause'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

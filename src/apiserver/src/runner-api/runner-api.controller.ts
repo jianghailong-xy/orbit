@@ -155,6 +155,7 @@ import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { type TaskFailure, recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
@@ -586,6 +587,12 @@ export class RunnerApiController {
      * report.
      */
     @Optional() private readonly integrationJobs?: IntegrationJobRelay,
+    /**
+     * The coordinator's spend fuse, read on the two facts an event batch can commit (contract §6.1
+     * F5). `@Optional()` for the same reason as the rest of this list, and harmless when absent: a
+     * reading not taken here is taken on the next batch that carries the same kind of spend.
+     */
+    @Optional() private readonly fuse?: ProjectFuseService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -4523,6 +4530,15 @@ export class RunnerApiController {
         if (isNoiseSystemEvent(e)) continue;
         this.realtime.publish(sessionId, e);
       }
+    }
+    // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
+    // turn nobody delivered, or a call that opened a session. Decided from the batch already in
+    // hand rather than by asking the fuse on every ingest — this is the hottest path there is, and
+    // a batch carrying neither is the overwhelming majority.
+    if (durable.some((e) => e.type === RunEventType.TURN_END && !e.turnId)) {
+      await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
+    } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
+      await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
     }
     return { ok: true };
   }

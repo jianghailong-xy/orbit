@@ -25,6 +25,7 @@ import {
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
   ResolveProjectBlockerDto,
+  ResumeProjectFuseDto,
   UpdateProjectDto,
   UpdateProjectIntegrationDto,
 } from './dto';
@@ -32,6 +33,7 @@ import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
+import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
 import { HANDOFF_STORED_STATES, type HandoffStoredState } from './project-handoff';
@@ -50,6 +52,9 @@ export class ProjectsController {
     /** What this project owes somebody a decision about (contract §4.8). Last in the list, so the
      *  specs that build this controller by hand keep constructing it exactly as they did. */
     private readonly openItems: ProjectOpenItemService,
+    /** The owner's door back from a paused coordinator (contract §6.3). Appended for the same
+     *  reason as the line above: the specs that build this controller by hand keep their order. */
+    private readonly fuse: ProjectFuseService,
   ) {}
 
   /**
@@ -426,6 +431,28 @@ export class ProjectsController {
   @Get(':id/open-items')
   openItemsOf(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.openItems.list(user.userId, id);
+  }
+
+  /**
+   * Let this project's coordinator start things again (contract §6.3 F-T4).
+   *
+   * The owner's alone, and this controller is the reason that holds: it is reached with an account
+   * credential and never carries an acting session, while the runner door an agent knocks on does
+   * not expose this route at all. The service restates it for anything that reaches it another way.
+   *
+   * Everything the pause held goes back out in the order it was asked in, and every fact it refused
+   * is asked again from the rows it was derived from. A body raises what the coordinator may spend
+   * today; an empty one resumes without raising anything, which — since the day's spend has not
+   * moved — is how a project pauses again on the next thing its coordinator starts.
+   */
+  @Post(':id/fuse/:episodeId/resume')
+  resumeFuse(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('episodeId', PublicIdPipe) episodeId: string,
+    @Body() dto: ResumeProjectFuseDto,
+  ) {
+    return this.fuse.resume(user.userId, id, episodeId, { raiseLimits: dto });
   }
 
   @Post(':id/blockers/:blockerId/resolve')

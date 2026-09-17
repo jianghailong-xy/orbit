@@ -17,6 +17,7 @@ import { RunnerSessionScope, SessionsService } from '../sessions/sessions.servic
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
+import { ProjectFuseService } from '../projects/project-fuse.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { SessionLifecycleActor } from '../projects/attempt-budget';
 import { CurrentRunner } from './current-runner.decorator';
@@ -66,6 +67,13 @@ export class RunnerSessionsController {
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly mergeReceipts: MergeReceiptService,
     private readonly attempts: SessionAttemptService,
+    /**
+     * The spend fuse, for the one thing this door starts (contract §6.4 F7). Optional in the
+     * signature for the specs that construct this controller directly, exactly as the runner API
+     * controller's later collaborators are: a spawn nothing held is a spawn, which is what every
+     * one of those specs is about.
+     */
+    private readonly fuse?: ProjectFuseService,
   ) {}
 
   /**
@@ -147,6 +155,12 @@ export class RunnerSessionsController {
     }
     this.assertNoServiceToken(grant);
     const caller = await this.orchestration.assert(runner, parentSessionId, orchestrationToken);
+    // A coordinator whose project paused its fuse does not get told no — what it asked for is kept
+    // and goes out when the account owner resumes (contract §6.3 F-T2). Asked here, at the door,
+    // because this is where "who is asking" is known; a session that coordinates nothing, or whose
+    // project is not paused, spawns exactly as it always did.
+    const held = await this.fuse?.holdIfPaused(caller, 'SESSION_CREATE', { dto });
+    if (held) return held;
     return this.sessions.spawnFromSession(runner.ownerId, caller, dto);
   }
 

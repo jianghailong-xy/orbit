@@ -1936,6 +1936,10 @@ model Project {
 
   /// Every attempt the platform made to land work on this project's integration line (migration 0281).
   integrationJobs ProjectIntegrationJob[]
+  /// The times this project's coordinator spent more than it may on its own, and what each pause
+  /// held while it lasted (migration 0280).
+  fuseEpisodes    ProjectFuseEpisode[]
+  fuseHeldActions ProjectFuseHeldAction[]
 
   /// The per-status tally of this project's tasks (migration 0282), maintained by the
   /// `project_task_status_count_sync` triggers on `task` and read by the detail read instead of a
@@ -2204,10 +2208,12 @@ model ProjectOpenItem {
   /// The attempt the item came from. History rather than a foreign key: a session purged from Trash
   /// leaves its items as they were.
   sessionId        String? @map("session_id") @db.Uuid
-  integrationJobId String? @map("integration_job_id") @db.Uuid
-  promotionId      String? @map("promotion_id") @db.Uuid
-  fuseEpisodeId    String? @map("fuse_episode_id") @db.Uuid
-  askedBySessionId String? @map("asked_by_session_id") @db.Uuid
+  integrationJobId String?             @map("integration_job_id") @db.Uuid
+  promotionId      String?             @map("promotion_id") @db.Uuid
+  /// The pause this card is about, for a `FUSE_PAUSED` item (migration 0280).
+  fuseEpisodeId    String?             @map("fuse_episode_id") @db.Uuid
+  fuseEpisode      ProjectFuseEpisode? @relation(fields: [fuseEpisodeId], references: [id], onDelete: Cascade)
+  askedBySessionId String?             @map("asked_by_session_id") @db.Uuid
 
   dedupeKey String @map("dedupe_key")
   /// Written once from rows that do not change, so a delivery built from them reads the same on replay.
@@ -2262,6 +2268,77 @@ model ProjectOpenItemDelivery {
   @@unique([itemId, sessionId, purpose], map: "project_open_item_delivery_item_session_purpose_key")
   @@index([sessionId, clientTurnId], map: "project_open_item_delivery_session_turn_idx")
   @@map("project_open_item_delivery")
+}
+
+/// One time a project's coordinator spent more on its own than the project allows, and what became of
+/// it (docs/project-integration-line-contract.md §6.2, migration 0280).
+///
+/// The reading is kept as it was taken — which kind crossed, against which limit, over which window,
+/// and the committed row whose arrival made the fuse read itself — because a pause is a conclusion the
+/// owner is asked to overturn, and they can only weigh what it was concluded from. A resumed episode is
+/// final (`project_fuse_episode_resumed_guard`) and a project has at most one open at a time, both
+/// partial conditions this schema cannot spell. The card is `openItems`, and there is exactly one.
+model ProjectFuseEpisode {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  ownerId   String  @map("owner_id") @db.Uuid
+  project   Project @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+
+  /// How many times this project has paused, counting from 1.
+  generation Int
+  /// Which kind of autonomous spend crossed: SELF_STARTED_TURNS, SESSIONS_OPENED, SUCCESSOR_RETRIES.
+  dimension   String
+  observed    Int
+  limitValue  Int      @map("limit_value")
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  /// All three kinds as they stood at the reading, so the card says what the day cost and not only
+  /// the one line that crossed.
+  spend Json
+  /// `{ table: 'run_event' | 'tool_call' | 'task', id }` — the committed row this reading was taken on.
+  crossingFact Json @map("crossing_fact")
+
+  pausedAt        DateTime  @default(now()) @map("paused_at") @db.Timestamptz(3)
+  resumedAt       DateTime? @map("resumed_at") @db.Timestamptz(3)
+  resumedByUserId String?   @map("resumed_by_user_id") @db.Uuid
+  /// What this resume raised, when the owner raised anything.
+  raisedLimits Json? @map("raised_limits")
+
+  heldActions ProjectFuseHeldAction[]
+  openItems   ProjectOpenItem[]
+
+  @@map("project_fuse_episode")
+}
+
+/// One thing the coordinator tried to start while its project was paused (§6.2, migration 0280).
+///
+/// Held rather than refused: the request is kept verbatim, with the conversation that asked and the
+/// order it asked in, so resuming puts it back through the door it was held at instead of telling an
+/// agent to do it again. `replayResult` says what the replay came to — what it produced, or why the
+/// door refused it the second time.
+model ProjectFuseHeldAction {
+  id        String             @id @default(uuid(7)) @db.Uuid
+  episodeId String             @map("episode_id") @db.Uuid
+  episode   ProjectFuseEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  projectId String             @map("project_id") @db.Uuid
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The order they were asked in, which is the order they go back out in.
+  seq  Int
+  /// SESSION_CREATE, TASK_START, SESSION_SEND, TASK_SUCCESSOR or SELF_WAKE.
+  kind String
+  /// The conversation that asked. History rather than a reference that has to stay resolvable.
+  actingSessionId String  @map("acting_session_id") @db.Uuid
+  request         Json
+  /// The caller's own key, for a door that has one.
+  idempotencyKey String? @map("idempotency_key")
+
+  state        String    @default("HELD")
+  replayedAt   DateTime? @map("replayed_at") @db.Timestamptz(3)
+  replayResult Json?     @map("replay_result")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([episodeId, seq], map: "project_fuse_held_action_seq_key")
+  @@map("project_fuse_held_action")
 }
 
 /// One CURRENT, authored project acceptance criterion.

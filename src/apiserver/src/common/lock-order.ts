@@ -113,7 +113,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_task_status_count',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_task_status_count, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE only',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '

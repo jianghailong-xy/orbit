@@ -8,6 +8,7 @@ import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
+import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -42,6 +43,12 @@ import { WakeDispositionService } from './wake-disposition.service';
  * the conversation the project already has. That is the reason the router can ask the question
  * without holding the answer.
  *
+ * `ProjectFuseService` is here for the third variant of the same reason: what it turns into an owner
+ * card is `CoordinatorConvergenceService`'s reading, and what it puts back when the owner resumes
+ * goes through `CompletionInputRouter` and `SessionsService` — all three this module's already. The
+ * unit that decides what an authorized wake is spent on does NOT hold it: it asks whether the
+ * project is paused with `project-fuse.ts`'s own reader, so the router can keep pointing one way.
+ *
  * `CoordinatorDeliveryService` is registered beside the judgment one rather than in SessionsModule
  * even though `SessionsService` is what it ultimately calls: what it decides is which wake reaches
  * a coordinator, which is this module's subject, and SessionsModule is imported here already.
@@ -56,6 +63,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CompletionInputRouter,
     ProjectOpenItemService,
     CoordinatorConvergenceService,
+    ProjectFuseService,
     CoordinatorJudgmentService,
     CoordinatorDeliveryService,
     ProjectTasksSettledProducer,
@@ -69,6 +77,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CompletionInputRouter,
     ProjectOpenItemService,
     CoordinatorConvergenceService,
+    ProjectFuseService,
     CoordinatorJudgmentService,
     CoordinatorDeliveryService,
     ProjectTasksSettledProducer,

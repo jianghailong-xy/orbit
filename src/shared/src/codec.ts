@@ -85,6 +85,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'integrationJobId',
   'promotionId',
   'fuseEpisodeId',
+  // The same pause, named by the rows that hang off it rather than by the card that points at it:
+  // a held action's `episodeId`, and the `:episodeId` the resume door is addressed by (0280).
+  'episodeId',
   'ownerSessionId',
   // The person whose EVIDENCE_JUDGMENT event supplied a task's completion judgment. It is returned
   // beside the event and names the user row exactly as ownerId/userId do.
@@ -216,6 +219,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'appliedTaskId',
   // The account owner who resolved a project blocker (0269), named exactly as `decidedByUserId` is.
   'resolvedByUserId',
+  // And the one who resumed a paused coordinator (0280), which is the same kind of name.
+  'resumedByUserId',
   // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
   // and a person opens it, so it is an address like every other id in an error body.
   'handoffId',

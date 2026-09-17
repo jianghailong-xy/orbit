@@ -12,6 +12,7 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { REMOVED_CRITERION_WIRING_FIELDS } from './dto';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
+import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
@@ -210,6 +211,7 @@ const refuse = (name: string) => () => {
     { provide: SessionAttemptService, useValue: { describe: refuse('attempts') } },
     { provide: TaskCheckpointService, useValue: { record: refuse('checkpoints') } },
     { provide: ProjectOpenItemService, useValue: { list: refuse('open items') } },
+    { provide: ProjectFuseService, useValue: { resume: refuse('the fuse') } },
     JwtAuthGuard,
     Reflector,
     { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: OWNER_ID }) } },

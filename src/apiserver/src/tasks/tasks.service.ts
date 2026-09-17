@@ -59,6 +59,7 @@ import {
   collectAggregationScope,
 } from '../projects/task-aggregation-writer';
 import { recordTaskFailure } from '../projects/project-open-item';
+import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -1508,17 +1509,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * the two above — the specs and harnesses that build this service by hand pass what they test.
      */
     openItems?: ProjectOpenItemService,
+    /**
+     * The coordinator's spend fuse, read on the third of the facts §6.1 F5 names: a task write that
+     * committed a replacement, which is a retry. Optional for the same reason as the three above.
+     */
+    fuse?: ProjectFuseService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;
+    this.fuse = fuse;
   }
 
   private readonly handoffs: ProjectHandoffService;
   private readonly completionInputs?: CompletionInputRouter;
   private readonly pauseProjector?: TaskListPauseProjectorService;
   private readonly openItems?: ProjectOpenItemService;
+  private readonly fuse?: ProjectFuseService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -3389,8 +3397,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       [task.id, task.parentTaskId, dto.supersedesTaskId],
       [dto.supersedesTaskId, task.verifiesTaskId],
     );
-    // A successor is what answers the failure of the attempt it replaces (contract §4.2).
-    if (dto.supersedesTaskId) await this.openItems?.resolveByFact([dto.supersedesTaskId]);
+    // A successor is what answers the failure of the attempt it replaces (contract §4.2) — and,
+    // when an agent filed it, one more retry against what the coordinator may spend (§6.1 F5).
+    if (dto.supersedesTaskId) {
+      await this.openItems?.resolveByFact([dto.supersedesTaskId]);
+      await this.fuse?.afterSupersession(task.projectId, dto.supersedesTaskId);
+    }
     return task;
   }
 

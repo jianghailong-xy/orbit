@@ -112,6 +112,7 @@ test('the user door routes a body with a workspaceId to createInWorkspace, and o
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const user = { userId: OWNER_ID } as never;
 

@@ -451,6 +451,18 @@ export class ResolveProjectBlockerDto {
   @IsString() @MaxLength(MAX_BLOCKER_RESOLUTION_REASON_CHARS) reason!: string;
 }
 
+/**
+ * The account owner resuming a paused coordinator, optionally raising what it may spend on its own
+ * today (`docs/project-integration-line-contract.md` §6.3 F-T4). Every field is optional: resuming
+ * without raising anything is the ordinary answer, and §6.5 F11 says what happens then — the window
+ * did not move, so the next crossing fact pauses it again with a card of its own.
+ */
+export class ResumeProjectFuseDto {
+  @IsOptional() @IsInt() @Min(0) maxSelfStartedTurnsPerDay?: number;
+  @IsOptional() @IsInt() @Min(0) maxSessionsOpenedPerDay?: number;
+  @IsOptional() @IsInt() @Min(0) maxRetriesPerSuccessorChain?: number;
+}
+
 export class RecordMergeEvidenceDto {
   /** What was required, in the words whoever wrote the acceptance criteria used. */
   @IsString() @MinLength(1) @MaxLength(MAX_MERGE_REQUIREMENT_CHARS) requirementId!: string;

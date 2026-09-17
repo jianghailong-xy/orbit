@@ -29,6 +29,7 @@ import {
   mechanicalAction,
 } from './mechanical-disposition';
 import { criterionKeyOf } from './project-acceptance';
+import { openFuseEpisodeId, refusingWhileFusePaused } from './project-fuse';
 import {
   type CriterionWithLandingFacts,
   type LandingBranches,
@@ -156,7 +157,17 @@ export class WakeDispositionService {
         : { outcome: delivered.outcome };
     }
 
-    const judged = await this.judgments.wake(fact, authorize);
+    // The one thing a paused fuse refuses (`project-fuse.ts` §6.3 F-T3): a judgment session is the
+    // most expensive thing an authorized fact can be spent on, and a coordinator over its budget is
+    // exactly the conversation that must not be handed another. Composed in FRONT of the fact's own
+    // authorizer, so the refusal leaves no judgment recorded against the fact's key — that is what
+    // lets the same fact be asked again after the owner resumes. Every other terminal above is
+    // reached without asking: an external fact is delivered or recorded during a pause as it would
+    // be outside one.
+    const judged = await this.judgments.wake(
+      fact,
+      refusingWhileFusePaused(authorize, () => openFuseEpisodeId(this.prisma, fact.projectId)),
+    );
     return judged.outcome === 'REFUSED'
       ? { outcome: 'REFUSED', refusalCode: judged.refusalCode }
       : { outcome: judged.outcome };
