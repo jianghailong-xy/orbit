@@ -16,6 +16,32 @@ const stillBlocked = {
 
 type SessionRow = Record<string, unknown>;
 
+/** One branch of a `where`'s OR, against a fixture row.
+ *
+ *  A nested object is a to-one relation filter, which Prisma resolves as "the related row exists
+ *  AND matches" — so a session with no task fails `{ task: { ... } }` rather than passing it
+ *  vacuously. That is not a detail: it is exactly why the dispatch-hold veto needs its own
+ *  `{ taskId: null }` branch, and a fake that let a missing relation through would report the
+ *  predicate as working when it excluded every session that has no task at all. */
+function matchesBranch(row: SessionRow, cond: Record<string, unknown>): boolean {
+  return Object.entries(cond).every(([key, expected]) => {
+    if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
+      const related = row[key] as Record<string, unknown> | null | undefined;
+      if (!related) return false;
+      return Object.entries(expected as Record<string, unknown>)
+        .every(([k, v]) => (related[k] ?? null) === v);
+    }
+    return (row[key] ?? null) === expected;
+  });
+}
+
+/** Every `AND` clause of a `where`, each of which is itself an OR of branches. The dispatch-hold
+ *  veto rides here, so a fake that read only the top-level OR would report a paused session as due
+ *  and see nothing at all. */
+function matchesAnd(row: SessionRow, clauses: Array<{ OR?: Array<Record<string, unknown>> }>): boolean {
+  return clauses.every((clause) => (clause.OR ?? []).some((cond) => matchesBranch(row, cond)));
+}
+
 function makeService(
   rows: SessionRow[],
   opts: {
@@ -145,12 +171,16 @@ function makeService(
       // A SNAPSHOT, not the live objects. The sweep decides from what it read here and writes
       // later; handing it the mutable rows would make every "somebody changed it in between" test
       // impossible to express, because the change would be visible to the read that preceded it.
-      findMany: async (args: { where: { OR?: Array<Record<string, unknown>> } }) => {
+      findMany: async (args: {
+        where: {
+          OR?: Array<Record<string, unknown>>;
+          AND?: Array<{ OR?: Array<Record<string, unknown>> }>;
+        };
+      }) => {
         const snapshot = rows
           .filter((r) =>
-            (args.where.OR ?? []).some((cond) =>
-              Object.entries(cond).every(([k, v]) => (r[k] ?? null) === v),
-            ),
+            (args.where.OR ?? []).some((cond) => matchesBranch(r, cond))
+            && matchesAnd(r, args.where.AND ?? []),
           )
           .map((r) => ({ ...r }));
         // The race lands here: after the sweep has read, before it has written anything.
@@ -171,6 +201,7 @@ function makeService(
         const where = args.where as {
           status?: string; retryAt?: { not: null } | Date | null;
           retryAttempts?: number; taskId?: string | null; startsTaskWork?: boolean;
+          AND?: Array<{ OR?: Array<Record<string, unknown>> }>;
         };
         const retryAtMatches = () => {
           if (where.retryAt === undefined) return true;
@@ -187,7 +218,11 @@ function makeService(
           (where.status === undefined || where.status === row.status) &&
           (where.retryAttempts === undefined || where.retryAttempts === row.retryAttempts) &&
           (where.taskId === undefined || where.taskId === (row.taskId ?? null)) &&
-          (where.startsTaskWork === undefined || where.startsTaskWork === row.startsTaskWork);
+          (where.startsTaskWork === undefined || where.startsTaskWork === row.startsTaskWork) &&
+          // ...and the AND clauses, which is where the dispatch-hold veto rides. A claim that
+          // ignored them would let a pause landing between the due read and this write be
+          // overtaken by a decision made a moment before it.
+          matchesAnd(row!, where.AND ?? []);
         if (hit) Object.assign(row as object, args.data);
         return { count: hit ? 1 : 0 };
       },
@@ -708,7 +743,7 @@ test('§13.1 AG6: a retry whose task became an aggregate parent stands down perm
       status: RunStatus.FAILED,
       taskId: 'task-1',
       startsTaskWork: true,
-      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
     }),
   ], { aggregateParentIds: ['task-1'] });
   await service.sweep(NOW);
@@ -726,7 +761,7 @@ test('§13.1 AG6: the compatibility boundaries still retry normally', async () =
     const { service, resumed } = makeService(
       [row({
         status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
-        task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+        task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
       })],
       { aggregateParentIds: [] },
     );
@@ -742,7 +777,7 @@ test('§13.1 AG6: a NON-work session on an aggregate parent retries normally', a
   const { service, resumed, rows } = makeService(
     [row({
       status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: false,
-      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
     })],
     { aggregateParentIds: ['task-1'] },
   );
@@ -761,7 +796,7 @@ test('§13.1 AG6 commit race: the stand-down is decided by the CURRENT row, not 
   const { service, rows } = makeService(
     [row({
       status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
-      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
     })],
     {
       aggregateParentIds: [],
@@ -788,7 +823,7 @@ test('§13.1 AG6: a shape released between the snapshot and the settle leaves th
   const { service, rows } = makeService(
     [row({
       status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
-      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
     })],
     { aggregateParentIds: ['task-1'], aggregateAtSettle: false },
   );
@@ -806,7 +841,7 @@ test('§13.1 AG6: a session demoted to non-work between snapshot and settle is n
   const { service, rows } = makeService(
     [row({
       status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
-      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
     })],
     { aggregateParentIds: ['task-1'], startsTaskWorkAtSettle: false },
   );
@@ -893,7 +928,7 @@ test('§13.1 AG6: the lock refusal is recognised through the Prisma wrapper, not
   ] as const) {
     const session = row({
       status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
-      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null, dispatchHold: false },
     });
     const { service, resumed } = makeService([session], {
       aggregateParentIds: ['task-1'],
@@ -904,4 +939,70 @@ test('§13.1 AG6: the lock refusal is recognised through the Prisma wrapper, not
     assert.notEqual(session.retryAt, null, `${name}: still armed`);
     assert.equal(session.retryAttempts, 0, `${name}: and nothing spent`);
   }
+});
+
+/** A task-bound WORK session on a task whose list is paused — what the reaper's offline arm, or a
+ *  quota-killed turn, leaves behind on a campaign somebody has since stopped. */
+function heldWork(over: SessionRow = {}): SessionRow {
+  return row({
+    taskId: 'task-held',
+    startsTaskWork: true,
+    task: {
+      terminalReason: null, supersededByTaskId: null, verifies: null,
+      dispatchHold: true,
+    },
+    ...over,
+  });
+}
+
+test('a paused list stops the sweep from resuming its task\'s work', async () => {
+  // The hole this closes: `dispatch_hold` is read by every other automatic starter in the
+  // deployment (tasks.service AUTO_RUN_READY_SQL, PROJECT_INDEPENDENT_READY_SQL,
+  // AUTO_RUN_RETRY_CANDIDATE_SQL, SCHEDULED_DUE_SQL) and by the manual Run door, and was read by
+  // nothing here — so a pause stopped the retry of a task that auto-runs (its retry IS the
+  // scheduler re-selecting it) and did not stop the retry of one that does not.
+  const { service, resumed, rows } = makeService([heldWork()]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'the paused campaign is not resumed');
+  // DEFERRED, not decided. The arm this sweep found is still there and no attempt was spent, so
+  // the retry fires on the first sweep after the pause lifts — the uncommitted work in that
+  // session's worktree waits rather than being abandoned.
+  assert.equal(rows[0].retryAt, PAST, 'the arm is left exactly as it was found');
+  assert.equal(rows[0].retryAttempts, 0, 'and no attempt is spent on a retry that did not happen');
+});
+
+test('a session whose task is not paused still retries, and a paused one does not take its slot',
+  async () => {
+    // Both rows are due, on the same runner and provider. PER_QUOTA_PER_SWEEP is one release per
+    // (runner, provider) per sweep, so this is also the assertion that the veto does not merely
+    // fail to resume the paused session: it must not spend the sweep's one release on it either,
+    // which is what happens if the pause is read anywhere later than the candidate set.
+    const { service, resumed, rows } = makeService([
+      heldWork({ id: 'session-held' }),
+      row({
+        id: 'session-free',
+        taskId: 'task-free',
+        startsTaskWork: true,
+        task: {
+          terminalReason: null, supersededByTaskId: null, verifies: null,
+          dispatchHold: false,
+        },
+      }),
+    ]);
+    await service.sweep(NOW);
+    assert.deepEqual(resumed.map((r) => r.id), ['session-free'],
+      'the runnable one is resumed, and it is the only one');
+    assert.equal(rows[0].retryAt, PAST, 'the paused one is still armed for after the pause');
+  });
+
+test('a paused task\'s salvage conversation still gets its answer re-sent', async () => {
+  // The veto is on the TASK'S WORK, which is the line §13.1 AG6 draws and the thing
+  // `dispatch_hold` is named after. A salvage session is somebody asking a question about a run
+  // that already happened; re-sending the words a quota killed answers that person, and pausing a
+  // campaign is not an instruction to stop answering them.
+  const { service, resumed } = makeService([
+    heldWork({ id: 'session-salvage', startsTaskWork: false }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed.map((r) => r.id), ['session-salvage']);
 });

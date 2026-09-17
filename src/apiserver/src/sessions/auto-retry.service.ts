@@ -43,6 +43,42 @@ const PER_QUOTA_PER_SWEEP = 1;
 const MAX_PER_SWEEP = 50;
 
 /**
+ * The list pause, asked where a retry is RELEASED rather than where it was armed.
+ *
+ * `task.dispatch_hold` is a paused list projected onto the task row, and every other automatic
+ * starter in the deployment reads it: all four candidate scans (tasks.service.ts
+ * AUTO_RUN_READY_SQL, PROJECT_INDEPENDENT_READY_SQL, AUTO_RUN_RETRY_CANDIDATE_SQL,
+ * SCHEDULED_DUE_SQL) and the manual Run door. This sweep did not, and the result was one pause
+ * with two answers: a task that opts into auto-run has the reaper stand aside for the scheduler
+ * (`armRetry` in reaper.service.ts) and the scan that would re-select it asks the column, so the
+ * pause held; a task that does not opt in is retried HERE, and the pause did not. Nothing about
+ * that difference is a policy — it is which mechanism happens to own the retry.
+ *
+ * Stated positively and read off the task's own column, which is the shape AUTO_RUN_READY_SQL's
+ * comment insists on after deleting 112 paused-able lists released 55,513 tasks: a veto that
+ * cannot be expressed reads as permission.
+ *
+ * Only the TASK'S WORK is held. A salvage conversation (`starts_task_work = false`) is somebody
+ * asking about a run that already happened, and re-sending the words a quota killed answers that
+ * person — pausing a campaign is not an instruction to stop answering them. It is the same line
+ * §13.1 AG6 draws between a session doing a task's work and one held about it.
+ *
+ * Applied at the due read and again in the claim, and deliberately NOWHERE ELSE — not at either
+ * place a retry is armed (the reaper's offline branch, ingestion's quota branch). A person pauses
+ * a list when things are already going wrong, so at the moment those two arm, the hold usually
+ * does not exist yet: a check there is a veto asked before the fact it is about, and an arm that
+ * was never written cannot be reconsidered when the pause lifts. Asked here it is asked against
+ * the world at the instant of the resume, once, for every arming path there is.
+ */
+const NOT_DISPATCH_HELD: Prisma.SessionWhereInput = {
+  OR: [
+    { taskId: null },
+    { startsTaskWork: false },
+    { task: { dispatchHold: false } },
+  ],
+};
+
+/**
  * Re-sends messages that a self-healing failure killed, once it is likely to work.
  *
  * Three failures qualify. Two arrive as the entire reply: the account's provider quota running
@@ -116,6 +152,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
           { status: RunStatus.FAILED },
         ],
+        // A held task's work is not a candidate at all (see NOT_DISPATCH_HELD). Filtered here
+        // rather than skipped in the loop, and that is not only tidiness: a row skipped in the
+        // loop keeps the retry_at it was armed with, which is among the OLDEST in the system, so
+        // it would hold its place at the front of this bounded page on every sweep for as long as
+        // the pause lasted — the pause would starve the retries that CAN run. Left out of the
+        // page, its arm simply waits, and the sweep after the pause lifts finds it due.
+        AND: [NOT_DISPATCH_HELD],
       },
       orderBy: { retryAt: 'asc' },
       take: MAX_PER_SWEEP,
@@ -345,6 +388,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               { taskId: null },
               { task: { terminalReason: null, supersededByTaskId: null } },
             ],
+            // ...and the pause, carried here for the same reason SU6 is: a list paused between
+            // the due read above and this write must not have its campaign resumed on the
+            // strength of a reading taken before it. Zero rows is already the "somebody else owns
+            // this retry" path — the arm is left standing, no attempt is spent, and the sweep
+            // after the pause lifts decides.
+            AND: [NOT_DISPATCH_HELD],
           },
           data: { retryAt: null, retryAttempts: attempts + 1 },
         });
