@@ -82,4 +82,21 @@ final class RetrySendWiringTests: XCTestCase {
                       "a send that fails hands back what it consumed, which for a retry is the "
                           + "retried text rather than whatever the composer was holding")
     }
+
+    /// A retry carries the text alone. The chips staged in the composer belong to the message the
+    /// reader is composing, so they neither travel with the retry nor disappear from under it — an
+    /// image picked for the next message that silently left with a retry is the bug here.
+    func testAnOverrideSendCarriesTheTextAlone() throws {
+        let send = try section(try source(Self.consolePath),
+                               from: "func send(authoritative: RunStatus? = nil, overrideText: String? = nil) async {",
+                               to: "var lastUserMessageText")
+        XCTAssertTrue(send.contains("let carried = fromComposer ? pendingAttachments : []"),
+                      "what rides along is the composer's own chips, and nothing at all for a retry")
+        for line in send.split(separator: "\n") where line.contains("pendingAttachments =") {
+            XCTAssertTrue(line.contains("fromComposer"),
+                          "unguarded chip clear or restore in send() — a retry would eat or double "
+                              + "the attachments staged for the next message: "
+                              + "\(line.trimmingCharacters(in: .whitespaces))")
+        }
+    }
 }

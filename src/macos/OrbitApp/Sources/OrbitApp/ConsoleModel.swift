@@ -1139,7 +1139,8 @@ final class ConsoleModel {
     /// of the last user turn (see `retryLastMessage`). It rides this same path for the gating,
     /// queueing and failure handling below, but the composer is neither read nor cleared for it: a
     /// retry is nothing the user just typed, so it must not flash through the input field on its
-    /// way out, nor take the draft they are part-way through typing with it.
+    /// way out, nor take the draft they are part-way through typing with it — nor the attachments
+    /// they have staged (a retry carries the text alone; see `carried` below).
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
@@ -1150,8 +1151,9 @@ final class ConsoleModel {
         // So honor the tap and hold until the upload lands. (Web instead disables its send button
         // while `uploading` — the wait costs the user the same time without a button that looks
         // dead.) Everything below reads the composer afterwards, so text typed during the wait
-        // still goes out with this send.
-        if pendingAttachments.contains(where: \.isUploading) {
+        // still goes out with this send. A retry is not waiting on anything of the composer's: it
+        // carries no chips, so an upload in flight is none of its business.
+        if fromComposer, pendingAttachments.contains(where: \.isUploading) {
             waitingForUploads = true
             await waitForStagedUploads()
             waitingForUploads = false
@@ -1223,9 +1225,13 @@ final class ConsoleModel {
         // shell send comes back with its leading `!`.
         let draft = overrideText ?? composerText
         let staged = pendingAttachments
-        // Every staged attachment has finished uploading by now (the send waited above), so each
+        // What rides with this send. A retry carries the text alone: the staged chips belong to the
+        // message the user is composing, not to the one being re-sent, so they neither travel with
+        // it nor leave the composer (web parity — its card's retry sends `images: []`).
+        let carried = fromComposer ? pendingAttachments : []
+        // Every chip that rides along has finished uploading by now (the send waited above), so each
         // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
-        let ready = pendingAttachments.compactMap { att in att.remoteID.map { (att, $0) } }
+        let ready = carried.compactMap { att in att.remoteID.map { (att, $0) } }
         let attachmentIds = ready.map(\.1)
         // Carry mime/name onto the optimistic bubble so it can render image thumbnails / file chips
         // immediately (the durable `user` event later supplies the authoritative refs).
@@ -1248,7 +1254,7 @@ final class ConsoleModel {
         publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
         localSendTick &+= 1 // …and force that scroll even if the user had scrolled up to read history
         if fromComposer { composerText = "" }
-        pendingAttachments = []
+        if fromComposer { pendingAttachments = [] }
 
         sending = true
         defer { sending = false }
@@ -1283,10 +1289,13 @@ final class ConsoleModel {
             reducer.removeOptimisticUser(clientTurnId: clientTurnId)
             awaitingReply = false   // no turn is coming — drop the tail "working" indicator
             publishStateNow()
-            // …and hand the draft back: the composer was cleared on send, so this is the only copy
-            // left. Anything typed while the retries ran stays, below the returned text.
+            // …and hand the message back: the composer was cleared of what this send consumed, so
+            // this is the only copy left of it (a retry's text, which the composer never held,
+            // lands here too). Anything typed while the retries ran stays, below the returned text.
             composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
-            pendingAttachments = staged + pendingAttachments
+            // The chips come back the same way — but only for a send that took them: a retry never
+            // did, and putting them back would double them.
+            if fromComposer { pendingAttachments = staged + pendingAttachments }
             statusMessage = ComposerLogic.sendFailureMessage(error)
         }
     }
