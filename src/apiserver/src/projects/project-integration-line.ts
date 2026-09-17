@@ -115,6 +115,18 @@ export function readProjectCodebase(
   });
 }
 
+/** How long this project's exception items wait on its coordinator before they are the owner's. */
+async function escalationWindow(
+  db: Pick<Prisma.TransactionClient, 'project'>,
+  projectId: string,
+): Promise<number> {
+  const row = await db.project.findUniqueOrThrow({
+    where: { id: projectId },
+    select: { exceptionEscalationSeconds: true },
+  });
+  return row.exceptionEscalationSeconds;
+}
+
 /** The line a binding states, when somebody decided it: the owner, or the default rule at the start. */
 function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
   if (row.integrationRefSource !== 'EXPLICIT' && !row.integrationStartedAt) return null;
@@ -136,9 +148,18 @@ export interface ProjectIntegrationView {
   mergeCheckCommand: string | null;
   mergeCheckCommandAbsentReason: 'NOT_CONFIGURED' | null;
   mergeCheckTimeoutSeconds: number | null;
+  /**
+   * How long one of this project's exception items may wait on its coordinator before it becomes the
+   * account owner's (§4.1, §4.6). Always present: every project has a window, and the default two
+   * hours is a setting nobody changed rather than the absence of one.
+   */
+  escalationSeconds: number;
 }
 
-export function projectIntegrationView(row: ProjectCodebaseLine | null): ProjectIntegrationView {
+export function projectIntegrationView(
+  row: ProjectCodebaseLine | null,
+  escalationSeconds: number,
+): ProjectIntegrationView {
   const line = row ? decidedLine(row) : null;
   return {
     line,
@@ -151,6 +172,7 @@ export function projectIntegrationView(row: ProjectCodebaseLine | null): Project
     mergeCheckCommand: row?.mergeCheckCommand ?? null,
     mergeCheckCommandAbsentReason: row?.mergeCheckCommand ? null : 'NOT_CONFIGURED',
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
+    escalationSeconds,
   };
 }
 
@@ -163,6 +185,8 @@ export interface IntegrationSettings {
   upstreamRef?: string;
   mergeCheckCommand?: string | null;
   mergeCheckTimeoutSeconds?: number | null;
+  /** This project's escalation window in seconds (§4.6). The column's CHECK bounds it, 300 to a week. */
+  exceptionEscalationSeconds?: number;
 }
 
 /** The binding, locked for the rest of this transaction. Rank 55: after `task`, before its children. */
@@ -228,6 +252,30 @@ export async function configureProjectIntegration(
     throw new BadRequestException('a project that integrates straight into main has no project branch to name');
   }
 
+  // The escalation window is the PROJECT's column, not the binding's (§4.1): it says how long a
+  // person waits, and a project with no code at all still has exceptions waiting on somebody. So it
+  // is written first and on its own terms — a request that names only this one asks nothing of the
+  // repository, and answers without binding the project to one. It is not locked when integration
+  // starts either (L4), because nothing about the line it landed on is decided here.
+  if (settings.exceptionEscalationSeconds !== undefined) {
+    await tx.project.updateMany({
+      where: { id: projectId, ownerId },
+      data: { exceptionEscalationSeconds: settings.exceptionEscalationSeconds },
+    });
+  }
+  // `!== undefined` rather than a falsy test, because `null` is a setting: it clears the merge check.
+  const bindingNamed = settings.line !== undefined
+    || settings.projectBranchName !== undefined
+    || settings.upstreamRef !== undefined
+    || settings.mergeCheckCommand !== undefined
+    || settings.mergeCheckTimeoutSeconds !== undefined;
+  if (!bindingNamed) {
+    return projectIntegrationView(
+      await readProjectCodebase(tx, projectId),
+      await escalationWindow(tx, projectId),
+    );
+  }
+
   let row = await lockCodebase(tx, projectId);
   if (!row) {
     const [workspace] = await tx.$queryRaw<Array<{ repoUrl: string | null }>>(Prisma.sql`
@@ -281,7 +329,7 @@ export async function configureProjectIntegration(
     },
     select: LINE_COLUMNS,
   });
-  return projectIntegrationView(written);
+  return projectIntegrationView(written, await escalationWindow(tx, projectId));
 }
 
 /**

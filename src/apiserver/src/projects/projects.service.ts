@@ -2310,14 +2310,21 @@ export class ProjectsService {
         ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
       blockers,
-      integration: projectIntegrationView(codebase),
+      integration: projectIntegrationView(codebase, project.exceptionEscalationSeconds),
     };
   }
 
   /** The project's integration line, as `GET /projects/:id/integration` serves it (contract §1.6). */
   async integration(ownerId: string, id: string): Promise<ProjectIntegrationView> {
-    await this.assertOwned(ownerId, id);
-    return projectIntegrationView(await readProjectCodebase(this.prisma, id));
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { exceptionEscalationSeconds: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    return projectIntegrationView(
+      await readProjectCodebase(this.prisma, id),
+      project.exceptionEscalationSeconds,
+    );
   }
 
   /**

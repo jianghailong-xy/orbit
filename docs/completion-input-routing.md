@@ -27,10 +27,25 @@ audit row. A repaired authority can deliver the identical fact again. Successful
 delivery compare-and-sets `CLAIMED` to `CONSUMED` and records `consumer_type`/`consumed_at`, so an
 unchanged replay cannot run a consumer twice; a new evidence/result/verdict version gets a new key.
 
-There is no scheduler, timeout, startup sweep or elapsed-time interpretation in this path.
-`AWAITING_INPUT` neither refuses nor delays evidence/request routing. EVIDENCE_JUDGMENT consumers are
-people and use the request/inbox surface. Only VERIFICATION uses its deterministic verifier Task
-and the ordinary one-shot task execution machinery.
+There is no scheduler, timeout, startup sweep or elapsed-time interpretation in this path for an
+agent. `AWAITING_INPUT` neither refuses nor delays evidence/request routing. EVIDENCE_JUDGMENT
+consumers are people and use the request/inbox surface. Only VERIFICATION uses its deterministic
+verifier Task and the ordinary one-shot task execution machinery.
+
+The one clock added by the integration-line contract escalates an unhandled open item to the account
+owner (`docs/project-integration-line-contract.md` §4.6,
+`projects/open-item-escalation.service.ts`). It writes the item's assignee and nothing else: the
+owner then reads it under "needs you" in that project's open items, and the push that tells them so
+is §7.6's, sent from the rows this sweep returns. It creates no wake, no turn and no session.
+
+It is an exception to the rule above and not a hole in it, because of WHO it acts on. Elapsed time
+may not start agent work: an agent woken by a timer is working on nothing that happened, which is
+the loop this document's routing removed. But an item assigned to a coordinator conversation that
+has stopped reading waits forever, and the person the platform could have asked never learns there
+was anything to ask. So the clock is allowed exactly where its output is a human's inbox and its
+write is one column — and nowhere else. `exception-escalation.pg.spec.ts` holds it to that by
+counting `conversation_turn`, `session`, `project_coordinator_wake` and delivery rows across the
+whole database either side of a sweep.
 
 Since migration 0243 some fact kinds do reach the Project's person-opened `coordinator_session_id`
 conversation, and each one is there because what it needs is an ACTION rather than a judgment. The

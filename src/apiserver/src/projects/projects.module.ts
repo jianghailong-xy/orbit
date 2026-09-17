@@ -4,6 +4,7 @@ import { ProjectsController } from './projects.controller';
 import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentModule } from './coordinator-judgment.module';
+import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceModule } from './project-acceptance.module';
 import { ProjectAttributionModule } from './project-attribution.module';
@@ -30,6 +31,11 @@ import { ProjectsService } from './projects.service';
     SessionAttemptService,
     AttemptBudgetMeterService,
     TaskCheckpointService,
+    // The escalation clock (§4.6). Here rather than in TasksService, whose one interval is pinned by
+    // its own census, and rather than in PushModule, whose providers are pinned by another: a clock
+    // that only ever writes an item's assignee belongs beside the items, not beside the sweeps that
+    // start work.
+    ProjectOpenItemEscalationService,
   ],
   exports: [
     ProjectHandoffModule,

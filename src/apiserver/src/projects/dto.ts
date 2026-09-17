@@ -232,6 +232,13 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
   @IsOptional() @IsString() mergeCheckCommand?: string | null;
   /** That check's budget in seconds; null returns it to the one-hour default. */
   @IsOptional() @IsInt() @Min(1) mergeCheckTimeoutSeconds?: number | null;
+  /**
+   * How long one of this project's exception items may wait on its coordinator before it becomes
+   * yours (§4.6). Five minutes to a week, the same range the column's CHECK holds; two hours unless
+   * changed. It takes effect on items opened after it — an item already waiting carries the window
+   * it was opened under (X-E2), so shortening this does not reach back and escalate a queue.
+   */
+  @IsOptional() @IsInt() @Min(300) @Max(604_800) exceptionEscalationSeconds?: number;
 }
 
 export class UpdateProjectDto {
