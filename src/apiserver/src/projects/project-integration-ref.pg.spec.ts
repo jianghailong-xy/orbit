@@ -31,6 +31,7 @@ import {
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { SessionAttemptService } from './session-attempt.service';
@@ -142,6 +143,7 @@ async function openDoor(stack: Stack): Promise<{ base: string; close: () => Prom
       { provide: ProjectHandoffService, useValue: {} },
       { provide: SessionAttemptService, useValue: {} },
       { provide: TaskCheckpointService, useValue: {} },
+      { provide: ProjectOpenItemService, useValue: {} },
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async (token: string) => ({ sub: token }) } },
