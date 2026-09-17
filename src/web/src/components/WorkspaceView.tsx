@@ -200,7 +200,12 @@ import {
   SessionEvidenceDecisionCard,
   evidenceDecisionCardRows,
 } from './EvidenceDecisionCard';
-import { SessionAcceptanceConfirmationCard } from './AcceptanceConfirmationCard';
+import {
+  ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+  ACCEPTANCE_PLAN_CHANGE_PREFIX,
+  SessionAcceptanceConfirmationCard,
+  acceptancePlanChangeContext,
+} from './AcceptanceConfirmationCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -1311,19 +1316,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // between cannot treat the previous session's transcript as the newly selected session's.
   const [eventsSessionId, setEventsSessionId] = useState<string | null>(selectedId);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
-  // An armed reply: the next composer send answers one open question instead of starting a fresh
-  // turn, and the card that armed it stays until then. Three presses arm it — a question's "Chat
-  // about this, a decline of one of Orbit's own asks, and the confirmation card's send-back — because
-  // all three want a sentence, and the composer is where a sentence is typed. Null = normal send;
-  // `target` is the only thing that differs, and it is which door the send goes to.
+  // An armed reply: the next composer send carries what is typed to one card's business instead of
+  // being an ordinary message, and the card that armed it stays until then. Four presses arm it — a
+  // question's "Chat about this", a decline of one of Orbit's own asks, the confirmation card's
+  // send-back, and the settlement card's "Chat about this" — because all four want a sentence, and
+  // the composer is where a sentence is typed. Null = normal send; `target` is the only thing that
+  // differs, and it is where the send goes.
+  //
+  // `planChange` is the one that goes through no door at all. The other three answer a call that is
+  // blocking on them; there the agent is idle and nothing is pending, so the send is an ordinary
+  // turn with the plan it is about carried in front of it (`context`).
   const [replyTo, setReplyTo] = useState<{
     target:
       | { kind: 'approval'; id: string }
-      | { kind: 'ownerConfirmation'; taskId: string; requestId: string };
+      | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
     placeholder: string;
+    /** Carried ahead of the typed message by a send that starts an ordinary turn. */
+    context?: string;
   } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
@@ -3445,6 +3458,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (!approvals.some((a) => a.id === id)) setReplyTo(null);
       return;
     }
+    // Nothing answers a plan change another way: no call is pending on it, so there is no question
+    // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
+    // chip is dismissed.
+    if (replyTo.target.kind === 'planChange') return;
     // The same rule read from the other door — but only once the read has actually come back. A
     // read in flight is "this browser cannot say yet", and disarming on it would throw away a
     // reason somebody is in the middle of typing.
@@ -4523,6 +4540,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ownerDecision.mutate({ taskId, requestId, decision: 'SEND_BACK', note: c });
         return;
       }
+      // Talking about a plan before it is started reaches no door: this is an ordinary turn at an
+      // idle agent, with the project, its criteria and their seal carried in front of the message
+      // because nothing in the session holds them. The card that armed it is untouched — its own
+      // Start is still the other way out.
+      if (replyTo.target.kind === 'planChange') {
+        if (!c) return;
+        pinToBottom();
+        const carried = replyTo.context;
+        setReplyTo(null);
+        setText('');
+        setComposerRefs({});
+        setHistIdx(-1);
+        const typed = materializeReferences(c, composerRefs);
+        send.mutate({
+          content: carried ? `${carried}\n\n${typed}` : typed,
+          images: readyImages,
+          intent,
+        });
+        return;
+      }
       const imgs = readyImages;
       if (!c && imgs.length === 0) return;
       pinToBottom();
@@ -4911,6 +4948,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       target: { kind: 'ownerConfirmation', taskId: selectedTaskId, requestId: waiting.requestId },
       banner: OWNER_SENDING_BACK_PREFIX + title,
       placeholder: OWNER_SEND_BACK_LABEL,
+    });
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The settlement card's "Chat about this": the next send is an ordinary turn saying what should
+  // change about the plan, with the plan itself carried in front of it. Unlike the three above it
+  // answers nothing — the agent has finished writing the criteria and is waiting — so no door is
+  // named here. The card stays until then, with its own Start the project still live.
+  const startPlanChangeChat = (plan: {
+    projectId: string;
+    criteriaDigest: string;
+    projectTitle: string;
+    criteria: string[];
+  }): void => {
+    setReplyTo({
+      target: { kind: 'planChange', projectId: plan.projectId, criteriaDigest: plan.criteriaDigest },
+      banner: ACCEPTANCE_PLAN_CHANGE_PREFIX + plan.projectTitle,
+      placeholder: ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+      context: acceptancePlanChangeContext(plan),
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -6065,17 +6120,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               )}
               {/* The settlement question — whether this project's criteria, together, are what
-                  done means — once it is the last thing the project's DONE waits on: drawn from the
-                  confirmation standing and the criteria, and pressed straight at the confirmation
-                  door. Keyed by the session like the two cards above, because whether it was
-                  delivered or set aside belongs to this conversation, and by a key neither of them
-                  carries, for the reason the evidence card's note gives. It reports whether it is on
-                  screen and still a question, and that report is what the pinned strip points at. */}
+                  done means — asked while the plan is written and nothing has run: drawn from the
+                  confirmation standing and the project, and pressed straight at the confirmation
+                  door, which is also what starts the project. Keyed by the session like the two
+                  cards above, because whether it was delivered belongs to this conversation, and by
+                  a key neither of them carries, for the reason the evidence card's note gives. It
+                  reports whether it is on screen and the project is still unstarted, and that report
+                  is what the pinned strip points at. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionAcceptanceConfirmationCard
                   key={`confirmation:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
                   onOpenQuestion={reportSettlementQuestion}
+                  onChatAbout={startPlanChangeChat}
                 />
               )}
               {selected &&

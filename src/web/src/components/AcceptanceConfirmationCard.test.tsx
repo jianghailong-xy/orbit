@@ -9,9 +9,8 @@ import {
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import {
-  ACCEPTANCE_CONFIRM_LABEL,
-  ACCEPTANCE_HIDE_CRITERIA_LABEL,
-  ACCEPTANCE_NOT_YET_LABEL,
+  ACCEPTANCE_SHOW_LESS_LABEL,
+  ACCEPTANCE_START_LABEL,
   CONFIRMATION_NOT_RECORDED,
   CONFIRMATION_UNREAD_EXPLANATION,
   SessionAcceptanceConfirmationCard,
@@ -20,6 +19,7 @@ import {
   acceptanceReadLabel,
   type ConfirmationCriterion,
 } from './AcceptanceConfirmationCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { shortSeal } from './CriteriaDecisionCard';
 
 /**
@@ -27,11 +27,12 @@ import { shortSeal } from './CriteriaDecisionCard';
  * conversation meets it in.
  *
  * What is asserted is what the native console does (`ConsoleModel.settlementHeldOnConfirmation`,
- * OrbitKit `AcceptanceConfirmations`): a card exactly when the standing can be answered, criteria are
- * stated and every one is met by its work, and none otherwise; a delivered card stays, and goes stale
- * in place; a press sends the version standing now, and a refusal re-reads before the button comes
- * back. Every "none" is asserted on a fixture that goes on to draw the card once the one fact under
- * test changes, so an empty pane is never a card that was not going to draw anyway.
+ * OrbitKit `AcceptanceConfirmations`): a card exactly when an OPEN project states criteria nobody
+ * has confirmed — whether or not any of them is met by its work, which is the move this card was
+ * rewritten for — and none otherwise; a delivered card stays, and goes stale in place; a press sends
+ * the version standing now, and a refusal re-reads before the button comes back. Every "none" is
+ * asserted on a fixture that goes on to draw the card once the one fact under test changes, so an
+ * empty pane is never a card that was not going to draw anyway.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -73,18 +74,32 @@ function criteriaOf(...met: Array<boolean | undefined>): ConfirmationCriterion[]
   }));
 }
 
-const ALL_MET = criteriaOf(true, true, true);
+/** The plan as this card now meets it: written, and not one line of it done yet. */
+const NONE_MET = criteriaOf(false, false, false);
+
+const TITLE = 'move the confirmation to the start';
+
+/** The project document, as much of it as the card reads. */
+function documentOf(criteria: ConfirmationCriterion[] | undefined, status = 'OPEN'): ProjectDocument {
+  return { title: TITLE, status, acceptanceCriteriaItems: criteria };
+}
+
+type ProjectDocument = {
+  title?: string;
+  status?: string;
+  acceptanceCriteriaItems?: ConfirmationCriterion[];
+};
 
 /** A body, an Error for the read failing, or a function for a read that answers when told to. */
 type Answer<T> = T | Error | (() => Promise<T>);
 
 const server: {
   standing: Answer<StandardSetConfirmationStanding>;
-  document: Answer<{ acceptanceCriteriaItems?: ConfirmationCriterion[] }>;
+  document: Answer<ProjectDocument>;
   door: (criteriaDigest: string) => Promise<StandardSetConfirmationStanding>;
 } = {
   standing: standingOf('UNCONFIRMED'),
-  document: { acceptanceCriteriaItems: ALL_MET },
+  document: documentOf(NONE_MET),
   door: async () => standingOf('CONFIRMED'),
 };
 
@@ -105,9 +120,10 @@ let client: QueryClient | null = null;
 
 beforeEach(() => {
   server.standing = standingOf('UNCONFIRMED');
-  server.document = { acceptanceCriteriaItems: ALL_MET };
+  server.document = documentOf(NONE_MET);
   server.door = async () => standingOf('CONFIRMED');
   requests.length = 0;
+  armed.length = 0;
   vi.mocked(api).mockImplementation((async (
     path: string,
     init?: { method?: string; body?: { criteriaDigest?: string } },
@@ -137,6 +153,9 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
+/** Every plan the card handed to the composer, in order: what the page would arm the bar with. */
+const armed: Array<{ projectId: string; criteriaDigest: string; projectTitle: string; criteria: string[] }> = [];
+
 /** A pane per conversation, each holding the card for the project it coordinates — `null` for a
  *  conversation that coordinates none. */
 async function mount(...conversations: Array<string | null>): Promise<{ node: HTMLElement; qc: QueryClient }> {
@@ -155,7 +174,10 @@ async function mount(...conversations: Array<string | null>): Promise<{ node: HT
       <QueryClientProvider client={qc}>
         {conversations.map((projectId, index) => (
           <section key={index}>
-            <SessionAcceptanceConfirmationCard projectId={projectId} />
+            <SessionAcceptanceConfirmationCard
+              projectId={projectId}
+              onChatAbout={(plan) => armed.push(plan)}
+            />
           </section>
         ))}
       </QueryClientProvider>,
@@ -170,8 +192,20 @@ const cardsIn = (node: ParentNode): HTMLElement[] => [
 const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
   ...card.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
 ];
+const labelsOf = (card: HTMLElement): Array<string | null> => actionsOf(card).map((b) => b.textContent);
+/** The criteria as they are on screen right now — no toggle pressed. */
+const criteriaOn = (card: HTMLElement): string[] => [
+  ...card.querySelectorAll('.settlement-card-criteria li'),
+].map((row) => row.textContent ?? '');
 const staleOf = (card: HTMLElement): string | null =>
   card.querySelector('.settlement-card-stale')?.textContent ?? null;
+
+/** The reading control. Deliberately not looked up among the actions: it is not one. */
+const readToggle = (card: HTMLElement): HTMLButtonElement => {
+  const found = card.querySelector<HTMLButtonElement>('.settlement-card-read');
+  if (!found) throw new Error('the card offers no way to read the criteria in full');
+  return found;
+};
 
 function action(card: HTMLElement, label: string): HTMLButtonElement {
   const found = actionsOf(card).find((button) => button.textContent === label);
@@ -227,7 +261,7 @@ async function delivered(): Promise<{ node: HTMLElement; qc: QueryClient; card: 
     if (!only) throw new Error('the card is not on the page');
     return only;
   };
-  expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'the delivered card cannot be answered').toBe(false);
+  expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'the delivered card cannot be answered').toBe(false);
   return { node, qc, card };
 }
 
@@ -236,15 +270,50 @@ const SLOW = { timeout: 30_000 };
 
 describe('whether a coordinator conversation is drawn the card', SLOW, () => {
   it.each<State>(['UNCONFIRMED', 'STALE'])(
-    'draws exactly one while the set is %s and every stated criterion is met, through every re-read',
+    'draws exactly one while the set is %s and NOT ONE criterion is met, through every re-read',
     async (state) => {
       server.standing = standingOf(state);
+      server.document = documentOf(NONE_MET);
       const { node, qc } = await mount(PROJECT);
       await until(() => cardsIn(node).length > 0, 'the card to be drawn');
       for (let round = 0; round < 3; round += 1) await reread(qc);
       expect(cardsIn(node)).toHaveLength(1);
     },
   );
+
+  /**
+   * The move this card exists for: the question is asked while the plan is written and nothing has
+   * run. Five criteria, every one of them unmet, the set not empty and nobody has confirmed it — the
+   * card is there; confirmed, it is not. `satisfied` is not in the condition at all, which the third
+   * case holds by flipping every one of them to met and asking for the same card.
+   */
+  it.each<[string, ConfirmationCriterion[]]>([
+    ['not one of the 5 stated criteria is met', criteriaOf(false, false, false, false, false)],
+    ['the read answered for none of the 5', criteriaOf(undefined, undefined, undefined, undefined, undefined)],
+    ['every one of the 5 is met', criteriaOf(true, true, true, true, true)],
+  ])('draws one on an OPEN project stating 5 criteria nobody has confirmed while %s', async (_, criteria) => {
+    server.document = documentOf(criteria);
+    const { node } = await mount(PROJECT);
+    await until(() => cardsIn(node).length === 1, 'the card to be drawn before any work has run');
+    // The set is not empty and it is all five: what a press would bind is what is on the card.
+    expect(criteriaOn(cardsIn(node)[0]!)).toEqual(criteria.map((item) => item.text));
+  });
+
+  /** The other half of the same condition, on the same five unmet criteria: confirmed is started,
+   *  and a started project is asked nothing. */
+  it('draws none for the same 5 unmet criteria once the set is CONFIRMED', async () => {
+    server.standing = standingOf('CONFIRMED');
+    server.document = documentOf(criteriaOf(false, false, false, false, false));
+    const { node, qc } = await mount(PROJECT);
+    await readsLanded(qc);
+    expect(cardsIn(node), 'a project already started was asked to start again').toHaveLength(0);
+
+    // And the same reads saying it is no longer confirmed bring it back, so the empty pane above
+    // was this fact and not a card that was never going to draw.
+    server.standing = standingOf('STALE');
+    await reread(qc);
+    expect(cardsIn(node)).toHaveLength(1);
+  });
 
   it('draws none in a conversation that coordinates no project, beside one that does on the same reads', async () => {
     const { node } = await mount(null, PROJECT);
@@ -255,41 +324,18 @@ describe('whether a coordinator conversation is drawn the card', SLOW, () => {
       .toEqual([]);
   });
 
-  it('draws none while the set is already confirmed, and one when the same reads say it no longer is', async () => {
-    server.standing = standingOf('CONFIRMED');
-    const { node, qc } = await mount(PROJECT);
-    await readsLanded(qc);
-    expect(cardsIn(node), 'a set already confirmed was put to the owner again').toHaveLength(0);
-
-    server.standing = standingOf('STALE');
-    await reread(qc);
-    expect(cardsIn(node)).toHaveLength(1);
-  });
-
-  it.each<[string, ConfirmationCriterion[]]>([
-    ['one criterion is not met by its work', criteriaOf(true, false, true)],
-    ['the read did not answer for one criterion', criteriaOf(true, undefined, true)],
-  ])('draws none while %s, and one once every criterion is met', async (_, criteria) => {
-    server.document = { acceptanceCriteriaItems: criteria };
-    const { node, qc } = await mount(PROJECT);
-    await readsLanded(qc);
-    expect(cardsIn(node), 'the card was offered before every criterion was met').toHaveLength(0);
-
-    server.document = { acceptanceCriteriaItems: ALL_MET };
-    await reread(qc);
-    expect(cardsIn(node)).toHaveLength(1);
-  });
-
-  it.each<[string, { acceptanceCriteriaItems?: ConfirmationCriterion[] }]>([
-    ['states no criteria', { acceptanceCriteriaItems: [] }],
-    ['carries no criteria at all', {}],
-  ])('draws none while the project %s, and one once it states criteria that are met', async (_, document) => {
+  it.each<[string, ProjectDocument]>([
+    ['states no criteria', documentOf([])],
+    ['carries no criteria at all', documentOf(undefined)],
+    ['is no longer OPEN', documentOf(NONE_MET, 'DONE')],
+    ['does not say where it stands', { title: TITLE, acceptanceCriteriaItems: NONE_MET }],
+  ])('draws none while the project %s, and one once it is an OPEN project stating criteria', async (_, document) => {
     server.document = document;
     const { node, qc } = await mount(PROJECT);
     await readsLanded(qc);
-    expect(cardsIn(node), 'an empty set was put to the owner as what done means').toHaveLength(0);
+    expect(cardsIn(node), 'a plan that is not there was put to the owner as what done means').toHaveLength(0);
 
-    server.document = { acceptanceCriteriaItems: ALL_MET };
+    server.document = documentOf(NONE_MET);
     await reread(qc);
     expect(cardsIn(node)).toHaveLength(1);
   });
@@ -312,7 +358,7 @@ describe('when a read fails', SLOW, () => {
     expect(cardsIn(node), 'a card was offered off a read that failed').toHaveLength(0);
 
     server.standing = standingOf('UNCONFIRMED');
-    server.document = { acceptanceCriteriaItems: ALL_MET };
+    server.document = documentOf(NONE_MET);
     await reread(qc);
     expect(cardsIn(node)).toHaveLength(1);
   });
@@ -323,13 +369,13 @@ describe('when a read fails', SLOW, () => {
     await reread(qc);
     expect(cardsIn(node), 'the delivered card went away with the read').toHaveLength(1);
     expect(staleOf(card())).toBe(CONFIRMATION_UNREAD_EXPLANATION);
-    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'an unread card still offers a confirmation')
+    expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'an unread card still offers a confirmation')
       .toBe(true);
 
     // The failed read was the reason: the next read that answers gives the button back.
     server.standing = standingOf('UNCONFIRMED');
     await reread(qc);
-    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled).toBe(false);
+    expect(action(card(), ACCEPTANCE_START_LABEL).disabled).toBe(false);
   });
 });
 
@@ -358,16 +404,16 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
     expect(cardsIn(node)).toHaveLength(1);
     expect(staleOf(card())).toBe(acceptanceConfirmationStaleExplanation(standingOf('CONFIRMED')));
     expect(staleOf(card())).toContain(shortSeal(CURRENT));
-    const confirm = action(card(), ACCEPTANCE_CONFIRM_LABEL);
+    const confirm = action(card(), ACCEPTANCE_START_LABEL);
     expect(confirm.disabled, 'a set confirmed elsewhere is still offered for confirming').toBe(true);
     await act(async () => {
       confirm.click();
     });
     expect(presses(), 'a press on the stale card reached the door').toEqual([]);
-    // Reading the set and putting the question down write nothing, and stay available as on the
-    // native card, where both are never disabled.
-    expect(action(card(), acceptanceReadLabel(3)).disabled).toBe(false);
-    expect(action(card(), ACCEPTANCE_NOT_YET_LABEL).disabled).toBe(false);
+    // Reading the set and talking about it write nothing, and stay available as on the native card,
+    // where neither is ever disabled.
+    expect(readToggle(card()).disabled).toBe(false);
+    expect(action(card(), OWNER_SEND_BACK_ACTION).disabled).toBe(false);
   });
 
   it('sends the version it is drawn from, and when the door says that version moved, re-reads before offering the next', async () => {
@@ -386,7 +432,7 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
     const readsBefore = standingReads();
 
     await act(async () => {
-      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
+      action(card(), ACCEPTANCE_START_LABEL).click();
     });
     await until(() => presses().length === 1, 'the press to reach the door');
     // The version standing when the card was drawn — not the one a stale confirmation named.
@@ -397,13 +443,13 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
     // on record before React Query has handed the card the press at all. A turn first: the button
     // read is then the card that has been handed everything the press set off.
     await turn();
-    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'the button came back before the re-read did')
+    expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'the button came back before the re-read did')
       .toBe(true);
 
     await act(async () => {
       release(standingOf('UNCONFIRMED', MOVED));
     });
-    await until(() => !action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'the re-read to give the button back');
+    await until(() => !action(card(), ACCEPTANCE_START_LABEL).disabled, 'the re-read to give the button back');
     expect(card().querySelector('.settlement-card-meta')?.textContent).toContain(shortSeal(MOVED));
     const refusal = card().querySelector('.settlement-card-error')?.textContent ?? '';
     expect(refusal).toContain(CONFIRMATION_NOT_RECORDED);
@@ -412,53 +458,97 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
     server.standing = standingOf('UNCONFIRMED', MOVED);
     server.door = async () => standingOf('CONFIRMED', MOVED);
     await act(async () => {
-      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
+      action(card(), ACCEPTANCE_START_LABEL).click();
     });
     await until(() => presses().length === 2, 'the second press to reach the door');
     expect(presses()[1]).toBe(`POST ${STANDING_PATH} ${MOVED}`);
   });
 });
 
-describe('reading the set, putting the question down, and confirming', SLOW, () => {
-  it('opens the criteria it would confirm, in their stated order, and folds them away again', async () => {
-    server.document = { acceptanceCriteriaItems: [ALL_MET[2]!, ALL_MET[0]!, ALL_MET[1]!] };
+describe('the two actions, reading the set, and starting the project', SLOW, () => {
+  /**
+   * Two, and the reading toggle is neither of them. There was a third — the one that put the
+   * question down — which meant "ask me once the work settles" at the end of a project and means
+   * waiting for nothing before one has begun. The equality below is what keeps it from growing back
+   * under any name: it names both labels and their order, so a third action of any wording fails.
+   */
+  it('offers exactly two actions — start, and the one word every card uses for handing a reply to the composer', async () => {
     const { card } = await delivered();
-    expect(card().querySelector('.settlement-card-criteria')).toBeNull();
+    expect(labelsOf(card()), 'the card grew a third answer').toEqual([
+      ACCEPTANCE_START_LABEL,
+      OWNER_SEND_BACK_ACTION,
+    ]);
+    expect(actionsOf(card())).toHaveLength(2);
+    // Neither action carries a subtitle: two lines beside one is the bug `ApprovalCards.swift`
+    // records, and both buttons ask `CardAction` for their size rather than naming one.
+    for (const button of actionsOf(card())) {
+      expect(button.className).toContain('card-action');
+      expect(button.querySelectorAll('*'), 'an action grew a second line').toHaveLength(0);
+    }
+  });
 
-    const read = action(card(), acceptanceReadLabel(3));
+  /** Criterion: the criteria are readable without pressing anything. The toggle takes the clamp
+   *  off the text that is already there — it does not fetch it, and it is not an action. */
+  it('shows every criterion before anything is pressed, and reads them whole on the toggle', async () => {
+    const stated = criteriaOf(false, false, false);
+    server.document = documentOf([stated[2]!, stated[0]!, stated[1]!]);
+    const { card } = await delivered();
+
+    const visible = ['condition 1 holds', 'condition 2 holds', 'condition 3 holds'];
+    expect(criteriaOn(card()), 'the criteria were folded away behind a control').toEqual(visible);
+    const list = card().querySelector('.settlement-card-criteria')!;
+    expect(list.className, 'the criteria were already unfolded').not.toContain('is-open');
+
+    const read = readToggle(card());
+    expect(read.textContent).toBe(acceptanceReadLabel(3));
     expect(read.getAttribute('aria-expanded')).toBe('false');
+    expect(read.getAttribute('aria-controls')).toBe(list.id);
+    expect(actionsOf(card()), 'the reading toggle was put in the action row').toHaveLength(2);
+
     await act(async () => {
       read.click();
     });
-    const list = card().querySelector('.settlement-card-criteria');
-    expect([...(list?.querySelectorAll('li') ?? [])].map((row) => row.textContent)).toEqual([
-      'condition 1 holds',
-      'condition 2 holds',
-      'condition 3 holds',
-    ]);
-    const hide = action(card(), ACCEPTANCE_HIDE_CRITERIA_LABEL);
-    expect(hide.getAttribute('aria-expanded')).toBe('true');
-    expect(hide.getAttribute('aria-controls')).toBe(list?.id);
+    expect(card().querySelector('.settlement-card-criteria')!.className).toContain('is-open');
+    expect(criteriaOn(card()), 'unfolding the criteria changed which ones are there').toEqual(visible);
+    expect(readToggle(card()).textContent).toBe(ACCEPTANCE_SHOW_LESS_LABEL);
 
     await act(async () => {
-      hide.click();
+      readToggle(card()).click();
     });
-    expect(card().querySelector('.settlement-card-criteria')).toBeNull();
+    expect(card().querySelector('.settlement-card-criteria')!.className).not.toContain('is-open');
+    expect(criteriaOn(card())).toEqual(visible);
   });
 
-  it('puts the question down on Not yet, and writes nothing', async () => {
+  /**
+   * Chat about this hands the plan to the bottom composer and presses nothing. What separates it
+   * from the card going away is the point: the card stays, and starting the project is still the
+   * other way out of it.
+   */
+  it('hands the plan to the composer, leaves the card up with start still live, and writes nothing', async () => {
     const { node, card } = await delivered();
     await act(async () => {
-      action(card(), ACCEPTANCE_NOT_YET_LABEL).click();
+      action(card(), OWNER_SEND_BACK_ACTION).click();
     });
-    expect(cardsIn(node)).toHaveLength(0);
-    expect(presses()).toEqual([]);
+
+    expect(armed, 'the composer was not armed, or armed more than once').toHaveLength(1);
+    expect(armed[0]).toEqual({
+      projectId: PROJECT,
+      criteriaDigest: CURRENT,
+      projectTitle: TITLE,
+      criteria: NONE_MET.map((item) => item.text),
+    });
+    expect(cardsIn(node), 'the card went away when it handed the reply over').toHaveLength(1);
+    expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'starting the project went dead with it')
+      .toBe(false);
+    expect(presses(), 'handing a reply to the composer reached the door').toEqual([]);
+    // No box grew inside the card: the sentence is typed in the one composer at the bottom.
+    expect(card().querySelectorAll('textarea, input')).toHaveLength(0);
   });
 
-  it('keeps a confirmation pressed here as recorded here, on the key the card reads', async () => {
+  it('keeps a press made here as recorded here, on the key the card reads', async () => {
     const { qc, card } = await delivered();
     await act(async () => {
-      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
+      action(card(), ACCEPTANCE_START_LABEL).click();
     });
     await until(() => card().querySelector('.settlement-card-recorded') !== null, 'the door’s answer on the card');
 

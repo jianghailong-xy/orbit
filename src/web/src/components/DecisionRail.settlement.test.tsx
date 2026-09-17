@@ -1,10 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import {
-  ACCEPTANCE_CONFIRMATION_TITLE,
-  ACCEPTANCE_CONFIRM_LABEL,
-  ACCEPTANCE_NOT_YET_LABEL,
-} from './AcceptanceConfirmationCard';
+import { ACCEPTANCE_CONFIRMATION_TITLE, ACCEPTANCE_START_LABEL } from './AcceptanceConfirmationCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { CRITERIA_DECISION_HEADING, type PendingCriteriaDecisionQueue } from './CriteriaDecisionCard';
 import {
   DecisionStrip,
@@ -203,8 +200,8 @@ describe('nothing the settlement question puts in the strip answers it', () => {
 
   it('never carries the card’s own actions as words', () => {
     for (const html of everyState()) {
-      expect(html).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
-      expect(html).not.toContain(ACCEPTANCE_NOT_YET_LABEL);
+      expect(html).not.toContain(ACCEPTANCE_START_LABEL);
+      expect(html).not.toContain(OWNER_SEND_BACK_ACTION);
     }
   });
 });

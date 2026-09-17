@@ -193,17 +193,18 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
  * Take the reader to the settlement card: the third kind of question the line counts.
  *
  * Whether this project's criteria, together, are what "done" means is the question Orbit draws into
- * the coordinator conversation (`AcceptanceConfirmationCard.tsx`) once it is the last thing the
- * project's DONE waits on. The card stays where it was drawn while the conversation goes on, and
+ * the coordinator conversation (`AcceptanceConfirmationCard.tsx`) as soon as the plan is written and
+ * before any of it runs. The card stays where it was drawn while the conversation goes on, and
  * nothing pinned said it was there.
  *
- * It is counted while that card is on screen and still a question, which is how iOS's needs-you bar
- * counts it (`openQuestionRowIDs`, `AcceptanceConfirmations.isOpen`) — and the card is what says so.
- * Neither half can be read back off the standing: a delivered card stays when the criteria move, Not
- * yet takes it away, and a set confirmed at another end leaves it on screen but no longer asking. So
- * nothing here decides when that card is drawn; the page passes on what the card reported. The
- * confirmation binds a version of the set and is pressed on the card with that set readable under
- * the button, so a press here scrolls to the card and asks the server nothing.
+ * It is counted while that card is on screen and the project it is about has still not been started,
+ * which is how iOS's needs-you bar counts it (`openQuestionRowIDs`,
+ * `AcceptanceConfirmations.isOpen`) — and the card is what says so. Neither half can be read back off
+ * the standing: a delivered card stays when the criteria move, and a project started at another end
+ * leaves it on screen with nothing left to press. So nothing here decides when that card is drawn;
+ * the page passes on what the card reported. Starting binds a version of the set and is pressed on
+ * the card with that set readable above the button, so a press here scrolls to the card and asks the
+ * server nothing.
  *
  * A conversation draws at most one, so its class is the handle. Returns whether it arrived, as
  * `revealDecisionCard` does.
@@ -484,8 +485,8 @@ export function DecisionStrip({
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
    *  Null for every ordinary session, which has no ruler of its own to move. */
   criteria?: PendingCriteriaDecisionQueue | null;
-  /** Whether this conversation's settlement card is on screen and still a question: the card's own
-   *  report, passed on by the page. False wherever no such card is drawn. */
+  /** Whether this conversation's settlement card is on screen and its project is still unstarted:
+   *  the card's own report, passed on by the page. False wherever no such card is drawn. */
   confirmation?: boolean;
   /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, when the page draws
    *  its confirmation card here: the task's title and how long the run has waited. */
@@ -503,7 +504,7 @@ export function DecisionStrip({
   onReveal?: (row: PendingDecisionRow) => void;
   /** Where the reader goes to answer a proposal: its card, in the conversation it was sent to. */
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
-  /** Where the reader goes to answer the settlement question: its card. */
+  /** Where the reader goes to start the project on the plan it states: its card. */
   onRevealConfirmation?: () => void;
 }) {
   const [at, setAt] = useState<string | null>(null);
@@ -641,8 +642,8 @@ export function SessionDecisionStrip({
   /** The rows whose evidence card this conversation draws, by `decisionRowKey`. Computed by the
    *  page, which mounts that card beside this strip, with the card's own filter. */
   cards?: ReadonlySet<string>;
-  /** Whether this conversation's settlement card is on screen and still a question, as the card
-   *  reported it to the page that mounts both (`SessionAcceptanceConfirmationCard`). */
+  /** Whether this conversation's settlement card is on screen and its project is still unstarted,
+   *  as the card reported it to the page that mounts both (`SessionAcceptanceConfirmationCard`). */
   confirmation?: boolean;
   /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, as the page that
    *  draws its confirmation card read it. Null wherever no such card is drawn. */

@@ -10,55 +10,67 @@ import {
 } from '../lib/acceptanceConfirmation';
 import { CardActionButton, CardActions } from './CardAction';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
+// The words this card's second action uses. Imported rather than re-declared, and read inside the
+// component rather than bound at module scope: `OwnerConfirmationCard` reaches this module again
+// through `DecisionRail`, and a top-level alias would be evaluated while that binding is still in
+// its temporal dead zone depending on which of the three a bundle enters first.
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
 /**
- * The settlement question, asked in the conversation it was delivered to: is this set of criteria,
- * together, what "done" means for the project?
+ * The settlement question, asked in the conversation it was delivered to, at the moment it can
+ * still change something: this is the plan — these N conditions — so shall the project start?
  *
  * WHY IT IS A CARD IN THE COORDINATOR CONVERSATION
  * ------------------------------------------------
- * `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY, and once every criterion is met it is the last thing
- * the project's DONE projection waits on. Its door refuses any request that carries an acting
- * session and takes the browser's own credential, so the answer is pressed here, straight at
+ * `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY, and the same press that records the confirmation
+ * turns the project on (`project-acceptance.service.ts`: `coordinatorEnabled` is written by no
+ * other hand). Its door refuses any request that carries an acting session and takes the browser's
+ * own credential, so the answer is pressed here, straight at
  * `POST /projects/:id/acceptance/confirmation`, with no agent between the press and the door. This
  * is the browser's half of what iOS and macOS draw as `AcceptanceConfirmationCard`
  * (`ApprovalCards.swift`), and it carries the provenance mark the other two cards Orbit draws into
  * a conversation carry, for their reason: a transcript is where an agent's words appear.
  *
- * THE NATIVE CARD'S CONDITION, STATES AND WORDS
- * ---------------------------------------------
- * `settlementHeldOnConfirmation` is `ConsoleModel.settlementHeldOnConfirmation`: the standing can
- * be answered, the criteria are not empty, and every one of them is met by its work. That is
- * knowingly weaker than the server's `PROJECT_ACCEPTANCE_LANDED`, which also wants merge receipts,
- * so the card can arrive a little early and never late — and confirming early binds a version that
- * any later edit ends. The sentences are OrbitKit's `AcceptanceConfirmations`, copied by hand, and
+ * WHY IT ARRIVES BEFORE THE WORK AND NOT AFTER IT
+ * -----------------------------------------------
+ * `settlementHeldOnConfirmation` used to wait until every criterion was met by its work, and that
+ * is the moment the question is worth least: answering "no" then annuls work already done, so the
+ * card could only ever be agreed with, and 20 of the 28 projects that reached DONE had gone round
+ * it entirely. It is asked now at the one moment the answer is cheap — the plan is written and
+ * nothing has run — so `satisfied` no longer enters the condition at all: an OPEN project, a set
+ * that is not empty, and a standing nobody has confirmed. The criteria are on the card unfolded,
+ * because a digest can prove WHICH version was signed and never that it was read.
+ *
+ * The sentences are OrbitKit's `AcceptanceConfirmations`, copied by hand, and
  * `AcceptanceConfirmationCopyParityTests.swift` reads them back out of this file: the two clients
  * share no compiler, so a sentence re-worded at one end only turns nothing else red.
  *
  * DELIVERED ONCE, RE-DERIVED ON EVERY RENDER
  * ------------------------------------------
  * The card appears on the first render the condition holds and stays for as long as this
- * conversation is on screen, the way a native delivered card does: confirmed at another end, it
- * goes stale IN PLACE, with the button disabled and the reason above it, rather than vanishing
- * mid-read. Nothing about the set is kept across renders — the standing and the criteria are read
- * again each time — and a read that failed is not an answer: the card says it could not be
- * re-read and offers nothing to confirm, which is OrbitKit's rule for a standing it does not have.
+ * conversation is on screen, the way a native delivered card does: started at another end, it goes
+ * stale IN PLACE, with the button disabled and the reason above it, rather than vanishing mid-read.
+ * Nothing about the set is kept across renders — the standing and the project are read again each
+ * time — and a read that failed is not an answer: the card says it could not be re-read and offers
+ * nothing to start, which is OrbitKit's rule for a standing it does not have. Editing any criterion
+ * ends the confirmation, and the card comes back for the new version on the same condition.
  *
  * WHAT THE PINNED STRIP IS TOLD
  * -----------------------------
- * Whether this card is on screen and still a question (`onOpenQuestion`), which is what iOS's
- * needs-you bar counts. The card reports it rather than the strip reading the standing again,
- * because being on screen is this card's own state: delivered once, gone after Not yet, and still
- * there — stale — after a confirmation at another end.
+ * Whether this card is on screen and the project it is about has still not been started
+ * (`onOpenQuestion`), which is what iOS's needs-you bar counts. The card reports it rather than the
+ * strip reading the standing again, because being on screen is this card's own state: delivered
+ * once, and still there — stale — after the project was started at another end.
  */
 
-/** The card's heading: the question itself (`AcceptanceConfirmations.title`). */
-export const ACCEPTANCE_CONFIRMATION_TITLE = 'Confirm what done means?';
-export const ACCEPTANCE_CONFIRM_LABEL = 'Confirm — this is what done means';
-/** Writes nothing: it puts the question down for as long as this conversation is on screen. */
-export const ACCEPTANCE_NOT_YET_LABEL = 'Not yet';
-/** The reading toggle once it is open, in `ApprovalCards.swift`'s own words. */
-export const ACCEPTANCE_HIDE_CRITERIA_LABEL = 'Hide the criteria';
+/** The card's heading: what the card is about, not whether it has been answered
+ *  (`AcceptanceConfirmations.title`). */
+export const ACCEPTANCE_CONFIRMATION_TITLE = 'When is this project done?';
+/** The primary action. One press: it records the confirmation AND starts the project, because
+ *  saying what would settle a project is what authorises work on it. */
+export const ACCEPTANCE_START_LABEL = 'Start the project';
+/** The reading toggle once the criteria are shown whole. */
+export const ACCEPTANCE_SHOW_LESS_LABEL = 'Show less';
 /** The provenance as the meta line spells it: OrbitKit's `CriteriaDecisions.provenanceLabel`. */
 export const ACCEPTANCE_PROVENANCE = 'From Orbit';
 export const ACCEPTANCE_PROVENANCE_TITLE =
@@ -69,11 +81,42 @@ export const CONFIRMATION_CHANGED_SINCE =
   'The criteria changed after they were confirmed, so that confirmation no longer stands.';
 export const CONFIRMATION_EDIT_ENDS_IT =
   'Editing any criterion ends this confirmation and Orbit will ask again.';
+/** Where the project stands, as the meta line's third field says it. Confirming is starting, so
+ *  the standing is what answers this and there is nothing else to read it off. */
+export const ACCEPTANCE_NOT_STARTED = 'not started';
+export const ACCEPTANCE_STARTED = 'started';
+export const ACCEPTANCE_CHANGED_SINCE_STARTED = 'changed since it started';
+/** What the composer's bar says it is about to talk about, ahead of the project's own title. */
+export const ACCEPTANCE_PLAN_CHANGE_PREFIX = 'Talking about this plan: ';
+/** What the armed composer asks for. A message, not an answer: no door is waiting on it. */
+export const ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER = 'What should done mean instead?';
 export const CONFIRMATION_UNREAD_EXPLANATION =
   'This card could not be re-read just now, so the version it would confirm cannot be named — and '
   + 'a confirmation that names no version is not one. The criteria themselves are untouched by this.';
 /** What a press the door did not take says, over the door's own message. */
 export const CONFIRMATION_NOT_RECORDED = 'That confirmation was not recorded';
+
+/**
+ * What the next send carries ahead of the typed message: the plan as it stands, named by its seal.
+ *
+ * The other three armed replies answer a call that is blocking on them, so their door already knows
+ * what the reply is about. This one starts an ordinary turn at an idle agent, which knows none of
+ * it — so the version being discussed rides with the message rather than being looked up, and the
+ * seal is in it so a reply about a set that has since moved can be told apart from one about this
+ * one.
+ */
+export function acceptancePlanChangeContext(plan: {
+  projectTitle: string;
+  criteriaDigest: string;
+  criteria: string[];
+}): string {
+  const numbered = plan.criteria.map((text, index) => `${index + 1}. ${text}`).join('\n');
+  return (
+    `About the acceptance criteria of “${plan.projectTitle}” — the ${plan.criteria.length} that `
+    + `stand now, at seal ${shortSeal(plan.criteriaDigest)}, which nobody has confirmed and which `
+    + `no work has started against:\n\n${numbered}`
+  );
+}
 
 /** One stated criterion, as much of it as this card reads — the narrow view OrbitKit's
  *  `ProjectCriteriaDocument` takes of the same document. `satisfied` is absent when the read
@@ -85,78 +128,52 @@ export interface ConfirmationCriterion {
   satisfied?: boolean;
 }
 
-interface ConfirmationCriteriaDocument {
+/** As much of the project document as this card reads: the stated criteria, the title the meta
+ *  line names it by, and the status the card's own condition turns on. */
+export interface ConfirmationProjectDocument {
+  title?: string;
+  status?: string;
   acceptanceCriteriaItems?: ConfirmationCriterion[];
-}
-
-/** One line of the body: something that holds, or the one thing that does not. The open line is
- *  the question being asked, not a failure, which is why it is a question mark and not a cross. */
-export interface AcceptanceConfirmationCheck {
-  ok: boolean;
-  text: string;
 }
 
 /** The reading toggle's label. It carries the count because the count is the thing confirmed: a
  *  person is agreeing that THESE N conditions, together, express the goal. */
 export function acceptanceReadLabel(count: number): string {
-  return count === 1 ? `Read the ${count} criterion` : `Read the ${count} criteria`;
+  return `Read all ${count} in full`;
 }
 
-/** Who is asking, about which version, and what is held on the answer. */
-export function acceptanceConfirmationMeta(standing: StandardSetConfirmationStanding | null): string {
-  if (!standing) return `${ACCEPTANCE_PROVENANCE} — the standing could not be read just now.`;
+/** Which project, how many conditions, where it stands, and which version of them — in that
+ *  order. The seal is last because it answers a question nobody has until they have read the
+ *  rest: it names the version a press binds, and proves nothing about having read it. */
+export function acceptanceConfirmationMeta(
+  standing: StandardSetConfirmationStanding | null,
+  projectTitle: string,
+): string {
+  if (!standing) return `${projectTitle} — the standing could not be read just now.`;
   const count = standing.currentVersion.material.length;
-  const seal = shortSeal(standing.currentVersion.digest);
-  return (
-    `${ACCEPTANCE_PROVENANCE} — the set of ${count} at seal ${seal}. `
-    + `Settlement is held on this.`
-  );
-}
-
-/** The body: what holds, and the one thing that does not. The second line is never dropped — it
- *  is the mechanism, and the reason the card exists: nobody derives DONE from criteria alone. */
-export function acceptanceConfirmationChecks(
-  standing: StandardSetConfirmationStanding,
-): AcceptanceConfirmationCheck[] {
-  const count = standing.currentVersion.material.length;
-  const rows: AcceptanceConfirmationCheck[] = [];
-  switch (standing.state) {
-    case 'UNCONFIRMED':
-      rows.push({
-        ok: false,
-        text: `Nobody has confirmed that these ${count} express this project’s goal.`,
-      });
-      break;
-    case 'STALE': {
-      const prior = standing.confirmation;
-      rows.push({
-        ok: false,
-        text: prior
-          ? `${CONFIRMATION_CHANGED_SINCE} It named seal ${shortSeal(prior.criteriaDigest)}.`
-          : CONFIRMATION_CHANGED_SINCE,
-      });
-      break;
-    }
-    case 'CONFIRMED':
-      rows.push({
-        ok: true,
-        text:
-          `These ${count} were confirmed to express this project’s goal, and the wording that `
-          + `stands now is the wording that was confirmed.`,
-      });
-      break;
-  }
-  rows.push(
+  const stands =
     standing.state === 'CONFIRMED'
-      ? { ok: true, text: CONFIRMATION_EDIT_ENDS_IT }
-      : {
-          ok: false,
-          text:
-            `Orbit will not derive DONE until you say this set of ${count} is what `
-            + `“done” means here.`,
-        },
+      ? ACCEPTANCE_STARTED
+      : standing.state === 'STALE'
+        ? ACCEPTANCE_CHANGED_SINCE_STARTED
+        : ACCEPTANCE_NOT_STARTED;
+  return (
+    `${projectTitle} · ${count} criteria · ${stands} · seal ${shortSeal(standing.currentVersion.digest)}`
   );
-  return rows;
+}
+
+/** The one paragraph the card keeps: what starting binds the project to, and what ends it. It is
+ *  never dropped — it is the mechanism, and the reason this card is asked before the work rather
+ *  than after it. A stale standing says first why it is being asked a second time. */
+export function acceptanceStartExplanation(
+  count: number,
+  standing: StandardSetConfirmationStanding | null,
+): string {
+  const again = standing?.state === 'STALE' ? `${CONFIRMATION_CHANGED_SINCE} ` : '';
+  return (
+    `${again}Once this starts, Orbit derives done from these ${count} and from nothing else. `
+    + CONFIRMATION_EDIT_ENDS_IT
+  );
 }
 
 /** Whether the confirm button may be pressed. Both un-confirmed states offer it, and it always
@@ -168,10 +185,11 @@ export function acceptanceConfirmationAnswerable(
   return standing !== null && standing.state !== 'CONFIRMED';
 }
 
-/** Whether the settlement question is still a question — OrbitKit's `AcceptanceConfirmations.isOpen`.
- *  Not the same as answerable: a standing that could not be read offers nothing to confirm and is
- *  still open, because a failed read is this device's problem and not an answer. */
-export function acceptanceConfirmationOpen(
+/** Whether this project has still not been started — OrbitKit's `AcceptanceConfirmations.isOpen`,
+ *  and what the pinned line counts. Confirming IS starting, so the standing is the whole of it and
+ *  there is nothing else to read it off; a standing that could not be read leaves the project not
+ *  started, because a failed read is this device's problem and not an answer. */
+export function acceptanceProjectUnstarted(
   standing: StandardSetConfirmationStanding | null,
 ): boolean {
   return standing === null || standing.state !== 'CONFIRMED';
@@ -192,66 +210,77 @@ export function acceptanceConfirmationStaleExplanation(
   );
 }
 
-/** What a confirmation pressed on this card leaves where its actions were. */
+/** What a press on this card leaves where its actions were. */
 export function acceptanceConfirmedLine(standing: StandardSetConfirmationStanding): string {
   const count = standing.currentVersion.material.length;
   const seal = shortSeal(standing.currentVersion.digest);
-  return `You confirmed the standard set — ${count} criteria at seal ${seal}`;
+  return `You started the project on ${count} criteria at seal ${seal}`;
 }
 
 /**
- * Whether the owner's confirmation is the LAST thing settlement is waiting on, read off the
+ * Whether this project is waiting to be started on a plan nobody has confirmed, read off the
  * confirmation standing and the project document — null for either one that could not be read.
  *
- * The confirmation is lazy on purpose: asked at the last moment rather than the first, so a card
- * offered while half the criteria are unmet would be a standing interruption in every coordinator
- * conversation from the day the project was created.
+ * Three facts and no fourth: the project is OPEN, it states criteria, and the set standing now has
+ * not been confirmed. `satisfied` is deliberately absent — waiting for every criterion to be met
+ * put the question at the moment it could only be agreed with, which is what this card was moved
+ * for. No quiet period is needed either side of a write: `project_update(acceptanceCriteriaItems)`
+ * replaces the whole set in one statement (`criteria-pending-decisions.ts`), so a read never
+ * catches a plan half-written.
  */
 export function settlementHeldOnConfirmation(
   standing: StandardSetConfirmationStanding | null,
-  criteria: ConfirmationCriterion[] | null,
+  project: ConfirmationProjectDocument | null,
 ): boolean {
   if (!acceptanceConfirmationAnswerable(standing)) return false;
-  if (criteria === null || criteria.length === 0) return false;
-  return criteria.every((criterion) => criterion.satisfied === true);
+  if (project === null || project.status !== 'OPEN') return false;
+  return (project.acceptanceCriteriaItems ?? []).length > 0;
 }
 
 /**
- * The card. Presentational apart from whether its criteria are open: it issues no request, so a
- * render can assert what each standing puts on screen.
+ * The card. Presentational apart from whether its criteria are shown whole: it issues no request,
+ * so a render can assert what each standing puts on screen.
  *
- * The confirm action is `CardAction`'s, under its one rule — an action that cannot succeed is
- * `disabled` rather than lit-and-refused. `Not yet` and the reading toggle write nothing and are
- * never disabled, as on the native card: putting a question down, or reading what it is about, is
- * available whatever the server says about it.
+ * TWO ACTIONS, AND THE READING TOGGLE IS NEITHER OF THEM
+ * -----------------------------------------------------
+ * Start, and talk about it first. Both are `CardAction`'s, at its sizes, under its one rule — an
+ * action that cannot succeed is `disabled` rather than lit-and-refused — and neither carries a
+ * subtitle, which is what once made one of these buttons two lines tall beside a one-line
+ * neighbour. The criteria are on the card already, so opening them whole is a reading control and
+ * sits with the text it unfolds rather than in the action row; it writes nothing and is never
+ * disabled, as on the native card.
  */
 export function AcceptanceConfirmationCard({
   standing,
   criteria,
+  projectTitle,
   busy = false,
   error = null,
   recorded = null,
-  onConfirm,
-  onSetAside,
+  onStart,
+  onChatAbout,
 }: {
   /** The confirmation standing, or null when it could not be read. */
   standing: StandardSetConfirmationStanding | null;
   /** The stated criteria, or null when the project document could not be read. */
   criteria: ConfirmationCriterion[] | null;
+  /** What the meta line calls the project this plan belongs to. */
+  projectTitle: string;
   /** A press from this card is on its way to the door, or the re-read after a refusal is. */
   busy?: boolean;
   /** The door's refusal of the last press, when it refused. */
   error?: Error | null;
-  /** The door's answer to a confirmation pressed HERE, once there is one. */
+  /** The door's answer to a press made HERE, once there is one. */
   recorded?: StandardSetConfirmationStanding | null;
-  onConfirm: () => void;
-  onSetAside: () => void;
+  onStart: () => void;
+  /** Hands the reply to the bottom composer. The card stays and `onStart` stays live. */
+  onChatAbout: () => void;
 }): JSX.Element {
   const listId = useId();
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const answerable = acceptanceConfirmationAnswerable(standing);
-  // A confirmation given here is not one given "at another end", which is the one reading of its
-  // own answer this card can be sure is wrong.
+  // A press made here is not one made "at another end", which is the one reading of its own answer
+  // this card can be sure is wrong.
   const stale = recorded ? null : acceptanceConfirmationStaleExplanation(standing);
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
   return (
@@ -263,32 +292,40 @@ export function AcceptanceConfirmationCard({
         </span>
       </div>
       <div className="approval-body is-questions settlement-card-body">
-        <div className="settlement-card-meta">{acceptanceConfirmationMeta(standing)}</div>
-        {standing ? (
-          <ul className="settlement-card-checks">
-            {acceptanceConfirmationChecks(standing).map((check) => (
-              <li key={check.text} className={check.ok ? 'is-held' : 'is-open'}>
-                <span className="settlement-card-mark" aria-hidden>
-                  {check.ok ? '✓' : '?'}
-                </span>
-                <span>{check.text}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <div className="settlement-card-meta">
+          {acceptanceConfirmationMeta(standing, projectTitle)}
+        </div>
         {stale ? <p className="settlement-card-stale">{stale}</p> : null}
-        {/* The set itself. Load-bearing rather than decorative: this card sits alone in a
-            transcript, and confirming a set the reader cannot read is exactly the "signed unread"
-            the version digest exists to prevent. */}
-        {criteriaOpen && items.length > 0 ? (
-          <ol id={listId} className="settlement-card-criteria">
-            {items.map((item) => (
-              <li key={item.id} value={item.ordinal}>
-                {item.text}
-              </li>
-            ))}
-          </ol>
+        {/* The set itself, open. Load-bearing rather than decorative: a folded list is an
+            invitation to sign what was never opened, and the version digest proves only WHICH
+            wording was signed. Each condition is clamped to two lines so N of them stay one
+            card; the toggle under them takes the clamp off. */}
+        {items.length > 0 ? (
+          <>
+            <ol
+              id={listId}
+              className={criteriaOpen ? 'settlement-card-criteria is-open' : 'settlement-card-criteria'}
+            >
+              {items.map((item) => (
+                <li key={item.id} value={item.ordinal}>
+                  <span className="settlement-card-criterion">{item.text}</span>
+                </li>
+              ))}
+            </ol>
+            <button
+              type="button"
+              className="settlement-card-read"
+              aria-expanded={criteriaOpen}
+              aria-controls={listId}
+              onClick={() => setCriteriaOpen((open) => !open)}
+            >
+              {criteriaOpen ? ACCEPTANCE_SHOW_LESS_LABEL : acceptanceReadLabel(items.length)}
+            </button>
+          </>
         ) : null}
+        <p className="settlement-card-explains">
+          {acceptanceStartExplanation(items.length, standing)}
+        </p>
         {error ? (
           <Alert
             className="settlement-card-error"
@@ -304,23 +341,14 @@ export function AcceptanceConfirmationCard({
       </div>
       {recorded ? null : (
         <CardActions className="approval-actions settlement-card-actions">
-          <CardActionButton tone="primary" disabled={busy || !answerable} onClick={onConfirm}>
-            {ACCEPTANCE_CONFIRM_LABEL}
+          <CardActionButton tone="primary" disabled={busy || !answerable} onClick={onStart}>
+            {ACCEPTANCE_START_LABEL}
           </CardActionButton>
-          {/* Absent while the criteria could not be read: a control that would open nothing is
-              not one. */}
-          {items.length > 0 ? (
-            <CardActionButton
-              tone="secondary"
-              expanded={criteriaOpen}
-              controls={criteriaOpen ? listId : undefined}
-              onClick={() => setCriteriaOpen((open) => !open)}
-            >
-              {criteriaOpen ? ACCEPTANCE_HIDE_CRITERIA_LABEL : acceptanceReadLabel(items.length)}
-            </CardActionButton>
-          ) : null}
-          <CardActionButton tone="secondary" onClick={onSetAside}>
-            {ACCEPTANCE_NOT_YET_LABEL}
+          {/* The same control, and the same word for it, as the other three cards that hand a
+              reply to the composer. Dead only where there is no version to talk about: a standing
+              that could not be read names none. */}
+          <CardActionButton tone="secondary" disabled={standing === null} onClick={onChatAbout}>
+            {OWNER_SEND_BACK_ACTION}
           </CardActionButton>
         </CardActions>
       )}
@@ -329,28 +357,43 @@ export function AcceptanceConfirmationCard({
 }
 
 /**
- * The wired card for one conversation: at most one, delivered the first time settlement is held on
- * the owner's confirmation, and re-derived from both reads on every render after that.
+ * The wired card for one conversation: at most one, delivered the first time an unstarted project
+ * states a plan nobody has confirmed, and re-derived from both reads on every render after that.
  *
- * The standing is read under `acceptanceConfirmationKey` and the criteria under the project page's
+ * The standing is read under `acceptanceConfirmationKey` and the project under the project page's
  * own `['project', id]`. A press sends `currentVersion.digest` from the read the card is drawn
  * from; the door refuses a version that moved in between, and the answer to that refusal is to read
  * the set again — so a refusal re-reads, and the card stays busy until that read has landed.
+ *
+ * Nothing puts the card down. A third action used to do that, while the question was asked at the
+ * end of a project, where putting it down meant "let me answer once the work settles"; asked before
+ * anything has run it would mean waiting for nothing, so the way past this card is to start the
+ * project or to say what should change first.
  */
 export function SessionAcceptanceConfirmationCard({
   projectId,
   onOpenQuestion,
+  onChatAbout,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
-  /** Told whether this card is on screen and still a question each time that changes, and `false`
-   *  when the card goes: what the pinned strip points at (`DecisionRail.tsx`). A stable function. */
+  /** Told whether this card is on screen and the project is still unstarted each time that
+   *  changes, and `false` when the card goes: what the pinned strip points at
+   *  (`DecisionRail.tsx`). A stable function. */
   onOpenQuestion?: (open: boolean) => void;
+  /** Arms the bottom composer to talk about this plan, given what the next send should carry as
+   *  context. Nothing here is a door, and the card stays put. Called from a press only, so unlike
+   *  `onOpenQuestion` it need not be stable. */
+  onChatAbout?: (plan: {
+    projectId: string;
+    criteriaDigest: string;
+    projectTitle: string;
+    criteria: string[];
+  }) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
   const [delivered, setDelivered] = useState(false);
-  const [setAside, setSetAside] = useState(false);
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(project),
     queryFn: () => readAcceptanceConfirmation(project),
@@ -360,24 +403,23 @@ export function SessionAcceptanceConfirmationCard({
   const documentRead = useQuery({
     queryKey: ['project', project],
     queryFn: () =>
-      api<ConfirmationCriteriaDocument>(`/projects/${encodeURIComponent(project)}`),
+      api<ConfirmationProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled: Boolean(projectId),
     refetchInterval: 20_000,
   });
   // A read that failed is not an answer, whatever an earlier read said.
   const standing = standingRead.isError ? null : (standingRead.data ?? null);
-  const criteria = documentRead.isError
-    ? null
-    : (documentRead.data?.acceptanceCriteriaItems ?? null);
-  const held = settlementHeldOnConfirmation(standing, criteria);
+  const document = documentRead.isError ? null : (documentRead.data ?? null);
+  const criteria = document?.acceptanceCriteriaItems ?? null;
+  const held = settlementHeldOnConfirmation(standing, document);
   useEffect(() => {
     if (held) setDelivered(true);
   }, [held]);
-  // On screen and still a question: the delivered card iOS's needs-you bar counts while
+  // On screen and not started: the delivered card iOS's needs-you bar counts while
   // `AcceptanceConfirmations.isOpen`. `shown` is exactly what the render below draws, so the strip
   // is told about the card a reader can reach and not about the reads behind it.
-  const shown = !setAside && (delivered || held);
-  const openHere = shown && acceptanceConfirmationOpen(standing);
+  const shown = delivered || held;
+  const openHere = shown && acceptanceProjectUnstarted(standing);
   useEffect(() => {
     onOpenQuestion?.(openHere);
   }, [onOpenQuestion, openHere]);
@@ -395,18 +437,30 @@ export function SessionAcceptanceConfirmationCard({
   });
 
   if (!shown) return null;
+  const title = document?.title || project;
   return (
     <AcceptanceConfirmationCard
       standing={standing}
       criteria={criteria}
+      projectTitle={title}
       busy={confirm.isPending}
       error={confirm.isError ? confirm.error : null}
       recorded={confirm.isSuccess ? confirm.data : null}
-      onConfirm={() => {
+      onStart={() => {
         if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
         confirm.mutate(standing.currentVersion.digest);
       }}
-      onSetAside={() => setSetAside(true)}
+      onChatAbout={() => {
+        if (standing === null) return;
+        onChatAbout?.({
+          projectId: project,
+          criteriaDigest: standing.currentVersion.digest,
+          projectTitle: title,
+          criteria: [...(criteria ?? [])]
+            .sort((a, b) => a.ordinal - b.ordinal)
+            .map((item) => item.text),
+        });
+      }}
     />
   );
 }

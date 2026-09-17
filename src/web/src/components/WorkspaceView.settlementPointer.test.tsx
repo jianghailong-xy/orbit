@@ -13,7 +13,8 @@ import {
   wayPosition,
   type PendingDecisionQueue,
 } from './DecisionRail';
-import { ACCEPTANCE_CONFIRM_LABEL, ACCEPTANCE_NOT_YET_LABEL } from './AcceptanceConfirmationCard';
+import { ACCEPTANCE_START_LABEL } from './AcceptanceConfirmationCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import {
   acceptanceConfirmationKey,
   type StandardSetConfirmationStanding,
@@ -178,13 +179,14 @@ const ORDINARY_QUEUE: PendingDecisionQueue = {
   ],
 };
 
-/** What the stubbed server answers right now. Each case starts from settlement held on the owner:
- *  both criteria met, the set unconfirmed, and one weakening waiting beside it. */
+/** What the stubbed server answers right now. Each case starts from a project waiting to be
+ *  started: two criteria stated and unmet, the set unconfirmed, and one weakening waiting beside
+ *  it. */
 const server: {
   standing: StandardSetConfirmationStanding;
   criteria: ReturnType<typeof criteriaOf>;
   proposals: PendingCriteriaDecisionRow[];
-} = { standing: standingOf('UNCONFIRMED'), criteria: criteriaOf(true, true), proposals: [held()] };
+} = { standing: standingOf('UNCONFIRMED'), criteria: criteriaOf(false, false), proposals: [held()] };
 
 class FakeEventSource {
   static open: FakeEventSource[] = [];
@@ -246,7 +248,7 @@ beforeEach(() => {
   viewport = 1280;
   navigateTo = null;
   server.standing = standingOf('UNCONFIRMED');
-  server.criteria = criteriaOf(true, true);
+  server.criteria = criteriaOf(false, false);
   server.proposals = [held()];
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -267,7 +269,12 @@ beforeEach(() => {
     }
     if (path === `/projects/${PROJECT_PUBLIC}`) {
       documentReads += 1;
-      return reply({ id: PROJECT_PUBLIC, acceptanceCriteriaItems: server.criteria });
+      return reply({
+        id: PROJECT_PUBLIC,
+        title: 'the settlement pointer',
+        status: 'OPEN',
+        acceptanceCriteriaItems: server.criteria,
+      });
     }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       return reply(proposalsOf(server.proposals));
@@ -444,7 +451,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
   });
 
   it('counts nothing for the card while it has not been drawn, and counts it once it is', async () => {
-    server.criteria = criteriaOf(true, false);
+    server.criteria = [];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     // Drawn, counting what it does count, and both of the card's reads answered.
     await waitForUi(() => {
@@ -457,7 +464,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(settlementCards()).toEqual([]);
 
     // The one fact under test changes, and the same page draws the card and counts it.
-    server.criteria = criteriaOf(true, true);
+    server.criteria = criteriaOf(false, false);
     await reread(['project', PROJECT_PUBLIC], () => documentReads);
     await waitForUi(() => {
       expect(counted()).toBe(needsDecisionCount(2));
@@ -491,21 +498,6 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     await go(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(counted()).toBe(needsDecisionCount(2));
-    });
-  });
-
-  it('stops counting it once the card is put down with Not yet', async () => {
-    await coordinatorWithTheCard();
-    const notYet = [...settlementCards()[0]!.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')]
-      .find((button) => button.textContent === ACCEPTANCE_NOT_YET_LABEL)!;
-    await act(async () => {
-      notYet.click();
-    });
-    await waitForUi(() => {
-      expect(settlementCards()).toEqual([]);
-    });
-    await waitForUi(() => {
-      expect(counted(), 'a card put down is still counted').toBe(needsDecisionCount(1));
     });
   });
 
@@ -550,11 +542,11 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     const stray = [...strip()!.querySelectorAll<HTMLButtonElement>('button')]
       .filter((button) => !button.classList.contains('decision-strip-line'));
     expect(stray.map((button) => button.outerHTML), 'the strip grew a control that goes nowhere').toEqual([]);
-    expect(strip()!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
-    expect(strip()!.textContent).not.toContain(ACCEPTANCE_NOT_YET_LABEL);
+    expect(strip()!.textContent).not.toContain(ACCEPTANCE_START_LABEL);
+    expect(strip()!.textContent).not.toContain(OWNER_SEND_BACK_ACTION);
     // The answer is still where it lives: on the card.
     expect([...settlementCards()[0]!.querySelectorAll('button')].map((button) => button.textContent))
-      .toContain(ACCEPTANCE_CONFIRM_LABEL);
+      .toContain(ACCEPTANCE_START_LABEL);
   });
 });
 

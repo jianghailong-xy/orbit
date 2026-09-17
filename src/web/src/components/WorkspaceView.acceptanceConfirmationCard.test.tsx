@@ -14,6 +14,12 @@ import {
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
+import {
+  ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+  ACCEPTANCE_PLAN_CHANGE_PREFIX,
+  ACCEPTANCE_START_LABEL,
+} from './AcceptanceConfirmationCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
 /**
  * The settlement confirmation card where the owner meets it: the real WorkspaceView, on a
@@ -85,7 +91,7 @@ const NOTE: Record<string, string> = {
   [ORDINARY_PUBLIC]: 'ordinary note',
 };
 
-/** Settlement held on the owner: both criteria met, and nobody has confirmed the set. */
+/** The project is waiting to be started: it states criteria, and nobody has confirmed them. */
 const STANDING: StandardSetConfirmationStanding = {
   state: 'UNCONFIRMED',
   confirmed: false,
@@ -95,7 +101,7 @@ const STANDING: StandardSetConfirmationStanding = {
   },
   confirmation: null,
 };
-const CRITERIA = [1, 2].map((n) => ({ id: `c${n}`, ordinal: n, text: `condition ${n} holds`, satisfied: true }));
+const CRITERIA = [1, 2].map((n) => ({ id: `c${n}`, ordinal: n, text: `condition ${n} holds`, satisfied: false }));
 
 /** A weakening held against the same project, so the criteria card shares the pane. */
 const PROPOSALS: PendingCriteriaDecisionQueue = (() => {
@@ -191,7 +197,9 @@ beforeEach(() => {
       confirmationReads += 1;
       return reply(STANDING);
     }
-    if (path === `/projects/${PROJECT_PUBLIC}`) return reply({ id: PROJECT_PUBLIC, acceptanceCriteriaItems: CRITERIA });
+    if (path === `/projects/${PROJECT_PUBLIC}`) {
+      return reply({ id: PROJECT_PUBLIC, title: 'the criteria seal', status: 'OPEN', acceptanceCriteriaItems: CRITERIA });
+    }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       criteriaReads += 1;
       return reply(PROPOSALS);
@@ -358,6 +366,53 @@ describe('the settlement confirmation card in WorkspaceView', { timeout: 60_000 
   });
 });
 
+/**
+ * The second action's whole job: it arms the ONE composer at the bottom of the page and presses
+ * nothing. Only the view can hold this — the card is handed a callback, and whether that callback
+ * reaches the composer, leaves the card up and leaves starting the project live is a fact about the
+ * page the two live on.
+ */
+describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
+  it('arms the composer with this plan, keeps the card up with Start the project live, and reaches no door', async () => {
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.settlement-card')).toBe(1);
+    });
+    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.settlement-card')!;
+    const actions = (): HTMLButtonElement[] => [
+      ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
+    ];
+    // Exactly two, and it is the second one that hands the reply over.
+    expect(actions().map((button) => button.textContent))
+      .toEqual([ACCEPTANCE_START_LABEL, OWNER_SEND_BACK_ACTION]);
+    expect(count('.composer-replyto'), 'the composer was already armed').toBe(0);
+    const requestedBefore = requested.length;
+
+    await act(async () => {
+      actions()[1]!.click();
+    });
+
+    // replyTo is set: the bar names this plan, and the composer asks for what should change.
+    await waitForUi(() => {
+      expect(count('.composer-replyto')).toBe(1);
+    });
+    expect(mounted().querySelector('.composer-replyto-text')?.textContent)
+      .toBe(`${ACCEPTANCE_PLAN_CHANGE_PREFIX}the criteria seal`);
+    expect(
+      [...mounted().querySelectorAll('textarea')].map((box) => box.getAttribute('placeholder')),
+      'the armed composer does not ask for what should change',
+    ).toContain(ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER);
+
+    // The card is still there and its own way out is still live.
+    expect(count('.settlement-card'), 'the card went away when it handed the reply over').toBe(1);
+    expect(actions()[0]!.disabled, 'Start the project went dead with the handoff').toBe(false);
+    // No box grew inside the card, and nothing was written anywhere.
+    expect(card().querySelectorAll('textarea, input')).toHaveLength(0);
+    expect(requested.slice(requestedBefore), 'arming the composer asked the server for something')
+      .toEqual([]);
+  });
+});
+
 describe('where the card is mounted', () => {
   /** Both spellings, because the web suite runs from `src/web` and a runner may start at the root. */
   const workspaceView = (): string => {
@@ -379,5 +434,30 @@ describe('where the card is mounted', () => {
     // WorkspaceView.criteriaDecisionCard.test.tsx for what two siblings sharing a key cost.
     expect(element).toContain('key={`confirmation:${selectedId}`}');
     expect(element).toContain('projectId={selectedSession?.projectId ?? null}');
+    expect(element, 'the card has nothing to hand its reply to').toContain('onChatAbout=');
+  });
+
+  /**
+   * Where the armed send goes, which no render in jsdom reaches: `sendTurn` is the real module here
+   * and a turn is not started against a stub. So the branch is read out of the source, as the
+   * mount above is — the same thing `ComposerHandoffWiringTests.swift` does at the other end.
+   *
+   * What is pinned is the one way this target differs from the other three: it starts an ORDINARY
+   * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a `planChange` send
+   * that grew one would be this card answering a call that nobody made.
+   */
+  it('sends a plan change as an ordinary turn carrying the plan, through no door', () => {
+    const source = workspaceView();
+    const at = source.indexOf("if (replyTo.target.kind === 'planChange') {");
+    expect(at, 'nothing in onSend handles an armed plan change').toBeGreaterThan(-1);
+    // To the end of the branch: the `return` that leaves onSend's replyTo block.
+    const branch = source.slice(at, source.indexOf('\n      }', at));
+    expect(branch, 'the send does not start an ordinary turn').toContain('send.mutate({');
+    expect(branch, 'the typed message does not carry the plan in front of it').toContain('carried');
+    for (const door of ['decide(', 'ownerDecision.mutate', 'confirmAcceptanceCriteria']) {
+      expect(branch, `a plan change was routed through ${door}`).not.toContain(door);
+    }
+    // And the plan it carries is built once, by the card that owns those words.
+    expect(source).toContain('context: acceptancePlanChangeContext(plan)');
   });
 });

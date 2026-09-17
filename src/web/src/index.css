@@ -7354,40 +7354,15 @@ button.composer-usage:focus-visible {
   line-height: 1.6;
   color: var(--text-3);
 }
-.settlement-card-checks {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 13px;
-  line-height: 1.55;
-}
-.settlement-card-checks li {
-  display: flex;
-  gap: 8px;
-}
-.settlement-card-checks li + li {
-  margin-top: 4px;
-}
-/* A tick and a question mark differ in shape as well as hue, so no colour carries the difference
-   alone. Amber, not red: the open line is the question being asked, not a failure. */
-.settlement-card-mark {
-  flex: none;
-  width: 12px;
-  font-weight: 700;
-  text-align: center;
-}
-.settlement-card-checks li.is-held .settlement-card-mark {
-  color: var(--success);
-}
-.settlement-card-checks li.is-open .settlement-card-mark {
-  color: var(--warning);
-}
 .settlement-card-stale {
   margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-2);
 }
+/* The criteria are open on the card, not behind a toggle: the reader is agreeing to THESE, and a
+   folded list is an invitation to sign what was never opened. Each is clamped to two lines so a set
+   of any size still reads as one card; `is-open` takes the clamp off. */
 .settlement-card-criteria {
   margin: 10px 0 0;
   padding-left: 22px;
@@ -7395,8 +7370,40 @@ button.composer-usage:focus-visible {
   line-height: 1.6;
   color: var(--text-1);
 }
+/* The clamp is on the text and not on the row: `-webkit-box` on the `li` itself would take its
+   ordinal with it, and the ordinal is how a reader names which condition they mean. */
+.settlement-card-criterion {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.settlement-card-criteria.is-open .settlement-card-criterion {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
 .settlement-card-criteria li + li {
   margin-top: 4px;
+}
+/* A reading control, not an action: it sits with the text it unfolds rather than in the action row,
+   which is why it is not a `.card-action`. */
+.settlement-card-read {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  color: var(--brand);
+  cursor: pointer;
+}
+.settlement-card-read:hover {
+  text-decoration: underline;
+}
+.settlement-card-explains {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
 }
 .settlement-card-error {
   margin-top: 10px;
