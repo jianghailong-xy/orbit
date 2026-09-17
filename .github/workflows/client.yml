@@ -23,11 +23,15 @@ on:
       - "src/macos/**"
       - "src/ios/**"
       - ".github/workflows/client.yml"
+      # The nav guard's rules live outside this file, so it is listed on its own — otherwise a
+      # broken edit to it would only be discovered by the next navigation change.
+      - "scripts/ci/nav-push-gate.sh"
   pull_request:
     paths:
       - "src/macos/**"
       - "src/ios/**"
       - ".github/workflows/client.yml"
+      - "scripts/ci/nav-push-gate.sh"
   # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
   # `gh workflow run client.yml --ref <branch>`.
   workflow_dispatch:
@@ -57,6 +61,20 @@ jobs:
           else
             echo "No bare system(size:) call sites outside Typography.swift."
           fi
+
+  # Navigation guard: pushes go onto the section's navigation stack (NavState/NavNode in OrbitKit)
+  # and nowhere else — no boolean push beside it, no stored selection that can disagree with what
+  # the stack shows, no flag telling the model which shell it is drawn in. Text scan only, so it
+  # runs here rather than on the 10× Mac runners; the same rules are pinned in OrbitKitTests, which
+  # a PR that cannot run `swift test` still gets held to by this job (see scripts/ci/nav-push-gate.sh
+  # for why each rule exists and what to write instead).
+  nav-push:
+    name: Navigation (one push mechanism per stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Gate a second push mechanism
+        run: bash scripts/ci/nav-push-gate.sh
 
   macos:
     name: macOS (build + test)
