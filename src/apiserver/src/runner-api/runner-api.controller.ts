@@ -4148,9 +4148,20 @@ export class RunnerApiController {
         );
       }
       if (durable.length > 0) {
+        // The one place a run_event is ever written, and the reason the per-token progress pings
+        // stop costing 868 MB/day: `isNoiseSystemEvent` decides here whether a row is worth
+        // storing, using the same predicate the live broadcast and the read paths' notNoiseSql
+        // use, so what a client can see and what the archive holds stay the same set.
+        //
+        // `max(seq)` stays safe. It is load-bearing — the queue and the reclaim path both rebuild
+        // the runner's event counter from it (runner-go: `seq := job.MaxSeq + 1`) — and a drop
+        // leaves it BELOW what the dead process had counted to. The slots it fell behind by were
+        // never stored, so a runner resuming at max+1 re-uses empty ones and `skipDuplicates`
+        // has nothing to swallow. A batch that is nothing but pings stores nothing at all
+        // (chunkedCreateMany's loop does not run on an empty list).
         await chunkedCreateMany(
           (data) => tx.runEvent.createMany({ data, skipDuplicates: true }),
-          durable.map((e) => ({
+          durable.filter((e) => !isNoiseSystemEvent(e)).map((e) => ({
             sessionId,
             seq: e.seq,
             type: e.type,

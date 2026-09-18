@@ -7,6 +7,16 @@ import { RunStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
+/** A row as it lands in `run_event`: the columns the events write path sets. */
+type RunEventRow = {
+  sessionId: string;
+  seq: number;
+  type: string;
+  payload: unknown;
+  turnId: string | null;
+  createdAt: Date;
+};
+
 function makeController(
   status: RunStatus = RunStatus.AWAITING_INPUT,
   runtimeSessionId: string | null = 'runtime-1',
@@ -19,6 +29,10 @@ function makeController(
     turnContents?: Record<string, string | null>;
     coordinatorContextEpoch?: number;
   } = {},
+  // An in-memory `run_event` for specs that read back what a batch actually stored. It keeps the
+  // table's own key: a second row at the same (sessionId, seq) is silently skipped, which is what
+  // `skipDuplicates: true` does and why a collision here loses a real event instead of failing.
+  runEventTable?: RunEventRow[],
 ) {
   const calls = {
     createMany: [] as any[],
@@ -38,7 +52,14 @@ function makeController(
     runEvent: {
       createMany: async (args: any) => {
         calls.createMany.push(args);
-        return { count: args.data.length };
+        if (!runEventTable) return { count: args.data.length };
+        let count = 0;
+        for (const row of args.data as RunEventRow[]) {
+          if (runEventTable.some((r) => r.seq === row.seq)) continue;
+          runEventTable.push(row);
+          count += 1;
+        }
+        return { count };
       },
     },
     // Every tool_use is denormalized into tool_call on create, and its tool_result pairs back
@@ -808,4 +829,169 @@ test('a backlogged batch inserts in bounded chunks so no single createMany can s
   assert.equal(calls.createMany[0].data.length, 256);
   assert.equal(calls.createMany[1].data.length, 44);
   assert.equal(calls.createMany.every((c: any) => c.skipDuplicates === true), true);
+});
+
+const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
+const RUNNER_OWNER = '22222222-2222-4222-8222-222222222222';
+
+/**
+ * The reclaim door, taking its high-water mark out of the same table the write path filled — the
+ * production line the resume rests on (`maxSeq: agg._max.seq ?? 0` in RunnerApiController, and the
+ * same `runEvent.aggregate({ _max: { seq } })` in queue.service.ts for a fresh claim).
+ */
+function makeReclaimController(runEventTable: RunEventRow[], sessionId: string) {
+  const prisma = {
+    session: {
+      findMany: async () => [
+        {
+          id: sessionId,
+          ownerId: RUNNER_OWNER,
+          status: RunStatus.AWAITING_INPUT,
+          // Codex reclaims with the Orbit session id and starts a fresh thread, so this path does
+          // not need a runtime id; anything but null is enough for a Job to be built at all.
+          provider: 'codex',
+          providerBuiltin: true,
+          model: null,
+          permissionMode: null,
+          effort: null,
+          title: 'idle session',
+          runtimeSessionId: null,
+          inboxLeaseOwner: '44444444-4444-4444-8444-444444444444',
+          branch: null,
+          mergeTarget: null,
+          workspaceId: null,
+          taskId: null,
+          workspace: null,
+          assignedRunner: {
+            runtimeDefaultModels: { codex: 'gpt-runtime-default' },
+            modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+          },
+        },
+      ],
+    },
+    user: { findUnique: async () => null },
+    runEvent: {
+      aggregate: async () => ({
+        _max: { seq: runEventTable.reduce<number | null>((max, r) => (max === null || r.seq > max ? r.seq : max), null) },
+      }),
+    },
+    $executeRaw: async () => 1,
+  };
+  return new RunnerApiController(
+    prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+}
+
+const at = (minute: number) => `2026-09-18T10:${String(minute).padStart(2, '0')}:00.000Z`;
+
+/**
+ * What ingress stores, and what it refuses to. The noise rows are the per-token `thinking_tokens`
+ * pings — 97.8% of this table's rows on 2026-09-18, 98.3% of them from one provider — so this is
+ * the write-side half of the retention change; the read paths still filter the same predicate
+ * (notNoiseSql) for the rows already archived.
+ */
+test('ingress stores no system progress ping, and stores everything else whole', async () => {
+  const table: RunEventRow[] = [];
+  const { calls, controller } = makeController(RunStatus.RUNNING, 'runtime-1', {}, table);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      { seq: 1, type: RunEventType.USER, ts: at(0), turnId: 'turn-1', payload: { text: '把 run_event 的入口收一下' } },
+      // `init` is one of the two system subtypes with a real consumer (runtimeInitSessionId).
+      { seq: 2, type: RunEventType.SYSTEM, ts: at(1), payload: { subtype: 'init', sessionId: 'runtime-1' } },
+      // The row this exists to stop storing: `{model, subtype, sessionId}` and nothing else.
+      { seq: 3, type: RunEventType.SYSTEM, ts: at(2), payload: { model: null, subtype: 'thinking_tokens', sessionId: 'runtime-1' } },
+      { seq: 4, type: RunEventType.ASSISTANT, ts: at(3), turnId: 'turn-1', payload: { text: '改好了' } },
+      { seq: 5, type: RunEventType.SYSTEM, ts: at(4), payload: { subtype: 'status' } },
+      { seq: 6, type: RunEventType.SYSTEM, ts: at(5), payload: {} },
+      // Codex streams stderr as a subtype-less system event, and it is the only record of why a
+      // runtime failed to come up. The shape rule is what keeps it — a subtype blocklist would not.
+      { seq: 7, type: RunEventType.SYSTEM, ts: at(6), payload: { content: 'No conversation found with session ID abc' } },
+    ],
+  });
+
+  assert.deepEqual(table.map((r) => r.seq), [1, 2, 4, 7], 'the pings never reach run_event');
+  assert.deepEqual(
+    calls.createMany[0].data.map((r: { seq: number }) => r.seq),
+    [1, 2, 4, 7],
+    'nor are they handed to the insert to be dropped there',
+  );
+  assert.deepEqual(table[3].payload, { content: 'No conversation found with session ID abc' });
+  assert.deepEqual(table[0].payload, { text: '把 run_event 的入口收一下' }, 'a user echo is stored as the engine read it');
+  assert.deepEqual(
+    {
+      sessionId: table[2].sessionId,
+      seq: table[2].seq,
+      type: table[2].type,
+      turnId: table[2].turnId,
+      createdAt: table[2].createdAt,
+    },
+    { sessionId: 'session-1', seq: 4, type: RunEventType.ASSISTANT, turnId: 'turn-1', createdAt: new Date(at(3)) },
+    'a surviving row keeps every column it had',
+  );
+});
+
+/**
+ * The invariant the drop rests on, end to end through the code that hands a runner its counter.
+ *
+ * Dropping pings at ingress puts the stored high-water mark BELOW what the dead process had counted
+ * to. That is safe because the slots it fell behind by were never stored: a runner resuming at
+ * max+1 re-uses free ones. What would NOT be safe is a stored row at or above the resume point —
+ * `createMany({ skipDuplicates: true })` swallows a colliding event in silence, so a real one would
+ * simply go missing. Both sites that rebuild the counter read `max(run_event.seq)`
+ * (queue.service.ts for a claim, RunnerApiController.reclaim below), so the store here is the only
+ * thing between them.
+ */
+test('a ping dropped at the tail of a batch is a free slot when a runner resumes', async () => {
+  const table: RunEventRow[] = [];
+  const { controller } = makeController(RunStatus.RUNNING, 'runtime-1', {}, table);
+
+  // One incarnation of a runner, counting 1..10. The last two are the per-token pings it ends on.
+  await controller.events({ id: RUNNER_ID }, 'session-1', {
+    events: [
+      ...Array.from({ length: 8 }, (_, i) => ({
+        seq: i + 1,
+        type: RunEventType.ASSISTANT,
+        ts: at(i),
+        turnId: 'turn-1',
+        payload: { text: `chunk ${i + 1}` },
+      })),
+      { seq: 9, type: RunEventType.SYSTEM, ts: at(9), payload: { model: null, subtype: 'thinking_tokens', sessionId: 'runtime-1' } },
+      { seq: 10, type: RunEventType.SYSTEM, ts: at(10), payload: { model: null, subtype: 'thinking_tokens', sessionId: 'runtime-1' } },
+    ],
+  });
+  // It dies, the runner comes back and reclaims. The resume point is the STORED max — 8, two
+  // behind the 10 that process had counted to, and that gap is the whole point: assert it before
+  // anything else, so this spec fails on the invariant itself rather than on a symptom of it.
+  const reclaimed = await makeReclaimController(table, 'session-1').reclaim({
+    id: RUNNER_ID,
+    ownerId: RUNNER_OWNER,
+  });
+  const resumePoint = reclaimed.sessions[0]!.maxSeq + 1;
+
+  assert.equal(resumePoint, 9);
+  assert.equal(
+    table.some((r) => r.seq >= resumePoint),
+    false,
+    'nothing stored at or above the resume point, so skipDuplicates has nothing to swallow',
+  );
+  assert.deepEqual(table.map((r) => r.seq), [1, 2, 3, 4, 5, 6, 7, 8], 'the two pings are what it fell behind by');
+
+  // The new process starts its counter there (runner-go: `seq := job.MaxSeq + 1`) and so re-uses
+  // 9 — the slot its predecessor burned on a ping. It is free, so the real event lands intact.
+  await controller.events({ id: RUNNER_ID }, 'session-1', {
+    events: [
+      {
+        seq: resumePoint,
+        type: RunEventType.ASSISTANT,
+        ts: at(20),
+        turnId: 'turn-2',
+        payload: { text: 'the reply after the restart' },
+      },
+    ],
+  });
+
+  assert.deepEqual(table.map((r) => r.seq), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(table[8].payload, { text: 'the reply after the restart' }, 'stored, not skipped as a duplicate');
 });
