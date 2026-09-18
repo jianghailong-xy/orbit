@@ -206,7 +206,7 @@
   "actions": [
     {
       "kind": "NOTIFY_USER",
-      "effect": "One user-visible notification, counted by the existing needs-you badge path."
+      "effect": "One user-visible notification: an APNs alert to the owner's devices for each Match (PushService.notifyWatchMatched, thread-id watch-<watchId>). It adds no counter of its own, and it is not in the needs-you badge either: that badge counts the sessions waiting on the owner, which a watch never joins. The web has no notification for it; a NOTIFY_USER watch is read on the Following page."
     },
     {
       "kind": "RESUME_SESSION",

@@ -160,7 +160,7 @@ Agent 最常要的那句话——「等这 7 个 Task 全部终态，或任一�
 | `ACTIVE` | `MATCHED` | 条件成立且 `mode = ONE_SHOT`；Match 在同一事务里写入 |
 | `ACTIVE` / `PAUSED` | `EXPIRED` | `now >= expiresAt`；**暂停不延长 TTL** |
 | `ACTIVE` / `PAUSED` | `CANCELLED` | 观察者或 owner 取消 |
-| `ACTIVE` | `REVOKED` | 求值或交付时权限复核失败 |
+| `ACTIVE` | `REVOKED` | **求值时**权限复核失败。交付时复核失败不改状态，只记 `PERMISSION_REVOKED` 死信（§6、§7） |
 | `ACTIVE` | `UNRESOLVABLE` | 目标全部 `GONE`，条件永远无法判定 |
 
 终态：`MATCHED / EXPIRED / CANCELLED / REVOKED / UNRESOLVABLE`。continuous 的 Watch 触发后留在
@@ -283,7 +283,10 @@ Watch 当场结束，不占 live 名额。一个观察者会话一小时内最�
 
 每个 Watch 恰好一个动作。
 
-**`NOTIFY_USER`**：一条用户可见通知，走既有的 needs-you 角标口径，不另造一套计数。
+**`NOTIFY_USER`**：一条用户可见通知——每个 Match 给 owner 的设备推一条 APNs 提醒（`PushService.notifyWatchMatched`，
+`thread-id = watch-<watchId>`），不另造一套计数。它**不进 needs-you 角标**：角标数的是「在等你」的会话
+（`PushService.needsYouSessions`：有待批准项的 Open 会话），Watch 不属于这个集合，也不会让它的数字动。
+Web 端没有对应的通知，一个 `NOTIFY_USER` 的 Watch 只在 Following 页与卡片上可见。
 
 **`RESUME_SESSION`**：通过**正常队列入口**给观察者会话入队**恰好一个** `ConversationTurn`：
 

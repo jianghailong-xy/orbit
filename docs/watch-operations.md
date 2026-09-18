@@ -335,7 +335,12 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" "$ORBIT/api/watches/deliveries
 - 唤醒环只在创建时沿 live `RESUME_SESSION` Watch 的会话链检查，最多 32 跳。经由 Task 状态间接形成的环，以及总在对方的等待结束后
   才重建、从不同时存在的环，由唤醒风暴上限兜底。
 - 每日预算是软上限，并发交付可能超出几次；风暴上限是精确的。
-- continuous Watch 目前不能通过 API 创建，求值器也不会为它记录 Match。间隔限制已经在交付层生效，留给后续的持续订阅使用。
+- continuous Watch 只能由用户 API 创建：`POST /api/watches` 收 `mode` / `debounceSeconds` / `wakeBudget`
+  （`CreateWatchDto`），而会话里的 runner 门（`RunnerCreateWatchDto`）没有 `mode`，Web 与 macOS 的编辑器也不提供这个选项，
+  所以 agent 自己建不出 continuous Watch。求值器会为它记录 Match：一次跨越开一个合并窗口，窗口关闭时写一个 Match，
+  用掉一次唤醒预算（§2、§7.5），间隔限制在交付层生效。
+- continuous Watch 的 NOTIFY_USER，macOS 的本地提醒只在 Watch 进 MATCHED 时发一次；continuous 一直停在 `ACTIVE`
+  并让 `generation` 递增，中间的 Match 在 macOS 上没有提醒。iOS 走 APNs，每个 generation 都会推。
 - 计数器是进程级的，重启归零。跨 replica 或按时间窗看，用 `increase()` 求和。
 - 更大规模的负载与故障注入，由独立的 Claude 产品 QA Gate 复核。
 
