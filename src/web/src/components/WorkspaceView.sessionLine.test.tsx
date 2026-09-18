@@ -231,3 +231,34 @@ describe('sessionLine names the gate holding a queued session', () => {
     ).toEqual({ text: 'Waiting for slot', tone: 'queued' });
   });
 });
+
+/**
+ * The console header over a session a watch will bring back. The word comes from the watches
+ * themselves (lib/watches `watchingWord`); what is asserted here is where the header puts it — the
+ * same place `SessionHeader.statusWord` puts it on macOS, which is what made the two disagree while
+ * the browser had no branch for it at all.
+ */
+describe('statusLabel over a session parked on a watch', () => {
+  const parked = { status: 'AWAITING_INPUT', engineTurnActive: false, pendingApprovals: 0 };
+
+  it('says what the wait is for instead of asking the reader for a reply', () => {
+    expect(statusLabel(parked)).toBe('Waiting for your reply');
+    expect(statusLabel(parked, 'Watching 7 targets')).toBe('Watching 7 targets');
+  });
+
+  it("keeps a background process out of the watch's words, and the watch out of the tray's", () => {
+    // A shell left up is not what the session is waiting on: the wake is.
+    expect(statusLabel({ ...parked, runningBgCount: 1 })).toBe('Background process running');
+    expect(statusLabel({ ...parked, runningBgCount: 1 }, 'Watching 1 target')).toBe('Watching 1 target');
+  });
+
+  it('never hides work of its own or a question for the reader behind the wait', () => {
+    // A sub-workspace is this workspace still working; a self-driven turn and an approval outrank
+    // the wait for the same reason they outrank everything else the word could say.
+    expect(statusLabel({ ...parked, runningSubagentCount: 1 }, 'Watching 1 target')).toBe('Running Agent');
+    expect(statusLabel({ ...parked, engineTurnActive: true }, 'Watching 1 target')).toBe('Running');
+    expect(statusLabel({ ...parked, pendingApprovals: 1 }, 'Watching 1 target')).toBe('Waiting for approval');
+    // And it says nothing of a watch about a session that is not parked at all.
+    expect(statusLabel({ status: 'RUNNING' }, 'Watching 1 target')).toBe('Running');
+  });
+});

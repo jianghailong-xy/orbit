@@ -43,6 +43,7 @@ import {
   watchStateCopy,
   watchesFollowedBy,
   watchesFollowing,
+  watchingWord,
 } from './watches';
 
 vi.mock('../api', () => ({ api: vi.fn(async () => ({})) }));
@@ -433,6 +434,53 @@ describe('who follows whom', () => {
     expect(watchesFollowedBy([waiting, other], 'TASK', TASK_UUID).map((w) => w.id)).toEqual(['waiting']);
     // Same id, other kind: a session is never followed by a watch on a task.
     expect(watchesFollowedBy([waiting, other], 'SESSION', TASK_UUID)).toEqual([]);
+  });
+});
+
+/**
+ * The word the console header says over a session a watch will bring back. The screenshot this
+ * started from read "Waiting for your reply" over a session nobody was being asked anything by —
+ * macOS has read it as the watch since `SessionHeader.statusWord`, and this is the browser's half.
+ */
+describe('the word for a session parked on a watch', () => {
+  const OBSERVER = '0195c0de-0000-7000-8000-0000000000c3';
+  const observing = (over: Partial<WatchView> = {}): WatchView =>
+    watch({
+      action: 'RESUME_SESSION',
+      observerType: 'SESSION',
+      observerSessionId: uuidToBase62(OBSERVER),
+      ...over,
+    });
+
+  it('counts each target once across the watches that will resume the session', () => {
+    const one = observing({ id: 'w1', targets: [target('t1')] });
+    expect(watchingWord([one], OBSERVER)).toBe('Watching 1 target');
+    // Two watches over the same task are one target, as the strip below the header counts it.
+    const same = observing({ id: 'w2', targets: [target('t1'), target('t2')] });
+    expect(watchingWord([one, same], OBSERVER)).toBe('Watching 2 targets');
+    // A deleted target is no longer being looked at, so it is not counted.
+    const withGone = observing({ id: 'w3', targets: [target('t1'), target('t9', { state: 'GONE' })] });
+    expect(watchingWord([withGone], OBSERVER)).toBe('Watching 1 target');
+  });
+
+  it('says nothing for a session no live watch will resume', () => {
+    // Nothing at all, an ended watch, a watch on somebody else, and a notifying watch whose observer
+    // this session is: what it triggers goes to the person, so no wake is coming here.
+    expect(watchingWord([], OBSERVER)).toBeNull();
+    expect(watchingWord([observing({ state: 'MATCHED' })], OBSERVER)).toBeNull();
+    expect(watchingWord([observing({ observerSessionId: 'someoneElse' })], OBSERVER)).toBeNull();
+    expect(watchingWord([observing({ action: 'NOTIFY_USER' })], OBSERVER)).toBeNull();
+  });
+
+  it('says a paused wait is paused rather than counting targets nobody is reading', () => {
+    expect(watchingWord([observing({ state: 'PAUSED' })], OBSERVER)).toBe('Watch paused');
+    expect(
+      watchingWord([observing({ id: 'a', state: 'PAUSED' }), observing({ id: 'b', state: 'PAUSED' })], OBSERVER),
+    ).toBe('2 watches paused');
+    // One still active: that one is what the session is waiting on.
+    expect(
+      watchingWord([observing({ id: 'a', state: 'PAUSED' }), observing({ id: 'b' })], OBSERVER),
+    ).toBe('Watching 1 target');
   });
 });
 

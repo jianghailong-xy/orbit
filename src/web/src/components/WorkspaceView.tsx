@@ -90,6 +90,7 @@ import {
   ownerConfirmationQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
+  watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
 import {
@@ -147,7 +148,7 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
-import { parseWatchWake } from '../lib/watches';
+import { parseWatchWake, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
 import {
@@ -227,7 +228,7 @@ import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
-import type { SessionTurnIntent, SessionTurnPlacement } from '@orbit/shared';
+import type { SessionTurnIntent, SessionTurnPlacement, WatchView } from '@orbit/shared';
 import {
   AgentProvider,
   derivePermissionSemantics,
@@ -900,7 +901,12 @@ export function SessionTagChips({
 
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
-export function statusLabel(session: any): string {
+//
+// `watching` is this session as an observer: the word for the live watches that will resume it
+// (lib/watches `watchingWord`), which the header reads instead of "Waiting for your reply" — a wake
+// is coming, and nobody is being asked for one. Absent wherever a caller has no watches to hand
+// (the search palette's rows), which keeps the previous reading rather than inventing one.
+export function statusLabel(session: any, watching?: string | null): string {
   const state = sessionRunStateOf(session);
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
@@ -908,7 +914,14 @@ export function statusLabel(session: any): string {
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
-  if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
+  if (state === 'AWAITING_INPUT') {
+    // A sub-workspace is this workspace still working, so it outranks the wait it is parked on; a
+    // background shell it left up is not, and a watch is not a process either (contract §9.2), so
+    // the wait is said in the watch's own words before the tray's.
+    const parked = parkedWorkLabel(session);
+    if (parked?.kind === 'subagent') return parked.text;
+    return watching ?? parked?.text ?? 'Waiting for your reply';
+  }
   if (state === 'FAILED') {
     if (sessionRetryPending(session)) return 'Retrying';
     const err: string = typeof session.error === 'string' ? session.error : '';
@@ -1772,6 +1785,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
+  // What this conversation is waiting on, when a watch is what will bring it back: the same read the
+  // Watching strip above the composer makes (one cache entry between them), so the header's word and
+  // the strip under it cannot disagree about the same wait.
+  const watchesForHeaderQ = useQuery(watchesQuery());
+  const selectedWatchingWord = useMemo(
+    () =>
+      selectedId && Array.isArray(watchesForHeaderQ.data)
+        ? watchingWord(watchesForHeaderQ.data as WatchView[], selectedId)
+        : null,
+    [watchesForHeaderQ.data, selectedId],
+  );
   // The project this conversation coordinates, if any — see projectBackLink. Read the merged row
   // so a fresh detail can enrich (or correct) the compact list snapshot during rolling upgrades.
   const projectBack = projectBackLink(selectedSession);
@@ -4494,7 +4518,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       maxConcurrent: runner.maxConcurrent,
       sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
       sessionStatus: selectedSession
-        ? statusLabel(selectedSession)
+        ? statusLabel(selectedSession, selectedWatchingWord)
         : selectedMissing
           ? 'not found'
           : null,
@@ -5443,7 +5467,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected) : '';
+  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord) : '';
   const headLifecycleWord = selectedLifecycleState
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;

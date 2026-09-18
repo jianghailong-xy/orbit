@@ -1,4 +1,5 @@
 import {
+  WATCH_ATTENTION_EXPIRED_ACTIONS,
   WATCH_LEAF_SINCE_VERSION,
   WATCH_LEAVES,
   WATCH_LIMITS,
@@ -282,6 +283,45 @@ export const STRIP_THEN = 'Resume this session';
 export const STRIP_MANAGE = 'Manage in Watches ›';
 export const STRIP_EARLIEST = 'earliest ';
 
+/**
+ * The words the console header says a session parked on watches in. macOS says the same four from
+ * `WatchSessionSummary.word`, and its `WatchStripCopyParityTests` compares them against these.
+ */
+export const WATCHING_WORDS = {
+  target: 'target',
+  targets: 'targets',
+  paused: 'Watch paused',
+  pausedMany: 'watches paused',
+} as const;
+
+/**
+ * The header's status word for a session that live watches will resume, or null when none will.
+ *
+ * The set is the strip's (`watchesFollowing`, live): the watches whose wake comes back to this
+ * session. While one is ACTIVE the session is not waiting for a reply and it has not left a process
+ * running — contract §9.2 keeps a watch out of the Background processes words — so it reads as what
+ * it is doing, with every target counted once across those watches. Paused, nothing is being looked
+ * at, and the word says that instead of counting targets nobody is reading. macOS: the same word
+ * from `WatchSessionSummary.word`, which `SessionHeader.statusWord` puts in the same place.
+ */
+export function watchingWord(watches: readonly WatchView[], sessionId: string): string | null {
+  const observing = watchesFollowing(watches, sessionId).filter(isLiveWatch);
+  if (observing.length === 0) return null;
+  const active = observing.filter((w) => w.state === 'ACTIVE');
+  if (active.length === 0) {
+    return observing.length === 1
+      ? WATCHING_WORDS.paused
+      : `${observing.length} ${WATCHING_WORDS.pausedMany}`;
+  }
+  const targets = new Set(
+    active.flatMap((w) =>
+      w.targets.filter((t) => t.state !== 'GONE').map((t) => `${t.targetKind}:${normId(t.targetResourceId)}`),
+    ),
+  );
+  const noun = targets.size === 1 ? WATCHING_WORDS.target : WATCHING_WORDS.targets;
+  return `${STRIP_LABEL} ${targets.size} ${noun}`;
+}
+
 export interface WatchProgress {
   met: number;
   waiting: number;
@@ -430,7 +470,10 @@ export function watchProblem(w: WatchView): WatchProblem | null {
       detail: errorProse(retrying.lastError),
     };
   }
-  if (w.state === 'EXPIRED' && w.action === 'NOTIFY_USER') {
+  // The contract's own `attention.expiredActions`, as shared transcribes it and as macOS reads it
+  // (`WatchAttentionRule.expiredActions`): one rule, so the two clients cannot file one watch under
+  // two different tabs.
+  if (w.state === 'EXPIRED' && WATCH_ATTENTION_EXPIRED_ACTIONS.includes(w.action)) {
     return {
       tone: 'warning',
       title: 'Expired before its condition held',

@@ -163,4 +163,35 @@ final class WatchStripCopyParityTests: XCTestCase {
                                + "\(Self.webCard).")
         }
     }
+
+    /// The word the console header says over a session a watch will bring back — the strip's own
+    /// heading, counted out over what is being watched.
+    ///
+    /// This is the drift that made the pair worth extending: this client has read such a session as
+    /// Watching since `SessionHeader.statusWord`, while the browser went on saying "Waiting for your
+    /// reply" over the same session, because nothing compared the two ends' headers. Its words are
+    /// `WATCHING_WORDS` in the browser; this end builds them in `WatchSessionSummary.word`, so what
+    /// is compared here is what this client actually says and not a second copy of the literals.
+    func testTheHeaderWordForASessionParkedOnAWatchIsTheBrowsersWord() throws {
+        let lib = try flat(Self.webWatches)
+        let one = try capture(lib, "target: '(.+?)',", "the header's word for one target", Self.webWatches)
+        let many = try capture(lib, "targets: '(.+?)',", "the header's word for several targets", Self.webWatches)
+        let paused = try capture(lib, "paused: '(.+?)',", "the header's word for a paused wait", Self.webWatches)
+        let pausedMany = try capture(lib, "pausedMany: '(.+?)',", "the header's words for several paused waits",
+                                     Self.webWatches)
+
+        XCTAssertEqual(WatchProjection.watchingLabel(targets: 1), "\(WatchProjection.stripLabel) 1 \(one)",
+                       "the word over a session watching one target drifted from \(Self.webWatches).")
+        XCTAssertEqual(WatchProjection.watchingLabel(targets: 7), "\(WatchProjection.stripLabel) 7 \(many)",
+                       "the word over a session watching several targets drifted from \(Self.webWatches).")
+
+        let onePaused = try XCTUnwrap(WatchSessionSummary(
+            sessionID: "S1", watches: [WatchFixture.watch(id: "W1", state: "PAUSED")]))
+        XCTAssertEqual(onePaused.word, paused, "the word over a session whose one watch is paused drifted.")
+        let twoPaused = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [
+            WatchFixture.watch(id: "W1", state: "PAUSED"),
+            WatchFixture.watch(id: "W2", state: "PAUSED"),
+        ]))
+        XCTAssertEqual(twoPaused.word, "2 \(pausedMany)", "the word over a session whose watches are all paused drifted.")
+    }
 }
