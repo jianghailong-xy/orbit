@@ -1,38 +1,63 @@
-# Postgres checkup — 2026-09-17T23:58:12Z
+# Postgres checkup — 2026-09-18T11:07:37Z
 
 Produced by `scripts/pg-checkup.sh` against container `orbit-postgres`, database `orbit`
-(8736 MB); re-run that script to refresh this file. Read-only; no table is scanned.
+(9465 MB); re-run that script to refresh this file. Read-only; no table is scanned.
 Baselines quoted per section come from the capacity-governance project's 2026-09-15 first
 measurement, with its 2026-09-17 recheck where one exists — so each section reads as
 before → now.
 
 Thresholds: disk 85%, transaction 300s, idle-in-transaction 300s,
-idle 24h, dead tuples 10000 with autovacuum older than 7d.
+idle 24h, dead tuples past the table's own autovacuum trigger line with no
+autovacuum in 7d.
 
 ## Alerts
 
-- **DISK 89%** of / used, 22 GB free (threshold 85%)
-- **3 table(s)** over 10000 dead tuples with no autovacuum in 7 days
+- **DISK 91%** of / used, 18 GB free (threshold 85%)
+
+The reading behind that count: dead tuples per table against that table's **own** autovacuum
+trigger line (`autovacuum_vacuum_threshold + scale_factor x reltuples`, table-level
+`reloptions` first — the arithmetic autovacuum itself uses). **0 alerted**:
+`alerted` marks the rows the bullet above counted, and there is no such bullet when that
+number is 0. Past the line is not by itself a fault: it is where autovacuum becomes due, and a
+table past its line that autovacuum visited recently is autovacuum working. Section 6 carries
+the same readings beside the rest of the bloat picture.
+
+```
+                    relation                    | n_dead_tup | own_trigger_line | pct_of_line | alerted |        last_autovacuum        
+------------------------------------------------+------------+------------------+-------------+---------+-------------------------------
+ public.session                                 |       1111 |             1114 |        99.7 | f       | 2026-09-18 05:16:28.074287+00
+ public.watch                                   |         80 |               88 |        91.3 | f       | 2026-09-18 10:57:34.915878+00
+ public.project_completion_contract             |         54 |               62 |        86.5 | f       | 2026-09-16 16:01:31.417347+00
+ public.approval                                |        411 |              477 |        86.2 | f       | 
+ public.project_acceptance_criterion_definition |        108 |              131 |        82.2 | f       | 2026-09-11 03:55:45.467188+00
+ public.conversation_turn                       |       3239 |             4024 |        80.5 | f       | 2026-09-15 12:28:56.081557+00
+ public.client_version                          |         40 |               51 |        79.1 | f       | 2026-09-18 00:32:12.630499+00
+ public.task_dependency_revision                |      15191 |            22270 |        68.2 | f       | 2026-08-26 03:51:46.711564+00
+ public.task_dispatch_epoch                     |      14502 |            22270 |        65.1 | f       | 2026-08-26 03:52:46.585499+00
+ public.session_scheduled_wakeup                |         33 |               55 |        59.8 | f       | 
+(10 rows)
+
+```
 
 ## 1. Disk water level
 
 ```
 Filesystem      Size  Used Avail Use% Mounted on
-/dev/sda1       197G  167G   23G  89% /
+/dev/sda1       197G  170G   19G  91% /
 
-database size: 8736 MB
+database size: 9465 MB
 ```
 
 **Baseline.** `/` is 197G on this host. 2026-09-15: **100% full**, and Postgres logged
 `ENOSPC` 288 times — that is how the incident was discovered. 2026-09-17: 88% (23G free).
-Now: 89% (22G free of 196G).
+Now: 91% (18G free of 196G).
 
 The database is not the only writer on this filesystem (container logs have no rotation), but
 per section 3 it is the largest one, so disk relief has to come from there.
 
 ## 2. Top SQL
 
-`pg_stat_statements` has been accumulating for **00d 06h** (`.save=on`, so it survives
+`pg_stat_statements` has been accumulating for **00d 17h** (`.save=on`, so it survives
 restarts — ask `pg_stat_statements_info.stats_reset` how long the window is, never
 `pg_postmaster_start_time()`). `.track=top` keeps `total_exec_time` additive, which is what
 makes the share column meaningful.
@@ -40,18 +65,18 @@ makes the share column meaningful.
 ### By total execution time
 
 ```
-                                             query                                             | calls | total_s | mean_ms  | pct_of_total 
------------------------------------------------------------------------------------------------+-------+---------+----------+--------------
- SELECT "public"."task_list"."id", "public"."task_list"."title", "public"."task                |  1692 |   385.3 |   227.74 |         17.9
- SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "r                |   407 |   108.0 |   265.28 |          5.0
- SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."di                | 39279 |    94.3 |     2.40 |          4.4
- -- 会话生命周期分布 与 其持有的 run_event 行数 select case when s.deleted_at is not null then |     1 |    92.5 | 92548.81 |          4.3
- SELECT MAX("seq") AS "_max$seq" FROM (SELECT "public"."run_event"."seq" FROM "                |  3646 |    92.2 |    25.28 |          4.3
- SELECT count(*)::int AS count FROM task t WHERE t.owner_id = $1::uuid AND t.li                |  1679 |    79.0 |    47.06 |          3.7
- select date_trunc($1, created_at)::date d, count(*) rows, count(*) filter (whe                |     1 |    76.6 | 76585.96 |          3.6
- SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId", a.runner                |   408 |    67.4 |   165.19 |          3.1
- SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration", "inbox_lease_ow                | 41175 |    57.8 |     1.40 |          2.7
- SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "r                |   408 |    48.9 |   119.84 |          2.3
+                                     query                                      | calls  | total_s |  mean_ms  | pct_of_total 
+--------------------------------------------------------------------------------+--------+---------+-----------+--------------
+ SELECT "public"."task_list"."id", "public"."task_list"."title", "public"."task |   2027 |   399.7 |    197.17 |          6.1
+ SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId", a.runner |   1075 |   358.0 |    333.01 |          5.5
+ SELECT MAX("seq") AS "_max$seq" FROM (SELECT "public"."run_event"."seq" FROM " |   9785 |   321.8 |     32.88 |          4.9
+ SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."di | 131833 |   283.9 |      2.15 |          4.3
+ SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "r |   1074 |   283.7 |    264.13 |          4.3
+ SELECT count(*)::int AS count FROM task t WHERE t.owner_id = $1::uuid AND t.li |   4380 |   215.6 |     49.22 |          3.3
+ SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration", "inbox_lease_ow | 106167 |   203.2 |      1.91 |          3.1
+ SELECT "public"."task"."id", "public"."task"."title", "public"."task"."status" |    558 |   149.4 |    267.75 |          2.3
+ with mx as ( select distinct on (session_id) session_id, seq, type, payload fr |      1 |   138.9 | 138925.65 |          2.1
+ select pg_sleep($1)                                                            |      1 |   120.1 | 120060.52 |          1.8
 (10 rows)
 
 ```
@@ -62,18 +87,18 @@ Anything with a non-zero count here spilled out of `work_mem` (4MB) to disk, whi
 slower and a claim on the filesystem in section 1.
 
 ```
-                                             query                                             | calls | temp_blks_written | temp_written | total_s 
------------------------------------------------------------------------------------------------+-------+-------------------+--------------+---------
- select date_trunc($1, created_at)::date d, count(*) rows, count(*) filter (whe                |     1 |            731045 | 5711 MB      |    76.6
- select count(*) as total_tasks, count(*) filter (where list_id is not null) as                |     1 |               273 | 2184 kB      |     0.3
- SELECT "public"."task_list"."id", "public"."task_list"."title", "public"."task                |  1692 |                 0 | 0 bytes      |   385.3
- SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "r                |   407 |                 0 | 0 bytes      |   108.0
- SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."di                | 39284 |                 0 | 0 bytes      |    94.4
- -- 会话生命周期分布 与 其持有的 run_event 行数 select case when s.deleted_at is not null then |     1 |                 0 | 0 bytes      |    92.5
- SELECT MAX("seq") AS "_max$seq" FROM (SELECT "public"."run_event"."seq" FROM "                |  3646 |                 0 | 0 bytes      |    92.2
- SELECT count(*)::int AS count FROM task t WHERE t.owner_id = $1::uuid AND t.li                |  1679 |                 0 | 0 bytes      |    79.0
- SELECT t.id, t.owner_id AS "ownerId", t.assignee_id AS "workspaceId", a.runner                |   408 |                 0 | 0 bytes      |    67.4
- SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration", "inbox_lease_ow                | 41176 |                 0 | 0 bytes      |    57.8
+                                                 query                                                  | calls | temp_blks_written | temp_written | total_s 
+--------------------------------------------------------------------------------------------------------+-------+-------------------+--------------+---------
+ select date_trunc($1, created_at)::date d, count(*) rows, count(*) filter (whe                         |     1 |            731045 | 5711 MB      |    76.6
+ select coalesce(s.provider,$1) provider, count(distinct s.id) sess, count(*) r                         |     1 |            234798 | 1834 MB      |    32.4
+ explain (analyze, buffers, timing off) with mx as ( select distinct on (sessio                         |     1 |            145095 | 1134 MB      |    95.1
+ with mx as ( select distinct on (session_id) session_id, seq, type, payload fr                         |     1 |            144319 | 1127 MB      |   138.9
+ with subset as (select id from session order by id limit $1), orig as ( select                         |     1 |             95819 | 749 MB       |    29.5
+ select e.session_id, s.provider, s.title, count(*) rows from run_event e join                          |     1 |             31712 | 248 MB       |     8.8
+ select left(regexp_replace(query, $1, $2, $3), $4) as query, calls, round(tota                         |    17 |             12032 | 94 MB        |     5.0
+ -- 用 PG 自己的收件时钟交叉验证增速（created_at 由 runner 提供，不可全信） select date_trunc($1, inges |     1 |              9600 | 75 MB        |    10.4
+ select query from pg_stat_statements where queryid = $1                                                |    15 |              6625 | 52 MB        |     0.8
+ select left(regexp_replace(query, $1, $2, $3), $4) as query, calls, temp_blks_                         |    16 |              6034 | 47 MB        |     3.5
 (10 rows)
 
 ```
@@ -95,14 +120,14 @@ bytes are compressed values out of line, which `VACUUM` cannot reclaim.
 ```
                     relation                     |  total  |  heap   | indexes |  toast  | reltuples_est 
 -------------------------------------------------+---------+---------+---------+---------+---------------
- public.run_event                                | 5362 MB | 2865 MB | 1392 MB | 1104 MB | 11,227,203
- public.tool_call                                | 1027 MB | 314 MB  | 43 MB   | 671 MB  | 383,941
- public.task                                     | 966 MB  | 160 MB  | 187 MB  | 618 MB  | 125,712
- public.attachment                               | 591 MB  | 416 kB  | 288 kB  | 590 MB  | 1,739
+ public.run_event                                | 6065 MB | 3299 MB | 1650 MB | 1117 MB | 12,436,804
+ public.tool_call                                | 1044 MB | 321 MB  | 44 MB   | 679 MB  | 404,020
+ public.task                                     | 966 MB  | 160 MB  | 187 MB  | 618 MB  | 111,719
+ public.attachment                               | 595 MB  | 416 kB  | 288 kB  | 594 MB  | 1,739
  public.executable_runtime_heartbeat             | 186 MB  | 117 MB  | 68 MB   | 64 kB   | 131,067
- public.session_diff                             | 84 MB   | 432 kB  | 80 kB   | 84 MB   | 1,849
+ public.session_diff                             | 86 MB   | 440 kB  | 88 kB   | 86 MB   | 1,896
+ public.session                                  | 80 MB   | 9352 kB | 53 MB   | 19 MB   | 5,320
  recovery_import_20260819.source_run_event       | 80 MB   | 35 MB   | 0 bytes | 46 MB   | 116,721
- public.session                                  | 79 MB   | 9352 kB | 52 MB   | 18 MB   | 5,278
  recovery_import_20260819.source_tool_call       | 60 MB   | 15 MB   | 0 bytes | 45 MB   | 18,155
  recovery_import_20260819.task_recovery_manifest | 57 MB   | 54 MB   | 3416 kB | 24 kB   | 109,968
 (10 rows)
@@ -119,15 +144,15 @@ future candidate has to earn the same one.
 ```
               relation               |                  index                  |  size  | idx_scan | idx_tup_read 
 -------------------------------------+-----------------------------------------+--------+----------+--------------
- public.run_event                    | run_event_session_id_seq_key            | 686 MB | 15327273 |    959297437
- public.run_event                    | run_event_pkey                          | 396 MB | 15053265 |       114157
- public.run_event                    | run_event_text_trgm                     | 132 MB |     2287 |       621867
- public.run_event                    | run_event_turn_id_idx                   | 109 MB |    42559 |     72727077
- public.run_event                    | run_event_renderable_idx                | 69 MB  |   357260 |     45228502
- public.session                      | session_search_trgm                     | 49 MB  |     1981 |       224316
- public.task                         | task_project_rollup_covering_idx        | 27 MB  |    13301 |     83630165
- public.tool_call                    | tool_call_session_id_tool_use_id_idx    | 25 MB  |  2296884 |      2425527
- public.task                         | task_title_search_trgm                  | 20 MB  |     1523 |         5682
+ public.run_event                    | run_event_session_id_seq_key            | 817 MB | 17231653 |   1049474816
+ public.run_event                    | run_event_pkey                          | 498 MB | 16945131 |       114157
+ public.run_event                    | run_event_text_trgm                     | 134 MB |     2294 |       623995
+ public.run_event                    | run_event_turn_id_idx                   | 129 MB |    64338 |     89673235
+ public.run_event                    | run_event_renderable_idx                | 70 MB  |   379483 |     48255983
+ public.session                      | session_search_trgm                     | 50 MB  |     1981 |       224316
+ public.task                         | task_project_rollup_covering_idx        | 27 MB  |    13317 |     84399357
+ public.tool_call                    | tool_call_session_id_tool_use_id_idx    | 26 MB  |  2323813 |      2451659
+ public.task                         | task_title_search_trgm                  | 20 MB  |     1566 |         5815
  public.executable_runtime_heartbeat | executable_runtime_heartbeat_latest_idx | 20 MB  |     4500 |      2956369
 (10 rows)
 
@@ -139,7 +164,7 @@ survives the table's growth rate:
 ```
  run_event_indexes |  rows_est  | mb_per_million_rows 
 -------------------+------------+---------------------
- 1392 MB           | 11,227,203 |               124.0
+ 1650 MB           | 12,436,804 |               132.7
 (1 row)
 
 ```
@@ -165,7 +190,7 @@ Two things that reading teaches, both worth re-reading against the numbers above
 ```
  datname | temp_files | temp_bytes | avg_per_file | stats_reset |        logging        |     work_mem      
 ---------+------------+------------+--------------+-------------+-----------------------+-------------------
- orbit   |     329974 | 1363 GB    | 4331 kB      |             | 1024 (log_temp_files) | 4096kB (work_mem)
+ orbit   |     330348 | 1367 GB    | 4338 kB      |             | 1024 (log_temp_files) | 4096kB (work_mem)
 (1 row)
 
 ```
@@ -196,13 +221,13 @@ An empty table means nothing crossed a threshold. For context, the longest-lived
 regardless of threshold:
 
 ```
-  pid  | state | state_age | application_name |                      query                       
--------+-------+-----------+------------------+--------------------------------------------------
-  7145 | idle  | 05:40:08  |                  | LISTEN orbit_inbox
- 42772 | idle  | 00:00:01  |                  | SELECT pg_notify($1, $2)
- 42743 | idle  | 00:00:01  |                  | SELECT pg_notify($1, $2)
- 42518 | idle  | 00:00:00  |                  | SELECT "public"."watch_delivery"."id", "public".
- 41153 | idle  | 00:00:00  |                  | SELECT "public"."workspace"."id", "public"."work
+  pid   | state | state_age | application_name |                      query                       
+--------+-------+-----------+------------------+--------------------------------------------------
+  90150 | idle  | 03:36:20  |                  | LISTEN orbit_inbox
+ 111643 | idle  | 00:00:05  |                  | SELECT pg_notify($1, $2)
+ 111477 | idle  | 00:00:05  |                  | SELECT pg_notify($1, $2)
+ 111683 | idle  | 00:00:05  |                  | SELECT pg_notify($1, $2)
+ 111312 | idle  | 00:00:02  |                  | SELECT "public"."project_criteria_authorship"."d
 (5 rows)
 
 ```
@@ -222,26 +247,29 @@ Estimates from `pg_stat_user_tables`, which is free. Exact bloat measurement is 
 not attempted: it would read every page of these tables.
 
 ```
-            relation             | n_dead_tup | n_live_tup | dead_pct |        last_autovacuum        | autovacuum_age |       last_autoanalyze        | autovacuum_count 
----------------------------------+------------+------------+----------+-------------------------------+----------------+-------------------------------+------------------
- public.tool_call                |      33270 |     400851 |      7.7 | 2026-09-05 10:29:51.451284+00 | 12 days        | 2026-09-16 05:37:06.999049+00 |                1
- public.task_dependency_revision |      15707 |     111719 |     12.3 | 2026-08-26 03:51:46.711564+00 | 22 days        | 2026-08-29 21:21:32.175997+00 |                8
- public.task_dispatch_epoch      |      14498 |     111719 |     11.5 | 2026-08-26 03:52:46.585499+00 | 22 days        | 2026-08-29 21:00:30.924862+00 |                8
- public.conversation_turn        |       2783 |      20109 |     12.2 | 2026-09-15 12:28:56.081557+00 | 2 days         | 2026-09-17 15:16:32.62721+00  |               12
- public.run_event                |       1196 |   11617179 |      0.0 | 2026-09-16 16:07:38.628476+00 | 1 day          | 2026-09-17 14:42:27.723557+00 |                9
- public.session                  |        479 |       5278 |      8.3 | 2026-09-17 23:56:21.22093+00  | 00:00:00       | 2026-09-17 23:57:14.461904+00 |              138
- public.approval                 |        383 |       2230 |     14.7 |                               |                | 2026-09-16 00:06:27.589943+00 |                0
- public.inbox_lease_generation   |        306 |      10769 |      2.8 |                               |                | 2026-09-16 16:40:25.633908+00 |                0
- public.attachment               |        149 |       1769 |      7.8 | 2026-09-05 06:09:26.478044+00 | 12 days        | 2026-09-17 06:06:02.095805+00 |                1
- public.project_coordinator_wake |        144 |       1665 |      8.0 | 2026-09-16 00:07:27.862566+00 | 1 day          | 2026-09-16 06:47:50.886063+00 |                9
+            relation             | n_dead_tup | own_trigger_line | pct_of_line | n_live_tup | dead_pct |        last_autovacuum        | autovacuum_age |       last_autoanalyze        | autovacuum_count 
+---------------------------------+------------+------------------+-------------+------------+----------+-------------------------------+----------------+-------------------------------+------------------
+ public.tool_call                |      34965 |            80854 |        43.2 |     408349 |      7.9 | 2026-09-05 10:29:51.451284+00 | 13 days        | 2026-09-18 00:53:20.146525+00 |                1
+ public.task_dependency_revision |      15191 |            22270 |        68.2 |     111738 |     12.0 | 2026-08-26 03:51:46.711564+00 | 23 days        | 2026-08-29 21:21:32.175997+00 |                8
+ public.task_dispatch_epoch      |      14502 |            22270 |        65.1 |     111738 |     11.5 | 2026-08-26 03:52:46.585499+00 | 23 days        | 2026-08-29 21:00:30.924862+00 |                8
+ public.conversation_turn        |       3239 |             4024 |        80.5 |      20320 |     13.7 | 2026-09-15 12:28:56.081557+00 | 2 days         | 2026-09-17 15:16:32.62721+00  |               12
+ public.session                  |       1110 |             1114 |        99.6 |       5320 |     17.3 | 2026-09-18 05:16:28.074287+00 | 00:00:00       | 2026-09-18 11:03:36.897438+00 |              148
+ public.run_event                |       1052 |          2487411 |         0.0 |   13517723 |      0.0 | 2026-09-18 01:29:59.98698+00  | 00:00:00       | 2026-09-18 02:37:23.786549+00 |               10
+ public.approval                 |        411 |              477 |        86.2 |       2258 |     15.4 |                               |                | 2026-09-16 00:06:27.589943+00 |                0
+ public.project_coordinator_wake |        201 |              386 |        52.1 |       1722 |     10.5 | 2026-09-16 00:07:27.862566+00 | 2 days         | 2026-09-18 00:45:17.545089+00 |                9
+ public.attachment               |        152 |              398 |        38.2 |       1777 |      7.9 | 2026-09-05 06:09:26.478044+00 | 13 days        | 2026-09-17 06:06:02.095805+00 |                1
+ public.task_dependency          |        126 |            20477 |         0.6 |     110862 |      0.1 | 2026-08-29 15:08:22.026171+00 | 19 days        | 2026-08-29 18:16:26.164728+00 |                8
 (10 rows)
 
 ```
 
-Tables over the alert threshold (10000 dead tuples and no autovacuum for
-7d) are counted in the Alerts section. A stale `last_autovacuum` next to
-a growing `n_dead_tup` is the signal worth acting on: autovacuum's scale factor is proportional
-to table size, so on a large table the trigger point recedes as the table grows.
+`own_trigger_line` is each table's own vacuum trigger point and `pct_of_line` is how far into
+it the table is. Read the line before the reading: the scale factor is proportional to table
+size, so the trigger point recedes as a table grows and the same `n_dead_tup` means different
+things on a 400k-row table and on a 5k-row one. The Alerts section counts the tables **past
+that line** with no autovacuum for 7d, which is the combination worth
+acting on: a stale `last_autovacuum` beside a table that should already have been vacuumed. A
+table below its line is autovacuum working as configured.
 
 **Baseline.** 2026-09-15: `tool_call` had 24,497 dead tuples and its `last_autovacuum` was
 stuck at **2026-09-05**.
