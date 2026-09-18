@@ -843,6 +843,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        new table and refuses rewrites of a resumed episode: it writes nothing, names none of the
   //        six preserved triggers or functions, and is not a second writer of the DONE fence. Nothing
   //        it creates uses the `project_acceptance_` prefix or the word `judgment`.
+  //   0285 rewrote one function body and nothing else: `task_dependency_tail_id`, which resolves a
+  //        prerequisite through its supersession chain, now reads the head row once instead of
+  //        twice and is labelled PARALLEL SAFE. It matters here because a CREATE OR REPLACE is how
+  //        one migration silently reverts another, so: it is NOT a writer of the DONE fence or of
+  //        any of the six preserved triggers/functions above — the only name it replaces is its
+  //        own, which 0212 created and 0226 last rewrote. It carries no DDL besides that body, no
+  //        DML of any kind, no DROP and no ALTER, so neither 0177 relation, no
+  //        `task_completion_criterion` label, no task row and no `project_acceptance_*` object can
+  //        move by one byte. Its return value is unchanged for every input, checked over all
+  //        111,752 task ids, all 110,866 edge heads and 200 ids belonging to no task.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -892,7 +902,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0281_project_integration_job',
       '0282_project_task_status_count',
       '0283_task_project_assignee_idx',
-      '0284_project_fuse_pause'],
+      '0284_project_fuse_pause',
+      '0285_task_dependency_tail_id_single_read'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

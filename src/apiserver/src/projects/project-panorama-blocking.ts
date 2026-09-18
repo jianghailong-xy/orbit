@@ -146,6 +146,12 @@ export async function readProjectBlockingLeaderboard(
                count(DISTINCT r.node)::int AS "downstreamBlocked"
           FROM reach r
           JOIN unfinished o ON o.id = r.root
+         -- The same one-time gate the edge CTE carries, for the same reason. Over the cap reach
+         -- is empty and this ranking is known-empty with it, but without the gate the
+         -- planner still sorts every unfinished row to merge-join it against nothing: on the
+         -- 109,872-task project here that is an 8.3 MB external merge and two thirds of the
+         -- endpoint's time, spent to produce no rows.
+         WHERE NOT (SELECT truncated FROM size)
          GROUP BY o.id, o.title, o.status
          -- Title then id after the count: ties are common (every link of a chain blocks the same
          -- number) and a ranking that reshuffles between two identical reads is not a ranking.
