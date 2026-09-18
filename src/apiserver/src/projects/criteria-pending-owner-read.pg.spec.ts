@@ -42,9 +42,11 @@
  *       card is SUPERSEDED or merely ALREADY_SETTLED.
  *   (6) a proposal that was answered is gone, and it was answered with the key this read handed
  *       over. That is what makes (2) a claim about a usable key rather than about a string. Its
- *       ANSWER reads out in its place, in `settled` — the outcome and both seals, under the address
- *       `pending` gave the proposal — which is how a card still on screen at another end can say
- *       Approved rather than only "answered".
+ *       ANSWER reads out in its place, in `settled` — the outcome, both seals, and BOTH SIDES of
+ *       what was asked (`proposal`, `diff`), under the address `pending` gave the proposal — which
+ *       is how a card still on screen at another end can say Approved rather than only "answered",
+ *       and how the receipt can still show what the change was. That a SETTLED answer keeps its
+ *       diff is deliberate and is asserted here as a wire fact; the case says why.
  *   (7) the same for a refusal, newest first, with the seal left where it was; and never for the
  *       proposal (5) displaced, which left `pending` without anybody answering it — "no longer
  *       pending" is not "answered".
@@ -494,11 +496,30 @@ test('the owner’s pending-decision read: over HTTP, with the key, and only the
       const answers = answersOf(read);
       assert.equal(answers.length, 1, 'the one answer this project has had');
       const [approval] = answers;
+      // BOTH SIDES, AND THAT IS DELIBERATE. Until 2026-09-17 this list ended at `resultingSeal`
+      // and said so — "nothing of the proposal: a stale card keeps no diff". Two changes reversed
+      // it on purpose, against the account owner's report that "after approving, I can no longer
+      // see what the change was": `proposal` republishes what was asked for, off the intent row a
+      // trigger keeps immutable, and `diff` carries the words a rewrite REPLACED, off the snapshot
+      // 0279 stores inside the deciding transaction because an APPROVE overwrites them and no
+      // later read can recover them. So a settled answer keeps its diff, and this case asserts the
+      // keys are on the WIRE rather than only on the derivation.
+      //
+      // It does not contradict the sentence it replaced, which was about a different thing: the
+      // stale CARD still renders no diff (`CriteriaDecisionCard`, the `criteria-decision-gone`
+      // branch — a card whose question has moved on is not where words nobody is being asked
+      // about belong). What carries them is the RECEIPT, and this read is where it reads them.
       assert.deepEqual(
         Object.keys(approval).filter((key) => !key.endsWith('PublicId')).sort(),
-        ['baseSeal', 'decidedAt', 'decision', 'intentId', 'resultingSeal'],
-        'the answer and its two seals, and nothing of the proposal: a stale card keeps no diff',
+        ['baseSeal', 'decidedAt', 'decision', 'diff', 'intentId', 'proposal', 'resultingSeal'],
+        'the answer, its two seals, and both sides of what it answered: the receipt’s before-and-after',
       );
+      // And neither key is empty on the wire. `criteria-decision-diff-snapshot.pg.spec.ts` makes
+      // this claim about the DERIVATION, which it calls directly; only over HTTP is it a claim
+      // about what a browser is actually handed — which is the whole reason this file exists.
+      assert.equal((approval.diff as { state?: string } | null)?.state, 'SNAPSHOT',
+        `the diff the door stored for this answer: ${JSON.stringify(approval.diff)}`);
+      assert.ok(approval.proposal, 'and what it asked for, off the intent row a trigger keeps immutable');
       // Under the address `pending` gave the proposal — the comparison a card makes to find it.
       assert.equal(approval.intentId, row.intentId);
       assert.equal(approval.decision, 'APPROVE');
