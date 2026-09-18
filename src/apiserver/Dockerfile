@@ -5,9 +5,12 @@
 FROM node:26-slim AS build
 WORKDIR /app
 
-# Prisma needs OpenSSL present on Debian slim
-RUN apt-get update && apt-get install -y --no-install-recommends openssl \
- && rm -rf /var/lib/apt/lists/*
+# No OpenSSL install step: what Prisma's engines need is libssl's shared objects — `node:26-slim`
+# is Debian trixie and already carries them (`libssl3t64`), and the schema engine we boot with is
+# literally named `schema-engine-debian-openssl-3.0.x`. The `openssl` CLI is never invoked, so an
+# apt layer here bought nothing and cost the build a dependency on a reachable Debian mirror: on
+# 2026-09-18 a deployment's resolver answered for deb.debian.org with unroutable addresses and the
+# whole upgrade died at this line on `E: Unable to locate package openssl`.
 
 # Manifests first for layer caching
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -31,9 +34,8 @@ FROM node:26-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Prisma needs OpenSSL present on Debian slim
-RUN apt-get update && apt-get install -y --no-install-recommends openssl \
- && rm -rf /var/lib/apt/lists/*
+# Same as the build stage: the runtime needs libssl's shared objects, which the base image ships,
+# not the `openssl` CLI.
 
 # node_modules carries the generated Prisma client + the prisma CLI used at boot. WHICH tree npm
 # puts them in is a resolution outcome and not a contract: 7.9.1 kept `prisma`/`@prisma/client` in
