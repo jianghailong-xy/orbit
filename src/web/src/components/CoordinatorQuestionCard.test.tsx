@@ -155,6 +155,19 @@ describe('answering it', () => {
     });
   }
 
+  /**
+   * Wait for what the render is supposed to show rather than for a fixed number of ticks: how many
+   * a read takes is a property of the machine, and a test that pins it passes alone and fails in a
+   * full suite.
+   */
+  async function until(held: () => boolean, what: string) {
+    for (let i = 0; i < 50; i += 1) {
+      if (held()) return;
+      await settle();
+    }
+    throw new Error(`never became true: ${what}`);
+  }
+
   function press(label: string) {
     const button = [...host.querySelectorAll('button')].find(
       (element) => element.textContent?.includes(label),
@@ -176,7 +189,7 @@ describe('answering it', () => {
     const options = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
     await act(async () => options[1]!.click());
     await act(async () => press(SEND_ANSWER).click());
-    await settle();
+    await until(() => host.textContent!.includes(DELIVERED_TO_COORDINATOR), 'the receipt');
 
     expect(apiMock).toHaveBeenCalledTimes(1);
     expect(apiMock.mock.calls[0]![0]).toBe(
@@ -196,7 +209,7 @@ describe('answering it', () => {
     });
     await draw(<CoordinatorQuestionCard projectId={PROJECT_ID} row={row()} now={NOW} />);
     await act(async () => press(SEND_ANSWER).click());
-    await settle();
+    await until(() => host.textContent!.includes(WAITING_FOR_COORDINATOR), 'the receipt');
     expect(host.textContent).toContain(WAITING_FOR_COORDINATOR);
   });
 
@@ -209,7 +222,7 @@ describe('answering it', () => {
   it('draws the project’s open questions from the one read both places share', async () => {
     apiMock.mockResolvedValue({ needsYou: [row()], withCoordinator: [] });
     await draw(<CoordinatorQuestions projectId={PROJECT_ID} now={NOW} />);
-    await settle();
+    await until(() => host.textContent!.includes(QUESTION), 'the question on screen');
     expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/open-items`);
     expect(host.textContent).toContain(QUESTION);
     expect(host.textContent).toContain(FROM_COORDINATOR);

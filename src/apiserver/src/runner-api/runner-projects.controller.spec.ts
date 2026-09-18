@@ -508,11 +508,17 @@ test('removeProject preserves the service refusal for a non-empty project', asyn
 // that unit added — the manual trigger — deliberately did NOT join it. Enqueuing a signal
 // attributed to USER is how a person drives a MANUAL project, so an agent able to do it would be
 // driving its own coordinator; that one stays on the door a person signs in to.
-test('the runner project bridge exposes exactly create, the reads, update, and guarded delete', () => {
+test('the runner project bridge exposes exactly create, the reads, update, the question, and guarded delete', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
+    // A coordinator putting a question to the account owner (§5.2 R7). It belongs on the machine
+    // door and nowhere else: only the conversation a project is coordinated FROM may ask, and that
+    // conversation reaches Orbit through this door. Asking grants nothing and starts nothing — the
+    // question is filed and the call returns — so it needs no orchestration credential, and the
+    // refusal for any other session is the whole authority check.
+    'askOwner',
     'createProject',
     'getProject',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
@@ -537,6 +543,7 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     ]),
   );
   assert.deepEqual(verbs, {
+    askOwner: RequestMethod.POST,
     createProject: RequestMethod.POST,
     getProject: RequestMethod.GET,
     // Unit L7: GET. The verb is the assertion — a POST appearing here would be a coordinator

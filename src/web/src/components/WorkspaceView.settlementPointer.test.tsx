@@ -276,6 +276,12 @@ beforeEach(() => {
         acceptanceCriteriaItems: server.criteria,
       });
     }
+    // The open items the coordinator question card reads (§5.2). Empty: no question is open in any
+    // of these cases, and the card draws nothing — what is asserted here is the strip and the cards
+    // beside it, which an unstubbed read would break by being unstubbed rather than by being wrong.
+    if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
+      return reply({ needsYou: [], withCoordinator: [] });
+    }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       return reply(proposalsOf(server.proposals));
     }

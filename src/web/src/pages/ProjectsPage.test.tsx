@@ -162,6 +162,10 @@ const attributionKeys = (projectUuid: string) => [['project', encodeId(projectUu
 const headerKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
+    // The open items, read by the card that draws a coordinator's question to the owner (§5.2).
+    // Ahead of the panorama because that is where the card sits: beside the blockers, above the
+    // command centre, since both answer "what is standing in this project's way".
+    ['project', id, 'open-items'],
     ['project', id, 'panorama'],
     ['project', id, 'coordinator', 'status'],
     ['project', id, 'panorama', 'blocking', 5],

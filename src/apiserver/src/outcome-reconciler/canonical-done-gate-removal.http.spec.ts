@@ -13,6 +13,7 @@ import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestratio
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectsService } from '../projects/projects.service';
 import { OutcomeSurfaceService } from './outcome-surface.service';
 import { OutcomeSurfacesController } from './outcome-surfaces.controller';
@@ -56,6 +57,9 @@ const refuse = (name: string) => () => {
     // double for the same reason every service here is: nothing in this file is supposed to reach a
     // handler body, so a route that did would fail on the double rather than pass quietly.
     { provide: RunnerOrchestrationAuthorizer, useValue: { assert: refuse('orchestration.assert') } },
+    // A fifth, acquired when a coordinator gained a way to put a question to the account owner
+    // (§5.2 R7). A double for the same reason as the rest.
+    { provide: ProjectOpenItemService, useValue: { askOwner: refuse('openItems.askOwner') } },
     JwtAuthGuard,
     RunnerAuthGuard,
     Reflector,

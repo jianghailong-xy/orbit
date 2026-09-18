@@ -524,6 +524,12 @@ describe('one waiting completion decision on the session page', { timeout: 30_00
       }
       if (path.startsWith('/sessions')) return reply([COORDINATOR]);
       if (path.startsWith('/tasks/evidence-decisions/pending')) return reply(QUEUE);
+      // The open items the coordinator question card reads (§5.2). Empty: no question is open in
+      // this case, so the card draws nothing and what is asserted here is the evidence card beside
+      // it — an unstubbed read would fail the census rather than the assertion.
+      if (path === `/projects/${PROJECT_ID}/open-items`) {
+        return reply({ needsYou: [], withCoordinator: [] });
+      }
       if (path.startsWith(`/projects/${PROJECT_ID}/acceptance/criteria-decisions/pending`)) {
         return reply({ readAt: '2026-09-10T13:27:00Z', projectId: PROJECT_ID, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
       }
