@@ -90,6 +90,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
@@ -214,6 +215,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
       [SessionsService, sessions],
       [RealtimeService, realtime],
       [ProjectOpenItemService, new ProjectOpenItemService(prisma, sessions)],
+      [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
     ])),
   };
 
@@ -643,6 +645,7 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
       [SessionsService, sessions],
       [RealtimeService, realtime],
       [ProjectOpenItemService, items],
+      [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
     ])),
   };
   const owner = await accountOwner(stack);

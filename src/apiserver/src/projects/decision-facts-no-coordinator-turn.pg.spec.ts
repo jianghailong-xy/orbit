@@ -75,6 +75,7 @@ import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criterionKeyOf } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -162,6 +163,8 @@ function connect(url: string): Stack {
       [SessionsService, sessions],
       [RealtimeService, realtime],
       [CoordinatorDeliveryService, deliveries],
+      [ProjectOpenItemService, new ProjectOpenItemService(prisma, sessions)],
+      [CoordinatorConvergenceService, new CoordinatorConvergenceService(prisma)],
     ])),
     deliveries,
   };
