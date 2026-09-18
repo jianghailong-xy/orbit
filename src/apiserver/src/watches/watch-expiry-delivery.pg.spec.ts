@@ -26,7 +26,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { PrismaClient } from '@prisma/client';
-import { MAX_PROMPT_CHARS, WATCH_LIMITS } from '@orbit/shared';
+import { MAX_PROMPT_CHARS, RunEventType, WATCH_LIMITS } from '@orbit/shared';
 import { Client } from 'pg';
 import { EMPTY } from 'rxjs';
 
@@ -246,6 +246,21 @@ async function insertSession(owner: string, status: string, runnerId: string): P
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
+}
+
+/**
+ * A reply under a turn, as the engine writes one. A completion settles a message turn as ANSWERED only
+ * when something answered it, so a turn with none of these under it goes back to the queue instead
+ * (criterion 3, ab6407ca4) — and the runner's next take would be handed that turn again rather than
+ * what queued behind it, which is the queue shape every case below reads. A turn an engine actually
+ * ran has this event.
+ */
+async function say(turnId: string, sessionId: string, text: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"),0)+1 FROM "run_event" WHERE "session_id" = $2),$3,$4::jsonb,$5)`,
+    [randomUUID(), sessionId, RunEventType.ASSISTANT, JSON.stringify({ text }), turnId],
+  );
 }
 
 async function createWatch(
@@ -742,6 +757,7 @@ test('with the evaluator and the delivery worker running and nothing called by h
      VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
     [current, observer, `current-${current}`],
   );
+  await say(current, observer, 'working on it');
   const watchId = await waitingWatch(owner, observer);
 
   const sweeping = await evaluatorFor({ pollIntervalMs: 100 });
@@ -797,7 +813,9 @@ interface QueuedExpiry {
 
 /**
  * An observer RUNNING a turn, with its expiry queued behind it and the expiry's delivery DELIVERED: the
- * state each way that run can end meets (watch-wake-drain.ts).
+ * state each way that run can end meets (watch-wake-drain.ts). It has already said something — a
+ * completion over a turn nothing answered hands that turn back to the queue, and the runner's next take
+ * would be handed it again rather than the expiry waiting behind it.
  */
 async function expiryQueuedBehindRunningTurn(
   owner: string,
@@ -811,6 +829,7 @@ async function expiryQueuedBehindRunningTurn(
      VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
     [current, observer, `current-${current}`],
   );
+  await say(current, observer, 'working on it');
   const watchId = await expiredWatch(owner, observer);
   const { id: deliveryId } = await onlyExpiry(watchId);
   assert.deepEqual(outcomesFor(await pool.delivery.drain(), deliveryId), ['DELIVERED']);

@@ -27,7 +27,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { ConfigService } from '@nestjs/config';
 import type { PrismaClient } from '@prisma/client';
-import { MAX_PROMPT_CHARS, WATCH_LIMITS } from '@orbit/shared';
+import { MAX_PROMPT_CHARS, RunEventType, WATCH_LIMITS } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -312,6 +312,21 @@ async function insertSession(owner: string, status: string, runnerId: string): P
     [id, owner, status, runnerId, `runtime-${id}`],
   );
   return id;
+}
+
+/**
+ * A reply under a turn, as the engine writes one. A completion settles a message turn as ANSWERED only
+ * when something answered it, so a turn with none of these under it goes back to the queue instead
+ * (criterion 3, ab6407ca4) — and the runner's next take would be handed that turn again rather than
+ * what queued behind it, which is the queue shape every case below reads. A turn an engine actually
+ * ran has this event.
+ */
+async function say(turnId: string, sessionId: string, text: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"),0)+1 FROM "run_event" WHERE "session_id" = $2),$3,$4::jsonb,$5)`,
+    [randomUUID(), sessionId, RunEventType.ASSISTANT, JSON.stringify({ text }), turnId],
+  );
 }
 
 async function createWatch(
@@ -652,6 +667,7 @@ test('a RUNNING observer keeps its one run: the wake queues behind the current t
      VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
     [current, observer, `current-${current}`],
   );
+  await say(current, observer, 'working on it');
   const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
   const { id: deliveryId } = await onlyDelivery(watchId);
   const { delivery, sessions, prisma: pool } = await worker();
@@ -903,7 +919,9 @@ interface QueuedWake {
 
 /**
  * An observer RUNNING a turn, with a wake queued behind it whose delivery is DELIVERED: the state each
- * way that run can end meets (watch-wake-drain.ts).
+ * way that run can end meets (watch-wake-drain.ts). It has already said something — a completion over a
+ * turn nothing answered hands that turn back to the queue, and the runner's next take would be handed
+ * it again rather than the wake waiting behind it.
  */
 async function wakeQueuedBehindRunningTurn(owner: string, runner: string, pool: Worker): Promise<QueuedWake & { current: string }> {
   const observer = await insertSession(owner, 'RUNNING', runner);
@@ -913,6 +931,7 @@ async function wakeQueuedBehindRunningTurn(owner: string, runner: string, pool: 
      VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
     [current, observer, `current-${current}`],
   );
+  await say(current, observer, 'working on it');
   const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
   const { id: deliveryId } = await onlyDelivery(watchId);
   assert.deepEqual(outcomesFor(await pool.delivery.drain(), deliveryId), ['DELIVERED']);
