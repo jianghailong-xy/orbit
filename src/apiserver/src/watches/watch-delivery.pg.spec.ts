@@ -1004,6 +1004,10 @@ test('a wake still queued when its observer\'s running turn fails is a dead lett
   const taken = await wakeQueuedBehindRunningTurn(owner, runner, pool);
   await complete(taken.observer, taken.current, 'SUCCEEDED');
   assert.equal((await inbox.dequeueTurn(taken.observer, runner, null, false, []))?.turnId, taken.wakeId, 'the runner took the wake');
+  // The wake RAN, so its completion carries the reply an engine that ran produces: a turn nothing
+  // answered goes back to the queue, and a run that ends with it queued drains it as a wake no runner
+  // ever took, which is the death this control is about.
+  await say(taken.wakeId, taken.observer, 'the wake ran');
   await complete(taken.observer, taken.wakeId, 'FAILED');
   assert.equal((await sessionOf(taken.observer)).status, 'FAILED', 'the run the wake started failed');
   assert.equal((await onlyDelivery(taken.watchId)).state, 'DELIVERED', 'a wake the runner took was dead-lettered by its run failing');

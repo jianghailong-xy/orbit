@@ -893,6 +893,10 @@ test('an expiry still queued when its observer\'s running turn fails is a dead l
   const taken = await expiryQueuedBehindRunningTurn(owner, runner, pool);
   await complete(taken.observer, taken.current, 'SUCCEEDED');
   assert.equal((await inbox.dequeueTurn(taken.observer, runner, null, false, []))?.turnId, taken.wakeId, 'the runner took the expiry');
+  // The expiry RAN, so its completion carries the reply an engine that ran produces: a turn nothing
+  // answered goes back to the queue, and a run that ends with it queued drains it as an expiry no
+  // runner ever took, which is the death this control is about.
+  await say(taken.wakeId, taken.observer, 'the expiry ran');
   await complete(taken.observer, taken.wakeId, 'FAILED');
   assert.equal((await sessionOf(taken.observer)).status, 'FAILED', 'the run the expiry started failed');
   assert.equal((await onlyExpiry(taken.watchId)).state, 'DELIVERED', 'an expiry the runner took was dead-lettered by its run failing');
