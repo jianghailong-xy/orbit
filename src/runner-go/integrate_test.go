@@ -111,7 +111,7 @@ func mustRun(t *testing.T, dir, name string, args ...string) {
 	}
 }
 
-func silent(string) {}
+func silent(string, *IntegrationUpstreamMoved) {}
 
 // TestIntegrationRebaseLandsAndVerifies is the ordinary case: a clean branch, no checks, and a
 // target that did not exist yet. What it pins is J-S7 — the runner does not report LANDED from the

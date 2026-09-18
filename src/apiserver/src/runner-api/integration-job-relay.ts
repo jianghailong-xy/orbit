@@ -24,7 +24,12 @@ import {
   openItemKindForJobState,
   shortBranchName,
 } from '../projects/project-integration-job';
-import { recordIntegrationFailure } from '../projects/project-open-item';
+import { recordIntegrationFailure, recordPromotionApproval } from '../projects/project-open-item';
+import { promotionDedupeKey } from '../projects/project-promotion';
+import {
+  applyPromotionJobResult,
+  markPromotionRechecking,
+} from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -123,6 +128,11 @@ interface ClaimedRow {
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
+  /** A promotion job's frozen source, and the two facts M-S3 compares before it lands. */
+  jobSourceSha: string | null;
+  promotionId: string | null;
+  upstreamShaChecked: string | null;
+  mergeTreeSha: string | null;
 }
 
 /**
@@ -181,6 +191,11 @@ export async function dispatchIntegrationJobs(
       upstreamRef: row.upstreamRef,
       sourceRef: row.sourceRef,
       ...(row.sessionBaseSha ? { sessionBaseSha: row.sessionBaseSha } : {}),
+      // A promotion names the exact commit the owner is being asked about, so the runner works from
+      // that rather than from wherever the branch has got to since (§3.4 M-S1).
+      ...(row.jobSourceSha ? { sourceSha: row.jobSourceSha } : {}),
+      ...(row.upstreamShaChecked ? { upstreamShaChecked: row.upstreamShaChecked } : {}),
+      ...(row.mergeTreeSha ? { mergeTreeSha: row.mergeTreeSha } : {}),
       checks: checksFor(row),
       cancelRequested: row.cancelRequestedAt != null,
     });
@@ -198,7 +213,13 @@ export async function dispatchIntegrationJobs(
  */
 function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
   const checks: IntegrationCheckSpec[] = [];
-  if (row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
+  // A PROJECT_BRANCH promotion runs the project's merge check and nothing else (§3.4 M-S3): every
+  // task it carries already passed its own acceptance on the line, and the session the job names
+  // belongs to one of those tasks only so the queue can find a checkout to work in — the job itself
+  // names no task, which is why `row.acceptanceCommand` here is that session's task's and not the
+  // promotion's.
+  const taskAcceptanceApplies = row.kind === 'LAND_TASK';
+  if (taskAcceptanceApplies && row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
     checks.push({
       name: 'TASK_ACCEPTANCE',
       command: row.acceptanceCommand,
@@ -289,7 +310,17 @@ async function claimOne(
       t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
-      j."cancel_requested_at" AS "cancelRequestedAt"
+      j."cancel_requested_at" AS "cancelRequestedAt",
+      j."source_sha" AS "jobSourceSha",
+      j."promotion_id" AS "promotionId",
+      -- Scalar subqueries rather than another join: the FROM list of an UPDATE cannot join ON a
+      -- column of the table being updated -- 42P01, invalid reference to FROM-clause entry for
+      -- table j -- and a claim that raises is a claim this relay swallows as a warning, which reads
+      -- as a queue nobody ever picks up rather than as an error.
+      (SELECT p."upstream_sha_checked" FROM "project_promotion" p
+        WHERE p."id" = j."promotion_id") AS "upstreamShaChecked",
+      (SELECT p."merge_tree_sha" FROM "project_promotion" p
+        WHERE p."id" = j."promotion_id") AS "mergeTreeSha"
   `);
   return rows[0] ?? null;
 }
@@ -364,6 +395,18 @@ export async function receiveIntegrationJobProgress(
     data: { phase: body.phase, heartbeatAt: new Date() },
   });
   if (moved.count === 0) throw new IntegrationJobRefused('STALE_CLAIM');
+  // M-T7: the upstream moved after the owner confirmed, so the job is redoing the merge and the
+  // checks on the new tip. A progress report rather than a question — the owner confirmed these
+  // tasks and these checks, and the checks passing again is the same answer (M5).
+  if (body.upstreamMoved) {
+    const job = await prisma.projectIntegrationJob.findUnique({
+      where: { id: jobId },
+      select: { promotionId: true, kind: true },
+    });
+    if (job?.promotionId && job.kind === 'LAND_PROMOTION') {
+      await markPromotionRechecking(prisma, job.promotionId);
+    }
+  }
   return { accepted: true };
 }
 
@@ -372,6 +415,14 @@ export interface IntegrationResultAftermath {
   projectId: string;
   landedTaskId: string | null;
   openItemTaskIds: string[];
+  /**
+   * The project whose next promotion candidate is now worth looking for (§3.4 M-F1, M-F4), or null.
+   *
+   * After the commit rather than inside it, because the condition it tests is "the queue is empty",
+   * and a queue is only empty of rows that committed. Re-derivable: the next landing asks again, and
+   * nothing about the rows it reads expires.
+   */
+  considerPromotionProjectId: string | null;
 }
 
 /**
@@ -406,7 +457,7 @@ export async function applyIntegrationJobResult(
       where: { id: input.jobId },
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
-        taskId: true, sessionId: true, targetRef: true, sourceRef: true,
+        taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true,
         task: { select: { title: true } },
       },
@@ -428,7 +479,7 @@ export async function applyIntegrationJobResult(
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
 
-    const receiptIds = jobLanded(state) && job.sessionId
+    const receiptIds = jobLanded(state) && job.sessionId && !job.promotionId
       ? await MergeReceiptService.fromIntegrationJob(tx, {
         ownerId: job.ownerId,
         sessionId: job.sessionId,
@@ -449,6 +500,29 @@ export async function applyIntegrationJobResult(
       : [];
 
     const checks = clipChecks(body.checks ?? []);
+    // §3: a promotion job's result is the promotion's, and moves it in the same transaction — a
+    // MERGED promotion and the receipts saying its tasks are on the upstream are one fact (M9).
+    // BEFORE the job's own update, not after: `project_integration_job_terminal_guard` refuses a
+    // second write to a row that has reached a terminal state, so everything this result implies has
+    // to be known by the time that one statement runs.
+    const promotion = job.promotionId
+      ? await applyPromotionJobResult(tx, {
+        promotionId: job.promotionId,
+        jobId: job.id,
+        jobKind: job.kind,
+        state,
+        upstreamSha: body.upstreamSha ?? null,
+        testedSha: body.testedSha ?? null,
+        testedTreeSha: body.testedTreeSha ?? null,
+        landedSha: body.landedSha ?? null,
+        targetShaBefore: body.targetShaBefore ?? null,
+        aheadOfUpstream: body.aheadOfUpstream ?? null,
+        filesChanged: body.filesChanged ?? null,
+        checks,
+        conflicts: body.conflicts ?? [],
+      })
+      : null;
+    const promotionReceiptIds = promotion?.receiptIds ?? [];
     await tx.projectIntegrationJob.update({
       where: { id: job.id },
       data: {
@@ -467,7 +541,7 @@ export async function applyIntegrationJobResult(
         conflicts: (body.conflicts ?? []).slice(0, 200),
         errorCode: body.errorCode ?? undefined,
         errorDetail: (body.errorDetail ?? undefined) as Prisma.InputJsonValue | undefined,
-        receiptIds,
+        receiptIds: [...receiptIds, ...promotionReceiptIds],
         finishedAt: new Date(),
         heartbeatAt: new Date(),
       },
@@ -475,6 +549,37 @@ export async function applyIntegrationJobResult(
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
+    if (promotion?.openApproval) {
+      // M-T2: the one card in this whole line that is the owner's rather than the coordinator's.
+      // Producing it IS the push event §3.3 names; sending the push is the client task's (criterion
+      // 13), and nothing here reaches a device.
+      const opened = await recordPromotionApproval(tx, {
+        projectId: job.projectId,
+        ownerId: job.ownerId,
+        promotionId: promotion.promotionId,
+        jobId: job.id,
+        taskId: job.taskId,
+        sessionId: job.sessionId,
+        title: promotion.openApproval.title,
+        dedupeKey: promotionDedupeKey(promotion.promotionId),
+        payload: {
+          promotionId: promotion.promotionId,
+          sourceRef: job.sourceRef,
+          upstreamRef: job.targetRef,
+          upstreamShaChecked: body.upstreamSha ?? null,
+          taskIds: promotion.openApproval.taskIds,
+          checks,
+          landsAs: 'MERGE_COMMIT',
+        },
+      });
+      openItemId = opened;
+      if (openItemId) {
+        await tx.projectPromotion.update({
+          where: { id: promotion.promotionId },
+          data: { openItemId },
+        });
+      }
+    }
     const itemKind = openItemKindForJobState(state);
     if (itemKind) {
       const opened = await recordIntegrationFailure(tx, {
@@ -483,8 +588,9 @@ export async function applyIntegrationJobResult(
         jobId: job.id,
         taskId: job.taskId,
         sessionId: job.sessionId,
+        promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.task?.title ?? 'a task'),
+        title: integrationItemTitle(state, job.kind, job.task?.title ?? 'a task'),
         dedupeKey: integrationDedupeKey(state, job.id),
         payload: failurePayload(state, {
           kind: job.kind,
@@ -497,15 +603,23 @@ export async function applyIntegrationJobResult(
           errorDetail: body.errorDetail ?? null,
         }),
       });
-      openItemId = opened?.itemId ?? null;
+      openItemId = opened?.itemId ?? openItemId;
     }
 
     return {
-      answer: { accepted: true, state: state as never, receiptIds, openItemId },
+      answer: {
+        accepted: true,
+        state: state as never,
+        receiptIds: [...receiptIds, ...promotionReceiptIds],
+        openItemId,
+      },
       after: {
         projectId: job.projectId,
-        landedTaskId: jobLanded(state) ? job.taskId : null,
-        openItemTaskIds: openItemId && job.taskId ? [job.taskId] : [],
+        landedTaskId: jobLanded(state) && !job.promotionId ? job.taskId : null,
+        openItemTaskIds: openItemId && job.taskId && itemKind ? [job.taskId] : [],
+        // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
+        considerPromotionProjectId:
+          job.kind === 'LAND_TASK' || job.kind === 'LAND_PROMOTION' ? job.projectId : null,
       },
     };
   }, onRetry);

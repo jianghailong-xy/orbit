@@ -321,9 +321,17 @@ type IntegrationJobCommand struct {
 	UpstreamRef  string `json:"upstreamRef"`
 	SourceRef    string `json:"sourceRef"`
 	// The anchor a rebase replays from, when the source session recorded one.
-	SessionBaseSha  string                 `json:"sessionBaseSha,omitempty"`
-	Checks          []IntegrationCheckSpec `json:"checks"`
-	CancelRequested bool                   `json:"cancelRequested"`
+	SessionBaseSha string `json:"sessionBaseSha,omitempty"`
+	// A promotion's frozen source: the exact commit the owner is being asked about (§3.4 M-S1).
+	// Empty for a LAND_TASK, which takes whatever its task branch holds now.
+	SourceSha string `json:"sourceSha,omitempty"`
+	// LAND_PROMOTION: the upstream tip the last passing check ran against, and the tree it made.
+	// M-S2 and M-S3 compare both — an unmoved upstream must reproduce the same tree, and a moved one
+	// must be checked again before anything lands.
+	UpstreamShaChecked string                 `json:"upstreamShaChecked,omitempty"`
+	MergeTreeSha       string                 `json:"mergeTreeSha,omitempty"`
+	Checks             []IntegrationCheckSpec `json:"checks"`
+	CancelRequested    bool                   `json:"cancelRequested"`
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
@@ -351,6 +359,15 @@ type IntegrationJobProgressRequest struct {
 	ClaimGeneration string `json:"claimGeneration"`
 	LeaseOwner      string `json:"leaseOwner"`
 	Phase           string `json:"phase"`
+	// The upstream moved under a confirmed promotion, so the merge and the checks are being redone
+	// on the new tip (§3.3 M-T7). Nil on every other report.
+	UpstreamMoved *IntegrationUpstreamMoved `json:"upstreamMoved,omitempty"`
+}
+
+// IntegrationUpstreamMoved is the two tips of that move, for a reader of the timeline.
+type IntegrationUpstreamMoved struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
@@ -369,6 +386,7 @@ type IntegrationJobResultRequest struct {
 	LandedSha       string                   `json:"landedSha,omitempty"`
 	LandedTreeSha   string                   `json:"landedTreeSha,omitempty"`
 	AheadOfUpstream *int                     `json:"aheadOfUpstream,omitempty"`
+	FilesChanged    *int                     `json:"filesChanged,omitempty"`
 	Checks          []IntegrationCheckResult `json:"checks,omitempty"`
 	Conflicts       []string                 `json:"conflicts,omitempty"`
 	ErrorCode       string                   `json:"errorCode,omitempty"`

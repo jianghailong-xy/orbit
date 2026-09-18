@@ -405,6 +405,8 @@ export interface IntegrationFailure {
   sessionId: string | null;
   /** The job's terminal state, which decides the kind: CONFLICT, CHECK_FAILED or ERROR. */
   state: 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  /** The promotion this failure was part of, when the job was checking or landing one (M-T3, M-T9). */
+  promotionId?: string | null;
   title: string;
   dedupeKey: string;
   payload: Record<string, unknown>;
@@ -458,6 +460,7 @@ export async function recordIntegrationFailure(
       taskId: failure.taskId,
       sessionId: failure.sessionId,
       integrationJobId: failure.jobId,
+      promotionId: failure.promotionId ?? null,
       dedupeKey: failure.dedupeKey,
       title: failure.title,
       payload: failure.payload as unknown as Prisma.InputJsonValue,
@@ -679,4 +682,65 @@ function howInChinese(how: string | undefined): string {
 function clip(text: string): string {
   const clean = text.replace(/ /g, '');
   return clean.length > MAX_ERROR_CHARS ? `${clean.slice(0, MAX_ERROR_CHARS)}…` : clean;
+}
+
+
+/** What the owner is being asked to merge (§3.3 M-T2, §4.2). */
+export interface PromotionApproval {
+  projectId: string;
+  ownerId: string;
+  promotionId: string;
+  jobId: string;
+  taskId: string | null;
+  sessionId: string | null;
+  title: string;
+  dedupeKey: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Open the owner's "merge this into main?" card, in the transaction that recorded the passing check
+ * (§3.3 M-T2).
+ *
+ * OWNER, always, and with no escalation clock. The other kinds in this table go to the project's
+ * coordinator first and reach a person when that does not work; this one starts and ends with the
+ * account owner, because what it is asking for is authority and no amount of waiting moves that to
+ * somebody else. `escalateAt` is therefore null rather than two hours out: there is nobody above the
+ * owner to escalate to, and a timer that can only fire into a void is a timer that will one day be
+ * read as "this was ignored".
+ *
+ * Producing this row IS the event the push §3.3 names. Nothing here sends one: the four owner
+ * pushes are the client task's (criterion 13), and they read this table.
+ *
+ * Returns null when the partial unique index already holds this key, which is how a check result the
+ * runner reported twice opens one card.
+ */
+export async function recordPromotionApproval(
+  tx: Prisma.TransactionClient,
+  approval: PromotionApproval,
+): Promise<string | null> {
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: approval.projectId,
+      ownerId: approval.ownerId,
+      kind: 'PROMOTION_APPROVAL' satisfies OpenItemKind,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee: 'OWNER' satisfies OpenItemAssignee,
+      assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+      taskId: approval.taskId,
+      sessionId: approval.sessionId,
+      integrationJobId: approval.jobId,
+      promotionId: approval.promotionId,
+      dedupeKey: approval.dedupeKey,
+      title: approval.title,
+      payload: approval.payload as unknown as Prisma.InputJsonValue,
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  return created?.id ?? null;
 }

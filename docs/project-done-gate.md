@@ -20,7 +20,12 @@ built. So this is a re-deliberation of that decision and not the correction of a
 
 - every criterion the project states reads `satisfied` **and** `landing = 'LANDED'`, from the two
   readers `project_get` already serves (`project-criterion-satisfaction.ts`,
-  `project-criterion-landing.ts`) — not a second definition of either; and
+  `project-criterion-landing.ts`) — not a second definition of either. `landing = 'LANDED'` means
+  the serving tasks are all on the project's UPSTREAM; work that has only reached its project branch
+  reads `ON_INTEGRATION_LINE` and does not count
+  (`docs/project-integration-line-contract.md` §1.4, §3.5 M11). So for a project that integrates on a
+  branch of its own, the status is `OPEN` until the account owner confirms the merge into main, and
+  flips when the receipts for that merge are written; and
 - one `project_standard_set_confirmation` row names the version of the criteria that stands today
   (migration 0245, r3), compared by `criteriaSemanticRevision`. Editing a criterion's assertion or
   its verification method moves that digest, so the confirmation stops counting with no flag

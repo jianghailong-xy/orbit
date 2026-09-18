@@ -43,10 +43,11 @@ import type { MainTipAnswer } from './main-tip-probe';
  * ===============================================
  * `MERGE_AND_RELEASE_NEXT` is a decision, not a merge. This module computes it, the delivery
  * returns it, and the session that acts on it is the one that already holds the merge protocol.
- * Merging is the coordinator's one irreversible outward action, and the account owner drew the
- * line on 2026-09-06 exactly there: the apiserver may work out that a merge is what this round
- * calls for, and may not perform one. The other three actions are reversible and are the
- * coordinator's own.
+ * Merging is the coordinator's one irreversible outward action, and the account owner drew the line
+ * on 2026-09-06 and narrowed it on 2026-09-13: landing on a project branch is the platform's,
+ * performed by an integration job; landing on the upstream always goes through the owner's
+ * confirmation card. `MERGE_AND_RELEASE_NEXT` remains a decision, never a merge performed from here.
+ * The other three actions are reversible and are the coordinator's own.
  */
 
 /** What one round's declared command did, in the vocabulary the coordinator reasons in. */

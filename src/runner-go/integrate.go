@@ -56,6 +56,7 @@ type integrationResult struct {
 	LandedSha       string
 	LandedTreeSha   string
 	AheadOfUpstream *int
+	FilesChanged    *int
 	Checks          []IntegrationCheckResult
 	Conflicts       []string
 	ErrorCode       string
@@ -63,8 +64,10 @@ type integrationResult struct {
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
-// passes one that POSTs; a test passes one that records.
-type integrationReporter func(phase string)
+// passes one that POSTs; a test passes one that records. The second argument is non-nil exactly
+// once: the step where a confirmed promotion found the upstream had moved and is redoing its merge
+// and its checks on the new tip (§3.3 M-T7).
+type integrationReporter func(phase string, moved *IntegrationUpstreamMoved)
 
 // runIntegrationJob performs one claimed job and answers what it came to
 // (docs/project-integration-line-contract.md §2.4).
@@ -91,10 +94,17 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 	scratch := filepath.Join(filepath.Dir(cmd.WorkDir), integrateScratchPrefix+cmd.JobID)
 	defer removeIntegrationWorktree(repoRoot, scratch)
 
+	one := integrateOnce
+	if cmd.Kind == "CHECK_PROMOTION" || cmd.Kind == "LAND_PROMOTION" {
+		// A promotion merges the whole project branch into the upstream instead of replaying one
+		// task onto the line (§3.4). Same loop around it, and for the same reason: the one failure
+		// worth trying again inside a single job is losing a race for the ref it is writing.
+		one = promoteOnce
+	}
 	var last integrationResult
 	for round := 0; round <= integrationRefetchRounds; round++ {
 		removeIntegrationWorktree(repoRoot, scratch)
-		last = integrateOnce(cmd, repoRoot, scratch, report)
+		last = one(cmd, repoRoot, scratch, report)
 		// The one thing worth doing again inside a single job: the target moved between the check
 		// and the push, so the tree that was tested is no longer the tree that would land. Re-read
 		// the refs and re-run the checks on the new combination (§2.5 J5).
@@ -117,7 +127,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	local := cmd.RefAuthority == "RUNNER_LOCAL"
 
 	// ── J-S1 FETCH ────────────────────────────────────────────────────────────────────────────
-	report("FETCH")
+	report("FETCH", nil)
 	if !local {
 		// The target may legitimately not exist yet (a project branch nobody has pushed), so the
 		// two refs are fetched separately and only upstream's absence is fatal.
@@ -165,7 +175,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// Only a project branch absorbs upstream: on a MAIN line the target IS upstream.
 	base := targetSha
 	if cmd.TargetRef != cmd.UpstreamRef && !isAncestor(scratch, upstreamSha, targetSha) {
-		report("MAIN_SYNC")
+		report("MAIN_SYNC", nil)
 		merged, conflicts, err := integrationMerge(scratch, upstreamSha,
 			fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
 		if err != nil {
@@ -192,7 +202,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		// A source that contains merge commits carries somebody's conflict resolutions inside
 		// them. A rebase would replay the sides and ask for those resolutions again; a merge keeps
 		// them (§2.4 J-S4).
-		report("MERGE")
+		report("MERGE", nil)
 		merged, conflicts, err := integrationMerge(scratch, sourceSha,
 			fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.TargetRef))
 		if err != nil {
@@ -201,7 +211,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		}
 		tested = merged
 	} else {
-		report("REBASE")
+		report("REBASE", nil)
 		onto := fork
 		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) {
 			onto = cmd.SessionBaseSha
@@ -217,7 +227,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 
 	// ── J-S5 CHECK ────────────────────────────────────────────────────────────────────────────
 	if len(cmd.Checks) > 0 {
-		report("CHECK")
+		report("CHECK", nil)
 	}
 	for _, spec := range cmd.Checks {
 		outcome := runIntegrationCheck(scratch, spec)
@@ -251,7 +261,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	result.TestedTreeSha = treeSha
 
 	// ── J-S6 PUSH ─────────────────────────────────────────────────────────────────────────────
-	report("PUSH")
+	report("PUSH", nil)
 	// mergeLock, not only the per-target lock above: this is the same repository root's refs that
 	// a session's own "merge to main" moves, and the two must not interleave.
 	mergeLock.Lock()
@@ -272,7 +282,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	}
 
 	// ── J-S7 VERIFY ───────────────────────────────────────────────────────────────────────────
-	report("VERIFY")
+	report("VERIFY", nil)
 	if !local {
 		if _, err := git(repoRoot, "fetch", remote, cmd.TargetRef); err != nil {
 			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
@@ -299,6 +309,196 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			result.AheadOfUpstream = &n
 		}
 	}
+	result.State, result.Phase = "LANDED", "VERIFY"
+	return result
+}
+
+
+// promoteOnce is one pass at merging a project's finished work into its upstream
+// (docs/project-integration-line-contract.md §3.4, steps M-S1 to M-S4).
+//
+// The shape is the same as integrateOnce's and the difference is the whole of §3: what lands is a
+// MERGE COMMIT of the source into the upstream rather than the source replayed on top of it, so
+// every commit the project branch accumulated stays an ancestor of main and the history a person
+// reads afterwards is the history that was there (hard constraint 3, M6).
+//
+// Two jobs come through here. A CHECK_PROMOTION builds that merge, runs the project's merge check
+// on it, and stops — it pushes nothing, and what it reports is the upstream tip and the tree the
+// owner is being asked to approve. A LAND_PROMOTION does it again and pushes: with the upstream
+// where the check left it, the merge must reproduce the same TREE (the commit's own SHA cannot be
+// reproduced, and is not what was approved); with the upstream moved, the merge and the checks are
+// redone on the new tip and the move is reported so a reader can see it happened (M5, M-T7).
+func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
+	remote := cmd.RemoteName
+	if remote == "" {
+		remote = "origin"
+	}
+	local := cmd.RefAuthority == "RUNNER_LOCAL"
+	landing := cmd.Kind == "LAND_PROMOTION"
+
+	// ── M-S1 FETCH ────────────────────────────────────────────────────────────────────────────
+	report("FETCH", nil)
+	if !local {
+		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
+			return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
+				"ref": cmd.UpstreamRef, "detail": gitStderr(err),
+			})
+		}
+		if _, err := git(repoRoot, "fetch", remote, cmd.SourceRef); err != nil {
+			return errorResult("FETCH", "SOURCE_BRANCH_MISSING", map[string]any{
+				"ref": cmd.SourceRef, "detail": gitStderr(err),
+			})
+		}
+	}
+	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
+	if err != nil || upstreamSha == "" {
+		return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
+			"ref": cmd.UpstreamRef, "detail": errText(err),
+		})
+	}
+	// The commit the owner is being asked about, frozen when the candidate was made. Falling back
+	// to the ref would merge whatever has landed on the branch since, which is not what was shown.
+	sourceSha := strings.TrimSpace(cmd.SourceSha)
+	if sourceSha == "" {
+		sourceSha, err = integrationTip(repoRoot, remote, cmd.SourceRef, local)
+	} else if _, probe := git(repoRoot, "rev-parse", "--verify", "--quiet", sourceSha+"^{commit}"); probe != nil {
+		err = probe
+		sourceSha = ""
+	}
+	if err != nil || sourceSha == "" {
+		return errorResult("FETCH", "SOURCE_BRANCH_MISSING", map[string]any{
+			"ref": cmd.SourceRef, "sha": cmd.SourceSha, "detail": errText(err),
+		})
+	}
+
+	result := integrationResult{
+		SourceSha: sourceSha, TargetShaBefore: upstreamSha, UpstreamSha: upstreamSha,
+	}
+
+	if _, err := git(repoRoot, "worktree", "add", "--detach", scratch, upstreamSha); err != nil {
+		return errorResult("FETCH", "FETCH_FAILED", map[string]any{
+			"detail": "could not stage a promotion worktree: " + gitStderr(err),
+		})
+	}
+
+	// Already on the upstream: nothing to merge, and a merge commit for it would be a commit that
+	// carries no change at all.
+	if isAncestor(scratch, sourceSha, upstreamSha) {
+		result.State, result.Phase = "ALREADY_LANDED", "MERGE"
+		return result
+	}
+
+	// ── M-S2 MERGE ────────────────────────────────────────────────────────────────────────────
+	moved := landing && cmd.UpstreamShaChecked != "" && cmd.UpstreamShaChecked != upstreamSha
+	if moved {
+		report("MERGE", &IntegrationUpstreamMoved{From: cmd.UpstreamShaChecked, To: upstreamSha})
+	} else {
+		report("MERGE", nil)
+	}
+	merged, conflicts, mergeErr := integrationMerge(scratch, sourceSha,
+		fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.UpstreamRef))
+	if mergeErr != nil {
+		result.State, result.Phase, result.Conflicts = "CONFLICT", "MERGE", conflicts
+		return result
+	}
+	result.TestedSha = merged
+	treeSha, err := git(scratch, "rev-parse", merged+"^{tree}")
+	if err != nil || treeSha == "" {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "MERGE", "CHECK_MUTATED_TREE"
+		result.ErrorDetail = map[string]any{"detail": "could not read the merged tree: " + errText(err)}
+		return result
+	}
+	result.TestedTreeSha = treeSha
+	if ahead, err := git(scratch, "rev-list", "--count", upstreamSha+".."+sourceSha); err == nil {
+		if n, convErr := strconv.Atoi(strings.TrimSpace(ahead)); convErr == nil {
+			result.AheadOfUpstream = &n
+		}
+	}
+	if files, err := git(scratch, "diff", "--name-only", upstreamSha, merged); err == nil {
+		n := len(strings.Fields(files))
+		result.FilesChanged = &n
+	}
+
+	// ── M-S3 CHECK ────────────────────────────────────────────────────────────────────────────
+	// The upstream is where the approved check left it, so the merge has to come out the same. It
+	// will not be the same COMMIT — a merge commit carries the moment it was made — and the tree is
+	// what was approved, so the tree is what is compared.
+	if landing && !moved && cmd.MergeTreeSha != "" && cmd.MergeTreeSha != treeSha {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "MERGE", "PROMOTION_TREE_NONDETERMINISTIC"
+		result.ErrorDetail = map[string]any{"expectedTree": cmd.MergeTreeSha, "actualTree": treeSha}
+		return result
+	}
+	// Checked here on every check job, and on a landing only when the upstream moved: an unmoved
+	// upstream reproduced the tree that already passed, and running the same commands on the same
+	// tree again is an hour spent to learn nothing (M5).
+	if !landing || moved {
+		if len(cmd.Checks) > 0 {
+			report("CHECK", nil)
+		}
+		for _, spec := range cmd.Checks {
+			outcome := runIntegrationCheck(scratch, spec)
+			result.Checks = append(result.Checks, outcome)
+			if outcome.ExitCode == nil || *outcome.ExitCode != spec.ExpectedExitCode {
+				result.State, result.Phase = "CHECK_FAILED", "CHECK"
+				return result
+			}
+		}
+	}
+
+	if !landing {
+		// M-S4 for a check: nothing is pushed, and what comes back is what the owner is asked about.
+		result.State, result.Phase = "READY", "CHECK"
+		return result
+	}
+
+	// ── M-S4 the tree that is about to land, then the push ────────────────────────────────────
+	head, _ := git(scratch, "rev-parse", "HEAD")
+	dirty, _ := git(scratch, "status", "--porcelain", "--untracked-files=no")
+	if head != merged || strings.TrimSpace(dirty) != "" {
+		result.State, result.Phase = "ERROR", "PUSH"
+		result.ErrorCode = "CHECK_MUTATED_TREE"
+		result.ErrorDetail = map[string]any{"head": head, "expected": merged, "dirty": clip(dirty, 2000)}
+		return result
+	}
+	report("PUSH", nil)
+	mergeLock.Lock()
+	pushErr := integrationPush(repoRoot, scratch, remote, cmd.UpstreamRef, merged, upstreamSha, local)
+	if pushErr == nil {
+		advanceLocalRef(repoRoot, cmd.UpstreamRef, merged)
+	}
+	mergeLock.Unlock()
+	if pushErr != nil {
+		result.State, result.Phase = "ERROR", "PUSH"
+		if isNonFastForward(gitStderr(pushErr)) {
+			result.ErrorCode = "TARGET_MOVED"
+		} else {
+			result.ErrorCode = "PUSH_REJECTED"
+		}
+		result.ErrorDetail = map[string]any{"detail": clip(gitStderr(pushErr), 2000)}
+		return result
+	}
+
+	// ── VERIFY ────────────────────────────────────────────────────────────────────────────────
+	report("VERIFY", nil)
+	if !local {
+		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
+			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
+			result.ErrorDetail = map[string]any{"detail": "could not read the upstream back: " + gitStderr(err)}
+			return result
+		}
+	}
+	landed, _ := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
+	landedTree, _ := git(repoRoot, "rev-parse", landed+"^{tree}")
+	if landed != merged || landedTree != treeSha {
+		result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
+		result.ErrorDetail = map[string]any{
+			"expectedSha": merged, "actualSha": landed,
+			"expectedTree": treeSha, "actualTree": landedTree,
+		}
+		return result
+	}
+	result.LandedSha = landed
+	result.LandedTreeSha = landedTree
 	result.State, result.Phase = "LANDED", "VERIFY"
 	return result
 }
@@ -484,13 +684,16 @@ func tailOf(s string, n int) string {
 // process's claim moved on, and the right answer to that is to stop.
 func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 	logln("integration job", job.JobID, job.Kind, job.SourceRef, "->", job.TargetRef)
-	result := runIntegrationJob(job, func(phase string) {
+	result := runIntegrationJob(job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
-		// on either way.
+		// on either way. The one report that is more than a phase is `upstreamMoved` — the control
+		// plane moves the promotion to RECHECKING on it (§3.3 M-T7) — and it is best effort too:
+		// the result that follows carries the upstream this job actually merged onto regardless.
 		_ = t.integrationJobProgress(job.JobID, IntegrationJobProgressRequest{
 			ClaimGeneration: job.ClaimGeneration,
 			LeaseOwner:      job.LeaseOwner,
 			Phase:           phase,
+			UpstreamMoved:   moved,
 		})
 	})
 	body := IntegrationJobResultRequest{
@@ -507,6 +710,7 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 		LandedSha:       result.LandedSha,
 		LandedTreeSha:   result.LandedTreeSha,
 		AheadOfUpstream: result.AheadOfUpstream,
+		FilesChanged:    result.FilesChanged,
 		Checks:          result.Checks,
 		Conflicts:       result.Conflicts,
 		ErrorCode:       result.ErrorCode,

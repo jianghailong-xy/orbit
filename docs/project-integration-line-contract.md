@@ -546,6 +546,8 @@ interface TaskIntegrationView {
 
 **M10**：`project-done-derived.ts` 的输入与重算边沿都不改；§1.4 把 `LANDED` 收窄为 `ON_UPSTREAM`，所以 DONE 在合入前是 OPEN、合入后翻为 DONE。M9 的回执经 `MergeReceiptService.deliverProjectFactsAfterCommit` 触发重算，与今天的回执边沿是同一个入口。
 
+> 实现记（2026-09-18）：§3 的 `PROJECT_BRANCH` 线已落地（迁移 0285 `project_promotion`、`projects/project-promotion.ts` 与 `.service.ts`、`POST /projects/:id/promotions/:promotionId/{confirm|decline|cancel}`、runner 的 `promoteOnce`）。**M-F2 的 `TASK_BRANCH` 候选还没有**：`MAIN` 线项目的代码任务 DONE 仍然什么都不入队（`enqueueForDoneTask` 答 `PROMOTION_REQUIRED`），它有自己的工单。
+
 **M11**：`docs/project-done-gate.md` 第一节补一句：「`landing = 'LANDED'` 指服务任务都在项目的 upstream 上；在项目分支上的读作 `ON_INTEGRATION_LINE`」。
 
 **M12**：`mechanical-disposition.ts` §2 的最后两句改为：「the account owner drew the line on 2026-09-06 and narrowed it on 2026-09-13: landing on a project branch is the platform's, performed by an integration job; landing on the upstream always goes through the owner's confirmation card. `MERGE_AND_RELEASE_NEXT` remains a decision, never a merge performed from here.」

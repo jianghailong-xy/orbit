@@ -853,6 +853,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `task_completion_criterion` label, no task row and no `project_acceptance_*` object can
   //        move by one byte. Its return value is unchanged for every input, checked over all
   //        111,752 task ids, all 110,866 edge heads and 200 ids belonging to no task.
+  //   0286 added `project_promotion` — one candidate for merging a project's finished work into its
+  //        upstream, with what the owner confirmed and what it became — and gave
+  //        `project_integration_job.promotion_id` and `project_open_item.promotion_id` the foreign
+  //        keys 0281 and 0278 said would come with it. Read against every claim above: the table is
+  //        its own, and the only preserved relations it touches are those two, each reached by ADDing
+  //        a constraint to a column that already exists and is NULL in every row ever written. It
+  //        drops and retypes nothing, carries no DML of any kind, and creates no type — so no stored
+  //        task, criterion or acceptance row can move by one byte, and the 0177 pair and the
+  //        `task_completion_criterion` labels are out of its reach. Its one function and trigger,
+  //        `project_promotion_terminal_guard`, is BEFORE UPDATE on its own new table and refuses
+  //        rewrites of a merged, declined, cancelled or superseded candidate: it writes nothing,
+  //        names none of the six preserved triggers or functions, and is not a second writer of the
+  //        DONE fence. Nothing it creates uses the `project_acceptance_` prefix or the word
+  //        `judgment`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -903,7 +917,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0282_project_task_status_count',
       '0283_task_project_assignee_idx',
       '0284_project_fuse_pause',
-      '0285_task_dependency_tail_id_single_read'],
+      '0285_task_dependency_tail_id_single_read',
+      '0286_project_promotion'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

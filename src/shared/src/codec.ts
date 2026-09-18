@@ -85,6 +85,17 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'integrationJobId',
   'promotionId',
   'fuseEpisodeId',
+  // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
+  // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
+  // account owner who confirmed it, the card itself, and the receipts it wrote. None is a fence —
+  // the promotion's own compare-and-set is on `state`, which is text, and its landing job is fenced
+  // by `claimGeneration` and `claimLeaseOwner` like every other job's.
+  'includedTaskIds',
+  'checkJobId',
+  'landJobId',
+  'confirmedByUserId',
+  'openItemId',
+  'receiptIds',
   // The same pause, named by the rows that hang off it rather than by the card that points at it:
   // a held action's `episodeId`, and the `:episodeId` the resume door is addressed by (0280).
   'episodeId',

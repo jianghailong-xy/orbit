@@ -156,6 +156,7 @@ import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout'
 import { type TaskFailure, recordTaskFailure, returnQueuedTurns } from '../projects/project-open-item';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
   TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
@@ -593,6 +594,12 @@ export class RunnerApiController {
      * reading not taken here is taken on the next batch that carries the same kind of spend.
      */
     @Optional() private readonly fuse?: ProjectFuseService,
+    /**
+     * Whether a landing has left the project branch ready to be offered to its owner (contract §3.4
+     * M-F1, M-F4). `@Optional()` for the same reason as the rest of this list; a queue with no
+     * promotion service simply offers nothing, and the next landing asks again.
+     */
+    @Optional() private readonly promotions?: ProjectPromotionService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1192,6 +1199,12 @@ export class RunnerApiController {
       if (after.openItemTaskIds.length > 0) {
         await this.openItems?.deliverForTasks(after.openItemTaskIds)
           .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
+      }
+      if (after.considerPromotionProjectId) {
+        // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
+        // true of rows that landed, and this job's own is one of them. The service logs and swallows
+        // its own failures — a candidate not made now is made by the next landing.
+        await this.promotions?.considerCandidate(after.considerPromotionProjectId);
       }
     }
     return applied.answer;

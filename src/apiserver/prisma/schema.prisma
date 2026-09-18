@@ -2150,6 +2150,80 @@ model ProjectIntegrationJob {
   @@map("project_integration_job")
 }
 
+/// One candidate for merging into a project's upstream, and what its owner did with it
+/// (docs/project-integration-line-contract.md §3.2, migration 0285).
+///
+/// A promotion is a DECISION waiting to be taken, not a piece of git work: the checks and the merge
+/// are `ProjectIntegrationJob` rows (`CHECK_PROMOTION`, `LAND_PROMOTION`) pointing back at this one
+/// through `promotionId`. What lives here is what the owner is being asked, what they answered, and
+/// the two frozen facts M-S3 compares before anything is pushed — the upstream tip the last passing
+/// check ran against, and the tree it produced.
+///
+/// Two constraints carry the contract and neither can be spelled here: the partial unique index over
+/// `(projectId, sourceRef)` WHERE the state is still live (one card per source, so a second landing
+/// supersedes the standing candidate rather than opening a second one), and the CHECKs that a
+/// confirmed promotion names who confirmed it and a merged one names the commit it became.
+/// `sourceKind` and `state` are closed sets held by CHECKs and spelled in
+/// `projects/project-promotion.ts`; a terminal row is final (`project_promotion_terminal_guard`).
+///
+/// No Prisma relations, deliberately. Everything this table is read with is addressed by its own
+/// scalars, and a relation field would put a back-reference on five models — `Project`, `Task`,
+/// `Session`, `User`, `ProjectCodebase` — that nothing traverses. The foreign keys are in the
+/// migration, where the database enforces them.
+model ProjectPromotion {
+  id         String @id @default(uuid(7)) @db.Uuid
+  projectId  String @map("project_id") @db.Uuid
+  ownerId    String @map("owner_id") @db.Uuid
+  codebaseId String @map("codebase_id") @db.Uuid
+
+  /// PROJECT_BRANCH is the ordinary source; TASK_BRANCH is what a MAIN-line project promotes,
+  /// because it has no branch of its own to accumulate on (appendix A-Q7).
+  sourceKind String  @map("source_kind")
+  taskId     String? @map("task_id") @db.Uuid
+  sessionId  String? @map("session_id") @db.Uuid
+
+  sourceRef   String @map("source_ref")
+  sourceSha   String @map("source_sha") @db.Char(40)
+  /// Frozen from the codebase row when the candidate was made: what "main" meant then.
+  upstreamRef String @map("upstream_ref")
+
+  /// What the last passing check ran against, and what it produced. M-S3 compares both: the same
+  /// upstream must reproduce the same tree, and a different upstream must be checked again.
+  upstreamShaChecked String? @map("upstream_sha_checked") @db.Char(40)
+  mergeTreeSha       String? @map("merge_tree_sha") @db.Char(40)
+
+  /// The tasks this merge would carry onto the upstream, and what the card shows about the size.
+  includedTaskIds String[] @map("included_task_ids") @db.Uuid
+  commitsAhead    Int?     @map("commits_ahead")
+  filesChanged    Int?     @map("files_changed")
+
+  checks    Json     @default("[]")
+  conflicts String[] @default([])
+
+  state      String  @default("CHECKING")
+  checkJobId String? @map("check_job_id") @db.Uuid
+  landJobId  String? @map("land_job_id") @db.Uuid
+
+  confirmedByUserId String?   @map("confirmed_by_user_id") @db.Uuid
+  confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  /// When the landing job found the upstream had moved and redid the merge and the checks on the
+  /// new tip (M-T7). Durable, because `RECHECKING` is passed through in seconds and a reader asking
+  /// "was this rechecked" is asking about something that already happened.
+  recheckedAt       DateTime? @map("rechecked_at") @db.Timestamptz(3)
+  decidedAt         DateTime? @map("decided_at") @db.Timestamptz(3)
+
+  mergedSha  String?   @map("merged_sha") @db.Char(40)
+  mergedAt   DateTime? @map("merged_at") @db.Timestamptz(3)
+  openItemId String?   @map("open_item_id") @db.Uuid
+  receiptIds String[]  @default([]) @map("receipt_ids") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([projectId, createdAt], map: "project_promotion_project_idx")
+  @@map("project_promotion")
+}
+
 /// How many of a project's tasks are in each status (migration 0282).
 ///
 /// The detail read used to ask Prisma for `task.groupBy({ by: ['status'], where: { projectId } })`,

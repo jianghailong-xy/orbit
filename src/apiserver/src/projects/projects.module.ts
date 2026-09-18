@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ProjectPromotionController } from './project-promotion.controller';
+import { ProjectPromotionService } from './project-promotion.service';
 import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentModule } from './coordinator-judgment.module';
@@ -24,7 +26,7 @@ import { ProjectsService } from './projects.service';
     CoordinatorJudgmentModule,
     ProjectAcceptanceModule,
   ],
-  controllers: [ProjectsController],
+  controllers: [ProjectsController, ProjectPromotionController],
   providers: [
     ProjectsService,
     ConvergenceLedgerService,
@@ -36,6 +38,9 @@ import { ProjectsService } from './projects.service';
     // that only ever writes an item's assignee belongs beside the items, not beside the sweeps that
     // start work.
     ProjectOpenItemEscalationService,
+    // Merging a project branch into main (§3). Provided here and exported, so the runner door that
+    // notices a landing and the owner door that answers the card are the same instance.
+    ProjectPromotionService,
   ],
   exports: [
     ProjectHandoffModule,
@@ -53,6 +58,7 @@ import { ProjectsService } from './projects.service';
     AttemptBudgetMeterService,
     ProjectAcceptanceModule,
     TaskCheckpointService,
+    ProjectPromotionService,
   ],
 })
 export class ProjectsModule {}

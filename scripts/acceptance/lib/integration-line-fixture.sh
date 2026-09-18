@@ -394,3 +394,142 @@ wait_for_job_state() {
 }
 
 origin_tip() { git -C "$1" rev-parse --verify --quiet "$2" 2>/dev/null || true; }
+
+# ── promotions: merging a project branch into main (§3) ────────────────────────────────────────
+
+# One JSON request made the way an AGENT would make it: the same credential, plus the session header
+# that says a session is holding it. The doors that keep a decision for the account owner refuse it,
+# and that refusal is the whole of "only the owner can confirm" — a rule checked at one door only is
+# not a rule, so the case that asserts it has to be able to knock on the door as an agent.
+api_as_session() {
+  local method="$1" route="$2" session="$3" body="${4:-}"
+  local tmp="$FIX_SCRATCH/api-body"
+  if [ -n "$body" ]; then
+    curl -sS -o "$tmp" -w '%{http_code}' -X "$method" "$FIX_API_ORIGIN/api$route" \
+      -H 'content-type: application/json' -H "authorization: Bearer $FIX_TOKEN" \
+      -H "x-orbit-session-id: $session" -d "$body" > "$FIX_SCRATCH/api-status"
+  else
+    curl -sS -o "$tmp" -w '%{http_code}' -X "$method" "$FIX_API_ORIGIN/api$route" \
+      -H "authorization: Bearer $FIX_TOKEN" -H "x-orbit-session-id: $session" \
+      > "$FIX_SCRATCH/api-status"
+  fi
+  cat "$tmp"
+}
+
+# A new commit on the upstream, pushed. What "main moved" means for every case below, and the one
+# fact §3 turns on: a candidate is checked against the upstream as it was, and the upstream does not
+# hold still while somebody decides.
+advance_upstream() {
+  local work="$1" file="$2" content="$3"
+  git -C "$work" checkout --quiet main
+  printf '%s\n' "$content" > "$work/$file"
+  git -C "$work" add "$file"
+  git -C "$work" commit --quiet -m "main: $file"
+  git -C "$work" push --quiet origin main
+  git -C "$work" rev-parse main
+}
+
+# The project's newest promotion, and one column of it.
+promotion_of() { sql1 "SELECT id FROM project_promotion WHERE project_id = '$1' ORDER BY created_at DESC LIMIT 1"; }
+promotion_column_of() {
+  sql1 "SELECT COALESCE($2::text, '') FROM project_promotion
+         WHERE project_id = '$1' ORDER BY created_at DESC LIMIT 1"
+}
+
+wait_for_promotion_state() {
+  local project="$1" expected="$2" budget="${3:-180}"
+  wait_for_sql "the promotion of $project to reach $expected" "$budget" \
+    "SELECT COALESCE((SELECT state FROM project_promotion WHERE project_id = '$project'
+                       ORDER BY created_at DESC LIMIT 1), 'NONE')" "$expected"
+}
+
+# One column of the job of a given kind that belongs to this project's newest promotion.
+promotion_job_column_of() {
+  sql1 "SELECT COALESCE($3::text, '') FROM project_integration_job j
+         WHERE j.project_id = '$1' AND j.kind = '$2'
+         ORDER BY j.created_at DESC LIMIT 1"
+}
+
+# The owner pressing Merge on the card (§3.4 M-F3).
+confirm_promotion() {
+  local project="$1" promotion="$2"
+  local body; body="$(api POST "/projects/$project/promotions/$promotion/confirm" '{}')"
+  case "$(api_status)" in
+    200|201) ;;
+    *) fail "confirm of promotion $promotion answered $(api_status): $body" ;;
+  esac
+}
+
+# A project that also STATES something: one acceptance criterion, so that `project.status` has
+# something to be derived from. `new_project` deliberately states none — a project with no criteria
+# is withheld DONE by `NO_CRITERIA_STATED` and could never flip.
+new_project_with_criterion() {
+  local title="$1" workspace_uuid="$2" origin="$3" merge_check="${4:-}"
+  local created project_uuid
+  created="$(api POST /projects "$(python3 -c '
+import json,sys
+print(json.dumps({
+  "title": sys.argv[1],
+  "goal": "integration line acceptance",
+  "acceptanceCriteriaItems": [{
+    "text": "the work reaches main",
+    "verificationMethod": "the acceptance script asserts project.status flips on the merge",
+  }],
+}))' "$title")")"
+  project_uuid="$(sql1 "SELECT id FROM project WHERE title = '$title' ORDER BY created_at DESC LIMIT 1")"
+  [ -n "$project_uuid" ] || fail "project not created: $created"
+  local stated
+  stated="$(sql1 "SELECT count(*) FROM project_acceptance_criterion_definition WHERE project_id = '$project_uuid'")"
+  # The owner's own door applies criteria directly; an agent's would be held as a proposal. A held
+  # one here would make every later assertion about DONE a statement about the wrong thing.
+  [ "$stated" = "1" ] || fail "the project states $stated criteria, expected 1: $created"
+  local check_sql='NULL'
+  if [ -n "$merge_check" ]; then check_sql="'$merge_check'"; fi
+  sql "INSERT INTO project_codebase
+         (id, project_id, owner_id, slot, canonical_repo_url, upstream_ref, integration_ref,
+          integration_ref_source, ref_authority, remote_name, merge_check_command, created_at, updated_at)
+       VALUES (gen_random_uuid(), '$project_uuid', '$FIX_OWNER_UUID', 'primary', '$origin',
+               'refs/heads/main', 'refs/heads/project/$title', 'EXPLICIT', 'REMOTE', 'origin',
+               $check_sql, now(), now())" >/dev/null
+  printf '%s\n' "$project_uuid"
+}
+
+# The account owner saying that THIS version of the criteria expresses the goal — one of the four
+# things `project-done-derived.ts` folds, and the only one no work can supply.
+confirm_standard_set() {
+  local project="$1"
+  local standing digest
+  standing="$(api GET "/projects/$project/acceptance/confirmation")"
+  digest="$(printf '%s' "$standing" | python3 -c 'import json,sys;print(json.load(sys.stdin)["currentVersion"]["digest"])')"
+  [ -n "$digest" ] || fail "no criteria digest to confirm: $standing"
+  local body; body="$(api POST "/projects/$project/acceptance/confirmation" "{\"criteriaDigest\":\"$digest\"}")"
+  case "$(api_status)" in
+    200|201) ;;
+    *) fail "confirming the standard set answered $(api_status): $body" ;;
+  esac
+}
+
+# Which stated criterion a task serves. Written here rather than through the task door because the
+# fixture creates its tasks with SQL — the declaration is an input to what is under test, not part
+# of it.
+declare_task_serves_criterion() {
+  local task="$1" project="$2"
+  sql "UPDATE task SET criterion_definition_id = d.id, criterion_revision = d.revision
+         FROM project_acceptance_criterion_definition d
+        WHERE d.project_id = '$project' AND task.id = '$task'" >/dev/null
+}
+
+# Is `ancestor` in `descendant`'s history, in the checkout `work`? Answers yes/no rather than a
+# status, so an assertion reads as the sentence it is making.
+is_ancestor_in() {
+  local work="$1" ancestor="$2" descendant="$3"
+  if git -C "$work" merge-base --is-ancestor "$ancestor" "$descendant" 2>/dev/null; then
+    printf 'yes\n'
+  else
+    printf 'no\n'
+  fi
+}
+
+# Everything the origin holds, in this checkout, so the assertions below can read commits the runner
+# made on another branch of the same repository.
+fetch_all() { git -C "$1" fetch --quiet origin '+refs/heads/*:refs/remotes/origin/*' 2>/dev/null || true; }

@@ -502,6 +502,20 @@ export class AskOwnerDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(200) clientQuestionId?: string;
 }
 
+/**
+ * The owner confirming a merge into main (contract §3.4 M-F3).
+ *
+ * `sourceSha` is FRESHNESS, not a key: it says which candidate the card the owner pressed was drawn
+ * from, so a press against a card that a newer landing has already superseded is refused instead of
+ * merging whatever is on the branch now. Optional, because a client that re-read the promotion
+ * immediately before pressing has already established the same thing.
+ */
+export class ConfirmPromotionDto {
+  @IsOptional() @Matches(/^[0-9a-f]{40}$/, {
+    message: 'sourceSha must be the 40-character SHA of the candidate being confirmed',
+  }) sourceSha?: string;
+}
+
 /** The owner answering one: an option, free text, or both. The service refuses neither. */
 export class AnswerOpenItemDto {
   @IsOptional() @IsInt() @Min(0) @Max(3) option?: number;

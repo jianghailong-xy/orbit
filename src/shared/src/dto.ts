@@ -1925,6 +1925,14 @@ export interface IntegrationJobCommand {
   sourceRef: string;
   /** LAND_TASK: the source session's baseSha, the anchor a rebase replays from. */
   sessionBaseSha?: string;
+  /** CHECK_PROMOTION / LAND_PROMOTION: the exact commit the owner is being asked about (§3.4 M-S1).
+   *  The runner works from this rather than from wherever the source ref has got to since. */
+  sourceSha?: string;
+  /** LAND_PROMOTION: the upstream tip the promotion's last passing check ran against, and the tree
+   *  that check produced. M-S2 and M-S3 compare both — the same upstream must reproduce the same
+   *  tree, and an upstream that moved must be checked again before anything lands. */
+  upstreamShaChecked?: string;
+  mergeTreeSha?: string;
   checks: IntegrationCheckSpec[];
   /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
   cancelRequested: boolean;
@@ -1958,6 +1966,8 @@ export interface IntegrationJobResultRequest {
   landedSha?: string | null;
   landedTreeSha?: string | null;
   aheadOfUpstream?: number | null;
+  /** How many files the merge would change, for the card the owner reads (§3.2). */
+  filesChanged?: number | null;
   checks?: IntegrationCheckResult[];
   conflicts?: string[];
   errorCode?: string | null;
