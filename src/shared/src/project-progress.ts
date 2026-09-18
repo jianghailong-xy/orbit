@@ -124,3 +124,126 @@ export interface ProjectIntegrationBuckets {
   /** Blocked tasks held by nothing but a prerequisite that is finished and not yet landed (§2.5 J9). */
   waitingForLanding: number;
 }
+
+/** What opened an exception item, as §4.2's closed set spells it. */
+export type OpenItemKind =
+  | 'INTEGRATION_CONFLICT'
+  | 'INTEGRATION_CHECK_FAILED'
+  | 'INTEGRATION_ERROR'
+  | 'TASK_FAILED'
+  | 'PROMOTION_APPROVAL'
+  | 'COORDINATOR_QUESTION'
+  | 'FUSE_PAUSED';
+
+/** Who is expected to act on an item: the project's coordinator, or its owner in person (§4.1). */
+export type OpenItemAssignee = 'COORDINATOR' | 'OWNER';
+
+/**
+ * Why it is theirs. `DEFAULT` is the ordinary answer; the other five are each a story the card has
+ * to tell, because an item that BECAME the owner's says something a plain assignment does not —
+ * nobody acted, the conversation ended, the chain ran out, somebody handed it over, or there was
+ * never a coordinator to hand it to (§4.1, §4.4 X-D6, §4.5 X-C3, §4.6 X-E1).
+ */
+export type OpenItemAssigneeReason =
+  | 'DEFAULT'
+  | 'NO_COORDINATOR'
+  | 'COORDINATOR_ENDED'
+  | 'CHAIN_LIMIT'
+  | 'ESCALATED'
+  | 'HANDED_OVER';
+
+/** Where an item owed to a coordinator is on its way there (§4.4). `NOT_REQUIRED` is the owner's
+ *  own items: nothing is delivered to a person, they are shown the card. */
+export type OpenItemDeliveryState =
+  | 'NOT_REQUIRED'
+  | 'PENDING'
+  | 'QUEUED'
+  | 'DELIVERED'
+  | 'RETURNED';
+
+/**
+ * The presses an item offers, as the server decides they exist — never as a client guesses.
+ *
+ * §4.8 names a longer list; this is the part of it with a door on the other side today. A button
+ * for a door nobody built is a button that answers a press with nothing, so the server omits it and
+ * the card draws what it is given.
+ */
+export type OpenItemAction =
+  | 'OPEN_COORDINATOR'
+  | 'OPEN_TASK_SESSION'
+  | 'RETRY'
+  | 'CANCEL_TASK'
+  | 'RESUME'
+  | 'ANSWER';
+
+/** What a coordinator asked its owner to decide (§5.2 R7). */
+export interface CoordinatorQuestion {
+  question: string;
+  options: Array<{ label: string; description?: string }>;
+  /** Index into `options`; null when the coordinator recommended nothing. */
+  recommendedOption: number | null;
+  blocksTaskIds: string[];
+  ifUnanswered: string | null;
+}
+
+/**
+ * One open exception, as `GET /projects/:id/open-items` serves it (§4.8).
+ *
+ * `detailLine` is the server's own sentence about what happened, in the words of the fact that
+ * opened the item — the client never re-derives it from a payload, because two renderings of one
+ * fact are two things free to disagree.
+ */
+export interface ProjectOpenItemRow<Instant = string> {
+  itemId: string;
+  kind: OpenItemKind;
+  title: string;
+  detailLine: string;
+  assignee: OpenItemAssignee;
+  assigneeReason: OpenItemAssigneeReason;
+  /** When the wait began. Reset when the owner sends an item back to the coordinator (§4.7). */
+  waitingSince: Instant;
+  /** When it stops being the coordinator's, frozen at creation; null once it is the owner's. */
+  escalateAt: Instant | null;
+  escalatedAt: Instant | null;
+  taskId: string | null;
+  /** The attempt this item is about, when there is one: the run whose failure opened it. */
+  sessionId: string | null;
+  promotionId: string | null;
+  fuseEpisodeId: string | null;
+  delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
+  actions: OpenItemAction[];
+  /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
+  question: CoordinatorQuestion | null;
+}
+
+/** The project's open exceptions, split by who is expected to act (§4.8). */
+export interface ProjectOpenItemsView<Instant = string> {
+  needsYou: Array<ProjectOpenItemRow<Instant>>;
+  withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+}
+
+/**
+ * Whether the platform's last word to this project's coordinator reached it (§7.2 V7, V9).
+ *
+ * The one thing the coordinator card could never say before: a conversation that looks idle because
+ * nothing was delivered reads exactly like one that is idle because it has nothing to do, and this
+ * project exists because the first was happening and nobody could see it.
+ */
+export interface CoordinatorWakeups<Instant = string> {
+  state: 'DELIVERED' | 'QUEUED' | 'RETURNED' | 'NONE';
+  at: Instant | null;
+}
+
+/**
+ * What the coordinator has spent on its own today, against what it may (§6.1, §7.2 V9).
+ *
+ * `limit` is null when the project authorised an unbounded one: a card that drew that as a full
+ * meter would be reporting a limit nobody set.
+ */
+export interface CoordinatorFuseUsage {
+  selfStartedToday: number;
+  limit: number | null;
+  paused: boolean;
+  /** The open pause, for the card that resumes it; null while nothing is paused. */
+  episodeId: string | null;
+}

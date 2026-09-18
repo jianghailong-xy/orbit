@@ -60,6 +60,9 @@ export interface OpenItemRow {
   escalateAt: Date | null;
   escalatedAt: Date | null;
   taskId: string | null;
+  /** The attempt this item is about, when one is recorded: the run whose failure opened it. It is
+   *  what the card's "Open task session" reaches, and a task can have had several. */
+  sessionId: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   /** Where this item is on its way to the coordinator, or that it is not owed to one. */
@@ -629,6 +632,7 @@ export class ProjectOpenItemService {
         escalateAt: true,
         escalatedAt: true,
         taskId: true,
+        sessionId: true,
         promotionId: true,
         fuseEpisodeId: true,
         assignedAt: true,
@@ -670,6 +674,7 @@ export class ProjectOpenItemService {
         escalateAt: row.escalateAt,
         escalatedAt: row.escalatedAt,
         taskId: row.taskId,
+        sessionId: row.sessionId,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         delivery: row.assignee !== 'COORDINATOR'

@@ -196,6 +196,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
+import { ProjectExceptionCards } from './ProjectProgressStatus';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import {
   EvidenceDecisionReceipt,
@@ -6178,6 +6179,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {selected && selectedId && !selectedTrashed && (
                 <CoordinatorQuestions
                   key={`coordinator-question:${selectedId}`}
+                  projectId={coordinatedProjectId}
+                />
+              )}
+              {/* And the rest of what this project owes somebody, as the same cards the project
+                  page expands (mocks 5 and 6 ①): a conflict or a failed check this conversation is
+                  expected to fix, a task that failed, an item a clock has since made the owner's,
+                  and the pause that stopped this conversation from starting anything. Drawn here
+                  because this is where the coordinator would be told about them, and they are the
+                  answer to "why has nothing moved" for whoever opens this conversation to ask.
+                  Keyed apart from its siblings for the reason the evidence card's note gives
+                  below. */}
+              {selected && selectedId && !selectedTrashed && (
+                <ProjectExceptionCards
+                  key={`open-items:${selectedId}`}
                   projectId={coordinatedProjectId}
                 />
               )}

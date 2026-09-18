@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ProjectCoordinatorCard,
   type CoordinatorCardLayout,
+  type CoordinatorIntegration,
   type CoordinatorSession,
   type CoordinatorStatus,
 } from './ProjectCoordinatorCard';
@@ -67,6 +68,9 @@ function liveStatus(over: Partial<CoordinatorSession> = {}): CoordinatorStatus {
       agentIdAbsentReason: null,
       agentName: 'Claude Opus 5',
       agentNameAbsentReason: null,
+      // Served for every state now (§7.2 V9); the legacy case below takes them away again.
+      wakeups: { state: 'DELIVERED', at: '2026-08-24T06:56:00.000Z' },
+      fuse: { selfStartedToday: 6, limit: 30, paused: false, episodeId: null },
     },
     openability: {
       canOpen: true,
@@ -203,13 +207,20 @@ function unavailableStatus(): CoordinatorStatus {
 
 function paint(
   status: CoordinatorStatus,
-  opts: { layout?: CoordinatorCardLayout; openTaskCount?: number } = {},
+  opts: {
+    layout?: CoordinatorCardLayout;
+    openTaskCount?: number;
+    automatic?: boolean;
+    integration?: CoordinatorIntegration;
+  } = {},
 ): string {
   return renderToStaticMarkup(
     <ProjectCoordinatorCard
       status={status}
       layout={opts.layout}
       openTaskCount={opts.openTaskCount}
+      automatic={opts.automatic}
+      integration={opts.integration}
     />,
   );
 }
@@ -395,6 +406,45 @@ describe('ProjectCoordinatorCard — LIVE', () => {
       }),
     );
     expect(pillOf(html)).toContain('Idle');
+  });
+});
+
+describe('ProjectCoordinatorCard — what Automatic says it does', () => {
+  it('states the integration rule for a project that lands on its own branch', () => {
+    const body = text(paint(liveStatus(), {
+      automatic: true,
+      integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' },
+    }));
+    expect(body).toContain('Tasks land on project/bg-jobs by themselves and start once their');
+    expect(body).toContain('prerequisites land. Merging into main always asks you.');
+    // The sentence it replaced described a platform that no longer opens a judgment session for a
+    // failed task, and a task that waits for a prerequisite to be DONE rather than to land.
+    expect(body).not.toContain('opens a judgment session');
+  });
+
+  it('states it for a project whose line is main', () => {
+    const body = text(paint(liveStatus(), { automatic: true, integration: { line: 'MAIN', ref: 'main' } }));
+    expect(body).toContain('Tasks are checked on main by themselves and start once their');
+    expect(body).toContain('Merging into main always asks you.');
+  });
+
+  it('keeps the old sentence while no line has been decided', () => {
+    const body = text(paint(liveStatus(), { automatic: true }));
+    expect(body).toContain('Starts ready tasks on its own');
+    expect(body).not.toContain('Merging into main always asks you');
+  });
+
+  it('draws the two progress rows a payload carries them on, and neither when it does not', () => {
+    const withRows = text(paint(liveStatus(), { automatic: true }));
+    expect(withRows).toContain('Wake-ups');
+    expect(withRows).toContain('Self-started today');
+
+    const legacy = liveStatus();
+    delete legacy.coordination.wakeups;
+    delete legacy.coordination.fuse;
+    const without = text(paint(legacy));
+    expect(without).not.toContain('Wake-ups');
+    expect(without).not.toContain('Self-started today');
   });
 });
 

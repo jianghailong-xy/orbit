@@ -1,7 +1,14 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { DownOutlined } from '@ant-design/icons';
 import { Button, Dropdown, Space, Switch } from 'antd';
-import { SessionLifecycleState, SessionRunState } from '@orbit/shared';
+import {
+  type CoordinatorFuseUsage,
+  type CoordinatorWakeups,
+  type IntegrationLine,
+  SessionLifecycleState,
+  SessionRunState,
+} from '@orbit/shared';
+import { CoordinatorProgressRows } from './ProjectProgressStatus';
 
 /**
  * A project's coordination session, drawn as the four states it can actually be in — and, inside
@@ -73,6 +80,11 @@ export interface CoordinatorStatus {
     agentIdAbsentReason: string | null;
     agentName: string | null;
     agentNameAbsentReason: string | null;
+    /** Whether the platform's last word reached this conversation (§7.2 V7). Absent from a server
+     *  that predates the read, and then the row is simply not drawn. */
+    wakeups?: CoordinatorWakeups;
+    /** What it has started on its own today against what it may (§7.2 V9). Absent likewise. */
+    fuse?: CoordinatorFuseUsage;
   };
   openability: {
     canOpen: boolean;
@@ -344,6 +356,7 @@ export function ProjectCoordinatorCard({
   layout = 'desktop',
   openTaskCount,
   automatic,
+  integration,
   readyTaskCount,
   automaticPending,
   onAction,
@@ -358,6 +371,9 @@ export function ProjectCoordinatorCard({
    *  Omitted while that document is still loading, and then the switch is not drawn at all — an
    *  Off-looking switch on an unread project is a lie about the project. */
   automatic?: boolean;
+  /** This project's integration line, from the same document — what Automatic means depends on
+   *  where work lands (§7.2 V8). Omitted, the sentence falls back to the one it always said. */
+  integration?: CoordinatorIntegration;
   /** Tasks that could start now, for the consequence Off has to state. Omitted while the tally is
    *  loading, which costs the warning line and nothing else. */
   readyTaskCount?: number;
@@ -443,12 +459,58 @@ export function ProjectCoordinatorCard({
       {typeof automatic === 'boolean' ? (
         <Automatic
           automatic={automatic}
+          integration={integration}
           readyTaskCount={readyTaskCount}
           pending={automaticPending}
           onChange={onAutomaticChange}
         />
       ) : null}
     </section>
+  );
+}
+
+/** Where this project's finished tasks land, as far as this card is concerned: enough to say what
+ *  Automatic now means, and nothing more (§7.2 V8). Absent while the project document is loading,
+ *  or on a project that has no code to land. */
+export interface CoordinatorIntegration {
+  line: IntegrationLine | null;
+  /** The branch, for the `PROJECT_BRANCH` sentence that names it. */
+  ref: string | null;
+}
+
+/**
+ * What Automatic means now that the platform lands the work (§7.2 V8).
+ *
+ * The old sentence — "starts ready tasks on its own, and opens a judgment session when a criterion
+ * needs a decision" — described a platform that no longer exists: judgment sessions are not opened
+ * for a failed task any more (§8.4 C4), and what a ready task waits for is its prerequisites to
+ * LAND rather than merely to be marked done. The new one says both halves of the deal, including
+ * the half that is a promise: merging into main always asks.
+ *
+ * A project that has not decided a line keeps the old sentence, because for it the old sentence is
+ * still true — nothing lands by itself until there is a line to land on.
+ */
+function automaticCopy(integration?: CoordinatorIntegration): ReactNode {
+  if (integration?.line === 'PROJECT_BRANCH' && integration.ref) {
+    return (
+      <>
+        Tasks land on <b style={{ color: 'var(--text-1)' }}>{integration.ref}</b> by themselves and
+        start once their prerequisites land. Merging into main always asks you.
+      </>
+    );
+  }
+  if (integration?.line === 'MAIN') {
+    return (
+      <>
+        Tasks are checked on main by themselves and start once their prerequisites land. Merging
+        into main always asks you.
+      </>
+    );
+  }
+  return (
+    <>
+      Starts ready tasks on its own, and opens a judgment session when a criterion needs a decision.
+    </>
   );
 }
 
@@ -466,11 +528,13 @@ export function ProjectCoordinatorCard({
  */
 function Automatic({
   automatic,
+  integration,
   readyTaskCount,
   pending,
   onChange,
 }: {
   automatic: boolean;
+  integration?: CoordinatorIntegration;
   readyTaskCount?: number;
   pending?: boolean;
   onChange?: (next: boolean) => void;
@@ -494,10 +558,7 @@ function Automatic({
       </div>
 
       {automatic ? (
-        <p style={{ ...MUTED, margin: '6px 0 0' }}>
-          Starts ready tasks on its own, and opens a judgment session when a criterion needs a
-          decision.
-        </p>
+        <p style={{ ...MUTED, margin: '6px 0 0' }}>{automaticCopy(integration)}</p>
       ) : (
         <>
           <p style={{ ...MUTED, margin: '6px 0 0' }}>Nothing here starts or asks on its own.</p>
@@ -652,6 +713,18 @@ function Live({
           <IdentityRow label="Workspace" name={coordination.workspaceName} tone="neutral" />
         ) : null}
       </div>
+
+      {/* Whether Orbit's last word got through, and how much of today's own initiative is left
+          (§7.2 V7, mock 2 ③). Under the workspace because they are the same kind of fact — what
+          this conversation IS — and above the dispatch box, which is about the work. A server that
+          does not report them draws neither row rather than two zeroes. */}
+      {coordination.wakeups && coordination.fuse ? (
+        <CoordinatorProgressRows
+          wakeups={coordination.wakeups}
+          fuse={coordination.fuse}
+          now={Date.parse(readAt)}
+        />
+      ) : null}
 
       <div
         style={{

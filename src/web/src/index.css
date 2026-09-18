@@ -13115,3 +13115,242 @@ button.composer-usage:focus-visible {
     flex-wrap: wrap;
   }
 }
+
+/* ── Open items (mock 2 ②) ─────────────────────────────────────────────────────────────────
+   Everything this project still owes somebody, in the two groups that say who is expected to act.
+   The dot carries the group as colour and the sub-head carries it as a word, so the two groups are
+   told apart without reading colour at all — the palette does not separate under CVD. */
+.project-open-items {
+  margin-bottom: 14px;
+  padding: 14px 18px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.project-open-items-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.project-open-items-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-open-items-hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.project-open-items-group {
+  margin: 10px 2px 0;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.project-open-items-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.project-open-item-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 210px auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+.project-open-items-group + .project-open-items-list .project-open-item-row:first-child {
+  border-top: 0;
+}
+.project-open-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning-solid);
+}
+.project-open-item-row.is-coordinator .project-open-item-dot {
+  background: var(--brand);
+}
+.project-open-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-open-item-line {
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-open-item-who {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.project-open-item-age {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.project-open-item-press {
+  text-align: right;
+}
+.project-open-item-action,
+.project-open-item-action:hover {
+  text-decoration: none;
+}
+.project-open-item-action {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-size: 12.5px;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.project-open-item-action:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+.project-open-item-action.is-primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.project-open-item-action.is-primary:hover {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+  color: #fff;
+}
+
+/* ── The exception cards (mocks 5 and 6 ①) ─────────────────────────────────────────────────
+   One card for a conflict, a failed combined-tree check, a task that failed, an item a clock made
+   the owner's, and a pause. Amber chrome for what the owner has to act on and neutral for what the
+   coordinator is handling — the same two the rows above use, so a card and its row agree. */
+.approval-card.project-open-item-card {
+  margin: 10px 0;
+}
+.project-open-item-card.is-coordinator {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+.project-open-item-card.is-coordinator .approval-head {
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-subtle);
+}
+.project-open-item-card.is-owner {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.project-open-item-card.is-owner .approval-head {
+  background: var(--warning-bg);
+  border-bottom-color: var(--warning-border);
+}
+.project-open-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.project-open-item-heading {
+  min-width: 0;
+}
+/* The provenance mark in its third colour: nothing is wrong and nobody is being asked to decide —
+   Orbit is reporting a fact. Same box, so the three marks read as one family. */
+.criteria-provenance.prov-neutral {
+  border-color: var(--border);
+  color: var(--text-3);
+}
+.project-open-item-card .approval-body.project-open-item-body {
+  background: var(--bg-raised);
+  padding: 10px 14px;
+}
+.project-open-item-detail {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.project-open-item-subject {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-open-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.project-open-item-actions:empty {
+  display: none;
+}
+.project-open-item-error {
+  flex-basis: 100%;
+}
+.project-open-item-foot {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ── The coordinator card's two progress rows (mock 2 ③) ───────────────────────────────────
+   Whether Orbit's last word reached the conversation, and how much of today's own initiative it
+   has left. Laid out like the identity rows above them so the card reads as one column. */
+.project-coordinator-progress {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.project-coordinator-progress.is-stacked {
+  display: block;
+}
+.project-coordinator-progress-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.project-coordinator-progress-label {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.project-coordinator-progress-value .is-carried {
+  color: var(--success);
+}
+.project-coordinator-progress-value .is-returned,
+.project-coordinator-progress-value .is-paused {
+  color: var(--warning);
+  font-weight: 600;
+}
+.project-coordinator-meter {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.project-coordinator-meter i {
+  display: block;
+  height: 6px;
+  border-radius: 4px;
+  background: var(--brand);
+}
+.project-coordinator-meter i.is-paused {
+  background: var(--warning-solid);
+}

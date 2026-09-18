@@ -1,6 +1,11 @@
 import { useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Input } from 'antd';
+import type {
+  CoordinatorQuestion,
+  ProjectOpenItemRow,
+  ProjectOpenItemsView,
+} from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
 import { api } from '../api';
 import { projectOpenItemsQuery } from '../lib/queries';
@@ -27,34 +32,17 @@ import { ago } from '../lib/watches';
  * refuses an acting session (§5.2 R10); this draws what that door serves and posts to it.
  */
 
-/** What `ask_owner` filed, as the open-items read serves it (§5.2 R7). */
-export interface CoordinatorQuestion {
-  question: string;
-  options: Array<{ label: string; description?: string }>;
-  /** Index into `options`; null when the coordinator recommended nothing. */
-  recommendedOption: number | null;
-  blocksTaskIds: string[];
-  ifUnanswered: string | null;
-}
-
-/** One open item. Only the fields this card reads — the rest of the row belongs to its own card. */
-export interface ProjectOpenItemRow {
-  itemId: string;
-  kind: string;
-  title: string;
-  /** The server's own one-liner: what it blocks, and what happens if nobody answers. */
-  detailLine: string;
-  assignee: 'OWNER' | 'COORDINATOR';
-  waitingSince: string;
-  /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
-  question: CoordinatorQuestion | null;
-}
-
-/** `GET /projects/:id/open-items`, split by who is expected to act (§4.8). */
-export interface ProjectOpenItemsView {
-  needsYou: ProjectOpenItemRow[];
-  withCoordinator: ProjectOpenItemRow[];
-}
+/**
+ * What `ask_owner` filed and the row that carries it, from the one declaration every client reads
+ * (`@orbit/shared`, §7.0). Re-exported here because this card was the first reader of the door and
+ * the page, the workspace view and the tests import them through it — one shape, one home, and the
+ * partial copy this file used to keep cannot drift from the read model any more.
+ */
+export type {
+  CoordinatorQuestion,
+  ProjectOpenItemRow,
+  ProjectOpenItemsView,
+} from '@orbit/shared';
 
 /** What the answer door hands back: the item is closed, and where the answer went (§5.2 R10). */
 export interface OwnerAnswerReceipt {

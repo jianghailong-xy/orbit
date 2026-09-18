@@ -37,8 +37,10 @@ import {
   ProjectCoordinatorCard,
   type CoordinatorAction,
   type CoordinatorCardLayout,
+  type CoordinatorIntegration,
 } from '../components/ProjectCoordinatorCard';
 import { ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
+import { ProjectOpenItems } from '../components/ProjectProgressStatus';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
 import { ProjectSections } from '../components/ProjectSections';
@@ -1099,10 +1101,17 @@ export function ProjectDetailPage() {
               from this same document, and not at all while nothing is open. */}
           <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
 
-          {/* Open items: what this project's coordinator has asked its owner to decide (mock 5).
-              Beside the blockers because it is the same question — what is standing in the way —
-              asked by the conversation running the project rather than found by the platform. It
-              draws nothing while nothing is open. */}
+          {/* Everything this project still owes somebody, in the two groups that say who is
+              expected to act (mock 2 ②): what waits for the reader in person, and what its
+              coordinator is handling — each with how long it has waited and when it stops being
+              the coordinator's. Beside the blockers because it is the same question — what is
+              standing in the way — answered from the exceptions rather than from the platform's
+              own guards. It draws nothing while nothing is open. */}
+          <ProjectOpenItems projectId={id} />
+
+          {/* The questions among those items, as the cards that answer them (mock 5). The rows
+              above link here rather than drawing a second copy: one question, answered in one
+              place, whichever of the two the reader came through. */}
           <CoordinatorQuestions projectId={id} />
 
           {/* One command centre, two responsibilities: the work account establishes context on
@@ -1121,6 +1130,7 @@ export function ProjectDetailPage() {
               layout={narrow ? 'narrow' : 'desktop'}
               openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
               automatic={p.coordinatorEnabled}
+              integration={p.integration}
               configRevision={p.configRevision}
             />
           </div>
@@ -1266,6 +1276,7 @@ export function ProjectCoordinatorSection({
   layout,
   openTaskCount,
   automatic,
+  integration,
   configRevision,
 }: {
   projectId: string;
@@ -1279,6 +1290,9 @@ export function ProjectCoordinatorSection({
    *  — which for the revision means fencing the write against a number nothing on screen came
    *  from. Omitted, the switch is not drawn. */
   automatic?: boolean;
+  /** Where this project's finished tasks land, from the same document: what Automatic means
+   *  depends on it (§7.2 V8). */
+  integration?: CoordinatorIntegration;
   configRevision?: string;
 }) {
   const navigate = useNavigate();
@@ -1455,6 +1469,7 @@ export function ProjectCoordinatorSection({
             layout={layout}
             openTaskCount={openTaskCount}
             automatic={automatic}
+            integration={integration}
             readyTaskCount={panorama.data?.buckets.ready}
             automaticPending={setAutomatic.isPending}
             onAction={act}

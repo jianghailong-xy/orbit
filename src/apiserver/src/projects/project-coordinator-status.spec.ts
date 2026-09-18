@@ -56,6 +56,12 @@ type Fixture = {
   pendingApprovals?: number;
   /** What `busiestAssignee` finds, and the workspace row behind it. */
   borrowed?: { id: string; name: string } | null;
+  /** The open `project_fuse_episode`, when this project is paused (§6.2). */
+  pausedEpisodeId?: string | null;
+  /** The newest platform delivery to the coordinator, as the union read hands it back (§7.2 V7). */
+  carried?: { at: Date; returnedAt: Date | null; deliveredAt: Date | null } | null;
+  /** What `assessSpend` reads, for the row that says what today cost (§6.1). */
+  spend?: { selfStartedTurns: number; limit: number | null };
 };
 
 function serviceWith(fixture: Fixture = {}) {
@@ -89,9 +95,47 @@ function serviceWith(fixture: Fixture = {}) {
           : null;
       },
     },
+    // The two progress reads (§7.2 V9): the open pause, and the newest thing the platform sent the
+    // coordinator. Raw because both are one statement over rows Prisma has no model join for.
+    $queryRaw: async (query: unknown) => {
+      const text = (query as { text?: string }).text ?? '';
+      if (text.includes('FROM "project_fuse_episode"')) {
+        queries.push('fuse.episode');
+        return fixture.pausedEpisodeId ? [{ id: fixture.pausedEpisodeId }] : [];
+      }
+      if (text.includes('FROM "project_open_item_delivery"')) {
+        queries.push('wakeups');
+        return fixture.carried ? [fixture.carried] : [];
+      }
+      throw new Error(`unexpected raw query: ${text}`);
+    },
   };
   const acceptance = { criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }) };
-  return { service: new ProjectsService(prisma as never, acceptance as never), queries };
+  const convergence = {
+    assessSpend: async () => ({
+      spend: {
+        selfStartedTurns: fixture.spend?.selfStartedTurns ?? 0,
+        sessionsOpened: 0,
+        successorRetries: 0,
+      },
+      limits: {
+        maxSelfStartedTurnsPerDay: fixture.spend === undefined ? 40 : fixture.spend.limit,
+        maxSessionsOpenedPerDay: 40,
+        maxRetriesPerSuccessorChain: 2,
+      },
+    }),
+  };
+  // Positional, and the three in between are the ones this read never reaches: passing `undefined`
+  // is what lets their own defaults stand rather than stubbing services nothing here calls.
+  const service = new ProjectsService(
+    prisma as never,
+    acceptance as never,
+    undefined as never,
+    undefined as never,
+    undefined as never,
+    convergence as never,
+  );
+  return { service, queries };
 }
 
 // ── The five states, each asserting WHICH reason rather than merely that a value is missing ──
@@ -495,4 +539,87 @@ test('an unknown id and another owner’s id get the same 404', async () => {
     /project not found/,
   );
   await assert.rejects(() => service.coordinatorStatus(OTHER_OWNER_ID, PROJECT_ID), /project not found/);
+});
+
+// ── The two progress rows the card gained (§7.2 V9) ──
+
+test('the last thing the platform sent the coordinator is DELIVERED once a turn was handed over', async () => {
+  const handed = new Date('2026-08-24T06:56:00.000Z');
+  const { service } = serviceWith({
+    project: projectRow({
+      coordinatorSessionId: SESSION_ID,
+      coordinatorSession: sessionRow(),
+      coordinatorWorkspaceId: WORKSPACE_ID,
+      coordinatorWorkspace: workspaceRow(),
+    }),
+    carried: { at: new Date('2026-08-24T06:55:00.000Z'), returnedAt: null, deliveredAt: handed },
+    spend: { selfStartedTurns: 6, limit: 30 },
+  });
+  const status = await service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+
+  assert.deepEqual(status.coordination.wakeups, { state: 'DELIVERED', at: handed });
+  assert.deepEqual(status.coordination.fuse, {
+    selfStartedToday: 6,
+    limit: 30,
+    paused: false,
+    episodeId: null,
+  });
+});
+
+test('a turn nobody has taken yet is QUEUED, and one handed back is RETURNED', async () => {
+  const written = new Date('2026-08-24T06:55:00.000Z');
+  const queued = await serviceWith({
+    project: projectRow({ coordinatorSessionId: SESSION_ID, coordinatorSession: sessionRow() }),
+    carried: { at: written, returnedAt: null, deliveredAt: null },
+  }).service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.deepEqual(queued.coordination.wakeups, { state: 'QUEUED', at: written });
+
+  const taken = new Date('2026-08-24T06:57:00.000Z');
+  const returned = await serviceWith({
+    project: projectRow({ coordinatorSessionId: SESSION_ID, coordinatorSession: sessionRow() }),
+    // A delivery that was taken back at a drain point is not a delivery, whatever the turn says.
+    carried: { at: written, returnedAt: taken, deliveredAt: taken },
+  }).service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.deepEqual(returned.coordination.wakeups, { state: 'RETURNED', at: taken });
+});
+
+test('a project with no coordinator is asked nothing, and reads NONE', async () => {
+  const { service, queries } = serviceWith();
+  const status = await service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.deepEqual(status.coordination.wakeups, { state: 'NONE', at: null });
+  assert.equal(queries.includes('wakeups'), false);
+});
+
+test('an open episode is what makes the card say paused, not the reading beside it', async () => {
+  const episode = '00000000-0000-7000-8000-0000000000e1';
+  const paused = await serviceWith({
+    project: projectRow({ coordinatorSessionId: SESSION_ID, coordinatorSession: sessionRow() }),
+    pausedEpisodeId: episode,
+    spend: { selfStartedTurns: 31, limit: 30 },
+  }).service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.deepEqual(paused.coordination.fuse, {
+    selfStartedToday: 31,
+    limit: 30,
+    paused: true,
+    episodeId: episode,
+  });
+
+  // Resumed: the day's spend has not moved, and the card must not go on saying it is stopped.
+  const resumed = await serviceWith({
+    project: projectRow({ coordinatorSessionId: SESSION_ID, coordinatorSession: sessionRow() }),
+    pausedEpisodeId: null,
+    spend: { selfStartedTurns: 31, limit: 30 },
+  }).service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.equal(resumed.coordination.fuse.paused, false);
+  assert.equal(resumed.coordination.fuse.selfStartedToday, 31);
+});
+
+test('a limit the owner signed away reads as no limit rather than as zero', async () => {
+  const { service } = serviceWith({
+    project: projectRow({ coordinatorSessionId: SESSION_ID, coordinatorSession: sessionRow() }),
+    spend: { selfStartedTurns: 12, limit: null },
+  });
+  const status = await service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.equal(status.coordination.fuse.limit, null);
+  assert.equal(status.coordination.fuse.selfStartedToday, 12);
 });

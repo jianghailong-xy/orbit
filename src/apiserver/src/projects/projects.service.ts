@@ -17,6 +17,8 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import {
+  type CoordinatorFuseUsage,
+  type CoordinatorWakeups,
   deriveSessionLifecycleState,
   RunEventType,
   SessionLifecycleState,
@@ -96,6 +98,9 @@ import {
 } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
+import { CoordinatorConvergenceService } from './coordinator-convergence.service';
+import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
+import { openFuseEpisodeId } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
 import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
@@ -679,6 +684,10 @@ export interface ProjectCoordinatorStatus {
     agentIdAbsentReason: 'NO_COORDINATOR_AGENT' | null;
     agentName: string | null;
     agentNameAbsentReason: 'NO_COORDINATOR_AGENT' | null;
+    /** Whether the platform's last word to this conversation reached it (§7.2 V7 / V9). */
+    wakeups: CoordinatorWakeups<Date>;
+    /** What it has started on its own today, against what it may (§6.1, §7.2 V9). */
+    fuse: CoordinatorFuseUsage;
   };
   openability: {
     canOpen: boolean;
@@ -829,6 +838,11 @@ export class ProjectsService {
     // coordinator conversation is replaced, whatever its exceptions were owed to the previous one is
     // owed to this one (contract §4.4 X-D4 2).
     private readonly openItems: ProjectOpenItemService = undefined as unknown as ProjectOpenItemService,
+    // Only `coordinatorStatus` needs it, and defaulted for the third time for the same reason: the
+    // specs that build this service by hand to exercise a write must not each have to stub a
+    // reading they never reach. Its absence costs that one read the fuse row and nothing else.
+    private readonly convergence: CoordinatorConvergenceService =
+      undefined as unknown as CoordinatorConvergenceService,
   ) {}
 
   /**
@@ -4076,6 +4090,15 @@ export class ProjectsService {
         ? await this.prisma.approval.count({ where: { sessionId: session.id, status: 'PENDING' } })
         : 0;
 
+    // The two progress rows (§7.2 V9). Read here rather than on their own endpoint because they are
+    // the same subject as everything else on this card — what the conversation is doing and whether
+    // it can — and because they are read only for a coordinator that exists: a project with none has
+    // nothing to have been delivered and nothing to have spent.
+    const [wakeups, fuse] = await Promise.all([
+      readCoordinatorWakeups(this.prisma, project.coordinatorSessionId),
+      this.readFuseUsage(project.id),
+    ]);
+
     // What the POST would do if pressed right now, branch for branch.
     let refusalCode: ProjectCoordinatorStatus['openability']['refusalCode'] = null;
     let refusalDetail: CoordinatorRefusalDetail = null;
@@ -4151,6 +4174,8 @@ export class ProjectsService {
         agentIdAbsentReason: agentAbsentReason,
         agentName,
         agentNameAbsentReason: agentAbsentReason,
+        wakeups,
+        fuse,
       },
       openability: {
         canOpen: refusalCode == null,
@@ -4414,6 +4439,24 @@ export class ProjectsService {
       select: { id: true },
     });
     return workspace?.id ?? null;
+  }
+
+  /**
+   * Today's self-started turns against today's limit (§7.2 V9).
+   *
+   * The open episode decides `paused`, and it is read first: the assessment is a rolling 24-hour
+   * window that stays over the limit for the rest of the day after a pause, so a card driven by the
+   * reading alone would go on saying "paused" to an owner who had already resumed.
+   *
+   * A server built without the fuse reading — the specs that construct this service by hand for a
+   * write — answers the shape with zeroes rather than throwing: the card draws one row less.
+   */
+  private async readFuseUsage(projectId: string): Promise<CoordinatorFuseUsage> {
+    const episodeId = await openFuseEpisodeId(this.prisma, projectId);
+    if (this.convergence == null) {
+      return { selfStartedToday: 0, limit: null, paused: episodeId != null, episodeId };
+    }
+    return coordinatorFuseUsage(await this.convergence.assessSpend(projectId), episodeId);
   }
 
   /**

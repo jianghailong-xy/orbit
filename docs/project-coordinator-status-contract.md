@@ -98,7 +98,10 @@ its dependency graph — each of those already has an endpoint.
     "agentId": "3CuIHiSJZBQ7nLVUwc7ekz",
     "agentIdAbsentReason": null,
     "agentName": "orbit",
-    "agentNameAbsentReason": null
+    "agentNameAbsentReason": null,
+
+    "wakeups": { "state": "DELIVERED", "at": "2026-08-24T06:56:00.000Z" },
+    "fuse": { "selfStartedToday": 6, "limit": 40, "paused": false, "episodeId": null }
   },
 
   "openability": {
@@ -144,6 +147,8 @@ session run state — see the next section for why that distinction matters.
 | `workspaceName` | string? | string or `null` | `workspace.name` — `schema.prisma:558`, joined on `coordinator_workspace_id` | `NO_COORDINATION_WORKSPACE`, `COORDINATION_WORKSPACE_PURGED`, `COORDINATION_WORKSPACE_TRASHED` |
 | `agentId` | uuid? | base62 string or `null` (`codec.ts:186`) | the `COORDINATOR` `project_member.agent_id` — `schema.prisma:1656`, role at `:1658`; the same one-row lateral `COORDINATION_INCLUDE` reads (`projects.service.ts:197`) | `NO_COORDINATOR_AGENT` |
 | `agentName` | string? | string or `null` | `workspace.name` — `schema.prisma:558`, joined on that member's `agent_id` | `NO_COORDINATOR_AGENT` |
+| `wakeups` | object | `{ state: "DELIVERED" \| "QUEUED" \| "RETURNED" \| "NONE", at: ISO-8601 \| null }` | the newest platform delivery to `sessionId`, across `project_open_item_delivery` and `project_coordinator_wake` (`status = 'DELIVERED'`); arrival is `conversation_turn.delivered_at` — `coordinator-progress.ts` | never absent; `NONE` with `at: null` is "nothing was ever sent", including a project with no coordinator |
+| `fuse` | object | `{ selfStartedToday: number, limit: number \| null, paused: boolean, episodeId: uuid \| null }` | `CoordinatorConvergenceService.assessSpend` for the numbers, the open `project_fuse_episode` for `paused` and `episodeId` — contract §6.1, §7.2 V9 | never absent; `limit: null` is an unbounded limit the owner signed for, not a missing one |
 
 Notes that are part of the contract, not commentary:
 
@@ -305,6 +310,8 @@ a live coordinator in a workspace that was disabled underneath it still opens.
 | `coordination.workspaceId` + reason | reason | ✓ | ✓ | ✓, except `WORKSPACE_FORGOTTEN` → reason |
 | `coordination.workspaceName` + reason | reason | ✓ | ✓ | ✓, except `WORKSPACE_FORGOTTEN` → reason |
 | `coordination.agentId` / `agentName` + reasons | reasons | ✓ | ✓ | ✓ or reasons — the trigger drops the membership when the landing cannot carry one |
+| `coordination.wakeups` | `NONE` | ✓ | ✓ — what the conversation was last sent before it went to Trash | ✓ or `NONE` |
+| `coordination.fuse` | zeroes, never paused | ✓ | ✓ | ✓ — a pause outlives the conversation that earned it |
 | `openability.canOpen` / `willCreate` | ✓ | ✓ | ✓ | ✓ |
 | `openability.refusalCode` / `refusalDetail` / `requiredAction` | ✓ when `NO_LANDING_WORKSPACE`, else reasons | reasons | reasons | ✓ |
 | `openability.landing.*` | ✓, or reasons when `NO_LANDING_WORKSPACE` | reasons | ✓ | reasons |

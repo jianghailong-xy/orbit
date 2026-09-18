@@ -229,6 +229,11 @@ function store(options: StoreOptions = {}) {
         const row = findSession(values[0]);
         return row ? [{ workspace_id: row.workspaceId }] : [];
       }
+      // The two progress reads the status card gained (§7.2 V9). Nothing in this store has ever
+      // paused or been delivered to, and that is the answer they get: this spec is about which
+      // workspace a coordinator opens in, and both rows are drawn beside that question.
+      if (text.includes('FROM "project_fuse_episode"')) return [];
+      if (text.includes('FROM "project_open_item_delivery"')) return [];
       throw new Error(`unexpected raw query: ${text}`);
     },
   };
