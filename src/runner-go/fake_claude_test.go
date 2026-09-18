@@ -88,6 +88,12 @@ type fakeStep struct {
 	Request   map[string]interface{} `json:"request,omitempty"`
 	Response  map[string]interface{} `json:"response,omitempty"`
 	IsError   bool                   `json:"isError,omitempty"`
+	// NumTurns is the `num_turns` a result frame reports. Omitted keeps the default of one turn,
+	// which is what a scripted engine that got as far as answering did; 0 is the shape an engine
+	// that never got going reports — a `--resume` of a conversation nothing holds is the incident's
+	// own, and it is the counter the control plane reads to tell "the engine stopped" from "the
+	// engine ran". A pointer because 0 is a value here and not an absence.
+	NumTurns *int `json:"numTurns,omitempty"`
 }
 
 type fakeSpawn struct {
@@ -356,9 +362,13 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		if subtype == "" {
 			subtype = "success"
 		}
+		numTurns := 1
+		if s.NumTurns != nil {
+			numTurns = *s.NumTurns
+		}
 		return marshalFrame(map[string]interface{}{
 			"type": "result", "subtype": subtype, "is_error": s.IsError,
-			"num_turns": 1, "result": s.Text, "session_id": sessionID,
+			"num_turns": numTurns, "result": s.Text, "session_id": sessionID,
 		}), nil
 	case "control_request":
 		req := map[string]interface{}{"subtype": s.Subtype}

@@ -27,8 +27,12 @@
  *   * (1) the engine was asked to OPEN the conversation (`--session-id`, never `--resume` on a
  *     conversation this machine has never held), the turn comes back ANSWERED, an ASSISTANT event
  *     hangs off it and the session carries the reply.
- *   * (2) an engine that starts and dies answers nothing: the turn is NOT ANSWERED, it is handed out
- *     again by the next inbox poll, and the session is not parked as if it were idle.
+ *   * (2) an engine that starts and dies answers nothing: the turn is NOT ANSWERED, it is handed
+ *     back to the queue with nothing outstanding and with its words and both images still on the
+ *     row, the session is not parked as if it were idle, and the completion put it on the
+ *     sweeper's retry ladder instead of leaving the message where nothing would deliver it. (That
+ *     the next delivery hands the same turn — images included — over again is pinned where the
+ *     inbox poll is driven: turn-complete-unanswered.pg.spec.ts.)
  *
  * Both are asserted against the database, read on a second connection, never through the answer that
  * wrote them.
@@ -440,10 +444,12 @@ test('a lost claim is recovered without the session ever going silent', {
     status: string;
     num_turns: number;
     last_assistant_text: string | null;
+    /** Non-null while the sweeper owes this session another attempt — see auto-retry.service. */
+    retry_at: Date | null;
   }
   const sessionRow = async (sessionId: string): Promise<SessionRow> => {
     const { rows } = await sql.query<SessionRow>(
-      'SELECT status, num_turns, last_assistant_text FROM "session" WHERE id = $1::uuid', [sessionId]);
+      'SELECT status, num_turns, last_assistant_text, retry_at FROM "session" WHERE id = $1::uuid', [sessionId]);
     return rows[0];
   };
 
@@ -467,30 +473,10 @@ test('a lost claim is recovered without the session ever going silent', {
       [{ emit: 'eof' }],
     );
 
-    // The branch itself: the claim failed for a reason that may have committed, and the reclaim is
-    // what recovered the session — as a first spawn, on an id nothing holds a conversation for.
-    assert.ok(typeof scenario.receipt.claimError === 'string' && scenario.receipt.claimError !== '',
-      `the claim was answered, so the chain under test never ran: ${JSON.stringify(scenario.receipt)}`);
-    assert.equal(scenario.receipt.retryable, true, 'the lost claim was not treated as retryable');
-    const recovered = scenario.receipt.recovered as Array<Record<string, unknown>>;
-    assert.equal(recovered[0].sessionId, scenario.sessionId, 'the reclaim recovered a different session');
-    assert.equal(recovered[0].reclaimed, true, 'the recovered job was not marked reclaimed');
-    assert.equal(recovered[0].maxSeq, 0, 'the recovered job was not the never-run one (maxSeq must be 0)');
-    assert.equal(recovered[0].firstSpawn, true, 'the recovered job did not resolve to a first spawn');
-    assert.ok(dropped.includes(scenario.sessionId), 'the proxy did not drop the claim under test');
-
-    // What the engine was handed. This is the whole first-spawn question: an id never opened is
-    // opened, and a conversation this machine does not have is never resumed.
-    const spawns = await eventually('the engine to be spawned', async () => {
-      const seen = scenario.spawns();
-      return seen.length > 0 ? seen : undefined;
-    });
-    assert.equal(spawns.length, 1, `the engine was spawned ${spawns.length} times, not once`);
-    assert.ok(spawns[0].argv.includes('--session-id'), `the engine was not asked to open the conversation: ${spawns[0].argv.join(' ')}`);
-    assert.ok(!spawns[0].argv.includes('--resume'), `the engine was asked to resume a conversation this machine has never held: ${spawns[0].argv.join(' ')}`);
-    assert.equal(spawns[0].argv[spawns[0].argv.indexOf('--session-id') + 1], scenario.sessionUuid, 'the opened conversation is not this session');
-
-    // The ending: something answered the person, and the reading of the row says so.
+    // The ending first, because it is what the person sees: something answered the message, and
+    // the reading of the row says so. A session that recovered into a resume of nothing lands here
+    // as the opposite — a turn consumed with no word under it — which is where the fix's absence
+    // has to show.
     const turn = await eventually('the turn to be answered', async () => {
       const row = await turnRow(scenario.turnId);
       return row.status === 'ANSWERED' ? row : undefined;
@@ -514,6 +500,30 @@ test('a lost claim is recovered without the session ever going silent', {
         WHERE session_id = $1::uuid AND turn_id = $2::uuid AND type = 'user'`,
       [scenario.sessionId, scenario.turnId]);
     assert.equal(Number(delivered.rows[0]?.n), 2, 'the engine was handed the message without its two images');
+
+    // What the engine was handed. This is the whole first-spawn question: an id never opened is
+    // opened, and a conversation this machine does not have is never resumed.
+    const spawns = await eventually('the engine to be spawned', async () => {
+      const seen = scenario.spawns();
+      return seen.length > 0 ? seen : undefined;
+    });
+    assert.equal(spawns.length, 1, `the engine was spawned ${spawns.length} times, not once`);
+    assert.ok(spawns[0].argv.includes('--session-id'), `the engine was not asked to open the conversation: ${spawns[0].argv.join(' ')}`);
+    assert.ok(!spawns[0].argv.includes('--resume'), `the engine was asked to resume a conversation this machine has never held: ${spawns[0].argv.join(' ')}`);
+    assert.equal(spawns[0].argv[spawns[0].argv.indexOf('--session-id') + 1], scenario.sessionUuid, 'the opened conversation is not this session');
+
+    // And the runner's own account of the branch: the claim failed for a reason that may have
+    // committed, and the reclaim is what recovered the session, as a first spawn on an id nothing
+    // holds a conversation for. Corroboration for the two readings above, not a substitute.
+    assert.ok(typeof scenario.receipt.claimError === 'string' && scenario.receipt.claimError !== '',
+      `the claim was answered, so the chain under test never ran: ${JSON.stringify(scenario.receipt)}`);
+    assert.equal(scenario.receipt.retryable, true, 'the lost claim was not treated as retryable');
+    const recovered = scenario.receipt.recovered as Array<Record<string, unknown>>;
+    assert.equal(recovered[0].sessionId, scenario.sessionId, 'the reclaim recovered a different session');
+    assert.equal(recovered[0].reclaimed, true, 'the recovered job was not marked reclaimed');
+    assert.equal(recovered[0].maxSeq, 0, 'the recovered job was not the never-run one (maxSeq must be 0)');
+    assert.equal(recovered[0].firstSpawn, true, 'the recovered job did not resolve to a first spawn');
+    assert.ok(dropped.includes(scenario.sessionId), 'the proxy did not drop the claim under test');
   });
 
   // ── (2) an engine that answers nothing ────────────────────────────────────────────────────────
@@ -521,9 +531,11 @@ test('a lost claim is recovered without the session ever going silent', {
     const scenario = await runScenario(
       'the session whose engine could not answer',
       // The incident's completion, byte for byte, from an engine that was correctly asked to open
-      // the conversation: `error_during_execution` with nothing said. It is not the resume bug —
-      // that one is (1)'s — and the control plane cannot tell the two apart, which is the point.
-      [{ await: 'user' }, { emit: 'result', subtype: 'error_during_execution', isError: true, text: 'No conversation found with session ID' }],
+      // the conversation: `error_during_execution`, `num_turns` 0, and nothing billed. It is not
+      // the resume bug — that one is (1)'s — and the control plane cannot tell the two apart, which
+      // is the point. The counter is not decoration: "ran no turn and billed nothing" is half of
+      // what the completion reads to arm the retry this case ends on.
+      [{ await: 'user' }, { emit: 'result', subtype: 'error_during_execution', isError: true, text: 'No conversation found with session ID', numTurns: 0 }],
     );
 
     const recovered = scenario.receipt.recovered as Array<Record<string, unknown>>;
@@ -535,34 +547,43 @@ test('a lost claim is recovered without the session ever going silent', {
     });
     assert.ok(spawns[0].argv.includes('--session-id'), `the engine was not asked to open the conversation: ${spawns[0].argv.join(' ')}`);
 
-    // The engine ended the turn without answering. Wait for that turn to have ended at all — its
-    // `turn_end` is written before the completion that follows it — and then ask what the control
-    // plane did with a turn nothing answered.
-    const turn = await eventually('the turn to be handed back', async () => {
+    // The engine ended the turn without answering. Its `turn_end` is written before the completion
+    // that follows it, so wait for the control plane to have settled the row one way or the other,
+    // then say which way: waiting only for the handing-back would report the missing invariant as a
+    // timeout, where the invariant's absence is a thing this can name.
+    const turn = await eventually('the turn to be settled by the completion that followed it', async () => {
       const ended = await sql.query<{ n: string }>(
         `SELECT count(*) AS n FROM "run_event"
           WHERE session_id = $1::uuid AND turn_id = $2::uuid AND type = 'turn_end'`,
         [scenario.sessionId, scenario.turnId]);
       if (Number(ended.rows[0].n) === 0) return undefined;
       const row = await turnRow(scenario.turnId);
-      return row.delivered_at === null && row.status === 'PENDING' ? row : undefined;
+      return row.status === 'PENDING' || row.status === 'ANSWERED' ? row : undefined;
     });
     assert.notEqual(turn.status, 'ANSWERED', 'a turn nothing answered was marked ANSWERED');
     assert.equal(turn.answered_at, null, 'a turn nothing answered carries an answered_at');
+    assert.equal(turn.delivered_at, null, 'a turn handed back to the queue is not still out on a delivery');
 
     // …and owed means nothing was consumed: the row still carries the words it was sent with and
     // both images are still hanging off it, so the delivery that comes back is this message again
-    // and not a message with its attachments already spent. (What the next delivery hands over is
-    // pinned by turn-complete-unanswered.pg.spec.ts; that the row is owed at all is this one's.)
+    // and not a message with its attachments already spent. What the next delivery hands over is
+    // read off the row, not watched: this runner's inbox is never polled a second time here, so
+    // the delivery itself is pinned where the poll is driven — turn-complete-unanswered.pg.spec.
     const queued = await sql.query<{ content: string; n: string }>(
       `SELECT t.content, (SELECT count(*) FROM "attachment" a WHERE a.turn_id = t.id) AS n
          FROM "conversation_turn" t WHERE t.id = $1::uuid`, [scenario.turnId]);
     assert.equal(queued.rows[0].content, OPENING, 'the requeued message lost the words it was sent with');
     assert.equal(Number(queued.rows[0].n), 2, 'the requeued message lost the two images it was sent with');
 
+    // What the completion left the session as. Read here, not waited on: the ack above and this
+    // row are written in one transaction, so a settle that has happened cannot leave either half
+    // unseen — and an arm that never arrives is the third fix's absence, which a timeout would
+    // report as nothing having happened.
     const session = await sessionRow(scenario.sessionId);
     assertNotSilentlyParked('the session whose engine answered nothing', session);
     assert.notEqual(session.status, 'AWAITING_INPUT',
       'a session with a message still owed is not idle: the turn is back in the queue, so the session must read as running');
+    assert.notEqual(session.retry_at, null,
+      'a startup that ran no turn, billed nothing and answered nothing was left off the retry ladder');
   });
 });

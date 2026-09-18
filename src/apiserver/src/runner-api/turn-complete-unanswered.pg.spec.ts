@@ -229,6 +229,23 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
     // The bubble the runner opens for the person's own message. It is the only thing under this
     // turn: the engine died before it could say a word.
     await say(api, f, 1, RunEventType.USER, { text: '把这两张图里的报错讲清楚' });
+    // The two screenshots the question was sent with, in the incident's own sizes. They hang off
+    // the turn, and nothing about them is remembered anywhere else: the delivery re-reads the row,
+    // which is why a message that went back to the queue goes back out with what it was sent with.
+    for (const [i, name] of ['27.png', '28.png'].entries()) {
+      await db.attachment.create({
+        data: {
+          id: randomUUID(),
+          ownerId: f.ownerId,
+          sessionId: f.sessionId,
+          turnId: f.turnId,
+          fileName: name,
+          mimeType: 'image/png',
+          sizeBytes: 64,
+          data: Buffer.from(`not a real image, attachment ${i + 1}`),
+        },
+      });
+    }
 
     await api.turnComplete({ id: f.runnerId }, f.sessionId, { turnId: f.turnId, ...ENGINE_STOPPED });
 
@@ -241,6 +258,10 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
       'the inbox hands the same turn out again — the question is still owed an answer');
     assert.equal(offered?.content, '把这两张图里的报错讲清楚',
       'and it is the person’s own words that go back to the engine, not a placeholder');
+    assert.deepEqual(
+      offered?.attachments?.map((a) => a.fileName),
+      ['27.png', '28.png'],
+      'the images the question was sent with are handed over again — the row they hang off is still the one owed an answer');
   });
 
   await t.test('(2) the same report over a turn the engine spoke in: ANSWERED', async () => {
