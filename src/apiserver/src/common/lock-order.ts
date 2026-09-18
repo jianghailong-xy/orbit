@@ -113,14 +113,24 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_task_status_count',
     modes: 'INSERT/UPDATE/DELETE only',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
       + 'own. `project_integration_job` is here rather than at a rank of its own for that reason: '
       + 'enqueue runs in the transaction that wrote a Task DONE (50) and locked the codebase row '
       + '(55), and inserts here last; the claim path is an autocommit statement that takes this '
-      + 'table alone (FOR UPDATE SKIP LOCKED over one candidate) and reaches for nothing below.',
+      + 'table alone (FOR UPDATE SKIP LOCKED over one candidate) and reaches for nothing below. '
+      + '`project_task_status_count` (0282) is the same shape one trigger over: the three '
+      + '`project_task_status_count_sync` triggers fire on a Task write (50) and UPSERT it here, '
+      + 'having already taken the project (40) through `task_project_id_fkey`. It is here rather '
+      + 'than on `project` itself for exactly this reason — a column of `project` would be a rank-40 '
+      + 'lock taken from inside a rank-50 write, inverting the order and putting a new wait edge '
+      + 'between every Task write and every coordinator write. Rows are taken sorted by '
+      + '(project_id, status) in one statement, so two concurrent bulk writes over overlapping '
+      + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
+      + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
+      + 'that moves no task between projects reaches this table not at all.',
   },
   {
     rank: 70,

@@ -67,7 +67,18 @@ const sha = (nibble: string) => nibble.repeat(40);
  * Nineteen statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
- *   1  the per-status task tally (`task.groupBy`);
+ *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
+ *      a `task.groupBy` over this project's rows one statement for one statement, which is why the
+ *      number below did not move — and why the number below is NOT what this file was really
+ *      about. The groupBy was ONE statement at either size too; what separated it from a lookup
+ *      was that its cost was the PROJECT's row count rather than the page's. One project on this
+ *      deployment holds 98.33% of the `task` table, so for it that read was a 3,679-buffer
+ *      traversal of a covering index at 76–124 ms (`Index Only Scan using
+ *      task_project_rollup_covering_idx`, measured 2026-09-18) — against a page whose whole point
+ *      is that its cost does not depend on how big the project is. The count is now maintained per
+ *      write by statement triggers on `task` (0282), so this read touches one row per status the
+ *      project actually has, and the case below refuses any statement of this read that groups
+ *      `task` again;
  *   5  the satisfaction derivation — its criteria, their serving tasks, and, off those tasks, the
  *      verifications pointed at them, their newest completion evidence, and that evidence's
  *      decisions;
@@ -269,13 +280,41 @@ test('the project detail read costs the same number of statements at either size
       'the recorded text is the statement that was sent, not a placeholder for it');
 
     // And what it records for the read under test is that read: a log that counted the right
-    // number of the wrong things would satisfy every assertion after this one.
+    // number of the wrong things would satisfy every assertion after this one. `task` is in the
+    // list because the derivations beside the tally DO read task rows — the assertion below is
+    // what says the tally is not one of them, so its absence here would not be evidence.
     const { sent } = await measure(large);
-    for (const table of ['"project"', '"task"', '"project_acceptance_criterion_definition"',
-      '"session_merge_receipt"', '"project_criteria_authorship"', '"project_blocker"',
-      '"project_codebase"']) {
+    for (const table of ['"project"', '"task"', '"project_task_status_count"',
+      '"project_acceptance_criterion_definition"', '"session_merge_receipt"',
+      '"project_criteria_authorship"', '"project_blocker"', '"project_codebase"']) {
       assert.ok(sent.some((text) => text.includes(table)),
         `the project detail read must reach ${table}; it sent:\n${listing(sent)}`);
+    }
+  });
+
+  // ═══ 1b. the tally is a lookup, not a recount of this project's tasks ════════════════════════
+  await t.test('no statement of the read groups the task table, at either size', async () => {
+    // The regression this file exists for is not a COUNT of statements: `task.groupBy` is ONE
+    // statement, at either size, so a per-read count of 20 is satisfied by putting it back. What
+    // separated it from a lookup was never its number — it was that its cost was the project's row
+    // count. A 109,872-row project and a one-row project cost 3,679 buffers and 4. This asserts
+    // the shape instead: nothing this read sends aggregates `task`.
+    const groupsTask = (text: string) => /FROM\s+"public"\."task"[\s\S]*?GROUP BY/iu.test(text);
+    for (const [label, id] of [['one criterion', small], ['five criteria', large]] as const) {
+      const { sent } = await measure(id);
+      const offenders = sent.filter(groupsTask);
+      assert.deepEqual(offenders, [],
+        `${label}: the detail read must not aggregate this project's tasks; it sent:\n`
+          + `${listing(sent)}`);
+
+      // And the tally really is the maintained one, rather than a table that happens to be named
+      // in the join: its own statement is the lookup, filtered by project and by a live count.
+      const tally = sent.filter((text) => text.includes('"project_task_status_count"'));
+      assert.equal(tally.length, 1,
+        `${label}: exactly one statement reads the tally; it sent:\n${listing(sent)}`);
+      assert.match(tally[0], /"count" > \$\d+/u,
+        'the tally is filtered to the statuses this project actually has, which is the shape the '
+          + `groupBy produced: ${tally[0]}`);
     }
   });
 
@@ -318,7 +357,7 @@ test('the project detail read costs the same number of statements at either size
       assert.equal(item.landing, 'UNKNOWN',
         `criterion ${position + 1} has two serving tasks that no receipt mentions`);
       // The four statements the independence lane spends are spent on an ANSWER. A lane that
-      // issued them and dropped the result would still cost seventeen, and this is the line that
+      // issued them and dropped the result would still cost nineteen, and this is the line that
       // would notice — `buildProject` states its criteria through the owner's own door, so every
       // one of them is authored USER, and USER is never a conflict.
       assert.equal(item.independence, 'INDEPENDENT',

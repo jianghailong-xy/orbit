@@ -111,7 +111,8 @@ interface ProjectCriterionStanding extends AcceptanceCriterionItem {
 
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
  *  the server's grouped task tally. Statuses with no tasks are absent from `tasksByStatus`
- *  entirely (it's a `groupBy`), so an empty object means "no tasks", not "counts unavailable" —
+ *  entirely (the server serves only a status it holds a count above zero for), so an empty object
+ *  means "no tasks", not "counts unavailable" —
  *  the FIELD being absent is what means that, which is why the cancel question below states a
  *  number only when it is present. */
 interface ProjectDetail extends Project {

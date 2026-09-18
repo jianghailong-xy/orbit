@@ -198,7 +198,8 @@ function store(options: StoreOptions = {}) {
         return row ? { id: row.id, name: row.name } : null;
       },
     },
-    task: { groupBy: async () => [] },
+    task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
+    projectTaskStatusCount: { findMany: async () => [] },
     approval: { count: async () => 0 },
     $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(prisma),
     $queryRaw: async (query: unknown) => {

@@ -2258,10 +2258,26 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('project not found');
     const [byStatus, satisfaction, landingFacts, codebase, independence, blockers] = await Promise.all([
-      this.prisma.task.groupBy({
-        by: ['status'],
-        where: { projectId: id },
-        _count: { _all: true },
+      // One lookup by primary key, not a tally of this project's tasks.
+      //
+      // This was `task.groupBy({ by: ['status'], where: { projectId: id } })`, and its filter is
+      // real — but the predicate is not what the statement costs. What it costs is the number of
+      // ROWS the project has, and on this deployment one project holds 98.33% of the `task` table
+      // (109,872 of 111,738). For that project the read is a traversal of the whole covering index
+      // whatever the plan: measured on production 2026-09-18, `Index Only Scan using
+      // task_project_rollup_covering_idx` at 3,679 buffers and 76–124 ms per call, against ~21% of
+      // a 128MB `shared_buffers`. `enable_indexonlyscan = off` is worse, not different in kind —
+      // 20,501 buffers — and no filter or narrower index makes an exact count of 109,872 rows
+      // cheap, because those rows are genuinely being counted.
+      //
+      // `project_task_status_count` (0282) holds those counts as rows maintained by statement
+      // triggers on `task`, so this read touches one row per status this project actually has.
+      // `count > 0` rather than deleting zero rows on the write path: it keeps `tasksByStatus` the
+      // partial map it has always been — the statuses the project has, not all five — and it is
+      // the same shape the groupBy produced, which is what every caller decodes.
+      this.prisma.projectTaskStatusCount.findMany({
+        where: { projectId: id, count: { gt: 0 } },
+        select: { status: true, count: true },
       }),
       // One more query, not one per criterion: the derivation is a single findMany whose nested
       // select carries every serving task's settlement facts with it.
@@ -2299,18 +2315,18 @@ export class ProjectsService {
       // always-true placeholder — and it is therefore not the shape it looks like: because the
       // join key here IS the grouping key, PostgreSQL folds the outer row's id into the aggregate
       // and the plan never scans the table. Measured in production on 2026-09-18, that statement
-      // reads 40.1 buffers per call and the `task.groupBy` below reads 15.5 — the second pass is
-      // the expensive half of the pair. For a project of 109,872 rows (98.33% of the table is one
-      // project) a dirty visibility map turned them into 138 ms and 188 ms respectively.
+      // reads 40.1 buffers per call and the tally beside it read 15.5 on average — the second pass
+      // was the expensive half of the pair, and for the project of 109,872 rows it was the whole
+      // cost of the read.
       //
-      // Summing the buckets deletes that pass without touching the number: the two reads carry the
-      // same predicate — `project_id = <this project>` and no filter of any kind above it, which is
-      // what the placeholder in the aggregate means — so every row the relation aggregate counted
-      // is in exactly one bucket here. Still exact, still served as `_count.tasks`, which is the
-      // shape callers decode (`projects.service.spec.ts` pins the fold; the pg spec pins the total
-      // against `count(*)` in the database).
-      _count: { tasks: byStatus.reduce((total, row) => total + row._count._all, 0) },
-      tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
+      // Summing the buckets deletes that pass without touching the number: the maintained counts
+      // and the relation aggregate count the same rows — `project_id = <this project>`, no filter
+      // of any kind above it, which is what the placeholder in the aggregate means — so every row
+      // the aggregate counted is in exactly one bucket here. Still exact, still served as
+      // `_count.tasks`, which is the shape callers decode (`projects.service.spec.ts` pins the
+      // fold; the pg spec pins the total against `count(*)` in the database).
+      _count: { tasks: byStatus.reduce((total, row) => total + row.count, 0) },
+      tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row.count])),
     });
     return {
       ...stated,

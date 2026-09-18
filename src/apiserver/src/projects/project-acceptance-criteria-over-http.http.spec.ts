@@ -180,7 +180,8 @@ function fakePrisma() {
         return { count: data.length };
       },
     },
-    task: { groupBy: async () => [] },
+    task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
+    projectTaskStatusCount: { findMany: async () => [] },
     // The row `update` locks before it writes. `config_revision` is a number for the same reason
     // `coordinatorGeneration` is; nothing in this probe compares it.
     $queryRaw: async () => [{

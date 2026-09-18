@@ -802,6 +802,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        on its own new table and refuses rewrites of a finished job: it writes nothing, names none
   //        of the six preserved triggers or functions, and is not a second writer of the DONE fence.
   //        Nothing it creates uses the `project_acceptance_` prefix or the word `judgment`.
+  //   0282 added `project_task_status_count` and the three `project_task_status_count_sync` triggers
+  //        that maintain it, so that `GET /projects/:id` stops recounting one project's rows — the
+  //        same shape as 0280, on the statement beside it. Read against every claim above: it is
+  //        the second later migration whose triggers sit ON `task`, and like 0280's they write
+  //        nothing on `task` — all three write rows of a table 0282 creates, and `task` is only
+  //        READ, through the INSERT/DELETE/UPDATE transition tables of the statement that fired
+  //        them. No column of `task` is added, dropped or rewritten, so `task.acceptance_command`,
+  //        `task.acceptance_expected_exit_code` and every stored task row survive untouched, and
+  //        `task_executable_acceptance_pair` is not named. Its DML is the backfill plus the
+  //        trigger bodies: the backfill INSERTs into its own new table from a `count(*)` of `task`,
+  //        and never UPDATEs or DELETEs a preserved relation. It creates no type and carries no
+  //        `ALTER TYPE`/`DROP TYPE`, so the `task_completion_criterion` labels stand with 0267's
+  //        fourth. Its one `CREATE FUNCTION` is `project_task_status_count_sync` — a new name,
+  //        created rather than replaced — so it is not another writer of the DONE fence, and it
+  //        drops no trigger or function at all. Nothing it creates uses the `project_acceptance_`
+  //        prefix or the word `judgment`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -848,7 +864,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0278_project_open_item',
       '0279_criteria_decision_diff_snapshot',
       '0280_task_list_task_count',
-      '0281_project_integration_job'],
+      '0281_project_integration_job',
+      '0282_project_task_status_count'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

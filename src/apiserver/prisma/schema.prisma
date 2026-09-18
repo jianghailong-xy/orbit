@@ -1937,6 +1937,11 @@ model Project {
   /// Every attempt the platform made to land work on this project's integration line (migration 0281).
   integrationJobs ProjectIntegrationJob[]
 
+  /// The per-status tally of this project's tasks (migration 0282), maintained by the
+  /// `project_task_status_count_sync` triggers on `task` and read by the detail read instead of a
+  /// groupBy over this project's rows.
+  taskStatusCounts ProjectTaskStatusCount[]
+
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off, cf. `task_id_owner_id_key`.
   @@unique([id, ownerId], map: "project_id_owner_id_key")
@@ -2139,6 +2144,38 @@ model ProjectIntegrationJob {
   @@index([state, createdAt, id], map: "project_integration_job_queued_idx")
   @@index([projectId, createdAt], map: "project_integration_job_project_idx")
   @@map("project_integration_job")
+}
+
+/// How many of a project's tasks are in each status (migration 0282).
+///
+/// The detail read used to ask Prisma for `task.groupBy({ by: ['status'], where: { projectId } })`,
+/// which is a filtered read of a covering index — and therefore costs the PROJECT's row count
+/// rather than the page's. One project on this deployment holds 109,872 of the table's 111,738
+/// rows, so for that project an exact tally is a 3,679-buffer traversal of the whole index however
+/// good the plan is (`Index Only Scan using task_project_rollup_covering_idx`, 76–124 ms measured
+/// on production 2026-09-18). The tally stops being recomputed per read and becomes rows
+/// maintained per write; the read is then one primary-key lookup of at most one row per status.
+///
+/// A relation of its own rather than a column of `Project`, for the lock-order reason the
+/// migration argues: `project` is rank 40 and `task` rank 50, so a trigger on `task` writing a
+/// project column inverts the rank and adds a wait edge to every coordinator write. These rows are
+/// rank 60 — children whose FK parent the writing transaction already holds.
+///
+/// Exact, not approximate: `count` is every row of `task` whose `project_id` and `status` are
+/// these, which is what the groupBy counted — no further filter on either side. Rows whose count
+/// falls to 0 are left in place and filtered by the read, so the shape of `tasksByStatus` (only
+/// the statuses the project actually has) is unchanged.
+model ProjectTaskStatusCount {
+  projectId String     @map("project_id") @db.Uuid
+  status    TaskStatus
+  count     Int
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The key the read uses and the key the trigger's UPSERT conflicts on: one row per project and
+  /// status, so a project's whole tally is one index range.
+  @@id([projectId, status], map: "project_task_status_count_pkey")
+  @@map("project_task_status_count")
 }
 
 /// An exception somebody has to act on (docs/project-integration-line-contract.md §4.1, migration

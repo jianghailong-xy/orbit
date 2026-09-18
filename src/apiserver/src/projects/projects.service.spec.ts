@@ -330,7 +330,7 @@ test('concurrent identical project indexes share one aggregate without caching i
 });
 
 test('the detail read reports progress without loading the project’s tasks', async () => {
-  let groupByArgs: any;
+  let tallyArgs: any;
   let findFirstArgs: any;
   const service = serviceWith({
     project: {
@@ -348,15 +348,20 @@ test('the detail read reports progress without loading the project’s tasks', a
         };
       },
     },
-    task: {
-      groupBy: async (args: any) => {
-        groupByArgs = args;
+    // The tally is the maintained one (0282): rows read by primary key, not a groupBy over this
+    // project's tasks. A read that went back to the groupBy would find no delegate here.
+    projectTaskStatusCount: {
+      findMany: async (args: any) => {
+        tallyArgs = args;
         return [
-          { status: 'DONE', _count: { _all: 2 } },
-          { status: 'OPEN', _count: { _all: 1 } },
+          { status: 'DONE', count: 2 },
+          { status: 'OPEN', count: 1 },
         ];
       },
+    },
+    task: {
       findMany: async () => assert.fail('the detail read must not load the project’s tasks'),
+      groupBy: async () => assert.fail('the detail read must not tally the project’s tasks'),
     },
     // A project with no stated criteria has nothing for the satisfaction read, the landing lane
     // beside it, or the independence lane beside that, to answer about. All three are still
@@ -381,7 +386,8 @@ test('the detail read reports progress without loading the project’s tasks', a
   assert.equal(project._count.tasks, 3, 'the total is the sum of the tally above');
   assert.equal(findFirstArgs.include._count, undefined,
     'the detail read must not ask the relation for a second aggregate over the same rows');
-  assert.deepEqual(groupByArgs.where, { projectId: PROJECT_ID });
+  assert.deepEqual(tallyArgs.where, { projectId: PROJECT_ID, count: { gt: 0 } },
+    'the tally is read by project, and a status this project no longer has is not in the map');
   // The task tally is a PROCESS measure and it is the only one left: migration 0229 removed the
   // acceptance judgment, so nothing on this read concludes anything about the stated criteria.
   assert.equal('acceptance' in project, false,
@@ -408,7 +414,8 @@ test('the detail read serves the authored criteria and no second representation 
         runtime: { coordinatorGeneration: 0n },
       }),
     },
-    task: { groupBy: async () => [] },
+    task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
+    projectTaskStatusCount: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 1, servingTasks: [] }],
     },
@@ -449,7 +456,8 @@ test('the detail item is the authored declaration, with no derived verdict besid
         runtime: { coordinatorGeneration: 0n },
       }),
     },
-    task: { groupBy: async () => [] },
+    task: { groupBy: async () => assert.fail('the detail read must not tally the project’s tasks') },
+    projectTaskStatusCount: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async () => [{ id: CRITERION_A_ID, ordinal: 1, revision: 2, servingTasks: [] }],
     },
