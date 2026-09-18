@@ -148,12 +148,13 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | N8 legacy import / request backfill（0184） | import 先取 owner `FOR KEY SHARE`(10)，再锁单个 task(50)；backfill 的 batch owner FK 先取得同等锁，再按 UUID 以 `FOR UPDATE SKIP LOCKED` 锁有界 task 集(50)；两者最后写 evidence/request/inbox/delivery/audit 子行(60) | **新增** | import 的 reviewer FK 不会在 task 之后倒取 owner；backfill 在锁任何 task 前先创建审计 batch。schema migration 不扫描 task，批次默认把设备 ledger 终结为 `IN_APP_ONLY`，只有显式 allowlist 产生 due push。 |
 | ~~`project_acceptance_conclusion_validate` / `_reconcile`（0179）、`project_acceptance_done_gate` / `_advance_epoch` / `_epoch_audit`（0150）~~ | — | **已删除（0229_project_acceptance_judgment_removal）** | 项目验收判定整体移除：四张判定表、`project` 上的四个触发器与六个列一起消失。0179 的 conclusion → project 预锁边、0150 的 DONE 闸与 epoch 审计边在等待图中不复存在。`project.status = 'DONE'` 现在是普通列写入，没有任何数据库守卫。 |
 | `project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project） | 该 project 下**全部** `task` 行 | **保留** | 40 → 50，顺序内。只在协调开关翻转时发生。 |
+| `task_list_task_count_insert` / `_delete` / `_relist`（0280，语句级 + transition table） | 被计数的 `task_list` 行 `FOR NO KEY UPDATE`，每条语句每个列表一次 | **新增（0280）**，50 → 20，见 §5 第三条 | `GET /task-lists` 的 `_count` 原本编译成对整张 `task` 的无过滤聚合（占全库执行时间 22.1%），改成按写维护的列。`_relist` 挂在**全部** UPDATE 上（PG 不允许带列清单的触发器用 transition table），但函数是把两张 transition table 按列表**净增量**相加，status / progress / `dispatch_hold` 这类写净增量为 0，被 `HAVING` 丢掉，一行都不写也不锁。 |
 | `Task.updated_at` 作为版本边界 | — | **已取消（0132）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
 | `Session.inbox_lease_owner` / `inbox_lease_generation` fencing | 与 `SELECT … FOR UPDATE` 同一条语句 | **保留，未触碰** | 本次没有任何改动会改变 lease fencing 的语义：`lockSessionLeaseOwner` 一字未动，`runner-write-lease-owner.spec.ts` 与 `inbox-lease-generation.spec.ts` 全绿。 |
 
-## 5. 声明的例外（两条，各自附论证）
+## 5. 声明的例外（三条，各自附论证）
 
-两条都写在 `LOCK_ORDER_EXCEPTIONS` 里，因为**没写下来的例外等于没有锁序**。
+三条都写在 `LOCK_ORDER_EXCEPTIONS` 里，因为**没写下来的例外等于没有锁序**。
 
 1. **`TasksService.deleteAndStopRuns`：`task`(50) 先于级联出来的 `session` 写(30)。**
    Task 行必须在扫描"还在跑的 run"之前锁住，否则一次派发会挤在扫描和 DELETE 之间、被这段本来就是为了
@@ -165,6 +166,16 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 2. **`project_event` outbox 插入：`project`(40) 在 `task`/`session` 写(50/30)之后。**
    模式是 `FOR KEY SHARE`，只与 `FOR UPDATE` 冲突；project 上的 `FOR UPDATE` 持有者不会回过头去等
    `task`/`session`，所以这条倒序没有可以配对的另一半。
+
+3. **`task_list_task_count_sync`（0280）：`task_list`(20) 在 `task` 写(50)之后。**
+   这三个语句级触发器把列表的任务计数按写维护，取的是被计数列表行的 `FOR NO KEY UPDATE`。
+   形状与论证和暂停投影器的 watermark 写完全相同：多行 `task` 写一律先持 owner mutex（I1），而唯一
+   对 `task_list` 取 `FOR UPDATE` 的路径 `TaskListsService.writePolicy` 先取 `user` 的 `FOR UPDATE`，
+   所以一次 `task` 写不可能插进它中间。单行 DELETE 不取 owner 锁，但要成环，对手必须**同时**以冲突模式
+   持有 `task_list` 且回过头去等一个 `task` 行——两个持有者都不是：0276 之后 `writePolicy` 一个 `task`
+   行都不写，投影器的 watermark 是它那笔事务的最后一把锁。
+   插入路径上 `task_list_id_fkey` 本来就已经取了同一行的 `FOR KEY SHARE`，而 `FOR NO KEY UPDATE` 与
+   `FOR KEY SHARE` **不冲突**，所以同一个列表的两个并发插入是在计数上串行，不是在锁升级上死锁。
 
 ## 6. 已解决：任务状态造成的 `task → project` 验收边
 

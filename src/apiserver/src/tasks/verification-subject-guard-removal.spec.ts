@@ -299,14 +299,16 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 37,
+  assert.equal(core.length, 40,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
     + 'removed the two `task_judgment_verifier_*` guards and '
     + '`task_open_verification_request_carrier_guard` with the judgment machinery, 36 once '
-    + '0231 added `session_source_freeze_guard` to `session` with the SOURCE snapshot, and 37 once '
-    + '0271 added `task_progress_epoch_advance` to `task` with the lifecycle epoch');
+    + '0231 added `session_source_freeze_guard` to `session` with the SOURCE snapshot, 37 once '
+    + '0271 added `task_progress_epoch_advance` to `task` with the lifecycle epoch, and 40 once '
+    + '0280 added the three `task_list_task_count_*` triggers to `task` — the maintained list '
+    + 'count that replaced an unfiltered whole-table aggregate on every read of GET /task-lists');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -317,11 +319,13 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'removed three of them, all three being 0192 guards that read the judgment request table');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
-    ['run_event_ingestion_provenance_guard', 'session_source_freeze_guard', 'task_progress_epoch_advance'],
+    ['run_event_ingestion_provenance_guard', 'session_source_freeze_guard',
+      'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
+      'task_progress_epoch_advance'],
     'the only triggers here newer than 0207 are the ones a later migration installed and kept — '
-    + '0220\'s `run_event_ingestion_provenance_guard`, 0231\'s `session_source_freeze_guard` and '
-    + '0271\'s `task_progress_epoch_advance`. '
-    + '0212\'s `failure_successor_task_binding_immutable` was a third, and 0226 removed it',
+    + '0220\'s `run_event_ingestion_provenance_guard`, 0231\'s `session_source_freeze_guard`, '
+    + '0271\'s `task_progress_epoch_advance` and 0280\'s three `task_list_task_count_*`. '
+    + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(
     TRIGGER_WRITE_SOURCES.some((entry) => entry.trigger === 'task_verification_subject_guard'),

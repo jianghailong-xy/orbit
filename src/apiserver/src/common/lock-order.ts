@@ -168,6 +168,21 @@ export const LOCK_ORDER_EXCEPTIONS = [
       'neither waits on a task or session row while holding it (both only write project-scoped ' +
       'child tables), so the inversion has no counterpart to close a cycle with.',
   },
+  {
+    where: 'task_list_task_count_sync (0280) — task_list (20) after the task write (50)',
+    why:
+      'The three statement triggers that maintain task_list.task_count take FOR NO KEY UPDATE on ' +
+      'the counted list, which is rank 20 reached from a rank 50 write. Same shape and same ' +
+      'argument as the pause projector\'s watermark: every multi-row task write holds the owner ' +
+      'graph mutex (I1) first, and the one path that takes task_list FOR UPDATE — ' +
+      'TaskListsService.writePolicy — takes user FOR UPDATE before it, so a task write can never ' +
+      'be interleaved with it. A single-row delete takes no owner lock, but its counterpart would ' +
+      'have to hold task_list in a conflicting mode AND wait on a task row, and neither holder ' +
+      'does: writePolicy writes no task row at all since 0276, and the projector takes the ' +
+      'watermark last. FOR NO KEY UPDATE also does not conflict with the FOR KEY SHARE that ' +
+      'task_list_id_fkey already takes on the insert path, so two concurrent inserts into one ' +
+      'list serialize on the counter rather than deadlocking on an upgrade.',
+  },
 ] as const;
 
 /**

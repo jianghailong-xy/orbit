@@ -110,7 +110,15 @@ export class TaskListsService {
         foremanStallMinutes: true,
         verifyOnDone: true,
         ownerSessionId: true,
-        _count: { select: { tasks: true } },
+        // The maintained count, not `_count: { select: { tasks: true } }`. That relation aggregate
+        // compiles to a LEFT JOIN onto an UNFILTERED `GROUP BY list_id` over the whole `task`
+        // table — Prisma emits `WHERE $4=$5` for it, an always-true placeholder — so every poll of
+        // this index recounted all 111,717 rows to produce 13 numbers, and on 2026-09-17 that one
+        // statement was 22.1% of the database's entire execution time. Filtering it does not help:
+        // 110,439 of those rows belong to the polling owner's own lists. The count is the same
+        // number and still exact (see `TaskList.taskCount` and migration 0280); it is answered from
+        // the list row, and re-wrapped as `_count` below so no client sees a changed shape.
+        taskCount: true,
       },
     });
     // `runningTasks` = how many of the list's tasks are actually executing right now:
@@ -136,10 +144,11 @@ export class TaskListsService {
       _count: { _all: true },
     });
     const done = new Map(doneGrouped.map((g) => [g.listId, g._count._all]));
-    return lists.map((l) => {
-      const total = l._count?.tasks ?? 0;
+    return lists.map(({ taskCount, ...l }) => {
+      const total = taskCount ?? 0;
       return {
         ...l,
+        _count: { tasks: total },
         runningTasks: running.get(l.id) ?? 0,
         completed: total > 0 && (done.get(l.id) ?? 0) === total,
       };

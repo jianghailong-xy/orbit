@@ -356,7 +356,7 @@ test('the declared order is a strict ranking with argued gaps', () => {
   assert.ok(LOCK_ORDER.some((l) => l.relation === 'session'));
   assert.ok(LOCK_ORDER.some((l) => l.relation === 'task'));
   assert.ok(LOCK_ORDER.some((l) => l.relation === 'project'));
-  assert.equal(LOCK_ORDER_EXCEPTIONS.length, 2);
+  assert.equal(LOCK_ORDER_EXCEPTIONS.length, 3);
   assert.ok(LOCK_ORDER_COMPATIBLE.some((c) => c.relation === 'workspace'));
   assert.ok(LOCK_ORDER_COMPATIBLE.some((c) => c.relation === 'runner'));
 });

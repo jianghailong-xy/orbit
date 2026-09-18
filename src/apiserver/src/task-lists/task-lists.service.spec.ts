@@ -229,7 +229,7 @@ test('the list index projects no instructions, whatever else it carries', async 
       taskList: {
         findMany: async (args: any) => {
           selected = args.select;
-          return [{ id: LIST_ID, title: 'FineWeb Parquet', _count: { tasks: 27468 } }];
+          return [{ id: LIST_ID, title: 'FineWeb Parquet', taskCount: 27468 }];
         },
       },
       // Both grouped counts: running tasks, then DONE tasks.
@@ -244,7 +244,15 @@ test('the list index projects no instructions, whatever else it carries', async 
   // A projection, not an include — otherwise every column rides along again the moment one is added.
   assert.equal(selected.instructions, undefined);
   assert.equal(selected.title, true);
-  assert.deepEqual(selected._count, { select: { tasks: true } });
+  // The count comes off the list row. Asking Prisma for the relation aggregate instead compiles to
+  // an unfiltered `GROUP BY list_id` over the whole `task` table on every poll of this index (0280).
+  assert.equal(selected.taskCount, true);
+  assert.equal(selected._count, undefined);
+  // …and is still answered as `_count: { tasks }`: it is what the shipped macOS/iOS clients decode
+  // into `taskCount` for the drawer badge and the scope-menu labels, and what the `tasklist_list`
+  // MCP tool advertises. The maintained column is an implementation of that number, not a new shape.
+  assert.deepEqual(list._count, { tasks: 27468 });
+  assert.equal((list as Record<string, unknown>).taskCount, undefined);
   assert.equal(list.runningTasks, 0);
   // No task is DONE, so a list holding 27,468 of them is not finished.
   assert.equal(list.completed, false);

@@ -3117,6 +3117,20 @@ model TaskList {
   ownerSessionId      String?   @map("owner_session_id") @db.Uuid
   ownerSession        Session?  @relation("TaskListConsole", fields: [ownerSessionId], references: [id], onDelete: SetNull)
 
+  /// How many tasks point at this list, maintained by the `task_list_task_count_sync` triggers on
+  /// `task` (0280) rather than recounted per read.
+  ///
+  /// It is the same number Prisma's `_count: { select: { tasks: true } }` produced, and the index
+  /// endpoint still answers with `_count: { tasks }` so no client sees the difference. What changed
+  /// is what the read costs: that relation aggregate compiled to an UNFILTERED `GROUP BY list_id`
+  /// over all of `task` — `WHERE $4=$5`, Prisma's always-true placeholder — and at 111,717 rows and
+  /// a poll every 15s it was 22.1% of this database's total execution time on 2026-09-17.
+  ///
+  /// Maintained in the database because `Task.listId` is `onDelete: SetNull`: deleting a list
+  /// re-lists its tasks through a referential action no application code runs. Write it through
+  /// `task` and let the triggers follow; nothing should assign this column directly.
+  taskCount Int     @default(0) @map("task_count")
+
   tasks     Task[]
   revisions TaskListRevision[]
   events    TaskListEvent[]
