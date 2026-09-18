@@ -34,7 +34,30 @@ FIX_LOG=""
 # ── plumbing ───────────────────────────────────────────────────────────────────────────────────
 
 say() { printf '==> %s\n' "$*"; }
-fail() { printf '!! %s\n' "$*" >&2; return 1; }
+
+# A failed expectation ENDS the thing it was expected of, and is remembered on disk.
+#
+# Both halves are load-bearing, and a `return 1` here has neither. `main` runs each case as the
+# condition of an `if`, and bash turns errexit off for everything inside a tested command — so a
+# case whose first assertion failed carried on through every later one and then reported PASS,
+# which is how a tree with no integration line at all passed all four cases. Exiting is what stops
+# the case: a case runs in a subshell, so this ends that case and nothing else. The file is for the
+# `fail` calls that happen inside a `$( )`, where the exit ends only the substitution — the case
+# would otherwise keep going with an empty string it was never given. `run_case` reads it.
+fail() {
+  printf '!! %s\n' "$*" >&2
+  [ -n "$FIX_SCRATCH" ] && : > "$FIX_SCRATCH/case-failed"
+  exit 1
+}
+
+# One case, run so that it cannot report anything but what happened.
+run_case() {
+  local name="$1" status=0
+  rm -f "$FIX_SCRATCH/case-failed"
+  ( "$name" ) || status=$?
+  if [ -e "$FIX_SCRATCH/case-failed" ]; then return 1; fi
+  return "$status"
+}
 
 # One query, tuples only. `psql` runs inside the container, so this needs no client on the host.
 # A failing statement says what PostgreSQL said and fails: a seeding error that only shows up as a

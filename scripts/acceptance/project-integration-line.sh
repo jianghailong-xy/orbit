@@ -114,6 +114,9 @@ case_conflict_opens_item_target_untouched() {
   git -C "$work" push --quiet origin project/conflict
   git -C "$work" checkout --quiet main
   local target_before; target_before="$(origin_tip "$origin" refs/heads/project/conflict)"
+  # Read before the case can compare it to itself: "the target did not move" is no assertion at all
+  # when the target was never there, and a seeding step that quietly failed would spell that.
+  [ -n "$target_before" ] || fail 'the project branch was not seeded'
 
   new_task_branch "$work" task/conflict contested.txt 'ours' >/dev/null
   local task; task="$(new_code_task "$project" 'conflicting task' "$ws" task/conflict "$base")"
@@ -162,6 +165,7 @@ case_check_failed_opens_item_nothing_lands() {
   git -C "$work" push --quiet origin project/checks
   git -C "$work" checkout --quiet main
   local target_before; target_before="$(origin_tip "$origin" refs/heads/project/checks)"
+  [ -n "$target_before" ] || fail 'the project branch was not seeded'
 
   new_task_branch "$work" task/checks fuse.txt 'blows the merge check' >/dev/null
   local task; task="$(new_code_task "$project" 'task the line rejects' "$ws" task/checks "$base")"
@@ -261,7 +265,7 @@ main() {
   local failures=0
   for name in "${selected[@]}"; do
     say "case $name"
-    if "$name"; then
+    if run_case "$name"; then
       printf '    PASS %s\n' "$name"
     else
       printf '    FAIL %s\n' "$name"
