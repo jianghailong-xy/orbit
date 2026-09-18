@@ -139,6 +139,8 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
                        "the show-all fold")
         assertDeclares(web, "OWNER_CONFIRMATION_SHOW_LESS", OwnerConfirmations.showLess,
                        "the show-less fold")
+        assertDeclares(web, "OWNER_CONFIRMATION_YOURS", OwnerConfirmations.yours,
+                       "the line saying whose call this is")
 
         // Where the report starts folding is a number both ends decide from, so it is compared:
         // a phone folding a sentence the browser shows whole is the two ends disagreeing about

@@ -14,6 +14,7 @@ import {
   OWNER_CONFIRMATION_NO_CRITERIA,
   OWNER_CONFIRMATION_NO_REPORT,
   OWNER_CONFIRMATION_SHOW_ALL,
+  OWNER_CONFIRMATION_YOURS,
   OWNER_CONFIRMED_HEADING,
   OWNER_CONFIRM_ACTION,
   OWNER_SEND_BACK_ACTION,
@@ -207,7 +208,11 @@ describe('the confirmation card', () => {
     expect(html).toContain(OWNER_CONFIRMATION_HEADING);
     expect(html).toContain('FROM ORBIT');
     expect(html).toContain(escaped(TITLE));
-    expect(html).toContain(`${TASK_ID} · OWNER_CONFIRMED`);
+    // Whose call this is, in words — and the id kept beside it. The enum `OWNER_CONFIRMED` is how
+    // the record spells this criterion, not something a reader of the card has to know.
+    expect(html).toContain(OWNER_CONFIRMATION_YOURS);
+    expect(html).toContain(TASK_ID);
+    expect(html).not.toContain('OWNER_CONFIRMED');
     // In the order the owner decides in: the task, then what settles it, then the report.
     const settles = html.indexOf(WHAT_SETTLES_IT);
     const reported = html.indexOf(WHAT_THE_RUN_REPORTED);
@@ -278,7 +283,7 @@ describe('where the card is drawn, and what a decision leaves', () => {
 
     const sentBack = renderToStaticMarkup(<OwnerDecisionReceipt view={all} decided={sendBack} />);
     expect(sentBack).toContain(OWNER_SENT_BACK_HEADING);
-    expect(ownerDecisionReceiptLine(sendBack)).toMatch(/^Sent back by you · /u);
+    expect(ownerDecisionReceiptLine(sendBack)).toMatch(/^Asked for more by you · /u);
     expect(buttons(sentBack)).toEqual([]);
   });
 });

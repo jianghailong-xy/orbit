@@ -909,19 +909,30 @@ private struct OwnerConfirmationCardView: View {
                 confirmButton(standing)
                 sendBackButton(standing)
             }
+            // Under the buttons rather than in the second one's tooltip: a touch screen has no
+            // hover, so the one sentence saying the task stays open was unreadable on a phone.
+            Text(OwnerConfirmations.sendBackHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .approvalChrome(.blue, dimmed: !OwnerConfirmations.isOpen(standing))
     }
 
-    /// What is being confirmed: the task, and which criterion asks for it.
+    /// What is being confirmed: the task, and whose call it is — in words, with the id beside them.
+    /// The line used to read `<id> · OWNER_CONFIRMED`, which spent the card's second line on an
+    /// enum nobody outside this system reads.
     private func lead(_ view: OwnerConfirmationView) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(view.title)
                 .font(.orbitProse.bold())
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(view.taskId) · \(view.completionCriterion)")
-                .font(.orbitMonoFine).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(OwnerConfirmations.yours).font(.orbitLabel)
+                Text(view.taskId).font(.orbitMonoFine)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -952,8 +963,8 @@ private struct OwnerConfirmationCardView: View {
         }
         .buttonStyle(.bordered)
         .disabled(deciding || !standing.answerable)
-        // What the press promises, where the card no longer prints it: the reason becomes this
-        // session's next message and the task stays open.
+        // The same promise the card prints under these buttons, kept as a pointer's tooltip for a
+        // mouse that hovers before it presses.
         .help(OwnerConfirmations.sendBackHint)
     }
 

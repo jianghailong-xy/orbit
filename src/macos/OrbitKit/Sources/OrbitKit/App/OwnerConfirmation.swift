@@ -321,19 +321,24 @@ public enum OwnerConfirmations {
     /// What the action promises before it is pressed, where the card has room to say it (a tooltip
     /// on the desktop): the door refuses a send-back carrying no note and writes nothing at all,
     /// and a confirmation sent back is not a task closed.
-    public static let sendBackHint = "Sent to this session as your next message. The task stays open."
+    public static let sendBackHint = "Your next message goes to this agent. The task stays open."
     /// What the composer says it is about to answer while armed, ahead of the task's own title.
-    public static let sendingBackPrefix = "Sending back to this run: "
-    public static let whatSettlesIt = "WHAT SETTLES IT"
-    public static let whatTheRunReported = "WHAT THE RUN REPORTED"
+    public static let sendingBackPrefix = "Replying to: "
+    public static let whatSettlesIt = "WHAT COUNTS AS DONE"
+    public static let whatTheRunReported = "WHAT THE AGENT SAID"
     public static let showAll = "Show all"
     public static let showLess = "Show less"
-    public static let noCriteria = "This task states no acceptance criteria."
-    public static let noReport = "The run ended its turn without a message."
+    public static let noCriteria = "Nobody wrote down what counts as done."
+    public static let noReport = "The agent finished without saying anything."
+    /// What the line under the title says (`OWNER_CONFIRMATION_YOURS`): which completion criterion
+    /// this task carries, as the fact it is about the reader rather than as the enum
+    /// `OWNER_CONFIRMED`. The id stays beside it, quieter — an address somebody occasionally
+    /// copies and never reads.
+    public static let yours = "You decide when this is done"
     public static let confirmedHeading = "Confirmed done"
-    public static let sentBackHeading = "Sent back"
-    public static let showWhatSettledIt = "Show what settled it"
-    public static let hideWhatSettledIt = "Hide what settled it"
+    public static let sentBackHeading = "Asked for more"
+    public static let showWhatSettledIt = "Show what counted as done"
+    public static let hideWhatSettledIt = "Hide what counted as done"
     /// What a session row and the session header say while one of these cards is waiting — the one
     /// string the list and the console share with the browser.
     public static let waitingForConfirmation = "Waiting for your confirmation"
