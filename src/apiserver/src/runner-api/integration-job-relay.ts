@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   IntegrationCheckResult,
@@ -25,6 +25,7 @@ import {
   shortBranchName,
 } from '../projects/project-integration-job';
 import { recordIntegrationFailure } from '../projects/project-open-item';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
@@ -43,11 +44,25 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 export class IntegrationJobRelay {
   private readonly logger = new Logger(IntegrationJobRelay.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /**
+     * Where an exception item this class opens is handed to whoever it belongs to (contract §4.4
+     * X-D4 (1)). Every OTHER failure here is opened inside a result the runner POSTED, and the
+     * controller that answers that request delivers it afterwards — but a claim with nowhere to run
+     * is ended by the dispatch itself, in a heartbeat that asked for work rather than reporting any,
+     * and an item nobody is told about is exactly what §4 exists to rule out.
+     *
+     * `@Optional()` like the rest of this door's collaborators: a spec that constructs the relay to
+     * exercise the queue passes none, and an undelivered item is still re-derived from its own row
+     * by the coordinator's next turn (X-D4 (3)).
+     */
+    @Optional() private readonly openItems?: ProjectOpenItemService,
+  ) {}
 
   /** §2.3 J-T2, J-T3 — see `dispatchIntegrationJobs`. */
   dispatch(heartbeat: IntegrationDispatchHeartbeat): Promise<IntegrationJobCommand[]> {
-    return dispatchIntegrationJobs(this.prisma, heartbeat, this.logger);
+    return dispatchIntegrationJobs(this.prisma, heartbeat, this.logger, this.openItems);
   }
 
   /** §2.2 J-T4 — see `receiveIntegrationJobProgress`. */
@@ -127,6 +142,7 @@ export async function dispatchIntegrationJobs(
   prisma: PrismaService,
   heartbeat: IntegrationDispatchHeartbeat,
   log: Logger = logger,
+  openItems?: Pick<ProjectOpenItemService, 'deliverForTasks'>,
 ): Promise<IntegrationJobCommand[]> {
   if (!heartbeat.leaseOwner || heartbeat.draining) return [];
   if (!heartbeat.capabilities?.includes(INTEGRATION_JOB_CLAIM)) return [];
@@ -145,8 +161,12 @@ export async function dispatchIntegrationJobs(
     taken.push(row.serialKey);
     if (!row.workDir) {
       // Nothing to work in. Ended here rather than handed over, so it opens an item instead of
-      // being redelivered every 30 seconds to a runner that cannot act on it.
-      await finishUnworkable(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
+      // being redelivered every 30 seconds to a runner that cannot act on it — and the item is
+      // handed on from here too, because this beat is the only door that knows it was opened.
+      const after = await finishUnworkable(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
+      if (after && after.openItemTaskIds.length > 0) {
+        await openItems?.deliverForTasks(after.openItemTaskIds);
+      }
       continue;
     }
     commands.push({
@@ -274,14 +294,19 @@ async function claimOne(
   return rows[0] ?? null;
 }
 
-/** A claim of a job with nowhere to run it: ended as an ERROR so somebody sees it once. */
+/**
+ * A claim of a job with nowhere to run it: ended as an ERROR so somebody sees it once.
+ *
+ * Answers with the same aftermath the result route answers with, because the item it just opened is
+ * owed the same delivery — and this caller is the only one that will ever know it happened.
+ */
 async function finishUnworkable(
   prisma: PrismaService,
   jobId: string,
   leaseOwner: string,
   claimGeneration: bigint,
-): Promise<void> {
-  await applyIntegrationJobResult(prisma, {
+): Promise<IntegrationResultAftermath | null> {
+  const applied = await applyIntegrationJobResult(prisma, {
     jobId,
     body: {
       claimGeneration: claimGeneration.toString(),
@@ -290,7 +315,11 @@ async function finishUnworkable(
       errorCode: 'INTEGRATION_REPOSITORY_UNKNOWN',
       errorDetail: { reason: 'the source session names no working directory on this runner' },
     },
-  }).catch((error) => logger.warn(`could not end an unworkable job: ${error?.message ?? error}`));
+  }).catch((error) => {
+    logger.warn(`could not end an unworkable job: ${error?.message ?? error}`);
+    return null;
+  });
+  return applied?.after ?? null;
 }
 
 // ── progress and result ───────────────────────────────────────────────────────────────────────
