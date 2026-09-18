@@ -233,7 +233,7 @@ import {
   permissionModeAvailableOnRunner,
   TRASH_RETENTION_DAYS,
 } from '@orbit/shared';
-import { lastTypedUserMessageText } from '../lib/deliveredMessage';
+import { lastTypedUserMessage } from '../lib/deliveredMessage';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -368,9 +368,18 @@ type PendingSessionOperation =
 // the moment it's picked/pasted, then sent by id with the turn. `previewUrl` is a local
 // object URL for the thumbnail — set only for inline images; a non-image file renders as a
 // chip (name + size) instead. `id` is set once the upload resolves.
+//
+// `file` is the local blob, and only something picked here has one. An attachment handed back out
+// of a message that was already sent — withdrawn, or taken back undelivered — has no blob and needs
+// none: its bytes are on the server under `id`, which is the whole of what a send references. So
+// what the chip shows is carried beside the blob rather than read out of it, and `size` is absent
+// for the ones the server describes (the queue snapshot reports id and mime, not length).
 interface ComposerImage {
   uid: string;
-  file: File;
+  file?: File;
+  name: string;
+  mime: string;
+  size?: number;
   previewUrl?: string;
   status: 'uploading' | 'done';
   id?: string;
@@ -3477,6 +3486,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       vars: {
         content: string;
         images: ComposerImage[];
+        /** Attachments the control plane already holds, referenced by id — what a re-send carries
+         *  of the message it re-sends. Nothing is uploaded again; the bytes never moved. */
+        attachmentIds?: string[];
         shell?: boolean;
         intent?: SessionTurnIntent;
       },
@@ -3499,8 +3511,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (selected && live && sameSessionSendBlocked)
         throw new Error(sameSessionSendBlockedCopy);
       // Only fully-uploaded images carry an id to reference; onSend blocks while any is
-      // still uploading, so this is the complete set.
-      const attachmentIds = imgs.map((im) => im.id).filter((x): x is string => !!x);
+      // still uploading, so this is the complete set. A re-send hands its ids in directly: its
+      // files are already on the server and were never staged in this composer.
+      const attachmentIds = [
+        ...(vars.attachmentIds ?? []),
+        ...imgs.map((im) => im.id).filter((x): x is string => !!x),
+      ];
       const operation = logicalSendToken(sendOperationRef.current, {
         sessionId: selected?.id ?? null,
         content,
@@ -3530,6 +3546,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
         const placement = turnPlacementOf(res);
+        // The optimistic row carries the refs this send referenced, so withdrawing it before the
+        // server snapshot comes round (which is authoritative, and does carry them) still hands the
+        // files back to the composer. A re-send knows only the ids it was given; the snapshot fills
+        // in what each one is a moment later.
+        const attachments = [
+          ...imgs.flatMap((im) => (im.id ? [{ id: im.id, mimeType: im.mime }] : [])),
+          ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
+        ];
         const queuedItem =
           placement === 'accepted'
             ? undefined
@@ -3539,6 +3563,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 shell,
                 placement,
                 ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                ...(attachments.length ? { attachments } : {}),
               };
         return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
       }
@@ -3737,7 +3762,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // URLs move here as-is — setImages([]) below drops the chips without revoking them.
       const previews = vars.images.filter((im) => im.previewUrl);
       if (turnId && previews.length) {
-        const refs: TurnImage[] = previews.map((im) => ({ url: im.previewUrl as string, mime: im.file.type }));
+        const refs: TurnImage[] = previews.map((im) => ({ url: im.previewUrl as string, mime: im.mime }));
         setTurnImages((m) => ({ ...m, [turnId]: refs }));
       } else if (created && previews.length) {
         // The create path has no turnId to key local previews on (the runner seeds the
@@ -3777,8 +3802,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     ? [
                         {
                           id: image.id,
-                          mime: image.file.type || 'application/octet-stream',
-                          name: image.file.name,
+                          mime: image.mime || 'application/octet-stream',
+                          name: image.name,
                         },
                       ]
                     : [],
@@ -3816,8 +3841,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
       // user typed, fold their queued text back into the composer so it can be edited and
       // resent — the composer is guaranteed empty here (showStop only offers Stop with an
-      // empty composer), so this never clobbers an in-progress draft. Queued images can't
-      // be rehydrated (a ComposerImage needs its File), so flag any that were dropped.
+      // empty composer), so this never clobbers an in-progress draft. Their attachments come
+      // back the same way: the messages are already being merged into one draft, so the files
+      // they were sent with are staged together under it.
       const restored = visibleQueuedTurns
         .filter((q) => !parseWatchWake(q.content)) // a wake is the watch's words, never theirs
         .map((q) => {
@@ -3826,15 +3852,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         })
         .filter(Boolean)
         .join('\n\n');
-      const droppedImages = visibleQueuedTurns.reduce(
-        (n, q) => n + (q.attachments?.length ?? turnImages[q.turnId]?.length ?? 0),
-        0,
-      );
       if (restored) setText(restored);
-      if (droppedImages)
-        message.info(
-          `${droppedImages} queued image${droppedImages > 1 ? 's' : ''} weren't restored — re-add if needed`,
-        );
+      stageRestored(visibleQueuedTurns.flatMap((q) => q.attachments ?? []));
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -3855,12 +3874,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
       // read through textRef, since the awaited gap may have outdated this render's `text`.
       const body = withdrawn?.content.trim();
-      if (body && !textRef.current.trim()) setText(withdrawn?.shell ? `!${body}` : body);
-      const droppedImages = withdrawn?.attachments?.length ?? turnImages[turnId]?.length ?? 0;
-      if (droppedImages)
-        message.info(
-          `${droppedImages} image${droppedImages > 1 ? 's' : ''} from that message weren't restored — re-add if needed`,
-        );
+      if (body && !textRef.current.trim()) {
+        setText(withdrawn?.shell ? `!${body}` : body);
+        // The files follow the words: restoring them under a draft that kept its place would stage
+        // one message's images against another's text.
+        stageRestored(withdrawn?.attachments);
+      }
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
     }
@@ -4408,7 +4427,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }
       const uid = `att-${imageUid.current++}`;
       const previewUrl = isInlineImage ? URL.createObjectURL(file) : undefined;
-      setImages((prev) => [...prev, { uid, file, previewUrl, status: 'uploading' }]);
+      setImages((prev) => [
+        ...prev,
+        { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
+      ]);
       try {
         const { id } = await uploadAttachment(file, selected?.id);
         setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
@@ -4421,6 +4443,32 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     [canAttach, selected, message],
   );
+  // Hand attachments already on the control plane back to the composer as staged chips. There is no
+  // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a
+  // message put back carries its files without the reader finding them a second time. A queue
+  // snapshot reports id and mime only, so a file chip drawn from one shows no size and an image is
+  // drawn from the stored bytes rather than a local object URL.
+  const composerImagesFromRefs = (
+    refs: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+  ): ComposerImage[] =>
+    refs.map((ref) => ({
+      uid: `att-${imageUid.current++}`,
+      name: ref.name ?? 'Attachment',
+      mime: ref.mime ?? ref.mimeType ?? '',
+      status: 'done' as const,
+      id: ref.id,
+    }));
+  // Appended, never replacing: put-back is explicitly user-initiated and must not discard chips
+  // already staged for the message being typed. Anything already staged by id stays once.
+  const stageRestored = (
+    refs: readonly { id: string; mime?: string; mimeType?: string; name?: string }[] | undefined,
+  ): void => {
+    if (!refs?.length) return;
+    setImages((prev) => {
+      const held = new Set(prev.map((im) => im.id).filter(Boolean));
+      return [...prev, ...composerImagesFromRefs(refs.filter((ref) => !held.has(ref.id)))];
+    });
+  };
   const removeImage = (uid: string): void => {
     setImages((prev) => {
       const target = prev.find((im) => im.uid === uid);
@@ -5034,11 +5082,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing
   // session would just throw out of the send mutation.
-  const retryText = lastTypedUserMessageText(
-    events,
-    detailForSelected?.prompt,
-    selected?.numTurns,
+  // What a retry re-sends: the words, and the ids of the files that went out with them. Read as
+  // one, off one event — the attachments belong to that message, and a second walk back through the
+  // transcript could stop at a different one.
+  // Memoized: it builds a fresh object, and the two cards below hold it in a dependency list that
+  // exists to keep them from being rebuilt on every render.
+  const retry = useMemo(
+    () => lastTypedUserMessage(events, detailForSelected?.prompt, selected?.numTurns),
+    [events, detailForSelected?.prompt, selected?.numTurns],
   );
+  const retryText = retry.text;
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
@@ -5047,7 +5100,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerId: runner.id,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
-          ? () => sendMutate({ content: retryText, images: [] })
+          ? () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
           : undefined,
       retryText,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
@@ -5060,6 +5113,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       shownProvider,
       runner.name,
       runner.id,
+      retry,
       retryText,
       selectedTrashed,
       selectedMissing,
@@ -5075,10 +5129,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     () =>
       selectedTrashed || selectedMissing
         ? null
-        : (text: string) => {
+        : (
+            text: string,
+            attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[],
+          ) => {
             const body = text.trim();
             if (!body) return;
             setText((draft) => (draft.trim() ? `${draft}\n\n${body}` : body));
+            stageRestored(attachments);
             setTimeout(() => taRef.current?.focus(), 0);
           },
     [selectedTrashed, selectedMissing],
@@ -5089,13 +5147,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // red bubble under a conversation that has long since moved past it.
   const takeBackUndelivered = async (turn: QueuedTurn): Promise<void> => {
     if (!selectedId || !restoreUndelivered) return;
-    restoreUndelivered(turn.content);
+    restoreUndelivered(turn.content, turn.attachments);
     setQueued((q) => q.filter((x) => x.turnId !== turn.turnId));
-    const droppedImages = turn.attachments?.length ?? turnImages[turn.turnId]?.length ?? 0;
-    if (droppedImages)
-      message.info(
-        `${droppedImages} image${droppedImages > 1 ? 's' : ''} from that message weren't restored — re-add if needed`,
-      );
     try {
       await cancelQueuedTurn(selectedId, turn.turnId);
     } catch (e) {
@@ -5113,7 +5166,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
-          ? () => sendMutate({ content: retryText, images: [] })
+          ? () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
           : undefined,
       retryText,
       onCancelAuto: selected?.id
@@ -6355,14 +6408,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {images.length > 0 && (
           <div className="composer-attachments">
             {images.map((im) =>
-              im.previewUrl ? (
+              // An image picked here draws from its local object URL (instant); one handed back out
+              // of a sent message has no blob and draws from the bytes the control plane holds.
+              im.previewUrl || (im.id && im.mime.startsWith('image/')) ? (
                 <span key={im.uid} className="composer-pill composer-attach">
-                  <Image
-                    className="composer-attach-thumb"
-                    src={im.previewUrl}
-                    alt=""
-                    preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
-                  />
+                  {im.previewUrl ? (
+                    <Image
+                      className="composer-attach-thumb"
+                      src={im.previewUrl}
+                      alt=""
+                      preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
+                    />
+                  ) : (
+                    <AttachmentImage id={im.id as string} variant="chip" />
+                  )}
                   {im.status === 'uploading' && (
                     <span className="composer-attach-spin">
                       <LoadingOutlined spin />
@@ -6384,10 +6443,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   ) : (
                     <PaperClipOutlined className="composer-file-icon" />
                   )}
-                  <span className="composer-file-name" title={im.file.name}>
-                    {im.file.name}
+                  <span className="composer-file-name" title={im.name}>
+                    {im.name}
                   </span>
-                  <span className="composer-file-size">{fmtBytes(im.file.size)}</span>
+                  {im.size !== undefined && (
+                    <span className="composer-file-size">{fmtBytes(im.size)}</span>
+                  )}
                   <button
                     type="button"
                     className="composer-file-remove"

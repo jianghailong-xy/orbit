@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeNote,
+  lastTypedUserMessage,
   lastTypedUserMessageText,
   splitRecordedNote,
 } from './deliveredMessage';
@@ -115,5 +116,77 @@ describe('lastTypedUserMessageText', () => {
     const echoed = `这是什么？\n\n${block}`;
 
     expect(lastTypedUserMessageText([{ type: 'user', payload: { text: echoed } }], 'old opening', 1)).toBe(echoed);
+  });
+});
+
+describe('lastTypedUserMessage', () => {
+  // The attachments are already on the server: `turn_id` points at the turn that was swallowed and
+  // the bytes never moved. A retry that sends `images: []` asks the person to find the two files
+  // again for a message the control plane still holds whole.
+  const PNG_A = '0199aa00-0000-7000-8000-00000000a001';
+  const PNG_B = '0199aa00-0000-7000-8000-00000000a002';
+
+  it('recovers the ids of the attachments sent with the message it re-sends', () => {
+    const events = [
+      {
+        type: 'user',
+        payload: {
+          text: '看看这两张图',
+          attachments: [
+            { id: PNG_A, mime: 'image/png', name: 'before.png' },
+            { id: PNG_B, mime: 'image/png', name: 'after.png' },
+          ],
+        },
+      },
+    ];
+
+    expect(lastTypedUserMessage(events, null, 1)).toEqual({
+      text: '看看这两张图',
+      attachmentIds: [PNG_A, PNG_B],
+    });
+  });
+
+  it('reads the older id-only echo the same way', () => {
+    // Events recorded before the refs carried mime/name echo `images` instead.
+    const events = [{ type: 'user', payload: { text: '再试一次', images: [{ id: PNG_A }] } }];
+
+    expect(lastTypedUserMessage(events, null, 1).attachmentIds).toEqual([PNG_A]);
+  });
+
+  it('takes the attachments from the same turn as the text, never a newer one', () => {
+    // The text is found by walking back past echoes that carry no words of their own. Whatever
+    // rides with the retry has to be what was sent WITH that message: attachments picked up from a
+    // later turn would re-send somebody else's files under this message's words.
+    const note = `\n\n${COORDINATOR}`;
+    const events = [
+      { type: 'user', payload: { text: '这两张', attachments: [{ id: PNG_A }] } },
+      { type: 'user', payload: { text: note, controlPlaneNote: note, attachments: [{ id: PNG_B }] } },
+    ];
+
+    expect(lastTypedUserMessage(events, null, 2)).toEqual({ text: '这两张', attachmentIds: [PNG_A] });
+  });
+
+  it('carries nothing for a message that had no attachments', () => {
+    expect(lastTypedUserMessage([{ type: 'user', payload: { text: '部署一下' } }], null, 1)).toEqual({
+      text: '部署一下',
+      attachmentIds: [],
+    });
+  });
+
+  it('carries nothing for the first-turn prompt fallback, which has no echoed turn to read', () => {
+    expect(lastTypedUserMessage([], 'open with this', 0)).toEqual({
+      text: 'open with this',
+      attachmentIds: [],
+    });
+  });
+
+  it('is the one reading the text accessor is built on', () => {
+    // Two scans could disagree about which turn is the last typed one, and then the retry would
+    // send one message's words with another's files.
+    const events = [
+      { type: 'user', payload: { text: '看看这两张图', attachments: [{ id: PNG_A }, { id: PNG_B }] } },
+    ];
+
+    expect(lastTypedUserMessageText(events, null, 1)).toBe(lastTypedUserMessage(events, null, 1).text);
   });
 });

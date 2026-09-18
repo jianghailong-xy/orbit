@@ -95,6 +95,15 @@ export interface RunEvent {
 /** A locally-known image attachment for a user turn, keyed by turnId. The bytes are the
  *  browser's own object URL from the just-sent upload — the runner echoes only the text,
  *  so the composer hands these in to show the sent image inside the user's bubble. */
+/** One durable attachment ref echoed on a `user` turn: the id its bytes live under on the control
+ *  plane, plus what it is, for telling an inline image from a downloadable file. The id alone is
+ *  what a re-send references — nothing has to be uploaded again. */
+export interface TurnAttachmentRef {
+  id: string;
+  mime?: string;
+  name?: string;
+}
+
 export interface TurnImage {
   url: string;
   mime: string;
@@ -153,7 +162,9 @@ export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
  * anything. WorkspaceView supplies this; the shared/public page and the static export leave it
  * null, where the mark stands alone — a reader who cannot send cannot resend either.
  */
-export const UndeliveredCtx = createContext<((text: string) => void) | null>(null);
+export const UndeliveredCtx = createContext<
+  ((text: string, attachments?: readonly TurnAttachmentRef[]) => void) | null
+>(null);
 
 /**
  * The untrimmed payload of a clipped event, fetched the first time its card is opened (`want`).
@@ -274,7 +285,7 @@ type TextNode = {
   // Durable refs from the persisted `user` event — fetched on demand so a turn's
   // attachments survive a reload (and show on the seeded first turn, which has no local
   // preview). Images render inline; non-image files render as a downloadable chip.
-  attachmentRefs?: { id: string; mime?: string; name?: string }[];
+  attachmentRefs?: TurnAttachmentRef[];
   // How far this message got on its way into the engine's conversation: the state its
   // `user` event opened with, patched by each `user_delivery` that followed. Absent on
   // events recorded before the runner reported delivery at all, and on every runtime that
@@ -1488,7 +1499,11 @@ function UserBubble({ node }: { node: TextNode }) {
         <div className="chat-undelivered" title={node.deliveryReason}>
           ⚠ {steerDeliveryState(node.delivery).label}
           {node.delivery === 'failed' && putBack && typed && (
-            <button type="button" className="chat-undelivered-retry" onClick={() => putBack(typed)}>
+            <button
+              type="button"
+              className="chat-undelivered-retry"
+              onClick={() => putBack(typed, node.attachmentRefs)}
+            >
               Put back in the composer
             </button>
           )}
@@ -1549,13 +1564,26 @@ export function relTime(iso: string): string {
 // Renders a past turn's image from its attachment id. The download endpoint is
 // bearer-guarded (an <img src> can't carry the token), so fetch the blob and show its
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
-export function AttachmentImage({ id, previewKey, order }: { id: string; previewKey?: string; order?: number }) {
+export function AttachmentImage({
+  id,
+  previewKey,
+  order,
+  // The composer draws the same stored image at chip size when one is handed back out of a
+  // message, so it says which of the two it is asking for rather than restyling a transcript image.
+  variant = 'transcript',
+}: {
+  id: string;
+  previewKey?: string;
+  order?: number;
+  variant?: 'transcript' | 'chip';
+}) {
+  const className = variant === 'chip' ? 'composer-attach-thumb' : 'chat-image';
   return (
     <ResolvedAttachmentImage
       id={id}
-      className="chat-image"
+      className={className}
       alt="Image sent by user"
-      loadingClassName="chat-image chat-image-loading"
+      loadingClassName={`${className} chat-image-loading`}
       previewKey={previewKey}
       order={order}
     />
