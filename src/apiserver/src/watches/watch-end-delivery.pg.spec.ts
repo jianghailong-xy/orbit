@@ -862,6 +862,9 @@ test('with the evaluator and the delivery worker running and nothing called by h
     assert.ok(wake.content && next?.content?.includes(wake.content), 'with the content it was queued with');
     assert.deepEqual(targetMentions(next?.content ?? null, [revoked.task, unresolvable.task, stranger]), [], `${wake.clientTurnId} reached the runner saying something about the targets`);
     handed.push(wake.clientTurnId);
+    // The runner runs what it took, so that turn has a reply before it is completed: a completion over
+    // one that did not goes back to the queue, and the next take would be handed the same end turn.
+    await say(wake.id, observer, 'the end turn ran');
     running = wake.id;
   }
   assert.deepEqual(handed.sort(), [...keys].sort(), 'the runner was handed each end turn once');
