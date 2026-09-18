@@ -55,14 +55,26 @@ export const showsConversation = (path: string): boolean =>
  * Which way it went is read off the DOM rather than a remembered path: that class *is* the pane
  * swap, and until React commits it still names the screen we're on. A pop that swaps no pane
  * (conversation to conversation) or lands on a page without the split animates nothing.
+ *
+ * One of those backs slides on its own. iOS draws the edge swipe — the screen being returned to
+ * slides in under the finger — and marks the popstate it commits with hasUAVisualTransition, so
+ * by the time this runs the swap has already played out in front of the reader. Playing it a
+ * second time is the flash: the "before" snapshot of this transition is the pane being left, full
+ * size on top, and it sits there for the whole 260ms before leaving again. That case swaps the
+ * panes in place instead — ahead of the paint that replaces the swipe's preview with the live
+ * page, which still holds the pane we left — so the browser's animation is the only one seen.
  */
 export function installPaneSlideOnPopState(): void {
-  window.addEventListener('popstate', () => {
+  window.addEventListener('popstate', (event) => {
     const split = document.querySelector('.workspace-split');
     if (!split) return;
     const leaving = split.classList.contains('show-conversation');
     const entering = showsConversation(window.location.pathname);
     if (leaving === entering) return;
+    if (event.hasUAVisualTransition) {
+      split.classList.toggle('show-conversation', entering);
+      return;
+    }
     // The browser has already navigated; this only has to redraw around it.
     navigateWithPaneSlide(entering ? 'push' : 'pop', () => {});
   });

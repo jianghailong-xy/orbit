@@ -150,10 +150,16 @@ describe('installPaneSlideOnPopState', () => {
     return split;
   };
 
-  /** A history move the app didn't make: the URL is already the new one when popstate lands. */
-  const popTo = (path: string): void => {
+  /**
+   * A history move the app didn't make: the URL is already the new one when popstate lands.
+   * `uaAnimated` is the flag iOS puts on the pop an edge swipe commits, having drawn the swap
+   * itself — jsdom parses the init dict but has no such member, so it is written on by hand.
+   */
+  const popTo = (path: string, opts: { uaAnimated?: boolean } = {}): void => {
     window.history.pushState({}, '', path);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    const event = new PopStateEvent('popstate');
+    if (opts.uaAnimated) Object.defineProperty(event, 'hasUAVisualTransition', { value: true });
+    window.dispatchEvent(event);
   };
 
   it("the browser's own back off a conversation runs the ← button's pop slide", () => {
@@ -168,6 +174,37 @@ describe('installPaneSlideOnPopState', () => {
       expect(split.className, 'the list must be showing when the "after" snapshot is taken').toBe(
         'workspace-split',
       );
+    } finally {
+      split.remove();
+    }
+  });
+
+  it('a swipe that drew its own swap is not slid a second time', () => {
+    stubMedia({ phone: true });
+    const transition = stubViewTransitions();
+    const split = mountSplit('conversation');
+    try {
+      popTo('/workspaces/w1', { uaAnimated: true });
+
+      expect(transition.calls, 'the browser has already animated this one').toBe(0);
+      expect(document.documentElement.dataset.paneNav).toBeUndefined();
+      expect(split.className, 'the live page is the list the swipe was revealing').toBe(
+        'workspace-split',
+      );
+    } finally {
+      split.remove();
+    }
+  });
+
+  it('a swipe the browser animated forward is showing the conversation it revealed', () => {
+    stubMedia({ phone: true });
+    const transition = stubViewTransitions();
+    const split = mountSplit('list');
+    try {
+      popTo('/sessions/s1', { uaAnimated: true });
+
+      expect(transition.calls).toBe(0);
+      expect(split.className).toBe('workspace-split show-conversation');
     } finally {
       split.remove();
     }
