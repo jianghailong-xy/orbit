@@ -206,6 +206,13 @@ export interface WatchTargetView {
   state: WatchTargetState;
   targetEpoch: number;
   lastEvaluatedAt: string | null;
+  /**
+   * The target's own title, read with the watch and under the same account. Null when this account
+   * cannot read the row — deleted, or no longer its own — which is never on its own a reason to
+   * call a target deleted: `state` is GONE when the row is gone, and that is what a client says
+   * "Deleted" from. Absent from an older server, which leaves a client naming the target by its id.
+   */
+  targetTitle?: string | null;
 }
 
 export type WatchDeliveryState = 'PENDING' | 'IN_FLIGHT' | 'DELIVERED' | 'DEAD_LETTER';

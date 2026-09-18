@@ -121,6 +121,11 @@ const WATCH_VIEW_SELECT = {
 
 type WatchRow = Prisma.WatchGetPayload<{ select: typeof WATCH_VIEW_SELECT }>;
 
+/** A watch as a client reads it: every target carries its own name, read with the watch (`named`). */
+type NamedWatchRow = Omit<WatchRow, 'targets'> & {
+  targets: (WatchRow['targets'][number] & { targetTitle: string | null })[];
+};
+
 /** A delivery as the operations read lists it: what a watch's read shows, and the watch and Match it belongs to. */
 const DELIVERY_OPS_SELECT = {
   ...DELIVERY_VIEW_SELECT,
@@ -254,7 +259,7 @@ export class WatchesService {
    * rolls back and asks again once the turn is free (`untilOwnerTurn`), and so does one whose transaction lapsed without
    * writing. A create still waiting after `maxCreateWaitMs` answers the retryable 503, having written nothing.
    */
-  async create(ownerId: string, dto: CreateWatchDto): Promise<WatchRow> {
+  async create(ownerId: string, dto: CreateWatchDto): Promise<NamedWatchRow> {
     const request = this.createRequest(dto);
     // Before any gate: a create whose response was lost reads back what it made even if a target
     // has since become unreadable. What already happened is looked up, not judged again.
@@ -343,23 +348,62 @@ export class WatchesService {
     return watch;
   }
 
-  async get(ownerId: string, id: string, scope: WatchScope = {}): Promise<WatchRow> {
+  async get(ownerId: string, id: string, scope: WatchScope = {}): Promise<NamedWatchRow> {
     const watch = await this.prisma.watch.findFirst({
       where: { id, ownerId, ...scopeWhere(scope) },
       select: WATCH_VIEW_SELECT,
     });
     if (!watch) throw new NotFoundException('watch not found');
-    return watch;
+    return (await this.named(ownerId, [watch]))[0];
   }
 
-  async list(ownerId: string, state?: string, scope: WatchScope = {}): Promise<WatchRow[]> {
+  async list(ownerId: string, state?: string, scope: WatchScope = {}): Promise<NamedWatchRow[]> {
     assertListState(state);
-    return this.prisma.watch.findMany({
+    const watches = await this.prisma.watch.findMany({
       where: { ownerId, ...(state !== undefined ? { state } : {}), ...scopeWhere(scope) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: LIST_LIMIT,
       select: WATCH_VIEW_SELECT,
     });
+    return this.named(ownerId, watches);
+  }
+
+  /**
+   * Every target's own name, in two reads for the whole answer, so a card can say what it watches
+   * without a request per target: a Following page draws up to LIST_LIMIT watches, each naming up to
+   * `maxTargetsPerWatch`, and names fetched one row at a time arrive late for some of them and not at
+   * all for the rest — which is how a card ended up showing a truncated id where a title belongs.
+   *
+   * Scoped to the owner like every other read here. A target this account can no longer read has no
+   * title, and that is all it means: whether the row is gone is the target's own `state` (GONE), which
+   * the evaluator writes, and which is the only thing a client may say "Deleted" from.
+   */
+  private async named(ownerId: string, watches: WatchRow[]): Promise<NamedWatchRow[]> {
+    const idsOf = (kind: WatchTargetKind): string[] => [
+      ...new Set(
+        watches.flatMap((w) => w.targets.filter((t) => t.targetKind === kind).map((t) => t.targetResourceId)),
+      ),
+    ];
+    const sessionIds = idsOf('SESSION');
+    const taskIds = idsOf('TASK');
+    const [sessions, tasks] = await Promise.all([
+      sessionIds.length === 0
+        ? []
+        : this.prisma.session.findMany({ where: { id: { in: sessionIds }, ownerId }, select: { id: true, title: true } }),
+      taskIds.length === 0
+        ? []
+        : this.prisma.task.findMany({ where: { id: { in: taskIds }, ownerId }, select: { id: true, title: true } }),
+    ]);
+    const titles = new Map<string, string | null>();
+    for (const row of sessions) titles.set(`SESSION:${row.id}`, row.title);
+    for (const row of tasks) titles.set(`TASK:${row.id}`, row.title);
+    return watches.map((watch) => ({
+      ...watch,
+      targets: watch.targets.map((target) => ({
+        ...target,
+        targetTitle: titles.get(`${target.targetKind}:${target.targetResourceId}`) ?? null,
+      })),
+    }));
   }
 
   /**
@@ -374,7 +418,7 @@ export class WatchesService {
    * dead letter nobody has to act on never takes a place in the answer: its code is the heading of `last_error`,
    * read here as `watchDeadLetterCodeOf` reads it (and as the gauges in watch-metrics.ts already read it).
    */
-  async listNeedingAttention(ownerId: string, state?: string): Promise<WatchRow[]> {
+  async listNeedingAttention(ownerId: string, state?: string): Promise<NamedWatchRow[]> {
     assertListState(state);
     const needsLooking = Prisma.sql`(
           (d."state" = 'DEAD_LETTER'
@@ -393,15 +437,16 @@ export class WatchesService {
        ORDER BY w."created_at" DESC, w."id" DESC
        LIMIT ${LIST_LIMIT}::int`);
     // Read back through the view every other list answers with, so one watch reads the same wherever it is shown.
-    return this.prisma.watch.findMany({
+    const watches = await this.prisma.watch.findMany({
       where: { ownerId, id: { in: picked.map((row) => row.id) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: WATCH_VIEW_SELECT,
     });
+    return this.named(ownerId, watches);
   }
 
   /** Edit the condition or the deadline of a live watch. Its targets, its action and its mode stay as created. */
-  async update(ownerId: string, id: string, dto: UpdateWatchDto): Promise<WatchRow> {
+  async update(ownerId: string, id: string, dto: UpdateWatchDto): Promise<NamedWatchRow> {
     this.assertWatchesOn(ownerId, 'update');
     if (dto.predicate === undefined && dto.ttlSeconds === undefined) {
       throw new BadRequestException('nothing to update: send a predicate with its predicateVersion, or ttlSeconds');
@@ -434,7 +479,7 @@ export class WatchesService {
     });
   }
 
-  pause(ownerId: string, id: string): Promise<WatchRow> {
+  pause(ownerId: string, id: string): Promise<NamedWatchRow> {
     return this.transition(ownerId, id, (watch) => {
       if (watch.state === 'PAUSED') return null;
       if (watch.state !== 'ACTIVE') throw notLive(watch.state, 'paused');
@@ -443,7 +488,7 @@ export class WatchesService {
     });
   }
 
-  async resume(ownerId: string, id: string): Promise<WatchRow> {
+  async resume(ownerId: string, id: string): Promise<NamedWatchRow> {
     this.assertWatchesOn(ownerId, 'resume');
     return this.transition(ownerId, id, (watch, now) => {
       if (watch.state === 'ACTIVE') return null;
@@ -453,7 +498,7 @@ export class WatchesService {
     });
   }
 
-  cancel(ownerId: string, id: string): Promise<WatchRow> {
+  cancel(ownerId: string, id: string): Promise<NamedWatchRow> {
     return this.transition(ownerId, id, (watch) => {
       if (watch.state === 'CANCELLED') return null;
       if (!LIVE_STATES.includes(watch.state)) throw notLive(watch.state, 'cancelled');
@@ -752,7 +797,7 @@ export class WatchesService {
   }
 
   /** The watch this key already made, if the request is the one that made it; a 409 if it is not. */
-  private async replay(ownerId: string, request: CreateRequest): Promise<WatchRow | null> {
+  private async replay(ownerId: string, request: CreateRequest): Promise<NamedWatchRow | null> {
     const committed = await this.prisma.watch.findFirst({
       where: { ownerId, idempotencyKey: request.idempotencyKey },
       select: WATCH_VIEW_SELECT,
@@ -773,7 +818,7 @@ export class WatchesService {
       // Says nothing about the watch it refused beyond that it differs: a retry needs no more.
       throw new ConflictException('that idempotency key already made a different watch; nothing was written — use a new key for a new request');
     }
-    return committed;
+    return (await this.named(ownerId, [committed]))[0];
   }
 
   /**
@@ -784,7 +829,7 @@ export class WatchesService {
     ownerId: string,
     id: string,
     decide: (watch: TransitionRow, now: Date) => Prisma.WatchUpdateManyMutationInput | null,
-  ): Promise<WatchRow> {
+  ): Promise<NamedWatchRow> {
     for (let attempt = 1; attempt <= TRANSITION_ATTEMPTS; attempt += 1) {
       const watch = await this.prisma.watch.findFirst({ where: { id, ownerId }, select: TRANSITION_SELECT });
       if (!watch) throw new NotFoundException('watch not found');

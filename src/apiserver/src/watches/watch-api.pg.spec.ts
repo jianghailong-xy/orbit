@@ -748,6 +748,54 @@ test('a deleted target cannot be frozen into a new watch; a trashed session stil
   assert.deepEqual([...statesById(read.body.targets).keys()].sort(), [later, kept].sort());
 });
 
+/**
+ * Every read names what the watch watches, so a card does not have to ask for a row per target — and
+ * says nothing at all about a target this account cannot read, which is not the same claim as the
+ * row being gone: a target moved to another account reads back exactly as a deleted one would over
+ * HTTP (404 on its own row), and only the target's own state records a deletion.
+ */
+test('a watch carries its targets\' titles, and none for a target its account cannot read', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'named targets');
+  const other = await account(h, 'the other account');
+  const open = await task(h, owner.id, 'OPEN');
+  const live = await session(h, owner.id, { status: 'RUNNING' });
+  await h.sql.query(`UPDATE "task" SET "title" = 'Land the redirect fix' WHERE "id" = $1`, [open]);
+  await h.sql.query(`UPDATE "session" SET "title" = 'Coordinator: Watch project' WHERE "id" = $1`, [live]);
+
+  // The create's own answer carries them: it is what a client puts straight into the list it draws.
+  const overTask = await create(h, owner, watchBody(tasks([open])), 'a watch over a task');
+  const overSession = await create(h, owner, watchBody(sessions([live]), { predicate: ALL_SETTLED }), 'a watch over a session');
+  assert.equal(overTask.targets[0].targetTitle, 'Land the redirect fix', 'the create names the task it watches');
+  assert.equal(overSession.targets[0].targetTitle, 'Coordinator: Watch project', 'the create names the session it watches');
+
+  const titles = async (why: string): Promise<Map<string, string | null>> => {
+    const list = await call(h, owner.bearer, 'GET', '/watches');
+    expectStatus(list, 200, why);
+    const rows = list.body as Array<{ targets: Array<{ targetResourceId: string; targetTitle: string | null }> }>;
+    return new Map(rows.flatMap((w) => w.targets.map((t) => [toUuid(t.targetResourceId), t.targetTitle])));
+  };
+  const listed = await titles('the list reads back');
+  assert.equal(listed.get(open), 'Land the redirect fix', 'the list names the task');
+  assert.equal(listed.get(live), 'Coordinator: Watch project', 'the list names the session');
+  const one = await call(h, owner.bearer, 'GET', `/watches/${overTask.id}`);
+  expectStatus(one, 200, 'one watch reads back');
+  assert.equal(one.body.targets[0].targetTitle, 'Land the redirect fix', 'the single read names the task');
+
+  // Moved to another account, and deleted outright: both read back with no title. The target of the
+  // moved task is still OBSERVED — nothing here says it was deleted, because it was not.
+  await h.sql.query(`UPDATE "task" SET "owner_id" = $2 WHERE "id" = $1`, [open, other.id]);
+  await h.sql.query(`DELETE FROM "session" WHERE "id" = $1`, [live]);
+  const after = await titles('the list reads back after the targets moved and went');
+  assert.equal(after.get(open), null, "a target of another account's is named by nothing");
+  assert.equal(after.get(live), null, 'a deleted target is named by nothing');
+  const moved = await call(h, owner.bearer, 'GET', `/watches/${overTask.id}`);
+  expectStatus(moved, 200, 'the watch over the moved task still reads back');
+  assert.equal(moved.body.targets[0].state, 'OBSERVED', 'a target that moved account is not recorded as deleted');
+  // And the other account is told nothing about any of it.
+  expectStatus(await call(h, other.bearer, 'GET', `/watches/${overTask.id}`), 404, "another account's read of the watch");
+});
+
 // ── lifecycle ───────────────────────────────────────────────────────────────────────────────────
 
 test('pause, resume, edit and cancel move only along the contract transitions', { skip, timeout: 120_000 }, async () => {

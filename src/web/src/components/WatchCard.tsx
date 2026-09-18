@@ -83,6 +83,7 @@ export function WatchCard({ watch, focused = false }: { watch: WatchView; focuse
               key={`${t.targetKind}:${t.targetResourceId}`}
               kind={t.targetKind}
               id={t.targetResourceId}
+              title={t.targetTitle}
               state={t.state}
             />
           ))}

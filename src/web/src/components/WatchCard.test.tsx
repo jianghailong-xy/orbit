@@ -16,7 +16,14 @@ import { WatchCard } from './WatchCard';
  * control that writes but never redraws fails here.
  */
 
-vi.mock('../api', () => ({ api: vi.fn(), getSession: vi.fn() }));
+// `ApiError` REAL, not restated: a target's name asks whether a failed read was a 404 with
+// `error instanceof ApiError && error.status === 404`, and a stand-in class here would let that
+// branch pass against a shape the client never throws.
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(),
+  getSession: vi.fn(),
+}));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api, getSession } = await import('../api');
@@ -214,10 +221,8 @@ afterEach(async () => {
 
 describe('a watch card', { timeout: 30_000 }, () => {
   it('says what it watches, what it waits for, how stale that is and what happens next, with nothing opened', async () => {
-    serve(
-      {},
-      { T1: 'Web Watch cards', T2: 'macOS Watch', T3: 'Agent tools', OBSERVER: 'Coordinator: Watch project' },
-    );
+    // Only the observer session is still read by id; the targets' names come with the watch.
+    serve({}, { OBSERVER: 'Coordinator: Watch project' });
     await mount(
       <WatchCard
         watch={watch({
@@ -232,9 +237,13 @@ describe('a watch card', { timeout: 30_000 }, () => {
             ],
           },
           targets: [
-            target('T1', { state: 'SATISFIED', lastEvaluatedAt: at(-42 * MINUTE) }),
-            target('T2'),
-            target('T3'),
+            target('T1', {
+              state: 'SATISFIED',
+              lastEvaluatedAt: at(-42 * MINUTE),
+              targetTitle: 'Web Watch cards',
+            }),
+            target('T2', { targetTitle: 'macOS Watch' }),
+            target('T3', { targetTitle: 'Agent tools' }),
           ],
           // Minutes, not seconds: a loaded run takes seconds between building this and drawing it.
           lastEvaluatedAt: at(-5 * MINUTE),
@@ -263,6 +272,37 @@ describe('a watch card', { timeout: 30_000 }, () => {
     // agent its wait moved, so the card offers Pause and Stop alone.
     expect(['Pause', 'Stop'].map((label) => !!button(label, card))).toEqual([true, true]);
     expect(button('Edit', card)).toBeUndefined();
+  });
+
+  /**
+   * What the card calls a target, and what it may not. The names ride on the watch, so a page of
+   * cards over hundreds of targets asks for nothing per target — and a target this account cannot
+   * read is not named "Deleted": its own row answers 404 exactly as a deleted one would (a task
+   * moved to another account does, which is where the false wording came from), so only what the
+   * watch itself records as GONE is said to be gone.
+   */
+  it('names its targets from the watch, and calls deleted only what the watch records as gone', async () => {
+    serve({});
+    await mount(
+      <WatchCard
+        watch={watch({
+          targets: [
+            target('T1', { targetTitle: 'Land the redirect fix' }),
+            target('T2', { state: 'GONE' }),
+            // Readable by this account no longer, so the watch came back with no name for it.
+            target('T3', { targetTitle: null }),
+          ],
+        })}
+      />,
+    );
+    const card = container!.querySelector('.watch-card')!;
+    expect([...card.querySelectorAll('.watch-target-name')].map((n) => n.textContent)).toEqual([
+      'Land the redirect fix',
+      'Deleted task',
+      'T3…',
+    ]);
+    // Not one request for a name: whatever the card shows, it showed from the watch it was given.
+    expect(vi.mocked(api).mock.calls.map(([path]) => String(path)).filter((p) => p.includes('/row'))).toEqual([]);
   });
 
   it('draws the bar against what the condition asks for, not the target count', async () => {

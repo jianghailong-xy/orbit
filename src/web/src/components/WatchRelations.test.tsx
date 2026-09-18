@@ -14,7 +14,14 @@ import { SessionWatchBadges, SessionWatchStrip, TaskFollowedBy } from './WatchRe
  * must show next to watches it must not.
  */
 
-vi.mock('../api', () => ({ api: vi.fn(), getSession: vi.fn() }));
+// `ApiError` REAL, not restated: a target's name asks whether a failed read was a 404 with
+// `error instanceof ApiError && error.status === 404`, and a stand-in class here would let that
+// branch pass against a shape the client never throws.
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(),
+  getSession: vi.fn(),
+}));
 vi.mock('../lib/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 const { api, getSession } = await import('../api');
 
@@ -225,7 +232,7 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     serve(
       [
         watch('WAITING', {
-          targets: [target('TASK', 'T1')],
+          targets: [target('TASK', 'T1', { targetTitle: 'A task' })],
           expiresAt: at(6 * HOUR + 10 * MINUTE),
           ...resumes('S_ME'),
         }),
@@ -235,6 +242,7 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
     await mount(<SessionWatchStrip sessionId="S_ME" />);
     const strip = container!.querySelector('.watch-strip')!;
     expect(strip.querySelector('.watch-strip-title')?.textContent).toBe('Watching');
+    // The name the watch carries, not one asked for by id.
     expect(strip.querySelector('.watch-strip-target')?.textContent).toBe('A task');
     // Where that one target stands, off the read its name came from: folded shut, the line answers
     // "is it even running" without the strip being opened.

@@ -223,10 +223,10 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const live = waitingOn.flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'));
   const targets = live.map((t) => `${t.targetKind}:${t.targetResourceId}`);
   const single = waitingOn.length === 1 && new Set(targets).size === 1 ? live[0] : null;
-  // The same read the line's name comes from, so the status beside it costs no second request. It
-  // is only there for a lone target: several of them have no one status, and asking for all of
-  // their rows to say so would be a read per target on a line that is folded shut.
-  const { name: singleName, chip: singleStatus } = useTargetName(
+  // The lone target's own status, beside the name the watch already carries. Only for a lone target:
+  // several of them have no one status, and asking for all of their rows to say so would be a read
+  // per target on a line that is folded shut.
+  const { chip: singleStatus } = useTargetName(
     single?.targetKind ?? null,
     single?.targetResourceId ?? null,
   );
@@ -242,7 +242,7 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   // threshold its own condition sets, and several watches — no one condition between them — count
   // the targets they cover.
   const targetLine = single
-    ? (singleName ?? linkId(single.targetResourceId).slice(0, 8))
+    ? (single.targetTitle ?? linkId(single.targetResourceId).slice(0, 8))
     : waitingOn.length === 1
       ? thresholdLine(thresholdOf(waitingOn[0].predicate, live), waitingOn)
       : `${targetCount} ${targetNoun(waitingOn, targetCount)}`;
@@ -314,6 +314,7 @@ function StripWatchBlock({ watch, now, showsThen }: { watch: WatchView; now: num
             key={`${t.targetKind}:${t.targetResourceId}`}
             kind={t.targetKind}
             id={t.targetResourceId}
+            title={t.targetTitle}
             // Each target says where it itself stands, which is what the reader came for. `met` is
             // not repeated per target: the Progress row above counts them, and the satisfied ones
             // are sorted first, so the order says which they are. Kept for a session target, which
