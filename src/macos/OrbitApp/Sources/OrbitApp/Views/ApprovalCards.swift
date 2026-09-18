@@ -869,8 +869,12 @@ private struct OwnerConfirmationCardView: View {
     /// The report this card was drawn for — the door's compare-and-set.
     let requestID: String
     @State private var deciding = false
+    /// Whether the refusal behind the lead line is showing. Folded by default: it names a code the
+    /// reader acts on only when reporting the problem.
+    @State private var staleDetailOpen = false
 
     private var standing: OwnerConfirmationStanding { console.ownerStanding(taskID, requestID) }
+    private var staleDetailLabel: String { staleDetailOpen ? "Hide details" : "Details" }
 
     var body: some View {
         let standing = self.standing
@@ -895,14 +899,27 @@ private struct OwnerConfirmationCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Above the dead buttons, so it reads as the reason they are dead.
+            // Above the dead buttons, so it reads as the reason they are dead. The lead line is
+            // what the reader acts on; the refusal behind it, code and all, is for whoever reports
+            // the problem.
             if let stale = OwnerConfirmations.staleExplanation(standing) {
-                Text(stale)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.08),
-                                in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(stale.lead)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    DisclosureToggle(open: staleDetailOpen, label: staleDetailLabel) {
+                        staleDetailOpen.toggle()
+                    }
+                    if staleDetailOpen {
+                        Text(stale.detail)
+                            .font(.orbitLabel).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.blue.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             }
 
             ApprovalActions {

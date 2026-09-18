@@ -367,25 +367,40 @@ public enum OwnerConfirmations {
 
     // MARK: the standing, in words
 
-    /// Why this card cannot be answered, addressed to the reader looking at its dead buttons. Each
-    /// sentence names the refusal the door would give, because that is the fact: a reader told only
-    /// "you cannot" has been told the button is broken.
-    public static func staleExplanation(_ standing: OwnerConfirmationStanding) -> String? {
+    /// Why this card cannot be answered, in the two parts the card draws it in.
+    ///
+    /// For the reader looking at dead buttons, the only two questions are whether their press
+    /// counted and what to do now — and both are answered by the lead line. The detail names the
+    /// refusal the door would give, in its own spelling, which is what somebody reporting the
+    /// problem needs and nobody else reads; so it is kept whole and one press away rather than
+    /// standing between the reader and the answer.
+    public struct StaleExplanation: Equatable, Sendable {
+        public let lead: String
+        public let detail: String
+    }
+
+    public static func staleExplanation(_ standing: OwnerConfirmationStanding)
+        -> StaleExplanation? {
         switch standing.state {
         case .waiting, .answered:
             return nil
         case .superseded:
-            return "A later report is waiting on you now, so the report this card was drawn for is "
-                + "not the one waiting. Nothing here would be recorded; the newer report has its own "
-                + "card in the session it reported in. (OWNER_CONFIRMATION_STALE)"
+            return StaleExplanation(
+                lead: "Nothing was recorded — there's a newer report waiting instead.",
+                detail: "A later run of this task reported since this card was drawn, so the report "
+                    + "you read is not the one waiting now. The newer report has its own card in the "
+                    + "session it reported in. (OWNER_CONFIRMATION_STALE)")
         case .notWaiting:
-            return "No run of this task is waiting on you, so there is nothing to confirm or send "
-                + "back here. Nothing was recorded — run the task to give it another turn, or "
-                + "confirm it from the task's own page. (OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK)"
+            return StaleExplanation(
+                lead: "Nothing to confirm here right now.",
+                detail: "No run of this task is waiting on you, so there is nothing to confirm or "
+                    + "send back. Run the task to give it another turn, or confirm it from the "
+                    + "task's own page. (OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK)")
         case .unread:
-            return "This card could not re-read the task just now, so it cannot say what is waiting. "
-                + "Nothing on it is kept from an earlier read: an answer the door might refuse is not "
-                + "offered. The task itself is unaffected."
+            return StaleExplanation(
+                lead: "This card couldn't re-read the task just now.",
+                detail: "It cannot say what is waiting, and it keeps nothing from an earlier read: "
+                    + "an answer the door might refuse is not offered. The task itself is unaffected.")
         }
     }
 
