@@ -319,8 +319,13 @@ final class OwnerConfirmationDoorTests: XCTestCase {
             XCTAssertFalse(standing.answerable, label)
             XCTAssertFalse(OwnerConfirmations.isOpen(standing), label)
             XCTAssertNil(standing.waiting, "a stale card shows its address, not another report")
-            let explanation = OwnerConfirmations.staleExplanation(standing) ?? ""
-            XCTAssertTrue(explanation.contains("OWNER_CONFIRMATION_STALE"), explanation)
+            let explanation = OwnerConfirmations.staleExplanation(standing)
+            XCTAssertEqual(explanation?.lead,
+                           "Nothing was recorded — there's a newer report waiting instead.")
+            // The refusal's own spelling is kept, for whoever reports the problem — in the detail
+            // the card folds, not in the reader's way.
+            XCTAssertTrue(explanation?.detail.contains("OWNER_CONFIRMATION_STALE") ?? false,
+                          explanation?.detail ?? "")
         }
     }
 
@@ -334,8 +339,10 @@ final class OwnerConfirmationDoorTests: XCTestCase {
         XCTAssertEqual(standing.state, .notWaiting)
         XCTAssertFalse(standing.answerable)
         XCTAssertFalse(OwnerConfirmations.isOpen(standing))
+        XCTAssertEqual(OwnerConfirmations.staleExplanation(standing)?.lead,
+                       "Nothing to confirm here right now.")
         XCTAssertTrue(OwnerConfirmations.staleExplanation(standing)?
-                        .contains("OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK") ?? false)
+                        .detail.contains("OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK") ?? false)
     }
 
     /// The read has not come back. That is not "nothing is waiting": the card cannot say what it is
