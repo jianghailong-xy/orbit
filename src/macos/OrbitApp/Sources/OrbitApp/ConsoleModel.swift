@@ -1178,8 +1178,9 @@ final class ConsoleModel {
     /// queueing and failure handling below, but the composer is neither read nor cleared for it: a
     /// retry is nothing the user just typed, so it must not flash through the input field on its
     /// way out, nor take the draft they are part-way through typing with it — nor the attachments
-    /// they have staged (a retry carries the text alone; see `carried` below).
-    func send(authoritative: RunStatus? = nil, overrideText: String? = nil) async {
+    /// they have staged (a retry carries its own message's files; see `carried` below).
+    func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
+              overrideAttachments: [TurnAttachment]? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
@@ -1253,7 +1254,12 @@ final class ConsoleModel {
             // the message. Handed back to `send` whole, with the composer already cleared above —
             // the card that armed it is untouched, and its own Start is still the other way out.
             case .planChange(let context):
-                await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)")
+                // Says outright that it carries no attachments, rather than leaving that to how
+                // its text arrived: a question about a plan is the typed sentence and nothing else
+                // (an attachment cannot say what should change), and the chips staged in the
+                // composer stay there for the message they were picked for.
+                await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)",
+                           overrideAttachments: [])
             }
             return
         }
@@ -1283,17 +1289,22 @@ final class ConsoleModel {
         // shell send comes back with its leading `!`.
         let draft = overrideText ?? composerText
         let staged = pendingAttachments
-        // What rides with this send. A retry carries the text alone: the staged chips belong to the
-        // message the user is composing, not to the one being re-sent, so they neither travel with
-        // it nor leave the composer (web parity — its card's retry sends `images: []`).
-        let carried = fromComposer ? pendingAttachments : []
-        // Every chip that rides along has finished uploading by now (the send waited above), so each
-        // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
-        let ready = carried.compactMap { att in att.remoteID.map { (att, $0) } }
-        let attachmentIds = ready.map(\.1)
+        // What rides with this send: whatever it was handed, else the composer's own chips. A
+        // retry hands in the attachments of the message it is re-sending — their bytes are on the
+        // control plane under those ids and never moved, so re-sending without them would ask the
+        // reader to find the files again for a message the server is still holding whole (web
+        // parity — its card's retry sends that turn's own ids). What it does NOT take is the staged
+        // chips: those belong to the message being composed, so they neither travel with a retry
+        // nor leave the composer under it. Every chip that rides along has finished uploading by
+        // now (the send waited above), so each carries its server `remoteID`; `compactMap` is
+        // belt-and-suspenders against a stray nil.
+        let carried: [TurnAttachment] = overrideAttachments ?? pendingAttachments.compactMap { att in
+            att.remoteID.map { TurnAttachment(id: $0, mime: att.mimeType, name: att.filename) }
+        }
+        let attachmentIds = carried.map(\.id)
         // Carry mime/name onto the optimistic bubble so it can render image thumbnails / file chips
         // immediately (the durable `user` event later supplies the authoritative refs).
-        let turnAttachments = ready.map { TurnAttachment(id: $0.1, mime: $0.0.mimeType, name: $0.0.filename) }
+        let turnAttachments = carried
 
         // A turn already in flight ⇒ this message waits its turn, so label it "Queued" rather than
         // "Sending…" (web parity). Reads the authoritative control-plane status the view passes in
@@ -1358,18 +1369,24 @@ final class ConsoleModel {
         }
     }
 
-    /// What a retry after a sign-in failure would re-send: the latest user turn in the transcript.
+    /// What a retry after a sign-in failure would re-send: the latest user turn in the transcript,
+    /// as that retry would carry it — their words, and the attachments those words went out with.
     /// Empty when the failure landed before any user message — a first run, whose opening prompt was
     /// seeded server-side and never became a transcript item — and the card then offers the sign-in
     /// alone rather than a button that would send nothing.
-    var lastUserMessageText: String {
+    ///
+    /// Both halves off ONE bubble: a second walk back through the transcript could stop at a
+    /// different message and re-send one message's words under another's files.
+    var lastUserMessage: (text: String, attachments: [TurnAttachment]) {
         for item in state.items.reversed() {
             if case .user(let b) = item, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return b.text
+                return (b.text, b.attachments)
             }
         }
-        return ""
+        return ("", [])
     }
+
+    var lastUserMessageText: String { lastUserMessage.text }
 
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
     /// message"). Handed to `send` as the message itself rather than typed into the composer, so
@@ -1377,9 +1394,9 @@ final class ConsoleModel {
     /// here without the text flashing through the input field on its way out — and without a draft
     /// the user is part-way through typing having to be moved aside and put back.
     func retryLastMessage() async {
-        let text = lastUserMessageText
-        guard !text.isEmpty, !sending else { return }
-        await send(overrideText: text)
+        let last = lastUserMessage
+        guard !last.text.isEmpty, !sending else { return }
+        await send(overrideText: last.text, overrideAttachments: last.attachments)
     }
 
     // MARK: auto-retry (the quota / provider-error card)

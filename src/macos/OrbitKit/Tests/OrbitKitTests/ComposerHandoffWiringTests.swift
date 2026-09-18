@@ -242,13 +242,23 @@ final class ComposerHandoffWiringTests: XCTestCase {
             throw WiringError.missing("the send's plan-change branch")
         }
         let branch = String(reroute[branchAt.upperBound...])
+        // Joined rather than matched line by line: where the call wraps is a formatting decision,
+        // while what it sends is the contract. Comment lines are still dropped first, so a sentence
+        // about the call cannot stand in for the call.
         let sent = branch.split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+            .joined(separator: " ")
         XCTAssertTrue(
             sent.contains(
-                "await send(authoritative: authoritative, overrideText: \"\\(context)\\n\\n\\(text)\")"),
+                "await send(authoritative: authoritative, overrideText: \"\\(context)\\n\\n\\(text)\""),
             "the typed message must go out as an ordinary turn with the plan in front of it")
+        // And with none of the composer's staged chips: an attachment cannot say what should change
+        // about a plan, and the chips belong to the message they were picked for. Said outright
+        // here because `send` otherwise carries the composer's own.
+        XCTAssertTrue(sent.contains("overrideAttachments: []"),
+                      "a plan change must say it carries no attachments, or it takes the chips "
+                          + "staged for the next message out with it")
         for door in ["decideOwnerConfirmation", "replyToQuestion", "confirmStandardSet", "api."] {
             XCTAssertFalse(branch.contains(door),
                            "a plan change was routed through \(door): it answers no call, so it "
