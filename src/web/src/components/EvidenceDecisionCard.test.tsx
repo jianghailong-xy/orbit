@@ -17,6 +17,7 @@ import {
 import {
   DECISION_ASK_HEADING,
   DECISION_CONFIRM_ACTION,
+  DECISION_CRITERION_HEADING,
   DECISION_NO_CLAIM,
   DECISION_NO_CRITERION,
   DECISION_NO_GAPS,
@@ -29,6 +30,7 @@ import {
   EVIDENCE_DECISION_UNREAD_HEADING,
   EvidenceDecisionCard,
   SessionEvidenceDecisionCard,
+  decisionClaimFold,
   decisionGapsMore,
   evidenceDecisionRecordedLine,
   evidenceDecisionRefusal,
@@ -263,6 +265,21 @@ describe('the card is drawn from the row the pending read published', () => {
     expect(html).toContain(decisionGapsMore(1));
   });
 
+  it('carries the criterion’s own text, not only its key, and leads the card with it', () => {
+    // The judgment is whether this evidence settles THAT sentence. The key identifies it; only the
+    // text lets somebody answer, and it used to be two disclosures down inside a machine check.
+    const live = row();
+    const html = card(evidenceDecisionStanding(queue([live]), PROJECT_ID, live));
+
+    expect(html).toContain(DECISION_CRITERION_HEADING);
+    expect(html).toContain(escaped(live.criterion!.text));
+    // The order a person decides in: the standard, then what the submitter admits is missing, and
+    // the account they wrote about it last.
+    const standard = html.indexOf(escaped(live.criterion!.text));
+    expect(standard).toBeLessThan(html.indexOf(escaped(GAPS[0])));
+    expect(html.indexOf(escaped(GAPS[0]))).toBeLessThan(html.indexOf(escaped(live.claim)));
+  });
+
   it('says what a different row says, and nothing of the first', () => {
     // The negative control for the case above: were any of those strings constants that merely
     // matched the fixture, they would still be here.
@@ -288,9 +305,10 @@ describe('the card is drawn from the row the pending read published', () => {
     expect(html).not.toContain(escaped(GAPS[0]));
   });
 
-  it('folds a long claim and gives all of it back on request', async () => {
+  it('folds a long claim to a line naming its length, and gives all of it back on request', async () => {
     const tail = '这句话在折叠时看不到';
-    const long = row({ claim: `${CLAIM}${'补充说明。'.repeat(40)}${tail}` });
+    const claim = `${CLAIM}${'补充说明。'.repeat(40)}${tail}`;
+    const long = row({ claim });
     const rendered = await mount(
       <EvidenceDecisionCard
         standing={evidenceDecisionStanding(queue([long]), PROJECT_ID, long)}
@@ -298,9 +316,14 @@ describe('the card is drawn from the row the pending read published', () => {
       />,
     );
 
-    expect(rendered.querySelector('.decision-ask-claim')?.textContent).not.toContain(tail);
-    await click(press(rendered, '展开全文'));
+    // Folded, none of it is on screen — not even its first line. What stands in its place says how
+    // much there is to read, so a thousand-word account cannot push the actions off a phone.
+    expect(rendered.querySelector('.decision-ask-claim')).toBeNull();
+    expect(rendered.textContent).toContain(decisionClaimFold(claim.length));
+    await click(press(rendered, decisionClaimFold(claim.length)));
     expect(rendered.querySelector('.decision-ask-claim')?.textContent).toContain(tail);
+    // And what it opens onto is the whole thing once, not the fold's preview plus the rest.
+    expect(rendered.querySelector('.decision-ask-claim')?.textContent).toBe(claim);
   });
 
   it('says so when a revision carries no claim at all, rather than rendering a blank', () => {

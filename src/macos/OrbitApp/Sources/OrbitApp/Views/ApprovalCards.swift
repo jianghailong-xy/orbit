@@ -680,6 +680,7 @@ private struct EvidenceDecisionFacts: View {
     private var claim: FoldedClaim {
         EvidenceDecisions.foldedClaim(row.claim, clamp: EvidenceDecisions.claimClamp)
     }
+    private var fullClaim: String { row.claim.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var gaps: GapPreview { EvidenceDecisions.gapPreview(row) }
     private var checks: [EvidenceDecisionCheck] { EvidenceDecisions.checks(row) }
 
@@ -688,33 +689,65 @@ private struct EvidenceDecisionFacts: View {
             Text(row.title)
                 .font(.orbitLabel.bold()).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            claimBlock
+            standardBlock
+            gapsBlock
+            checksBlock
+            accountBlock
             Text(EvidenceDecisions.meta(row))
                 .font(.orbitMonoFine).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            gapsBlock
-            checksBlock
         }
     }
 
     // MARK: body
 
-    private var claimBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(claim.text.isEmpty ? EvidenceDecisions.noClaim : claim.text)
-                .font(.orbitProse.bold())
-                .foregroundStyle(claim.text.isEmpty ? AnyShapeStyle(.secondary)
-                                                    : AnyShapeStyle(.primary))
+    /// The sentence being judged, first and in its own words. A reader asked whether this evidence
+    /// settles a criterion cannot answer from the criterion's KEY, which is all the card used to
+    /// carry above the fold — the text was two disclosures down, inside a machine check's detail.
+    private var standardBlock: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(EvidenceDecisions.criterionHeading)
+                .font(.orbitLabel.bold()).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if claim.folded {
-                DisclosureToggle(open: claimOpen, label: claimOpen ? "收起" : "展开全文") {
+            Text(row.criterion?.text ?? EvidenceDecisions.noCriterion)
+                .font(.orbitProse)
+                .foregroundStyle(row.criterion == nil ? AnyShapeStyle(.secondary)
+                                                      : AnyShapeStyle(.primary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.blue.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// The submitter's own account, last and folded when it is long.
+    ///
+    /// It used to lead the card, which put a paragraph of implementation detail between the reader
+    /// and the gaps — the part most likely to change the answer — and the actions. Opening it now
+    /// REPLACES the fold rather than printing underneath it: the old shape drew the clamped first
+    /// 90 characters and then the whole text, so every long account began twice.
+    private var accountBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if claim.text.isEmpty {
+                Text(EvidenceDecisions.noClaim)
+                    .font(.orbitProse).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if claim.folded {
+                DisclosureToggle(open: claimOpen,
+                                 label: claimOpen ? EvidenceDecisions.claimHide
+                                                  : EvidenceDecisions.claimFold(fullClaim.count)) {
                     claimOpen.toggle()
                 }
                 if claimOpen {
-                    Text(row.claim.trimmingCharacters(in: .whitespacesAndNewlines))
+                    Text(fullClaim)
                         .font(.orbitProse)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            } else {
+                Text(fullClaim)
+                    .font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
