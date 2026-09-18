@@ -245,6 +245,27 @@ func syncJobProvider(job *ClaimedSession) {
 	}
 }
 
+// firstSpawnFor reports whether this spawn opens claude's conversation (--session-id) or
+// continues one that already exists (--resume).
+func firstSpawnFor(job *ClaimedSession) bool {
+	// A revived session's conversation exists even when Orbit has stored nothing for it: a
+	// transcript import writes that file with no engine having run at all.
+	if job.Resume {
+		return false
+	}
+	// A reclaim USUALLY means an engine already opened the conversation. Not always: reclaim
+	// also covers a claim whose HTTP response was lost after the server had already flipped the
+	// row PENDING -> RUNNING (reclaimMissingSessions), and no engine ever spawned for that one.
+	// No machine holds a conversation under its id, so --resume dies with "No conversation found
+	// with session ID" and the user's first message is never answered. MaxSeq — the events Orbit
+	// has stored for the session — is 0 for exactly that reclaim and non-zero once an engine has
+	// run, so the distinction needs no new field from the server.
+	if job.Reclaimed {
+		return job.MaxSeq == 0
+	}
+	return true
+}
+
 func currentRuntimeSessionID(job *ClaimedSession) string {
 	if job.RuntimeSessionID != "" {
 		return job.RuntimeSessionID
@@ -865,9 +886,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	waitTurnPermit := func(waitCtx context.Context) bool {
 		return pool.waitActive(live, waitCtx, shutdownCtx)
 	}
-	// A reclaimed or revived session's claude session already exists, so even its
-	// first spawn must --resume (firstSpawn=false), not --session-id.
-	firstSpawn := !job.Reclaimed && !job.Resume
+	firstSpawn := firstSpawnFor(job)
 	lastClaimJob := job
 	respawns := 0
 	terminalAckSettled := false
@@ -909,7 +928,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if claimedJob != nil && claimedJob != lastClaimJob {
 			job = claimedJob
 			lastClaimJob = claimedJob
-			firstSpawn = !job.Reclaimed && !job.Resume
+			firstSpawn = firstSpawnFor(job)
 			writeSessionMeta(scratch, job, execDir)
 		}
 		// From the first activation attempt onward the server may have committed this

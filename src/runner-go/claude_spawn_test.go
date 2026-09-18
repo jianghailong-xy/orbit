@@ -88,6 +88,69 @@ func TestClaudeCommandArgsOpenThenResumeTheSameConversation(t *testing.T) {
 	}
 }
 
+// A reclaim is not only a session that was already running: reclaimMissingSessions also picks
+// up a row the server flipped PENDING -> RUNNING before its claim response was lost, for which
+// no engine was ever spawned. No machine has a conversation under that id, and Orbit has stored
+// no events for it (MaxSeq 0), so resuming it dies with "No conversation found with session ID"
+// instead of answering the user's first message. Open it instead.
+func TestClaudeSpawnOpensAReclaimedSessionThatNeverRan(t *testing.T) {
+	job := claudeSpawnJob(t)
+	job.Reclaimed = true
+	job.MaxSeq = 0
+	got := claudeCommandArgs(job, t.TempDir(), firstSpawnFor(job))
+	if !containsArgs(got, []string{"--session-id", job.SessionUUID}) {
+		t.Errorf("argv %v does not open %s for a reclaimed session that never spawned an engine", got, job.SessionUUID)
+	}
+	if containsArgs(got, []string{"--resume", job.SessionUUID}) {
+		t.Errorf("argv %v resumes a conversation that was never opened", got)
+	}
+}
+
+// The reclaim that --resume exists for is still the common one: stored history means an engine
+// ran, so the conversation exists and must be continued rather than reopened.
+func TestClaudeSpawnResumesAReclaimedSessionWithHistory(t *testing.T) {
+	job := claudeSpawnJob(t)
+	job.Reclaimed = true
+	job.MaxSeq = 12
+	got := claudeCommandArgs(job, t.TempDir(), firstSpawnFor(job))
+	if !containsArgs(got, []string{"--resume", job.SessionUUID}) {
+		t.Errorf("argv %v does not resume %s for a reclaimed session with history", got, job.SessionUUID)
+	}
+	if containsArgs(got, []string{"--session-id", job.SessionUUID}) {
+		t.Errorf("argv %v reopens a conversation that already exists", got)
+	}
+}
+
+// runInteractiveSession decides firstSpawn twice — once for the claim it starts on, once more
+// when reserveEngine hands a cold supervisor a fresher claim. Both must reach the same rule:
+// an inline copy at either site silently reverts the one above after a claim refresh, which no
+// argv test can see. Asserted in the source because the second site is only reachable through a
+// live pool and a refreshed claim.
+func TestBothFirstSpawnSitesShareOneRule(t *testing.T) {
+	source, err := os.ReadFile("session.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assignments := 0
+	for _, line := range strings.Split(string(source), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "firstSpawn :=") && !strings.HasPrefix(trimmed, "firstSpawn =") {
+			continue
+		}
+		// `firstSpawn = false` after a spawn is the loop's own bookkeeping, not a rule.
+		if strings.HasSuffix(trimmed, "= false") {
+			continue
+		}
+		assignments++
+		if !strings.Contains(trimmed, "firstSpawnFor(job)") {
+			t.Errorf("session.go derives firstSpawn inline (%q); both sites must call firstSpawnFor", trimmed)
+		}
+	}
+	if assignments != 2 {
+		t.Errorf("found %d firstSpawn derivations in session.go, want the 2 runInteractiveSession makes", assignments)
+	}
+}
+
 // End to end against the fake CLI: the flags we build are the flags the process is started
 // with, the handle's stdin is a real open pipe, and `result` is a turn boundary — the same
 // process takes the next turn, with no second spawn.
