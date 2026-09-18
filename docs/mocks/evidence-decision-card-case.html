@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>需要你裁决 — 真实 case 的改法</title>
+<style>
+  :root { --bg-raised:#fff; --border:#dee0e3; --border-subtle:#eceef1;
+          --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e;
+          --brand:#3370ff; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+          --warning:#c2710c; --warning-border:#ffd591; --warning-bg:#fff4e6;
+          --success:#1a7f37; --mark:#e8590c; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 40px 48px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+         "Noto Serif CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.02em; margin:0 0 9px; }
+  .lede { color:#55555e; max-width:1000px; margin:0 0 4px; font-size:14px; }
+  .lede b { color:#16161a; }
+  .row { display:flex; gap:46px; align-items:flex-start; margin-top:32px; }
+  figure { margin:0; width:420px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  figcaption { margin-top:13px; font-size:12.5px; line-height:1.6; color:#55555e; }
+  figcaption b { color:#16161a; }
+  figcaption ul { margin:5px 0 0; padding-left:17px; }
+  figcaption li { margin-top:3px; }
+
+  .phone { width:420px; height:860px; border-radius:42px; background:#fff; overflow:hidden;
+           position:relative; border:9px solid #17171a;
+           box-shadow:0 2px 4px rgba(0,0,0,.18), 0 16px 40px rgba(0,0,0,.2); }
+  .status { height:44px; display:flex; align-items:flex-end; justify-content:space-between;
+            padding:0 24px 5px; font-size:13.5px; font-weight:600; color:var(--text-1); }
+  .navbar { padding:4px 16px 8px; border-bottom:1px solid var(--border-subtle); }
+  .navbar .t { font-size:16px; font-weight:600; }
+  .navbar .s { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+  .scroll { padding:10px 12px; position:relative; height:calc(860px - 44px - 52px - 86px);
+            overflow:hidden; }
+  .composerbar { position:absolute; left:0; right:0; bottom:0; height:86px; padding:10px 14px;
+                 border-top:1px solid var(--border-subtle); background:#fff; }
+  .cbox { border:1px solid var(--border); border-radius:20px; padding:9px 12px; font-size:13px;
+          color:var(--text-3); }
+  .modelbar { margin-top:7px; font-size:11px; color:var(--text-3); display:flex; gap:12px; }
+
+  .card { border:1px solid var(--brand); border-radius:12px; background:var(--brand-tint);
+          overflow:hidden; }
+  .head { padding:9px 12px; display:flex; align-items:center; gap:8px; font-size:14px;
+          font-weight:600; color:var(--text-1); border-bottom:1px solid var(--brand-border); }
+  .prov { margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+          border-radius:4px; background:#fff; color:var(--warning); font-size:10.5px;
+          font-weight:600; letter-spacing:.04em; }
+  .body { padding:9px 12px 12px; }
+  .subtitle { font-size:11.5px; font-weight:600; color:var(--text-3); }
+  .claim { margin-top:6px; font-size:13.5px; line-height:1.55; font-weight:600; color:var(--text-1); }
+  .meta { margin-top:6px; font-family:ui-monospace,Menlo,monospace; font-size:10.5px;
+          color:var(--text-3); }
+  .block { margin-top:10px; padding:8px 10px; border-radius:8px; background:#fff;
+           border:1px solid var(--brand-border); }
+  .block.amber { background:var(--warning-bg); border-color:var(--warning-border); }
+  .block .k { font-size:10.5px; font-weight:700; letter-spacing:.03em; color:var(--text-3); }
+  .block.amber .k { color:var(--warning); }
+  .block .v { margin-top:3px; font-size:12.5px; line-height:1.5; color:var(--text-1); }
+  .block ul { margin:4px 0 0; padding-left:16px; font-size:12.5px; line-height:1.45;
+              color:var(--text-1); }
+  .block li { margin-top:4px; }
+  .more { margin-top:5px; font-size:12px; color:var(--text-2); }
+  .checkline { display:flex; gap:6px; font-size:12.5px; color:var(--text-2); line-height:1.5; }
+  .checkline .ok { color:var(--success); font-weight:700; }
+  .btns { margin-top:11px; display:flex; flex-direction:column; gap:8px; }
+  .btn { padding:9px 14px; border-radius:7px; font-size:13.5px; text-align:center;
+         border:1px solid transparent; }
+  .btn.primary { background:var(--brand); color:#fff; font-weight:600; }
+  .btn.secondary { background:#fff; color:var(--text-2); border-color:var(--border); }
+  .fold { margin-top:9px; font-size:12.5px; color:var(--text-2); }
+
+  .fade { position:absolute; left:0; right:0; bottom:0; height:120px;
+          background:linear-gradient(to bottom, rgba(236,241,255,0), #eaf1ff 62%, #eaf1ff); }
+  .offscreen { position:absolute; left:12px; right:12px; bottom:14px; z-index:3;
+               background:rgba(232,89,12,.95); color:#fff; border-radius:8px; padding:7px 10px;
+               font-size:12px; line-height:1.45; text-align:center; }
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-4px -5px; border:2px dashed var(--mark);
+                 border-radius:9px; pointer-events:none; }
+  .num { position:absolute; top:-10px; right:-10px; width:18px; height:18px; border-radius:9px;
+         background:var(--mark); color:#fff; font-size:11px; font-weight:700; line-height:18px;
+         text-align:center; z-index:4; }
+</style>
+<body>
+
+<h1>「需要你裁决」：同一条真实证据，两种排法</h1>
+<p class="lede">这条证据是真的（任务 <code>34QTEhtb6QEddsXKbNsrt</code>，rev 1）：
+<b>主张 1941 字</b>、<b>缺口 5 条</b>、<b>机器已核 3 项</b>、引用 7 条。
+iOS 卡片把主张折到 90 字、web 折到 120 字 —— 也就是说这条主张是设计假设的 <b>21.6 倍</b>。
+下面左边是它现在的排法，右边是把同样的字段换个顺序之后。<b>一个字都不用重写，只换顺序和层级。</b></p>
+
+<div class="row">
+
+<figure>
+  <div class="tag now">现状 · 手机上打开的样子</div>
+  <div class="phone">
+    <div class="status"><span>1:58</span><span>••ıl ᯤ 77</span></div>
+    <div class="navbar">
+      <div class="t">把「什…  Coordinator  ⊙ Following 1 task</div>
+      <div class="s">Waiting for approval · Open · 1h ago</div>
+    </div>
+    <div class="scroll">
+      <div class="card">
+        <div class="head"><span>需要你裁决</span><span class="prov">FROM ORBIT</span></div>
+        <div class="body">
+          <div class="subtitle">web：确认卡搬到开工时刻</div>
+          <div class="claim">web 确认卡已搬到开工时刻。settlementHeldOnConfirmation 改为 project.status
+            === 'OPEN' &amp;&amp; criteria 非空 &amp;&amp; standing.state !== 'CONFIRMED'，satisfied
+            不再参与（卡片改读 /projects/:id 的 status 与 title）。标题 When is this project done?；
+            meta 行为项目名 · N criteria · not started · seal xxxxxx（seal 降至末位）；criteria
+            默认可见、每条 CSS 截断两行，由卡内一个非 action 的阅读控件 Read all N in full /
+            Show less 展开（clamp 放在内层 span，保住 ol 序号）；保留一段说明 Once this starts,
+            Orbit derives done from these N and from nothing else. 加既有常量
+            CONFIRMATION_EDIT_ENDS_IT。动作只剩两个，用既有 CardActions/CardActionButton，
+            无新尺寸、主按钮无副标题：主 Start the project，次直接引用 OwnerConfirmationCard 的
+            OWNER_SEND_BACK_ACTION（web 侧对应 Approvals.chatAction，未新造字面量；为避开
+            Acceptance→Owner→DecisionRail 模块环的 TDZ，在组件体内读取而非模块级取别名）。</div>
+        </div>
+      </div>
+      <div class="fade"></div>
+      <div class="offscreen">↓ 再滚 1 屏还是这段主张 · 5 条缺口在第 3 屏 · <b>两个按钮在第 4 屏</b><br>
+        「需要你裁决」，而屏幕上没有一个可裁决的东西</div>
+    </div>
+    <div class="composerbar">
+      <div class="cbox">＋　　　　　　　　　　　　　　　↑</div>
+      <div class="modelbar"><span>Auto</span><span>orbitd@Claude</span><span>Opus 5</span><span>Max</span></div>
+    </div>
+  </div>
+  <figcaption><b>三件事排反了</b>
+    <ul>
+      <li><b>判据原文根本不在卡上。</b>要判的是「这版证据够不够满足那条标准」，而标准只以
+        <code>6JXDw7dJ…</code> 这个 key 出现在 meta 行，原文藏在「已核对三项」的第一项详情里，要展两层</li>
+      <li><b>缺口 5 条排在 1941 字之后。</b>而这 5 条正是提交者自己承认没验证的部分 ——
+        唯一可能改变答案的材料</li>
+      <li><b>按钮在四屏之外。</b>对照同一个 app 里的确认卡：那张把标准摆在正文第一个框</li>
+    </ul>
+  </figcaption>
+</figure>
+
+<figure>
+  <div class="tag new">建议 · 同样的字段，换个顺序</div>
+  <div class="phone">
+    <div class="status"><span>1:58</span><span>••ıl ᯤ 77</span></div>
+    <div class="navbar">
+      <div class="t">把「什…  Coordinator  ⊙ Following 1 task</div>
+      <div class="s">Waiting for approval · Open · 1h ago</div>
+    </div>
+    <div class="scroll">
+      <div class="card">
+        <div class="head"><span>需要你裁决</span><span class="prov">FROM ORBIT</span></div>
+        <div class="body">
+          <div class="subtitle">web：确认卡搬到开工时刻</div>
+          <div class="block mark" style="margin-top:7px">
+            <div class="k">这版证据要满足的标准</div>
+            <div class="v">三端卡片的出现条件是「计划已写下且尚未确认」而非「每条 criterion
+              已达成」：satisfied 不再参与该判定，<span style="font-family:ui-monospace,Menlo,monospace;
+              font-size:11.5px">project.status === 'OPEN' &amp;&amp; criteria 非空 &amp;&amp;
+              standing.state !== 'CONFIRMED'</span> 是全部条件。</div>
+            <span class="num">1</span>
+          </div>
+          <div class="block amber mark">
+            <div class="k">提交者说自己没验证的 · 5 条</div>
+            <ul>
+              <li>planChange 的发送分支没有 web 运行时断言，只由一条读源码的接线断言钉住</li>
+              <li>两行截断与 Show less 的视觉效果未经渲染验证，无截图佐证</li>
+              <li>只动了 web 半边；swift 侧 parity 测试在当前树是红的</li>
+            </ul>
+            <div class="more">还有 2 条 ▾</div>
+            <span class="num">2</span>
+          </div>
+          <div class="block mark">
+            <div class="k">机器替你核过的</div>
+            <div class="checkline" style="margin-top:3px"><span class="ok">✓</span>
+              <span>跑了全量 web 测试：1836 用例全过，退出码 0</span></div>
+            <div class="checkline"><span class="ok">✓</span><span>引用的标准仍是线上那一条</span></div>
+            <div class="checkline"><span class="ok">✓</span><span>7/7 条引用解析成功 · 裁决人独立于这次提交</span></div>
+            <span class="num">3</span>
+          </div>
+          <div class="btns mark">
+            <div class="btn primary">确认完成</div>
+            <div class="btn secondary">退回重做</div>
+            <span class="num">4</span>
+          </div>
+          <div class="fold mark">提交者自述全文（1941 字）▾<span class="num">5</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="composerbar">
+      <div class="cbox">＋　　　　　　　　　　　　　　　↑</div>
+      <div class="modelbar"><span>Auto</span><span>orbitd@Claude</span><span>Opus 5</span><span>Max</span></div>
+    </div>
+  </div>
+  <figcaption><b>改了什么</b>
+    <ul>
+      <li><b>1</b> 判据原文提到第一位（现在只在 meta 行留一个 key）—— 和确认卡的
+        <code>WHAT SETTLES IT</code> 同一个位置、同一个道理</li>
+      <li><b>2</b> 5 条缺口提到第二位，前 3 条直出、其余计数，正是现有 <code>gapsShown = 3</code> 的规则</li>
+      <li><b>3</b> 三项机器核对压成三行人话；那条跑测试的 TOOL_CALL 直接说「1836 用例全过」，
+        6 条文件路径收进详情</li>
+      <li><b>4</b> 按钮进首屏 —— 一张要人裁决的卡，选项不该在四屏之外</li>
+      <li><b>5</b> 1941 字的自述降到最后、默认折叠。它是留档，不是判断材料</li>
+    </ul>
+  </figcaption>
+</figure>
+</div>
+
+<h1 style="font-size:19px; margin:40px 0 8px">另外两件，跟这张卡同屏发生</h1>
+<p class="lede"><b>语言不一致：</b>这张卡全中文（需要你裁决 / 确认完成 / 退回重做 / 展开全文 /
+提交者声明的缺口），而同一个 app 里的确认卡全英文（Confirm this task is done? / Confirm done /
+Chat about this），卡上还并着一枚英文 FROM ORBIT。同一条会话里会连着弹出两种语言的判决卡，得选一边。</p>
+<p class="lede"><b>同屏里其他给机器看的字：</b>顶部 <code>Waiting for approval</code>、
+一条 <code>Background job finished 协调者复验 T1 的两个 pg spec exited 0.</code>、
+底部 <code>Watching … 0 met · 22h left</code>。「exited 0」和「0 met」跟卡上的
+<code>rev 1 · 6JXDw7dJ…</code> 是同一个毛病：把内部计量单位直接印在脸上。</p>
+
+</body>
+</html>

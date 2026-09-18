@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Owner confirmation card — copy review mockup</title>
+<style>
+  /* 真实 token，抄自 src/web/src/index.css :root（light） */
+  :root {
+    --bg-raised:#ffffff; --bg-base:#ffffff; --bg-sunken:#f7f8fa;
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+    --mark:#e8590c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 40px 52px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+         "Noto Serif CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:26px; letter-spacing:-.02em; margin:0 0 10px; }
+  .lede { color:#55555e; max-width:1080px; margin:0 0 6px; font-size:14.5px; }
+  .lede b { color:#16161a; }
+  .row { display:flex; gap:44px; align-items:flex-start; margin-top:36px; }
+  figure { margin:0; width:520px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  figcaption { margin-top:14px; font-size:13px; line-height:1.6; color:#55555e; }
+  figcaption b { color:#16161a; }
+  figcaption ul { margin:6px 0 0; padding-left:18px; }
+  figcaption li { margin-top:3px; }
+  h2.sec { font-size:16px; margin:44px 0 0; color:#16161a; }
+  h2.sec span { color:#8b8b95; font-weight:500; font-size:14px; }
+
+  /* ── 卡片本体：抄 .approval-card / .decision-ask / .owner-confirmation ── */
+  .approval-card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint);
+                   overflow:hidden; }
+  .approval-head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+                   background:var(--brand-tint); border-bottom:1px solid var(--brand-border);
+                   display:flex; align-items:center; gap:8px; }
+  .provenance { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+                border-radius:4px; background:var(--bg-raised); color:var(--warning);
+                font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .approval-body { padding:4px 14px 12px; font-size:13.5px; color:var(--text-1); }
+  .claim { font-size:15px; font-weight:600; line-height:1.45; color:var(--text-1); margin-top:8px; }
+  .meta { margin-top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+          font-size:11.5px; color:var(--text-3); }
+  .meta.plain { font-family:inherit; font-size:12.5px; color:var(--text-2); }
+  .meta.plain .id { font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:var(--text-3); }
+  .box { margin-top:10px; padding:8px 10px; border:1px solid var(--brand-border); border-radius:8px;
+         background:var(--bg-raised); }
+  .box .key { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--text-3); }
+  .box .val { margin-top:2px; font-size:13px; line-height:1.55; color:var(--text-1); }
+  .toggle { display:inline-flex; align-items:center; gap:5px; margin-top:6px; font-size:12.5px;
+            color:var(--text-2); }
+  .actions { display:flex; flex-direction:column; align-items:stretch; gap:8px; margin-top:12px; }
+  .btn { padding:6px 16px; border-radius:6px; font-size:13px; border:1px solid transparent;
+         text-align:center; }
+  .btn.primary { background:var(--brand); color:#fff; }
+  .btn.secondary { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); }
+  .hint { margin-top:8px; font-size:12px; line-height:1.5; color:var(--text-3); }
+
+  /* 回执 */
+  .receipt { border:1px solid var(--border); border-radius:10px; background:var(--bg-raised);
+             overflow:hidden; }
+  .receipt .approval-head { background:var(--bg-raised); border-bottom-color:var(--border-subtle); }
+  .receipt .tick { color:var(--success-solid); }
+  .chip { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--text-3); margin:8px 0 4px; }
+  .picked { margin-top:12px; font-size:12.5px; color:var(--text-2); }
+
+  /* 输入框顶栏 */
+  .composer { margin-top:14px; border:1px solid var(--border); border-radius:12px;
+              background:var(--bg-raised); padding:10px; }
+  .replybar { display:flex; align-items:center; gap:8px; background:var(--brand-tint);
+              border:1px solid var(--brand-border); border-radius:999px; padding:6px 12px;
+              font-size:12.5px; color:var(--text-2); }
+  .replybar .x { margin-left:auto; color:var(--text-3); }
+  .cbox { margin-top:8px; border:1px solid var(--border); border-radius:8px; padding:9px 11px;
+          font-size:13.5px; color:var(--text-4); background:var(--bg-base); }
+
+  /* 报错 */
+  .alert { display:flex; gap:9px; margin-top:10px; padding:9px 12px; border-radius:8px;
+           background:var(--warning-bg); border:1px solid var(--warning-border); }
+  .alert .ico { color:#fa8c16; font-size:14px; line-height:1.5; flex:none; }
+  .alert .t { font-size:13px; font-weight:600; color:var(--text-1); }
+  .alert .d { margin-top:3px; font-size:12.5px; line-height:1.55; color:var(--text-2); }
+  .alert .more { margin-top:5px; font-size:12.5px; color:var(--text-2); }
+
+  /* tooltip：现状里唯一说明后果的地方 */
+  .tipwrap { position:relative; }
+  .tooltip { position:absolute; left:50%; transform:translateX(-50%); bottom:-46px; z-index:3;
+             background:rgba(31,35,41,.94); color:#fff; font-size:11.5px; line-height:1.45;
+             padding:6px 9px; border-radius:6px; width:300px; text-align:center;
+             box-shadow:0 4px 12px rgba(0,0,0,.18); }
+  .tooltip:before { content:''; position:absolute; top:-5px; left:50%; margin-left:-5px;
+                    border:5px solid transparent; border-top:0; border-bottom-color:rgba(31,35,41,.94); }
+  .cursor { position:absolute; left:calc(50% + 46px); bottom:-14px; font-size:15px; }
+  .tipnote { margin-top:54px; font-size:12px; color:var(--mark); }
+
+  /* 改动标注 */
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-5px -6px; border:2px dashed var(--mark);
+                 border-radius:9px; pointer-events:none; }
+  .num { position:absolute; top:-11px; right:-11px; width:19px; height:19px; border-radius:10px;
+         background:var(--mark); color:#fff; font-size:11.5px; font-weight:700; line-height:19px;
+         text-align:center; z-index:4; }
+  .spacer { height:6px; }
+</style>
+<body>
+
+<h1>确认卡片：把内部词换成人话</h1>
+<p class="lede"><b>结构、颜色、按钮位置一律不动</b>，只改字，外加一处把 tooltip 里的承诺提到常显。
+橙色虚线 = 改动处，编号对应下面说明。卡片尺寸/配色按 <code>src/web/src/index.css</code> 的真实 token 还原；
+Mac 端 <code>OwnerConfirmation.swift</code> 是同一份文案，改的时候两端一起动（有 parity 测试盯着）。</p>
+
+<h2 class="sec">① 主卡片 <span>— 一个人要看着它决定「这活儿算不算干完了」</span></h2>
+<div class="row">
+
+  <figure>
+    <div class="tag now">现状</div>
+    <div class="approval-card">
+      <div class="approval-head">
+        <span>Confirm this task is done?</span>
+        <span class="provenance">FROM ORBIT</span>
+      </div>
+      <div class="approval-body">
+        <div class="claim">Retry the failing acceptance check on the watches list</div>
+        <div class="meta">34RxN7pQ2vK9sLbT4hWmZ · OWNER_CONFIRMED</div>
+        <div class="box">
+          <div class="key">WHAT SETTLES IT</div>
+          <div class="val">npm test -- watches passes on main, and the Following page shows a row for
+            every watch you follow.</div>
+        </div>
+        <div class="box">
+          <div class="key">WHAT THE RUN REPORTED · 9/17 18:22</div>
+          <div class="val">Re-ran the suite after the fix; one test was still red because the fixture
+            carried a stale id. Patched the fixture — all 42 pass now. Nothing was committed, the…</div>
+          <div class="toggle">Show all</div>
+        </div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="tipwrap">
+            <div class="btn secondary">Chat about this</div>
+            <div class="cursor">🖰</div>
+            <div class="tooltip">Sent to this session as your next message. The task stays open.</div>
+          </div>
+        </div>
+        <div class="tipnote">↑ 唯一说明「按下会怎样」的句子只在 hover 里，手机/触屏永远看不到</div>
+      </div>
+    </div>
+    <figcaption><b>读者遇到的生词</b>
+      <ul>
+        <li><b>WHAT THE RUN REPORTED</b> / <b>the run ended its turn</b>：run、turn 是 Orbit 内部模型</li>
+        <li><b>WHAT SETTLES IT</b>：settle 抽象，而且 "it" 在屏幕上没有先行词</li>
+        <li><b>OWNER_CONFIRMED</b> + 21 位 ID 占着标题正下方最贵的一行</li>
+        <li><b>Chat about this</b>：猜不到「任务不会关、我下一句话会发给它」</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <div class="tag new">建议</div>
+    <div class="approval-card">
+      <div class="approval-head">
+        <span>Confirm this task is done?</span>
+        <span class="provenance">FROM ORBIT</span>
+      </div>
+      <div class="approval-body">
+        <div class="claim">Retry the failing acceptance check on the watches list</div>
+        <div class="meta plain mark">You decide when this is done
+          <span class="id">· 34RxN7…</span><span class="num">1</span></div>
+        <div class="box">
+          <div class="key mark">WHAT COUNTS AS DONE<span class="num">2</span></div>
+          <div class="val">npm test -- watches passes on main, and the Following page shows a row for
+            every watch you follow.</div>
+        </div>
+        <div class="box">
+          <div class="key mark">WHAT THE AGENT SAID · 9/17 18:22<span class="num">3</span></div>
+          <div class="val">Re-ran the suite after the fix; one test was still red because the fixture
+            carried a stale id. Patched the fixture — all 42 pass now. Nothing was committed, the…</div>
+          <div class="toggle">Show all</div>
+        </div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="btn secondary mark">Ask for changes<span class="num">4</span></div>
+        </div>
+        <div class="hint mark">Your next message goes to this agent. The task stays open.<span class="num">5</span></div>
+      </div>
+    </div>
+    <figcaption><b>改了什么</b>
+      <ul>
+        <li><b>1</b> 枚举 + 长 ID 让位给它真正的意思；ID 缩短留在后面（仍可复制）</li>
+        <li><b>2</b> settle → counts as done，读的人不用先学一个词</li>
+        <li><b>3</b> run → agent；空态同步改 <b>The agent finished without saying anything.</b>
+          （原：The run ended its turn without a message.）</li>
+        <li><b>4</b> 说清按下去要什么；send-back 这个内部词不再露脸</li>
+        <li><b>5</b> tooltip 提成常显小字（<code>.owner-confirmation-hint</code> 这个类 CSS 里已经有了），
+          手机上也读得到</li>
+        <li>空验收标准同改：<b>Nobody wrote down what counts as done.</b>
+          （原：This task states no acceptance criteria.）</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">② 按下之后 <span>— 输入框顶栏 + 回执</span></h2>
+<div class="row">
+
+  <figure>
+    <div class="tag now">现状</div>
+    <div class="receipt">
+      <div class="approval-head"><span>Sent back</span><span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">Retry the failing acceptance check on the watches list</div>
+        <div class="picked">Sent back by you · 9/17 18:24</div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="replybar"><span>Sending back to this run: Retry the failing acceptance check…</span>
+        <span class="x">✕</span></div>
+      <div class="cbox">What's missing?</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="receipt" style="margin-top:14px">
+      <div class="approval-head"><span class="tick">✓</span><span>Confirmed done</span>
+        <span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">Retry the failing acceptance check on the watches list</div>
+        <div class="picked">Confirmed done by you · 9/17 18:24</div>
+        <div class="toggle">Show what settled it ▾</div>
+      </div>
+    </div>
+    <figcaption><b>Sent back</b> / <b>Sending back to this run</b> 是 <code>SEND_BACK</code> 这个枚举漏到了脸上：
+      正常人读「退回」会问退给谁、退到哪去了。<b>this run</b> 同上。</figcaption>
+  </figure>
+
+  <figure>
+    <div class="tag new">建议</div>
+    <div class="receipt">
+      <div class="approval-head"><span class="mark">Asked for changes<span class="num">6</span></span>
+        <span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">Retry the failing acceptance check on the watches list</div>
+        <div class="picked">Asked for changes · 9/17 18:24</div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="replybar mark"><span>Replying to: Retry the failing acceptance check…</span>
+        <span class="x">✕</span><span class="num">7</span></div>
+      <div class="cbox">What's missing?</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="receipt" style="margin-top:14px">
+      <div class="approval-head"><span class="tick">✓</span><span>Confirmed done</span>
+        <span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">Retry the failing acceptance check on the watches list</div>
+        <div class="picked">Confirmed done by you · 9/17 18:24</div>
+        <div class="toggle mark">Show what counted as done ▾<span class="num">8</span></div>
+      </div>
+    </div>
+    <figcaption><b>6·7</b> 和按钮上的 "Ask for changes" 连成一句话：按了什么 → 在答什么 → 留下了什么记录。
+      <br><b>8</b> 跟着 ② 一起改，全卡只剩一种说法。
+      <br><b>Confirm done / Confirmed done</b> 这条线本来就通顺，不动。</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">③ 卡片过期时 <span>— 现在是三句话的段落，末尾还挂着错误码</span></h2>
+<div class="row">
+
+  <figure>
+    <div class="tag now">现状</div>
+    <div class="alert">
+      <span class="ico">⚠</span>
+      <div>
+        <div class="t">Not recorded: this card is out of date</div>
+        <div class="d">A later report is waiting on you now, so the report this card was drawn for is
+          not the one waiting. Nothing here would be recorded; the newer report has its own card in
+          the session it reported in. (OWNER_CONFIRMATION_STALE)</div>
+      </div>
+    </div>
+    <figcaption>四行字里有 report／card／session／run 四个概念要同时装进脑子，末尾还甩一个
+      <code>OWNER_CONFIRMATION_STALE</code>。普通人读到第二句就丢了，而这一刻他只想知道两件事：
+      <b>我刚才那下算数吗</b>、<b>现在该看哪儿</b>。</figcaption>
+  </figure>
+
+  <figure>
+    <div class="tag new">建议</div>
+    <div class="alert mark">
+      <span class="ico">⚠</span>
+      <div>
+        <div class="t">Not recorded — there's a newer report to look at</div>
+        <div class="d">This card is out of date, so nothing was changed. The newer report is waiting
+          further down.</div>
+        <div class="more">Details ▾</div>
+      </div>
+      <span class="num">9</span>
+    </div>
+    <figcaption><b>9</b> 先回答那两个问题（没记下 / 去看新的那条），技术细节和错误码收进
+      <b>Details</b> 折叠里——报 bug 的人展开就有，其他人不必读。
+      <br>同理 <b>Not recorded</b>（无 run 等待那条）改成
+      <b>Nothing to confirm here right now</b> + Details。</figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">④ 没改、但值得单独定的一处</h2>
+<p class="lede" style="margin-top:10px"><b>FROM ORBIT</b> 这枚橙标（连同它那段三句话 tooltip）我在图里原样留着：
+它是<b>三张卡共用</b>的（证据裁决卡、判据裁决卡、这张确认卡都从 <code>CriteriaDecisionCard.tsx</code> 取
+<code>PROVENANCE_LABEL</code>）。要改的话建议 <b>VERIFIED BY ORBIT</b> + 一句
+<b>“Orbit wrote this card. Only you can press these buttons.”</b>，但那是一处跨三张卡的改动，
+单独拍板比夹在这批里更稳妥。</p>
+
+</body>
+</html>
