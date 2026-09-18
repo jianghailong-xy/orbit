@@ -452,6 +452,33 @@ async function failTurn(stack: Stack, w: World, a: Attempt, result = 'the engine
   assert.deepEqual(outcome, { ok: true, status: RunStatus.FAILED });
 }
 
+/**
+ * The engine's reply to a turn it ran, up the door the runner posts its transcript to.
+ *
+ * A turn is ANSWERED because something answered it, not because the engine stopped: a message turn
+ * with none of the workspace's own reply events under it goes back to PENDING when it is completed
+ * instead of ending. A fixture whose turn is meant to have ENDED — freeing the engine for whatever
+ * is queued behind it — has to have been spoken in first.
+ */
+async function answerTurn(
+  stack: Stack,
+  runnerId: string,
+  sessionId: string,
+  turnId: string,
+  text: string,
+): Promise<void> {
+  const last = await stack.db.runEvent.aggregate({ where: { sessionId }, _max: { seq: true } });
+  await stack.api.events({ id: runnerId }, sessionId, {
+    events: [{
+      seq: (last._max.seq ?? 0) + 1,
+      type: RunEventType.ASSISTANT,
+      ts: new Date().toISOString(),
+      turnId,
+      payload: { text },
+    }],
+  });
+}
+
 async function taskStatus(db: PrismaClient, taskId: string): Promise<TaskStatus> {
   return (await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } })).status;
 }
@@ -519,6 +546,9 @@ test('an EXECUTABLE exit code that disagrees opens one item', { skip, timeout: 1
   try {
     const w = await world(stack, 'exit-mismatch', 'PARKED');
     const a = await attempt(stack, w, 'exit-mismatch', { acceptance: { command: 'exit 7', expectedExitCode: 0 } });
+    // The task's own turn is answered — the engine ran it and said so — which is what settles it
+    // and leaves the acceptance shell turn as the next thing this session has to run.
+    await answerTurn(stack, w.runnerId, a.sessionId, a.turnId, 'the task work is done');
     const finished = await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
       turnId: a.turnId,
       status: SharedRunStatus.SUCCEEDED,
@@ -683,6 +713,9 @@ test('an item survives unread messages and is delivered after the running turn e
     assert.ok(queued.seq > unread.seq, 'it waits behind what the owner already sent');
 
     // Nothing else is written about the task: the coordinator's own turn ending is what hands it over.
+    // The turn ends the ordinary way — it was answered — so it settles here instead of going back
+    // to the queue in front of the messages already waiting behind it.
+    await answerTurn(stack, w.runnerId, coordinator, w.runningTurnId!, 'the project is fine');
     const ended = await stack.api.turnComplete({ id: w.runnerId }, coordinator, {
       turnId: w.runningTurnId!,
       status: SharedRunStatus.SUCCEEDED,
@@ -690,6 +723,7 @@ test('an item survives unread messages and is delivered after the running turn e
     assert.deepEqual(ended, { ok: true, status: RunStatus.RUNNING });
     const first = await dequeue(stack, coordinator, w.runnerId);
     assert.equal(first?.turnId, unread.turnId, 'the owner\'s message goes first');
+    await answerTurn(stack, w.runnerId, coordinator, first!.turnId, 'the project is fine');
     await stack.api.turnComplete({ id: w.runnerId }, coordinator, {
       turnId: first!.turnId,
       status: SharedRunStatus.SUCCEEDED,
