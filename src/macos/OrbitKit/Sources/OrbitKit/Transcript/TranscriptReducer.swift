@@ -106,6 +106,22 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transient like `bgLaunch` — excluded from the persisted keys below, so snapshots written
     /// before it existed still decode; a rehydrated session simply starts folding afresh.
     private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
+    /// Whether this turn has already put a row on screen that accounts for how it went: a reply, the
+    /// runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
+    /// `endTurn` speaks only when none of them did — in the recorded corpus every codex `failed`
+    /// turn already carries its own error, usually "You've hit your usage limit", where "send the
+    /// message again" would be wrong advice; and 190 of the 200 `error_during_execution` turns are
+    /// the user pressing stop, already drawn as an interrupt row.
+    ///
+    /// An engine's stderr deliberately does NOT count. It is a diagnosis, not an account of the
+    /// turn: it never says the turn produced no reply, nor what to do about it. All ten of the
+    /// observed silent-evaporation turns carry one ("No conversation found with session ID: …") and
+    /// nothing else, so letting stderr stand as the turn's account would leave this doing nothing
+    /// for the very case that asked for it.
+    ///
+    /// Transient like `bgLaunch` — excluded from the persisted keys below, so old snapshots still
+    /// decode. It is the one transient that does not come back empty: see `init(from:)`.
+    private var turnAccountedFor = false
 
     /// Latest broadcast-only foreground-shell snapshot, including the runner's monotonic version.
     /// Keeping this beside (rather than inside) ``TranscriptState`` lets an output that beats its
@@ -125,6 +141,22 @@ public struct TranscriptReducer: Sendable, Codable {
     private enum CodingKeys: String, CodingKey { case state, seen, openAssistant, openThinking, idSeq }
 
     public init() {}
+
+    /// Decoding a snapshot rehydrates the fold, not what the turn it was taken mid-way through had
+    /// already said — and the console checkpoints every few seconds while a session streams, so a
+    /// session switch routinely restores one. `turnAccountedFor` therefore comes back `true`: the
+    /// cost of assuming wrongly is one missing marker on the turn in flight, where assuming the
+    /// other way would put "this turn ended without a reply" under a reply that is on screen.
+    /// Everything else is decoded exactly as the synthesized initializer did.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decode(TranscriptState.self, forKey: .state)
+        seen = try c.decode(Set<Int>.self, forKey: .seen)
+        openAssistant = try c.decodeIfPresent(Int.self, forKey: .openAssistant)
+        openThinking = try c.decodeIfPresent(Int.self, forKey: .openThinking)
+        idSeq = try c.decode(Int.self, forKey: .idSeq)
+        turnAccountedFor = true
+    }
 
     /// Persist the durable fold without baking a broadcast-only shell preview into its running
     /// card. The in-memory state still carries `result` so existing views render without a second
@@ -514,6 +546,9 @@ public struct TranscriptReducer: Sendable, Codable {
 
     private mutating func finalizeAssistant(_ full: String, seq: Int, turnId: String?,
                                            ts: String? = nil) {
+        // Every branch below leaves a row — a reply, an error line, or a card — so the turn has
+        // spoken for itself either way, and `endTurn` needn't speak for it.
+        turnAccountedFor = true
         // Three failures arrive as an ordinary assistant reply — an expired sign-in, a spent quota
         // or an unreachable provider, and an outright API error — with a `success` result, so
         // nothing upstream treats the turn as failed. Rendered verbatim they read as the agent
@@ -806,14 +841,33 @@ public struct TranscriptReducer: Sendable, Codable {
 
     // MARK: - turn / user / interrupt / error
 
+    /// The turn is over, and this is the last chance to say it never answered.
+    ///
+    /// A control plane that sends `status` is still the authority. None of the four runner emitters
+    /// does — they send the engine's `subtype` — so the `else` used to park every turn at
+    /// `.awaitingInput`, which for a turn whose engine never spawned was the client's own hand
+    /// turning a dead turn into a healthy one, while the transcript showed nothing but a divider.
+    ///
+    /// `.interrupted` rather than `.failed`: it is what the runner itself concludes for this
+    /// subtype (`session.go`'s `resultFrom` maps it to interrupted), and the session really is
+    /// still alive — so the composer stays on Send, which is the action the marker asks for.
     private mutating func endTurn(_ ev: RunEvent) {
         flushStreaming()
         clearLiveToolOutputsAtBoundary()
+        defer { turnAccountedFor = false }
         if let s = str(ev, "status"), let st = RunStatus(rawValue: s) {
             setStatus(st)
-        } else {
-            setStatus(.awaitingInput)
+            return
         }
+        // A runner too old to send a subtype says nothing about how the turn went, and a failure
+        // invented out of that silence is the same lie facing the other way.
+        let subtype = str(ev, "subtype") ?? ""
+        guard !subtype.isEmpty, !TurnOutcome.finished(subtype), !turnAccountedFor else {
+            setStatus(.awaitingInput)
+            return
+        }
+        state.items.append(.error(id: nextID(), message: TurnOutcome.endedWithoutReply))
+        setStatus(.interrupted)
     }
 
     /// Adopt a run-status transition, and settle anything the transition strands.
@@ -952,6 +1006,7 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func appendInterrupt(seq: Int) {
+        turnAccountedFor = true
         flushStreaming()
         state.items.append(.interrupt(id: nextID(), seq: seq))
         state.status = .interrupted
@@ -961,6 +1016,7 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func appendError(_ ev: RunEvent) {
+        turnAccountedFor = true
         let msg = str(ev, "message") ?? str(ev, "error") ?? str(ev, "text") ?? "error"
         // A signed-out engine is reported as an error event rather than assistant text (there is no
         // model in the loop yet — it never got to spawn), but the remedy is the same human action,
@@ -1166,6 +1222,24 @@ public struct TranscriptReducer: Sendable, Codable {
             return TurnAttachment(id: id, mime: el["mime"]?.stringValue, name: el["name"]?.stringValue)
         }
     }
+}
+
+/// What a `turn_end` says about the turn it closes, and what the transcript says back.
+///
+/// The runner has always reported this — `turn_end` carries the engine's `subtype` — but none of
+/// the four emitters sends `status`, which is the only key `endTurn` used to read.
+enum TurnOutcome {
+    /// Stated the way round that survives a failure nobody has thought of yet: these are the four
+    /// runners' words for a turn that FINISHED — `success` (claude/anthropic/deepseek/opencode) and
+    /// `completed` (codex/kimi) — and anything else is a turn that did not.
+    static func finished(_ subtype: String) -> Bool { subtype == "success" || subtype == "completed" }
+
+    /// The engine's own word for it (`error_during_execution`) is a diagnosis, not something to
+    /// show a reader — so this says what happened and what to do about it. Kept in step BY
+    /// CONVENTION with web's `TURN_ENDED_WITHOUT_REPLY` in `Transcript.tsx` (there is no shared
+    /// string table across the three clients); `TurnEndOutcomeTests` reads that file to catch a
+    /// one-sided edit.
+    static let endedWithoutReply = "This turn ended without a reply — send the message again to retry."
 }
 
 /// Readying an engine's raw stderr line for the transcript — the native half of the web

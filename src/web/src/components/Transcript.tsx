@@ -368,6 +368,22 @@ function linkifyLogText(text: string): ReactNode[] {
   return out;
 }
 
+/**
+ * What the transcript says for a turn that ended without answering.
+ *
+ * The engine's own word for it (`error_during_execution`) is a diagnosis, not something to show a
+ * reader — so this says what happened and what to do about it. Kept in step BY CONVENTION with
+ * OrbitKit's `TurnOutcome.endedWithoutReply` (there is no shared string table across the three
+ * clients); `TranscriptReducerTests.testTheMarkerSaysTheSameWordsOnWeb` reads this line to catch a
+ * one-sided edit, so keep it a single-quoted one-liner.
+ */
+export const TURN_ENDED_WITHOUT_REPLY = 'This turn ended without a reply — send the message again to retry.';
+
+// Stated the way round that survives a failure nobody has thought of yet: these are the four
+// runners' words for a turn that FINISHED — `success` (claude/anthropic/deepseek/opencode) and
+// `completed` (codex/kimi) — and anything else is a turn that did not.
+const TURN_FINISHED_SUBTYPES = new Set(['success', 'completed']);
+
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
   const byId = new Map<string, ToolNode>();
@@ -448,6 +464,19 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // User bubbles by turn, so a delivery report that lands after one can amend it. A
   // message is never re-rendered as sent by a later event — only ever as failed.
   const userByTurn = new Map<string, TextNode>();
+  // Whether this turn has already put a row on screen that accounts for how it went: a reply, the
+  // runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
+  // `turn_end` speaks only when none of them did — in the recorded corpus every codex `failed`
+  // turn already carries its own error, usually "You've hit your usage limit", where "send the
+  // message again" would be wrong advice; and 190 of the 200 `error_during_execution` turns are
+  // the user pressing stop, already drawn as "⊘ interrupted".
+  //
+  // An engine's stderr deliberately does NOT count. It is a diagnosis, not an account of the turn:
+  // it never says the turn produced no reply, nor what to do about it. All ten of the observed
+  // silent-evaporation turns carry one ("No conversation found with session ID: …") and nothing
+  // else, so letting stderr stand as the turn's account would leave this fix doing nothing for the
+  // very case that asked for it.
+  let turnAccountedFor = false;
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -527,6 +556,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
       case 'assistant':
         if (p.text) {
           const text = String(p.text);
+          // Every branch below leaves a row — a reply, an error line, or a card — so the turn has
+          // spoken for itself either way.
+          turnAccountedFor = true;
           // A Claude API error (e.g. content filtering) comes back as an assistant text
           // block, not an `error` event — render it as an error so the failed turn is
           // unmistakable instead of looking like a normal reply. An expired sign-in arrives
@@ -598,10 +630,27 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         break;
       }
       // turn_end is emitted only for the top-level turn (never inside a sub-workspace).
-      case 'turn_end':
-        roots.push({ kind: 'divider', seq: ev.seq });
+      case 'turn_end': {
+        // The turn is over, and this is the last chance to say it never answered. What used to be
+        // here was a divider whose entire style is `margin: 12px 0` — so a turn that failed
+        // contributed twelve pixels of blank, and if the engine happened to write to stderr the
+        // reader got one raw line ("No conversation found with session ID: …") and no statement
+        // that the turn had failed at all. The runner has always reported it: every `turn_end`
+        // carries the engine's `subtype`. But a runner too old to send one says nothing about how
+        // the turn went, and a failure invented out of that silence is the same lie facing the
+        // other way.
+        const subtype = typeof p.subtype === 'string' ? p.subtype : '';
+        const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        roots.push(
+          failed
+            ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
+            : { kind: 'divider', seq: ev.seq },
+        );
+        turnAccountedFor = false;
         break;
+      }
       case 'interrupt':
+        turnAccountedFor = true;
         into(parent).push({ kind: 'interrupt', seq: ev.seq });
         break;
       case 'error': {
@@ -611,6 +660,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // stripAnsi: an engine that colours its output reaches here through the runner verbatim,
         // and the ESC byte is invisible in HTML — what would show is literal "[31m" garbage.
         const msg = stripAnsi(String(p.message ?? 'error'));
+        turnAccountedFor = true;
         if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;

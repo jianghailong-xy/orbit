@@ -1913,9 +1913,184 @@ final class TranscriptReducerTests: XCTestCase {
     }
 }
 
+/// A turn that ended without answering has to say so — and the client must stop washing it healthy.
+///
+/// The runner has always reported it: `turn_end` carries the engine's `subtype`, and the four
+/// emitters send `success` / `completed` when the turn finished and something else when it did not.
+/// None of them sends `status`, so the reducer's `payload["status"]` branch never fired and the
+/// `else` unconditionally parked the session at `.awaitingInput` — the client's own hand turning a
+/// dead turn into a healthy one.
+///
+/// The rule is stated the way round that survives a new failure: the two subtypes that mean the turn
+/// finished are named, and everything else is a turn that did not. What the marker must NOT do is
+/// say it twice — in the recorded corpus every codex `failed` turn already carries its own `error`
+/// event, and 190 of the 200 `error_during_execution` turns are the user pressing stop and already
+/// carry an `interrupt` row.
+final class TurnEndOutcomeTests: XCTestCase {
+
+    private func afterTurnEnd(subtype: String, preceded: [RunEvent] = []) -> TranscriptReducer {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("go")])))
+        for ev in preceded { r.apply(ev) }
+        r.apply(RunEvent(seq: 9, type: .turnEnd, payload: .object([
+            "subtype": .string(subtype), "numTurns": .int(0), "costUsd": .int(0)])))
+        return r
+    }
+
+    func testFailedSubtypeLeavesAMarkerAndDoesNotParkTheSessionAsHealthy() {
+        let r = afterTurnEnd(subtype: "error_during_execution")
+
+        XCTAssertNotEqual(r.state.status, .awaitingInput,
+                          "a turn that never answered must not be parked as waiting for the user")
+        XCTAssertEqual(r.state.status, .interrupted,
+                       "the runner itself calls this subtype interrupted (session.go resultFrom); "
+                       + "the session is still alive, so the composer must stay on Send")
+        XCTAssertEqual(r.state.items.last.flatMap { $0.asError }, TurnOutcome.endedWithoutReply)
+    }
+
+    func testTheMarkerSaysItInWordsNeverTheEnginesSubtype() {
+        let r = afterTurnEnd(subtype: "error_during_execution")
+
+        XCTAssertFalse(TurnOutcome.endedWithoutReply.contains("error_during_execution"))
+        XCTAssertFalse(r.state.items.compactMap { $0.asError }.contains { $0.contains("_") },
+                       "a raw engine subtype reached the reader")
+    }
+
+    func testASubtypeNobodyHasSeenYetIsMarkedBecauseTheRuleNamesTheGoodEndings() {
+        let r = afterTurnEnd(subtype: "error_starting_engine")
+
+        XCTAssertEqual(r.state.items.last.flatMap { $0.asError }, TurnOutcome.endedWithoutReply)
+    }
+
+    func testAFinishedTurnStillParksWithNoMarker() {
+        for subtype in ["success", "completed"] {
+            let r = afterTurnEnd(subtype: subtype)
+
+            XCTAssertEqual(r.state.status, .awaitingInput, "\(subtype) is a turn that finished")
+            XCTAssertTrue(r.state.items.compactMap { $0.asError }.isEmpty, "\(subtype) marked as a failure")
+        }
+    }
+
+    func testAnExplicitStatusOnTheEventStillWins() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("go")])))
+        r.apply(RunEvent(seq: 9, type: .turnEnd, payload: .object([
+            "status": .string("FAILED"), "subtype": .string("error_during_execution")])))
+
+        XCTAssertEqual(r.state.status, .failed,
+                       "a control plane that does send `status` is still the authority")
+    }
+
+    func testTheEngineIsNotAccusedWhenTheUserIsTheOneWhoStoppedTheTurn() {
+        let r = afterTurnEnd(subtype: "error_during_execution",
+                             preceded: [RunEvent(seq: 5, type: .interrupt, payload: .object([:]))])
+
+        XCTAssertTrue(r.state.items.compactMap { $0.asError }.isEmpty,
+                      "the interrupt row already accounts for this turn")
+        // And it still parks: a turn the user stopped really is waiting for them. The lie this
+        // fixes was only ever about turns that failed.
+        XCTAssertEqual(r.state.status, .awaitingInput)
+    }
+
+    /// The console checkpoints every few seconds while a session streams, so a session switch
+    /// routinely rehydrates a reducer mid-turn — with no memory of what that turn had already said.
+    /// Assume it said something: a missing marker on the turn in flight costs less than putting
+    /// "this turn ended without a reply" under a reply that is on screen.
+    func testARehydratedReducerDoesNotMarkTheTurnItWasRestoredIntoTheMiddleOf() throws {
+        var before = TranscriptReducer()
+        before.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("go")])))
+        before.apply(RunEvent(seq: 2, type: .assistant, payload: .object(["text": .string("here you go")])))
+
+        var after = try JSONDecoder().decode(TranscriptReducer.self,
+                                             from: try JSONEncoder().encode(before))
+        after.apply(RunEvent(seq: 3, type: .turnEnd, payload: .object([
+            "subtype": .string("error_during_execution")])))
+
+        XCTAssertTrue(after.state.items.compactMap { $0.asError }.isEmpty,
+                      "the reply is on screen — the restored reducer just could not remember it")
+        // The next turn is folded in full, so it is markable again.
+        after.apply(RunEvent(seq: 4, type: .user, payload: .object(["text": .string("again")])))
+        after.apply(RunEvent(seq: 5, type: .turnEnd, payload: .object([
+            "subtype": .string("error_during_execution")])))
+
+        XCTAssertEqual(after.state.items.compactMap { $0.asError }, [TurnOutcome.endedWithoutReply])
+    }
+
+    func testAFailureTheTurnAlreadyReportedIsNotRepeated() {
+        let r = afterTurnEnd(subtype: "failed",
+                             preceded: [RunEvent(seq: 5, type: .error,
+                                                 payload: .object(["message": .string("stream disconnected")]))])
+
+        XCTAssertEqual(r.state.items.compactMap { $0.asError }, ["stream disconnected"])
+    }
+
+    func testEachFailingTurnIsMarkedOnItsOwn() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("go")])))
+        r.apply(RunEvent(seq: 2, type: .error, payload: .object(["message": .string("stream disconnected")])))
+        r.apply(RunEvent(seq: 3, type: .turnEnd, payload: .object(["subtype": .string("failed")])))
+        r.apply(RunEvent(seq: 4, type: .user, payload: .object(["text": .string("again")])))
+        r.apply(RunEvent(seq: 5, type: .turnEnd, payload: .object(["subtype": .string("error_during_execution")])))
+
+        XCTAssertEqual(r.state.items.compactMap { $0.asError },
+                       ["stream disconnected", TurnOutcome.endedWithoutReply],
+                       "one accounted-for turn must not cover the next")
+    }
+
+    /// The copy fence. There is no shared string table across the three clients: web and Swift each
+    /// hardcode their own and stay in step by convention, so the only thing that can catch a
+    /// one-sided edit is this test reading the other end's source.
+    ///
+    /// Deliberately a failure and never an `XCTSkip` when the web constant cannot be found: a check
+    /// that quietly opts out reports green on exactly the day the two ends drift apart.
+    func testTheMarkerSaysTheSameWordsOnWeb() throws {
+        let source = try String(contentsOf: try webTranscript(), encoding: .utf8)
+
+        let name = "TURN_ENDED_WITHOUT_REPLY"
+        let line = source.split(separator: "\n", omittingEmptySubsequences: false)
+            .first { $0.contains("export const \(name)") }
+        let quoted = line.flatMap { l -> String? in
+            guard let open = l.firstIndex(of: "'"), let close = l.lastIndex(of: "'"), open < close
+            else { return nil }
+            return String(l[l.index(after: open)..<close])
+        }
+
+        XCTAssertEqual(quoted, TurnOutcome.endedWithoutReply,
+                       "web's \(name) and OrbitKit's TurnOutcome.endedWithoutReply have drifted "
+                       + "apart (or web's is no longer a single-quoted one-liner this can read)")
+    }
+
+    /// Web's transcript, found by walking up from this file until it is under foot — not a fixed
+    /// number of `..` hops, the way the other copy-parity tests find the other end's source.
+    private func webTranscript() throws -> URL {
+        let web = "src/web/src/components/Transcript.tsx"
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent(web)
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            dir = dir.deletingLastPathComponent()
+        }
+        // Deliberately a failure and never an `XCTSkip`: a check that quietly opts out reports
+        // green on exactly the day the thing it watches goes missing. If web's transcript moved,
+        // move this check with it rather than deleting it — it is the only thing holding the two
+        // hardcoded halves of this sentence together.
+        throw ParityError.noWebSource(web)
+    }
+
+    private enum ParityError: Error, CustomStringConvertible {
+        case noWebSource(String)
+        var description: String {
+            switch self {
+            case .noWebSource(let path): return "\(path) was not found above this test file."
+            }
+        }
+    }
+}
+
 // Test-only convenience accessors (kept out of the library surface).
 extension TranscriptItem {
     var asUser: UserBubble? { if case .user(let b) = self { return b }; return nil }
     var asAssistant: AssistantBubble? { if case .assistant(let b) = self { return b }; return nil }
     var asTool: ToolCard? { if case .toolCall(let c) = self { return c }; return nil }
+    var asError: String? { if case .error(_, let m) = self { return m }; return nil }
 }
