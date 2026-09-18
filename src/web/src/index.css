@@ -7354,9 +7354,25 @@ button.composer-usage:focus-visible {
   overflow-wrap: anywhere;
 }
 .owner-confirmation-hint {
+  margin-top: 8px;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-3);
+}
+/* What the line under the title says: whose call this is, with the task's address kept quieter
+   beside it. It replaced `<id> · OWNER_CONFIRMED`, which spent the card's second line on an
+   enum and a 21-character id. */
+.owner-confirmation-yours {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.owner-confirmation-id {
+  margin-left: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  word-break: break-all;
 }
 /* The task panel's pointer to that card while a run is waiting on it: a way there, not a button. */
 .tdp-owner-confirmation-pointer {

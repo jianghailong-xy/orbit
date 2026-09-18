@@ -95,22 +95,30 @@ export const OWNER_SEND_BACK_ACTION = 'Chat about this';
 /** What the composer asks for while it is armed: the reason's label, as the card used to print it
  *  over its own box. */
 export const OWNER_SEND_BACK_LABEL = "What's missing?";
-/** What the action promises before it is pressed, where the card has room to say it (the button's
- *  tooltip): the door refuses a send-back carrying no note and writes nothing at all, and a
- *  confirmation sent back is not a task closed. */
-export const OWNER_SEND_BACK_HINT = 'Sent to this session as your next message. The task stays open.';
+/** What the action promises, printed under the buttons rather than hidden in the second one's
+ *  tooltip: the door refuses a send-back carrying no note and writes nothing at all, and a
+ *  confirmation sent back is not a task closed. A promise a phone cannot show is a promise the
+ *  reader does not have — and this is the one that says pressing it does not close anything. */
+export const OWNER_SEND_BACK_HINT = 'Your next message goes to this agent. The task stays open.';
 /** What the composer says it is about to answer while armed, ahead of the task's own title. */
-export const OWNER_SENDING_BACK_PREFIX = 'Sending back to this run: ';
-export const WHAT_SETTLES_IT = 'WHAT SETTLES IT';
-export const WHAT_THE_RUN_REPORTED = 'WHAT THE RUN REPORTED';
+export const OWNER_SENDING_BACK_PREFIX = 'Replying to: ';
+/** The two boxes' keys, in the words somebody who has never read Orbit's source would use for
+ *  them: what the task is measured against, and what the thing that did the work said about it.
+ *  "Settles" and "the run reported" are this system's vocabulary, not a reader's. */
+export const WHAT_SETTLES_IT = 'WHAT COUNTS AS DONE';
+export const WHAT_THE_RUN_REPORTED = 'WHAT THE AGENT SAID';
 export const OWNER_CONFIRMATION_SHOW_ALL = 'Show all';
 export const OWNER_CONFIRMATION_SHOW_LESS = 'Show less';
-export const OWNER_CONFIRMATION_NO_CRITERIA = 'This task states no acceptance criteria.';
-export const OWNER_CONFIRMATION_NO_REPORT = 'The run ended its turn without a message.';
+export const OWNER_CONFIRMATION_NO_CRITERIA = 'Nobody wrote down what counts as done.';
+export const OWNER_CONFIRMATION_NO_REPORT = 'The agent finished without saying anything.';
+/** What the line under the title says now: which completion criterion this task carries, as the
+ *  fact it is about the reader rather than as the enum `OWNER_CONFIRMED`. The id stays beside it,
+ *  quieter, because it is an address somebody occasionally copies and never reads. */
+export const OWNER_CONFIRMATION_YOURS = 'You decide when this is done';
 export const OWNER_CONFIRMED_HEADING = 'Confirmed done';
-export const OWNER_SENT_BACK_HEADING = 'Sent back';
-export const OWNER_SHOW_WHAT_SETTLED_IT = 'Show what settled it';
-export const OWNER_HIDE_WHAT_SETTLED_IT = 'Hide what settled it';
+export const OWNER_SENT_BACK_HEADING = 'Asked for more';
+export const OWNER_SHOW_WHAT_SETTLED_IT = 'Show what counted as done';
+export const OWNER_HIDE_WHAT_SETTLED_IT = 'Hide what counted as done';
 /** What a session row and the session header say while one of these cards is waiting. */
 export const WAITING_FOR_CONFIRMATION = 'Waiting for your confirmation';
 
@@ -288,19 +296,19 @@ export function OwnerConfirmationActions({
   onSendBack: () => void;
 }): JSX.Element {
   return (
-    <CardActions className="decision-ask-actions">
-      <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
-        {OWNER_CONFIRM_ACTION}
-      </CardActionButton>
-      <CardActionButton
-        tone="secondary"
-        disabled={disabled}
-        title={OWNER_SEND_BACK_HINT}
-        onClick={onSendBack}
-      >
-        {OWNER_SEND_BACK_ACTION}
-      </CardActionButton>
-    </CardActions>
+    <>
+      <CardActions className="decision-ask-actions">
+        <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
+          {OWNER_CONFIRM_ACTION}
+        </CardActionButton>
+        <CardActionButton tone="secondary" disabled={disabled} onClick={onSendBack}>
+          {OWNER_SEND_BACK_ACTION}
+        </CardActionButton>
+      </CardActions>
+      {/* Under the buttons and not inside the second one's tooltip: a touch screen has no hover,
+          so the only sentence saying the task stays open was unreadable on a phone. */}
+      <div className="owner-confirmation-hint">{OWNER_SEND_BACK_HINT}</div>
+    </>
   );
 }
 
@@ -339,7 +347,10 @@ export function OwnerConfirmationCard({
       <div className="approval-body is-questions decision-ask-body">
         <section className="decision-ask-q">
           <div className="decision-ask-claim owner-confirmation-lead">{view.title}</div>
-          <div className="decision-ask-meta">{`${view.taskId} · OWNER_CONFIRMED`}</div>
+          <div className="owner-confirmation-yours">
+            {OWNER_CONFIRMATION_YOURS}
+            <span className="owner-confirmation-id">{view.taskId}</span>
+          </div>
           <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} />
           {error && refusal ? (
             <Alert

@@ -425,13 +425,13 @@ final class OwnerConfirmationDoorTests: XCTestCase {
         XCTAssertEqual(OwnerConfirmations.receiptLine(confirmed, time: "08:00"),
                        "Confirmed done by you · 08:00")
         XCTAssertEqual(OwnerConfirmations.receiptLine(sentBack, time: "9/15 08:00"),
-                       "Sent back by you · 9/15 08:00")
+                       "Asked for more by you · 9/15 08:00")
 
         let report = OwnerConfirmationReport(text: "t", reportedAt: "2026-09-16T07:30:00.000Z")
         XCTAssertEqual(OwnerConfirmations.reportHeading(report, time: "07:30"),
-                       "WHAT THE RUN REPORTED · 07:30")
+                       "WHAT THE AGENT SAID · 07:30")
         XCTAssertEqual(OwnerConfirmations.reportHeading(nil, time: nil),
-                       "WHAT THE RUN REPORTED",
+                       "WHAT THE AGENT SAID",
                        "a run that said nothing still gets the box, and the box still has a heading")
     }
 
