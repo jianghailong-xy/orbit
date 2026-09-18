@@ -1,0 +1,43 @@
+# TEMPORARY — an experiment, not a gate. Not on main; delete the branch when the question is answered.
+#
+# The question: on a real iPad, what widths does NavigationSplitView actually hand its columns, and
+# which horizontalSizeClass does the *content* column then see? Shipping v0.1.2-beta.85 showed the
+# session column settling at 359pt against an `ideal: 420` — and the sidebar at 222pt against a
+# `min: 260`, i.e. below a floor that is supposed to be hard. Neither Linux nor the test suite nor
+# the client CI's compile step can observe this: it is layout, and it needs a running simulator.
+#
+# The probe app draws each column's measured width and size class on itself, so every screenshot is
+# self-describing and the answer is read off the image rather than inferred.
+name: iPad split-view probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Measure the columns on an iPad simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Show available iPad simulators
+        run: xcrun simctl list devices available | sed -n '/iOS/,$p' | grep -i ipad || echo "(none preinstalled)"
+
+      - name: Build the probe and capture every configuration
+        working-directory: .probe
+        run: bash run.sh
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ipad-probe-shots
+          path: .probe/shots
+          if-no-files-found: error

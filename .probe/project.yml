@@ -1,0 +1,23 @@
+name: Probe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+targets:
+  Probe:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.probe
+        PRODUCT_NAME: Probe
+        GENERATE_INFOPLIST_FILE: YES
+        # iPad only, landscape included — a portrait phone has no three-column split to measure.
+        TARGETED_DEVICE_FAMILY: "2"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_ALLOWED: NO
