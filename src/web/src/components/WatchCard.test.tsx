@@ -288,7 +288,7 @@ describe('a watch card', { timeout: 30_000 }, () => {
         watch={watch({
           targets: [
             target('T1', { targetTitle: 'Land the redirect fix' }),
-            target('T2', { state: 'GONE' }),
+            target('T2', { state: 'GONE', targetTitle: null }),
             // Readable by this account no longer, so the watch came back with no name for it.
             target('T3', { targetTitle: null }),
           ],

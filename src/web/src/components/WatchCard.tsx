@@ -284,7 +284,12 @@ function WatchDetails({ watch, now }: { watch: WatchView; now: number }) {
         <ul className="watch-details-list">
           {watch.targets.map((t) => (
             <li key={`${t.targetKind}:${t.targetResourceId}`}>
-              <WatchTargetLink kind={t.targetKind} id={t.targetResourceId} state={t.state} />
+              <WatchTargetLink
+                kind={t.targetKind}
+                id={t.targetResourceId}
+                title={t.targetTitle}
+                state={t.state}
+              />
               <TargetStatus kind={t.targetKind} id={t.targetResourceId} />
               <span className="watch-muted"> · changed {ago(t.lastEvaluatedAt, now)}</span>
             </li>

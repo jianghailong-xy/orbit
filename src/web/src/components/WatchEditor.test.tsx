@@ -13,7 +13,14 @@ import { WatchEditorModal, type WatchEditorMode } from './WatchEditor';
  * instead of closing the dialog on them.
  */
 
-vi.mock('../api', () => ({ api: vi.fn(), getSession: vi.fn() }));
+// `ApiError` REAL, not restated: a target's name asks whether a failed read was a 404 with
+// `error instanceof ApiError && error.status === 404`, and a stand-in class here would let that
+// branch pass against a shape the client never throws.
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(),
+  getSession: vi.fn(),
+}));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api, getSession } = await import('../api');

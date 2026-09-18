@@ -77,9 +77,13 @@ const TARGET_STATE_WORD: Record<string, string> = {
  * The name comes with the watch (`targetTitle`, read under the same account as the watch itself), so a
  * card names what it watches from the read that drew it rather than a request of its own — a page of
  * watches over hundreds of targets used to ask for a row each, and the names that arrived late, or
- * never, left a truncated id where a title belongs. Without one the id is what there is to show, and
- * only a target the watch itself records as GONE is called deleted: a row this account cannot read is
- * not a row that is gone (contract §4, and `useTargetName`'s note above).
+ * never, left a truncated id where a title belongs. A `title` of null is that read's answer: this
+ * account cannot read the row, which is not the same as the row being gone — only a target the watch
+ * itself records as GONE is called deleted (contract §4, and `useTargetName`'s note above).
+ *
+ * No `title` at all is the other case: the editor names a target no watch has been made over yet, and
+ * a server from before `targetTitle` sends rows without one. Both still read the target's own row,
+ * which is what this did for everything.
  *
  * Which word after it, when `showsStatus` is set: the target's own status rather than what the watch
  * last recorded about it. Two words would need a rule — `met` is the watch's verdict and `Done` is the
@@ -100,8 +104,11 @@ export function WatchTargetLink({
   state?: string;
   showsStatus?: boolean;
 }) {
-  // Only the rows that show a status ask for one: the name is already here.
-  const { chip } = useTargetName(showsStatus ? kind : null, showsStatus ? id : null);
+  // The row is read only for what the watch did not carry: the status chip a strip row asks for, and
+  // a name nobody handed over (the editor, or a server older than `targetTitle`). A target the watch
+  // records as GONE is never read: the row is not there, and its name is what this says below.
+  const needsRow = state !== 'GONE' && (showsStatus || title === undefined);
+  const { name, chip } = useTargetName(needsRow ? kind : null, needsRow ? id : null);
   const noun = TARGET_NOUN[kind] ?? kind;
   const shown = linkId(id);
   const status = showsStatus ? chip : null;
@@ -113,7 +120,7 @@ export function WatchTargetLink({
     >
       <span className="watch-target-kind">{noun}</span>
       <span className="watch-target-name">
-        {state === 'GONE' ? `Deleted ${noun.toLowerCase()}` : (title ?? `${shown.slice(0, 8)}…`)}
+        {state === 'GONE' ? `Deleted ${noun.toLowerCase()}` : (title ?? name ?? `${shown.slice(0, 8)}…`)}
       </span>
       {status ? (
         <span className={`watch-target-status tone-${status.tone}`}>{status.label}</span>

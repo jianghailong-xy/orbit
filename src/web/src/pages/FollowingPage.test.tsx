@@ -13,7 +13,14 @@ import { FollowingPage } from './FollowingPage';
  * press away, and a link to one watch that lands on its card, opened.
  */
 
-vi.mock('../api', () => ({ api: vi.fn(), getSession: vi.fn() }));
+// `ApiError` REAL, not restated: a target's name asks whether a failed read was a 404 with
+// `error instanceof ApiError && error.status === 404`, and a stand-in class here would let that
+// branch pass against a shape the client never throws.
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(),
+  getSession: vi.fn(),
+}));
 vi.mock('../lib/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 const { api, getSession } = await import('../api');
 
