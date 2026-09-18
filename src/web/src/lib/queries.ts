@@ -1,5 +1,10 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { EventSearchResponse, SessionSearchResponse, WatchView } from '@orbit/shared';
+import type {
+  EventSearchResponse,
+  ProjectIntegrationView,
+  SessionSearchResponse,
+  WatchView,
+} from '@orbit/shared';
 import {
   api,
   getSession,
@@ -589,6 +594,28 @@ export const projectOpenItemsQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'open-items'] as const,
     queryFn: () =>
       api<ProjectOpenItemsView>(`/projects/${encodeURIComponent(projectId)}/open-items`),
+  });
+
+/**
+ * Where this project's finished tasks land, and what the queue that lands them is doing right now
+ * (contract §1.6, §7.2 V3).
+ *
+ * Its own endpoint rather than a widening of the project document, because the four job-derived
+ * numbers cost queries the document does not otherwise make: `project-get-query-count.pg.spec.ts`
+ * holds that document to a statement budget, and a page that reads the line every 30 seconds has
+ * no business making the read that answers "what is this project called" more expensive.
+ *
+ * Keyed under `['project', projectId]`, so the invalidation a coordinator or settings write already
+ * fires for the project refreshes this with it. Polled on the panorama's cadence for the same
+ * reason: every number on the row moves without this tab doing anything — a job is claimed, a check
+ * finishes, main is absorbed.
+ */
+export const projectIntegrationQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'integration'] as const,
+    queryFn: () =>
+      api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
+    refetchInterval: 30_000,
   });
 
 /**

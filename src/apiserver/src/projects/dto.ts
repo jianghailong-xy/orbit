@@ -159,49 +159,6 @@ export class UpdateProjectAcceptanceCriterionDto extends CreateProjectAcceptance
   @IsOptional() @IsPublicId() id?: string;
 }
 
-export class CreateProjectDto {
-  @IsString()
-  @MinLength(1)
-  title!: string;
-
-  /** What this project is trying to achieve. */
-  @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string;
-  /** What would settle that the goal was reached, one authored criterion per item. Migration 0229
-   * removed the legacy text shape and the parser that split it, so this is the only one. */
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
-  @ValidateNested({ each: true })
-  @Type(() => CreateProjectAcceptanceCriterionDto)
-  acceptanceCriteriaItems?: CreateProjectAcceptanceCriterionDto[];
-  /** How this project's work is to be done. Recorded only — nothing assembles it into a run
-   *  prompt in this phase (see the Project model). */
-  @IsOptional() @IsString() @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS) instructions?: string;
-
-  /** Owner-selected governance, settable in the same request that creates the project. Runner
-   * callers are refused these fields at their boundary. */
-  @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
-  @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
-  @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
-  /**
-   * Where this project's coordinator conversation opens — and, because naming one OPENS it, the
-   * request that carries this field creates a project that already has a coordinator.
-   *
-   * It cannot mean anything narrower. A landing is only ever written beside the conversation that
-   * runs in it: `coordinator/rebind` refuses to record one on its own, because a project naming a
-   * workspace no coordinator has opened in is read back as a conversation that went to Trash. So
-   * "coordinated in W" and "has a coordinator" are one fact, and this field states it.
-   *
-   * Omitted is unchanged and still the common case: the project is coordinated by nothing, and the
-   * first `POST :id/coordinator` decides the landing — from this field's value, or from the
-   * workspace the project's own work is assigned to.
-   */
-  @IsOptional() @IsPublicId() workspaceId?: string;
-
-  @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
-  sessionBudgetPerDay?: number | null;
-}
-
 const INTEGRATION_LINES: readonly IntegrationLine[] = ['MAIN', 'PROJECT_BRANCH'];
 /** A full branch ref: PSC SR9's rule, narrowed to branches, which are all a line can be. */
 const BRANCH_REF = /^refs\/heads\/\S+$/;
@@ -240,6 +197,62 @@ export class UpdateProjectIntegrationDto implements IntegrationSettings {
    * it was opened under (X-E2), so shortening this does not reach back and escalate a queue.
    */
   @IsOptional() @IsInt() @Min(300) @Max(604_800) exceptionEscalationSeconds?: number;
+}
+
+export class CreateProjectDto {
+  @IsString()
+  @MinLength(1)
+  title!: string;
+
+  /** What this project is trying to achieve. */
+  @IsOptional() @IsString() @MaxLength(MAX_PROJECT_GOAL_CHARS) goal?: string;
+  /** What would settle that the goal was reached, one authored criterion per item. Migration 0229
+   * removed the legacy text shape and the parser that split it, so this is the only one. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => CreateProjectAcceptanceCriterionDto)
+  acceptanceCriteriaItems?: CreateProjectAcceptanceCriterionDto[];
+  /** How this project's work is to be done. Recorded only — nothing assembles it into a run
+   *  prompt in this phase (see the Project model). */
+  @IsOptional() @IsString() @MaxLength(MAX_PROJECT_INSTRUCTIONS_CHARS) instructions?: string;
+
+  /**
+   * Where this project's finished tasks land, chosen in the same request that records the project
+   * (contract L1, L5). The same object `PATCH /projects/:id/integration` takes, and the same door
+   * rule: the account owner's to set, so a request carrying an acting session is refused whole
+   * rather than having the field dropped.
+   *
+   * Set at creation because that is the one moment the choice is free. It locks at the first
+   * integration (L4), and a project nobody chose for takes the default rule then — so a project
+   * whose owner already knows it wants a branch has exactly one cheap place to say so.
+   */
+  @IsOptional() @ValidateNested() @Type(() => UpdateProjectIntegrationDto)
+  integration?: UpdateProjectIntegrationDto;
+
+  /** Owner-selected governance, settable in the same request that creates the project. Runner
+   * callers are refused these fields at their boundary. */
+  @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
+  @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
+  @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
+  /**
+   * Where this project's coordinator conversation opens — and, because naming one OPENS it, the
+   * request that carries this field creates a project that already has a coordinator.
+   *
+   * It cannot mean anything narrower. A landing is only ever written beside the conversation that
+   * runs in it: `coordinator/rebind` refuses to record one on its own, because a project naming a
+   * workspace no coordinator has opened in is read back as a conversation that went to Trash. So
+   * "coordinated in W" and "has a coordinator" are one fact, and this field states it.
+   *
+   * Omitted is unchanged and still the common case: the project is coordinated by nothing, and the
+   * first `POST :id/coordinator` decides the landing — from this field's value, or from the
+   * workspace the project's own work is assigned to.
+   */
+  @IsOptional() @IsPublicId() workspaceId?: string;
+
+  @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
+  sessionBudgetPerDay?: number | null;
 }
 
 export class UpdateProjectDto {

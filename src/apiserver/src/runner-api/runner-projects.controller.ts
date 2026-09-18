@@ -122,10 +122,13 @@ export class RunnerProjectsController {
       // The named workspace WINS over the acting session's own, which is the whole point of
       // sending it: the caller is saying this project is coordinated somewhere else. The session
       // is spent proving the caller may say so, not deciding where.
-      return this.projects.createInWorkspace(runner.ownerId, dto, dto.workspaceId, {
-        type: 'RUNNER',
-        id: runner.id,
-      });
+      return this.projects.createInWorkspace(
+        runner.ownerId,
+        dto,
+        dto.workspaceId,
+        { type: 'RUNNER', id: runner.id },
+        inSession,
+      );
     }
     return inSession
       ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)

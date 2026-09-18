@@ -10,6 +10,7 @@ export * from './dbConflict';
 export * from './realtime';
 export * from './models';
 export * from './planUsage';
+export * from './project-progress';
 export * from './providerPresets';
 export * from './providerTransport';
 export * from './retry';

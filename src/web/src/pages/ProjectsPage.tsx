@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SessionLifecycleState, type TaskStatus } from '@orbit/shared';
+import {
+  SessionLifecycleState,
+  type ProjectIntegrationSettings,
+  type TaskIntegrationView,
+  type TaskStatus,
+} from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -33,6 +38,7 @@ import {
   type CoordinatorAction,
   type CoordinatorCardLayout,
 } from '../components/ProjectCoordinatorCard';
+import { ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
 import { ProjectSections } from '../components/ProjectSections';
@@ -57,6 +63,9 @@ import { firstOpenableWorkspace, workspaceRunnerId } from '../lib/workspaceOrder
 // The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
 // page that says "3h ago" should not be two functions that agree by coincidence.
 import { ago } from '../lib/runnerEngines';
+// The compact span the watch cards already spell — "3m", "3h 20m" — reused so a task row
+// saying how long its checks have been running reads the same as every other elapsed time here.
+import { formatSpan } from '../lib/watches';
 import {
   attentionChipOf,
   projectAttentionSections,
@@ -64,6 +73,7 @@ import {
 } from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
+  projectIntegrationQuery,
   runnersQuery,
   workspacesQuery,
 } from '../lib/queries';
@@ -134,6 +144,11 @@ interface ProjectDetail extends Project {
   acceptanceCriteriaItems?: ProjectCriterionStanding[];
   /** Every open blocker and the latest resolved ones. Absent from a server that predates the read. */
   blockers?: ProjectBlockers;
+  /** The settings half of this project's integration line, which the document already carries
+   *  (§1.4's one exception to keeping the new reads out of it). What the QUEUE is doing is the
+   *  separate `GET /projects/:id/integration`; this is only how the page knows which branch a
+   *  criterion landed on, and whether there is a branch at all. */
+  integration?: ProjectIntegrationSettings;
 }
 
 const STATUS_COLOR: Record<Project['status'], string> = {
@@ -1058,6 +1073,13 @@ export function ProjectDetailPage() {
             </div>
           </header>
 
+          {/* Where this project's finished work goes, directly under the title that names it: the
+              branch, how far ahead of main it is, when main last came in, what the queue has in
+              flight, and whether the tip is green — with the three settings that decide all of it
+              behind the same row (§7.2 V3 / V4). A project with no integration line draws nothing
+              here at all. */}
+          <ProjectIntegrationLine projectId={id!} />
+
           {/* A refused delete, in the server's own words. 409 here is a downstream reference — the
               project's tasks, or a session dispatched from one of its actions — and which one it is
               decides what the reader has to go and do first, so the sentence is shown rather than
@@ -1087,7 +1109,11 @@ export function ProjectDetailPage() {
               the left, then the coordinator offers the primary human action on the right. On
               narrow screens they remain in this reading/focus order and stack full-width. */}
           <div className="project-command-center">
-            <ProjectPanoramaHeader projectId={id} projectStatus={p.status} />
+            <ProjectPanoramaHeader
+              projectId={id}
+              projectStatus={p.status}
+              integrationLine={p.integration?.line ?? null}
+            />
             {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
                 but turn a present map with no OPEN row into the honest zero the card can say. */}
             <ProjectCoordinatorSection
@@ -1709,6 +1735,14 @@ interface ProjectTask {
     | 'CANCELLED';
   verificationState?: 'PENDING' | 'BLOCKED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'MISSING' | null;
   autoRunWhenReady?: boolean;
+  /** Where this task sits between "done" and "on main" (contract §2.7, §7.3 V10). Optional because
+   *  a server from before the integration line answers without it, and a row that read an absent
+   *  field as NOT_APPLICABLE would be claiming to know something it was never told. */
+  integration?: TaskIntegrationView;
+  /** Prerequisites that are FINISHED and not yet landed on the project's integration line — the
+   *  count behind "Waits for N task(s) to land". A subset of what `unmetCount` used to hide: those
+   *  are prerequisites somebody still has to do, this is work that is done and on its way. */
+  landingWaitCount?: number;
 }
 
 /** A task has a status a project does not (IN_PROGRESS), so it gets its own map rather than a
@@ -1754,7 +1788,10 @@ export function projectTaskWorkLabel(task: ProjectTask): { text: string; color: 
     case 'RUNNING':
       return { text: 'Running', color: 'processing' };
     case 'BLOCKED':
-      return { text: 'Blocked', color: 'default' };
+      // A row held by nothing but a landing says WHAT it is waiting for instead (§7.3 V10). One
+      // tag, not two: "Blocked" beside "Waits for 1 task to land" reads as two different holds,
+      // and only the second is true — nobody has to do anything about this one, it starts itself.
+      return taskWaitsForLanding(task) ? null : { text: 'Blocked', color: 'default' };
     case 'AWAITING_VERIFICATION': {
       const text = task.verificationState === 'FAILED'
         ? 'Verification failed'
@@ -1863,6 +1900,93 @@ function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
 
 /** One band of the list: the tasks sharing a topological level, or the trailing bucket of finished
  *  work. `level` is null only on that bucket, which is what the render dims. */
+/**
+ * §7.3 V10: the two stages a task passes through after DONE, as one predicate each.
+ *
+ * `integrating` is deliberately every non-terminal integration state AND the three failures: a
+ * conflict is not a fourth lane on this page, it is integration stopped — and a row filed under
+ * "Landed" or "Done" because its checks went red would be the exact false green the lane exists to
+ * prevent. `landed` is the two states a merge receipt proves.
+ */
+const INTEGRATING_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
+  'QUEUED', 'RUNNING', 'CONFLICT', 'CHECK_FAILED', 'ERROR', 'AWAITING_OWNER',
+]);
+const LANDED_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
+  'ON_INTEGRATION_LINE', 'ON_UPSTREAM',
+]);
+
+export function taskIntegrationStage(task: ProjectTask): 'integrating' | 'landed' | null {
+  const state = task.integration?.state;
+  if (!state) return null;
+  if (INTEGRATING_STATES.has(state)) return 'integrating';
+  return LANDED_STATES.has(state) ? 'landed' : null;
+}
+
+/**
+ * A task held up by NOTHING but a landing: its prerequisites are finished, and at least one of them
+ * has not reached the integration line yet (§2.5 J9).
+ *
+ * The difference this draws is the whole point of the lane. "Blocked" used to cover both "somebody
+ * still has to do the work this waits on" and "that work is done and the platform is landing it" —
+ * and only the first is anything a reader can act on. The second starts by itself.
+ */
+export function taskWaitsForLanding(task: ProjectTask): boolean {
+  return task.dependencyState !== 'READY' && (task.landingWaitCount ?? 0) > 0;
+}
+
+/** Which branches this project's rows name. Two spellings rather than one because "on the project
+ *  branch" and "on main" are different claims, and only the second means shipped. */
+export interface TaskLandingBranches {
+  ref: string | null;
+  upstreamRef: string | null;
+}
+
+/**
+ * One row's integration state as the tag it wears (§7.3 V10's third column).
+ *
+ * Every failure names WHO has it, because the difference decides what the reader does next: an item
+ * with the coordinator is being worked on, and the same item handed to the owner is waiting for
+ * them. A state this build does not recognise prints as nothing rather than as a guess — a browser
+ * held open across a deploy must under-report rather than mislabel.
+ */
+export function projectTaskIntegrationTag(
+  task: ProjectTask,
+  branches: TaskLandingBranches,
+): { text: string; color: string } | null {
+  if (taskWaitsForLanding(task)) {
+    const n = task.landingWaitCount ?? 0;
+    return { text: `Waits for ${n} task${n === 1 ? '' : 's'} to land`, color: 'default' };
+  }
+  const integration = task.integration;
+  if (!integration) return null;
+  const who = integration.handler === 'OWNER' ? 'you' : 'coordinator';
+  switch (integration.state) {
+    case 'QUEUED':
+      return { text: 'Queued for integration', color: 'default' };
+    case 'RUNNING':
+      return {
+        text: integration.checksRunningForMs === null
+          ? 'Integrating'
+          : `Integrating · checks ${formatSpan(integration.checksRunningForMs)}`,
+        color: 'processing',
+      };
+    case 'CONFLICT':
+      return { text: `Conflict · ${who}`, color: 'red' };
+    case 'CHECK_FAILED':
+      return { text: `Checks failed · ${who}`, color: 'red' };
+    case 'ERROR':
+      return { text: `Integration error · ${who}`, color: 'red' };
+    case 'AWAITING_OWNER':
+      return { text: 'Awaiting your approval', color: 'gold' };
+    case 'ON_INTEGRATION_LINE':
+      return { text: `On ${branches.ref ?? 'the project branch'}`, color: 'green' };
+    case 'ON_UPSTREAM':
+      return { text: `On ${branches.upstreamRef ?? 'main'}`, color: 'success' };
+    default:
+      return null;
+  }
+}
+
 export interface ProjectTaskGroup {
   key: string;
   level: number | null;
@@ -1889,17 +2013,28 @@ export interface ProjectTaskGroup {
 export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
   const byLevel = new Map<number, ProjectTask[]>();
   const running: ProjectTask[] = [];
+  const integrating: ProjectTask[] = [];
   const ready: ProjectTask[] = [];
   const awaitingVerification: ProjectTask[] = [];
   const failed: ProjectTask[] = [];
+  const waitingForLanding: ProjectTask[] = [];
+  const landed: ProjectTask[] = [];
   const settled: ProjectTask[] = [];
   for (const task of items) {
+    // The integration stage is read BEFORE the work lane, and that order is the unit: a DONE task
+    // the platform is still landing has settled by one reading and has not by the one this page
+    // is for, and filing it under "Done / Cancelled" is what used to make a project look finished
+    // while none of its work was on main.
+    const stage = taskIntegrationStage(task);
     const workState = projectTaskWorkStateOf(task);
     if (workState === 'RUNNING') running.push(task);
+    else if (stage === 'integrating') integrating.push(task);
+    else if (stage === 'landed') landed.push(task);
     else if (workState === 'READY') ready.push(task);
     else if (workState === 'AWAITING_VERIFICATION') awaitingVerification.push(task);
     else if (workState === 'FAILED') failed.push(task);
     else if (workState === 'DONE' || workState === 'CANCELLED') settled.push(task);
+    else if (taskWaitsForLanding(task)) waitingForLanding.push(task);
     else {
       const band = byLevel.get(task.topoLevel);
       if (band) band.push(task);
@@ -1910,6 +2045,14 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
   const groups: ProjectTaskGroup[] = [];
   if (running.length > 0) {
     groups.push({ key: 'running', level: 0, heading: 'Running', tasks: running });
+  }
+  if (integrating.length > 0) {
+    groups.push({
+      key: 'integrating',
+      level: 0,
+      heading: 'Integrating · checks run on the combined tree',
+      tasks: integrating,
+    });
   }
   if (ready.length > 0) {
     groups.push({ key: 'ready', level: 0, heading: 'Ready · can start now', tasks: ready });
@@ -1930,6 +2073,14 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
       tasks: failed,
     });
   }
+  if (waitingForLanding.length > 0) {
+    groups.push({
+      key: 'waiting-for-landing',
+      level: 0,
+      heading: 'Waiting · for a prerequisite to land',
+      tasks: waitingForLanding,
+    });
+  }
   groups.push(...[...byLevel.entries()]
     .sort(([a], [b]) => a - b)
     .map(([level, tasks]) => ({
@@ -1938,6 +2089,12 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
       heading: level === 0 ? 'Blocked · no executable work at this level' : `Blocked · topology level ${level}`,
       tasks,
     })));
+  if (landed.length > 0) {
+    // Level 0, not null: the dimmed band is "Done / Cancelled", and this one is not it. A task on
+    // the project branch is work somebody may still have to merge, and fading the whole group
+    // would say the opposite. The ROW on main fades, by itself (mock 3 ③).
+    groups.push({ key: 'landed', level: 0, heading: 'Landed', tasks: landed });
+  }
   if (settled.length > 0) {
     groups.push({ key: 'settled', level: null, heading: 'Done / Cancelled', tasks: settled });
   }
@@ -1968,6 +2125,17 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
     queryFn: () =>
       api<ProjectTaskPage>(`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`),
   });
+  // The same entry the integration row above already holds, under the same key: a landed row has
+  // to NAME the branch it landed on, and reading it here costs nothing — two `useQuery` calls on
+  // one key are one request and one cache entry.
+  const integration = useQuery({
+    ...projectIntegrationQuery(projectId),
+    enabled: Boolean(projectId),
+  });
+  const branches: TaskLandingBranches = {
+    ref: integration.data?.ref ?? null,
+    upstreamRef: integration.data?.upstreamRef ?? null,
+  };
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -2015,7 +2183,9 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
               <List
                 dataSource={group.tasks}
                 rowKey="id"
-                renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
+                renderItem={(t) => (
+                  <ProjectTaskRow projectId={projectId} task={t} branches={branches} />
+                )}
               />
             </div>
           ))}
@@ -2044,16 +2214,28 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
  * The same component renders those children, so a subtask that has subtasks of its own gets the
  * same control and opens the same way — one level per press, never a whole subtree at once.
  */
-function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectTask }) {
+function ProjectTaskRow({
+  projectId,
+  task,
+  branches,
+}: {
+  projectId: string;
+  task: ProjectTask;
+  branches: TaskLandingBranches;
+}) {
   const [expanded, setExpanded] = useState(false);
   const starts = scheduledStart(task.runAt);
   const workLabel = projectTaskWorkLabel(task);
+  const integrationTag = projectTaskIntegrationTag(task, branches);
 
   return (
     <List.Item
       className="project-task-row"
       data-work-state={projectTaskWorkStateOf(task)}
-      style={{ display: 'block' }}
+      data-integration-state={task.integration?.state}
+      // Work already on main recedes — it is the answer to "did that ship?" and to nothing a
+      // reader has to act on. Work on the project branch does not: somebody still has to merge it.
+      style={{ display: 'block', ...(task.integration?.state === 'ON_UPSTREAM' ? { opacity: 0.55 } : {}) }}
     >
       <div className="project-task-row-layout">
         {/* Own this flex item rather than asking AntD's Meta to negotiate directly with the two
@@ -2071,6 +2253,15 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
                 {workLabel ? (
                   <Tag data-testid="project-task-work-state" color={workLabel.color}>
                     {workLabel.text}
+                  </Tag>
+                ) : null}
+                {/* Where this one is between done and on main, or what it is waiting to land
+                    behind (§7.3 V10). Beside the work lane rather than replacing it: "DONE" is
+                    still true of a task whose checks are running, and the two tags together are
+                    the sentence — finished, not there yet. */}
+                {integrationTag ? (
+                  <Tag data-testid="project-task-integration" color={integrationTag.color}>
+                    {integrationTag.text}
                   </Tag>
                 ) : null}
                 {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
@@ -2133,7 +2324,7 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
 
       {expanded ? (
         <div className="project-task-children">
-          <ProjectTaskLevel projectId={projectId} parentTaskId={task.id} />
+          <ProjectTaskLevel projectId={projectId} parentTaskId={task.id} branches={branches} />
         </div>
       ) : null}
     </List.Item>
@@ -2212,9 +2403,13 @@ function ProjectTaskPrerequisites({ task }: { task: ProjectTask }) {
 export function ProjectTaskLevel({
   projectId,
   parentTaskId,
+  branches = { ref: null, upstreamRef: null },
 }: {
   projectId: string;
   parentTaskId: string;
+  /** The line's two branch names, handed down from the level above rather than read again: a
+   *  subtask that landed names the same branch its parent's siblings do. */
+  branches?: TaskLandingBranches;
 }) {
   const children = useQuery({
     queryKey: ['project', projectId, 'tasks', 'children', parentTaskId],
@@ -2246,7 +2441,9 @@ export function ProjectTaskLevel({
         size="small"
         dataSource={children.data.items}
         rowKey="id"
-        renderItem={(child) => <ProjectTaskRow projectId={projectId} task={child} />}
+        renderItem={(child) => (
+          <ProjectTaskRow projectId={projectId} task={child} branches={branches} />
+        )}
       />
       {/* Same reason as the root list: one page, no cursor sent, so stopping silently would read
           as "that is all of them". */}

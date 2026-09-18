@@ -11233,6 +11233,87 @@ button.composer-usage:focus-visible {
   margin-inline-end: 0;
 }
 
+/* The integration line, directly under the title metadata (contract §7.2 V3, mock 2 ①), with its
+   three settings behind the same row. A native <details>, so what it holds is reachable with a
+   keyboard and present in the document either way. */
+.project-integration {
+  margin-top: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.project-integration-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+}
+/* The default disclosure triangle would sit in front of a branch name and read as part of it. */
+.project-integration-row::-webkit-details-marker {
+  display: none;
+}
+.project-integration-facts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.project-integration-facts b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.project-integration-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.project-integration-settings-entry {
+  margin-inline-start: auto;
+  color: var(--brand);
+}
+.project-integration-settings-card {
+  padding: 4px 12px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.project-integration-setting {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0 0;
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .project-integration-setting {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}
+.project-integration-setting-label {
+  color: var(--text-2);
+  padding-top: 4px;
+}
+.project-integration-setting-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.project-integration-setting-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 /* What the account owner is shown before claiming a project's goal is met: one row per stated
    criterion, each carrying BOTH facts the server can offer — whether the work filed under it
    settled, and whether any receipt proves that work landed. Inside a modal, so the list scrolls
@@ -11690,6 +11771,11 @@ button.composer-usage:focus-visible {
 .acceptance-landing::before {
   content: '· ';
   color: var(--text-3);
+}
+/* "not on main yet", the tail of a criterion met on the project branch: warn text, so the one
+   thing a reader skimming a green row must not miss is the one thing that is not receded. */
+.acceptance-landing-warn {
+  color: var(--warning-text, var(--warning-solid));
 }
 .acceptance-unmet {
   margin-top: 5px;

@@ -162,6 +162,11 @@ const attributionKeys = (projectUuid: string) => [['project', encodeId(projectUu
 const headerKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
+    // Where this project's finished work goes (§1.6), read by the row under the title and again by
+    // the task list, which names the branch a landed row landed on. ONE entry for the two of them:
+    // two `useQuery` calls on one key share a request and a cache line, which is the whole reason
+    // the task list reads it rather than being handed it down through three components.
+    ['project', id, 'integration'],
     // The open items, read by the card that draws a coordinator's question to the owner (§5.2).
     // Ahead of the panorama because that is where the card sits: beside the blockers, above the
     // command centre, since both answer "what is standing in this project's way".
@@ -319,22 +324,32 @@ describe('ProjectsPage', () => {
       [
         'import {',
         '  projectCoordinatorStatusQuery,',
+        '  projectIntegrationQuery,',
         '  runnersQuery,',
         '  workspacesQuery,',
         "} from '../lib/queries';",
       ].join('\n'),
     );
 
-    // The page's SEVENTH endpoint — the read the coordinator card is drawn from. Its `api(...)`
-    // lives in lib/queries.ts, so the scan above cannot see it and the list would under-report
-    // what this page puts on the wire. Read out of that one factory (the rest of the module
-    // belongs to other pages) and asserted to be exactly one call at exactly this path, so the
-    // two assertions together are the whole of it.
-    const factory =
-      queriesSource.match(/export const projectCoordinatorStatusQuery = \([\s\S]*?\n  \}\);/)?.[0] ?? '';
-    expect(factory).not.toBe('');
-    expect([...factory.matchAll(API_CALL)].map((m) => m[1].trim())).toEqual([
+    // The page's SEVENTH and EIGHTH endpoints — the coordinator card's read, and the integration
+    // line's. Their `api(...)` calls live in lib/queries.ts, so the scan above cannot see them and
+    // the list would under-report what this page puts on the wire. Each is read out of its own
+    // factory (the rest of the module belongs to other pages) and asserted to be exactly one call
+    // at exactly one path, so the assertions together are the whole of it.
+    const factoryCalls = (name: string) => {
+      const factory =
+        queriesSource.match(new RegExp(`export const ${name} = \\([\\s\\S]*?\\n  \\}\\);`))?.[0] ?? '';
+      expect(factory).not.toBe('');
+      return [...factory.matchAll(API_CALL)].map((m) => m[1].trim());
+    };
+    expect(factoryCalls('projectCoordinatorStatusQuery')).toEqual([
       '`/projects/${encodeURIComponent(projectId)}/coordinator/status`',
+    ]);
+    // The integration line is its OWN endpoint rather than four more fields on the project
+    // document: `project-get-query-count.pg.spec.ts` holds that document to a statement budget,
+    // and the row polls. A path that grew a query string here would be a different read.
+    expect(factoryCalls('projectIntegrationQuery')).toEqual([
+      '`/projects/${encodeURIComponent(projectId)}/integration`',
     ]);
 
     // ...and one more that no regex can see: a named helper imported from the api client. Held by
@@ -436,7 +451,7 @@ describe('ProjectsPage', () => {
 
     // The bar has no room for a shape, so its label is where the buckets get named — all four of
     // them, including the one with no segment.
-    expect(meter).toContain('aria-label="Task status: 1 running, 0 ready, 17324 blocked, 0 awaiting verification, 6117 done, 0 failed, 0 cancelled"');
+    expect(meter).toContain('aria-label="Task status: 1 running, 0 ready, 17324 waiting, 0 awaiting verification, 6117 done, 0 failed, 0 cancelled"');
 
     // Beside it, a figure per drawn bucket, each with its own shape: amber --warning-solid and
     // neutral --text-3 are 2.32:1 and 2.94:1 against this background, so nothing here may rest on
@@ -1533,7 +1548,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     // so this reads the one place both are decided. Rendering the level from anywhere else would
     // make the child page eager, which the cache assertion above would then be blind to.
     expect(source).toMatch(
-      /\{expanded \? \(\s*<div className="project-task-children">\s*<ProjectTaskLevel projectId=\{projectId\} parentTaskId=\{task\.id\} \/>/,
+      /\{expanded \? \(\s*<div className="project-task-children">\s*<ProjectTaskLevel projectId=\{projectId\} parentTaskId=\{task\.id\} branches=\{branches\} \/>/,
     );
     const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
     const childrenRule = css.match(/\.project-task-children\s*\{([^}]*)\}/)?.[1] ?? '';
@@ -2059,5 +2074,272 @@ describe('a task’s lane when the API is too old to send one', () => {
         }),
       ),
     ).not.toBe('AWAITING_VERIFICATION');
+  });
+});
+
+// Contract `docs/project-integration-line-contract.md` §7.2 V3 / V4 / V6, §7.3 V10 and §7.4 V11 —
+// mocks 2, 3 and 6. What the four tests below are about, in one sentence each: where this
+// project's finished work goes, how much of it is already there, which row is on which side of
+// that line, and which criterion is met by work that has not crossed it yet.
+describe('ProjectDetailPage — integration', () => {
+  /** `GET /projects/:id/integration` (§1.6), as the row and the settings card read it. Spelled
+   *  out rather than imported: a payload the page changed unilaterally should break this. */
+  const integrationKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'integration'];
+
+  const integration = (over: Record<string, unknown> = {}) => ({
+    line: 'PROJECT_BRANCH',
+    lineAbsentReason: null,
+    ref: 'project/bg-jobs',
+    upstreamRef: 'main',
+    source: 'DEFAULT_RULE',
+    locked: true,
+    startedAt: '2026-01-01T00:00:00Z',
+    mergeCheckCommand: 'cd src/runner-go && go test -count=1 ./...',
+    mergeCheckCommandAbsentReason: null,
+    mergeCheckTimeoutSeconds: 3600,
+    escalationSeconds: 7200,
+    commitsAheadOfUpstream: 7,
+    commitsAheadOfUpstreamAbsentReason: null,
+    // Twelve minutes back from the suite's own clock, which is how the row's "12m ago" is
+    // reproducible without freezing time — the same thing the activity row above does.
+    lastUpstreamSyncAt: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+    lastUpstreamSyncAbsentReason: null,
+    integratingCount: 1,
+    queuedCount: 1,
+    mergeCheckOnTip: 'PASSING',
+    ...over,
+  });
+
+  /** The panorama's buckets with the three integration lanes the done count is split across
+   *  (V6). `done` stays the sum of them, which is the invariant the card is drawn from. */
+  const panorama = (buckets: Record<string, number> = {}, taskCount = 34, edgeCount = 18) => ({
+    buckets: {
+      running: 4,
+      ready: 0,
+      blocked: 2,
+      awaitingVerification: 0,
+      done: 28,
+      failed: 0,
+      cancelled: 0,
+      integrating: 1,
+      onIntegrationLine: 4,
+      onUpstream: 23,
+      doneNotIntegrated: 0,
+      waitingForLanding: 2,
+      ...buckets,
+    },
+    shape: { taskCount, edgeCount, ratio: edgeCount / taskCount, maxDepth: 3, form: 'chain' },
+  });
+
+  /** §2.7's per-task view, defaulted to the one state most rows are in. */
+  const taskIntegration = (over: Record<string, unknown> = {}) => ({
+    state: 'NOT_APPLICABLE',
+    since: null,
+    handler: null,
+    openItemId: null,
+    jobId: null,
+    checksRunningForMs: null,
+    ...over,
+  });
+
+  function withIntegration(seed?: (qc: QueryClient) => void, over: Record<string, unknown> = {}) {
+    const qc = newClient();
+    // Both halves, because they are two different reads: the project document carries the SETTINGS
+    // (§1.4's one exception), and the endpoint below carries what the queue is doing. A fixture
+    // with only one of them would be testing a page nobody serves.
+    qc.setQueryData(['project', encodeId(P1)], detail({
+      integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs', upstreamRef: 'main' },
+      ...over,
+    }));
+    qc.setQueryData(integrationKey(P1), integration());
+    seed?.(qc);
+    return { qc, html: () => renderDetail(qc, encodeId(P1)) };
+  }
+
+  /** The rendered text with its markup taken out. The line row emphasises the numbers inside it —
+   *  `<b>7</b> commits ahead of main` — and separates its facts with flex gap rather than with
+   *  spaces in the markup, so a `toContain` on the raw HTML would be asserting where the tags fall
+   *  rather than what the row says. Each element becomes one space, then runs collapse: what is
+   *  left is the row as a reader reads it. */
+  function text(html: string): string {
+    return html
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  it('shows the integration line row', () => {
+    const { html } = withIntegration();
+    const out = text(html());
+
+    // Where finished work goes, how far ahead of main it is, when main last came in, what is in
+    // flight, and whether the branch tip is green — the five facts of §7.2 V3, in that order, as
+    // one sentence rather than five independent `toContain`s that a scrambled row would pass.
+    expect(out).toContain(
+      'project/bg-jobs · 7 commits ahead of main · synced with main 12m ago'
+      + ' · Integrating 1 · Queued 1 · Merge check ✓ passing on the branch tip',
+    );
+    expect(out).toContain('Integration settings');
+  });
+
+  it('reads the integration line from its own key, not from the project document', () => {
+    // No entry seeded: the row is what the endpoint answers, so a page holding only the project
+    // document must still ARM the read rather than inventing a line from the document's copy.
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    renderDetail(qc, encodeId(P1));
+    expect(qc.getQueryCache().find({ queryKey: integrationKey(P1) })).toBeDefined();
+  });
+
+  it('says main, and nothing about a branch, when the line is main', () => {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    qc.setQueryData(
+      integrationKey(P1),
+      integration({ line: 'MAIN', ref: 'main', commitsAheadOfUpstream: null,
+        commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET', lastUpstreamSyncAt: null,
+        lastUpstreamSyncAbsentReason: 'NEVER_SYNCED' }),
+    );
+    const out = text(renderDetail(qc, encodeId(P1)));
+
+    expect(out).toContain('main · Integrating 1 · Queued 1 · Merge check ✓ passing');
+    expect(out).toContain('Integration settings');
+    // A project that lands straight into main is neither ahead of main nor syncing from it, so
+    // the two facts that only mean something on a branch are not printed as zeroes.
+    expect(out).not.toContain('commits ahead of main');
+    expect(out).not.toContain('synced with main');
+  });
+
+  it('offers the three integration settings behind the row', () => {
+    // §7.2 V4 / mock 6 ③. A native disclosure, so what it holds is in the markup either way and
+    // a reader with no pointer can reach it.
+    const { html } = withIntegration();
+    const out = html();
+
+    expect(out).toContain('Tasks land on');
+    expect(out).toContain('A project branch');
+    expect(out).toContain('Directly into main');
+    expect(out).toContain('Merge check');
+    expect(out).toContain('cd src/runner-go &amp;&amp; go test -count=1 ./...');
+    expect(out).toContain('Escalate after');
+    expect(out).toContain('2 hours');
+    // The line is locked, so the choice cannot be re-made — and the card says why rather than
+    // presenting a control that would be refused 409 INTEGRATION_LINE_LOCKED (L4).
+    expect(out).toContain('started integrating');
+  });
+
+  it('splits done into integrating, on project branch and on main', () => {
+    const { html } = withIntegration((qc) => qc.setQueryData(['project', encodeId(P1), 'panorama'], panorama()));
+    const out = html();
+
+    expect(out).toContain('Integrating');
+    expect(out).toContain('checks running on the combined tree');
+    expect(out).toContain('On project branch');
+    expect(out).toContain('not on main yet');
+    expect(out).toContain('On main');
+    expect(out).toContain('landed on main');
+    // One lane, not two: the old Done cell is what these three replace, so a card showing both
+    // would count 28 tasks twice.
+    expect(out).not.toContain('% complete');
+    // Waiting says what it is waiting FOR once a prerequisite is the thing holding it (V6).
+    expect(out).toContain('for a prerequisite to land');
+    expect(out).not.toContain('waiting on dependencies');
+  });
+
+  it('keeps the plain done lane on a project that is not integrating', () => {
+    // An older server, or a project nobody has integrated: the three lanes are absent from the
+    // payload and the card is exactly what it was.
+    const { html } = withIntegration((qc) =>
+      qc.setQueryData(['project', encodeId(P1), 'panorama'], {
+        buckets: { running: 1, ready: 0, blocked: 2, awaitingVerification: 0, done: 3, failed: 0, cancelled: 0 },
+        shape: { taskCount: 6, edgeCount: 2, ratio: 1 / 3, maxDepth: 1, form: 'chain' },
+      }),
+    );
+    const out = html();
+
+    expect(out).toContain('% complete');
+    expect(out).toContain('waiting on dependencies');
+    expect(out).not.toContain('On project branch');
+  });
+
+  it('groups tasks by integration stage with waiting reasons', () => {
+    const { html } = withIntegration((qc) =>
+      qc.setQueryData(tasksKey(P1), {
+        items: [
+          task({
+            id: 'i1', title: 'Checks are running on this one', status: 'DONE', workState: 'DONE',
+            integration: taskIntegration({ state: 'RUNNING', jobId: 'job-1', checksRunningForMs: 3 * 60_000 }),
+          }),
+          task({
+            id: 'i2', title: 'Checks failed on this one', status: 'DONE', workState: 'DONE',
+            integration: taskIntegration({ state: 'CHECK_FAILED', handler: 'COORDINATOR', openItemId: 'oi-1' }),
+          }),
+          task({
+            id: 'w1', title: 'Waits on a prerequisite landing', status: 'OPEN', workState: 'BLOCKED',
+            dependencyState: 'BLOCKED', unmetCount: 0, landingWaitCount: 1,
+          }),
+          task({
+            id: 'l1', title: 'Already on the project branch', status: 'DONE', workState: 'DONE',
+            integration: taskIntegration({ state: 'ON_INTEGRATION_LINE' }),
+          }),
+          task({
+            id: 'l2', title: 'Already on main', status: 'DONE', workState: 'DONE',
+            integration: taskIntegration({ state: 'ON_UPSTREAM' }),
+          }),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const out = html();
+
+    expect(out).toContain('Integrating · checks run on the combined tree');
+    expect(out).toContain('Integrating · checks 3m');
+    expect(out).toContain('Checks failed · coordinator');
+    expect(out).toContain('Waiting · for a prerequisite to land');
+    expect(out).toContain('Waits for 1 task to land');
+    expect(out).toContain('Landed');
+    expect(out).toContain('On project/bg-jobs');
+    expect(out).toContain('On main');
+    // A task the platform is still working on has not settled, so it is not filed under the
+    // heading that says it has.
+    expect(out).not.toContain('Done / Cancelled');
+  });
+
+  it('counts the tasks a row waits on in the plural the number asks for', () => {
+    const { html } = withIntegration((qc) =>
+      qc.setQueryData(tasksKey(P1), {
+        items: [
+          task({ id: 'w2', status: 'OPEN', workState: 'BLOCKED', dependencyState: 'BLOCKED',
+            unmetCount: 0, landingWaitCount: 2 }),
+        ],
+        nextCursor: null,
+      }),
+    );
+    expect(html()).toContain('Waits for 2 tasks to land');
+  });
+
+  it('describes criterion landing as project branch or main', () => {
+    const { html } = withIntegration(undefined, {
+      acceptanceCriteriaItems: [
+        { id: 'c-1', ordinal: 1, text: 'Jobs survive a merge', revision: 1, satisfied: true,
+          unmet: [], landing: 'ON_INTEGRATION_LINE' },
+        { id: 'c-2', ordinal: 2, text: 'Durable events carry the exit code', revision: 1,
+          satisfied: true, unmet: [], landing: 'LANDED' },
+        { id: 'c-3', ordinal: 3, text: 'Nobody merged anything', revision: 1, satisfied: true,
+          unmet: [], landing: 'UNKNOWN' },
+      ],
+    });
+    const out = html();
+
+    // Met, and on the project's own branch — which is NOT on main, said in the same breath so a
+    // reader cannot take the green as "shipped" (V11).
+    expect(out).toContain('on project/bg-jobs');
+    expect(out).toContain('not on main yet');
+    expect(out).toContain('on main');
+    // The old sentence named a branch this project may not even use.
+    expect(out).not.toContain('landed on the default branch');
+    // The absence of evidence keeps saying exactly that.
+    expect(out).toContain('no merge receipt either way');
   });
 });

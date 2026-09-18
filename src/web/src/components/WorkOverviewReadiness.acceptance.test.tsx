@@ -128,7 +128,7 @@ describe('mobile Work overview consumes canonical readiness', () => {
     expect(html).toContain('Cancelled');
     expect(html).toContain('25 tasks');
     expect(html).toContain(
-      'Task status: 1 running, 2 ready, 3 blocked, 5 awaiting verification, 11 done, 1 failed, 2 cancelled',
+      'Task status: 1 running, 2 ready, 3 waiting, 5 awaiting verification, 11 done, 1 failed, 2 cancelled',
     );
   });
 
@@ -209,7 +209,7 @@ describe('mobile Work overview consumes canonical readiness', () => {
       automaticReadyCard: html.includes('Ready · automatic dispatch'),
       noRunNow: !html.includes('Run Now'),
       verificationSubjectRunDisabled: !canStartTask({ ...tasks[0], runnable: false } as never),
-      canonicalTwentyFiveTaskAria: html.includes('Task status: 1 running, 2 ready, 3 blocked, 5 awaiting verification, 11 done, 1 failed, 2 cancelled'),
+      canonicalTwentyFiveTaskAria: html.includes('Task status: 1 running, 2 ready, 3 waiting, 5 awaiting verification, 11 done, 1 failed, 2 cancelled'),
     };
     expect(Object.values(assertions).every(Boolean)).toBe(true);
     writeFileSync(evidencePath, JSON.stringify({ viewport: { width: 390, height: 844 }, assertions }, null, 2));

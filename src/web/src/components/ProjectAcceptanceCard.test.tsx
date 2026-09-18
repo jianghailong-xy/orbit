@@ -617,7 +617,7 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     // The separator is drawn by the desktop rule and by nothing else: the markup itself never
     // carries one, so switching that rule off at the breakpoint removes it outright.
     const row = rowFor(paint(qc), 'The project read serves each criterion its satisfaction');
-    expect(row).toContain('landed on the default branch');
+    expect(row).toContain('on main');
     expect(row).not.toContain('\u00b7');
     expect(styleRule('.acceptance-landing::before')).toMatch(/content:\s*'\u00b7 '/u);
 
@@ -684,7 +684,7 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     // A met row carries both halves: the state and where that work went.
     const met = rowFor(html, 'The project read serves each criterion its satisfaction');
     expect(met).toContain('Met by its work');
-    expect(met).toContain('landed on the default branch');
+    expect(met).toContain('on main');
 
     // The open row's fixture HAS a landing. Withholding it is the decision under test: a reader
     // whose criterion is not met is not asking where the unfinished work merged to, and printing
@@ -692,7 +692,7 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
     const open = rowFor(html, 'A reader can see what is holding a criterion open');
     expect(open).toContain('Not met by its work');
     expect(open).not.toContain('acceptance-landing');
-    for (const half of ['landed on the default branch', 'no merge receipt either way']) {
+    for (const half of ['on main', 'no merge receipt either way']) {
       expect(open).not.toContain(half);
     }
   });

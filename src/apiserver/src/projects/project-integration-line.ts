@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import {
+  uuidToBase62,
+  type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
+  type ProjectIntegrationView as SharedProjectIntegrationView,
+} from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
@@ -133,33 +137,25 @@ function decidedLine(row: ProjectCodebaseLine): IntegrationLine | null {
   return row.integrationRef === row.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH';
 }
 
-/** What `GET /projects/:id/integration` and the project read serve (contract §1.6). */
-export interface ProjectIntegrationView {
-  line: IntegrationLine | null;
-  /** Why `line`, `ref` and `source` are null: nobody chose a line and nothing has integrated yet. */
-  lineAbsentReason: 'NOT_DECIDED' | null;
-  /** The integration line's branch, spelled as a merge receipt spells it. */
-  ref: string | null;
-  upstreamRef: string | null;
-  source: IntegrationRefSource | null;
-  /** Integration started, so the line can no longer change. */
-  locked: boolean;
-  startedAt: Date | null;
-  mergeCheckCommand: string | null;
-  mergeCheckCommandAbsentReason: 'NOT_CONFIGURED' | null;
-  mergeCheckTimeoutSeconds: number | null;
-  /**
-   * How long one of this project's exception items may wait on its coordinator before it becomes the
-   * account owner's (§4.1, §4.6). Always present: every project has a window, and the default two
-   * hours is a setting nobody changed rather than the absence of one.
-   */
-  escalationSeconds: number;
-}
+/**
+ * What the project document carries about the line (contract §1.6): the settings half, which is the
+ * one thing §1.4 lets into `ProjectsService.get` — it is already reading the binding row to decide
+ * what "landed" means, so this costs the document nothing.
+ *
+ * The declaration itself lives in `@orbit/shared` (§7.0): the web and OrbitKit read these same
+ * fields, and a second copy of a closed set like `IntegrationLine` is a client drawing a line the
+ * server never described.
+ */
+export type ProjectIntegrationSettingsView = SharedProjectIntegrationSettings<Date>;
+
+/** The settings plus what the queue has done with them — what `GET /projects/:id/integration`
+ *  answers (§1.6), and the five facts the project page's line row is drawn from. */
+export type ProjectIntegrationView = SharedProjectIntegrationView<Date>;
 
 export function projectIntegrationView(
   row: ProjectCodebaseLine | null,
   escalationSeconds: number,
-): ProjectIntegrationView {
+): ProjectIntegrationSettingsView {
   const line = row ? decidedLine(row) : null;
   return {
     line,
@@ -174,6 +170,71 @@ export function projectIntegrationView(
     mergeCheckTimeoutSeconds: row?.mergeCheckTimeoutSeconds ?? null,
     escalationSeconds,
   };
+}
+
+/**
+ * The settings, plus what the integration queue has done with them (§1.6).
+ *
+ * Two statements on top of the binding the caller already read, and they are the reason this is its
+ * own endpoint rather than four more fields on the project document: `project-get-query-count`
+ * holds that document to a budget, and the row that reads this polls.
+ *
+ * Every absence names its reason. A project whose first job has not finished is not one that is
+ * zero commits ahead, and a project that has never absorbed main is not one that synced at the
+ * epoch — printed as numbers, both would read as "nothing has happened here", which is the one
+ * thing the row must not say about work that has.
+ */
+export async function readProjectIntegrationView(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+  settings: ProjectIntegrationSettingsView,
+): Promise<ProjectIntegrationView> {
+  const [counts] = await prisma.$queryRaw<Array<{ integrating: number; queued: number }>>(Prisma.sql`
+    SELECT (count(*) FILTER (WHERE "state" = 'RUNNING'))::int AS "integrating",
+           (count(*) FILTER (WHERE "state" = 'QUEUED'))::int AS "queued"
+      FROM "project_integration_job"
+     WHERE "project_id" = ${projectId}::uuid`);
+  // The newest FINISHED landing attempt, which is what "the tip" means: how far ahead it left the
+  // line, and whether the check that ran on it passed. A job still running describes no tip yet.
+  const [newest] = await prisma.$queryRaw<Array<{
+    state: string; aheadOfUpstream: number | null;
+  }>>(Prisma.sql`
+    SELECT "state", "ahead_of_upstream" AS "aheadOfUpstream"
+      FROM "project_integration_job"
+     WHERE "project_id" = ${projectId}::uuid
+       AND "kind" = 'LAND_TASK'
+       AND "finished_at" IS NOT NULL
+     ORDER BY "finished_at" DESC, "id" DESC
+     LIMIT 1`);
+  const [synced] = await prisma.$queryRaw<Array<{ at: Date }>>(Prisma.sql`
+    SELECT "finished_at" AS "at"
+      FROM "project_integration_job"
+     WHERE "project_id" = ${projectId}::uuid
+       AND "state" = 'LANDED'
+       AND "main_sync_sha" IS NOT NULL
+     ORDER BY "finished_at" DESC, "id" DESC
+     LIMIT 1`);
+
+  const ahead = newest?.aheadOfUpstream ?? null;
+  return {
+    ...settings,
+    commitsAheadOfUpstream: ahead,
+    commitsAheadOfUpstreamAbsentReason: ahead === null ? 'NO_LANDING_YET' : null,
+    lastUpstreamSyncAt: synced?.at ?? null,
+    lastUpstreamSyncAbsentReason: synced ? null : 'NEVER_SYNCED',
+    integratingCount: counts?.integrating ?? 0,
+    queuedCount: counts?.queued ?? 0,
+    mergeCheckOnTip: mergeCheckOnTip(newest?.state ?? null),
+  };
+}
+
+/** What the newest finished landing says about the line's tip (§1.6). Anything that did not run
+ *  its checks to a verdict — a conflict, an error, a cancellation — leaves the tip UNKNOWN rather
+ *  than failing: nothing was tested, so nothing failed. */
+function mergeCheckOnTip(state: string | null): 'PASSING' | 'FAILING' | 'UNKNOWN' {
+  if (state === 'LANDED' || state === 'ALREADY_LANDED') return 'PASSING';
+  if (state === 'CHECK_FAILED') return 'FAILING';
+  return 'UNKNOWN';
 }
 
 /** What a request may set (L5). Each field is written only when sent; null clears the merge check. */
@@ -243,7 +304,7 @@ function repositoryUnknown(message: string): ConflictException {
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
   input: { ownerId: string; projectId: string; settings: IntegrationSettings },
-): Promise<ProjectIntegrationView> {
+): Promise<ProjectIntegrationSettingsView> {
   const { ownerId, projectId, settings } = input;
   if (Object.values(settings).every((value) => value === undefined)) {
     throw new BadRequestException('name at least one integration setting to change');

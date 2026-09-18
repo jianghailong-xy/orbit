@@ -35,6 +35,10 @@ const PROJECT = encodeId(P1);
 // changes unilaterally should break these tests, which it cannot do if both sides read one
 // constant.
 const TASKS_KEY = ['project', PROJECT, 'tasks', 'root'];
+/** The section's second entry: the project's integration line, which a landed row NAMES (§7.3
+ *  V10). Shared with the line row on the project page — same key, one request — so mounting the
+ *  section alone is the only place it shows up as an entry of its own. */
+const INTEGRATION_KEY = ['project', PROJECT, 'integration'];
 const childKey = (parentTaskId: string) => ['project', PROJECT, 'tasks', 'children', parentTaskId];
 const prereqKey = (taskId: string) => ['task', taskId, 'prerequisites'];
 
@@ -219,6 +223,7 @@ describe('ProjectTasks — waits and blocks badges', () => {
     ]);
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       TASKS_KEY,
+      INTEGRATION_KEY,
       prereqKey(T3),
     ]);
   });

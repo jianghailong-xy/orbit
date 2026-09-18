@@ -49,11 +49,13 @@ function serviceWith(opts: {
     parentWhere: any[];
     graph: any[];
     overlays: any[];
+    integration: any[];
   } = {
     findMany: [],
     parentWhere: [],
     graph: [],
     overlays: [],
+    integration: [],
   };
   const service = new ProjectsService({
     project: { findFirst: async () => ('project' in opts ? opts.project : { id: PROJECT_ID }) },
@@ -67,6 +69,14 @@ function serviceWith(opts: {
       if (rendered.includes('"unmetCount"')) {
         calls.graph.push(sql);
         return opts.graph ?? [];
+      }
+      // Where each row sits between done and on main (contract §2.7): a THIRD pass, over receipts,
+      // integration jobs and open items, which no number of extra `task` columns could answer.
+      // Bucketed by the one alias only it selects, for the same reason the graph pass is: a read
+      // this file cannot tell apart from another would make the counts below meaningless.
+      if (rendered.includes('"isCode"')) {
+        calls.integration.push(sql);
+        return [];
       }
       // taskPage also reads the canonical work-state overlay through the same Prisma raw-query
       // door. Keep that independent read visible without mislabelling it as a second graph walk.
@@ -494,6 +504,7 @@ test('every row carries all four dependency fields, and the graph is read once p
   // One pass for the page, not one per row — the whole reason the level is computed in SQL.
   assert.equal(calls.graph.length, 1);
   assert.equal(calls.overlays.length, 1, 'the separate work-state overlay is still read once');
+  assert.equal(calls.integration.length, 1, 'and so is the integration pass');
 });
 
 test('a page with no rows reads no graph at all', async () => {

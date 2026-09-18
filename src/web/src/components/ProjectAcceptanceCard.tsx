@@ -125,6 +125,9 @@ export interface AcceptanceCriterionItem {
 /** The parts of the project detail document this card reads. */
 interface ProjectAcceptanceDetail {
   acceptanceCriteriaItems?: AcceptanceCriterionItem[];
+  /** The settings half of the project's integration line, which this document already carries: the
+   *  branch a criterion's work can be met ON without being on main (§7.4 V11). */
+  integration?: { ref?: string | null };
 }
 
 /** How many criteria a card lists before it stops and says how many more there are. Twelve rather
@@ -183,9 +186,28 @@ const UNMET_CLAUSE: Record<string, string> = {
  *  nothing has settled yet is not asking where that unfinished work merged to, and answering
  *  anyway put a second sentence on every row that had nothing to do with why the row was open. */
 const LANDING: Record<string, string> = {
-  LANDED: 'landed on the default branch',
+  LANDED: 'on main',
   UNKNOWN: 'no merge receipt either way',
 };
+
+/** The third landing value, which needs the branch to say anything at all (contract §7.4 V11).
+ *
+ *  It is the one this card most needed and could not express: work that HAS met its criterion and
+ *  is sitting on the project's own branch. The old vocabulary had two words for it and both were
+ *  wrong — `landed on the default branch` claims it shipped, `no merge receipt either way` claims
+ *  nobody knows. The tail is drawn warn, not because anything is broken, but because "not on main
+ *  yet" is the part a reader skimming a green row has to see. */
+const ON_INTEGRATION_LINE = 'ON_INTEGRATION_LINE';
+
+function landingSentence(
+  landing: string,
+  ref: string | null | undefined,
+): { text: string; tail?: string } {
+  if (landing === ON_INTEGRATION_LINE) {
+    return { text: `on ${ref ?? 'the project branch'}`, tail: 'not on main yet' };
+  }
+  return { text: LANDING[landing] ?? landing };
+}
 
 /** The landing value that is drawn heavier than the other. A criterion its work has MET, with no
  *  receipt putting that work on the default branch, is precisely the false green this card exists
@@ -238,22 +260,37 @@ function RequiredAction({ code }: { code: string }) {
  * back to the next has been sent round twice. And a criterion the read did not answer for draws
  * nothing at all, which is also what an older server's document renders as.
  */
-function CriterionWork({ criterion }: { criterion: AcceptanceCriterionItem }) {
+function CriterionWork({
+  criterion,
+  integrationRef,
+}: {
+  criterion: AcceptanceCriterionItem;
+  integrationRef?: string | null;
+}) {
   if (criterion.satisfied === undefined) return null;
   const unmet = criterion.unmet ?? [];
+  const landing = criterion.landing === undefined
+    ? null
+    : landingSentence(criterion.landing, integrationRef);
   return (
     <>
       <div className="acceptance-work">
         <span className={`acceptance-work-state ${criterion.satisfied ? 'is-met' : 'is-unmet'}`}>
           {criterion.satisfied ? MET : NOT_MET}
         </span>
-        {criterion.satisfied && criterion.landing !== undefined ? (
+        {criterion.satisfied && landing ? (
           <span
             className={
               `acceptance-landing${criterion.landing === LANDING_FLAGGED ? ' is-flagged' : ''}`
             }
           >
-            {LANDING[criterion.landing] ?? criterion.landing}
+            {landing.text}
+            {landing.tail ? (
+              <>
+                {' · '}
+                <span className="acceptance-landing-warn">{landing.tail}</span>
+              </>
+            ) : null}
           </span>
         ) : null}
       </div>
@@ -317,9 +354,13 @@ function CriterionMethod({ method }: { method: string }) {
 export function AcceptanceCriteriaList({
   criteria,
   id,
+  integrationRef,
 }: {
   criteria: AcceptanceCriterionItem[];
   id?: string;
+  /** This project's integration branch, so a criterion met on it can NAME it. Absent for a project
+   *  with no line, where the only two landings are "on main" and "nobody said". */
+  integrationRef?: string | null;
 }) {
   return (
     <ul id={id} className="acceptance-criteria">
@@ -334,7 +375,7 @@ export function AcceptanceCriteriaList({
             <Markdown remarkPlugins={[remarkGfm]} components={INLINE_ONLY}>
               {c.text}
             </Markdown>
-            <CriterionWork criterion={c} />
+            <CriterionWork criterion={c} integrationRef={integrationRef} />
             {c.verificationMethod ? <CriterionMethod method={c.verificationMethod} /> : null}
           </div>
         </li>
@@ -434,7 +475,11 @@ export function ProjectAcceptanceCard({
             {`${plural(criteria.length, 'criterion', 'criteria')} stated. Whether one is met is `
               + 'read off the work filed under it; nothing in Orbit judges the criteria themselves.'}
           </div>
-          <AcceptanceCriteriaList id={criteriaListId} criteria={shown} />
+          <AcceptanceCriteriaList
+            id={criteriaListId}
+            criteria={shown}
+            integrationRef={detail.data?.integration?.ref ?? null}
+          />
           {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
             // forty-one would read as a complete list of twelve. The control remains after it is

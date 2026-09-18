@@ -206,6 +206,77 @@ export function taskLanding(
   return 'NOT_KNOWN';
 }
 
+/** A full ref as its branch name, in SQL — the same `branchName` fold one expression over. */
+export function branchNameSql(ref: string): string {
+  return `regexp_replace(${ref}, '^refs/heads/', '')`;
+}
+
+/**
+ * `taskLanding` (§1.4) as SQL, correlated to a TASK alias: which side of the line this task's work
+ * is on, as the three-valued answer the TypeScript fold gives.
+ *
+ * The same three values and the same precedence: upstream wins, because work on main is also
+ * everywhere the project branch will ever take it. A task in a project with no binding answers
+ * `NOT_KNOWN` — the legacy pair is deliberately NOT applied here, since this exists to classify a
+ * project's finished work against the line that project actually has, and one it does not have
+ * cannot put work anywhere.
+ */
+export function taskLandingSql(alias: string): string {
+  const results = LANDED_RESULTS.map((result) => `'${result}'`).join(', ');
+  const receiptOn = (ref: string) => `EXISTS (
+        SELECT 1 FROM "session_merge_receipt" landing_receipt
+          JOIN "project_codebase" receipt_line
+            ON receipt_line."project_id" = ${alias}."project_id"
+           AND receipt_line."slot" = 'primary'
+         WHERE landing_receipt."task_id" = ${alias}."id"
+           AND landing_receipt."result" IN (${results})
+           AND landing_receipt."target_branch" = ${branchNameSql(`receipt_line."${ref}"`)}
+      )`;
+  return `CASE
+      WHEN ${receiptOn('upstream_ref')} THEN 'ON_UPSTREAM'
+      WHEN ${receiptOn('integration_ref')} THEN 'ON_INTEGRATION_LINE'
+      ELSE 'NOT_KNOWN'
+    END`;
+}
+
+/**
+ * `isCodeTask` (§1.1) as SQL: work that has a commit to land at all.
+ *
+ * Its newest work session ran in a worktree on a branch, and the row is not declared codeless. The
+ * negation of the middle two disjuncts of `prerequisiteLandedSql`, stated positively because this
+ * asks the question the other way round — that one asks "is there nothing left to wait for", this
+ * asks "is this the kind of work that lands".
+ */
+export function isCodeTaskSql(alias: string): string {
+  return `(
+      ${alias}."project_id" IS NOT NULL
+      AND ${alias}."codeless" = false
+      AND EXISTS (
+        SELECT 1 FROM "session" code_work
+         WHERE code_work."id" = (
+                 SELECT newest_work."id" FROM "session" newest_work
+                  WHERE newest_work."task_id" = ${alias}."id"
+                    AND newest_work."starts_task_work" = true
+                    AND newest_work."deleted_at" IS NULL
+                  ORDER BY newest_work."created_at" DESC, newest_work."id" DESC
+                  LIMIT 1
+               )
+           AND code_work."isolation_status" = 'worktree'
+           AND code_work."branch" IS NOT NULL
+      )
+    )`;
+}
+
+/** `lineStarted` (§1.1) as SQL: this task's project has a binding that has begun integrating. */
+export function lineStartedSql(alias: string): string {
+  return `EXISTS (
+      SELECT 1 FROM "project_codebase" started_line
+       WHERE started_line."project_id" = ${alias}."project_id"
+         AND started_line."slot" = 'primary'
+         AND started_line."integration_started_at" IS NOT NULL
+    )`;
+}
+
 /**
  * The fold: one criterion is LANDED when every task serving it is on the upstream, and
  * ON_INTEGRATION_LINE when every one of them landed on one of the two branches and not all of them

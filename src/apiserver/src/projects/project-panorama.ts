@@ -1,6 +1,9 @@
 import { Prisma } from '@prisma/client';
+import type { ProjectIntegrationBuckets } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { dependenciesSatisfiedSql } from '../tasks/task-dependencies';
 import { projectTaskDependencyFactsSql } from './project-dependency-facts';
+import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { projectTaskWorkStateSql } from './project-task-work-state';
 
 /**
@@ -37,7 +40,7 @@ const MESH_MAX_TASKS = 30;
  * exhaustive partition: every bucket sum equals `shape.taskCount`; failures can never disappear
  * from the denominator or be mistaken for a cancellation.
  */
-export interface ProjectPanoramaBuckets {
+export interface ProjectPanoramaBuckets extends Partial<ProjectIntegrationBuckets> {
   /** Work in flight: a task with a live Session on it, or one the row itself calls IN_PROGRESS. */
   running: number;
   ready: number;
@@ -65,7 +68,9 @@ export interface ProjectPanorama {
   shape: ProjectPanoramaShape;
 }
 
-interface PanoramaRow {
+interface PanoramaRow extends ProjectIntegrationBuckets {
+  /** Whether ANY task in this project sits under a binding that has begun integrating (§1.1). */
+  lineStarted: boolean;
   running: number;
   ready: number;
   blocked: number;
@@ -102,12 +107,30 @@ export async function readProjectPanorama(
 ): Promise<ProjectPanorama> {
   const facts = projectTaskDependencyFactsSql(ownerId, projectId);
   const workState = Prisma.raw(projectTaskWorkStateSql('task_row'));
+  // The integration half (§7.2 V6), read in the SAME pass over `task` as the lanes above: the
+  // three buckets `done` splits across are a partition of it, and computing them in a second query
+  // would let the two disagree about one task across the gap between them.
+  const landing = Prisma.raw(taskLandingSql('task_row'));
+  const isCode = Prisma.raw(isCodeTaskSql('task_row'));
+  const lineStarted = Prisma.raw(lineStartedSql('task_row'));
+  // Held up by a landing AND BY NOTHING ELSE: the dependency predicate refuses it, and the same
+  // predicate with the landing clause lifted would not. The subtraction is what makes this
+  // "waiting for a prerequisite to land" rather than "blocked", which every task with an
+  // unfinished prerequisite also is. Same two expressions `ProjectReadyToRun` counts it with.
+  const blockedByLanding = Prisma.raw(
+    `(NOT (${dependenciesSatisfiedSql('task_row')})`
+    + ` AND ${dependenciesSatisfiedSql('task_row', { ignoreLanding: true })})`,
+  );
   // An aggregate with no GROUP BY returns exactly one row over zero input rows, which is what
   // makes an empty project a row of zeroes rather than an empty result to guess at.
   //
   const [row] = await prisma.$queryRaw<PanoramaRow[]>(Prisma.sql`
     WITH work AS MATERIALIZED (
-      SELECT task_row."id" AS "taskId", (${workState})::text AS "workState"
+      SELECT task_row."id" AS "taskId", (${workState})::text AS "workState",
+             (${landing})::text AS "landing",
+             (${isCode}) AS "isCode",
+             (${lineStarted}) AS "lineStarted",
+             (${blockedByLanding}) AS "waitingForLanding"
         FROM "task" task_row
        WHERE task_row."owner_id" = ${ownerId}::uuid
          AND task_row."project_id" = ${projectId}::uuid
@@ -120,6 +143,25 @@ export async function readProjectPanorama(
            (count(*) FILTER (WHERE work."workState" = 'DONE'))::int AS "done",
            (count(*) FILTER (WHERE work."workState" = 'FAILED'))::int AS "failed",
            (count(*) FILTER (WHERE work."workState" = 'CANCELLED'))::int AS "cancelled",
+           -- The three lanes DONE splits across, plus the remainder, in that order. Every one of
+           -- them is filtered on DONE, so they partition it by construction: a reader adding them
+           -- up gets the done count back, whatever the row underneath turns out to be.
+           (count(*) FILTER (
+              WHERE work."workState" = 'DONE' AND work."landing" = 'NOT_KNOWN'
+                AND work."isCode" AND work."lineStarted"))::int AS "integrating",
+           (count(*) FILTER (
+              WHERE work."workState" = 'DONE' AND work."landing" = 'ON_INTEGRATION_LINE'))::int
+             AS "onIntegrationLine",
+           (count(*) FILTER (
+              WHERE work."workState" = 'DONE' AND work."landing" = 'ON_UPSTREAM'))::int
+             AS "onUpstream",
+           (count(*) FILTER (
+              WHERE work."workState" = 'DONE' AND work."landing" = 'NOT_KNOWN'
+                AND NOT (work."isCode" AND work."lineStarted")))::int AS "doneNotIntegrated",
+           (count(*) FILTER (
+              WHERE work."workState" = 'BLOCKED' AND work."waitingForLanding"))::int
+             AS "waitingForLanding",
+           coalesce(bool_or(work."lineStarted"), false) AS "lineStarted",
            count(*)::int AS "taskCount",
            coalesce(sum(f."projectPrerequisiteCount"), 0)::int AS "edgeCount",
            coalesce(max(f."topoLevel"), 0)::int AS "maxDepth"
@@ -138,6 +180,19 @@ export async function readProjectPanorama(
       done: row?.done ?? 0,
       failed: row?.failed ?? 0,
       cancelled: row?.cancelled ?? 0,
+      // Reported only by a project that HAS a line and has begun using it. Five zeroes on a
+      // project that does not integrate would be five true numbers answering a question nobody
+      // asked, and a client cannot tell "nothing is in flight" from "nothing ever will be"
+      // once they are there — so the absence is the answer, and it is the whole set or none.
+      ...(row?.lineStarted
+        ? {
+            integrating: row.integrating,
+            onIntegrationLine: row.onIntegrationLine,
+            onUpstream: row.onUpstream,
+            doneNotIntegrated: row.doneNotIntegrated,
+            waitingForLanding: row.waitingForLanding,
+          }
+        : {}),
     },
     shape: { taskCount, edgeCount, ratio, maxDepth: row?.maxDepth ?? 0, form: topologyForm(taskCount, ratio) },
   };

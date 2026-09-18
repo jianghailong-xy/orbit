@@ -82,7 +82,10 @@ describe('ProjectPanoramaHeader', () => {
     for (const label of [
       'Running',
       'Ready',
-      'Blocked',
+      // What the lane is CALLED, since contract §7.2 V6: the number counts tasks waiting on a
+      // prerequisite, which is not the same claim as "blocked" — nobody has to do anything about
+      // most of them.
+      'Waiting',
       'Awaiting verification',
       'Done',
       'Failed',
@@ -159,7 +162,7 @@ describe('ProjectPanoramaHeader', () => {
 
     expect(meterAttr(html, 'role')).toBe('img');
     expect(meterAttr(html, 'aria-label')).toBe(
-      'Task status: 0 running, 4 ready, 30 blocked, 0 awaiting verification, 5 done, 0 failed, 0 cancelled',
+      'Task status: 0 running, 4 ready, 30 waiting, 0 awaiting verification, 5 done, 0 failed, 0 cancelled',
     );
 
     // The segments are in proportion, and the empty bucket has no sliver: a hairline of colour for
@@ -184,7 +187,7 @@ describe('ProjectPanoramaHeader', () => {
     const html = render(qc);
 
     expect(meterAttr(html, 'aria-label')).toBe(
-      'Task status: 0 running, 0 ready, 0 blocked, 0 awaiting verification, 0 done, 0 failed, 0 cancelled',
+      'Task status: 0 running, 0 ready, 0 waiting, 0 awaiting verification, 0 done, 0 failed, 0 cancelled',
     );
     expect(html).toContain('var(--fill-muted)');
     expect(html).toContain('no tasks yet'); // not "NaN% of 0"

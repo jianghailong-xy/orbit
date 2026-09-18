@@ -49,6 +49,20 @@ export interface ProjectPanoramaBuckets {
   failed?: number;
   /** A distinct terminal decision, kept visible so every task reconciles with the total. */
   cancelled: number;
+  /**
+   * The three lanes `done` splits across once this project has an integration line, plus the two
+   * numbers that make the split readable (contract §7.2 V6).
+   *
+   * Optional AS A SET, and read as one: a project with no line — and any server from before there
+   * were lines — reports none of them, and the card draws the single Done lane it always drew.
+   * Reading an absent `integrating` as 0 would instead claim that nothing is in flight, which is
+   * a different sentence from "this project does not integrate".
+   */
+  integrating?: number;
+  onIntegrationLine?: number;
+  onUpstream?: number;
+  doneNotIntegrated?: number;
+  waitingForLanding?: number;
 }
 
 /** The project's dependency graph as three numbers and the verdict drawn from them. */
@@ -83,9 +97,25 @@ export const projectPanoramaQuery = (projectId: string) =>
   });
 
 /** The shapes, in the order they are drawn. Names describe the mark, not the status it stands for. */
-export type BucketGlyph = 'disc' | 'triangle' | 'square' | 'hourglass' | 'check' | 'cross' | 'slash';
+export type BucketGlyph =
+  | 'disc'
+  | 'triangle'
+  | 'square'
+  | 'hourglass'
+  | 'check'
+  | 'cross'
+  | 'slash'
+  // Two more for the lanes `done` splits into: work the platform still has in hand, and work
+  // that reached the project's own branch but not main.
+  | 'spinner'
+  | 'branch';
 
-type BucketKey = keyof ProjectPanoramaBuckets;
+/** The seven lanes EVERY project reports, integration line or not. Spelled out rather than
+ *  `keyof ProjectPanoramaBuckets`, which now also covers the integration lanes: those are an
+ *  alternative set of cells, not extra members of this one, and the table below is what the
+ *  projects list draws its meter from. */
+type BucketKey =
+  | 'running' | 'ready' | 'blocked' | 'awaitingVerification' | 'done' | 'failed' | 'cancelled';
 
 /**
  * One row per bucket, in reading order: what it is called, which shape carries it, and which token
@@ -100,7 +130,7 @@ export const PANORAMA_BUCKETS: ReadonlyArray<{
 }> = [
   { key: 'running', label: 'Running', glyph: 'disc', color: 'var(--brand)' },
   { key: 'ready', label: 'Ready', glyph: 'triangle', color: 'var(--warning-solid)' },
-  { key: 'blocked', label: 'Blocked', glyph: 'square', color: 'var(--text-3)' },
+  { key: 'blocked', label: 'Waiting', glyph: 'square', color: 'var(--text-3)' },
   {
     key: 'awaitingVerification',
     label: 'Awaiting verification',
@@ -111,6 +141,75 @@ export const PANORAMA_BUCKETS: ReadonlyArray<{
   { key: 'failed', label: 'Failed', glyph: 'cross', color: 'var(--error)' },
   { key: 'cancelled', label: 'Cancelled', glyph: 'slash', color: 'var(--text-4)' },
 ];
+
+/**
+ * Whether this project's work is being INTEGRATED, which is what decides the shape of this card
+ * (§7.2 V6).
+ *
+ * The question is answered by the payload, not by the project: a server that reports the three
+ * lanes has an integration line and has classified every finished task against it; one that does
+ * not is either older than the line or looking at a project that has none. Either way the card
+ * draws the single Done lane, which is the thing it can honestly say.
+ */
+export function reportsIntegrationLanes(buckets: ProjectPanoramaBuckets): boolean {
+  return buckets.integrating !== undefined
+    && buckets.onIntegrationLine !== undefined
+    && buckets.onUpstream !== undefined;
+}
+
+/**
+ * The cells this card draws, in reading order, for a project that integrates (§7.2 V6's table).
+ *
+ * `Done` is replaced rather than joined: the three lanes sum to it, and a card showing both would
+ * invite a reader to add 28 and 28. The lanes that are NOT part of that sum — work that never had
+ * anything to land, failures, cancellations, verification — appear only when they are non-zero,
+ * because a project page carrying four permanent zeroes is a page where a one stops being visible.
+ *
+ * `On project branch` is dropped on a `MAIN` line rather than shown as a zero: a project landing
+ * straight into main has no branch for work to be stranded on, and a lane saying "0 stranded"
+ * answers a question nobody asked.
+ */
+export function integrationLanes(
+  buckets: ProjectPanoramaBuckets,
+  line: 'MAIN' | 'PROJECT_BRANCH' | null,
+): ReadonlyArray<{ key: string; label: string; value: number; footnote: string; glyph: BucketGlyph; color: string }> {
+  const at = (value: number | undefined) => value ?? 0;
+  const lanes = [
+    { key: 'running', label: 'Running', value: buckets.running, footnote: 'active sessions',
+      glyph: 'disc' as BucketGlyph, color: 'var(--brand)' },
+    { key: 'ready', label: 'Ready', value: buckets.ready, footnote: 'can start now',
+      glyph: 'triangle' as BucketGlyph, color: 'var(--warning-solid)' },
+    { key: 'blocked', label: 'Waiting', value: buckets.blocked,
+      // What it is waiting FOR, once a landing is the thing holding it: nobody has to act on that
+      // one, so a reader who sees this footnote can stop looking for somebody to chase.
+      footnote: at(buckets.waitingForLanding) > 0 ? 'for a prerequisite to land' : 'waiting on dependencies',
+      glyph: 'square' as BucketGlyph, color: 'var(--text-3)' },
+    { key: 'integrating', label: 'Integrating', value: at(buckets.integrating),
+      footnote: 'checks running on the combined tree',
+      glyph: 'spinner' as BucketGlyph, color: 'var(--brand)' },
+    ...(line === 'MAIN' ? [] : [{
+      key: 'onIntegrationLine', label: 'On project branch', value: at(buckets.onIntegrationLine),
+      footnote: 'not on main yet', glyph: 'branch' as BucketGlyph, color: 'var(--success)',
+    }]),
+    // The two greens are deliberately different, and the meter is why: these lanes are adjacent
+    // segments on one bar, and two touching blocks of the same colour read as a single larger
+    // block — which is exactly the reading this split exists to break up. `--success-solid` is the
+    // brighter of the pair, so main is the one that stands out.
+    { key: 'onUpstream', label: 'On main', value: at(buckets.onUpstream), footnote: 'landed on main',
+      glyph: 'check' as BucketGlyph, color: 'var(--success-solid)' },
+  ];
+  const extras = [
+    { key: 'doneNotIntegrated', label: 'Done', value: at(buckets.doneNotIntegrated),
+      footnote: 'nothing to land', glyph: 'check' as BucketGlyph, color: 'var(--success)' },
+    { key: 'awaitingVerification', label: 'Awaiting verification', value: at(buckets.awaitingVerification),
+      footnote: 'verifier must conclude', glyph: 'hourglass' as BucketGlyph, color: 'var(--brand)' },
+    { key: 'failed', label: 'Failed', value: at(buckets.failed), footnote: 'coordinated continuation',
+      glyph: 'cross' as BucketGlyph, color: 'var(--error)' },
+    { key: 'cancelled', label: 'Cancelled', value: buckets.cancelled,
+      footnote: 'closed without completion', glyph: 'slash' as BucketGlyph, color: 'var(--text-4)' },
+  ].filter((lane) => lane.value > 0);
+  return [...lanes, ...extras];
+}
 
 /** Rolling compatibility without letting an absent new field become NaN in a meter. */
 export function panoramaBucketValue(buckets: ProjectPanoramaBuckets, key: BucketKey): number {
@@ -165,6 +264,23 @@ export function Glyph({
         <path d="M2.2 2.2 L9.8 9.8 M9.8 2.2 L2.2 9.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       ) : shape === 'slash' ? (
         <path d="M2 10 L10 2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      ) : shape === 'spinner' ? (
+        // An open ring with an arrowhead: work in hand, drawn so it is not a second filled disc.
+        <path
+          d="M10.5 6 A4.5 4.5 0 1 1 6 1.5 M6 1.5 L4 3.4 M6 1.5 L8 3.4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : shape === 'branch' ? (
+        <g fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="3" cy="2.6" r="1.2" />
+          <circle cx="3" cy="9.4" r="1.2" />
+          <circle cx="9" cy="4.1" r="1.2" />
+          <path d="M3 3.8v4.4M9 5.3c0 2.2-2.2 2.4-4.8 3.4" strokeLinecap="round" />
+        </g>
       ) : (
         <path
           d="M1.5 6.4 L4.6 9.5 L10.5 2.6"
@@ -252,19 +368,25 @@ function segmentRadius(index: number, total: number): string {
 export function BucketMeter({
   buckets,
   height = 9,
+  segments,
 }: {
   buckets: ProjectPanoramaBuckets;
   height?: number;
+  /** The lanes to draw, when they are not the seven above: a project that integrates splits its
+   *  done count three ways, and a bar that kept drawing one green block would disagree with the
+   *  cells directly over it. Same proportions either way — this only changes what the blocks are. */
+  segments?: ReadonlyArray<{ key: string; label: string; value: number; color: string }>;
 }) {
-  const drawn = PANORAMA_BUCKETS.map((bucket) => ({
-    ...bucket,
+  const table = segments ?? PANORAMA_BUCKETS.map((bucket) => ({
+    key: bucket.key as string,
+    label: bucket.label,
+    color: bucket.color,
     value: panoramaBucketValue(buckets, bucket.key),
-  })).filter(
-    (segment) => segment.value > 0,
-  );
-  const label = `Task status: ${PANORAMA_BUCKETS.map(
-    (bucket) => `${panoramaBucketValue(buckets, bucket.key)} ${bucket.label.toLowerCase()}`,
-  ).join(', ')}`;
+  }));
+  const drawn = table.filter((segment) => segment.value > 0);
+  const label = `Task status: ${table
+    .map((segment) => `${segment.value} ${segment.label.toLowerCase()}`)
+    .join(', ')}`;
 
   return (
     <div role="img" aria-label={label} style={{ display: 'flex', gap: 2, height }}>
@@ -388,11 +510,16 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
 export function ProjectPanoramaHeader({
   projectId,
   projectStatus,
+  integrationLine,
 }: {
   projectId: string;
   /** Goal-level status. Task completion does not close a project, so this is what lets the card
    *  identify the useful in-between state: every task settled, project still open. */
   projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
+  /** Which line this project lands on, so the `On project branch` lane is dropped for a project
+   *  that has no branch to strand work on. Handed in rather than read again: the integration row
+   *  above this card already holds it, and a second read for one boolean is a second request. */
+  integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
 }) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
   const buckets = panorama.data?.buckets;
@@ -432,6 +559,9 @@ export function ProjectPanoramaHeader({
 
   const { shape } = panorama.data;
   const loaded = panorama.data.buckets;
+  const lanes = reportsIntegrationLanes(loaded)
+    ? integrationLanes(loaded, integrationLine ?? null)
+    : null;
   const awaitingVerification = loaded.awaitingVerification ?? 0;
   const failed = loaded.failed ?? 0;
   const settled = loaded.done + loaded.cancelled;
@@ -465,7 +595,13 @@ export function ProjectPanoramaHeader({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
+          // Three across when the done count is split three ways, which is what makes the six
+          // lanes two full rows rather than four and a gap — the grid's own background shows
+          // through an unfilled slot, and a grey rectangle beside "On main" reads as a cell that
+          // failed to render. `auto-fit` everywhere else, unchanged.
+          gridTemplateColumns: lanes
+            ? 'repeat(3, minmax(0, 1fr))'
+            : 'repeat(auto-fit, minmax(132px, 1fr))',
           gap: 2,
           background: 'var(--border-subtle)',
           border: '1px solid var(--border-subtle)',
@@ -473,24 +609,33 @@ export function ProjectPanoramaHeader({
           overflow: 'hidden',
         }}
       >
-        {PANORAMA_BUCKETS.map((bucket) => (
+        {(lanes
+          ?? PANORAMA_BUCKETS.map((bucket) => ({
+            key: bucket.key as string,
+            label: bucket.label,
+            value: panoramaBucketValue(loaded, bucket.key),
+            footnote: footnotes[bucket.key],
+            glyph: bucket.glyph,
+            color: bucket.color,
+          }))
+        ).map((lane) => (
           <Kpi
-            key={bucket.key}
-            label={bucket.label}
-            value={panoramaBucketValue(loaded, bucket.key)}
-            footnote={footnotes[bucket.key]}
-            glyph={bucket.glyph}
-            color={bucket.color}
+            key={lane.key}
+            label={lane.label}
+            value={lane.value}
+            footnote={lane.footnote}
+            glyph={lane.glyph}
+            color={lane.color}
             // The one cell that changes colour, and only in the state this card is about: ready
             // work with nothing serving it. The amber is a second reading of the banner below, not
             // the thing that says it.
-            attention={bucket.key === 'ready' && stalled}
+            attention={lane.key === 'ready' && stalled}
           />
         ))}
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <BucketMeter buckets={loaded} />
+        <BucketMeter buckets={loaded} segments={lanes ?? undefined} />
       </div>
 
       {stalled ? (

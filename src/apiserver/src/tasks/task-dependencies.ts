@@ -1,6 +1,10 @@
 import { TaskStatus } from '@orbit/shared';
 import {
   LANDED_RESULTS,
+  // A full ref as a merge receipt spells `target_branch`: the runner reports a branch, not a ref.
+  // The landing module's, not a second copy — this file and the panorama both fold refs the same
+  // way, and two spellings of that fold is two answers to "did it land".
+  branchNameSql,
   LandingReceiptFacts,
   landingBranchesFor,
   taskLanding,
@@ -353,11 +357,6 @@ export function dependenciesSatisfiedSql(
             AND ${landed}
        )
   )`;
-}
-
-/** A full ref as a merge receipt spells `target_branch`: the runner reports a branch, not a ref. */
-function branchNameSql(ref: string): string {
-  return `regexp_replace(${ref}, '^refs/heads/', '')`;
 }
 
 /**

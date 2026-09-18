@@ -97,6 +97,7 @@ import {
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
+import { readTaskIntegrationViews } from './project-task-integration';
 import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
 import {
   emptyProjectListAttention,
@@ -122,6 +123,7 @@ import {
   configureProjectIntegration,
   type IntegrationSettings,
   projectIntegrationView,
+  readProjectIntegrationView,
   type ProjectIntegrationView,
   readProjectCodebase,
 } from './project-integration-line';
@@ -271,6 +273,16 @@ interface ProjectTaskDependencyFields {
    * treat the two identically anyway.
    */
   dependencyState: Exclude<DependencyState, 'NONE'>;
+  /**
+   * Prerequisites that are FINISHED and not yet on this project's integration line (§2.5 J9) —
+   * the count behind the task row's "Waits for N task(s) to land" (§7.3 V10).
+   *
+   * A strict subset of what `unmetCount` never said: those are prerequisites somebody still has to
+   * do, these are prerequisites that are done and on their way. Only the second starts this task by
+   * itself, which is why a row saying "Blocked" about it was sending readers to look for somebody
+   * to chase.
+   */
+  landingWaitCount: number;
 }
 
 /** The raw tallies the graph query returns, before the state rule is applied to them. */
@@ -281,6 +293,9 @@ interface ProjectTaskDependencyRow extends Omit<ProjectTaskDependencyFields, 'de
   doneCount: number;
   /** How many of them are finished code work that is not on the project's line yet (§2.5 J9). */
   unlandedCount: number;
+  /** Of those, the ones whose work is FINISHED: the prerequisites this task is waiting to LAND,
+   *  as opposed to waiting for somebody to do. */
+  landingWaitCount: number;
 }
 
 /** A task with no edges at all — also the shape a row falls back to, so no key ever goes missing. */
@@ -289,6 +304,7 @@ const UNCONNECTED_TASK: ProjectTaskDependencyFields = {
   blocksCount: 0,
   topoLevel: 0,
   dependencyState: 'READY',
+  landingWaitCount: 0,
 };
 
 /** The shared rule, with this payload's collapse of `NONE` onto `READY` applied once. */
@@ -897,7 +913,7 @@ export class ProjectsService {
    * transaction like `status` above, so a refused request writes nothing it carried.
    */
   private static assertIntegrationIsNotWrittenFromASession(
-    dto: UpdateProjectDto,
+    dto: UpdateProjectDto | CreateProjectDto,
     actingSessionId: string | undefined,
   ): void {
     if (dto.integration === undefined || !actingSessionId?.trim()) return;
@@ -1956,6 +1972,13 @@ export class ProjectsService {
             )
           : await writeProject(this.prisma);
       if (coordinator) this.sessions?.announceProjectSessionChanged?.(coordinator.sessionId);
+      // The line, when the request chose one (L1). After the project row rather than inside its
+      // insert: the binding it writes is a row in another table under another lock (rank 55 after
+      // the project's 40), and the project is a complete, usable record without it — a repository
+      // the server cannot name is a 409 about the LINE, not a project that failed to be created.
+      if (dto.integration) {
+        await this.configureIntegration(ownerId, createdResult.project.id, dto.integration);
+      }
       return withAcceptanceDefinitions(withCoordination(createdResult.project));
     } catch (e) {
       // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
@@ -2003,6 +2026,10 @@ export class ProjectsService {
     sessionId: string,
     dto: CreateProjectDto,
   ) {
+    // Same door rule as the update path: an agent session does not choose the branch its own
+    // project's work lands on (L5). Checked before anything is written, so a refused request
+    // leaves no project behind for the caller to wonder about.
+    ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, sessionId);
     const seed = await this.coordinatorFromSession(ownerId, runnerId, sessionId);
     const principal = { type: 'RUNNER', id: runnerId } as const;
     let project: Awaited<ReturnType<ProjectsService['create']>>;
@@ -2075,7 +2102,11 @@ export class ProjectsService {
     dto: CreateProjectDto,
     workspaceId: string,
     principal: ProjectCreatePrincipal = { type: 'SYSTEM', id: ownerId },
+    /** The session that proved the caller may name a workspace, when one did. Its presence is what
+     *  makes an integration choice in the same request this session's rather than the owner's. */
+    actingSessionId?: string,
   ) {
+    ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
     const project = await this.create(ownerId, dto, undefined, principal);
     await this.coordinator(ownerId, project.id, workspaceId);
     return this.get(ownerId, project.id);
@@ -2357,9 +2388,13 @@ export class ProjectsService {
       select: { exceptionEscalationSeconds: true },
     });
     if (!project) throw new NotFoundException('project not found');
-    return projectIntegrationView(
-      await readProjectCodebase(this.prisma, id),
-      project.exceptionEscalationSeconds,
+    return readProjectIntegrationView(
+      this.prisma,
+      id,
+      projectIntegrationView(
+        await readProjectCodebase(this.prisma, id),
+        project.exceptionEscalationSeconds,
+      ),
     );
   }
 
@@ -2374,11 +2409,15 @@ export class ProjectsService {
     settings: IntegrationSettings,
   ): Promise<ProjectIntegrationView> {
     await this.assertOwned(ownerId, id);
-    return withTransactionRetry(
+    const written = await withTransactionRetry(
       this.prisma,
       (tx) => configureProjectIntegration(tx, { ownerId, projectId: id, settings }),
       loggedRetry(this.logger, 'projects.configureIntegration'),
     );
+    // The same shape the GET answers, composed after the write rather than inside it: what the
+    // queue is doing is not part of what was just decided, and reading it in the transaction would
+    // put two more statements under the binding's lock for a row nobody is waiting on.
+    return readProjectIntegrationView(this.prisma, id, written);
   }
 
   /**
@@ -2535,13 +2574,22 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates] = await Promise.all([
+    const [dependencies, workStates, integrations] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
         page.map((task) => task.id),
       ),
       readProjectTaskWorkStates(
+        this.prisma,
+        ownerId,
+        projectId,
+        page.map((task) => task.id),
+      ),
+      // Where each row sits between done and on main (§2.7). One pass for the page, on the same
+      // terms as the two above: which side of the line a task is on is a fact about receipts,
+      // jobs and open items, so no number of extra `task` columns could answer it.
+      readTaskIntegrationViews(
         this.prisma,
         ownerId,
         projectId,
@@ -2557,6 +2605,17 @@ export class ProjectsService {
       return {
         ...task,
         ...work,
+        // Never spread-with-fallback into nothing here either: every row carries an integration
+        // view, and NOT_APPLICABLE is an answer — "this task has nothing to land" — while an
+        // absent key would read to a client as "this server does not report integration".
+        integration: integrations.get(task.id) ?? {
+          state: 'NOT_APPLICABLE' as const,
+          since: null,
+          handler: null,
+          openItemId: null,
+          jobId: null,
+          checksRunningForMs: null,
+        },
         childCount: _count.children,
         // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
         // carries all four keys, because an absent key reads to a client as "this endpoint does not
@@ -2620,7 +2679,8 @@ export class ProjectsService {
                COUNT(*) FILTER (WHERE "status" NOT IN ('DONE', 'CANCELLED'))::int AS "unmetCount",
                COUNT(*) FILTER (WHERE "status" IN ('CANCELLED', 'FAILED'))::int AS "terminalCount",
                COUNT(*) FILTER (WHERE "status" = 'DONE')::int AS "doneCount",
-               COUNT(*) FILTER (WHERE NOT "landed")::int AS "unlandedCount"
+               COUNT(*) FILTER (WHERE NOT "landed")::int AS "unlandedCount",
+               COUNT(*) FILTER (WHERE "status" = 'DONE' AND NOT "landed")::int AS "landingWaitCount"
           FROM "inbound"
          GROUP BY "id"
       ),
@@ -2658,7 +2718,8 @@ export class ProjectsService {
              COALESCE(t."prerequisiteCount", 0) AS "prerequisiteCount",
              COALESCE(t."terminalCount", 0) AS "terminalCount",
              COALESCE(t."doneCount", 0) AS "doneCount",
-             COALESCE(t."unlandedCount", 0) AS "unlandedCount"
+             COALESCE(t."unlandedCount", 0) AS "unlandedCount",
+             COALESCE(t."landingWaitCount", 0) AS "landingWaitCount"
         FROM "scoped" s
         LEFT JOIN "tally" t ON t."id" = s."id"
         LEFT JOIN "outbound" o ON o."id" = s."id"
@@ -2672,6 +2733,7 @@ export class ProjectsService {
           unmetCount: row.unmetCount,
           blocksCount: row.blocksCount,
           topoLevel: row.topoLevel,
+          landingWaitCount: row.landingWaitCount,
           dependencyState: projectTaskDependencyState({
             prerequisites: row.prerequisiteCount,
             terminal: row.terminalCount,
