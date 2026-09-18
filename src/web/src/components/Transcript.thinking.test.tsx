@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type RunEvent, StreamingDraftsCtx, Transcript } from './Transcript';
 
 /**
@@ -76,11 +76,16 @@ describe('a settled stretch of reasoning', () => {
 
 describe('a stretch still being written', () => {
   it('holds the live reasoning in a scrolling viewport, with its clock running', () => {
+    // `LiveSeconds` prints `Date.now() - startedAt` as it renders, through a formatter that rounds,
+    // so a 12s reading tolerates 500ms of the render itself — and a loaded host's mount runs past
+    // that. Date alone is frozen: the test's own clock is what moves, not the tolerance.
+    vi.useFakeTimers({ toFake: ['Date'] });
     const html = renderToStaticMarkup(
       <StreamingDraftsCtx.Provider value={{ text: '', think: 'weighing it up', thinkStartedAt: Date.now() - 12_000 }}>
         <Transcript events={[ev(1, 'user', { text: 'go' })]} live streamingAfterSeq={1} />
       </StreamingDraftsCtx.Provider>,
     );
+    vi.useRealTimers();
 
     expect(html).toContain('chat-think-port');
     expect(html).toContain('weighing it up');

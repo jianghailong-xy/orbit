@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
@@ -36,5 +37,12 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  // `<Transcript>` alone takes seconds to mount on a loaded host — 7.8s for the first mount, measured
+  // with a swift build running beside it — so vitest's 5s default reds its specs on wall clock alone,
+  // and a red gets read as a regression in whatever was just changed. 30s is the headroom those specs
+  // were already asking for one file at a time (`{ timeout: 30_000 }`); a hung test still fails, later.
+  test: {
+    testTimeout: 30_000,
   },
 });
