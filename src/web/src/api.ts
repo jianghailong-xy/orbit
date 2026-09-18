@@ -728,6 +728,13 @@ export const pinSession = (sessionId: string) =>
 export const unpinSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/pin`, { method: 'DELETE' });
 
+// What this session's Retry button would re-send, chosen by the same code the automatic retry
+// re-sends with. Asked only when the loaded transcript window cannot answer: a run's message sits
+// at seq 1 behind thousands of tool events, far outside the tail this page paints, and deciding
+// from that window alone is how the button went missing on exactly the runs an outage kills.
+export const getSessionRetryMessage = (sessionId: string) =>
+  api<{ text: string }>(`/sessions/${sessionId}/retry-message`);
+
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
 // switch can be flipped both ways, and carries the instant because the server dropped its copy

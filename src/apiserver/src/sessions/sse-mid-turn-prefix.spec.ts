@@ -67,7 +67,7 @@ function controllerOver(
     session: { findFirst: async () => ({ id: SESSION }) },
     $queryRaw: query,
   };
-  return new SessionsController({} as never, prisma as never, realtime, {} as never, {} as never);
+  return new SessionsController({} as never, prisma as never, realtime, {} as never, {} as never, {} as never);
 }
 
 /** A `$queryRaw` that does not answer until the test lets it — the replay window. */

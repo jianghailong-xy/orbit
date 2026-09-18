@@ -117,6 +117,7 @@ test('the SSE history replay applies the same fence while leaving its live half 
     { streamForRun: () => EMPTY, turnPrefix: () => ({ text: '', thinking: '' }) } as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   const replay: any[] = await firstValueFrom(

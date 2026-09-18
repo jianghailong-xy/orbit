@@ -1191,6 +1191,17 @@ export interface AutoRetryHelp {
   onRetry?: () => void;
   /** What that re-send would say. */
   retryText?: string;
+  /**
+   * Go and find out what it would say, because the loaded transcript is not where the answer is.
+   *
+   * `retryText` is read off the events this page holds, which are its newest 200. A conversation
+   * keeps its last message in there; a RUN does not — one task session is a single message
+   * followed by thousands of tool events, so the words a retry exists to re-send sit at seq 1,
+   * outside every window a client paints. Deciding from the window alone hid the button entirely
+   * on exactly the sessions a provider outage kills, so a card that finds nothing asks the server,
+   * which chooses with the same code the automatic retry re-sends with.
+   */
+  onNeedRetryText?: () => void;
   /** Turn the pending auto-retry off. */
   onCancelAuto?: () => void;
   /** Put it back, at the instant the card re-derived from the failing reply. */
@@ -1276,6 +1287,13 @@ function AutoRetryCard({
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [retryAt?.getTime()]);
+
+  // Asked once, and only by a card that has a button to offer and no words for it — a stale card
+  // and the share page's contextless one need nothing (see `onNeedRetryText`).
+  const needsRetryText = live && !help?.retryText && !!help?.onNeedRetryText;
+  useEffect(() => {
+    if (needsRetryText) help?.onNeedRetryText?.();
+  }, [needsRetryText]);
 
   const msLeft = retryAt ? retryAt.getTime() - now : 0;
   const armed = !!retryAt && msLeft > 0;

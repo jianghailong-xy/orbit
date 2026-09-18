@@ -616,6 +616,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     const picked = await workSession(stack, f, null, `merge-target-owner-${f.publicId}`);
     const ownerDoor = new SessionsController(
       stack.sessions, stack.prisma, stack.realtime, {} as SessionTagsService, stack.receipts,
+      {} as never,
     );
     await ownerDoor.mergeToMain({ userId: f.ownerId, email: 'owner@integration-ref.invalid' } as AuthUser,
       picked, { targetBranch: 'develop' });

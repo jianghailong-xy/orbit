@@ -38,6 +38,7 @@ import {
   SessionTurnDto,
   RecordMergeReceiptDto,
 } from './dto';
+import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
@@ -258,6 +259,7 @@ export class SessionsController {
     private readonly realtime: RealtimeService,
     private readonly tags: SessionTagsService,
     private readonly mergeReceipts: MergeReceiptService,
+    private readonly autoRetry: AutoRetryService,
   ) {}
 
   // CreateSessionDto is an interface, so the global ValidationPipe never sees it and its ids
@@ -560,6 +562,14 @@ export class SessionsController {
   @Delete(':id/share')
   unshare(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.disableShare(user.userId, id);
+  }
+
+  /** What this session's Retry button would re-send, chosen by the sweep's own chooser — so the
+   *  card can offer the button on a run whose message is thousands of events behind the loaded
+   *  window. `{ text: '' }` when there is nothing to re-send. */
+  @Get(':id/retry-message')
+  retryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.autoRetry.retryMessage(user.userId, id);
   }
 
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a

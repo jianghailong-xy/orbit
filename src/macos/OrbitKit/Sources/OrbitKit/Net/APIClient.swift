@@ -262,6 +262,13 @@ public final class APIClient: @unchecked Sendable {
     public func enableShare(_ id: String) async throws -> ShareInfo { try await postEmpty("sessions/\(id)/share") }
     public func disableShare(_ id: String) async throws { try await deleteRaw("sessions/\(id)/share") }
 
+    /// What this session's Retry button would re-send. Asked when the loaded event window holds no
+    /// user message — a run's message sits thousands of events behind its tail — so the card offers
+    /// the server's own choice rather than nothing at all. Web parity: `getSessionRetryMessage`.
+    public func retryMessage(sessionID: String) async throws -> RetryMessage {
+        try await get("sessions/\(sessionID)/retry-message")
+    }
+
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this
     /// session. Arming is automatic when one of those kills a turn; the POST exists so the card's
     /// switch is a switch and not a one-way trapdoor, and carries the instant because the server

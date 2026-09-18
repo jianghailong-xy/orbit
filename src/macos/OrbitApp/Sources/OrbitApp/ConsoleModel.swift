@@ -1388,15 +1388,47 @@ final class ConsoleModel {
 
     var lastUserMessageText: String { lastUserMessage.text }
 
+    /// The same question asked of the server, for the sessions this client cannot answer it for.
+    ///
+    /// `lastUserMessage` reads the transcript this client HOLDS, which is its newest 200 events
+    /// (`tailPage`). A conversation keeps its last message in there; a run does not — a task
+    /// session is one message followed by thousands of tool events, so the words a retry exists to
+    /// re-send sit at seq 1, outside every window this client paints. Deciding from the window
+    /// alone hid the Retry button entirely on exactly the sessions a provider outage kills.
+    /// Fetched by `refreshRetryText`, from the same chooser the automatic retry re-sends with
+    /// (auto-retry.service `messageToResend`). Web parity: `AutoRetryHelp.onNeedRetryText`.
+    ///
+    /// Words only. The files a message went out with are read off its bubble, and a session with no
+    /// bubble to read has none to offer — so this stands in for `lastUserMessage.text` alone and
+    /// never for its attachments.
+    private(set) var serverRetryText = ""
+
+    /// What a retry sends: what is on screen when that answers it, and the server's answer when
+    /// nothing on screen does.
+    var retryMessageText: String {
+        let loaded = lastUserMessageText
+        return loaded.isEmpty ? serverRetryText : loaded
+    }
+
+    /// Go and get it — only when the window came up empty, and only once per session.
+    func refreshRetryText() async {
+        guard lastUserMessageText.isEmpty, serverRetryText.isEmpty else { return }
+        serverRetryText = (try? await api.retryMessage(sessionID: sessionID))?.text ?? ""
+    }
+
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
     /// message"). Handed to `send` as the message itself rather than typed into the composer, so
     /// the retry obeys the same gating, queueing and failure handling as anything else sent from
     /// here without the text flashing through the input field on its way out — and without a draft
     /// the user is part-way through typing having to be moved aside and put back.
     func retryLastMessage() async {
+        // The bubble when this client holds one: its words AND the files they went out with, off
+        // the same bubble. When it holds none — a run's message is thousands of events behind the
+        // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
-        guard !last.text.isEmpty, !sending else { return }
-        await send(overrideText: last.text, overrideAttachments: last.attachments)
+        let text = last.text.isEmpty ? serverRetryText : last.text
+        guard !text.isEmpty, !sending else { return }
+        await send(overrideText: text, overrideAttachments: last.attachments)
     }
 
     // MARK: auto-retry (the quota / provider-error card)

@@ -409,6 +409,7 @@ test('the controller requires an exact active opt-in and defaults every other va
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const user = { userId: OWNER_ID } as never;
 

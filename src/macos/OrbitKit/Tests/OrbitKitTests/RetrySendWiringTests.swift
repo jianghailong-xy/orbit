@@ -30,6 +30,7 @@ final class RetrySendWiringTests: XCTestCase {
     }
 
     private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift"
+    private static let cardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/AutoRetryCard.swift"
 
     private func source(_ relative: String) throws -> String {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -79,6 +80,41 @@ final class RetrySendWiringTests: XCTestCase {
         XCTAssertTrue(send.contains("let draft = overrideText ?? composerText"),
                       "a send that fails hands back what it consumed, which for a retry is the "
                           + "retried text rather than whatever the composer was holding")
+    }
+
+    /// The card does not decide from the window it happens to hold.
+    ///
+    /// `lastUserMessageText` reads the transcript this client loaded — its newest 200 events. That
+    /// holds a conversation's last message and not a run's: a task session is one message followed
+    /// by thousands of tool events, so the words a retry exists to re-send are at seq 1, outside
+    /// the window. Reading it there is why a provider outage on a run drew a card with no Retry
+    /// button at all. Each assertion below is written so that GOING BACK TO THE LOADED WINDOW as
+    /// the only source is what turns it red.
+    func testTheCardAsksTheServerWhenItsWindowHoldsNoMessage() throws {
+        let card = try source(Self.cardPath)
+        XCTAssertTrue(card.contains("console.retryMessageText"),
+                      "the card reads the answer that falls back to the server's")
+        XCTAssertFalse(card.contains("console.lastUserMessageText"),
+                       "the loaded window is not the card's source of truth: reading it here is the "
+                           + "bug this test exists for")
+        XCTAssertTrue(card.contains("await console.refreshRetryText()"),
+                      "and it goes and gets that answer when it appears, beside the armed retry")
+
+        let console = try source(Self.consolePath)
+        let resolved = try section(console,
+                                   from: "var retryMessageText: String {",
+                                   to: "func refreshRetryText")
+        XCTAssertTrue(resolved.contains("loaded.isEmpty ? serverRetryText : loaded"),
+                      "what is on screen wins when there is something on screen, and the server's "
+                          + "answer stands in only when there is not")
+        let fetch = try section(console,
+                                from: "func refreshRetryText() async {",
+                                to: "func retryLastMessage")
+        XCTAssertTrue(fetch.contains("api.retryMessage(sessionID: sessionID)"),
+                      "asked of the door that answers with the sweep's own chooser")
+        XCTAssertTrue(fetch.contains("guard lastUserMessageText.isEmpty"),
+                      "and asked only when the window came up empty — otherwise this is a request "
+                          + "on every session anybody opens")
     }
 
     /// A retry carries the files the message was sent with.

@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import {
   RunEventType,
@@ -591,6 +597,34 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+  }
+
+  /**
+   * The same question, asked by the card instead of by the sweep: what would a manual Retry
+   * re-send?
+   *
+   * Both clients paint a session from a 200-event tail window and worked this out themselves, by
+   * looking for a user message inside it. That is the answer for a conversation and the wrong one
+   * for a run: one task session is a single message followed by thousands of tool events, so the
+   * message the retry exists to re-send sits outside the window and the button vanished — on
+   * exactly the sessions a provider outage kills. The clients cannot fix that by reading further
+   * back without paging the whole history onto a phone.
+   *
+   * So it is answered here, by `messageToResend` itself. Not merely to avoid a third
+   * implementation: the button PROMISES what the sweep would do, and any second chooser is a
+   * promise that can differ from the act.
+   *
+   * Empty text when there is nothing to re-send — the same conclusion that disarms a sweep, and
+   * the clients offer no button rather than a dead one.
+   */
+  async retryMessage(ownerId: string, id: string): Promise<{ text: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true, prompt: true, numTurns: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const { content } = await this.messageToResend(session.id, session.prompt, session.numTurns);
+    return { text: content };
   }
 
   /**

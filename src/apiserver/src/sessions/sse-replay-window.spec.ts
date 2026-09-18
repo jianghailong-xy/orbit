@@ -92,6 +92,7 @@ function controllerOver(query: () => Promise<unknown>, hub: Observable<unknown>,
     { streamForRun: () => hub, turnPrefix: () => ({ text: '', thinking: '' }) } as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 }
 

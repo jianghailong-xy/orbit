@@ -177,6 +177,7 @@ import {
   purgeSession,
   getSessionEventFull,
   getSessionEventPage,
+  getSessionRetryMessage,
   renameSession,
   restoreSession,
   resumeSession,
@@ -5092,6 +5093,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [events, detailForSelected?.prompt, selected?.numTurns],
   );
   const retryText = retry.text;
+  // …and the server's answer, for the sessions the line above cannot answer for. It is fetched
+  // only when a card says it needs it (AutoRetryHelp.onNeedRetryText): the events here are this
+  // page's newest 200, which hold a conversation's last message and not a run's — that one is at
+  // seq 1, thousands of tool events back. Asked per session, so switching away drops the ask.
+  //
+  // Words only: `retry.attachmentIds` are read off the bubble this page holds, and a page holding
+  // no bubble has no files to name — so the fallback re-sends the message's text and nothing else.
+  const [retryMessageAskedFor, setRetryMessageAskedFor] = useState<string | null>(null);
+  const serverRetryText =
+    useQuery({
+      queryKey: ['session', selectedId, 'retry-message'],
+      queryFn: () => getSessionRetryMessage(selectedId!),
+      enabled: !!selectedId && retryMessageAskedFor === selectedId,
+    }).data?.text ?? '';
+  const autoRetryText = retryText || serverRetryText;
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
@@ -5165,10 +5181,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
-        retryText && !selectedTrashed && !selectedMissing
-          ? () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
+        autoRetryText && !selectedTrashed && !selectedMissing
+          ? () =>
+              sendMutate({
+                content: autoRetryText,
+                images: [],
+                attachmentIds: retry.attachmentIds,
+              })
           : undefined,
-      retryText,
+      retryText: autoRetryText,
+      onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       onCancelAuto: selected?.id
         ? () => {
             cancelAutoRetry(selected.id)
@@ -5189,11 +5211,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.name,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
-      retryText,
+      autoRetryText,
       selectedTrashed,
       selectedMissing,
       sendMutate,
       selected?.id,
+      selectedId,
       qc,
     ],
   );

@@ -19,7 +19,15 @@ struct AutoRetryCardView: View {
             // it goes quiet exactly when a turn settles (see `WorktreeModel.startPolling`) — so the
             // card asks for it once, when it appears. Outside `content` so switching to the ticking
             // form when a retry turns up doesn't re-run the fetch.
-            .task { if !notice.stale { await console.refreshRetryState() } }
+            // …and, when this client's window holds no message to re-send, what the server would
+            // re-send: a run's message is thousands of events behind the tail, and a card that
+            // decided from the window alone offered no Retry at all (see `retryMessageText`).
+            .task {
+                if !notice.stale {
+                    await console.refreshRetryState()
+                    await console.refreshRetryText()
+                }
+            }
     }
 
     @ViewBuilder
@@ -37,8 +45,8 @@ struct AutoRetryCardView: View {
     @ViewBuilder
     private func card(now: Date) -> some View {
         // Read once per render: this body re-runs every second while a retry counts down, and
-        // `lastUserMessageText` walks the transcript backwards to find it.
-        let retryText = console.lastUserMessageText
+        // `retryMessageText` walks the transcript backwards to find it.
+        let retryText = console.retryMessageText
         let s = AutoRetryLogic.state(notice: notice,
                                      live: !notice.stale,
                                      retryAt: console.armedRetryAt,

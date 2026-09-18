@@ -492,6 +492,15 @@ public struct ArmAutoRetryRequest: Codable, Sendable {
     public init(retryAt: String) { self.retryAt = retryAt }
 }
 
+/// GET /sessions/:id/retry-message — the words this session's Retry button would re-send, chosen
+/// by the same server code the automatic retry re-sends with. Empty when there is nothing to
+/// re-send. Asked only when the loaded transcript window cannot answer; see
+/// `ConsoleModel.retryMessageText`.
+public struct RetryMessage: Codable, Sendable {
+    public let text: String
+    public init(text: String) { self.text = text }
+}
+
 /// POST /sessions/:id/turns — send a user message or raw shell command.
 public struct SessionTurnRequest: Codable, Sendable {
     public let clientTurnId: String   // client UUID, idempotency key
