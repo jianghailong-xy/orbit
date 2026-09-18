@@ -56,35 +56,39 @@ import {
  */
 
 /** The card's heading. */
-export const DECISION_ASK_HEADING = '需要你裁决';
-/** `确认完成` submits on the click itself. The generic form's pick-then-Submit exists for a form
+export const DECISION_ASK_HEADING = 'Does this evidence settle the task?';
+/** 'Confirm done' submits on the click itself. The generic form's pick-then-Submit exists for a form
  *  with several questions and several picks per question; in a two-way judgment it buys nothing
  *  but one more click between a reader and the thing they already decided. */
-export const DECISION_CONFIRM_ACTION = '确认完成';
-export const DECISION_SEND_BACK_ACTION = '退回重做';
+export const DECISION_CONFIRM_ACTION = 'Confirm done';
+export const DECISION_SEND_BACK_ACTION = 'Send back';
 /** The send-back's own submit, behind the reason box rather than beside it. */
-export const DECISION_SEND_ACTION = '退回';
+export const DECISION_SEND_ACTION = 'Send it back';
 /** Why the reason is required rather than a placeholder somebody may ignore: the decision door
  *  refuses a SEND_BACK carrying no note and writes nothing at all. The generic form could not know
  *  that, so it offered a permanently-present `Or type your own answer…` that reads like an
  *  invitation to say something rather than like the one thing that makes the button work. */
-export const DECISION_NOTE_LABEL = '下一版证据要给出什么？这句话是下一次尝试唯一能瞄准的东西。';
-export const DECISION_NOTE_PLACEHOLDER = '例如：把 pg spec 跑一遍，并给出改前先红的原始输出…';
+export const DECISION_NOTE_LABEL =
+  'What does the next version of the evidence have to show? It is the only thing the next '
+  + 'attempt can aim at.';
+export const DECISION_NOTE_PLACEHOLDER =
+  'For example: run the pg spec, and show the raw output of it failing before the fix…';
 /** The gaps that did not fit, counted rather than dropped: they are the body of this card. */
-export const decisionGapsMore = (rest: number): string => `还有 ${rest} 条`;
+export const decisionGapsMore = (rest: number): string => `${rest} more`;
 /** Evidence from before the envelope has no claim at all; the line says so rather than rendering
  *  a blank where the card's lead should be. */
-export const DECISION_NO_CLAIM = '这一版证据没有写下主张。';
-export const DECISION_NO_CRITERION = '未引用验收条目';
-export const DECISION_NO_GAPS = '提交者声明没有缺口';
+export const DECISION_NO_CLAIM = 'This version of the evidence states no claim.';
+export const DECISION_NO_CRITERION = 'no acceptance criterion cited';
+export const DECISION_NO_GAPS = 'the submitter declares nothing missing';
 /** The heading over the criterion's own text. The question this card asks is whether this evidence
  *  settles THAT sentence, and a key is not a sentence — so the text leads the card and the key
  *  stays in the meta line, where identity belongs. */
-export const DECISION_CRITERION_HEADING = '这版证据要满足的标准';
+export const DECISION_CRITERION_HEADING = 'WHAT IT HAS TO SATISFY';
 /** The submitter's own account, folded to one line with its length: the longest field on the card
  *  and the least decisive, kept whole and one press away. */
-export const decisionClaimFold = (chars: number): string => `提交者自述全文（${chars} 字）`;
-export const DECISION_CLAIM_HIDE = '收起自述';
+export const decisionClaimFold = (chars: number): string =>
+  `the submitter’s full account (${chars} characters)`;
+export const DECISION_CLAIM_HIDE = 'Hide the account';
 
 /** How many gaps the card shows before it starts counting. Three is what fits on a phone above the
  *  actions; the rest are one press away and the count is never hidden. */
@@ -117,22 +121,22 @@ function decisionChecks(row: PendingDecisionRow): DecisionCheck[] {
   return [
     {
       ok: row.decidability.decidable,
-      text: '引用的验收条目仍是线上那一条',
+      text: 'the criterion it cites is still the live one',
       detail: row.decidability.decidable
         ? (row.criterion ? `${row.criterion.key} · ${row.criterion.text}` : null)
         : row.decidability.refusal,
     },
     {
       ok: row.citations.length > 0 && unresolved.length === 0,
-      text: `${resolved.length}/${row.citations.length} 条引用解析成功`,
+      text: `${resolved.length}/${row.citations.length} citations resolved`,
       detail:
         unresolved.length === 0
           ? null
-          : unresolved.map((citation) => `${citation.ref}：${citation.reason ?? '未解析'}`).join('\n'),
+          : unresolved.map((citation) => `${citation.ref}: ${citation.reason ?? 'unresolved'}`).join('\n'),
     },
     {
       ok: row.independence.independent,
-      text: '裁决人独立于这次提交',
+      text: 'the decider is independent of this submission',
       detail: row.independence.independent ? null : row.independence.disqualification,
     },
   ];
@@ -174,7 +178,9 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
           one press from being read. */}
       <div className="decision-ask-gaps">
         <div className="decision-ask-gaps-head">
-          {row.gaps.length === 0 ? DECISION_NO_GAPS : `提交者声明的缺口 · ${row.gaps.length} 条`}
+          {row.gaps.length === 0
+            ? DECISION_NO_GAPS
+            : `WHAT THIS EVIDENCE DOES NOT ESTABLISH · ${row.gaps.length}`}
         </div>
         {row.gaps.length > 0 && (
           <ul className="decision-ask-gaps-list">
@@ -191,7 +197,7 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
               aria-expanded={gapsOpen}
               onClick={() => setGapsOpen(!gapsOpen)}
             >
-              {gapsOpen ? '收起' : decisionGapsMore(restGaps.length)}
+              {gapsOpen ? 'Show less' : decisionGapsMore(restGaps.length)}
             </button>
             {gapsOpen && (
               <ul className="decision-ask-gaps-rest">
@@ -211,8 +217,8 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
           aria-expanded={checksOpen}
           onClick={() => setChecksOpen(!checksOpen)}
         >
-          {`${held} 项机器已核`}
-          {held === checks.length ? '' : ` · ${checks.length - held} 项没过`}
+          {`${held} checked for you`}
+          {held === checks.length ? '' : ` · ${checks.length - held} did not hold`}
           <span className="decision-ask-caret" aria-hidden="true">{checksOpen ? '▴' : '▾'}</span>
         </button>
         {checksOpen && (
@@ -353,15 +359,16 @@ export const EVIDENCE_DECISION_SUPERSEDED = 'EVIDENCE_JUDGMENT_EVIDENCE_SUPERSED
 /** What the mark says about itself: who composed the card, whose words are quoted on it, and where
  *  a press goes. */
 export const EVIDENCE_PROVENANCE_TITLE =
-  '这张卡由 Orbit 按待决读直接出，不是 agent 在对话里打的字：任务标题、主张与缺口是记录里的原文。'
-  + '按钮由 Orbit 授权，按下去用你自己的登录直达决定门，不经过任何 agent。';
+  'Orbit drew this card from the pending read; no agent typed it into the conversation. The task '
+  + 'title, the claim and the gaps are the record’s own words. The buttons are Orbit’s, and a '
+  + 'press goes straight to the decision door with your own sign-in, through no agent.';
 
 /** The heading a card that can no longer be answered carries instead of `DECISION_ASK_HEADING`. */
-export const EVIDENCE_DECISION_STALE_HEADING = '这一版证据已经不等你裁决了';
+export const EVIDENCE_DECISION_STALE_HEADING = 'This evidence is no longer waiting on you';
 /** And the one for a card this browser could not re-derive just now. */
-export const EVIDENCE_DECISION_UNREAD_HEADING = '这张卡刚才没能重新读取';
+export const EVIDENCE_DECISION_UNREAD_HEADING = 'This card could not be re-read just now';
 /** And the one for a card this reader has just answered. */
-export const EVIDENCE_DECISION_RECORDED_HEADING = '你的裁决已记下';
+export const EVIDENCE_DECISION_RECORDED_HEADING = 'Decision recorded';
 
 /** What a card keeps across renders: the version of the evidence it was drawn for, and nothing else. */
 export type EvidenceDecisionAddress = Pick<PendingDecisionRow, 'taskId' | 'evidenceRevision'>;
@@ -449,19 +456,22 @@ export function evidenceDecisionStaleExplanation(standing: EvidenceDecisionStand
       return null;
     case 'SUPERSEDED':
       return (
-        `被顶掉了：这个任务又提交了第 ${standing.replacement.evidenceRevision} 版证据，门只裁决最新的一版，`
-        + `对第 ${standing.address.evidenceRevision} 版的任何裁决都会被拒绝（${EVIDENCE_DECISION_SUPERSEDED}）。`
-        + `这里什么也没有记下；第 ${standing.replacement.evidenceRevision} 版有它自己的卡。`
+        `Superseded: this task has submitted version ${standing.replacement.evidenceRevision} of its `
+        + `evidence since, and the door decides only the latest — any decision about version `
+        + `${standing.address.evidenceRevision} would be refused (${EVIDENCE_DECISION_SUPERSEDED}). `
+        + `Nothing was recorded here; version ${standing.replacement.evidenceRevision} has its own card.`
       );
     case 'ALREADY_DECIDED':
       return (
-        '已经答过了：这一版证据已不在待决里，它的裁决在别处记下了，从这张卡再发出的裁决会被拒绝'
-        + `（${EVIDENCE_DECISION_ALREADY_DECIDED}）。这张卡没有替你记下任何东西，也改变不了已经记下的。`
+        'Already answered: this version is no longer pending, its decision was recorded somewhere '
+        + `else, and a decision sent from this card would be refused (${EVIDENCE_DECISION_ALREADY_DECIDED}). `
+        + 'This card recorded nothing for you, and cannot change what was.'
       );
     case 'UNREAD':
       return (
-        '待决读刚才没能读回来，所以这张卡说不出它此刻在问什么。卡上不存证据的副本，内容每次都从读重新推导；'
-        + '说不准门会不会接受的裁决，这里就不提供。证据本身不受影响。'
+        'The pending read did not come back just now, so this card cannot say what it is asking. '
+        + 'It keeps no copy of the evidence — every line is re-derived from the read — and a decision '
+        + 'the door might refuse is not offered. The evidence itself is unaffected.'
       );
   }
 }
@@ -472,20 +482,21 @@ export function evidenceDecisionRefusal(error: Error): { stale: boolean; title: 
   // about the error class matters here.
   const code = (error as { code?: unknown }).code;
   if (code === EVIDENCE_DECISION_ALREADY_DECIDED) {
-    return { stale: true, title: '没有记下：这一版证据已经在别处答过了，这张卡已过期' };
+    return { stale: true, title: 'Not recorded: already answered elsewhere — this card is out of date' };
   }
   if (code === EVIDENCE_DECISION_SUPERSEDED) {
-    return { stale: true, title: '没有记下：这一版证据已被更新的一版顶掉，这张卡已过期' };
+    return { stale: true,
+      title: 'Not recorded: a newer version superseded this one — this card is out of date' };
   }
-  return { stale: false, title: '这次裁决没有记下' };
+  return { stale: false, title: 'Not recorded' };
 }
 
 /** What an answer given from this card leaves on it: the door's receipt, in the card's own words. */
 export function evidenceDecisionRecordedLine(result: EvidenceDecisionResult): string {
   const action =
     result.decision === 'CONFIRM' ? DECISION_CONFIRM_ACTION : DECISION_SEND_BACK_ACTION;
-  const line = `已记下「${action}」 · rev ${result.evidenceRevision}`;
-  return result.note ? `${line}：${result.note}` : line;
+  const line = `Recorded: ${action} · rev ${result.evidenceRevision}`;
+  return result.note ? `${line} — ${result.note}` : line;
 }
 
 /**
@@ -730,12 +741,12 @@ export function SessionEvidenceDecisionCard({
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 
 /** A receipt's heading when a run of this session, rather than the owner, recorded the decision. */
-export const EVIDENCE_DECISION_AGENT_RECORDED_HEADING = 'agent 的裁决已记下';
+export const EVIDENCE_DECISION_AGENT_RECORDED_HEADING = 'An agent recorded a decision';
 /** The fold over the evidence a receipt answered, and what it says while that is read. */
-export const DECISION_RECEIPT_OPEN = '展开主张与缺口';
-export const DECISION_RECEIPT_LOADING = '读取中…';
-export const DECISION_RECEIPT_UNREAD = '这一版证据刚才没能读回来。';
-export const DECISION_RECEIPT_REASON = '退回理由';
+export const DECISION_RECEIPT_OPEN = 'Show the claim and the gaps';
+export const DECISION_RECEIPT_LOADING = 'Reading…';
+export const DECISION_RECEIPT_UNREAD = 'This version of the evidence could not be read back just now.';
+export const DECISION_RECEIPT_REASON = 'the reason it was sent back';
 
 /** When a receipt says it was decided: the clock on the day it happened, the date as well after. */
 export function decisionReceiptTime(decidedAt: string, now: Date = new Date()): string {
@@ -807,7 +818,7 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
             aria-expanded={open}
             onClick={() => setOpen(!open)}
           >
-            {open ? '收起' : `${DECISION_RECEIPT_OPEN} ▾`}
+            {open ? 'Show less' : `${DECISION_RECEIPT_OPEN} ▾`}
           </button>
           {!open ? null : revisions.isPending ? (
             <div className="decision-ask-quiet">{DECISION_RECEIPT_LOADING}</div>
@@ -824,7 +835,9 @@ export function EvidenceDecisionReceipt({ decided }: { decided: RecordedDecision
               </div>
               <div className="decision-ask-gaps">
                 <div className="decision-ask-gaps-head">
-                  {facts.gaps.length === 0 ? DECISION_NO_GAPS : `提交者声明的缺口 · ${facts.gaps.length} 条`}
+                  {facts.gaps.length === 0
+                  ? DECISION_NO_GAPS
+                  : `WHAT THIS EVIDENCE DOES NOT ESTABLISH · ${facts.gaps.length}`}
                 </div>
                 {facts.gaps.length > 0 && (
                   <ul className="decision-ask-gaps-list">

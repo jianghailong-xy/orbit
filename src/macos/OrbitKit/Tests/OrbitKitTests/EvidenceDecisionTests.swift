@@ -70,8 +70,9 @@ final class EvidenceDecisionTests: XCTestCase {
                                        "「措辞够不够好」只能你读"],
                        "the first three gaps are their own rows, in the submitter's own words")
         XCTAssertEqual(preview.rest.count, 2)
-        XCTAssertEqual(EvidenceDecisions.gapsMore(preview.rest.count), "还有 2 条")
-        XCTAssertEqual(EvidenceDecisions.gapsHeading(r.gaps.count), "提交者声明的缺口 · 5 条",
+        XCTAssertEqual(EvidenceDecisions.gapsMore(preview.rest.count), "2 more")
+        XCTAssertEqual(EvidenceDecisions.gapsHeading(r.gaps.count),
+                       "WHAT THIS EVIDENCE DOES NOT ESTABLISH · 5",
                        "the count is never hidden, whatever fits")
     }
 
@@ -87,14 +88,15 @@ final class EvidenceDecisionTests: XCTestCase {
                        "34LMiluvx0jK63cj8arWl · rev 1 · 6KG2mjp63PrtVvGwxRLvFY")
 
         let checks = EvidenceDecisions.checks(r)
-        XCTAssertEqual(checks.map(\.text), ["引用的验收条目仍是线上那一条",
-                                            "2/3 条引用解析成功",
-                                            "裁决人独立于这次提交"])
+        XCTAssertEqual(checks.map(\.text), ["the criterion it cites is still the live one",
+                                            "2/3 citations resolved",
+                                            "the decider is independent of this submission"])
         XCTAssertEqual(checks.map(\.ok), [true, false, true])
-        XCTAssertEqual(checks[1].detail, "toolu_c：不在本任务下",
+        XCTAssertEqual(checks[1].detail, "toolu_c: 不在本任务下",
                        "the citation that did not resolve is named, never folded to a number")
         XCTAssertEqual(EvidenceDecisions.heldCount(r), 2)
-        XCTAssertEqual(EvidenceDecisions.checksHeading(held: 2, total: 3), "2 项机器已核 · 1 项没过")
+        XCTAssertEqual(EvidenceDecisions.checksHeading(held: 2, total: 3),
+                       "2 checked for you · 1 did not hold")
     }
 
     /// Evidence from before the envelope has no claim and quotes no criterion: the card says so
@@ -102,8 +104,9 @@ final class EvidenceDecisionTests: XCTestCase {
     func testEmptyClaimAndNoCriterionSaySo() {
         let r = row(claim: "   ", gaps: [], criterion: nil)
         XCTAssertEqual(EvidenceDecisions.foldedClaim(r.claim, clamp: 90).text, "")
-        XCTAssertEqual(EvidenceDecisions.meta(r), "34LMiluvx0jK63cj8arWl · rev 1 · 未引用验收条目")
-        XCTAssertEqual(EvidenceDecisions.gapsHeading(0), "提交者声明没有缺口")
+        XCTAssertEqual(EvidenceDecisions.meta(r),
+                       "34LMiluvx0jK63cj8arWl · rev 1 · no acceptance criterion cited")
+        XCTAssertEqual(EvidenceDecisions.gapsHeading(0), "the submitter declares nothing missing")
         XCTAssertFalse(EvidenceDecisions.noClaim.isEmpty)
     }
 
@@ -113,7 +116,7 @@ final class EvidenceDecisionTests: XCTestCase {
     /// NEGATIVE CONTROL: make `canSend` unconditional and both halves of this go red.
     func testSendBackIsUnsendableWithoutAReason() {
         var state = EvidenceSendBackState()
-        XCTAssertFalse(state.open, "the reason box is closed until 退回重做 is pressed")
+        XCTAssertFalse(state.open, "the reason box is closed until Send back is pressed")
         XCTAssertFalse(state.canSend)
 
         state.open = true

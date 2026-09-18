@@ -612,7 +612,7 @@ private struct EvidenceDecisionCard: View {
     // The one rule both clients are under: an action that cannot succeed is disabled rather than
     // lit and refused.
 
-    /// `确认完成` answers on the press: there is no pick-then-Submit step in between.
+    /// 'Confirm done' answers on the press: there is no pick-then-Submit step in between.
     private func confirmButton(_ standing: EvidenceDecisionStanding) -> some View {
         Button { decide(standing, .confirm) } label: {
             Text(EvidenceDecisions.confirmAction).approvalActionLabel()

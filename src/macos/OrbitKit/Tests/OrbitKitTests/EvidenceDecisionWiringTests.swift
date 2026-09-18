@@ -78,11 +78,11 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let reason = try section(card, from: "private func reasonBox", to: "private func decide")
 
         XCTAssertTrue(confirm.contains(".disabled(deciding || !standing.answerable)"),
-                      "确认完成 must be dead while the standing says the door would refuse it: a lit "
+                      "Confirm done must be dead while the standing says the door would refuse it: a lit "
                           + "button that is refused every time it is pressed is the bug this rule "
                           + "was written for")
         XCTAssertTrue(sendBack.contains(".disabled(deciding || !standing.answerable)"),
-                      "and so must 退回重做, which opens the reason box")
+                      "and so must Send back, which opens the reason box")
         XCTAssertTrue(reason.contains(".disabled(deciding || !standing.answerable || !sendBack.canSend)"),
                       "the send control is dead without a reason as well — the door refuses a "
                           + "SEND_BACK with no note and writes nothing at all")

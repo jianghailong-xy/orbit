@@ -34,7 +34,7 @@ import Foundation
 
    The mirror on the other side is `src/web/src/components/EvidenceDecisionCard.tsx`.
    `EvidenceDecisionCopyParityTests` reads that file and fails when the words drift, because "one
-   end says 机器已核 and the other says 提交者自述" is the failure this pair of clients exists to
+   end says 机器已核 and the other says 提交者自述"（现在是 "checked for you" 对 "the account"） is the failure this pair of clients exists to
    prevent.
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -346,7 +346,7 @@ public struct GapPreview: Equatable, Sendable {
 /// The rule it encodes belongs to the server: the decision door refuses a SEND_BACK carrying no
 /// note and writes NOTHING at all, so a control that would send one cannot be pressable.
 public struct EvidenceSendBackState: Equatable, Sendable {
-    /// Whether the reason box is open. Closed until `退回重做` is pressed: a permanently visible
+    /// Whether the reason box is open. Closed until `Send back` is pressed: a permanently visible
     /// box reads like an invitation to say something rather than like the one thing that makes the
     /// button work — which is exactly how the generic form's `Or type your own answer…` read.
     public var open: Bool
@@ -439,38 +439,43 @@ public enum EvidenceDecisions {
     // differently is two judgments that happen to write the same row.
 
     /// The card's heading (`DECISION_ASK_HEADING`).
-    public static let askHeading = "需要你裁决"
+    public static let askHeading = "Does this evidence settle the task?"
     /// The heading a card that can no longer be answered carries instead
     /// (`EVIDENCE_DECISION_STALE_HEADING`).
-    public static let staleHeading = "这一版证据已经不等你裁决了"
+    public static let staleHeading = "This evidence is no longer waiting on you"
     /// And the one for a card this device could not re-derive just now
     /// (`EVIDENCE_DECISION_UNREAD_HEADING`).
-    public static let unreadHeading = "这张卡刚才没能重新读取"
-    /// `确认完成` submits on the press itself (`DECISION_CONFIRM_ACTION`). A pick-then-Submit step
+    public static let unreadHeading = "This card could not be re-read just now"
+    /// 'Confirm done' submits on the press itself (`DECISION_CONFIRM_ACTION`). A pick-then-Submit step
     /// exists for a form with several questions and several picks per question; in a two-way
     /// judgment it buys nothing but one more press between a reader and the thing they already
     /// decided.
-    public static let confirmAction = "确认完成"
-    public static let sendBackAction = "退回重做"
+    public static let confirmAction = "Confirm done"
+    public static let sendBackAction = "Send back"
     /// The send-back's own submit, behind the reason box rather than beside it.
-    public static let sendAction = "退回"
+    public static let sendAction = "Send it back"
     /// Why the reason is required rather than a placeholder somebody may ignore: the decision door
     /// refuses a SEND_BACK carrying no note and writes nothing at all.
-    public static let noteLabel = "下一版证据要给出什么？这句话是下一次尝试唯一能瞄准的东西。"
-    public static let notePlaceholder = "例如：把 pg spec 跑一遍，并给出改前先红的原始输出…"
+    public static let noteLabel =
+        "What does the next version of the evidence have to show? It is the only thing the next "
+        + "attempt can aim at."
+    public static let notePlaceholder =
+        "For example: run the pg spec, and show the raw output of it failing before the fix…"
     /// Evidence from before the envelope has no claim at all; the line says so rather than
     /// rendering a blank where the card's lead should be.
-    public static let noClaim = "这一版证据没有写下主张。"
-    public static let noCriterion = "未引用验收条目"
-    public static let noGaps = "提交者声明没有缺口"
+    public static let noClaim = "This version of the evidence states no claim."
+    public static let noCriterion = "no acceptance criterion cited"
+    public static let noGaps = "the submitter declares nothing missing"
     /// The heading over the criterion's own text (`DECISION_CRITERION_HEADING`). The question is
     /// whether this evidence settles THAT sentence, and a key is not a sentence — so the text
     /// leads the card and the key stays in the meta line, where identity belongs.
-    public static let criterionHeading = "这版证据要满足的标准"
+    public static let criterionHeading = "WHAT IT HAS TO SATISFY"
     /// The submitter's account, folded to one line carrying its length (`decisionClaimFold`): the
     /// longest field on the card and the least decisive.
-    public static func claimFold(_ chars: Int) -> String { "提交者自述全文（\(chars) 字）" }
-    public static let claimHide = "收起自述"
+    public static func claimFold(_ chars: Int) -> String {
+        "the submitter’s full account (\(chars) characters)"
+    }
+    public static let claimHide = "Hide the account"
 
     /// The door's two refusals that mean "this card is out of date", in the door's own spelling, so
     /// a card can say which one it would meet.
@@ -478,17 +483,19 @@ public enum EvidenceDecisions {
     public static let supersededRefusal = "EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED"
 
     /// The gaps that did not fit, counted rather than dropped: they are the body of this card.
-    public static func gapsMore(_ rest: Int) -> String { "还有 \(rest) 条" }
+    public static func gapsMore(_ rest: Int) -> String { "\(rest) more" }
 
     /// The gaps heading: a count, so "less is shown" never means "something is hidden".
     public static func gapsHeading(_ total: Int) -> String {
-        total == 0 ? noGaps : "提交者声明的缺口 · \(total) 条"
+        total == 0 ? noGaps : "WHAT THIS EVIDENCE DOES NOT ESTABLISH · \(total)"
     }
 
     /// The folded line over the three machine checks. `held` leads because a check that held is a
     /// reason to stop reading; what did not hold is named beside it rather than left to the fold.
     public static func checksHeading(held: Int, total: Int) -> String {
-        held == total ? "\(held) 项机器已核" : "\(held) 项机器已核 · \(total - held) 项没过"
+        held == total
+            ? "\(held) checked for you"
+            : "\(held) checked for you · \(total - held) did not hold"
     }
 
     // MARK: the standing, in words
@@ -517,17 +524,23 @@ public enum EvidenceDecisions {
         case .decidable:
             return nil
         case .superseded(let replacement):
-            var out = "被顶掉了：这个任务又提交了第 \(replacement.evidenceRevision) 版证据，门只裁决最新的一版，"
-            out += "对第 \(standing.evidenceRevision) 版的任何裁决都会被拒绝（\(supersededRefusal)）。"
-            out += "这里什么也没有记下；第 \(replacement.evidenceRevision) 版有它自己的卡。"
+            var out = "Superseded: this task has submitted version "
+            out += "\(replacement.evidenceRevision) of its evidence since, and the door decides only "
+            out += "the latest — any decision about version \(standing.evidenceRevision) would be "
+            out += "refused (\(supersededRefusal)). Nothing was recorded here; version "
+            out += "\(replacement.evidenceRevision) has its own card."
             return out
         case .alreadyDecided:
-            var out = "已经答过了：这一版证据已不在待决里，它的裁决在别处记下了，从这张卡再发出的裁决会被拒绝"
-            out += "（\(alreadyDecidedRefusal)）。这张卡没有替你记下任何东西，也改变不了已经记下的。"
+            var out = "Already answered: this version is no longer pending, its decision was "
+            out += "recorded somewhere else, and a decision sent from this card would be refused "
+            out += "(\(alreadyDecidedRefusal)). This card recorded nothing for you, and cannot "
+            out += "change what was."
             return out
         case .unread:
-            var out = "待决读刚才没能读回来，所以这张卡说不出它此刻在问什么。卡上不存证据的副本，内容每次都从读重新推导；"
-            out += "说不准门会不会接受的裁决，这里就不提供。证据本身不受影响。"
+            var out = "The pending read did not come back just now, so this card cannot say what "
+            out += "it is asking. It keeps no copy of the evidence — every line is re-derived from "
+            out += "the read — and a decision the door might refuse is not offered. The evidence "
+            out += "itself is unaffected."
             return out
         }
     }
@@ -591,20 +604,20 @@ public enum EvidenceDecisions {
         return [
             EvidenceDecisionCheck(
                 ok: row.decidability.decidable,
-                text: "引用的验收条目仍是线上那一条",
+                text: "the criterion it cites is still the live one",
                 detail: row.decidability.decidable
                     ? row.criterion.map { "\($0.key) · \($0.text)" }
                     : row.decidability.refusal),
             EvidenceDecisionCheck(
                 ok: !row.citations.isEmpty && unresolved.isEmpty,
-                text: "\(resolved.count)/\(row.citations.count) 条引用解析成功",
+                text: "\(resolved.count)/\(row.citations.count) citations resolved",
                 detail: unresolved.isEmpty
                     ? nil
-                    : unresolved.map { "\($0.ref)：\($0.reason ?? "未解析")" }
+                    : unresolved.map { "\($0.ref): \($0.reason ?? "unresolved")" }
                         .joined(separator: "\n")),
             EvidenceDecisionCheck(
                 ok: row.independence.independent,
-                text: "裁决人独立于这次提交",
+                text: "the decider is independent of this submission",
                 detail: row.independence.independent ? nil : row.independence.disqualification),
         ]
     }
@@ -646,9 +659,9 @@ public enum EvidenceDecisions {
     /// is `receipts` below, drawn from the read.
     public static func recordedLine(_ result: EvidenceDecisionResult) -> String {
         let action = result.decision == .confirm ? confirmAction : sendBackAction
-        let line = "已记下「\(action)」 · rev \(result.evidenceRevision)"
+        let line = "Recorded: \(action) · rev \(result.evidenceRevision)"
         guard let note = result.note, !note.isEmpty else { return line }
-        return "\(line)：\(note)"
+        return "\(line) — \(note)"
     }
 
     // MARK: the receipt an answered revision leaves
@@ -657,10 +670,10 @@ public enum EvidenceDecisions {
     /// `EVIDENCE_DECISION_RECORDED_HEADING` and `EVIDENCE_DECISION_AGENT_RECORDED_HEADING`, word for
     /// word — a run of this session reaching the door is a different event from the owner pressing a
     /// card, and the heading is where a reader tells them apart.
-    public static let recordedHeading = "你的裁决已记下"
-    public static let agentRecordedHeading = "agent 的裁决已记下"
+    public static let recordedHeading = "Decision recorded"
+    public static let agentRecordedHeading = "An agent recorded a decision"
     /// The label over a send-back's reason, as the receipt shows it (web: `DECISION_RECEIPT_REASON`).
-    public static let receiptReasonLabel = "退回理由"
+    public static let receiptReasonLabel = "the reason it was sent back"
 
     private static let receiptClockFormatter: DateFormatter = {
         let f = DateFormatter()
