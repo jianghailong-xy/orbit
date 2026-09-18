@@ -14,37 +14,38 @@ public enum TaskJudgmentCopy {
     /// here starts a run and nothing here can be pressed. It used to be the verifier's state, which
     /// read as a document the reader was being asked to fetch. What the check is doing is a fact
     /// about the check, and it is said where the check itself is shown: the card below.
-    public static let gateActionLabel = "由复核判定"
+    public static let gateActionLabel = "Decided by its verification task"
 
     /// The chip under the title of a row that has no work of its own — the thing that is true of it
     /// and was nowhere on the page: no run of it can settle it.
-    public static let gateChip = "闸门 · 本行没有自己的活"
+    public static let gateChip = "Gate · no work of its own"
 
     /// The judgment each completion criterion declares, in the chip's words. Keyed on the criterion
     /// because that is what a criterion is for: who settles the task, which is a different question
     /// from whether the task has work to do (`completionPolicy`).
     public static let completionCriterionChip: [String: String] = [
-        "EXECUTABLE": "完成判定 · 验收命令",
-        "VERIFICATION": "完成判定 · 独立复核",
-        "EVIDENCE_JUDGMENT": "完成判定 · 证据判定",
-        "OWNER_CONFIRMED": "完成判定 · 所有者确认",
+        "EXECUTABLE": "Judged by · its acceptance command",
+        "VERIFICATION": "Judged by · an independent check",
+        "EVIDENCE_JUDGMENT": "Judged by · submitted evidence",
+        "OWNER_CONFIRMED": "Judged by · the account owner",
     ]
 
     /// The hint under the button, per state of the check that settles the row.
     public static let verificationSubjectHint: [String: String] = [
-        "MISSING": "还没有复核任务 —— 本行没有自己的活,而库里没有指向它的复核行。",
-        "PENDING": "复核任务已建,还没有给出结论。",
-        "RUNNING": "复核任务正在跑 —— 这一行由它的结论判定。",
-        "BLOCKED": "复核任务被挡住了 —— 先把挡住它的东西解掉。",
-        "FAILED": "复核结论是未通过 —— 这一行不会结算。",
-        "PASSED": "复核已通过 —— 正在应用结果。",
+        "MISSING": "No verification task yet — this row has no work of its own, and nothing in "
+            + "the ledger points at one.",
+        "PENDING": "The verification task is filed, and has not concluded yet.",
+        "RUNNING": "The verification task is running — its conclusion decides this row.",
+        "BLOCKED": "The verification task is blocked — clear what is blocking it first.",
+        "FAILED": "The verification concluded it failed — this row will not settle.",
+        "PASSED": "The verification passed — applying the result.",
     ]
 
     /// The card that names the check, the way into it, and the empty state a row with no check left
     /// reads — the same sentence its header hint carries, so the two cannot send a reader to
     /// different places.
-    public static let verifierCardHeading = "复核任务"
-    public static let verifierCardEntry = "查看"
+    public static let verifierCardHeading = "Verification task"
+    public static let verifierCardEntry = "View"
     public static let verifierCardEmpty = verificationSubjectHint["MISSING"]!
 }
 

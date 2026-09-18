@@ -1091,7 +1091,7 @@ export function TaskListView() {
                   loading={openingConsole}
                   title="Open the conversation this list is steered from"
                 >
-                  调度会话 ›
+                  Steering session ›
                 </Button>
               )}
             </div>

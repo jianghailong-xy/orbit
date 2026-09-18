@@ -281,7 +281,7 @@ describe('the task panel’s header action', () => {
       verifiesTaskId: null,
     }));
     expect(primaryAction(out)).toEqual({ label: 'Run now', disabled: false });
-    expect(out).toContain('完成判定 · 独立复核');
+    expect(out).toContain('Judged by · an independent check');
     expect(out).not.toContain('Missing verifier');
   });
 
@@ -291,7 +291,7 @@ describe('the task panel’s header action', () => {
       completionPolicy: 'VERIFICATION_PASSED',
       verifiesTaskId: null,
     }));
-    expect(primaryAction(out)).toEqual({ label: '由复核判定', disabled: true });
+    expect(primaryAction(out)).toEqual({ label: 'Decided by its verification task', disabled: true });
     expect(out).not.toContain('>Run now</span>');
   });
 
@@ -305,9 +305,9 @@ describe('the task panel’s header action', () => {
       completionPolicy: 'VERIFICATION_PASSED',
       verifiesTaskId: null,
     }));
-    expect(primaryAction(out)).toEqual({ label: '由复核判定', disabled: true });
-    expect(out).toContain('闸门 · 本行没有自己的活');
-    expect(out).not.toContain('完成判定 · 证据判定');
+    expect(primaryAction(out)).toEqual({ label: 'Decided by its verification task', disabled: true });
+    expect(out).toContain('Gate · no work of its own');
+    expect(out).not.toContain('Judged by · submitted evidence');
     // ...and its verifier is an ordinary runnable row, not a gate.
     expect(renderPanel(task({ completionCriterion: 'VERIFICATION', completionPolicy: 'MANUAL', verifiesTaskId: 'subj' })))
       .toContain('>Run now</span>');
@@ -330,7 +330,7 @@ describe('the task panel’s header action', () => {
       // None of these states may put a "Missing verifier" the reader is told to go create back on
       // the button: no client in this repo can write a verification task.
       const out = renderPanel(subject({ verificationState }));
-      expect(primaryAction(out)).toEqual({ label: '由复核判定', disabled: true });
+      expect(primaryAction(out)).toEqual({ label: 'Decided by its verification task', disabled: true });
       expect(out).not.toContain('Missing verifier');
       expect(out).not.toContain('create a verification task');
     },
@@ -340,7 +340,7 @@ describe('the task panel’s header action', () => {
     // A passed verifier, a newer one that has not reported yet, or an API too old to say.
     for (const verificationState of ['PASSED', 'PENDING', undefined]) {
       const out = renderPanel(subject({ status: 'DONE', verificationState }));
-      expect(primaryAction(out)).toEqual({ label: '由复核判定', disabled: true });
+      expect(primaryAction(out)).toEqual({ label: 'Decided by its verification task', disabled: true });
       expect(out).not.toContain('Awaiting verification');
       expect(out).not.toContain('Missing verifier');
     }
@@ -385,10 +385,10 @@ describe('how the panel says a row is decided, and what checks it', () => {
   };
 
   it.each([
-    ['EXECUTABLE', '完成判定 · 验收命令'],
-    ['VERIFICATION', '完成判定 · 独立复核'],
-    ['EVIDENCE_JUDGMENT', '完成判定 · 证据判定'],
-    ['OWNER_CONFIRMED', '完成判定 · 所有者确认'],
+    ['EXECUTABLE', 'Judged by · its acceptance command'],
+    ['VERIFICATION', 'Judged by · an independent check'],
+    ['EVIDENCE_JUDGMENT', 'Judged by · submitted evidence'],
+    ['OWNER_CONFIRMED', 'Judged by · the account owner'],
   ])('names the judgment method a %s row declares', (completionCriterion, text) => {
     expect(chipOf(renderPanel(task({ completionCriterion })))).toBe(text);
   });
@@ -400,26 +400,26 @@ describe('how the panel says a row is decided, and what checks it', () => {
       verifiesTaskId: null,
       verificationState: 'MISSING',
     }));
-    expect(chipOf(out)).toBe('闸门 · 本行没有自己的活');
+    expect(chipOf(out)).toBe('Gate · no work of its own');
     // The old copy for this state, and the instruction behind it, are both gone from the panel.
     expect(out).not.toContain('Missing verifier');
     expect(out).not.toContain('create a verification task');
-    expect(out).toContain('还没有复核任务');
+    expect(out).toContain('No verification task yet');
   });
 
   it('says nothing about judgment on a row that declares no method', () => {
     const out = renderPanel(task({ completionCriterion: null, completionPolicy: 'MANUAL' }));
     expect(chipOf(out)).toBeNull();
     // ...and no check card either: this row is decided by nothing in particular.
-    expect(out).not.toContain('复核任务');
+    expect(out).not.toContain('Verification task');
   });
 
-  /** The card under the header, as its own text — tags and whitespace out, because antd spaces a
-   *  two-character CJK button label itself ("查 看") and that kerning is not part of the copy. */
+  /** The card under the header, as its own text — tags out, and runs of whitespace collapsed to
+   *  one space so a two-line sentence still reads as one string. */
   const cardOf = (html: string): string =>
     (/<section class="tdp-verifier">([\s\S]*?)<\/section>/.exec(html)?.[1] ?? '')
       .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, '');
+      .replace(/\s+/g, ' ');
 
   it.each([
     ['a passed', 'PASS', 'PASS', 'tone-green'],
@@ -438,10 +438,10 @@ describe('how the panel says a row is decided, and what checks it', () => {
     }));
     expect(out).toMatch(new RegExp(`<span class="tdp-badge ${tone}">${label}</span>`));
     // Title, state and the way in, all three in the card.
-    expect(cardOf(out)).toContain('复核任务');
+    expect(cardOf(out)).toContain('Verification task');
     expect(cardOf(out)).toContain(CHECK.title);
     expect(cardOf(out)).toContain(label);
-    expect(cardOf(out)).toContain('查看');
+    expect(cardOf(out)).toContain('View');
   });
 
   it('shows the empty state on a gate row nothing checks, and not an impossible instruction', () => {
@@ -451,8 +451,8 @@ describe('how the panel says a row is decided, and what checks it', () => {
       verifiesTaskId: null,
       verificationState: 'MISSING',
     }));
-    expect(out).toContain('复核任务');
-    expect(out).toContain('还没有复核任务 —— 本行没有自己的活,而库里没有指向它的复核行。');
+    expect(out).toContain('Verification task');
+    expect(out).toContain('No verification task yet — this row has no work of its own');
     expect(out).not.toMatch(/verifiesTaskId|create a verification task/);
   });
 
@@ -491,7 +491,7 @@ describe('runNowHint — what the header button says on hover', () => {
     // place the reader is told why — a schedule is irrelevant to a task that cannot start.
     const scheduled = { scheduledLocal: 'Sep 1, 9:00 AM' };
     expect(runNowHint({ ...runnable, ...scheduled, completionOwned: true })).toBe(
-      '复核任务已建,还没有给出结论。',
+      'The verification task is filed, and has not concluded yet.',
     );
     expect(runNowHint({ ...runnable, ...scheduled, blocked: true })).toBe('Waiting for prerequisites');
     expect(
@@ -518,31 +518,32 @@ describe('runNowHint — what the header button says on hover', () => {
   it('tells a gate row’s reader what its check is doing, and asks for nothing they cannot do', () => {
     const subject = { ...runnable, completionOwned: true };
     expect(runNowHint({ ...subject, verificationState: 'MISSING' })).toBe(
-      '还没有复核任务 —— 本行没有自己的活,而库里没有指向它的复核行。',
+      'No verification task yet — this row has no work of its own, and nothing in the ledger '
+      + 'points at one.',
     );
     expect(runNowHint({ ...subject, verificationState: 'PENDING' })).toBe(
-      '复核任务已建,还没有给出结论。',
+      'The verification task is filed, and has not concluded yet.',
     );
     expect(runNowHint({ ...subject, verificationState: 'RUNNING' })).toBe(
-      '复核任务正在跑 —— 这一行由它的结论判定。',
+      'The verification task is running — its conclusion decides this row.',
     );
     expect(runNowHint({ ...subject, verificationState: 'BLOCKED' })).toBe(
-      '复核任务被挡住了 —— 先把挡住它的东西解掉。',
+      'The verification task is blocked — clear what is blocking it first.',
     );
     // FAIL and INCONCLUSIVE both arrive as FAILED, and neither is answered by running it again.
     expect(runNowHint({ ...subject, verificationState: 'FAILED' })).toBe(
-      '复核结论是未通过 —— 这一行不会结算。',
+      'The verification concluded it failed — this row will not settle.',
     );
     expect(runNowHint({ ...subject, verificationState: 'PASSED' })).toBe(
-      '复核已通过 —— 正在应用结果。',
+      'The verification passed — applying the result.',
     );
     expect(runNowHint({ ...subject, status: 'DONE', verificationState: 'PASSED' })).toBe(
-      '复核已通过 —— 这一行已经结束。',
+      'The verification passed — this row is finished.',
     );
     // The check's own sentence still outranks every other gate, as the generic one did.
     expect(
       runNowHint({ ...subject, blocked: true, canExecute: false, verificationState: 'MISSING' }),
-    ).toBe('还没有复核任务 —— 本行没有自己的活,而库里没有指向它的复核行。');
+    ).toBe('No verification task yet — this row has no work of its own, and nothing in the ledger points at one.');
   });
 
   it('never sends a reader after a verification task they have no way to create', () => {
