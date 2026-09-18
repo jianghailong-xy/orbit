@@ -269,11 +269,12 @@ struct TasksListView: View {
             // usable hiding place on iOS 17/18 (see `AppModel.push` — which also keeps the detail
             // store in step with the page this puts up). `.foregroundStyle(.primary)`: a button's
             // label otherwise inherits the accent tint, and the row is unchanged by design (only
-            // the wrapper is new).
-            Button { model.push(.taskDetail(taskID: task.id)) } label: {
+            // the wrapper is new). The row's actions wrap that `Button` — a `Button` does not pass
+            // `.swipeActions` / `.contextMenu` up from its label, so nested inside it (where they
+            // were) a swipe and a long press do nothing; see `rowActions`.
+            rowActions(Button { model.push(.taskDetail(taskID: task.id)) } label: {
                 row.foregroundStyle(.primary)
-            }
-            .rowActions(tasks, task)
+            }, tasks, task)
         }
     }
 
