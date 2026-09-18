@@ -152,26 +152,41 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                        "and that constant is the one this end's card reaches for")
     }
 
-    /// The line that says which project, how many conditions, where it stands and which version —
-    /// and the one it says instead when the standing could not be read.
+    /// The line that says which project, how many conditions, where the project stands, where its
+    /// confirmation stands and which version — and the one it says instead when the standing could
+    /// not be read.
     func testTheMetaLineMatchesTheWebCardWhole() throws {
         let web = try flatWebCard()
 
+        // Where the PROJECT stands, off `coordinatorEnabled` — three words, because a read that did
+        // not answer is neither of the other two.
         assertDeclares(web, "ACCEPTANCE_NOT_STARTED", AcceptanceConfirmations.notStarted,
-                       "where an unconfirmed project stands")
+                       "where a project nobody has started stands")
         assertDeclares(web, "ACCEPTANCE_STARTED", AcceptanceConfirmations.started,
-                       "where a confirmed project stands")
-        assertDeclares(web, "ACCEPTANCE_CHANGED_SINCE_STARTED",
-                       AcceptanceConfirmations.changedSinceStarted,
-                       "where a project whose criteria moved under it stands")
-        // The count before the state before the seal: order is the copy here, not just the words.
-        assertTemplate(web, AcceptanceConfirmations.meta(standing(.unconfirmed),
+                       "where a project that is handing work out stands")
+        assertDeclares(web, "ACCEPTANCE_START_NOT_READ", AcceptanceConfirmations.startNotRead,
+                       "what the line says when the project itself could not be read")
+        // And where the CONFIRMATION stands, off the standing. The second field exists because the
+        // first stopped answering both: an unconfirmed project may well have been started.
+        assertDeclares(web, "ACCEPTANCE_CONFIRMED", AcceptanceConfirmations.confirmed,
+                       "a set somebody has confirmed")
+        assertDeclares(web, "ACCEPTANCE_CHANGED_SINCE_CONFIRMED",
+                       AcceptanceConfirmations.changedSinceConfirmed,
+                       "a set whose criteria moved under the confirmation")
+        assertDeclares(web, "ACCEPTANCE_NOBODY_SAID_DONE",
+                       AcceptanceConfirmations.nobodySaidDone,
+                       "a set nobody has ever confirmed")
+        // The count, then where the project stands, then where the confirmation does, then the
+        // seal: order is the copy here, not just the words.
+        assertTemplate(web, AcceptanceConfirmations.meta(standing(.unconfirmed), started: false,
                                                         projectTitle: Self.project),
                        [(Self.project, "${projectTitle}"), (count, "${count}"),
                         (AcceptanceConfirmations.notStarted, "${stands}"),
+                        (AcceptanceConfirmations.nobodySaidDone, "${asked}"),
                         (currentSeal, "${shortSeal(standing.currentVersion.digest)}")],
                        "the meta line")
-        assertTemplate(web, AcceptanceConfirmations.meta(nil, projectTitle: Self.project),
+        assertTemplate(web, AcceptanceConfirmations.meta(nil, started: nil,
+                                                         projectTitle: Self.project),
                        [(Self.project, "${projectTitle}")],
                        "the meta line of a standing that could not be read")
     }

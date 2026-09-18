@@ -57,10 +57,10 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
  *
  * WHAT THE PINNED STRIP IS TOLD
  * -----------------------------
- * Whether this card is on screen and the project it is about has still not been started
- * (`onOpenQuestion`), which is what iOS's needs-you bar counts. The card reports it rather than the
- * strip reading the standing again, because being on screen is this card's own state: delivered
- * once, and still there — stale — after the project was started at another end.
+ * Whether this card is on screen and its question is still unanswered (`onOpenQuestion`), which is
+ * what iOS's needs-you bar counts. The card reports it rather than the strip reading the standing
+ * again, because being on screen is this card's own state: delivered once, and still there —
+ * stale — after the set was confirmed at another end.
  */
 
 /** The card's heading: what the card is about, not whether it has been answered
@@ -81,11 +81,23 @@ export const CONFIRMATION_CHANGED_SINCE =
   'The criteria changed after they were confirmed, so that confirmation no longer stands.';
 export const CONFIRMATION_EDIT_ENDS_IT =
   'Editing any criterion ends this confirmation and Orbit will ask again.';
-/** Where the project stands, as the meta line's third field says it. Confirming is starting, so
- *  the standing is what answers this and there is nothing else to read it off. */
+/** Where the project stands, as the meta line's third field says it: read off `coordinatorEnabled`
+ *  — the column that decides whether Orbit hands this project's tasks out, and which
+ *  `project-acceptance.service.ts` writes by no other hand — and off nothing else. Confirming turns
+ *  it on for a project started since that was wired, and says nothing whatever about one that was
+ *  already dispatching work when it landed. */
 export const ACCEPTANCE_NOT_STARTED = 'not started';
 export const ACCEPTANCE_STARTED = 'started';
-export const ACCEPTANCE_CHANGED_SINCE_STARTED = 'changed since it started';
+/** …and what that field says when the project itself could not be read. A failed read is not an
+ *  answer, and guessing "not started" at a project that is handing work out is the one thing this
+ *  field was taken off the standing to stop saying. */
+export const ACCEPTANCE_START_NOT_READ = 'start not read';
+/** Where the CONFIRMATION stands, as the meta line's fourth field says it. The other question
+ *  entirely, and the only one the standing answers: whether anybody has said what done means here,
+ *  and whether that is still the plan. */
+export const ACCEPTANCE_CONFIRMED = 'confirmed';
+export const ACCEPTANCE_CHANGED_SINCE_CONFIRMED = 'changed since it was confirmed';
+export const ACCEPTANCE_NOBODY_SAID_DONE = 'nobody has said what done means';
 /** What the composer's bar says it is about to talk about, ahead of the project's own title. */
 export const ACCEPTANCE_PLAN_CHANGE_PREFIX = 'Talking about this plan: ';
 /** What the armed composer asks for. A message, not an answer: no door is waiting on it. */
@@ -129,10 +141,16 @@ export interface ConfirmationCriterion {
 }
 
 /** As much of the project document as this card reads: the stated criteria, the title the meta
- *  line names it by, and the status the card's own condition turns on. */
+ *  line names it by, the status the card's own condition turns on, and whether the project has
+ *  been started. */
 export interface ConfirmationProjectDocument {
   title?: string;
   status?: string;
+  /** Whether Orbit is handing this project's tasks out. `/projects/:id` carries it already —
+   *  `withCoordination` spreads the column through in `...rest` — so the meta line's "started"
+   *  costs this card no request of its own. Absent from a read that did not say, which is not a
+   *  "no": it is the one thing this field must never be read as. */
+  coordinatorEnabled?: boolean;
   acceptanceCriteriaItems?: ConfirmationCriterion[];
 }
 
@@ -142,23 +160,40 @@ export function acceptanceReadLabel(count: number): string {
   return `Read all ${count} in full`;
 }
 
-/** Which project, how many conditions, where it stands, and which version of them — in that
- *  order. The seal is last because it answers a question nobody has until they have read the
- *  rest: it names the version a press binds, and proves nothing about having read it. */
+/** Which project, how many conditions, whether it has been started, whether anybody has said what
+ *  done means, and which version of them — in that order. The seal is last because it answers a
+ *  question nobody has until they have read the rest: it names the version a press binds, and
+ *  proves nothing about having read it.
+ *
+ *  TWO FIELDS BECAUSE THEY ARE TWO FACTS
+ *  -------------------------------------
+ *  One field used to answer both, off the standing alone: unconfirmed was printed "not started".
+ *  That holds only for a project created since confirming became the press that starts one — for
+ *  the projects that were already here it is simply a different question, and on 2026-09-18 seven
+ *  OPEN projects were handing work out with no confirmation ever recorded. The card said "not
+ *  started" about every one of them. So `started` is read off the project and `asked` off the
+ *  standing, and neither is inferred from the other. */
 export function acceptanceConfirmationMeta(
   standing: StandardSetConfirmationStanding | null,
+  started: boolean | null,
   projectTitle: string,
 ): string {
   if (!standing) return `${projectTitle} — the standing could not be read just now.`;
   const count = standing.currentVersion.material.length;
   const stands =
-    standing.state === 'CONFIRMED'
-      ? ACCEPTANCE_STARTED
-      : standing.state === 'STALE'
-        ? ACCEPTANCE_CHANGED_SINCE_STARTED
+    started === null
+      ? ACCEPTANCE_START_NOT_READ
+      : started
+        ? ACCEPTANCE_STARTED
         : ACCEPTANCE_NOT_STARTED;
+  const asked =
+    standing.state === 'CONFIRMED'
+      ? ACCEPTANCE_CONFIRMED
+      : standing.state === 'STALE'
+        ? ACCEPTANCE_CHANGED_SINCE_CONFIRMED
+        : ACCEPTANCE_NOBODY_SAID_DONE;
   return (
-    `${projectTitle} · ${count} criteria · ${stands} · seal ${shortSeal(standing.currentVersion.digest)}`
+    `${projectTitle} · ${count} criteria · ${stands} · ${asked} · seal ${shortSeal(standing.currentVersion.digest)}`
   );
 }
 
@@ -185,11 +220,13 @@ export function acceptanceConfirmationAnswerable(
   return standing !== null && standing.state !== 'CONFIRMED';
 }
 
-/** Whether this project has still not been started — OrbitKit's `AcceptanceConfirmations.isOpen`,
- *  and what the pinned line counts. Confirming IS starting, so the standing is the whole of it and
- *  there is nothing else to read it off; a standing that could not be read leaves the project not
- *  started, because a failed read is this device's problem and not an answer. */
-export function acceptanceProjectUnstarted(
+/** Whether this card is still asking something — OrbitKit's `AcceptanceConfirmations.isOpen`, and
+ *  what the pinned line counts. The standing is the whole of it, and deliberately: what is open is
+ *  the QUESTION, and only a confirmation answers that. Whether the project has been started is the
+ *  other fact the meta line carries, and a project already running has this question open all the
+ *  same. A standing that could not be read leaves it open, because a failed read is this device's
+ *  problem and not an answer. */
+export function acceptanceConfirmationStillOpen(
   standing: StandardSetConfirmationStanding | null,
 ): boolean {
   return standing === null || standing.state !== 'CONFIRMED';
@@ -254,6 +291,7 @@ export function AcceptanceConfirmationCard({
   standing,
   criteria,
   projectTitle,
+  started,
   busy = false,
   error = null,
   recorded = null,
@@ -266,6 +304,9 @@ export function AcceptanceConfirmationCard({
   criteria: ConfirmationCriterion[] | null;
   /** What the meta line calls the project this plan belongs to. */
   projectTitle: string;
+  /** Whether the project is handing its tasks out, or null when the project document could not be
+   *  read. Not derived from `standing`: that is the whole point of this field. */
+  started: boolean | null;
   /** A press from this card is on its way to the door, or the re-read after a refusal is. */
   busy?: boolean;
   /** The door's refusal of the last press, when it refused. */
@@ -293,7 +334,7 @@ export function AcceptanceConfirmationCard({
       </div>
       <div className="approval-body is-questions settlement-card-body">
         <div className="settlement-card-meta">
-          {acceptanceConfirmationMeta(standing, projectTitle)}
+          {acceptanceConfirmationMeta(standing, started, projectTitle)}
         </div>
         {stale ? <p className="settlement-card-stale">{stale}</p> : null}
         {/* The set itself, open. Load-bearing rather than decorative: a folded list is an
@@ -415,11 +456,11 @@ export function SessionAcceptanceConfirmationCard({
   useEffect(() => {
     if (held) setDelivered(true);
   }, [held]);
-  // On screen and not started: the delivered card iOS's needs-you bar counts while
+  // On screen and still asking: the delivered card iOS's needs-you bar counts while
   // `AcceptanceConfirmations.isOpen`. `shown` is exactly what the render below draws, so the strip
   // is told about the card a reader can reach and not about the reads behind it.
   const shown = delivered || held;
-  const openHere = shown && acceptanceProjectUnstarted(standing);
+  const openHere = shown && acceptanceConfirmationStillOpen(standing);
   useEffect(() => {
     onOpenQuestion?.(openHere);
   }, [onOpenQuestion, openHere]);
@@ -443,6 +484,9 @@ export function SessionAcceptanceConfirmationCard({
       standing={standing}
       criteria={criteria}
       projectTitle={title}
+      // Straight off the project read, absent-or-unread meaning neither yes nor no. A press here
+      // will turn it on, and a project that was already on when this card arrived says so.
+      started={document?.coordinatorEnabled ?? null}
       busy={confirm.isPending}
       error={confirm.isError ? confirm.error : null}
       recorded={confirm.isSuccess ? confirm.data : null}

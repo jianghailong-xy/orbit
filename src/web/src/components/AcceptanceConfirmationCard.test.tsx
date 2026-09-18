@@ -9,8 +9,14 @@ import {
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import {
+  ACCEPTANCE_CHANGED_SINCE_CONFIRMED,
+  ACCEPTANCE_CONFIRMED,
+  ACCEPTANCE_NOBODY_SAID_DONE,
+  ACCEPTANCE_NOT_STARTED,
   ACCEPTANCE_SHOW_LESS_LABEL,
   ACCEPTANCE_START_LABEL,
+  ACCEPTANCE_START_NOT_READ,
+  ACCEPTANCE_STARTED,
   CONFIRMATION_NOT_RECORDED,
   CONFIRMATION_UNREAD_EXPLANATION,
   SessionAcceptanceConfirmationCard,
@@ -79,14 +85,16 @@ const NONE_MET = criteriaOf(false, false, false);
 
 const TITLE = 'move the confirmation to the start';
 
-/** The project document, as much of it as the card reads. */
+/** The project document, as much of it as the card reads. `coordinatorEnabled` is left out by
+ *  default because that is how a new project reads: off. */
 function documentOf(criteria: ConfirmationCriterion[] | undefined, status = 'OPEN'): ProjectDocument {
-  return { title: TITLE, status, acceptanceCriteriaItems: criteria };
+  return { title: TITLE, status, coordinatorEnabled: false, acceptanceCriteriaItems: criteria };
 }
 
 type ProjectDocument = {
   title?: string;
   status?: string;
+  coordinatorEnabled?: boolean;
   acceptanceCriteriaItems?: ConfirmationCriterion[];
 };
 
@@ -199,6 +207,11 @@ const criteriaOn = (card: HTMLElement): string[] => [
 ].map((row) => row.textContent ?? '');
 const staleOf = (card: HTMLElement): string | null =>
   card.querySelector('.settlement-card-stale')?.textContent ?? null;
+const metaOf = (card: HTMLElement): string =>
+  card.querySelector('.settlement-card-meta')?.textContent ?? '';
+/** The meta line's fields, one at a time: `toContain` cannot tell "started" from "not started", so
+ *  each field is compared as the whole field it is. */
+const metaFieldsOf = (card: HTMLElement): string[] => metaOf(card).split(' · ');
 
 /** The reading control. Deliberately not looked up among the actions: it is not one. */
 const readToggle = (card: HTMLElement): HTMLButtonElement => {
@@ -338,6 +351,66 @@ describe('whether a coordinator conversation is drawn the card', SLOW, () => {
     server.document = documentOf(NONE_MET);
     await reread(qc);
     expect(cardsIn(node)).toHaveLength(1);
+  });
+});
+
+/**
+ * The meta line's two middle fields, which are two facts and are read off two documents.
+ *
+ * Every fixture above builds a project made a moment ago, and in one of those "nobody has confirmed
+ * it" and "nobody has started it" are the same sentence — which is exactly why the card could say
+ * one while meaning the other for as long as it did. Only a project that was already here separates
+ * them, and on 2026-09-18 seven OPEN projects were in that state: the coordinator handing work out,
+ * and not one confirmation ever recorded. The card called every one of them "not started".
+ */
+describe('where the meta line says the project stands', SLOW, () => {
+  it('says started — not "not started" — for a started project whose criteria nobody ever confirmed', async () => {
+    server.standing = standingOf('UNCONFIRMED');
+    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
+    const { qc, card } = await delivered();
+
+    expect(metaOf(card()), 'a project that is handing work out was called not started')
+      .not.toContain(ACCEPTANCE_NOT_STARTED);
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_STARTED);
+    // And the thing that IS true of it — that nobody has ever said what done means here — is said
+    // in its own field rather than being folded into the one above.
+    expect(metaFieldsOf(card())[3]).toBe(ACCEPTANCE_NOBODY_SAID_DONE);
+
+    // The same unconfirmed standing with the coordinator off is a new project's normal state. So
+    // the word moved with `coordinatorEnabled` and with nothing else: the standing never changed.
+    server.document = documentOf(NONE_MET);
+    await reread(qc);
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_NOT_STARTED);
+    expect(metaFieldsOf(card())[3]).toBe(ACCEPTANCE_NOBODY_SAID_DONE);
+  });
+
+  /** The other half: the fourth field is the standing's alone, and the third never moves with it.
+   *  The card is delivered unconfirmed and the standing moved under it, because a CONFIRMED set is
+   *  never delivered a card of its own — it is one that went stale in place. */
+  it.each<[State, string]>([
+    ['UNCONFIRMED', ACCEPTANCE_NOBODY_SAID_DONE],
+    ['STALE', ACCEPTANCE_CHANGED_SINCE_CONFIRMED],
+    ['CONFIRMED', ACCEPTANCE_CONFIRMED],
+  ])('says a %s set as "%s" while the project stays started throughout', async (state, asked) => {
+    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
+    const { qc, card } = await delivered();
+    server.standing = standingOf(state);
+    await reread(qc);
+
+    expect(metaFieldsOf(card())[3]).toBe(asked);
+    expect(metaFieldsOf(card())[2], 'the confirmation moved the project’s own field')
+      .toBe(ACCEPTANCE_STARTED);
+  });
+
+  /** A project this browser could not read is neither started nor not: a failed read is not an
+   *  answer, which is the rule the rest of this card already keeps. */
+  it('says neither once the project document stops answering', async () => {
+    const { qc, card } = await delivered();
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_NOT_STARTED);
+
+    server.document = new Error('503 on the document');
+    await reread(qc);
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_START_NOT_READ);
   });
 });
 

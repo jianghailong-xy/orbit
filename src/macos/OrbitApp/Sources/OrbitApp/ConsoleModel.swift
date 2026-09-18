@@ -1896,6 +1896,10 @@ final class ConsoleModel {
     /// The project's status, as the same read publishes it: one of the three facts the card's
     /// condition turns on.
     private var projectStatus: String?
+    /// Whether Orbit is handing this project's tasks out, as the same read publishes it: what the
+    /// card's meta line says "started" off, and nil while no read has answered — which the line
+    /// says rather than guessing "not started" at a project that is dispatching work.
+    private(set) var projectStarted: Bool?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -2011,6 +2015,7 @@ final class ConsoleModel {
             projectCriteria = document.acceptanceCriteriaItems ?? []
             projectDocumentTitle = document.title
             projectStatus = document.status
+            projectStarted = document.coordinatorEnabled
         }
         if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
         lastRulerRead = Date()

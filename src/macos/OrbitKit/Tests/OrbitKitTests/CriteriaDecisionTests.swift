@@ -688,22 +688,57 @@ final class CriteriaDecisionTests: XCTestCase {
             confirmation: state == .unconfirmed ? nil : prior)
     }
 
+    /// The meta line's fields, read one at a time: `contains` cannot tell "started" from "not
+    /// started", so each is compared as the whole field it is.
+    private func metaFields(_ standing: StandardSetConfirmationStanding?,
+                            started: Bool?) -> [String] {
+        AcceptanceConfirmations.meta(standing, started: started, projectTitle: "Aurora")
+            .components(separatedBy: " · ")
+    }
+
     func testTheConfirmationCardNamesTheProjectTheCountAndTheVersionAPressWouldBind() {
-        let meta = AcceptanceConfirmations.meta(confirmation(.unconfirmed), projectTitle: "Aurora")
-        XCTAssertTrue(meta.hasPrefix("Aurora"), meta)
-        XCTAssertTrue(meta.contains("10 criteria"), meta)
-        XCTAssertTrue(meta.contains("seal 9c4f7a1bb001"), meta)
-        // Where it stands, which is the thing a confirmation now decides: confirming is starting.
-        XCTAssertTrue(meta.contains(AcceptanceConfirmations.notStarted), meta)
-        XCTAssertTrue(AcceptanceConfirmations.meta(confirmation(.confirmed), projectTitle: "Aurora")
-                        .contains(AcceptanceConfirmations.started))
-        XCTAssertTrue(AcceptanceConfirmations.meta(confirmation(.stale), projectTitle: "Aurora")
-                        .contains(AcceptanceConfirmations.changedSinceStarted))
+        let fields = metaFields(confirmation(.unconfirmed), started: false)
+        XCTAssertEqual(fields.first, "Aurora")
+        XCTAssertEqual(fields.count, 5, fields.joined(separator: " · "))
+        XCTAssertEqual(fields[1], "10 criteria")
+        XCTAssertEqual(fields.last, "seal 9c4f7a1bb001")
         // A standing this device could not read names the project and says so, rather than
         // reporting a state it does not have.
-        XCTAssertEqual(AcceptanceConfirmations.meta(nil, projectTitle: "Aurora"),
+        XCTAssertEqual(AcceptanceConfirmations.meta(nil, started: nil, projectTitle: "Aurora"),
                        "Aurora — the standing could not be read just now.")
         XCTAssertEqual(AcceptanceConfirmations.readLabel(count: 10), "Read all 10 in full")
+    }
+
+    /// The two middle fields are two facts, and each is read off its own one.
+    ///
+    /// The combination that matters is the third row: a project that has been started and whose
+    /// criteria nobody ever confirmed. It is not hypothetical — seven OPEN projects were in it on
+    /// 2026-09-18 — and while the third field was derived from the standing, the card told every
+    /// one of them it had not been started.
+    func testWhereTheProjectStandsIsReadOffTheProjectAndNotOffTheStanding() {
+        for state in [StandardSetConfirmationStanding.State.unconfirmed, .stale, .confirmed] {
+            XCTAssertEqual(metaFields(confirmation(state), started: true)[2],
+                           AcceptanceConfirmations.started,
+                           "a started project reads \(state) as anything but started")
+            XCTAssertEqual(metaFields(confirmation(state), started: false)[2],
+                           AcceptanceConfirmations.notStarted,
+                           "an unstarted project reads \(state) as anything but not started")
+            XCTAssertEqual(metaFields(confirmation(state), started: nil)[2],
+                           AcceptanceConfirmations.startNotRead,
+                           "a project that could not be read reads \(state) as a state it lacks")
+        }
+    }
+
+    /// …and the fourth field is the confirmation's own, whatever the project is doing.
+    func testWhetherAnybodySaidWhatDoneMeansIsReadOffTheStandingAlone() {
+        for started in [true, false, nil] as [Bool?] {
+            XCTAssertEqual(metaFields(confirmation(.unconfirmed), started: started)[3],
+                           AcceptanceConfirmations.nobodySaidDone)
+            XCTAssertEqual(metaFields(confirmation(.stale), started: started)[3],
+                           AcceptanceConfirmations.changedSinceConfirmed)
+            XCTAssertEqual(metaFields(confirmation(.confirmed), started: started)[3],
+                           AcceptanceConfirmations.confirmed)
+        }
     }
 
     func testBothUnconfirmedStatesOfferTheButtonAndAConfirmedOneDoesNot() {

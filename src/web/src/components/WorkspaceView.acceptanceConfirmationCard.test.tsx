@@ -198,7 +198,7 @@ beforeEach(() => {
       return reply(STANDING);
     }
     if (path === `/projects/${PROJECT_PUBLIC}`) {
-      return reply({ id: PROJECT_PUBLIC, title: 'the criteria seal', status: 'OPEN', acceptanceCriteriaItems: CRITERIA });
+      return reply({ id: PROJECT_PUBLIC, title: 'the criteria seal', status: 'OPEN', coordinatorEnabled: false, acceptanceCriteriaItems: CRITERIA });
     }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       criteriaReads += 1;

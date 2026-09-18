@@ -1431,7 +1431,8 @@ private struct AcceptanceConfirmationCard: View {
             ApprovalHeader(symbol: "checkmark.seal.fill",
                            title: AcceptanceConfirmations.title,
                            tone: .blue)
-            Text(AcceptanceConfirmations.meta(standing, projectTitle: console.projectTitle))
+            Text(AcceptanceConfirmations.meta(standing, started: console.projectStarted,
+                                              projectTitle: console.projectTitle))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 

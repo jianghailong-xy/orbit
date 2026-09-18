@@ -503,13 +503,21 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// The status the confirmation card's own condition turns on — a project that is not OPEN is
     /// not one anybody is about to start.
     public let status: String?
+    /// Whether Orbit is handing this project's tasks out: the one column that decides it, and what
+    /// the confirmation card's meta line reads "started" off. This read is `GET /projects/:id`,
+    /// which carries the column already, so that field costs the card no request of its own.
+    /// Optional — a read that did not say is not a "no", which is the one thing it must never be
+    /// read as.
+    public let coordinatorEnabled: Bool?
 
     public init(id: String, acceptanceCriteriaItems: [Item]? = nil,
-                title: String? = nil, status: String? = nil) {
+                title: String? = nil, status: String? = nil,
+                coordinatorEnabled: Bool? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
         self.status = status
+        self.coordinatorEnabled = coordinatorEnabled
     }
 }
 
@@ -1049,16 +1057,40 @@ public enum AcceptanceConfirmations {
         "Read all \(count) in full"
     }
 
-    /// Where the project stands, as the meta line's third field says it. Confirming is starting, so
-    /// the standing is what answers this and there is nothing else to read it off.
+    /// Where the project stands, as the meta line's third field says it: read off
+    /// `coordinatorEnabled` — the column that decides whether Orbit hands this project's tasks out,
+    /// and which the confirmation door writes by no other hand — and off nothing else. Confirming
+    /// turns it on for a project started since that was wired, and says nothing whatever about one
+    /// that was already dispatching work when it landed.
     public static let notStarted = "not started"
     public static let started = "started"
-    public static let changedSinceStarted = "changed since it started"
+    /// …and what that field says when the project itself could not be read. A failed read is not an
+    /// answer, and guessing "not started" at a project that is handing work out is the one thing
+    /// this field was taken off the standing to stop saying.
+    public static let startNotRead = "start not read"
 
-    /// Which project, how many conditions, where it stands, and which version of them — in that
-    /// order. The seal is last because it answers a question nobody has until they have read the
-    /// rest: it names the version a press binds, and proves nothing about having read it.
+    /// Where the CONFIRMATION stands, as the meta line's fourth field says it. The other question
+    /// entirely, and the only one the standing answers: whether anybody has said what done means
+    /// here, and whether that is still the plan.
+    public static let confirmed = "confirmed"
+    public static let changedSinceConfirmed = "changed since it was confirmed"
+    public static let nobodySaidDone = "nobody has said what done means"
+
+    /// Which project, how many conditions, whether it has been started, whether anybody has said
+    /// what done means, and which version of them — in that order. The seal is last because it
+    /// answers a question nobody has until they have read the rest: it names the version a press
+    /// binds, and proves nothing about having read it.
+    ///
+    /// TWO FIELDS BECAUSE THEY ARE TWO FACTS
+    /// -------------------------------------
+    /// One field used to answer both, off the standing alone: unconfirmed was printed "not
+    /// started". That holds only for a project created since confirming became the press that
+    /// starts one — for the projects that were already here it is simply a different question, and
+    /// on 2026-09-18 seven OPEN projects were handing work out with no confirmation ever recorded.
+    /// The card said "not started" about every one of them. So `started` is read off the project
+    /// and `asked` off the standing, and neither is inferred from the other.
     public static func meta(_ standing: StandardSetConfirmationStanding?,
+                            started: Bool?,
                             projectTitle: String) -> String {
         guard let standing else {
             return "\(projectTitle) — the standing could not be read just now."
@@ -1066,12 +1098,18 @@ public enum AcceptanceConfirmations {
         let count = standing.currentVersion.material.count
         let seal = CriteriaDecisions.shortSeal(standing.currentVersion.digest)
         let stands: String
-        switch standing.state {
-        case .confirmed: stands = started
-        case .stale: stands = changedSinceStarted
-        case .unconfirmed: stands = notStarted
+        switch started {
+        case .some(true): stands = Self.started
+        case .some(false): stands = notStarted
+        case .none: stands = startNotRead
         }
-        return "\(projectTitle) · \(count) criteria · \(stands) · seal \(seal)"
+        let asked: String
+        switch standing.state {
+        case .confirmed: asked = Self.confirmed
+        case .stale: asked = changedSinceConfirmed
+        case .unconfirmed: asked = nobodySaidDone
+        }
+        return "\(projectTitle) · \(count) criteria · \(stands) · \(asked) · seal \(seal)"
     }
 
     /// How a stale standing's first line opens.
@@ -1098,10 +1136,11 @@ public enum AcceptanceConfirmations {
         return standing.state != .confirmed
     }
 
-    /// Whether this project has still not been started — what the needs-you bar counts. Confirming
-    /// IS starting, so the standing is the whole of it and there is nothing else to read it off; a
-    /// standing that could not be read leaves the project not started, because a failed read is
-    /// this device's problem and not an answer.
+    /// Whether this card is still asking something — what the needs-you bar counts. The standing is
+    /// the whole of it, and deliberately: what is open is the QUESTION, and only a confirmation
+    /// answers that. Whether the project has been started is the other fact the meta line carries,
+    /// and a project already running has this question open all the same. A standing that could not
+    /// be read leaves it open, because a failed read is this device's problem and not an answer.
     public static func isOpen(_ standing: StandardSetConfirmationStanding?) -> Bool {
         guard let standing else { return true }
         return standing.state != .confirmed
