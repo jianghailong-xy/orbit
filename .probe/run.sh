@@ -60,19 +60,19 @@ shot () { # name, then launch args
 }
 
 echo "==> capturing configurations"
-# 1-3: today's widths, one per style — does the style alone change what the columns get?
-shot 01-automatic-min320       -style automatic       -contentMin 320 -visibility all
-shot 02-balanced-min320        -style balanced        -contentMin 320 -visibility all
-shot 03-prominent-min320       -style prominentDetail -contentMin 320 -visibility all
-# 4-6: raise the content column's *min* (a hard floor, unlike ideal) under each style.
-shot 04-automatic-min400       -style automatic       -contentMin 400 -contentIdeal 440 -contentMax 520 -visibility all
-shot 05-balanced-min400        -style balanced        -contentMin 400 -contentIdeal 440 -contentMax 520 -visibility all
-shot 06-prominent-min400       -style prominentDetail -contentMin 400 -contentIdeal 440 -contentMax 520 -visibility all
-# 7: sidebar collapsed — the state the app now starts in.
-shot 07-automatic-min400-double -style automatic      -contentMin 400 -contentIdeal 440 -contentMax 520 -visibility doubleColumn
-# 8: does widening the sidebar's floor actually take effect? (main asks 260, gets 222)
-shot 08-balanced-sidebar320    -style balanced        -sidebarMin 320 -sidebarIdeal 320 -sidebarMax 360 \
-                               -contentMin 400 -contentIdeal 440 -contentMax 520 -visibility all
+# The premise died with the first run: a 420pt column still reported COMPACT, so the size class is
+# not simply "this column's width vs ~400". Sweep the content column's floor upward under the
+# default style and find where — or whether — it ever flips to REGULAR.
+shot 01-auto-320  -style automatic -contentMin 320 -contentIdeal 420 -contentMax 480 -visibility all
+shot 02-auto-400  -style automatic -contentMin 400 -contentIdeal 400 -contentMax 400 -visibility all
+shot 03-auto-460  -style automatic -contentMin 460 -contentIdeal 460 -contentMax 460 -visibility all
+shot 04-auto-520  -style automatic -contentMin 520 -contentIdeal 520 -contentMax 520 -visibility all
+shot 05-auto-600  -style automatic -contentMin 600 -contentIdeal 600 -contentMax 600 -visibility all
+# Does the style change the verdict at a width that is otherwise identical?
+shot 06-balanced-460  -style balanced        -contentMin 460 -contentIdeal 460 -contentMax 460 -visibility all
+shot 07-prominent-460 -style prominentDetail -contentMin 460 -contentIdeal 460 -contentMax 460 -visibility all
+# Sidebar collapsed: fewer columns sharing the width — does content flip then?
+shot 08-auto-460-double -style automatic -contentMin 460 -contentIdeal 460 -contentMax 460 -visibility doubleColumn
 
 echo "==> done. shots in $OUT"
 ls -1 "$OUT"

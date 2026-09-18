@@ -108,9 +108,9 @@ struct Pane: View {
                     .foregroundStyle(.black)
                     .clipShape(Capsule())
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(tint.opacity(0.18))
         }
-        .ignoresSafeArea(edges: .bottom)
     }
 }
