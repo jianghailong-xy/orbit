@@ -997,6 +997,10 @@ for (const end of ENDS) {
     // The control: the runner took the end wake, and it is the wake's own turn that fails. The engine
     // received it, so it was delivered, whatever its run came to.
     const taken = await endTakenByRunner(end, owner, runner, pool);
+    // The end wake RAN, so its completion carries the reply an engine that ran produces: a turn nothing
+    // answered goes back to the queue, and a run that ends with it queued drains it as a wake no runner
+    // ever took, which is the death this control is about.
+    await say(taken.wakeId, taken.observer, 'the end wake ran');
     await doors.complete(taken.observer, taken.wakeId, 'FAILED');
     assert.equal((await sessionOf(taken.observer)).status, 'FAILED', 'the run the end wake started failed');
     assert.equal((await onlyEnd(taken.watchId, end)).state, 'DELIVERED', 'an end wake the runner took was dead-lettered by its run failing');
