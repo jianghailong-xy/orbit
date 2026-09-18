@@ -5,8 +5,10 @@ import { Prisma } from '@prisma/client';
  *
  * `task_dependency` is kept acyclic by the application (`wouldCreateCycle`), not by a constraint,
  * so a cycle written by some other path would make the recursion below spin forever. The cap stops
- * it. It is far above any real project — the largest in the deployment is 118 tasks, and a chain
- * of N tasks reaches depth N-1 — so reaching it means the data is wrong, not that a project grew.
+ * it. A chain of N tasks reaches depth N-1, so reaching this means the data is wrong rather than
+ * that a project grew — but the margin is no longer the one this comment used to claim: the
+ * largest project in the deployment is 109,872 tasks at depth 352, not 118 tasks, so a project of
+ * that shape three times deeper would be truncated here and report a `maxDepth` that is a cap.
  */
 export const PROJECT_TOPOLOGY_MAX_DEPTH = 1000;
 
@@ -88,14 +90,27 @@ export function projectTaskDependencyFactsSql(ownerId: string, projectId: string
       -- UNION rather than UNION ALL: the duplicate elimination is what bounds this at
       -- tasks x depth instead of enumerating every distinct path, which on a dense graph is
       -- exponential. A task reached at several depths keeps the largest, below.
+      --
+      -- The step joins task_dependency and re-states the project scope rather than scanning the
+      -- edge CTE, which reads like the duplication it is until you price it: a CTE carries no
+      -- index, so PostgreSQL re-sorts the WHOLE edge set once per level of the recursion. On the
+      -- 109,872-task project here that is 353 external merge sorts, 48 seconds and 1.6 GB of temp
+      -- files; going through the index on depends_on_task_id makes each level cost one probe per
+      -- frontier row, which is 1.7 seconds and 12 MB for the same 109,872 levels, every one of
+      -- them identical. The edge CTE still defines the base term's "has no in-project
+      -- prerequisite", where it is read once.
       level(id, depth) AS (
         SELECT s.id, 0
           FROM scoped s
          WHERE NOT EXISTS (SELECT 1 FROM edge e WHERE e.task_id = s.id)
         UNION
-        SELECT e.task_id, l.depth + 1
+        SELECT d.task_id, l.depth + 1
           FROM level l
-          JOIN edge e ON e.depends_on_task_id = l.id
+          JOIN task_dependency d ON d.depends_on_task_id = l.id
+          JOIN task dependent
+            ON dependent.id = d.task_id
+           AND dependent.owner_id = ${ownerId}::uuid
+           AND dependent.project_id = ${projectId}::uuid
          WHERE l.depth < ${Prisma.raw(String(PROJECT_TOPOLOGY_MAX_DEPTH))}
       ),
       topo AS (SELECT id, max(depth) AS topo_level FROM level GROUP BY id)
