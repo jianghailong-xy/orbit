@@ -90,6 +90,10 @@ function harness(
     sessionDiff: { upsert: async () => undefined },
     llmUsage: { createMany: async () => undefined },
     runEvent: {
+      // The reply the completion boundary looks for before it settles a message turn as
+      // ANSWERED. These fixtures are about what a steer does, over ordinary turns the engine
+      // answered, so there is one.
+      findFirst: async () => ({ id: 'assistant-event' }),
       aggregate: async () => ({ _max: { seq: 10 } }),
       createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
         for (const event of data) published.push(event as never);

@@ -308,10 +308,12 @@ const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
 // Keep this distinct from LIVE: /complete must never finalize a freshly queued PENDING turn.
 const OPEN = OPEN_SESSION_STATUSES;
-// Frontier events that count as the workspace *answering* the pending user message, and so clear the
-// denormalized `lastUserText` the session list previews. Deliberately narrow: a turn ending, a
-// user interrupt, an error or a system/status handshake all end the turn without answering, and
-// clearing on those left a session interrupted before its first reply with nothing to preview.
+// Events that count as the workspace *answering* the pending user message. Two things read it: the
+// frontier reduction below clears the denormalized `lastUserText` the session list previews on one,
+// and turn-complete settles the person's turn as ANSWERED on one. Deliberately narrow: a turn
+// ending, a user interrupt, an error or a system/status handshake all end the turn without
+// answering, and clearing on those left a session interrupted before its first reply with nothing
+// to preview.
 // A tool is not an answer either: while one is in flight the row shows it (`lastToolUse` outranks
 // the message), but the gaps between tools are the workspace still working on that message, and
 // clearing there dropped the row back to the PREVIOUS turn's reply for the rest of the turn —
@@ -3441,13 +3443,46 @@ export class RunnerApiController {
         mergeError: null,
         mergedSourceSha: null,
       } as const;
-      // Idempotent ack: only the first turn-complete for this turn applies. A duplicate
-      // completion still clears the stale merge state — that was true before this was folded
-      // into one write, and it is the reason the clear cannot simply ride along with the park
-      // below. Nothing has written the Session row on this path, so this IS the one write.
+      // A turn is ANSWERED because something answered it — not because the engine stopped. The
+      // workspace's own reply is the only thing that can (ANSWERS_USER_TURN, the same set the
+      // preview line reads), so a message turn with none of those events under it produced no
+      // answer at all, whatever ended it: an engine that never came up, a `--resume` on a
+      // conversation that was never opened, or the next failure nobody has enumerated yet.
+      // ANSWERED consumes the person's message for good — with the attachments hanging off the
+      // row — so an unanswered one goes back to PENDING and is delivered again instead.
+      //
+      // An interrupt is the other way a question stops being owed: somebody asked this turn to
+      // stop, and re-running what they stopped is the one thing a requeue must never do. It ends
+      // a turn WITHOUT answering it (which is why it is not in the set above), so it is named
+      // here rather than added there. Only `message` turns are asked for a reply at all: a shell
+      // turn is answered by its exit code, and a control turn is acked on delivery.
+      const unanswered =
+        completedTurn?.kind === 'message'
+        && (await tx.runEvent.findFirst({
+          where: {
+            sessionId,
+            turnId: dto.turnId,
+            type: { in: [...ANSWERS_USER_TURN, RunEventType.INTERRUPT] },
+          },
+          select: { id: true },
+        })) == null;
+      // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
+      // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
+      // turn put back in the queue is no longer out on a delivery, so a retried completion for it
+      // matches nothing and cannot book a second set of numbers. A duplicate completion still
+      // clears the stale merge state — that was true before this was folded into one write, and
+      // it is the reason the clear cannot simply ride along with the park below. Nothing has
+      // written the Session row on this path, so this IS the one write.
       const ack = await tx.conversationTurn.updateMany({
-        where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
-        data: { status: 'ANSWERED', answeredAt: new Date() },
+        where: {
+          id: dto.turnId,
+          sessionId,
+          status: { not: 'ANSWERED' },
+          deliveredAt: { not: null },
+        },
+        data: unanswered
+          ? { status: 'PENDING', deliveredAt: null, leaseDeadlineAt: null, leaseGeneration: null }
+          : { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
         if (clearsMergedState) {

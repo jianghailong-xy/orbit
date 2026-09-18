@@ -88,6 +88,12 @@ function makeController(
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => null,
     },
+    runEvent: {
+      // The reply the completion boundary looks for before it settles a message turn as
+      // ANSWERED. This file is about where the session parks and who is woken, over ordinary
+      // turns the engine answered, so there is one.
+      findFirst: async () => ({ id: 'assistant-event' }),
+    },
   };
   const prisma = {
     session: { findUnique: async () => ({ ...session }) },
