@@ -10,7 +10,11 @@
 # self-describing and the answer is read off the image rather than inferred.
 name: iPad split-view probe
 
+# Push-triggered because workflow_dispatch only sees workflows registered on the default branch,
+# and this one deliberately never lands there.
 on:
+  push:
+    branches: ["orbit/ux-review-ipad-*"]
   workflow_dispatch:
 
 jobs:
