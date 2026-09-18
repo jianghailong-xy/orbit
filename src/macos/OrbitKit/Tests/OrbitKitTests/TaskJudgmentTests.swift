@@ -18,10 +18,10 @@ final class TaskJudgmentTests: XCTestCase {
     /// a row written before criteria were required says neither, rather than inventing one.
     func testChipNamesTheJudgment() {
         let gate = task(#"{"id":"1","title":"a","status":"OPEN","completionPolicy":"VERIFICATION_PASSED"}"#)
-        XCTAssertEqual(TaskJudgment.chip(gate), TaskJudgmentChip(isGate: true, text: "闸门 · 本行没有自己的活"))
+        XCTAssertEqual(TaskJudgment.chip(gate), TaskJudgmentChip(isGate: true, text: "Gate · no work of its own"))
 
         let executable = task(#"{"id":"2","title":"a","status":"OPEN","completionCriterion":"EXECUTABLE"}"#)
-        XCTAssertEqual(TaskJudgment.chip(executable), TaskJudgmentChip(isGate: false, text: "完成判定 · 验收命令"))
+        XCTAssertEqual(TaskJudgment.chip(executable), TaskJudgmentChip(isGate: false, text: "Judged by · its acceptance command"))
 
         // A criterion that settles the row with an independent verdict is still work of its own.
         let independent = task(#"{"id":"3","title":"a","status":"OPEN","completionCriterion":"VERIFICATION","completionPolicy":"MANUAL"}"#)
@@ -54,7 +54,7 @@ final class TaskJudgmentTests: XCTestCase {
     func testGateHintFollowsTheVerificationState() {
         XCTAssertEqual(TaskJudgment.gateHint("MISSING"), TaskJudgmentCopy.verifierCardEmpty)
         XCTAssertEqual(TaskJudgment.gateHint("RUNNING"),
-                       "复核任务正在跑 —— 这一行由它的结论判定。")
+                       "The verification task is running — its conclusion decides this row.")
         XCTAssertEqual(TaskJudgment.gateHint(nil), TaskJudgment.gateHint("PENDING"))
         XCTAssertEqual(TaskJudgment.gateHint("FROM_A_NEWER_SERVER"), TaskJudgment.gateHint("PENDING"))
     }

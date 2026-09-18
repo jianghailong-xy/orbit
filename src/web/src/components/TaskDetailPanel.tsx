@@ -152,19 +152,20 @@ const rehypeMentions = (names: string[]) => () => (tree: any) => {
  *
  * The hints keep that fact, and none of them asks for something the reader cannot do.
  */
-export const GATE_ACTION_LABEL = '由复核判定';
+export const GATE_ACTION_LABEL = 'Decided by its verification task';
 
 export const VERIFICATION_SUBJECT_HINT: Record<ProjectTaskVerificationState, string> = {
-  MISSING: '还没有复核任务 —— 本行没有自己的活,而库里没有指向它的复核行。',
-  PENDING: '复核任务已建,还没有给出结论。',
-  RUNNING: '复核任务正在跑 —— 这一行由它的结论判定。',
-  BLOCKED: '复核任务被挡住了 —— 先把挡住它的东西解掉。',
-  FAILED: '复核结论是未通过 —— 这一行不会结算。',
-  PASSED: '复核已通过 —— 正在应用结果。',
+  MISSING: 'No verification task yet — this row has no work of its own, and nothing in the '
+    + 'ledger points at one.',
+  PENDING: 'The verification task is filed, and has not concluded yet.',
+  RUNNING: 'The verification task is running — its conclusion decides this row.',
+  BLOCKED: 'The verification task is blocked — clear what is blocking it first.',
+  FAILED: 'The verification concluded it failed — this row will not settle.',
+  PASSED: 'The verification passed — applying the result.',
 };
 
 /** A gate row whose check has passed and which is over: it is not waiting for anything any more. */
-const GATE_DONE_HINT = '复核已通过 —— 这一行已经结束。';
+const GATE_DONE_HINT = 'The verification passed — this row is finished.';
 
 /**
  * A DONE subject never reads as still waiting: its passed verifier, a newer one that has not
@@ -192,7 +193,7 @@ function verificationSubjectAction(
  * A gate row (see `taskStartOwnedByCompletionDeclaration`) says the thing that is true of it and
  * was nowhere on the page: it has no work of its own, so no run of it can settle it.
  */
-export const GATE_CHIP = '闸门 · 本行没有自己的活';
+export const GATE_CHIP = 'Gate · no work of its own';
 
 /**
  * The judgment each completion criterion declares, in the words the chip uses. Keyed on the
@@ -204,10 +205,10 @@ export const GATE_CHIP = '闸门 · 本行没有自己的活';
  * nobody declared would be the same kind of guess this panel is being fixed for.
  */
 export const COMPLETION_CRITERION_CHIP: Record<string, string> = {
-  EXECUTABLE: '完成判定 · 验收命令',
-  VERIFICATION: '完成判定 · 独立复核',
-  EVIDENCE_JUDGMENT: '完成判定 · 证据判定',
-  OWNER_CONFIRMED: '完成判定 · 所有者确认',
+  EXECUTABLE: 'Judged by · its acceptance command',
+  VERIFICATION: 'Judged by · an independent check',
+  EVIDENCE_JUDGMENT: 'Judged by · submitted evidence',
+  OWNER_CONFIRMED: 'Judged by · the account owner',
 };
 
 /** The chip under a row's title, or null on a row that declares no judgment method. */
@@ -242,10 +243,10 @@ export function verifierOutcome(
 
 /** The card heading, and the empty state a row with no check left reads — the same sentence its
  *  header hint carries, so the two cannot send a reader to different places. */
-export const VERIFIER_CARD_HEADING = '复核任务';
+export const VERIFIER_CARD_HEADING = 'Verification task';
 export const VERIFIER_CARD_EMPTY = VERIFICATION_SUBJECT_HINT.MISSING;
 /** How the card gets into the check task — the entry that did not exist at all before. */
-export const VERIFIER_CARD_ENTRY = '查看';
+export const VERIFIER_CARD_ENTRY = 'View';
 
 /** The statuses an OWNER_CONFIRMED task can still be confirmed from: the door's own two. */
 export const OWNER_CONFIRMABLE_STATUSES: readonly string[] = ['OPEN', 'IN_PROGRESS'];
