@@ -339,8 +339,9 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" "$ORBIT/api/watches/deliveries
   （`CreateWatchDto`），而会话里的 runner 门（`RunnerCreateWatchDto`）没有 `mode`，Web 与 macOS 的编辑器也不提供这个选项，
   所以 agent 自己建不出 continuous Watch。求值器会为它记录 Match：一次跨越开一个合并窗口，窗口关闭时写一个 Match，
   用掉一次唤醒预算（§2、§7.5），间隔限制在交付层生效。
-- continuous Watch 的 NOTIFY_USER，macOS 的本地提醒只在 Watch 进 MATCHED 时发一次；continuous 一直停在 `ACTIVE`
-  并让 `generation` 递增，中间的 Match 在 macOS 上没有提醒。iOS 走 APNs，每个 generation 都会推。
+- `NOTIFY_USER` 的提醒按 Match 算，不按状态算：iOS 走 APNs，服务端每个 Match 推一条；macOS 自己 diff 两次读到的列表，
+  按 `generation` 递增判定（`WatchDelta.matched`），所以 continuous Watch 每个合并窗口提醒一次，与 iOS 一致。
+  两边的提醒 id 都是 `watch-<watchId>-<generation>`，同时收到也只显示一条。
 - 计数器是进程级的，重启归零。跨 replica 或按时间窗看，用 `increase()` 求和。
 - 更大规模的负载与故障注入，由独立的 Claude 产品 QA Gate 复核。
 
