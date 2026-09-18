@@ -143,7 +143,7 @@ final class EvidenceDecisionDoorTests: XCTestCase {
 
     // MARK: 1 — what one press sends
 
-    /// `确认完成` is one POST to the task's own decision door, and its body is the three bindings and
+    /// 'Confirm done' is one POST to the task's own decision door, and its body is the three bindings and
     /// nothing else — a note handed to a confirm is not sent, because the door takes a reason with a
     /// send-back only.
     func testConfirmPostsTheThreeBindingsToTheTasksDecisionDoor() async throws {
@@ -171,7 +171,7 @@ final class EvidenceDecisionDoorTests: XCTestCase {
         XCTAssertEqual(sent.body["decision"] as? String, "CONFIRM")
 
         XCTAssertEqual(result.decision, .confirm)
-        XCTAssertEqual(EvidenceDecisions.recordedLine(result), "已记下「确认完成」 · rev 3")
+        XCTAssertEqual(EvidenceDecisions.recordedLine(result), "Recorded: Confirm done · rev 3")
     }
 
     /// `退回` sends the same three bindings with the reason beside them, trimmed.
@@ -200,7 +200,7 @@ final class EvidenceDecisionDoorTests: XCTestCase {
         XCTAssertEqual(sent.body["note"] as? String, "把 pg spec 跑一遍")
 
         XCTAssertEqual(EvidenceDecisions.recordedLine(result),
-                       "已记下「退回重做」 · rev 3：把 pg spec 跑一遍")
+                       "Recorded: Send back · rev 3 — 把 pg spec 跑一遍")
     }
 
     // MARK: 2 — a send-back without a reason is never sent
@@ -258,7 +258,7 @@ final class EvidenceDecisionDoorTests: XCTestCase {
         XCTAssertEqual(EvidenceDecisions.heading(now), EvidenceDecisions.staleHeading)
         XCTAssertEqual(EvidenceDecisions.addressLine(now), "34LMiluvx0jK63cj8arWl · rev 3")
         XCTAssertTrue(EvidenceDecisions.staleExplanation(now)?
-                        .contains("（EVIDENCE_JUDGMENT_ALREADY_DECIDED）") ?? false)
+                        .contains("(EVIDENCE_JUDGMENT_ALREADY_DECIDED)") ?? false)
     }
 
     /// Gone, and the same task is in the read at a LATER revision: the door answers only the latest
@@ -273,8 +273,9 @@ final class EvidenceDecisionDoorTests: XCTestCase {
         XCTAssertFalse(EvidenceDecisions.isOpen(now))
         XCTAssertEqual(EvidenceDecisions.heading(now), EvidenceDecisions.staleHeading)
         let explanation = EvidenceDecisions.staleExplanation(now) ?? ""
-        XCTAssertTrue(explanation.contains("又提交了第 10 版证据"), explanation)
-        XCTAssertTrue(explanation.contains("对第 9 版的任何裁决都会被拒绝（EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED）"),
+        XCTAssertTrue(explanation.contains("submitted version 10 of its evidence"), explanation)
+        XCTAssertTrue(explanation.contains("version 9 would be refused "
+                                          + "(EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED)"),
                       explanation)
 
         XCTAssertEqual(standing([row(revision: "2")], revision: "9").state, .alreadyDecided,

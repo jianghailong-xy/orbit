@@ -53,8 +53,8 @@ import {
  * button dead could not pass.
  *
  * Static renders carry most of it, as in `CriteriaDecisionCard.test.tsx`. The file runs under jsdom
- * for the two things a static render cannot do: type a reason into the box before `退回` is asked
- * about, and press a button all the way through to the (mocked) `api()` call and the re-read after
+ * for the two things a static render cannot do: type a reason into the box before `Send it back` is
+ * asked about, and press a button all the way through to the (mocked) `api()` call and the re-read
  * it. `renderToStaticMarkup` writes `&` as `&amp;`, so every text assertion goes through
  * `escaped()` — the fixture's claim carries an ampersand and its title angle brackets to keep that
  * honest.
@@ -145,8 +145,8 @@ function card(
   );
 }
 
-/** Every rendered button, as its opening tag and its text. Labels are matched exactly: `退回` is a
- *  prefix of `退回重做`, so nothing here may match loosely. */
+/** Every rendered button, as its opening tag and its text. Labels are matched exactly: `Send back`
+ *  is a prefix of `Send it back`, so nothing here may match loosely. */
 function buttons(html: string): Array<{ tag: string; text: string }> {
   return [...html.matchAll(/(<button\b[^>]*>)([\s\S]*?)<\/button>/gu)].map((match) => ({
     tag: match[1],
@@ -352,13 +352,13 @@ describe('the card is drawn from the row the pending read published', () => {
       />,
     );
 
-    await click(press(rendered, '2 项机器已核 · 1 项没过'));
+    await click(press(rendered, '2 checked for you · 1 did not hold'));
     const checks = [...rendered.querySelectorAll('.decision-ask-check-list > li')];
     expect(checks).toHaveLength(3);
     expect(checks[0].textContent).toContain(live.criterion!.text);
-    expect(checks[1].textContent).toContain('1/2 条引用解析成功');
+    expect(checks[1].textContent).toContain('1/2 citations resolved');
     expect(checks[1].textContent).toContain('no tool call with that id under this task');
-    expect(checks[2].textContent).toContain('裁决人独立于这次提交');
+    expect(checks[2].textContent).toContain('the decider is independent of this submission');
   });
 });
 
@@ -419,7 +419,7 @@ describe('what one press sends to the door', () => {
 });
 
 describe('a send-back needs its reason', () => {
-  it('keeps 退回 disabled while the reason box is empty or blank, and sends the reason once it is not', async () => {
+  it('keeps Send it back disabled while the reason box is empty or blank, and sends the reason once it is not', async () => {
     const onDecide = vi.fn();
     const live = row();
     const rendered = await mount(
@@ -471,7 +471,7 @@ describe('where a card stands, and what it lets a reader press', () => {
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(true);
     expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(true);
     expect(html).toContain(EVIDENCE_DECISION_STALE_HEADING);
-    expect(html).toContain('已经答过');
+    expect(html).toContain('Already answered');
     expect(html).toContain(EVIDENCE_DECISION_ALREADY_DECIDED);
     // The address, and no frozen copy of what the version said.
     expect(html).toContain(escaped(`${live.taskId} · rev ${live.evidenceRevision}`));
@@ -487,8 +487,8 @@ describe('where a card stands, and what it lets a reader press', () => {
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(true);
     expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(true);
     expect(html).toContain(EVIDENCE_DECISION_STALE_HEADING);
-    expect(html).toContain('被顶掉');
-    expect(html).toContain('第 3 版');
+    expect(html).toContain('Superseded');
+    expect(html).toContain('version 3');
     expect(html).toContain(EVIDENCE_DECISION_SUPERSEDED);
     // Neither version's content: this one is not published any more, and the later one has its
     // own card.
@@ -515,7 +515,7 @@ describe('where a card stands, and what it lets a reader press', () => {
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(true);
     expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(true);
     expect(html).toContain(EVIDENCE_DECISION_UNREAD_HEADING);
-    expect(html).toContain('没能读回来');
+    expect(html).toContain('The pending read did not come back just now');
     // A failed read is not an answer: the card must not tell the reader somebody decided.
     expect(html).not.toContain(EVIDENCE_DECISION_STALE_HEADING);
     expect(html).not.toContain(EVIDENCE_DECISION_ALREADY_DECIDED);
@@ -546,7 +546,7 @@ describe('a press the door refused', () => {
       const html = card(standing, { error: refused(code, message) });
 
       expect(evidenceDecisionRefusal(refused(code, message)).stale, code).toBe(true);
-      expect(html, code).toContain('这张卡已过期');
+      expect(html, code).toContain('out of date');
       expect(html, code).toContain(escaped(evidenceDecisionRefusal(refused(code, message)).title));
       expect(html, code).toContain(escaped(message));
     }
@@ -555,9 +555,9 @@ describe('a press the door refused', () => {
   it('says only that it was not recorded for any other refusal', () => {
     const html = card(standing, { error: refused(undefined, 'decidingSessionId is invalid') });
 
-    expect(html).toContain('这次裁决没有记下');
+    expect(html).toContain('Not recorded');
     expect(html).toContain('decidingSessionId is invalid');
-    expect(html).not.toContain('这张卡已过期');
+    expect(html).not.toContain('out of date');
   });
 });
 
@@ -666,7 +666,7 @@ describe('the provenance mark', () => {
       expect(mark, standing.state).not.toBeNull();
       expect(mark![2], standing.state).toBe(PROVENANCE_LABEL);
       expect(mark![1], standing.state).toContain('agent');
-      expect(mark![1], standing.state).toContain('决定门');
+      expect(mark![1], standing.state).toContain('decision door');
     }
   });
 });
