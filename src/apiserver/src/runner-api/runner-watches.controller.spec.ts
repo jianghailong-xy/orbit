@@ -367,7 +367,9 @@ test('WatchesService confines a read to one observer only when asked', async () 
     watch: {
       findFirst: async (query: { where: unknown }) => {
         wheres.push(query.where);
-        return { id: WATCH_ID };
+        // `targets` as the view select always has it: the read names each target, and a row without
+        // the field is a shape no door answers with.
+        return { id: WATCH_ID, targets: [] };
       },
       findMany: async (query: { where: unknown }) => {
         wheres.push(query.where);
