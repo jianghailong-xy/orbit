@@ -177,7 +177,10 @@ before(async () => {
 
 beforeEach(async () => {
   if (skip) return;
-  for (const worker of running.splice(0)) await worker.stop();
+  await quiesce();
+  // The harness's own pool went with the case before this one, and a case's first write must not be
+  // the call that dials it.
+  await warm([prisma]);
   queueSignals = 0;
   inboxWakes.length = 0;
   apns.length = 0;
@@ -192,7 +195,7 @@ beforeEach(async () => {
 
 after(async () => {
   if (skip) return;
-  for (const worker of running.splice(0)) await worker.stop();
+  await quiesce();
   await sql
     ?.query(
       `DROP TRIGGER IF EXISTS "pccspec_watch_fault_turn" ON "conversation_turn";
@@ -202,9 +205,32 @@ after(async () => {
        DROP TABLE IF EXISTS "pccspec_watch_fault";`,
     )
     .catch(() => undefined);
-  for (const client of clients.splice(0)) await client.$disconnect().catch(() => undefined);
   await sql?.end().catch(() => undefined);
 });
+
+/**
+ * Stops the workers a case left running and closes its pools, before the next case opens its own. Each
+ * case makes its own, and a pool keeps idle connections for ten seconds: closed only at the end of the
+ * file, the cases after one open theirs on top of everything it left up.
+ */
+async function quiesce(): Promise<void> {
+  for (const worker of running.splice(0)) await worker.stop();
+  for (const client of clients.splice(0)) await client.$disconnect().catch(() => undefined);
+}
+
+/** pg.Pool's default size, which a PrismaPg built from a URL keeps. */
+const POOL_MAX = 10;
+
+/**
+ * Opens `connections` connections in each pool before a case bursts work onto it. A replica that has
+ * been serving has its pool open when its work arrives; a pool made moments before a burst opens them
+ * in the middle of it, and on a starved host each new PostgreSQL connection takes seconds — longer than
+ * the two seconds Prisma waits for one before a transaction fails to start (P2028). The race would be
+ * the connection handshakes, not the claims, landings and turns the case is about.
+ */
+async function warm(pools: PrismaClient[], connections = POOL_MAX): Promise<void> {
+  await Promise.all(pools.flatMap((prisma) => Array.from({ length: connections }, () => prisma.$executeRaw`SELECT pg_sleep(0.1)`)));
+}
 
 interface Worker {
   prisma: PrismaClient;
@@ -212,10 +238,14 @@ interface Worker {
   delivery: WatchDeliveryService;
 }
 
-/** One replica's delivery worker: its own pool, the real sessions service, the real push service. */
-function worker(options: WatchDeliveryOptions = {}, Sessions: typeof SessionsService = SessionsService): Worker {
+/**
+ * One replica's delivery worker: its own pool, the real sessions service, the real push service. Its
+ * pool is connected before it is handed over — see warm().
+ */
+async function worker(options: WatchDeliveryOptions = {}, Sessions: typeof SessionsService = SessionsService): Promise<Worker> {
   const pool = prismaClientFor(URL!);
   clients.push(pool);
+  await warm([pool]);
   const sessions = new Sessions(pool as unknown as PrismaService, queue as never, realtime as never);
   const delivery = new WatchDeliveryService(pool as unknown as PrismaService, sessions, pushFor(pool), {
     retryBaseMs: 0,
@@ -446,7 +476,7 @@ test('NOTIFY_USER: one generation rings the owner once, however many workers and
   const { id: deliveryId } = await onlyDelivery(watchId);
   const { rows: [{ reason }] } = await sql.query(`SELECT "reason" FROM "watch_match" WHERE "watch_id" = $1`, [watchId]);
 
-  const [a, b] = [worker(), worker()];
+  const [a, b] = await Promise.all([worker(), worker()]);
   const raced = (await Promise.all([a.delivery.drain(), b.delivery.drain(), a.delivery.drain(), b.delivery.drain()])).flat();
   assert.deepEqual(outcomesFor(raced, deliveryId), ['DELIVERED'], 'exactly one attempt delivered it');
   const later = [...(await a.delivery.drain()), ...(await b.delivery.drain())];
@@ -482,7 +512,7 @@ test('NOTIFY_USER: one generation rings the owner once, however many workers and
   // A worker whose lease on a notification ran out rings nobody; the pass that took it over rang once.
   const abandonedWatch = await matchedWatch(owner, 'NOTIFY_USER');
   const { id: abandonedDelivery } = await onlyDelivery(abandonedWatch);
-  const slow = worker({ leaseMs: 300 });
+  const slow = await worker({ leaseMs: 300 });
   const [stale] = (await slow.delivery.claimDue()).filter((row) => row.id === abandonedDelivery);
   assert.ok(stale, 'the slow worker holds the delivery');
   await eventually("the slow worker's lease to run out", () => leaseLapsed(abandonedDelivery), (lapsed) => lapsed);
@@ -502,7 +532,7 @@ test('RESUME_SESSION on an AWAITING_INPUT observer: one turn keyed watch:<id>:<g
   const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
   const { id: deliveryId } = await onlyDelivery(watchId);
 
-  const workers = [worker(), worker(), worker()];
+  const workers = await Promise.all([worker(), worker(), worker()]);
   const raced = (await Promise.all(workers.map(({ delivery }) => delivery.drain()))).flat();
   assert.deepEqual(outcomesFor(raced, deliveryId), ['DELIVERED']);
 
@@ -537,7 +567,7 @@ test('a turn somebody else queued under a wake\'s key is not the wake: the deliv
   const observer = await insertSession(owner, 'AWAITING_INPUT', await insertRunner(owner));
   const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
   const { id: deliveryId } = await onlyDelivery(watchId);
-  const { sessions, delivery } = worker();
+  const { sessions, delivery } = await worker();
 
   // Before any worker reached the Match, the owner's client sent a message under the key its wake is written under.
   await sessions.createTurn(owner, observer, { clientTurnId: `watch:${watchId}:1`, content: 'a message of the owner\'s, not the wake', intent: 'NEXT_TURN' });
@@ -579,8 +609,8 @@ test('a worker whose lease was taken over writes nothing — no turn, no acknowl
       return super.createTurn(...args);
     }
   }
-  const a = worker({ leaseMs: 300 }, StalledSessions);
-  const b = worker();
+  const a = await worker({ leaseMs: 300 }, StalledSessions);
+  const b = await worker();
   const [claim] = (await a.delivery.claimDue()).filter((row) => row.id === deliveryId);
   assert.ok(claim, 'A holds the delivery');
   const attempt = a.delivery.deliver(claim);
@@ -624,7 +654,7 @@ test('a RUNNING observer keeps its one run: the wake queues behind the current t
   );
   const watchId = await matchedWatch(owner, 'RESUME_SESSION', observer);
   const { id: deliveryId } = await onlyDelivery(watchId);
-  const { delivery, sessions, prisma: pool } = worker();
+  const { delivery, sessions, prisma: pool } = await worker();
   assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), ['DELIVERED']);
 
   const [runningTurn, wake, ...extra] = await turnsOn(observer);
@@ -669,7 +699,7 @@ test('a RUNNING observer keeps its one run: the wake queues behind the current t
 test('a wake never revives an observer whose life is over: Completed, ended, ending and Trash are dead letters, and a deleted observer takes its delivery with it', { skip, timeout: 180_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const { delivery } = worker();
+  const { delivery } = await worker();
   const cases = [
     { name: 'moved to Completed', end: `UPDATE "session" SET "completed_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_COMPLETED' },
     { name: 'its run succeeded', end: `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
@@ -733,7 +763,7 @@ test('a delivery that keeps failing is retried on a doubling backoff, then left 
 
   const RETRY_BASE_MS = 1_000;
   const RETRY_MAX_MS = 4_000;
-  const { delivery } = worker({ retryBaseMs: RETRY_BASE_MS, retryMaxMs: RETRY_MAX_MS });
+  const { delivery } = await worker({ retryBaseMs: RETRY_BASE_MS, retryMaxMs: RETRY_MAX_MS });
   const cap = CONTRACT.limits.maxDeliveryAttempts;
   assert.equal(WATCH_LIMITS.maxDeliveryAttempts, cap);
 
@@ -773,7 +803,7 @@ test('a delivery that keeps failing is retried on a doubling backoff, then left 
   const recoveringWatch = await matchedWatch(owner, 'RESUME_SESSION', recovering);
   const { id: recoveringDelivery } = await onlyDelivery(recoveringWatch);
   await sql.query(`INSERT INTO "pccspec_watch_fault" VALUES ('conversation_turn', $1)`, [recovering]);
-  const immediate = worker();
+  const immediate = await worker();
   assert.deepEqual(outcomesFor(await immediate.delivery.drain(), recoveringDelivery), ['RETRY']);
   assert.deepEqual(outcomesFor(await immediate.delivery.drain(), recoveringDelivery), ['RETRY']);
   await sql.query(`DELETE FROM "pccspec_watch_fault" WHERE "key" = $1`, [recovering]);
@@ -799,7 +829,7 @@ test('the wake is auditable in the transcript: the Match\'s reason, the targets 
   await sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [failing]);
   assert.equal((await evaluator.evaluate(watch.id)).outcome, 'MATCHED');
   const { id: deliveryId } = await onlyDelivery(watch.id);
-  const { delivery, sessions } = worker();
+  const { delivery, sessions } = await worker();
   assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), ['DELIVERED']);
 
   const { rows: [match] } = await sql.query(
@@ -840,7 +870,7 @@ test('a wake over the largest target set still fits one turn: every changed targ
   const { rows: [{ snapshot }] } = await sql.query(`SELECT "per_target_snapshot" AS "snapshot" FROM "watch_match" WHERE "watch_id" = $1`, [watchId]);
   assert.ok(JSON.stringify(snapshot, null, 2).length > MAX_PROMPT_CHARS, 'the whole snapshot would not fit a turn');
   const { id: deliveryId } = await onlyDelivery(watchId);
-  const { delivery } = worker();
+  const { delivery } = await worker();
   assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), ['DELIVERED']);
 
   const [turn] = await turnsOn(observer);
@@ -855,7 +885,7 @@ test('a started worker delivers what is due without being asked, and stops clean
   const owner = await insertUser();
   await insertDevice(owner, 'production');
   const watchId = await matchedWatch(owner, 'NOTIFY_USER');
-  const { delivery } = worker({ pollIntervalMs: 50 });
+  const { delivery } = await worker({ pollIntervalMs: 50 });
   delivery.start();
   await eventually('the loop to deliver', () => onlyDelivery(watchId), (row) => row.state === 'DELIVERED');
   await delivery.stop();
@@ -921,7 +951,7 @@ async function assertDeadLettered(
 test('a wake still queued when its observer\'s running turn fails is a dead letter, not DELIVERED; a wake the runner took stays delivered when its own turn fails', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
   const inbox = runnerApi as unknown as {
     dequeueTurn(
@@ -967,7 +997,7 @@ test('a wake still queued when its observer\'s running turn fails is a dead lett
 test('a wake still queued when its observer\'s runner is lost is a dead letter: the reaper finalizes the run and drains the wake unrun', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
 
   // The runner stops heartbeating past the offline window, and the production sweep runs.
@@ -986,7 +1016,7 @@ test('a wake still queued when its observer\'s runner is lost is a dead letter: 
 test('a wake still queued when the runner finalizes its observer\'s run is a dead letter', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const queued = await wakeQueuedBehindRunningTurn(owner, runner, pool);
   const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
 
@@ -998,7 +1028,7 @@ test('a wake still queued when the runner finalizes its observer\'s run is a dea
 test('a wake still queued when its observer is ended is a dead letter, whether the observer was running or waiting for a runner slot', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   // The service the owner's end goes through, with its post-commit announcements sent nowhere.
   const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, inert<never>());
 
@@ -1062,7 +1092,7 @@ async function queuedMessage(pool: Worker, owner: string, observer: string): Pro
 test('a wake still queued when its observer is interrupted is a dead letter: the interrupt deletes it with the rest of the queue, and nothing queues it again', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   // Another observer of the same owner on the same runner, which nobody interrupts.
   const bystander = await wakeQueuedBehindRunningTurn(owner, runner, pool);
 
@@ -1094,7 +1124,7 @@ test('a wake still queued when its observer is interrupted is a dead letter: the
 test('a wake its owner withdraws from the observer\'s queue is a dead letter; the observer\'s other queued wake and message keep theirs', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   // Another observer of the same owner on the same runner, whose queue nobody touches.
   const bystander = await wakeQueuedBehindRunningTurn(owner, runner, pool);
 
@@ -1140,7 +1170,7 @@ test('a wake its owner withdraws from the observer\'s queue is a dead letter; th
 test('a queued turn keyed watch:<id>:<a generation no integer holds> is not a wake: withdrawing it succeeds and changes no delivery', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const taken = await wakeTakenByRunner(owner, runner, pool);
 
   // No Match has such a generation: `watch_match.generation` is an integer.

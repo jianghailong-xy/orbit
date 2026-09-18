@@ -73,6 +73,7 @@ const noHints = { localPublications: () => EMPTY } as unknown as RealtimeService
 // ── the harness ────────────────────────────────────────────────────────────────────────────────
 
 let sql: Client;
+let prisma: PrismaClient;
 let watches: WatchesService;
 /** Never started: a case lands an evaluation by calling it. */
 let evaluator: WatchEvaluatorService;
@@ -98,7 +99,7 @@ before(async () => {
   sql = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  const prisma = prismaClientFor(URL!);
+  prisma = prismaClientFor(URL!);
   clients.push(prisma);
   watches = new WatchesService(prisma as unknown as PrismaService);
   evaluator = new WatchEvaluatorService(prisma as unknown as PrismaService, noHints, {
@@ -110,7 +111,10 @@ before(async () => {
 
 beforeEach(async () => {
   if (skip) return;
-  for (const loop of loops.splice(0)) await loop.stop();
+  await quiesce();
+  // The harness's own pool went with the case before this one, and a case's first write must not be
+  // the call that dials it.
+  await warm([prisma]);
   queueSignals = 0;
   await sql.query(`DELETE FROM "pccspec_watch_expiry_fault"`);
   await sql.query(`UPDATE "watch" SET "state" = 'CANCELLED', "next_evaluate_at" = NULL WHERE "state" IN ('ACTIVE', 'PAUSED')`);
@@ -124,7 +128,7 @@ beforeEach(async () => {
 
 after(async () => {
   if (skip) return;
-  for (const loop of loops.splice(0)) await loop.stop();
+  await quiesce();
   await sql
     ?.query(
       `DROP TRIGGER IF EXISTS "pccspec_watch_expiry_fault_refuse" ON "watch_delivery";
@@ -132,14 +136,41 @@ after(async () => {
        DROP TABLE IF EXISTS "pccspec_watch_expiry_fault";`,
     )
     .catch(() => undefined);
-  for (const client of clients.splice(0)) await client.$disconnect().catch(() => undefined);
   await sql?.end().catch(() => undefined);
 });
 
-/** Another replica's evaluator: its own pool, never started unless the case starts it. */
-function evaluatorFor(options: WatchEvaluatorOptions = {}): WatchEvaluatorService {
+/**
+ * Stops what a case left running and closes its pools, before the next case opens its own. Each case
+ * makes its own, and a pool keeps idle connections for ten seconds: closed only at the end of the file,
+ * the cases after one open theirs on top of everything it left up.
+ */
+async function quiesce(): Promise<void> {
+  for (const loop of loops.splice(0)) await loop.stop();
+  for (const client of clients.splice(0)) await client.$disconnect().catch(() => undefined);
+}
+
+/** pg.Pool's default size, which a PrismaPg built from a URL keeps. */
+const POOL_MAX = 10;
+
+/**
+ * Opens `connections` connections in each pool before a case bursts work onto it. A replica that has
+ * been serving has its pool open when its work arrives; a pool made moments before a burst opens them
+ * in the middle of it, and on a starved host each new PostgreSQL connection takes seconds — longer than
+ * the two seconds Prisma waits for one before a transaction fails to start (P2028). The race would be
+ * the connection handshakes, not the landings, sweeps and turns the case is about.
+ */
+async function warm(pools: PrismaClient[], connections = POOL_MAX): Promise<void> {
+  await Promise.all(pools.flatMap((prisma) => Array.from({ length: connections }, () => prisma.$executeRaw`SELECT pg_sleep(0.1)`)));
+}
+
+/**
+ * Another replica's evaluator: its own pool, never started unless the case starts it. The pool is
+ * connected before it is handed over — see warm().
+ */
+async function evaluatorFor(options: WatchEvaluatorOptions = {}): Promise<WatchEvaluatorService> {
   const pool = prismaClientFor(URL!);
   clients.push(pool);
+  await warm([pool]);
   const replica = new WatchEvaluatorService(pool as unknown as PrismaService, noHints, {
     reconcileIntervalMs: HOUR,
     pollIntervalMs: HOUR,
@@ -149,10 +180,14 @@ function evaluatorFor(options: WatchEvaluatorOptions = {}): WatchEvaluatorServic
   return replica;
 }
 
-/** One replica's delivery worker: its own pool and the real sessions service. */
-function worker(options: WatchDeliveryOptions = {}, Sessions: typeof SessionsService = SessionsService) {
+/**
+ * One replica's delivery worker: its own pool and the real sessions service. Its pool is connected
+ * before it is handed over — see warm().
+ */
+async function worker(options: WatchDeliveryOptions = {}, Sessions: typeof SessionsService = SessionsService) {
   const pool = prismaClientFor(URL!);
   clients.push(pool);
+  await warm([pool]);
   const sessions = new Sessions(pool as unknown as PrismaService, queue as never, realtime as never);
   const delivery = new WatchDeliveryService(pool as unknown as PrismaService, sessions, push, {
     retryBaseMs: 0,
@@ -444,7 +479,8 @@ test('the evaluator lands EXPIRED together with the expiry delivery, once, howev
 
   // The control: the same landing with nothing refusing it, raced by three replicas.
   await sql.query(`DELETE FROM "pccspec_watch_expiry_fault"`);
-  const raced = await Promise.all([evaluator, evaluatorFor(), evaluatorFor()].map((replica) => replica.evaluate(watch.id)));
+  const replicas = await Promise.all([evaluatorFor(), evaluatorFor()]);
+  const raced = await Promise.all([evaluator, ...replicas].map((replica) => replica.evaluate(watch.id)));
   assert.deepEqual(raced.map((evaluation) => evaluation.outcome).sort(), ['EXPIRED', 'SETTLED', 'SETTLED']);
   const delivery = await onlyExpiry(watch.id);
   assert.equal(delivery.action, 'RESUME_SESSION');
@@ -487,7 +523,7 @@ test('the observer waiting on the watch gets one turn, keyed watch:<id>:expired 
   const watchId = await expiredWatch(owner, observer);
   const { id: deliveryId, snapshot } = await onlyExpiry(watchId);
 
-  const workers = [worker(), worker(), worker()];
+  const workers = await Promise.all([worker(), worker(), worker()]);
   const raced = (await Promise.all(workers.map(({ delivery }) => delivery.drain()))).flat();
   assert.deepEqual(outcomesFor(raced, deliveryId), ['DELIVERED']);
 
@@ -550,8 +586,8 @@ test('a worker whose lease on an expiry was taken over writes nothing, neither t
       return super.createTurn(...args);
     }
   }
-  const a = worker({ leaseMs: 300 }, StalledSessions);
-  const b = worker();
+  const a = await worker({ leaseMs: 300 }, StalledSessions);
+  const b = await worker();
   const [claim] = (await a.delivery.claimDue()).filter((row) => row.id === deliveryId);
   assert.ok(claim, 'A holds the delivery');
   const attempt = a.delivery.deliver(claim);
@@ -585,7 +621,7 @@ test('a worker whose lease on an expiry was taken over writes nothing, neither t
 test('a watch that matched owes no expiry turn, even once its TTL is behind it, and a condition that already holds when a late evaluation looks is a Match, not an expiry', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const observer = await insertSession(owner, 'AWAITING_INPUT', await insertRunner(owner));
-  const { delivery } = worker();
+  const { delivery } = await worker();
 
   // Matched while it was live; then its TTL passes, and it is evaluated and swept again.
   const task = await insertTask(owner, 'OPEN');
@@ -627,7 +663,7 @@ test('a watch that matched owes no expiry turn, even once its TTL is behind it, 
 test('an expiry never revives an observer whose life is over: Completed, ended, ending and Trash are dead letters the watch read shows', { skip, timeout: 180_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const { delivery } = worker();
+  const { delivery } = await worker();
   const cases = [
     { name: 'moved to Completed', end: `UPDATE "session" SET "completed_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_COMPLETED' },
     { name: 'its run succeeded', end: `UPDATE "session" SET "status" = 'SUCCEEDED', "finished_at" = now() WHERE "id" = $1`, code: 'OBSERVER_SESSION_ENDED' },
@@ -683,7 +719,7 @@ test('an expiry over the largest target set still fits in one turn: the snapshot
   assert.equal((await evaluator.evaluate(watch.id)).outcome, 'EXPIRED');
   const { id: deliveryId, snapshot } = await onlyExpiry(watch.id);
   assert.ok(JSON.stringify(snapshot, null, 2).length > MAX_PROMPT_CHARS, 'the whole snapshot would not fit in a turn');
-  const { delivery } = worker();
+  const { delivery } = await worker();
   assert.deepEqual(outcomesFor(await delivery.drain(), deliveryId), ['DELIVERED']);
 
   const [turn] = await turnsOn(observer);
@@ -708,8 +744,8 @@ test('with the evaluator and the delivery worker running and nothing called by h
   );
   const watchId = await waitingWatch(owner, observer);
 
-  const sweeping = evaluatorFor({ pollIntervalMs: 100 });
-  const { delivery, prisma: pool } = worker({ pollIntervalMs: 100 });
+  const sweeping = await evaluatorFor({ pollIntervalMs: 100 });
+  const { delivery, prisma: pool } = await worker({ pollIntervalMs: 100 });
   sweeping.start();
   delivery.start();
   await expire(watchId);
@@ -766,7 +802,7 @@ interface QueuedExpiry {
 async function expiryQueuedBehindRunningTurn(
   owner: string,
   runner: string,
-  pool: ReturnType<typeof worker>,
+  pool: Awaited<ReturnType<typeof worker>>,
 ): Promise<QueuedExpiry & { current: string }> {
   const observer = await insertSession(owner, 'RUNNING', runner);
   const current = randomUUID();
@@ -804,7 +840,7 @@ async function assertExpiryDeadLettered(owner: string, queued: QueuedExpiry, end
 test('an expiry still queued when its observer\'s running turn fails is a dead letter, not DELIVERED; an expiry the runner took stays delivered when its own turn fails', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const runnerApi = new RunnerApiController(pool.prisma as never, queue as never, inert<never>(), inert<never>(), inert<never>(), inert<never>(), inert<never>());
   const inbox = runnerApi as unknown as {
     dequeueTurn(
@@ -850,7 +886,7 @@ test('an expiry still queued when its observer\'s running turn fails is a dead l
 test('an expiry still queued when its observer\'s runner is lost is a dead letter: the reaper finalizes the run and drains the expiry unrun', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
 
   // The runner stops heartbeating past the offline window, and the production sweep runs.
@@ -869,7 +905,7 @@ test('an expiry still queued when its observer\'s runner is lost is a dead lette
 test('an expiry still queued when the runner finalizes its observer\'s run is a dead letter, and so is a Match\'s wake queued beside it', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
   // The same observer also waits on a watch that matched: its wake queues behind the expiry's.
   const matched = await createWatch(owner, { targets: [await insertTask(owner, 'FAILED')], observerSessionId: queued.observer });
@@ -893,7 +929,7 @@ test('an expiry still queued when the runner finalizes its observer\'s run is a 
 test('an expiry still queued when its running observer is ended is a dead letter', { skip, timeout: 120_000 }, async () => {
   const owner = await insertUser();
   const runner = await insertRunner(owner);
-  const pool = worker();
+  const pool = await worker();
   // The service the owner's end goes through, with its post-commit announcements sent nowhere.
   const sessions = new SessionsService(pool.prisma as unknown as PrismaService, queue as never, inert<never>());
   const queued = await expiryQueuedBehindRunningTurn(owner, runner, pool);
