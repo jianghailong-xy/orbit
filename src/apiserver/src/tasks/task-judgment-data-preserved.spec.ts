@@ -818,6 +818,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        created rather than replaced — so it is not another writer of the DONE fence, and it
   //        drops no trigger or function at all. Nothing it creates uses the `project_acceptance_`
   //        prefix or the word `judgment`.
+  //   0283 added `task_project_assignee_idx`, a partial btree on `(project_id, assignee_id)`, so
+  //        that `busiestAssignee` stops scanning the whole Task heap to count one project's rows.
+  //        Read against every claim above: its whole text is one `CREATE INDEX ... IF NOT EXISTS`,
+  //        so it carries no DML of any kind — no `INSERT INTO`, no `UPDATE ... SET`, no `DELETE
+  //        FROM`, no `TRUNCATE` — and no stored task, criterion or acceptance row moves by one byte.
+  //        It does not drop or alter `task` or any other preserved relation (an index is a new
+  //        relation of its own beside the table, not a rewrite of it), adds and drops no column, and
+  //        creates no type and carries no `ALTER TYPE`/`DROP TYPE`, so `task.acceptance_command`,
+  //        `task.acceptance_expected_exit_code`, `task_executable_acceptance_pair` and the
+  //        `task_completion_criterion` labels are all out of its reach. It creates no function and
+  //        no trigger and drops none, so it names none of the six preserved triggers or functions
+  //        and is not a second writer of the DONE fence. Nothing it creates uses the
+  //        `project_acceptance_` prefix or the word `judgment`.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -865,7 +878,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0279_criteria_decision_diff_snapshot',
       '0280_task_list_task_count',
       '0281_project_integration_job',
-      '0282_project_task_status_count'],
+      '0282_project_task_status_count',
+      '0283_task_project_assignee_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

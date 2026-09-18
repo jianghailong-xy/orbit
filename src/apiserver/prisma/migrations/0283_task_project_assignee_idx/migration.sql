@@ -1,0 +1,49 @@
+-- `busiestAssignee` picks the workspace a project's coordinator should open in — "the one most of
+-- this project's tasks are assigned to" — and it is the only project-scoped read left on `task`
+-- whose plan is a scan of the whole table rather than of the project:
+--
+--   ... FROM "task" LEFT JOIN "workspace" ON workspace.id = task.assignee_id
+--    WHERE "project_id" = $1 AND "assignee_id" IS NOT NULL AND workspace.deleted_at IS NULL
+--    GROUP BY "assignee_id" ORDER BY COUNT("assignee_id") DESC LIMIT 1
+--
+-- `take: 1` does not bound it: a GROUP BY has to see every row of the project before the LIMIT can
+-- choose one. Neither existing index serves that grouping. `task_project_rollup_covering_idx`
+-- carries the project predicate but not `assignee_id`, so it cannot be read index-only for this
+-- projection; `task_assignee_id_idx` carries `assignee_id` but not `project_id`, so a plan through
+-- it fetches a heap row per non-null task to test the project. One project on this deployment holds
+-- 109,872 of the table's 111,740 rows (98.33%), which is why the planner picks the third option —
+-- keeping every needed column in the btree so PostgreSQL can read it index-only. Measured on
+-- production against that project, `EXPLAIN (ANALYZE, BUFFERS)`:
+--
+--   Parallel Seq Scan on "task"  (Rows Removed by Filter: 623, in 3 loops)
+--     Buffers: shared hit=6599 read=13936          → 20,535 buffers — 160 MB through a 128 MB
+--     Execution Time: 86.9 ms                        shared_buffers, for one row of output
+--
+-- The same statement with this index, on a reproduction of that table (same rows, same
+-- distribution, same key widths; the index comes out at 792 kB / 99 pages because the btree
+-- deduplicates the 109,872 entries that share this project's key prefix):
+--
+--   Parallel Index Only Scan using task_project_assignee_idx  (Heap Fetches: 0)
+--     Index Cond: (project_id = '01a02d83-…'::uuid)
+--     Buffers: shared hit=2 read=97                → 99 buffers, none of them the heap
+--
+-- i.e. the read costs the PROJECT's rows in index pages instead of the TABLE's rows in heap pages:
+-- the 160 MB heap, of which 109–146 MB was physically read on the two runs measured above, becomes
+-- at most 792 kB of index, and one row of it is the answer. It does not make the statement free or
+-- constant — those rows are genuinely being counted, so the per-row work stays, and that is the part
+-- this index leaves alone. What it removes is the part that is not about this project at all.
+--
+-- Read the predicate as part of the index, not decoration. `busiestAssignee` always filters
+-- `project_id = $1` and `assignee_id IS NOT NULL`, so tasks filed under no project and unassigned
+-- tasks can never appear in its result or its grouping; the partial predicate keeps them out of the
+-- btree entirely, and it is what lets the planner match this index to that statement.
+-- `Session.retryAt` (0081), `task_project_rollup_covering_idx` (0178) and the two task-tree indexes
+-- (0108) are the same shape for the same reason: this schema cannot spell an index predicate.
+--
+-- Deliberately not CONCURRENTLY because Prisma runs the migration in a transaction. This data set
+-- is small enough for a normal build (111,740 rows, one pass); deployments with a much larger Task
+-- table may pre-create the identical index CONCURRENTLY, after which IF NOT EXISTS makes this
+-- migration a no-op.
+CREATE INDEX IF NOT EXISTS "task_project_assignee_idx"
+  ON "task" ("project_id", "assignee_id")
+  WHERE "project_id" IS NOT NULL AND "assignee_id" IS NOT NULL;

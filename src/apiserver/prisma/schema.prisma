@@ -3763,6 +3763,20 @@ model Task {
   /// the six figures of tasks that are in no project.
   @@index([ownerId, projectId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_project_root_created_id_idx")
   @@index([ownerId, projectId, parentTaskId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_project_child_created_id_idx")
+  /// `busiestAssignee`: which workspace most of one project's tasks are assigned to, asked when a
+  /// project that has never had a coordinator is about to get one. `GROUP BY assignee_id` cannot be
+  /// bounded by the caller's `take: 1` — the LIMIT picks from the counts, so every row of the
+  /// project is counted — and neither index beside this one serves it: the covering index above has
+  /// the project predicate but not `assignee_id`, and `task_assignee_id_idx` has `assignee_id` but
+  /// not `project_id`. With 109,872 of the table's 111,740 rows in one project the planner's answer
+  /// was a Seq Scan of the 160 MB heap, 20,535 buffers and 86.9 ms to produce one row; this index
+  /// makes that an index-only scan of 99 buffers, with no heap access at all.
+  ///
+  /// Created PARTIAL (`WHERE project_id IS NOT NULL AND assignee_id IS NOT NULL`, migration 0283),
+  /// which this schema cannot spell — the same trade the covering index above and 0108's pair carry.
+  /// The predicate is half the point here rather than a size optimisation: those two conditions are
+  /// the statement's own filters, so the predicate is what lets the planner match this index to it.
+  @@index([projectId, assigneeId], map: "task_project_assignee_idx")
   @@index([status])
   /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
   /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the
