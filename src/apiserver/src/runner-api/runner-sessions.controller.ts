@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  Optional,
   Param,
   Post,
   Query,
@@ -68,12 +69,15 @@ export class RunnerSessionsController {
     private readonly mergeReceipts: MergeReceiptService,
     private readonly attempts: SessionAttemptService,
     /**
-     * The spend fuse, for the one thing this door starts (contract §6.4 F7). Optional in the
-     * signature for the specs that construct this controller directly, exactly as the runner API
-     * controller's later collaborators are: a spawn nothing held is a spawn, which is what every
-     * one of those specs is about.
+     * The spend fuse, for the one thing this door starts (contract §6.4 F7).
+     *
+     * `@Optional()` and not merely `?`: the question mark is TypeScript's and Nest cannot see it,
+     * so without the decorator a module that stands this controller up without the provider fails
+     * to construct it — which is how `session-send-startup-removal.pg.spec.ts`, a spec about
+     * something else entirely, would have been killed at its timeout. A spawn nothing held is a
+     * spawn, which is what that spec and every other one here is about.
      */
-    private readonly fuse?: ProjectFuseService,
+    @Optional() private readonly fuse?: ProjectFuseService,
   ) {}
 
   /**

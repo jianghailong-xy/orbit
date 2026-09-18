@@ -33,6 +33,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
+import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsController } from './projects.controller';
@@ -398,6 +399,7 @@ async function openDoor(prisma: PrismaService): Promise<{ base: string; close: (
       { provide: SessionAttemptService, useValue: {} },
       { provide: TaskCheckpointService, useValue: {} },
       { provide: ProjectOpenItemService, useValue: {} },
+      { provide: ProjectFuseService, useValue: {} },
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async (token: string) => ({ sub: token }) } },

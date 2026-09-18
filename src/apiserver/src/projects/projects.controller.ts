@@ -49,13 +49,26 @@ export class ProjectsController {
     private readonly handoffs: ProjectHandoffService,
     private readonly attempts: SessionAttemptService,
     private readonly checkpoints: TaskCheckpointService,
-    /** What this project owes somebody a decision about (contract §4.8). Last in the list, so the
-     *  specs that build this controller by hand keep constructing it exactly as they did. */
+    /** What this project owes somebody a decision about (contract §4.8). */
     private readonly openItems: ProjectOpenItemService,
-    /** The owner's door back from a paused coordinator (contract §6.3). Appended for the same
-     *  reason as the line above: the specs that build this controller by hand keep their order. */
+    /** The owner's door back from a paused coordinator (contract §6.3). */
     private readonly fuse: ProjectFuseService,
   ) {}
+  // ADDING A DEPENDENCY HERE IS NOT FREE, AND APPENDING IT DOES NOT MAKE IT SO.
+  //
+  // Two kinds of spec build this controller themselves, and only one of them is a positional
+  // argument list the compiler counts (`coordinator-authority-boundary`,
+  // `project-create-in-workspace`). The other five stand a Nest module up around it and resolve BY
+  // TOKEN — `criteria-pending-owner-read`, `project-blocker-resolution`, `project-integration-ref`,
+  // `project-acceptance-criteria-over-http`, `project-done-unguarded` — so a provider nobody listed
+  // is not a shorter argument list, it is a controller Nest cannot construct. Three of those five
+  // are `*.pg.spec.ts`, which `npm test` deliberately filters out of its glob, so the failure shows
+  // up in neither `tsc` nor the unit suite: the module never comes up, the test file hangs on the
+  // leaked handle, and the run is killed at its timeout with rc=124 and no TAP summary at all.
+  //
+  // That has now happened twice, to the same three files, on the two dependencies above. So: add
+  // the provider to all five, in the same call, and run those three pg specs before saying anything
+  // about whether this compiles.
 
   /**
    * Record a project, and — when `workspaceId` names one — open its coordinator there.
