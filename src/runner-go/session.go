@@ -1501,7 +1501,20 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		// machine may simply not have: the session's first spawn on a different runner, a wiped
 		// ~/.claude, a moved worktree. Orbit still has every event, so rebuild the file instead
 		// of letting --resume fail with "No conversation found with session ID".
-		ensureClaudeTranscript(ctx, t, job, execDir, emit)
+		//
+		// The rebuild is also the only thing that can answer whether a continuation is possible
+		// here at all, and the claim is not evidence for it: `Reclaimed` with stored events, or a
+		// revival, both mean "a conversation exists" — but an engine that started and died leaves
+		// events and no conversation, and on this machine there may be neither a file nor a
+		// replayable message to put back. Continuing nothing is fatal in a way nothing downstream
+		// repairs: claude exits without a reply, the turn ends as error_during_execution, and
+		// every later claim repeats it. Open the conversation instead. The reverse mistake is
+		// already recoverable — claude answers "Session ID ... is already in use" and
+		// sessionIDTaken below turns that into a resume — so this direction is the one to be
+		// wrong in.
+		if !ensureClaudeTranscript(ctx, t, job, execDir, emit) {
+			firstSpawn = true
+		}
 	}
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 

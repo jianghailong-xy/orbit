@@ -55,26 +55,39 @@ const (
 )
 
 // ensureClaudeTranscript rebuilds the session's local Claude transcript when this machine does
-// not have it, so the caller's `--resume` finds a conversation. Best-effort throughout: on any
-// failure it logs and returns, leaving the spawn to fail exactly as it does today.
-func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) {
+// not have it, so the caller's `--resume` finds a conversation. Best-effort throughout: every
+// failure is logged and returned, never raised, so a rebuild that cannot happen still leaves the
+// spawn to be made.
+//
+// It reports one thing to its caller — whether this machine provably has nothing to resume, in
+// which case the spawn must open the conversation instead. That is a question about the disk, not
+// about the claim: `--resume` on a conversation no machine holds is fatal in a way the caller
+// cannot otherwise see coming (claude exits without a reply, the turn ends as
+// error_during_execution, and every later claim repeats it), while the reverse mistake is already
+// recovered from. False is returned only for the case that is KNOWABLE: Orbit has no replayable
+// message to rebuild from, so no retry and no other machine will find a conversation either. A
+// failure that leaves the question open — the events could not be read, the rebuilt file could
+// not be written — answers true and keeps the resume, because that failure is the recoverable
+// one: a later attempt can rebuild a history this one merely failed to fetch, whereas reopening
+// would drop it for good.
+func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) bool {
 	if p := findClaudeTranscript(job.SessionUUID); p != "" && claudeTranscriptHasConversation(p) {
-		return
+		return true
 	}
 	path, err := claudeTranscriptPath(execDir, job.SessionUUID)
 	if err != nil {
 		logln("transcript rebuild: cannot resolve transcript path:", err)
-		return
+		return true
 	}
 	events, err := fetchStoredEvents(ctx, t, job.SessionID)
 	if err != nil {
 		logln("transcript rebuild: cannot fetch stored events:", err)
-		return
+		return true
 	}
 	msgs, storedSummary, storedCut := replayMessagesFromEvents(events)
 	if len(msgs) == 0 {
 		logln("transcript rebuild: no replayable history for session", job.SessionID)
-		return
+		return false
 	}
 	cut, summary := planReplay(msgs, storedSummary, storedCut, func(head []replayMessage) string {
 		return summarizeReplayHead(ctx, head)
@@ -82,15 +95,15 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 	data, err := renderTranscriptJSONL(msgs, cut, summary, job, execDir)
 	if err != nil {
 		logln("transcript rebuild: cannot render transcript:", err)
-		return
+		return true
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		logln("transcript rebuild: cannot create project dir:", err)
-		return
+		return true
 	}
 	if err := writeFileAtomically(path, data, 0o644); err != nil {
 		logln("transcript rebuild: cannot write transcript:", err)
-		return
+		return true
 	}
 	logln("transcript rebuild: restored", len(msgs), "messages for", job.SessionID,
 		"("+strconv.Itoa(cut), "summarized behind a compact boundary)")
@@ -101,6 +114,7 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 		"messages":   len(msgs),
 		"summarized": cut,
 	})
+	return true
 }
 
 // claudeTranscriptPath is where Claude Code keeps one session's transcript. `--resume` looks ONLY

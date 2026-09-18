@@ -126,13 +126,21 @@ func TestClaudeSpawnResumesAReclaimedSessionWithHistory(t *testing.T) {
 // an inline copy at either site silently reverts the one above after a claim refresh, which no
 // argv test can see. Asserted in the source because the second site is only reachable through a
 // live pool and a refreshed claim.
+//
+// The claim is not the only evidence there is, and this test would otherwise forbid the other
+// kind: runClaudeSessionProcess answers firstSpawn back with what the transcript rebuild actually
+// found on this machine, and opens the conversation when it found nothing (session.go, beside
+// ensureClaudeTranscript). That is a different question, asked later, so it is pinned by its own
+// shape instead — one such correction, and it must sit under the rebuild call it answers. An
+// inlined claim rule is spelled neither way and is still caught.
 func TestBothFirstSpawnSitesShareOneRule(t *testing.T) {
 	source, err := os.ReadFile("session.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignments := 0
-	for _, line := range strings.Split(string(source), "\n") {
+	lines := strings.Split(string(source), "\n")
+	claimDerivations, openedInstead := 0, 0
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "firstSpawn :=") && !strings.HasPrefix(trimmed, "firstSpawn =") {
 			continue
@@ -141,13 +149,23 @@ func TestBothFirstSpawnSitesShareOneRule(t *testing.T) {
 		if strings.HasSuffix(trimmed, "= false") {
 			continue
 		}
-		assignments++
+		if trimmed == "firstSpawn = true" {
+			openedInstead++
+			if prev := strings.TrimSpace(lines[i-1]); !strings.HasPrefix(prev, "if !ensureClaudeTranscript(") {
+				t.Errorf("session.go opens a conversation (%q) somewhere other than a rebuild result (%q)", trimmed, prev)
+			}
+			continue
+		}
+		claimDerivations++
 		if !strings.Contains(trimmed, "firstSpawnFor(job)") {
 			t.Errorf("session.go derives firstSpawn inline (%q); both sites must call firstSpawnFor", trimmed)
 		}
 	}
-	if assignments != 2 {
-		t.Errorf("found %d firstSpawn derivations in session.go, want the 2 runInteractiveSession makes", assignments)
+	if claimDerivations != 2 {
+		t.Errorf("found %d firstSpawn derivations in session.go, want the 2 runInteractiveSession makes", claimDerivations)
+	}
+	if openedInstead != 1 {
+		t.Errorf("found %d post-rebuild corrections in session.go, want the 1 runClaudeSessionProcess makes", openedInstead)
 	}
 }
 
