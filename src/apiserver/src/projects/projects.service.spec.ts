@@ -331,15 +331,22 @@ test('concurrent identical project indexes share one aggregate without caching i
 
 test('the detail read reports progress without loading the project’s tasks', async () => {
   let groupByArgs: any;
+  let findFirstArgs: any;
   const service = serviceWith({
     project: {
-      findFirst: async () => ({
-        id: PROJECT_ID,
-        title: 'Ship it',
-        _count: { tasks: 3 },
-        members: [],
-        runtime: { coordinatorGeneration: 0n },
-      }),
+      findFirst: async (args: any) => {
+        findFirstArgs = args;
+        return {
+          id: PROJECT_ID,
+          title: 'Ship it',
+          // A number the database would not produce for this fixture's buckets (2 + 1). It is here
+          // so that reporting `3` below can only mean the total came off the tally: a read that
+          // went back to asking the relation for `_count.tasks` would report THIS.
+          _count: { tasks: 99 },
+          members: [],
+          runtime: { coordinatorGeneration: 0n },
+        };
+      },
     },
     task: {
       groupBy: async (args: any) => {
@@ -371,7 +378,9 @@ test('the detail read reports progress without loading the project’s tasks', a
   const project = await service.get(OWNER_ID, PROJECT_ID);
 
   assert.deepEqual(project.tasksByStatus, { DONE: 2, OPEN: 1 });
-  assert.equal(project._count.tasks, 3);
+  assert.equal(project._count.tasks, 3, 'the total is the sum of the tally above');
+  assert.equal(findFirstArgs.include._count, undefined,
+    'the detail read must not ask the relation for a second aggregate over the same rows');
   assert.deepEqual(groupByArgs.where, { projectId: PROJECT_ID });
   // The task tally is a PROCESS measure and it is the only one left: migration 0229 removed the
   // acceptance judgment, so nothing on this read concludes anything about the stated criteria.

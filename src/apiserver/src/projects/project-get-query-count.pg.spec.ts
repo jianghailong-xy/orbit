@@ -240,8 +240,15 @@ test('the project detail read costs the same number of statements at either size
     statements.reset();
     const read = await projects.get(ownerId, projectId) as unknown as {
       acceptanceCriteriaItems: StatedCriterion[];
+      _count: { tasks: number };
+      tasksByStatus: Record<string, number>;
     };
-    return { criteria: read.acceptanceCriteriaItems, sent: [...statements.sql] };
+    return {
+      criteria: read.acceptanceCriteriaItems,
+      total: read._count.tasks,
+      buckets: Object.values(read.tasksByStatus).reduce((sum, n) => sum + n, 0),
+      sent: [...statements.sql],
+    };
   }
 
   /** Every statement of a reading, one per line, for a failure a reader has to diagnose from TAP. */
@@ -322,6 +329,39 @@ test('the project detail read costs the same number of statements at either size
         `five: work 2 for criterion ${position + 1}`,
         `five: work 3 for criterion ${position + 1}`,
       ], 'each criterion names its OWN unsettled work, so the fixed cost is not a fixed answer');
+    }
+  });
+
+  // ═══ 4. the total is the database's own count, reached without a second aggregate ════════════
+  await t.test('the reported total is this project’s rows, counted in the tally the read already '
+    + 'makes', async () => {
+    const one = await measure(small);
+    const five = await measure(large);
+
+    // The oracle is the database, not the other field: `total` and `buckets` are computed from
+    // the same array, so agreeing with each other proves nothing on its own.
+    for (const [label, projectId, read] of [
+      ['one', small, one], ['five', large, five],
+    ] as Array<[string, string, Awaited<ReturnType<typeof measure>>]>) {
+      const counted = await sql.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM "task" WHERE project_id = $1', [projectId],
+      );
+      assert.equal(read.total, counted.rows[0].n,
+        `the project’s total has to be its rows in "task", which is what \`_count.tasks\` meant`);
+      assert.equal(read.total, read.buckets,
+        'the total is the sum of the per-status tally and not a number of its own');
+      assert.ok(read.total > 0, `the ${label} fixture has work, or both sides count zero`);
+    }
+
+    // And it is reached without Prisma's relation aggregate, whose LEFT JOIN onto an unfiltered
+    // `GROUP BY task.project_id` is a second pass over the same rows (`_aggr_count_tasks` is the
+    // alias it compiles to). Re-adding it would leave the numbers above unchanged and put the
+    // pass back — which is the regression this line exists to catch.
+    for (const read of [one, five]) {
+      for (const text of read.sent) {
+        assert.ok(!text.includes('_aggr_count_tasks'),
+          `the detail read must not ask for the relation aggregate again:\n${listing(read.sent)}`);
+      }
     }
   });
 });
