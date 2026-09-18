@@ -25,6 +25,7 @@ import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
+import { MAX_QUESTION_CHARS } from './project-open-item';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -461,6 +462,37 @@ export class ResumeProjectFuseDto {
   @IsOptional() @IsInt() @Min(0) maxSelfStartedTurnsPerDay?: number;
   @IsOptional() @IsInt() @Min(0) maxSessionsOpenedPerDay?: number;
   @IsOptional() @IsInt() @Min(0) maxRetriesPerSuccessorChain?: number;
+}
+
+/** One thing the owner can pick, as the coordinator worded it (contract §5.2 R7). */
+export class AskOwnerOptionDto {
+  @IsString() @MinLength(1) @MaxLength(200) label!: string;
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+}
+
+/**
+ * A coordinator's question to the account owner.
+ *
+ * Every field beyond the question itself is optional, and each absence means something the card
+ * shows: no options is a free answer, no recommendation is "the coordinator has no preference", no
+ * blocked tasks is "nothing is waiting on this". The 0-or-2-to-4 rule on `options` is restated by the
+ * service, which is where both doors meet.
+ */
+export class AskOwnerDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_QUESTION_CHARS) question!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(4)
+  @ValidateNested({ each: true }) @Type(() => AskOwnerOptionDto)
+  options?: AskOwnerOptionDto[];
+  @IsOptional() @IsInt() @Min(0) @Max(3) recommendedOption?: number;
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @IsPublicId({ each: true }) blocksTaskIds?: string[];
+  @IsOptional() @IsString() @MaxLength(500) ifUnanswered?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) clientQuestionId?: string;
+}
+
+/** The owner answering one: an option, free text, or both. The service refuses neither. */
+export class AnswerOpenItemDto {
+  @IsOptional() @IsInt() @Min(0) @Max(3) option?: number;
+  @IsOptional() @IsString() @MaxLength(4_000) text?: string;
 }
 
 export class RecordMergeEvidenceDto {

@@ -3714,7 +3714,9 @@ export class ProjectsService {
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
     // everything still waiting is handed over rather than left addressed to the conversation before.
-    await this.openItems?.deliverOwed(id);
+    // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
+    // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
+    await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
     return { sessionId: session.id, created: true, workspaceId: runIn };
   }
 

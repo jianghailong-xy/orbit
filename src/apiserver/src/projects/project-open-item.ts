@@ -117,6 +117,125 @@ export function openItemTurnId(itemId: string, assignedAt: Date): string {
   return `${OPEN_ITEM_TURN_PREFIX}${itemId}:${assignedAt.getTime()}`;
 }
 
+/** Every owner answer's client id starts here (§5.2 R10). */
+export const OWNER_ANSWER_TURN_PREFIX = 'owner-answer:v1:';
+
+/**
+ * The key an owner's answer is queued under: the question, and the conversation it is being told to.
+ *
+ * The conversation rather than a moment, because that is what §5.2 R11 counts: a project that
+ * rotates its coordinator owes the answer to the new one as well, and one generation reads it once.
+ */
+export function ownerAnswerTurnId(itemId: string, sessionId: string): string {
+  return `${OWNER_ANSWER_TURN_PREFIX}${itemId}:${sessionId}`;
+}
+
+/** What `ask_owner` files, and what the card renders (§5.2 R7, §4.2). */
+export interface CoordinatorQuestion {
+  question: string;
+  options: Array<{ label: string; description?: string }>;
+  /** Index into `options`; null when the coordinator recommended nothing. */
+  recommendedOption: number | null;
+  blocksTaskIds: string[];
+  /** What happens if nobody answers, in the asker's own words. */
+  ifUnanswered: string | null;
+}
+
+/** How the owner answered: an option, free text, or both. */
+export interface OwnerAnswer {
+  option?: number;
+  text?: string;
+  answeredByUserId: string;
+}
+
+/** Longest question a card shows and a turn carries (§5.2 R7). */
+export const MAX_QUESTION_CHARS = 2_000;
+/** A choice is between alternatives; more than four is a conversation, not a card. */
+const MAX_OPTIONS = 4;
+
+/** A question as the caller asked it, before it is a row. */
+export interface AskedQuestion {
+  question: string;
+  options?: Array<{ label: string; description?: string }>;
+  recommendedOption?: number;
+  blocksTaskIds?: string[];
+  ifUnanswered?: string;
+}
+
+/** Refused at the door, in the words the caller reads. Thrown as a 400 by the service. */
+export class QuestionNotAskable extends Error {}
+
+/**
+ * The question, normalized to the five fields every reader of the payload can count on.
+ *
+ * Every optional field becomes an explicit empty or null rather than an absent key: the card reads
+ * this, the turn is built from it, and "the coordinator recommended nothing" is a different fact
+ * from "an older build did not record recommendations".
+ */
+export function coordinatorQuestion(asked: AskedQuestion): CoordinatorQuestion {
+  const question = (asked.question ?? '').trim();
+  if (!question) throw new QuestionNotAskable('question is required');
+  if (question.length > MAX_QUESTION_CHARS) {
+    throw new QuestionNotAskable(`question must be at most ${MAX_QUESTION_CHARS} characters`);
+  }
+  const options = (asked.options ?? []).map((option) => ({
+    label: (option?.label ?? '').trim(),
+    ...(option?.description?.trim() ? { description: option.description.trim() } : {}),
+  }));
+  if (options.some((option) => !option.label)) {
+    throw new QuestionNotAskable('every option needs a label');
+  }
+  // Nothing to choose between is a free answer; one option is not a choice at all.
+  if (options.length === 1 || options.length > MAX_OPTIONS) {
+    throw new QuestionNotAskable(`options must be 0 or 2 to ${MAX_OPTIONS} entries`);
+  }
+  const recommended = asked.recommendedOption;
+  if (recommended !== undefined && recommended !== null) {
+    if (!Number.isInteger(recommended) || recommended < 0 || recommended >= options.length) {
+      throw new QuestionNotAskable('recommendedOption must name one of the options');
+    }
+  }
+  return {
+    question,
+    options,
+    recommendedOption: recommended ?? null,
+    blocksTaskIds: [...new Set(asked.blocksTaskIds ?? [])],
+    ifUnanswered: asked.ifUnanswered?.trim() || null,
+  };
+}
+
+/** The one line under a question's title: what it blocks, and what happens if nobody answers. */
+export function questionDetailLine(question: CoordinatorQuestion): string {
+  const blocks = question.blocksTaskIds.length > 0
+    ? `Blocks ${question.blocksTaskIds.length} task${question.blocksTaskIds.length > 1 ? 's' : ''}`
+    : '';
+  const unanswered = question.ifUnanswered ? `If you don’t answer: ${question.ifUnanswered}` : '';
+  return [blocks, unanswered].filter(Boolean).join(' · ');
+}
+
+/** The answer in the words it is shown and told in: the option chosen, the text given, or both. */
+export function answerInWords(question: CoordinatorQuestion, answer: OwnerAnswer): string {
+  const chosen = answer.option !== undefined ? question.options[answer.option]?.label : undefined;
+  return [chosen, answer.text?.trim()].filter(Boolean).join(' — ') || '(no answer given)';
+}
+
+/**
+ * What the coordinator is told when the owner has answered (§5.2 R10).
+ *
+ * Built only from rows that no longer change — the question as it was asked, the answer as it was
+ * given, the moment it was answered — because a replay under the same key compares the content byte
+ * for byte, and a conversation that already read it must not be told a second, differently worded
+ * version of the same answer.
+ */
+export function ownerAnswerMessage(
+  question: CoordinatorQuestion,
+  answer: OwnerAnswer,
+  answeredAt: Date,
+): string {
+  return `From Orbit · owner answer: you asked "${question.question}". `
+    + `The owner answered: ${answerInWords(question, answer)} (${answeredAt.toISOString()}).`;
+}
+
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
   status: true,

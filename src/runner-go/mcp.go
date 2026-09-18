@@ -526,6 +526,32 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "ask_owner":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		question := strings.TrimSpace(getString(args, "question"))
+		if question == "" {
+			return toolResult("question is required", true)
+		}
+		body := map[string]interface{}{"question": question}
+		// The options travel as the caller wrote them: the server is what decides whether 0, 2, 3
+		// or 4 of them is a question, and picking them apart here would be a second opinion about
+		// the same rule.
+		copyIfPresent(body, args, "options", "recommendedOption", "ifUnanswered", "clientQuestionId")
+		if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
+			body["blocksTaskIds"] = blocked
+		}
+		// The asking session IS the authority here: the server checks it against the project's own
+		// coordinator pointer, so a call made from anywhere else is refused rather than filed.
+		raw, err := s.t.askOwner(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("ask owner failed: "+err.Error(), true)
+		}
+		return toolResult("The question is with the account owner. Their answer will arrive as a "+
+			"message in this conversation; nothing is waiting on this call.\n"+prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2379,6 +2405,72 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"resolution note afterwards.",
 				},
 			}, "projectId", "blockerId", "reason"),
+		},
+		{
+			"name": "ask_owner",
+			"description": "Put a question to the account owner about the project you coordinate, " +
+				"and keep working. The question becomes a card in front of them — the wording you " +
+				"give, your options, which one you recommend, what it is holding up — and their " +
+				"answer comes back to you later as a message of its own. This call does NOT block: " +
+				"it returns the moment the question is filed, so ask and then go do whatever else " +
+				"is not waiting on the answer. " +
+				"Ask when the decision is genuinely theirs and you would otherwise guess: which of " +
+				"two ready tasks goes first when both rewrite the same file, whether work that " +
+				"turned out bigger than its task said is still wanted, which way to go at a fork " +
+				"the project's own instructions do not settle. Do NOT ask what you can read " +
+				"(project_get, task_get, the repository), what the acceptance criteria already " +
+				"answer, or for permission to do something you were told to do — a question costs " +
+				"a person's attention, and one that answers itself spends it for nothing. " +
+				"Give OPTIONS whenever you can name the alternatives: a question with options is " +
+				"one tap to answer, and a question without is a paragraph somebody has to write. " +
+				"Say which one you recommend and why in its description — you know the work best; " +
+				"they are deciding, not designing. " +
+				"Only the conversation this project is coordinated FROM may ask, because the " +
+				"question is filed in the project's name.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"question": map[string]interface{}{
+					"type": "string",
+					"description": "What you are asking, in the owner's terms rather than the " +
+						"codebase's: what has to be decided and why it is theirs. Up to 2000 " +
+						"characters, shown on the card exactly as written.",
+				},
+				"options": map[string]interface{}{
+					"type": "array",
+					"description": "The alternatives, 2 to 4 of them — or leave it out entirely for " +
+						"a question only prose can answer. Each option is { label, description }: " +
+						"the label is what the owner taps, the description is the consequence of " +
+						"choosing it.",
+					"items": obj(map[string]interface{}{
+						"label":       map[string]interface{}{"type": "string"},
+						"description": map[string]interface{}{"type": "string"},
+					}, "label"),
+				},
+				"recommendedOption": map[string]interface{}{
+					"type":        "integer",
+					"description": "Index into options of the one you recommend. Say why in that option's description.",
+				},
+				"blocksTaskIds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "The tasks that are waiting on this answer, so the card shows what it is holding up.",
+				},
+				"ifUnanswered": map[string]interface{}{
+					"type": "string",
+					"description": "What happens if nobody answers — \"nothing starts\", \"I will go " +
+						"with the first option tomorrow\". Shown on the card as written, so the " +
+						"owner can decide how urgent this is.",
+				},
+				"clientQuestionId": map[string]interface{}{
+					"type": "string",
+					"description": "Your own key for this question. A call retried under the same key " +
+						"files one question rather than asking twice; omit it and every call is a " +
+						"new question.",
+				},
+			}, "projectId", "question"),
 		},
 		{
 			"name": "project_delete",

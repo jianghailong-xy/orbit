@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
+  AnswerOpenItemDto,
   ConfirmAcceptanceCriteriaDto,
   CreateProjectDto,
   DecideCriteriaChangeDto,
@@ -466,6 +467,24 @@ export class ProjectsController {
     @Body() dto: ResumeProjectFuseDto,
   ) {
     return this.fuse.resume(user.userId, id, episodeId, { raiseLimits: dto });
+  }
+
+  /**
+   * The account owner answering a question their project's coordinator asked (contract §5.2 R10).
+   *
+   * Only here, on the door that takes the owner's own credential: a question exists because an agent
+   * may not decide the thing being asked about, so an agent answering it would be the same session
+   * deciding under a different name. The answer ends the question and is told to whichever
+   * conversation coordinates the project at this moment — which need not be the one that asked.
+   */
+  @Post(':id/open-items/:itemId/answer')
+  answerOpenItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+    @Body() dto: AnswerOpenItemDto,
+  ) {
+    return this.openItems.answerOpenItem(user.userId, id, itemId, dto);
   }
 
   @Post(':id/blockers/:blockerId/resolve')

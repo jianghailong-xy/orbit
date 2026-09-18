@@ -1256,6 +1256,23 @@ func (t *Transport) deleteProject(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// askOwner files a coordinator's question for the account owner and returns at once: the answer
+// arrives later as a turn, not as this call's result.
+//
+// The session header is the authority, not decoration — the server checks it against the project's
+// own coordinator pointer and refuses ASK_OWNER_COORDINATOR_ONLY for anything else. It is sent the
+// same way every other acting-session call sends it, which means an empty one sends no header at
+// all and is refused there rather than being mistaken here for a headless owner.
+func (t *Transport) askOwner(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/owner-questions", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

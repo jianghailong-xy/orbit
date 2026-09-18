@@ -15,6 +15,7 @@ import {
 import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import {
+  AskOwnerDto,
   CreateProjectDto,
   RecordMergeEvidenceDto,
   ResolveProjectBlockerDto,
@@ -23,6 +24,7 @@ import {
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { HANDOFF_STORED_STATES, type HandoffStoredState } from '../projects/project-handoff';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -63,6 +65,10 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
+    // Only `askOwner` needs it. Defaulted for the reason `ProjectsService`'s own late parameters
+    // are: Nest injects by type rather than by position, while the specs that build this controller
+    // by hand to exercise one route would each have to stub a service they never reach.
+    private readonly openItems: ProjectOpenItemService = undefined as unknown as ProjectOpenItemService,
   ) {}
 
   /**
@@ -251,6 +257,30 @@ export class RunnerProjectsController {
     @Body() dto: ResolveProjectBlockerDto,
   ) {
     return this.projects.resolveBlocker(runner.ownerId, id, blockerId, dto.reason, 'COORDINATOR');
+  }
+
+  /**
+   * A coordinator putting a question to the account owner (contract §5.2 R7–R9).
+   *
+   * The question is filed and the call returns: it does not block the turn, and the answer comes
+   * back later as a turn of its own, addressed to whichever conversation coordinates the project
+   * then. So a coordinator that hits something it may not decide — which task goes first, whether a
+   * branch is worth keeping — neither stalls nor decides it anyway.
+   *
+   * X-Orbit-Session-Id is what makes this askable at all, and it is checked by the service against
+   * the project's own coordinator pointer: the question goes to the owner in the project's name, so
+   * the session asking has to be the one the project points at. No orchestration credential: asking
+   * a question grants nothing and starts nothing, and the refusal for the wrong session is the whole
+   * authority check.
+   */
+  @Post('projects/:id/owner-questions')
+  askOwner(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: AskOwnerDto,
+  ) {
+    return this.openItems.askOwner(runner.ownerId, id, sessionId?.trim(), dto);
   }
 
   /**

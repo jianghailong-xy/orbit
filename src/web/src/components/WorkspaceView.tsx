@@ -195,6 +195,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
+import { CoordinatorQuestions } from './CoordinatorQuestionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import {
   EvidenceDecisionReceipt,
@@ -6165,6 +6166,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       [result.intentId]: result.reply ?? null,
                     }))
                   }
+                />
+              )}
+              {/* A question THIS conversation put to the account owner, drawn where it was asked
+                  (mock 5, §5.2): the coordinator asks and goes on working, and the card is what the
+                  owner answers — so the conversation shows what it is waiting on rather than only
+                  the sentence it wrote when it asked. Drawn from the open items and not from any
+                  turn, so it is the same card the project page shows, and it goes when it is
+                  answered. Keyed apart from its siblings for the reason the evidence card's note
+                  gives below. */}
+              {selected && selectedId && !selectedTrashed && (
+                <CoordinatorQuestions
+                  key={`coordinator-question:${selectedId}`}
+                  projectId={coordinatedProjectId}
                 />
               )}
               {/* The same kind of card for the evidence this session may confirm or send back:

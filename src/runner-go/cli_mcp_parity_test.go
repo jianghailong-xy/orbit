@@ -32,6 +32,11 @@ var cliParityExemptTools = map[string]string{
 	// schedule_wakeup takes no session id: it wakes the session it is called from, which a terminal
 	// outside one does not have, and inside one the agent reaches it over MCP.
 	"schedule_wakeup": "wakes the calling session: there is no session to wake at a terminal outside one",
+	// ask_owner asks AS the project's coordinator conversation, and the server checks the acting
+	// session against the project's own coordinator pointer (§5.2 R8). A terminal outside a session
+	// sends no session header and is refused every time, so the command would be one that can only
+	// fail; inside one, the coordinator reaches it over MCP.
+	"ask_owner": "asks as the project's coordinator session: a terminal outside one is refused by the server",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.

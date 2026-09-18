@@ -1,19 +1,51 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import {
+  AskedQuestion,
+  CoordinatorQuestion,
   OpenItemAssignee,
   OpenItemAssigneeReason,
   OpenItemKind,
+  OwnerAnswer,
+  QuestionNotAskable,
   SESSION_ENDING_SELECT,
   TASK_FAILURE_CHAIN_LIMIT,
+  coordinatorQuestion,
   openItemMessage,
   openItemTurnId,
+  ownerAnswerMessage,
+  ownerAnswerTurnId,
+  questionDetailLine,
   sessionHasEnded,
 } from './project-open-item';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
+
+/** Only the project's coordinator conversation may put a question to the owner (§5.2 R8). */
+export const ASK_OWNER_COORDINATOR_ONLY = 'ASK_OWNER_COORDINATOR_ONLY';
+/** A question that has been answered, withdrawn or superseded is not answered again (§4.7). */
+export const OPEN_ITEM_NOT_OPEN = 'OPEN_ITEM_NOT_OPEN';
+
+/**
+ * How many already-answered questions one binding reconsiders (§5.2 R11).
+ *
+ * A cap on the READ, not on the guarantee: an answer is redelivered while the work it unblocks is
+ * still open, or to the one generation that replaced its asker, and both of those are self-limiting.
+ * This only keeps a project with years of answered questions from re-reading all of them every time
+ * a coordinator is bound.
+ */
+const ANSWERS_RECONSIDERED_PER_BINDING = 50;
 
 /** One exception item, as a reader of the project sees it (§4.8). */
 export interface OpenItemRow {
@@ -37,7 +69,24 @@ export interface OpenItemRow {
     at: Date | null;
   };
   /** Doors that exist today. An action nobody can perform is not offered. */
-  actions: Array<'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK' | 'RESUME'>;
+  actions: Array<'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK' | 'RESUME' | 'ANSWER'>;
+  /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
+  question: CoordinatorQuestion | null;
+}
+
+/** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
+export interface OpenItemAsked {
+  itemId: string;
+  state: 'OPEN';
+}
+
+/** A question answered, and where the answer went (§5.2 R10). */
+export interface OpenItemAnswered {
+  itemId: string;
+  state: 'RESOLVED';
+  resolution: 'ANSWERED';
+  /** Null when no conversation is coordinating the project: the answer waits for the next one. */
+  delivery: { sessionId: string; turnId: string } | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -119,8 +168,9 @@ export class ProjectOpenItemService {
    * Items whose task has meanwhile moved on are resolved first, so a coordinator bound to a project
    * with a long history is not handed a queue of answered questions.
    */
-  async deliverOwed(projectId: string): Promise<void> {
+  async deliverOwed(projectId: string, replacedSessionId?: string): Promise<void> {
     await this.guarded('deliverOwed', async () => {
+      await this.deliverAnsweredQuestions(projectId, replacedSessionId);
       const owed = await this.prisma.projectOpenItem.findMany({
         where: { projectId, state: 'OPEN', assignee: 'COORDINATOR' },
         select: { id: true, assignedAt: true, taskId: true },
@@ -230,6 +280,293 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * A coordinator puts a question to the account owner (§5.2 R7–R9).
+   *
+   * The question is a durable item with the owner on it, not a message: the tool returns as soon as
+   * it is filed, the conversation goes on with whatever else it can do, and the answer arrives later
+   * as a turn. So a coordinator that needs a decision it has no authority to make is neither blocked
+   * nor forced to guess — and what it asked stays readable after the conversation itself is gone.
+   *
+   * Only the conversation this project is coordinated from may ask, because the question is filed in
+   * the project's name and shown to the owner as the project asking. Any other session — a task's
+   * own run, a coordinator of some other project — is refused rather than filed under a project it
+   * does not speak for.
+   */
+  async askOwner(
+    ownerId: string,
+    projectId: string,
+    actingSessionId: string | undefined,
+    asked: AskedQuestion & { clientQuestionId?: string },
+  ): Promise<OpenItemAsked> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: {
+        coordinatorEnabled: true,
+        coordinatorSessionId: true,
+        exceptionEscalationSeconds: true,
+      },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actingSessionId?.trim();
+    if (!asking || !project.coordinatorEnabled || asking !== project.coordinatorSessionId) {
+      throw new ForbiddenException({
+        code: ASK_OWNER_COORDINATOR_ONLY,
+        message:
+          'only the conversation coordinating this project may put a question to its owner. A '
+          + 'question is filed in the project’s name, so the session asking has to be the one the '
+          + 'project points at.',
+      });
+    }
+    let question: CoordinatorQuestion;
+    try {
+      question = coordinatorQuestion(asked);
+    } catch (error) {
+      if (error instanceof QuestionNotAskable) throw new BadRequestException(error.message);
+      throw error;
+    }
+    // The caller's own key for this question, so a tool call retried after a lost response files
+    // one question rather than asking the owner the same thing twice.
+    const dedupeKey = `CQ:${asked.clientQuestionId?.trim() || randomKey()}`;
+    const now = new Date();
+    const [created] = await this.prisma.projectOpenItem.createManyAndReturn({
+      data: [{
+        projectId,
+        ownerId,
+        kind: 'COORDINATOR_QUESTION' satisfies OpenItemKind,
+        state: 'OPEN',
+        assignee: 'OWNER' satisfies OpenItemAssignee,
+        // The owner is not who this ended up with; it is who it was always for.
+        assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+        askedBySessionId: asking,
+        dedupeKey,
+        title: `Coordinator asks: ${question.question}`,
+        payload: question as unknown as Prisma.InputJsonValue,
+        waitingSince: now,
+        assignedAt: now,
+        // Nowhere to escalate to — it is already the owner's. The window becomes their one reminder.
+        escalateAt: null,
+        remindAt: new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000),
+      }],
+      skipDuplicates: true,
+      select: { id: true },
+    });
+    if (created) return { itemId: created.id, state: 'OPEN' };
+    const already = await this.prisma.projectOpenItem.findFirst({
+      where: { projectId, dedupeKey, state: 'OPEN' },
+      select: { id: true },
+    });
+    if (already) return { itemId: already.id, state: 'OPEN' };
+    // The key is held by a question that has since been answered. Asking again under a key that is
+    // spent would file nothing and report success, so it is refused with the one thing to do about it.
+    throw new ConflictException({
+      code: OPEN_ITEM_NOT_OPEN,
+      message: 'a question under this clientQuestionId was already answered; ask under a new one',
+    });
+  }
+
+  /**
+   * The account owner answers a question (§5.2 R10).
+   *
+   * The answer ends the item and is then told to whichever conversation coordinates the project NOW
+   * — read after the answer has committed, so a project that rotated its coordinator while the owner
+   * was deciding tells the one it has rather than the one that asked. Nothing here waits for the
+   * delivery: the answer is written whether or not there is anybody to tell, and R11 tells the next
+   * coordinator when there is one.
+   */
+  async answerOpenItem(
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    given: { option?: number; text?: string },
+  ): Promise<OpenItemAnswered> {
+    const item = await this.prisma.projectOpenItem.findFirst({
+      where: { id: itemId, projectId, ownerId, kind: 'COORDINATOR_QUESTION' },
+      select: { id: true, state: true, payload: true },
+    });
+    if (!item) throw new NotFoundException('question not found');
+    const notOpen = (): ConflictException => new ConflictException({
+      code: OPEN_ITEM_NOT_OPEN,
+      message:
+        'this question is no longer open. A question gets one answer: the first one is what the '
+        + 'coordinator was told, and a second would replace an answer somebody already acted on.',
+    });
+    if (item.state !== 'OPEN') throw notOpen();
+    const question = item.payload as unknown as CoordinatorQuestion;
+    const text = given.text?.trim();
+    const option = given.option ?? undefined;
+    if (option === undefined && !text) {
+      throw new BadRequestException('an answer needs an option or some text');
+    }
+    if (option !== undefined
+      && (!Number.isInteger(option) || option < 0 || option >= (question.options?.length ?? 0))) {
+      throw new BadRequestException('option must name one of the options this question offered');
+    }
+    const answer: OwnerAnswer = {
+      ...(option !== undefined ? { option } : {}),
+      ...(text ? { text } : {}),
+      answeredByUserId: ownerId,
+    };
+    const settled = await this.prisma.projectOpenItem.updateMany({
+      where: { id: itemId, state: 'OPEN' },
+      data: {
+        state: 'RESOLVED',
+        resolution: 'ANSWERED',
+        resolvedAt: new Date(),
+        resolvedBy: 'USER',
+        resolvedByUserId: ownerId,
+        answer: answer as unknown as Prisma.InputJsonValue,
+      },
+    });
+    if (settled.count === 0) throw notOpen();
+    return {
+      itemId,
+      state: 'RESOLVED',
+      resolution: 'ANSWERED',
+      delivery: await this.deliverAnswer(itemId),
+    };
+  }
+
+  /**
+   * Tell the project's current coordinator what the owner answered (§5.2 R10, R11).
+   *
+   * Keyed by the question AND the conversation, which is what makes a rotation safe: every
+   * generation is told once, a replay of the same generation's key returns the turn already written,
+   * and a project with nobody coordinating it is told nothing until it has somebody.
+   */
+  private async deliverAnswer(itemId: string): Promise<{ sessionId: string; turnId: string } | null> {
+    const item = await this.prisma.projectOpenItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true,
+        ownerId: true,
+        projectId: true,
+        state: true,
+        resolution: true,
+        resolvedAt: true,
+        payload: true,
+        answer: true,
+        project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
+      },
+    });
+    if (!item || item.state !== 'RESOLVED' || item.resolution !== 'ANSWERED') return null;
+    if (!item.answer || !item.resolvedAt) return null;
+    const sessionId = item.project.coordinatorEnabled ? item.project.coordinatorSessionId : null;
+    if (!sessionId) return null;
+    const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
+    const content = ownerAnswerMessage(
+      item.payload as unknown as CoordinatorQuestion,
+      item.answer as unknown as OwnerAnswer,
+      item.resolvedAt,
+    );
+    try {
+      const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
+        clientTurnId,
+        content,
+        intent: 'NEXT_TURN',
+      }, {
+        participateSendTransaction: (tx) => this.acknowledgeAnswer(tx, {
+          itemId: item.id,
+          projectId: item.projectId,
+          sessionId,
+          clientTurnId,
+        }),
+      });
+      await this.prisma.projectOpenItemDelivery.updateMany({
+        where: { itemId: item.id, sessionId, purpose: 'ANSWER', clientTurnId, turnId: null },
+        data: { turnId: turn.turnId },
+      });
+      return { sessionId, turnId: turn.turnId };
+    } catch (error) {
+      // A conversation that has ended is not revived to be told, and a key already held by a turn
+      // means this generation has it. Both leave the answer on the item for the next coordinator.
+      if (error instanceof SessionNotSendable || error instanceof NotFoundException) return null;
+      if (error instanceof ConflictException) {
+        this.logger.warn(`the answer to ${item.id} is already queued on ${sessionId}`);
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers it
+   * still needs — the ones to questions that block work nobody has settled, and the ones asked by the
+   * conversation it just replaced, which would otherwise have been answered to nobody.
+   *
+   * Not every answer this project ever got: an answer is context for work still in front of the new
+   * coordinator, and replaying a year of settled questions is noise, not a guarantee.
+   */
+  private async deliverAnsweredQuestions(
+    projectId: string,
+    replacedSessionId?: string,
+  ): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { coordinatorEnabled: true, coordinatorSessionId: true },
+    });
+    const sessionId = project?.coordinatorEnabled ? project.coordinatorSessionId : null;
+    if (!sessionId) return;
+    const answered = await this.prisma.projectOpenItem.findMany({
+      where: {
+        projectId,
+        kind: 'COORDINATOR_QUESTION',
+        state: 'RESOLVED',
+        resolution: 'ANSWERED',
+        deliveries: { none: { sessionId, purpose: 'ANSWER' } },
+      },
+      select: { id: true, payload: true, askedBySessionId: true },
+      orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
+      take: ANSWERS_RECONSIDERED_PER_BINDING,
+    });
+    for (const item of answered.reverse()) {
+      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId;
+      const question = item.payload as unknown as CoordinatorQuestion;
+      if (!replaced && !(await this.blocksUnsettledWork(question.blocksTaskIds))) continue;
+      await this.deliverAnswer(item.id);
+    }
+  }
+
+  /** Whether any of these tasks is still somebody's to do. */
+  private async blocksUnsettledWork(taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
+    const ids = unique(taskIds ?? []);
+    if (ids.length === 0) return false;
+    return (await this.prisma.task.count({
+      where: { id: { in: ids }, status: { notIn: ['DONE', 'CANCELLED'] } },
+    })) > 0;
+  }
+
+  /** The answer's own ledger row, written in the turn's transaction under the Session lock (G6). */
+  private async acknowledgeAnswer(
+    tx: Prisma.TransactionClient,
+    delivery: { itemId: string; projectId: string; sessionId: string; clientTurnId: string },
+  ): Promise<void> {
+    const session = await tx.session.findUniqueOrThrow({
+      where: { id: delivery.sessionId },
+      select: SESSION_ENDING_SELECT,
+    });
+    if (sessionHasEnded(session)) {
+      throw new SessionNotSendable('the coordinator conversation has ended');
+    }
+    await tx.projectOpenItemDelivery.upsert({
+      where: {
+        itemId_sessionId_purpose: {
+          itemId: delivery.itemId,
+          sessionId: delivery.sessionId,
+          purpose: 'ANSWER',
+        },
+      },
+      create: {
+        itemId: delivery.itemId,
+        projectId: delivery.projectId,
+        sessionId: delivery.sessionId,
+        purpose: 'ANSWER',
+        clientTurnId: delivery.clientTurnId,
+      },
+      update: { clientTurnId: delivery.clientTurnId },
+    });
+  }
+
+  /**
    * Close the items of tasks that have moved on (§4.2), re-derived from committed rows.
    *
    * A failure is answered by what happens to the task, not by anybody reporting back: it is done, it
@@ -318,11 +655,15 @@ export class ProjectOpenItemService {
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
+      const question = row.kind === 'COORDINATOR_QUESTION'
+        ? (row.payload as unknown as CoordinatorQuestion)
+        : null;
       return {
         itemId: row.id,
         kind: row.kind as OpenItemKind,
         title: row.title,
-        detailLine: detailLine(row.kind, row.payload),
+        detailLine: question ? questionDetailLine(question) : detailLine(row.kind, row.payload),
+        question,
         assignee: row.assignee as OpenItemAssignee,
         assigneeReason: row.assigneeReason as OpenItemAssigneeReason,
         waitingSince: row.waitingSince,
@@ -342,6 +683,8 @@ export class ProjectOpenItemService {
                 : { state: 'QUEUED', sessionId: sent.sessionId, at: sent.createdAt },
         actions: row.fuseEpisodeId
           ? ['RESUME']
+          : question
+          ? ['ANSWER']
           : row.taskId
             ? row.assignee === 'COORDINATOR'
               ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
@@ -445,6 +788,11 @@ export class ProjectOpenItemService {
 
 function unique(ids: ReadonlyArray<string | null | undefined>): string[] {
   return [...new Set(ids.filter((id): id is string => !!id))];
+}
+
+/** A key for a caller that sent none: one question per call, which is what asking once means. */
+function randomKey(): string {
+  return randomUUID();
 }
 
 /** The line under an item's title, in the words of the fact (English: this is UI copy). */

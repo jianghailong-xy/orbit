@@ -1077,3 +1077,110 @@ func TestMCPTaskCreateIsTheDefaultAndNamesTheNarrowProjectCase(t *testing.T) {
 		}
 	}
 }
+
+// ask_owner is how a coordinator reaches the one decider it cannot stand in for. It is not a
+// `project_*` tool by name on purpose: the project is what it is ABOUT, while the thing being asked
+// is the account owner, and the closed set above is the set of tools that read and write a project.
+func TestMCPAskOwnerIsPartOfTheBaseTools(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	if !hasMCPTool(tools, "ask_owner") {
+		t.Fatalf("ask_owner missing from the base tools")
+	}
+	props := mcpToolProps(tools, "ask_owner")
+	for _, want := range []string{
+		"projectId", "question", "options", "recommendedOption", "blocksTaskIds",
+		"ifUnanswered", "clientQuestionId",
+	} {
+		if _, ok := props[want]; !ok {
+			t.Fatalf("ask_owner does not take %q: %#v", want, props)
+		}
+	}
+	// The one thing a model must not have to discover by trying it: this call returns immediately.
+	if desc := mcpToolDescription(tools, "ask_owner"); !strings.Contains(desc, "does NOT block") {
+		t.Fatalf("ask_owner's description does not say it returns without waiting: %q", desc)
+	}
+}
+
+func TestMCPAskOwnerPostsTheQuestionAsTheCallingSession(t *testing.T) {
+	var method, path, session string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"itemId":"34ODbP5CnvulADhPzwXNA","state":"OPEN"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("ask_owner", map[string]interface{}{
+		"projectId": "proj-1",
+		"question":  "Which of the two ready tasks goes first?",
+		"options": []interface{}{
+			map[string]interface{}{"label": "t4 first", "description": "one conflict fewer"},
+			map[string]interface{}{"label": "both now"},
+		},
+		"recommendedOption": float64(0),
+		"blocksTaskIds":     []interface{}{"task-4", "task-7"},
+		"ifUnanswered":      "nothing starts",
+		"clientQuestionId":  "call-1",
+	})
+	if res["isError"] == true {
+		t.Fatalf("ask_owner returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost || path != "/api/runner/projects/proj-1/owner-questions" {
+		t.Fatalf("ask_owner hit %s %s", method, path)
+	}
+	// The acting session IS the authority the server checks; a question sent without it is filed
+	// under a project nobody proved the caller coordinates.
+	if session != "343dlzsYWKo5z8l2M8tsB" {
+		t.Fatalf("ask_owner session header = %q", session)
+	}
+	if body["question"] != "Which of the two ready tasks goes first?" {
+		t.Fatalf("ask_owner sent question %#v", body["question"])
+	}
+	// The options go over as written: which counts as a question is the server's rule, and picking
+	// them apart here would be a second opinion about it.
+	options, _ := body["options"].([]interface{})
+	if len(options) != 2 {
+		t.Fatalf("ask_owner sent %d options: %#v", len(options), body["options"])
+	}
+	first, _ := options[0].(map[string]interface{})
+	if first["label"] != "t4 first" || first["description"] != "one conflict fewer" {
+		t.Fatalf("ask_owner reshaped an option: %#v", options[0])
+	}
+	blocked, _ := body["blocksTaskIds"].([]interface{})
+	if len(blocked) != 2 || blocked[0] != "task-4" {
+		t.Fatalf("ask_owner sent blocksTaskIds %#v", body["blocksTaskIds"])
+	}
+	for _, key := range []string{"recommendedOption", "ifUnanswered", "clientQuestionId"} {
+		if _, present := body[key]; !present {
+			t.Fatalf("ask_owner dropped %q: %#v", key, body)
+		}
+	}
+	// What the model reads back says where the answer will arrive, because nothing about this call
+	// says it: an empty acknowledgement would read like a question that went nowhere.
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	if !strings.Contains(text, "arrive as a message") {
+		t.Fatalf("ask_owner's result does not say where the answer arrives: %q", text)
+	}
+}
+
+func TestMCPAskOwnerRequiresAProjectAndAQuestion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("ask_owner reached the server without what it needs")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	for _, args := range []map[string]interface{}{
+		{"question": "who decides?"},
+		{"projectId": "proj-1"},
+		{"projectId": "proj-1", "question": "   "},
+	} {
+		if res := mcp.callTool("ask_owner", args); res["isError"] != true {
+			t.Fatalf("ask_owner accepted %#v", args)
+		}
+	}
+}

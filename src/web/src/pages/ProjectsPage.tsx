@@ -25,6 +25,7 @@ import {
   type AcceptanceCriterionItem,
 } from '../components/ProjectAcceptanceCard';
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
+import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import {
@@ -1075,6 +1076,12 @@ export function ProjectDetailPage() {
               blocker's kind, what it asks for and its files, and the press that resolves it. Drawn
               from this same document, and not at all while nothing is open. */}
           <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
+
+          {/* Open items: what this project's coordinator has asked its owner to decide (mock 5).
+              Beside the blockers because it is the same question — what is standing in the way —
+              asked by the conversation running the project rather than found by the platform. It
+              draws nothing while nothing is open. */}
+          <CoordinatorQuestions projectId={id} />
 
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On

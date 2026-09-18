@@ -8,10 +8,16 @@
  * On 2026-09-13 one such session waited seven hours. This file witnesses the reply the platform
  * sends it once the owner has decided.
  *
+ * The second group is the other direction of the same guarantee (contract §5.2): a coordinator that
+ * needs the owner to decide something asks with `ask_owner`, and the owner's answer comes back to
+ * whichever conversation is coordinating the project WHEN IT IS ANSWERED — which need not be the one
+ * that asked.
+ *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/blocking-request-replies.pg.spec.ts
  *
  * THE CASES
  * =========
+ * criteria decision replies:
  *   (a) APPROVE: the proposing session, parked, gets exactly one turn that says the proposal was
  *       approved, which criteria moved to which revision, and to read them back with project_get;
  *   (b) REJECT: the same turn says nothing was applied, which revisions still stand, and carries
@@ -23,6 +29,17 @@
  *       not revived, the reply is one comment on the task it ran, and repeating it writes no second;
  *   (e) a proposal the owner filed without a session has nobody to reply to, and the door says so.
  *
+ * ask_owner (§5.2 R7–R11):
+ *   (f) only the current coordinator may ask: any other session is refused
+ *       `ASK_OWNER_COORDINATOR_ONLY` and files nothing; the coordinator's question is the owner's
+ *       open item, and asking twice under one key files one;
+ *   (g) the owner's answer reaches the current coordinator: one turn keyed by the item and that
+ *       conversation, carrying the question and the option the owner chose, and answering again is
+ *       refused rather than sent twice;
+ *   (h) after a rotation the new coordinator receives the answer too — for a question that still
+ *       blocks an unsettled task, and for one whose asker was the conversation just replaced — while
+ *       the conversation that already had it is not written to a second time.
+ *
  * Every case builds its own project, task and session. A delivered reply moves its session from
  * AWAITING_INPUT to PENDING and a project holds one pending proposal at a time, so a shared fixture
  * would let one case's reply decide the precondition of the next.
@@ -33,6 +50,10 @@
  * under test adds. Typed through the real declarations, this file would not compile on the tree
  * before the change — and a compile error is not the red this file owes. Every case has to fail on
  * an assertion about a turn or a comment that is not there.
+ *
+ * The ask_owner group is read through the same kind of view, and for the same reason: `askOwner`,
+ * `answerOpenItem` and `deliverOwed`'s second argument are what its change adds, so they are reached
+ * through an optional shape and every case fails on a missing row rather than on `tsc`.
  *
  * WHY THE ENDED SESSION IS ONE THAT `resume` COULD REVIVE
  * =======================================================
@@ -70,6 +91,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsService } from './projects.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -191,6 +213,7 @@ test('a decided criteria proposal is answered back to the session that proposed 
       [ProjectAcceptanceService, new ProjectAcceptanceService(prisma)],
       [SessionsService, sessions],
       [RealtimeService, realtime],
+      [ProjectOpenItemService, new ProjectOpenItemService(prisma, sessions)],
     ])),
   };
 
@@ -522,4 +545,418 @@ async function revisionOf({ db }: Stack, definitionId: string): Promise<number> 
     where: { id: definitionId },
     select: { revision: true },
   })).revision;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * ask_owner: the coordinator asks, the owner answers, and the answer reaches whoever coordinates
+ * the project when it is answered (contract §5.2, R7–R11).
+ * ---------------------------------------------------------------------------------------------- */
+
+/** What `ask_owner` files, as its caller is told. */
+interface AskedView {
+  itemId: string;
+  state: string;
+}
+
+/** What answering hands back: the item's end, and where the answer went. */
+interface AnsweredView {
+  itemId: string;
+  state: string;
+  resolution: string;
+  delivery: { sessionId: string; turnId: string } | null;
+}
+
+interface AskOwnerRequest {
+  question: string;
+  options?: Array<{ label: string; description?: string }>;
+  recommendedOption?: number;
+  blocksTaskIds?: string[];
+  ifUnanswered?: string;
+  clientQuestionId?: string;
+}
+
+/**
+ * The three entries §5.2 adds, read as an optional shape for the reason the header gives: on the
+ * tree before the change this file must fail on a missing row, not on `tsc`.
+ *
+ * `deliverOwed` is already declared taking one argument, so the rotation's second one — the
+ * conversation that was just replaced — is reached through here as well.
+ */
+interface QuestionDoors {
+  askOwner?: (
+    ownerId: string,
+    projectId: string,
+    actingSessionId: string,
+    ask: AskOwnerRequest,
+  ) => Promise<AskedView>;
+  answerOpenItem?: (
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    answer: { option?: number; text?: string },
+  ) => Promise<AnsweredView>;
+  deliverOwed?: (projectId: string, replacedSessionId?: string) => Promise<void>;
+}
+
+/** One project, the conversation coordinating it, a stranger, and a task a question can block. */
+interface Asked extends Owner {
+  projectId: string;
+  coordinatorSessionId: string;
+  strangerSessionId: string;
+  taskId: string;
+}
+
+const QUESTION = 'Two ready tasks both rewrite session_pool.go. Which one starts first?';
+const OPTIONS = [
+  { label: 'Start t4 first, then t7 once t4 lands', description: 'One conflict fewer' },
+  { label: 'Start both now — expect a merge conflict to resolve' },
+  { label: 'Hold both' },
+];
+const IF_UNANSWERED = 'nothing starts; reminder at 2h';
+
+test('the coordinator asks the owner, and the answer reaches the coordinator of the moment', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const db = prismaClientFor(url);
+  t.after(async () => {
+    await db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+
+  const prisma = db as unknown as PrismaService;
+  const realtime = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
+  const sessions = new SessionsService(prisma, queue, realtime);
+  const items = new ProjectOpenItemService(prisma, sessions);
+  const doors = items as unknown as QuestionDoors;
+  const stack: Stack = {
+    db,
+    sql,
+    projects: builtByDeclaredTypes(new Map<unknown, unknown>([
+      [PrismaService, prisma],
+      [ProjectAcceptanceService, new ProjectAcceptanceService(prisma)],
+      [SessionsService, sessions],
+      [RealtimeService, realtime],
+      [ProjectOpenItemService, items],
+    ])),
+  };
+  const owner = await accountOwner(stack);
+
+  const ask = (w: Asked, as: string, request: AskOwnerRequest): Promise<AskedView> => {
+    assert.equal(typeof doors.askOwner, 'function',
+      'a coordinator needs a door to put a question to the account owner through (§5.2 R7)');
+    return doors.askOwner!.call(items, w.ownerId, w.projectId, as, request);
+  };
+  const answer = (
+    w: Asked,
+    itemId: string,
+    given: { option?: number; text?: string },
+  ): Promise<AnsweredView> => {
+    assert.equal(typeof doors.answerOpenItem, 'function',
+      'and the owner needs a door to answer it through (§5.2 R10)');
+    return doors.answerOpenItem!.call(items, w.ownerId, w.projectId, itemId, given);
+  };
+
+  await t.test('(f) only the current coordinator may ask, and one key files one question', async () => {
+    const w = await asked(stack, owner, 'who-may-ask');
+
+    const refused = refusal(await ask(w, w.strangerSessionId, { question: QUESTION })
+      .then(() => null, (e) => e));
+    assert.equal(refused.status, 403, 'a session that does not coordinate this project may not ask');
+    assert.equal(refused.body.code, 'ASK_OWNER_COORDINATOR_ONLY');
+    assert.deepEqual(await questionsIn(stack, w.projectId), [],
+      'and the refusal files nothing for the owner to read');
+
+    const asking: AskOwnerRequest = {
+      question: QUESTION,
+      options: OPTIONS,
+      recommendedOption: 0,
+      blocksTaskIds: [w.taskId],
+      ifUnanswered: IF_UNANSWERED,
+      clientQuestionId: 'tool-call-1',
+    };
+    const filed = await ask(w, w.coordinatorSessionId, asking);
+    assert.equal(filed.state, 'OPEN', 'the tool returns at once; the answer arrives as a turn');
+
+    const [row] = await questionsIn(stack, w.projectId);
+    assert.ok(row, 'the question is a durable item, not a message');
+    assert.equal(row.id, filed.itemId);
+    assert.equal(row.assignee, 'OWNER', 'a question is the owner’s and nobody else’s');
+    assert.equal(row.assignee_reason, 'DEFAULT');
+    assert.equal(row.asked_by_session_id, w.coordinatorSessionId, 'it records who asked');
+    assert.equal(row.dedupe_key, 'CQ:tool-call-1');
+    assert.equal(row.title, `Coordinator asks: ${QUESTION}`);
+    assert.deepEqual(row.payload, {
+      question: QUESTION,
+      options: OPTIONS,
+      recommendedOption: 0,
+      blocksTaskIds: [w.taskId],
+      ifUnanswered: IF_UNANSWERED,
+    }, 'carrying everything the card shows: the question, the options, the recommendation, '
+      + 'what it blocks and what happens if nobody answers');
+    assert.ok(row.remind_at, 'the owner is reminded once, after the project’s own window (§5.2 R9)');
+    assert.equal(row.escalate_at, null, 'an item already with the owner has nowhere to escalate to');
+    assert.equal(row.reminded_at, null);
+
+    const again = await ask(w, w.coordinatorSessionId, asking);
+    assert.equal(again.itemId, filed.itemId, 'the same tool call asked twice is one question');
+    assert.equal((await questionsIn(stack, w.projectId)).length, 1);
+
+    const open = await items.list(w.ownerId, w.projectId);
+    assert.deepEqual(open.needsYou.map((item) => item.itemId), [filed.itemId],
+      'and the owner reads it among the things waiting for them');
+    assert.deepEqual(open.withCoordinator, [], 'it is not something the coordinator can handle');
+    const [card] = open.needsYou;
+    assert.equal(card.kind, 'COORDINATOR_QUESTION');
+    assert.equal(card.delivery.state, 'NOT_REQUIRED', 'the question itself is not delivered anywhere');
+    assert.ok((card.actions as readonly string[]).includes('ANSWER'),
+      'the one thing the owner does with it');
+    const question = (card as unknown as { question?: Record<string, unknown> }).question;
+    assert.ok(question, 'the row carries the question the card renders (§4.8)');
+    assert.equal(question!.question, QUESTION);
+    assert.deepEqual(question!.options, OPTIONS);
+    assert.equal(question!.recommendedOption, 0);
+    assert.equal(question!.ifUnanswered, IF_UNANSWERED);
+    assert.deepEqual(question!.blocksTaskIds, [w.taskId]);
+  });
+
+  await t.test('(g) the owner’s answer reaches the current coordinator', async () => {
+    const w = await asked(stack, owner, 'answer-reaches');
+    const filed = await ask(w, w.coordinatorSessionId, {
+      question: QUESTION,
+      options: OPTIONS,
+      recommendedOption: 0,
+      blocksTaskIds: [w.taskId],
+      ifUnanswered: IF_UNANSWERED,
+      clientQuestionId: 'answered',
+    });
+    assert.deepEqual(await answerTurns(stack, w.coordinatorSessionId), [],
+      'nothing is sent while the question is still open');
+
+    const given = await answer(w, filed.itemId, { option: 0 });
+    assert.equal(given.state, 'RESOLVED');
+    assert.equal(given.resolution, 'ANSWERED');
+
+    const [row] = await questionsIn(stack, w.projectId, 'RESOLVED');
+    assert.equal(row.resolution, 'ANSWERED');
+    assert.equal(row.resolved_by, 'USER', 'the owner answered it in person');
+    assert.equal(row.resolved_by_user_id, w.ownerId);
+    assert.ok(row.resolved_at);
+    assert.deepEqual(row.answer, { option: 0, answeredByUserId: w.ownerId });
+
+    const turns = await answerTurns(stack, w.coordinatorSessionId);
+    assert.equal(turns.length, 1, 'exactly one turn carries the answer');
+    const [turn] = turns;
+    assert.equal(turn.clientTurnId, `owner-answer:v1:${filed.itemId}:${w.coordinatorSessionId}`,
+      'keyed by the question and the conversation it went to, so a replay sends nothing more');
+    assert.match(turn.content, /^From Orbit · owner answer: /);
+    assert.ok(turn.content.includes(QUESTION), 'it repeats what was asked');
+    assert.ok(turn.content.includes(OPTIONS[0]!.label), 'and says what the owner chose');
+    assert.equal(await statusOf(stack, w.coordinatorSessionId), RunStatus.PENDING,
+      'queued for the runner like any message, so the conversation wakes to read it');
+    assert.equal(given.delivery?.sessionId, w.coordinatorSessionId, 'the door says where it went');
+    assert.equal(given.delivery?.turnId, turn.id);
+
+    assert.deepEqual(await deliveriesOf(stack, filed.itemId), [
+      { session_id: w.coordinatorSessionId, purpose: 'ANSWER', returned_at: null },
+    ]);
+
+    const twice = refusal(await answer(w, filed.itemId, { option: 1 }).then(() => null, (e) => e));
+    assert.equal(twice.status, 409, 'an answered question is answered; it is not answered again');
+    assert.equal(twice.body.code, 'OPEN_ITEM_NOT_OPEN');
+    assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 1);
+  });
+
+  await t.test('(h) after a rotation the new coordinator receives the answer too', async () => {
+    const w = await asked(stack, owner, 'rotation');
+    // Two questions, for the two conditions R11 redelivers on: one still blocks a task nobody has
+    // settled, and one blocks nothing but was asked by the conversation this rotation replaces.
+    const blocking = await ask(w, w.coordinatorSessionId, {
+      question: QUESTION,
+      options: OPTIONS,
+      recommendedOption: 0,
+      blocksTaskIds: [w.taskId],
+      ifUnanswered: IF_UNANSWERED,
+      clientQuestionId: 'blocking',
+    });
+    const standalone = await ask(w, w.coordinatorSessionId, {
+      question: 'Should this project keep its integration line after the last task lands?',
+      clientQuestionId: 'standalone',
+    });
+    await answer(w, blocking.itemId, { option: 1 });
+    await answer(w, standalone.itemId, { text: 'keep it' });
+    assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 2,
+      'the conversation that asked is told both answers while it is still the coordinator');
+
+    const next = await coordinatorConversation(stack, owner, 'rotation-2');
+    await sql.query(
+      `UPDATE "project" SET "coordinator_session_id" = $1::uuid WHERE "id" = $2::uuid`,
+      [next, w.projectId],
+    );
+    assert.equal(typeof doors.deliverOwed, 'function');
+    // The edge the pointer swap runs, with the argument the swap passes: the conversation replaced.
+    await doors.deliverOwed!.call(items, w.projectId, w.coordinatorSessionId);
+
+    const arrived = await answerTurns(stack, next);
+    assert.equal(arrived.length, 2,
+      'both answers reach the conversation that coordinates the project now (§5.2 R11)');
+    assert.deepEqual(arrived.map((turn) => turn.clientTurnId).sort(), [
+      `owner-answer:v1:${blocking.itemId}:${next}`,
+      `owner-answer:v1:${standalone.itemId}:${next}`,
+    ].sort(), 'each keyed by the generation it was delivered to, so no generation reads one twice');
+    assert.ok(arrived.some((turn) => turn.content.includes(OPTIONS[1]!.label)));
+    assert.ok(arrived.some((turn) => turn.content.includes('keep it')));
+    assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 2,
+      'and the conversation that already had them is not written to a second time');
+
+    await doors.deliverOwed!.call(items, w.projectId, w.coordinatorSessionId);
+    assert.equal((await answerTurns(stack, next)).length, 2,
+      'running the same edge again sends nothing more');
+    for (const itemId of [blocking.itemId, standalone.itemId]) {
+      assert.deepEqual((await deliveriesOf(stack, itemId)).map((row) => row.session_id).sort(),
+        [w.coordinatorSessionId, next].sort(), 'one delivery per item per generation');
+    }
+  });
+});
+
+/** A project with a coordinator, a session that coordinates nothing, and one task under it. */
+async function asked(stack: Stack, owner: Owner, label: string): Promise<Asked> {
+  const { db } = stack;
+  const projectId = randomUUID();
+  const taskId = randomUUID();
+  const coordinatorSessionId = await coordinatorConversation(stack, owner, label);
+  const strangerSessionId = await coordinatorConversation(stack, owner, `${label}-stranger`);
+  await db.project.create({
+    data: {
+      id: projectId,
+      ownerId: owner.ownerId,
+      title: `ask_owner: ${label}`,
+      goal: 'a question the platform cannot answer reaches the person who can',
+      coordinatorEnabled: true,
+      coordinatorWorkspaceId: owner.workspaceId,
+      coordinatorSessionId,
+    },
+  });
+  await db.task.create({
+    data: {
+      id: taskId,
+      ownerId: owner.ownerId,
+      projectId,
+      title: `the work the question is about (${label})`,
+      creatorType: CreatorType.USER,
+      creatorId: owner.ownerId,
+      assigneeId: owner.workspaceId,
+      status: TaskStatus.OPEN,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    },
+  });
+  return { ...owner, projectId, coordinatorSessionId, strangerSessionId, taskId };
+}
+
+/** A conversation parked between turns: what a coordinator is when a turn is queued onto it. */
+async function coordinatorConversation(
+  { db }: Stack,
+  owner: Owner,
+  label: string,
+): Promise<string> {
+  const sessionId = randomUUID();
+  const title = `coordinator: ${label}`;
+  await db.session.create({
+    data: {
+      id: sessionId,
+      ownerId: owner.ownerId,
+      creatorId: owner.ownerId,
+      workspaceId: owner.workspaceId,
+      assignedRunnerId: owner.runnerId,
+      title,
+      prompt: title,
+      provider: 'claude',
+      status: RunStatus.AWAITING_INPUT,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+      titleManagedByProject: true,
+      numTurns: 1,
+      startedAt: new Date(),
+      runtimeSessionId: randomUUID(),
+    },
+  });
+  await db.conversationTurn.create({
+    data: {
+      sessionId,
+      seq: 1,
+      clientTurnId: SessionsService.initialTurnClientId(sessionId),
+      kind: 'message',
+      content: title,
+      status: 'ANSWERED',
+    },
+  });
+  return sessionId;
+}
+
+interface QuestionRow {
+  id: string;
+  assignee: string;
+  assignee_reason: string;
+  asked_by_session_id: string | null;
+  dedupe_key: string;
+  title: string;
+  payload: unknown;
+  answer: unknown;
+  resolution: string | null;
+  resolved_at: Date | null;
+  resolved_by: string | null;
+  resolved_by_user_id: string | null;
+  remind_at: Date | null;
+  reminded_at: Date | null;
+  escalate_at: Date | null;
+}
+
+async function questionsIn(
+  { sql }: Stack,
+  projectId: string,
+  state = 'OPEN',
+): Promise<QuestionRow[]> {
+  const { rows } = await sql.query<QuestionRow>(
+    `SELECT * FROM "project_open_item"
+      WHERE "project_id" = $1::uuid AND "kind" = 'COORDINATOR_QUESTION' AND "state" = $2
+      ORDER BY "created_at", "id"`,
+    [projectId, state],
+  );
+  return rows;
+}
+
+/** Every turn carrying an owner's answer, on the conversation it was addressed to. */
+async function answerTurns(
+  { sql }: Stack,
+  sessionId: string,
+): Promise<Array<{ id: string; clientTurnId: string; content: string }>> {
+  const { rows } = await sql.query<{ id: string; client_turn_id: string; content: string | null }>(
+    `SELECT "id", "client_turn_id", "content" FROM "conversation_turn"
+      WHERE "session_id" = $1::uuid AND "client_turn_id" LIKE 'owner-answer:v1:%'
+      ORDER BY "seq"`,
+    [sessionId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    clientTurnId: row.client_turn_id,
+    content: row.content ?? '',
+  }));
+}
+
+async function deliveriesOf(
+  { sql }: Stack,
+  itemId: string,
+): Promise<Array<{ session_id: string; purpose: string; returned_at: Date | null }>> {
+  const { rows } = await sql.query<{ session_id: string; purpose: string; returned_at: Date | null }>(
+    `SELECT "session_id", "purpose", "returned_at" FROM "project_open_item_delivery"
+      WHERE "item_id" = $1::uuid ORDER BY "created_at", "id"`,
+    [itemId],
+  );
+  return rows;
 }

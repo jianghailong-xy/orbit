@@ -19,6 +19,7 @@ import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import type { PendingDecisionQueue } from '../components/DecisionRail';
 import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard';
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
+import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
 import {
   activeTasksPath,
@@ -571,6 +572,23 @@ export const pendingCriteriaDecisionsQuery = (projectId: string) =>
       api<PendingCriteriaDecisionQueue>(
         `/projects/${encodeURIComponent(projectId)}/acceptance/criteria-decisions/pending`,
       ),
+  });
+
+/**
+ * What this project owes somebody a decision about, re-derived on every read: the exceptions its
+ * coordinator is handling, and what waits for the owner in person — including the questions the
+ * coordinator has asked them (`CoordinatorQuestionCard`, contract §4.8, §5.2).
+ *
+ * Keyed by the PROJECT, like the criteria proposals above and for the same reason: an item belongs
+ * to the project, and which session is reading it changes nothing about the answer. So the project
+ * page and the coordinator's conversation, which draw the same card, share one cache entry and can
+ * never be looking at two different moments.
+ */
+export const projectOpenItemsQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'open-items'] as const,
+    queryFn: () =>
+      api<ProjectOpenItemsView>(`/projects/${encodeURIComponent(projectId)}/open-items`),
   });
 
 /**
