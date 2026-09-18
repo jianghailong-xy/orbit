@@ -55,9 +55,9 @@ const (
 )
 
 // ensureClaudeTranscript rebuilds the session's local Claude transcript when this machine does
-// not have it, so the caller's `--resume` finds a conversation. Best-effort throughout: every
-// failure is logged and returned, never raised, so a rebuild that cannot happen still leaves the
-// spawn to be made.
+// not have it where the CLI will read it, so the caller's `--resume` finds a conversation.
+// Best-effort throughout: every failure is logged and returned, never raised, so a rebuild that
+// cannot happen still leaves the spawn to be made.
 //
 // It reports one thing to its caller — whether this machine provably has nothing to resume, in
 // which case the spawn must open the conversation instead. That is a question about the disk, not
@@ -70,13 +70,18 @@ const (
 // not be written — answers true and keeps the resume, because that failure is the recoverable
 // one: a later attempt can rebuild a history this one merely failed to fetch, whereas reopening
 // would drop it for good.
+//
+// "Where the CLI will read it" is the whole of the first question, so it is asked of that path and
+// never of a glob over every project directory: a worktree that moved leaves the conversation
+// under the old cwd's slug, which `--resume` cannot read. Finding it there is the reason to
+// rebuild here, never a reason to skip the rebuild and resume into nothing.
 func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) bool {
-	if p := findClaudeTranscript(job.SessionUUID); p != "" && claudeTranscriptHasConversation(p) {
-		return true
-	}
 	path, err := claudeTranscriptPath(execDir, job.SessionUUID)
 	if err != nil {
 		logln("transcript rebuild: cannot resolve transcript path:", err)
+		return true
+	}
+	if claudeTranscriptHasConversation(path) {
 		return true
 	}
 	events, err := fetchStoredEvents(ctx, t, job.SessionID)

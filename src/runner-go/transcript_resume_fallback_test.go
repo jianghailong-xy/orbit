@@ -32,10 +32,10 @@ import (
 // The CLI is taken down as soon as it is up: the decision under test is the one made before the
 // process starts, and nothing the fake does afterwards can change the argv it was started with.
 //
-// configDir is this machine's ~/.claude. A case that wants the conversation already present
-// writes it in there before calling; every other case starts from a machine that has never seen
-// the session.
-func resumeSpawn(t *testing.T, job *ClaimedSession, stored []StoredEvent, configDir string) []string {
+// configDir is this machine's ~/.claude, execDir the session's checkout. A case that wants the
+// conversation already present writes it where claude reads it for that checkout before calling;
+// every other case starts from a machine that has never seen the session.
+func resumeSpawn(t *testing.T, job *ClaimedSession, stored []StoredEvent, configDir, execDir string) []string {
 	t.Helper()
 	fake := newFakeClaude(t, fakeStep{Emit: "system_init"})
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -53,13 +53,13 @@ func resumeSpawn(t *testing.T, job *ClaimedSession, stored []StoredEvent, config
 
 	ctx, cancel := context.WithTimeout(context.Background(), fakeClaudeTimeout)
 	defer cancel()
-	dir := t.TempDir()
+	scratchDir := t.TempDir()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		runClaudeSessionProcess(ctx, context.Background(),
 			NewTransport(api.URL, "runner-token"),
-			job, "11111111-1111-4111-8111-111111111111", dir, dir,
+			job, "11111111-1111-4111-8111-111111111111", execDir, scratchDir,
 			func(string, map[string]interface{}) {},
 			func(string, string, map[string]interface{}) {},
 			func(string) {}, false, nil,
@@ -106,16 +106,21 @@ func TestUnreadableEventLogIsNotTreatedAsNoHistory(t *testing.T) {
 	}
 }
 
-// writeLocalConversation puts a transcript holding a real turn where claude keeps one, so the
-// machine under test is one that already has this session's conversation.
-func writeLocalConversation(t *testing.T, configDir, sessionUUID, turnType string) {
+// writeLocalConversation puts a transcript holding a real turn where claude will read it for a
+// session running in execDir — the same place a transcript import's copy lands, and the only
+// directory `--resume` looks in. A conversation under any other cwd's slug is one this machine
+// cannot resume, which is the failure TestResumeRebuildsWhenTheOnlyCopyIsUnderAnotherCwd covers.
+func writeLocalConversation(t *testing.T, execDir, sessionUUID, turnType string) {
 	t.Helper()
-	dir := filepath.Join(configDir, "projects", "-root-orbit-worktrees-x")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	path, err := claudeTranscriptPath(execDir, sessionUUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"type":"` + turnType + `","message":{"role":"` + turnType + `","content":[{"type":"text","text":"hi"}]}}` + "\n"
-	if err := os.WriteFile(filepath.Join(dir, sessionUUID+".jsonl"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -131,7 +136,7 @@ func TestResumeWithNothingReplayableOpensTheConversationInstead(t *testing.T) {
 	argv := resumeSpawn(t, job, []StoredEvent{
 		ev(1, evSystem, map[string]interface{}{"subtype": "init"}),
 		ev(2, evError, map[string]interface{}{"message": "engine exited during startup"}),
-	}, t.TempDir())
+	}, t.TempDir(), t.TempDir())
 	if !containsArgs(argv, []string{"--session-id", job.SessionUUID}) {
 		t.Errorf("argv %v resumes a conversation this machine does not have; it must open one", argv)
 	}
@@ -149,7 +154,7 @@ func TestResumeWithReplayableHistoryStillResumes(t *testing.T) {
 	argv := resumeSpawn(t, job, []StoredEvent{
 		ev(1, evUser, map[string]interface{}{"text": "rename the widget"}),
 		ev(2, evAssistant, map[string]interface{}{"text": "done"}),
-	}, t.TempDir())
+	}, t.TempDir(), t.TempDir())
 	if !containsArgs(argv, []string{"--resume", job.SessionUUID}) {
 		t.Errorf("argv %v does not resume a conversation that was rebuilt from stored history", argv)
 	}
@@ -166,9 +171,12 @@ func TestResumeWithAnImportedConversationStillResumes(t *testing.T) {
 	job := claudeSpawnJob(t)
 	job.Resume = true
 	job.MaxSeq = 0
-	configDir := t.TempDir()
-	writeLocalConversation(t, configDir, job.SessionUUID, "user")
-	argv := resumeSpawn(t, job, nil, configDir)
+	configDir, execDir := t.TempDir(), t.TempDir()
+	// claudeTranscriptPath resolves against CLAUDE_CONFIG_DIR, so the fixture has to be written
+	// under the config dir this spawn will use, not whatever the process inherited.
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	writeLocalConversation(t, execDir, job.SessionUUID, "user")
+	argv := resumeSpawn(t, job, nil, configDir, execDir)
 	if !containsArgs(argv, []string{"--resume", job.SessionUUID}) {
 		t.Errorf("argv %v does not resume an imported conversation that is on disk", argv)
 	}
