@@ -454,10 +454,13 @@ export class SessionsController {
   resume(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionResumeDto,
+    @Body(PublicIdPipe.forFields('attachmentIds', 'stopSessionId')) dto: SessionResumeDto,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.resume(user.userId, id, dto);
+    // The person's door, and the only one that routes a message onto the run that holds this
+    // session's task — see SessionsService.resume's `routeToCurrentRun` for why the sweeps and the
+    // dispatchers keep the refusal instead.
+    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true });
   }
 
   @Patch(':id/config')

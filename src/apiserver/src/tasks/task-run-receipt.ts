@@ -336,7 +336,64 @@ export function taskAlreadyRunning(context: {
     taskId: context.taskPublicId,
     conflictingSessionId: context.sessionPublicId,
     conflictingSessionStatus: context.sessionStatus,
+    // `ending` shaped only the English before this, and the two states it separates need different
+    // things said to a person: a run that is on its way out frees the task in a moment, while one
+    // that is working holds it until it is finished. A client reading the status alone cannot tell
+    // them apart — `cancel_requested_at` is set while the status is still RUNNING.
+    conflictingSessionEnding: context.ending === true,
     retryable: true,
+  });
+}
+
+/**
+ * The answer for "going where you asked means stopping the run that is going".
+ *
+ * A run's provider is fixed for its lifetime, so continuing a message on another one is not a
+ * setting: it is one run ended and another one started. That is destructive — the run being
+ * stopped is doing work — so the platform does not do it because a provider was named. It asks,
+ * and this is the asking.
+ *
+ * STRUCTURED, and here that is the whole point rather than a nicety. "This needs confirming" is a
+ * FIELD, and what to send back to confirm it is a field too (`confirm`), so a client offers the
+ * choice by reading the answer instead of by recognising a sentence. The value is the SESSION the
+ * confirmation is about, not a bare `true`: the person is authorising the end of the run they were
+ * shown, and a holder that changed hands between the question and the answer is a different run
+ * that has to ask again rather than be stopped on somebody else's confirmation.
+ *
+ * `retryable: false` because repeating this request unchanged asks the same question again. What
+ * moves it on is the person answering it.
+ */
+export function taskRunProviderSwitchConfirmation(context: {
+  taskPublicId: string;
+  /** The run that would be stopped. */
+  sessionPublicId: string;
+  sessionStatus: string;
+  /** The provider that run is on, and keeps. */
+  runningProvider: string;
+  /** The provider the message asked to continue on. */
+  requestedProvider: string;
+}): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    code: 'TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED',
+    message:
+      `task ${context.taskPublicId} is being worked by session ${context.sessionPublicId} on ` +
+      `${context.runningProvider}. A running session's provider is not switched under it, so ` +
+      `continuing on ${context.requestedProvider} means stopping that run first — its branch and ` +
+      'worktree are kept. Send this message again with `stopSessionId` to confirm',
+    owner: 'USER',
+    requiredAction:
+      `confirm stopping session ${context.sessionPublicId} and continuing on ` +
+      `${context.requestedProvider}`,
+    confirmationRequired: true,
+    confirm: { field: 'stopSessionId', value: context.sessionPublicId },
+    taskId: context.taskPublicId,
+    conflictingSessionId: context.sessionPublicId,
+    conflictingSessionStatus: context.sessionStatus,
+    runningProvider: context.runningProvider,
+    requestedProvider: context.requestedProvider,
+    retryable: false,
   });
 }
 

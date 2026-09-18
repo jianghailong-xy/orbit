@@ -84,6 +84,15 @@ export interface SessionResumeDto extends SessionTurnDto {
    *  same rejection as SessionConfigDto.provider. No reload turn is needed here: the revived
    *  session is claimed afresh, and the claim resolves the environment from the row. */
   provider?: string;
+  /** The run this message authorises STOPPING, named by its public id.
+   *
+   *  Only read when this session's task is being worked by another run and `provider` names a
+   *  different one than that run is on: the platform then answers
+   *  `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` and this field is what confirms it. It names
+   *  the session rather than being a bare flag because stopping a run is destructive and the
+   *  authorisation is for the run the person was SHOWN — a holder that changed hands in between is
+   *  a different run, and asks again rather than being stopped on a confirmation about another. */
+  stopSessionId?: string;
 }
 
 export interface MergeToMainDto {

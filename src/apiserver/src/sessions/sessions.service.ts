@@ -66,6 +66,7 @@ import {
 import {
   TaskRunFenceLost,
   taskAlreadyRunning,
+  taskRunProviderSwitchConfirmation,
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
@@ -414,6 +415,30 @@ const eventMatchSql = (norm: NormalizedSearchQuery): Prisma.Sql =>
     ),
     ' AND ',
   );
+
+/**
+ * What the resume door answers.
+ *
+ * Written out rather than inferred because the door is now REENTRANT: a confirmed provider switch
+ * stops the run in the way and re-enters `resume` to continue the message, and TypeScript cannot
+ * infer a return type through a cycle. Spelling it here also makes the one field the clients gained
+ * a declared part of the contract instead of a shape that happens to fall out of one branch.
+ */
+export interface SessionResumeAnswer {
+  turnId: string;
+  seq: number;
+  kind: string;
+  placement: TurnPlacement;
+  targetTurnId?: string;
+  /** Whether THIS request restarted an engine, as opposed to joining one that was already up. */
+  revived: boolean;
+  /**
+   * The session this message was delivered to, when that is not the one it was addressed to: the
+   * run holding the task's execution claim, as a PUBLIC id. Absent means it landed where it was
+   * sent. Clients follow it — this is how a person stops talking to a run that was replaced.
+   */
+  routedToSessionId?: string;
+}
 
 /** What SessionsService.resolveProviderSwitch answers — see its doc comment. */
 interface ResolvedProviderSwitch {
@@ -5661,7 +5686,27 @@ export class SessionsService {
   }
 
   /**
-   * The refusal for a revive that lost 0130's execution claim.
+   * Where a message goes when its revive lost 0130's execution claim.
+   *
+   * The run this session belongs to has been replaced — by Run Now, by a sweep, by the auto-run
+   * the task list reconciles — and the person is still looking at the one it replaced. Until now
+   * the whole answer was a refusal, and the message was never delivered anywhere: the platform
+   * knew which run holds the task and said so in a sentence, while the thing the person actually
+   * asked for (say this to whoever is doing the work) was left undone. So this ROUTES.
+   *
+   * Three answers, and which one it is turns on what the person chose, never on what would be
+   * convenient:
+   *
+   *   they named no provider, or the one already running — the message is delivered to the run
+   *     that holds the claim and the answer says which run that was, so the client can follow;
+   *   they named another provider — a run's provider is fixed for its lifetime, so this can only
+   *     be done by stopping that run, which is destructive and is therefore ASKED
+   *     (`TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED`) before it is done;
+   *   the confirmation names that run — it is stopped through the ordinary stop, and this message
+   *     opens the continuing round on the provider that was chosen.
+   *
+   * Nothing here stops a run that nobody asked to stop, and nothing here moves a running session
+   * onto another provider.
    *
    * `session_task_execution_claim_idx` makes "one live Session per task" a property of the database,
    * and a revive writes a LIVE status — so a task whose run has already been re-dispatched (Run Now,
@@ -5679,11 +5724,14 @@ export class SessionsService {
    * character) rather than "the newest" or "the live one": a reader narrower than the index it
    * explains answers "nothing holds the claim" for rows that do.
    */
-  private async refuseReviveOntoAHeldClaim(
+  private async routeOntoTheHeldClaim(
+    ownerId: string,
     id: string,
+    dto: SessionResumeDto,
     taskId: string | null,
     workspaceId: string | null,
-  ): Promise<never> {
+    opts?: { routeToCurrentRun?: boolean },
+  ): Promise<SessionResumeAnswer> {
     if (taskId !== null) {
       // `NOT: { id }` is belt-and-braces — every path here arrives with THIS row terminal, so it
       // cannot be in the index — and it is what keeps the sentence from naming the caller's own
@@ -5696,10 +5744,11 @@ export class SessionsService {
           workspaceId: true,
           startsTaskWork: true,
           cancelRequestedAt: true,
+          provider: true,
         },
       });
       if (holder) {
-        throw taskAlreadyRunning({
+        const inTheWay = () => taskAlreadyRunning({
           taskPublicId: uuidToBase62(taskId),
           sessionPublicId: uuidToBase62(holder.id),
           sessionStatus: holder.status,
@@ -5707,6 +5756,54 @@ export class SessionsService {
           ending: holder.cancelRequestedAt != null,
           notWork: holder.startsTaskWork === false,
         });
+        // Only a person routes — see `resume`'s `routeToCurrentRun`. Every server-driven caller
+        // keeps the refusal it has always had.
+        if (!opts?.routeToCurrentRun) throw inTheWay();
+        // Already on its way out, whoever asked for that — including the request one delivery ago
+        // that asked for it below. Nothing can take a message: `createTurn` refuses a session with
+        // `cancel_requested_at` set, and a revive still loses the claim until the runner lets go of
+        // it. Said as the retryable answer it is, so the repeat of this same `clientTurnId` lands
+        // the moment the claim is free.
+        if (holder.cancelRequestedAt != null) throw inTheWay();
+        // Nothing was chosen, or what was chosen is what is already running: this is a message, not
+        // a switch. It goes to the run doing the work, and the answer names that run so the client
+        // can follow it there.
+        //
+        // Per-session overrides that rode along (model, effort, permission mode, fast mode) are
+        // deliberately NOT carried over: they configure the session they were sent for, and this
+        // message is being delivered into a different one that is already running under its own.
+        if (dto.provider === undefined || dto.provider === holder.provider) {
+          const delivered = await this.createTurn(ownerId, holder.id, dto);
+          return {
+            ...delivered,
+            revived: false as const,
+            routedToSessionId: uuidToBase62(holder.id),
+          };
+        }
+        // A different provider was named. The switch itself was already judged — the revive that
+        // brought us here ran `resolveProviderSwitch` inside its transaction and would have thrown
+        // before reaching the index if the two ran on different runtimes — so what is left is the
+        // destructive half: this can only be done by ending the run that is going.
+        if (dto.stopSessionId !== holder.id) {
+          throw taskRunProviderSwitchConfirmation({
+            taskPublicId: uuidToBase62(taskId),
+            sessionPublicId: uuidToBase62(holder.id),
+            sessionStatus: holder.status,
+            runningProvider: holder.provider,
+            requestedProvider: dto.provider,
+          });
+        }
+        // Confirmed, and naming this run. The ordinary stop — the one the Stop button and
+        // `batch-stop` take — so the branch and the worktree are left exactly as they are and the
+        // runner winds its process down rather than being orphaned.
+        await this.cancel(ownerId, holder.id);
+        // And then the message goes where it was always going: this session, on the provider that
+        // was chosen, with this message opening it. A holder that had not started yet is already
+        // out of the claim when this re-enters; one with a process to wind down still holds it, and
+        // the re-entry answers with the ending refusal above rather than pretending otherwise.
+        // It cannot loop: a stop is authorised for ONE named session, so a claim that changed hands
+        // in between asks its own question instead of being stopped by this answer.
+        return this.resume(ownerId, id, dto, opts);
       }
     }
     // No holder: the claim was taken and released between the failed write and this read, or this
@@ -5747,8 +5844,20 @@ export class SessionsService {
        * attempt may not buy the same turn by reviving the session it belongs to instead.
        */
       participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * This request is a PERSON saying something now — the HTTP resume door, and only that one.
+       *
+       * It is what decides whether a message whose session has been replaced is ROUTED to the run
+       * that holds the task instead of refused. Every other caller of resume is a server replaying
+       * or dispatching something: the auto-retry sweeper re-sends a message that was typed into
+       * THIS run before a quota killed it, the task planner hands a paused run the task's own
+       * prompt, the coordinator delivers to the session it addressed. Routing those would push
+       * words that belong to one conversation into whichever run the task happens to be on — so
+       * they keep the refusal, and the person's door gets the routing.
+       */
+      routeToCurrentRun?: boolean;
     },
-  ) {
+  ): Promise<SessionResumeAnswer> {
     assertPromptSize(dto.content, 'message');
     const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
@@ -6165,10 +6274,18 @@ export class SessionsService {
       // becomes. Caught outside the transaction, because naming the holder means reading, and the
       // transaction that raised this cannot answer a read. Any other duplicate is somebody else's
       // fact and goes on being thrown as it is.
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
         if (!isExecutionClaimConflict(error)) throw error;
-        return this.refuseReviveOntoAHeldClaim(id, session.taskId, session.workspaceId);
+        return {
+          routed: await this.routeOntoTheHeldClaim(
+            ownerId, id, dto, session.taskId, session.workspaceId, opts,
+          ),
+        } as const;
       });
+    // The message was delivered somewhere else, or a round was continued by re-entering resume.
+    // Either way this delivery's receipt is that one, and none of the post-commit work below
+    // belongs to it: nothing on THIS row was revived.
+    if ('routed' in revived) return revived.routed;
     // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
     // and signal the control plane, so every other client moves the row out of Completed and
     // into Open without polling.

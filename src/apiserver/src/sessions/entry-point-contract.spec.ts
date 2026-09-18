@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { SessionsController } from './sessions.controller';
 import { SessionNotSendable, SessionsService } from './sessions.service';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
-import type { SessionTurnDto, SessionInterruptDto } from './dto';
+import type { SessionTurnDto, SessionInterruptDto, SessionResumeDto } from './dto';
 
 // `[K3]` guards attempts at this door; nothing here is an attempt, so both calls are no-ops. A
 // stub rather than `{}` so a guard that starts being called shows up as a test change, not a crash.
@@ -30,10 +30,14 @@ const CLIENT_TURN_ID = '33333333-3333-4333-8333-333333333333';
 
 type TurnCall = { ownerId: string; id: string; dto: SessionTurnDto };
 type InterruptCall = { ownerId: string; id: string; dto?: SessionInterruptDto };
+type ResumeCall = {
+  ownerId: string; id: string; dto: SessionResumeDto; opts?: { routeToCurrentRun?: boolean };
+};
 
 function doors() {
   const turns: TurnCall[] = [];
   const interrupts: InterruptCall[] = [];
+  const resumes: ResumeCall[] = [];
   const sessions = {
     createTurn: async (ownerId: string, id: string, dto: SessionTurnDto) => {
       turns.push({ ownerId, id, dto });
@@ -50,13 +54,24 @@ function doors() {
       interrupts.push({ ownerId, id, dto });
       return dto?.content ? { ok: true as const, turnId: 'turn-2', seq: 8 } : { ok: true as const };
     },
+    resume: async (
+      ownerId: string,
+      id: string,
+      dto: SessionResumeDto,
+      opts?: { routeToCurrentRun?: boolean },
+    ) => {
+      resumes.push({ ownerId, id, dto, opts });
+      return {
+        turnId: 'turn-3', seq: 9, kind: 'message', placement: 'accepted' as const, revived: true,
+      };
+    },
     assertHostedByRunner: async () => undefined,
   };
   const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, {} as never);
   const runner = new RunnerSessionsController(sessions as never, {
     assert: async () => undefined,
   } as never, {} as never, ATTEMPTS as never);
-  return { turns, interrupts, browser, runner };
+  return { turns, interrupts, resumes, browser, runner };
 }
 
 const RUNNER = { ownerId: OWNER_ID } as never;
@@ -268,4 +283,27 @@ test('SessionsService still carries the DI metadata Nest resolves it from', () =
     Reflect.getMetadata('__injectable__', SessionNotSendable), undefined,
     'and no error class beside it may have taken the decorator',
   );
+});
+
+test('only the person\'s door asks for a replaced run\'s message to be routed', async () => {
+  const d = doors();
+
+  await d.browser.resume({ userId: OWNER_ID } as never, SESSION_ID, {
+    clientTurnId: CLIENT_TURN_ID,
+    content: 'carry on with the task',
+  });
+  await d.runner.sendMessage(RUNNER, undefined, CALLER, 'tok', SESSION_ID, {
+    message: 'carry on with the task',
+    clientTurnId: CLIENT_TURN_ID,
+    resumeIfEnded: true,
+  });
+
+  assert.equal(d.resumes.length, 2);
+  // A person sending into a run the task has already replaced wants the work to carry on, and is
+  // watching: the message goes to the run that holds the task and the answer says which one.
+  assert.equal(d.resumes[0].opts?.routeToCurrentRun, true);
+  // An agent's send is not that. Its words belong to the conversation they were written for, and
+  // this door's own comment says the 409 is load-bearing: callers re-home a refused message onto a
+  // fresh session rather than have it pushed into whatever the task happens to be running.
+  assert.notEqual(d.resumes[1].opts?.routeToCurrentRun, true);
 });
