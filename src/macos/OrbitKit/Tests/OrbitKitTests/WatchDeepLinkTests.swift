@@ -73,4 +73,36 @@ final class WatchDeepLinkTests: XCTestCase {
                        [.watchMatched(watchID: seen, generation: 1, condition: "All tasks finish")])
         XCTAssertEqual(WatchDelta.matched(previous: [], current: current), [])
     }
+
+    /// A CONTINUOUS watch never becomes MATCHED until its budget runs out, so a client reading the
+    /// state alone said nothing about any of the Matches in between — while the same account's phone
+    /// was told about every one of them over APNs. Each Match is its own generation, and each one is
+    /// announced once, under the key the server collapses its push by.
+    func testEveryMatchOfAContinuousWatchIsAnnouncedOnce() {
+        let live = { (generation: Int, state: String) in
+            F.watch(id: "continuous", state: state, action: "NOTIFY_USER", observer: nil,
+                    targets: F.tasks(2, met: 2), generation: generation)
+        }
+        let event = { (generation: Int) in
+            NotificationEvent.watchMatched(watchID: "continuous", generation: generation,
+                                           condition: "All tasks finish")
+        }
+        // Still ACTIVE, one window coalesced into a Match: announced.
+        XCTAssertEqual(WatchDelta.matched(previous: [live(4, "ACTIVE")], current: [live(5, "ACTIVE")]),
+                       [event(5)])
+        // The same list twice — the wake budget's last Match settles the watch, and it is announced
+        // once, not again for the state it left the watch in.
+        XCTAssertEqual(WatchDelta.matched(previous: [live(5, "ACTIVE")], current: [live(6, "MATCHED")]),
+                       [event(6)])
+        XCTAssertEqual(WatchDelta.matched(previous: [live(6, "MATCHED")], current: [live(6, "MATCHED")]), [])
+        // Nothing matched: a re-read of the same watch is not news.
+        XCTAssertEqual(WatchDelta.matched(previous: [live(5, "ACTIVE")], current: [live(5, "ACTIVE")]), [])
+        // One alert per Match rather than one that keeps being replaced: the generation is in the
+        // identifier (its exact shape is asserted above, against a real public id).
+        let fifth = Notifications.content(for: event(5)).identifier
+        let sixth = Notifications.content(for: event(6)).identifier
+        XCTAssertTrue(fifth.hasSuffix("-5"), fifth)
+        XCTAssertTrue(sixth.hasSuffix("-6"), sixth)
+        XCTAssertNotEqual(fifth, sixth)
+    }
 }

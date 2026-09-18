@@ -79,12 +79,23 @@ public enum WatchDelta {
     /// The NOTIFY_USER watches that matched between two fetched lists — how a client with no APNs
     /// path (macOS) tells you. The watch has to have been seen live first: the first fetch only
     /// primes, and a Match from before this client ever saw the watch is history, not news.
+    ///
+    /// What is read is the Match itself, which is the `generation` (contract §4: a Match is written
+    /// with the generation that names it), not the state the watch is left in. A ONE_SHOT watch is
+    /// MATCHED by its only Match and raises the generation to 1 in the same write, so it reads the
+    /// same as before; a CONTINUOUS watch stays ACTIVE and raises the generation once per coalesced
+    /// window, and reading the state alone announced none of those — while the same account's iPhone
+    /// heard every one of them, because `PushService.notifyWatchMatched` pushes per Match whatever the
+    /// mode. The alert's own identifier is already `watch-<id>-<generation>`, the key the server
+    /// collapses its push under, so a device that gets both still shows one alert per Match.
     public static func matched(previous: [Watch], current: [Watch]) -> [NotificationEvent] {
-        let before = Dictionary(previous.map { (PublicID.storageKey($0.id), $0.state) },
+        let before = Dictionary(previous.map { (PublicID.storageKey($0.id), $0) },
                                 uniquingKeysWith: { a, _ in a })
         return current.compactMap { watch in
-            guard watch.action == .notifyUser, watch.state == .matched,
-                  let was = before[PublicID.storageKey(watch.id)], WatchStateMachine.isLive(was)
+            guard watch.action == .notifyUser,
+                  let was = before[PublicID.storageKey(watch.id)],
+                  WatchStateMachine.isLive(was.state),
+                  watch.generation > was.generation
             else { return nil }
             let condition = WatchProjection.condition(watch.predicate,
                                                       targetCount: WatchProgress(watch.targets).live)
