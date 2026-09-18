@@ -326,7 +326,8 @@ public struct EvidenceDecisionCheck: Equatable, Sendable, Identifiable {
     public var id: String { text }
 }
 
-/// The claim as it is shown, and whether anything was folded away behind "展开全文".
+/// The claim at its clamp, and whether it is long enough that the card folds it away behind
+/// `claimFold` instead of showing it where it stands.
 public struct FoldedClaim: Equatable, Sendable {
     public let text: String
     public let folded: Bool
@@ -462,6 +463,14 @@ public enum EvidenceDecisions {
     public static let noClaim = "这一版证据没有写下主张。"
     public static let noCriterion = "未引用验收条目"
     public static let noGaps = "提交者声明没有缺口"
+    /// The heading over the criterion's own text (`DECISION_CRITERION_HEADING`). The question is
+    /// whether this evidence settles THAT sentence, and a key is not a sentence — so the text
+    /// leads the card and the key stays in the meta line, where identity belongs.
+    public static let criterionHeading = "这版证据要满足的标准"
+    /// The submitter's account, folded to one line carrying its length (`decisionClaimFold`): the
+    /// longest field on the card and the least decisive.
+    public static func claimFold(_ chars: Int) -> String { "提交者自述全文（\(chars) 字）" }
+    public static let claimHide = "收起自述"
 
     /// The door's two refusals that mean "this card is out of date", in the door's own spelling, so
     /// a card can say which one it would meet.

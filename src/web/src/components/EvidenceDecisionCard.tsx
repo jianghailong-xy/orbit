@@ -77,12 +77,22 @@ export const decisionGapsMore = (rest: number): string => `还有 ${rest} 条`;
 export const DECISION_NO_CLAIM = '这一版证据没有写下主张。';
 export const DECISION_NO_CRITERION = '未引用验收条目';
 export const DECISION_NO_GAPS = '提交者声明没有缺口';
+/** The heading over the criterion's own text. The question this card asks is whether this evidence
+ *  settles THAT sentence, and a key is not a sentence — so the text leads the card and the key
+ *  stays in the meta line, where identity belongs. */
+export const DECISION_CRITERION_HEADING = '这版证据要满足的标准';
+/** The submitter's own account, folded to one line with its length: the longest field on the card
+ *  and the least decisive, kept whole and one press away. */
+export const decisionClaimFold = (chars: number): string => `提交者自述全文（${chars} 字）`;
+export const DECISION_CLAIM_HIDE = '收起自述';
 
 /** How many gaps the card shows before it starts counting. Three is what fits on a phone above the
  *  actions; the rest are one press away and the count is never hidden. */
 const DECISION_GAPS_SHOWN = 3;
-/** Where a claim starts being folded. A claim is one sentence in the good case and a paragraph in
- *  the bad one, and the bad one must not push the gaps and the actions off the screen. */
+/** Where a claim stops being shown at rest. A claim is one sentence in the good case and a
+ *  thousand-word implementation log in the bad one (measured: 1941 characters, 16× this number),
+ *  and the bad one must not push the standard, the gaps and the actions off the screen — so past
+ *  this length the account folds to a line saying how much of it there is. */
 const DECISION_CLAIM_CLAMP = 120;
 
 /** One machine-checkable statement about the row, in the row's own fields. */
@@ -144,28 +154,18 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
 
   return (
     <>
-      <div className="decision-ask-claim">
-        {claim === '' ? (
-          <span className="decision-ask-quiet">{DECISION_NO_CLAIM}</span>
-        ) : longClaim && !claimOpen ? (
-          `${claim.slice(0, DECISION_CLAIM_CLAMP)}…`
-        ) : (
-          claim
-        )}
-      </div>
-      {longClaim && (
-        <button
-          type="button"
-          className="decision-ask-toggle"
-          aria-expanded={claimOpen}
-          onClick={() => setClaimOpen(!claimOpen)}
-        >
-          {claimOpen ? '收起' : '展开全文'}
-        </button>
-      )}
-      <div className="decision-ask-meta">
-        {`${row.taskId} · rev ${row.evidenceRevision} · `}
-        {row.criterion ? row.criterion.key : DECISION_NO_CRITERION}
+      {/* The sentence being judged, in its own words and first. A reader asked whether this
+          evidence settles a criterion cannot answer from the criterion's KEY, which is all this
+          card used to carry — the text was two disclosures down, inside a machine check's detail. */}
+      <div className="decision-ask-standard">
+        <div className="decision-ask-standard-head">{DECISION_CRITERION_HEADING}</div>
+        <div className="decision-ask-standard-text">
+          {row.criterion ? (
+            row.criterion.text
+          ) : (
+            <span className="decision-ask-quiet">{DECISION_NO_CRITERION}</span>
+          )}
+        </div>
       </div>
 
       {/* The body of the card. What the submitter says they did NOT establish is the part most
@@ -230,6 +230,36 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
             ))}
           </ul>
         )}
+      </div>
+
+      {/* The submitter's own account, last and folded when it is long. It used to lead the card,
+          which put a paragraph of implementation detail between the reader and the gaps — the part
+          most likely to change the answer — and the actions. A short one is still read where it
+          stands; a long one is a line naming its own length. */}
+      <div className="decision-ask-account">
+        {claim === '' ? (
+          <span className="decision-ask-quiet">{DECISION_NO_CLAIM}</span>
+        ) : longClaim ? (
+          <>
+            <button
+              type="button"
+              className="decision-ask-toggle"
+              aria-expanded={claimOpen}
+              onClick={() => setClaimOpen(!claimOpen)}
+            >
+              {claimOpen ? DECISION_CLAIM_HIDE : decisionClaimFold(claim.length)}
+              <span className="decision-ask-caret" aria-hidden="true">{claimOpen ? '▴' : '▾'}</span>
+            </button>
+            {claimOpen && <div className="decision-ask-claim">{claim}</div>}
+          </>
+        ) : (
+          <div className="decision-ask-claim">{claim}</div>
+        )}
+      </div>
+
+      <div className="decision-ask-meta">
+        {`${row.taskId} · rev ${row.evidenceRevision} · `}
+        {row.criterion ? row.criterion.key : DECISION_NO_CRITERION}
       </div>
     </>
   );

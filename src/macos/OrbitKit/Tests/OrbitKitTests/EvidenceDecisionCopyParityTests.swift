@@ -110,6 +110,10 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
         assertDeclares(web, "DECISION_NO_CRITERION", EvidenceDecisions.noCriterion,
                        "the no-criterion line")
         assertDeclares(web, "DECISION_NO_GAPS", EvidenceDecisions.noGaps, "the no-gaps line")
+        assertDeclares(web, "DECISION_CRITERION_HEADING", EvidenceDecisions.criterionHeading,
+                       "the heading over the criterion's own text")
+        assertDeclares(web, "DECISION_CLAIM_HIDE", EvidenceDecisions.claimHide,
+                       "the account's fold-up")
     }
 
     /// The counted strings, which are templates on one side and interpolations on the other.
@@ -121,6 +125,9 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
         assertContains(web,
                        "`\(template(EvidenceDecisions.gapsHeading(5), [("5", "${row.gaps.length}")]))`",
                        "the gaps heading")
+        assertContains(web,
+                       "`\(template(EvidenceDecisions.claimFold(7), [("7", "${chars}")]))`",
+                       "the folded account line")
         let held = EvidenceDecisions.checksHeading(held: 2, total: 2)
         assertContains(web, "`\(template(held, [("2", "${held}")]))`", "the folded checks line")
         let broken = EvidenceDecisions.checksHeading(held: 2, total: 3)
