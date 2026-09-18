@@ -2,10 +2,10 @@
 
 **状态**：服务端已落地（`SessionsService.resume` + `sessions.controller.ts` + `task-run-receipt.ts`），
 本文件是 web 与 macOS 两单接线时的唯一权威。行为由
-`src/apiserver/src/sessions/resume-routes-to-current-run.pg.spec.ts`（7 例，真 PostgreSQL）
+`src/apiserver/src/sessions/resume-routes-to-current-run.pg.spec.ts`（8 例，真 PostgreSQL）
 与 `entry-point-contract.spec.ts` 钉住。
 
-**没有新端点。** 客户端仍然打 `POST /api/sessions/:id/resume`，多了一个可选请求字段和两种回答。
+**没有新端点。** 客户端仍然打 `POST /api/sessions/:id/resume`，多了一个可选请求字段和两个新答案。
 
 ---
 
@@ -42,7 +42,7 @@ POST /api/sessions/{sessionId}/resume
 
 ---
 
-## 2. 三种回答
+## 2. 回答有哪几种
 
 ### 2.1 投递到当前那一轮（用户没选 provider，或选的就是它）
 
@@ -106,7 +106,18 @@ HTTP 409，`code: "TASK_ALREADY_RUNNING"`，新增 `conflictingSessionEnding: tr
 客户端应当：显示「正在停止…马上继续」，带同一个 `clientTurnId` 隔一两秒重发，直到 200。
 消息在客户端手里，没丢。
 
-### 2.4 跨 runtime（不可确认）
+### 2.4 带附件的消息不路由（仍是 2.3 那个 409）
+
+`attachment` 行按 **sessionId** 锚定（`assertLinkableAttachments`），没法把 A 会话里的图
+挂到 B 会话的 turn 上。所以带 `attachmentIds` 的消息**不路由**，照旧答
+`TASK_ALREADY_RUNNING`（带 `conflictingSessionId`）。
+
+理由：另外两条路都更差 —— 要么把话投过去、把截图丢掉（用户说的「看这张图」就没了图），
+要么撞一句关于附件 id 的 400。结构化拒绝至少点名了该打开哪一轮。
+
+客户端：带附件时按 2.3 的卡片处理（「打开正在跑的那一轮」），用户在那边重发。
+
+### 2.5 跨 runtime（不可确认）
 
 HTTP 400，`a claude session cannot switch to a provider that runs on codex`。
 
@@ -132,7 +143,7 @@ claude ↔ deepseek（配置的 provider 借 claude runtime）是同 runtime，�
 
 | 事实 | 在哪 |
 | --- | --- |
-| 路由与三种回答 | `sessions.service.ts#routeOntoTheHeldClaim` |
+| 路由与几种回答（含附件边界） | `sessions.service.ts#routeOntoTheHeldClaim` |
 | 只有人的那道门路由 | `sessions.controller.ts#resume` 的 `routeToCurrentRun: true`；`entry-point-contract.spec.ts` |
 | 确认拒绝的形状 | `tasks/task-run-receipt.ts#taskRunProviderSwitchConfirmation` |
 | `conflictingSessionEnding` | `tasks/task-run-receipt.ts#taskAlreadyRunning` |

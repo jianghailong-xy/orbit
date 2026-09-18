@@ -5773,6 +5773,12 @@ export class SessionsService {
         // deliberately NOT carried over: they configure the session they were sent for, and this
         // message is being delivered into a different one that is already running under its own.
         if (dto.provider === undefined || dto.provider === holder.provider) {
+          // ...unless the message brought files with it. An `attachment` row is scoped to ONE
+          // session (`assertLinkableAttachments`), so the only two things this could do are hand
+          // the other run the words without the screenshot they are about, or fail on the
+          // attachment with a sentence about ids. Both are worse than the structured refusal this
+          // door has always given, which at least names the run to open and re-send in.
+          if (dto.attachmentIds?.length) throw inTheWay();
           const delivered = await this.createTurn(ownerId, holder.id, dto);
           return {
             ...delivered,

@@ -404,6 +404,45 @@ test('a provider on another runtime is refused, and nothing is stopped for it',
     }
   });
 
+test('a message carrying files is refused rather than delivered without them',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const { db, sessions } = connect();
+    try {
+      const f = await fixture(db, 'attachments', RunStatus.RUNNING);
+      const attachmentId = randomUUID();
+      // Uploaded into the run the person is looking at, which is where an `attachment` row lives:
+      // it is scoped to one session and cannot be linked to a turn in another.
+      await db.attachment.create({
+        data: {
+          id: attachmentId,
+          ownerId: f.ownerId,
+          sessionId: f.replaced,
+          fileName: 'screenshot.png',
+          mimeType: 'image/png',
+          sizeBytes: 3,
+          data: Buffer.from([1, 2, 3]),
+        },
+      });
+      const dto = message({ attachmentIds: [attachmentId] });
+
+      await assert.rejects(
+        () => sessions.resume(f.ownerId, f.replaced, dto as never, { routeToCurrentRun: true }),
+        (error: unknown) => {
+          assert.ok(error instanceof ConflictException);
+          // The structured refusal, which names the run to open — not a sentence about attachment
+          // ids, and not a delivery of the words without the picture they are about.
+          assert.equal(body(error).code, 'TASK_ALREADY_RUNNING');
+          assert.equal(body(error).conflictingSessionId, uuidToBase62(f.holder));
+          return true;
+        },
+      );
+      assert.deepEqual(await turnsFor(db, dto.clientTurnId), []);
+    } finally {
+      await db.$disconnect();
+    }
+  });
+
 test('a server-driven resume keeps the refusal: only a person routes a message',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
