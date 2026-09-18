@@ -36,8 +36,22 @@ LONG_IDLE_XACT="${ORBIT_CHECKUP_LONG_IDLE_XACT_SECONDS:-300}"
 # time), so this one is a day rather than an hour: what it is meant to catch is the 12-day
 # connection found on 2026-09-15, not a working listener.
 LONG_IDLE="${ORBIT_CHECKUP_LONG_IDLE_SECONDS:-86400}"
-DEAD_TUPLES="${ORBIT_CHECKUP_DEAD_TUPLES:-10000}"
 AUTOVACUUM_STALE_DAYS="${ORBIT_CHECKUP_AUTOVACUUM_STALE_DAYS:-7}"
+
+# What the dead-tuple alert compares against: the table's *own* autovacuum trigger line —
+# autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor x reltuples, with table-level
+# reloptions winning over the GUCs, which is the arithmetic autovacuum itself uses. There is no
+# absolute override, deliberately: the line is proportional to table size, so a fixed 10,000
+# flagged a large table nowhere near its own line and stayed silent on a small table already
+# past its. A table past this line that autovacuum has not visited within
+# AUTOVACUUM_STALE_DAYS is a stall worth waking someone for; a table below it is autovacuum
+# working as configured, which is what it should be doing every day.
+OWN_VACUUM_LINE_SQL="coalesce((select option_value::numeric from pg_options_to_table(c.reloptions)
+                   where option_name = 'autovacuum_vacuum_threshold'),
+                 current_setting('autovacuum_vacuum_threshold')::numeric)
+               + coalesce((select option_value::numeric from pg_options_to_table(c.reloptions)
+                   where option_name = 'autovacuum_vacuum_scale_factor'),
+                 current_setting('autovacuum_vacuum_scale_factor')::numeric) * c.reltuples"
 
 case "${1:-}" in
   -h | --help)
@@ -77,10 +91,12 @@ select
        and now() - state_change > interval '$LONG_IDLE_XACT seconds'),
   (select count(*) from pg_stat_activity
      where state = 'idle' and now() - state_change > interval '$LONG_IDLE seconds'),
-  (select count(*) from pg_stat_user_tables
-     where n_dead_tup > $DEAD_TUPLES
-       and (last_autovacuum is null
-            or last_autovacuum < now() - interval '$AUTOVACUUM_STALE_DAYS days')),
+  (select count(*)
+     from pg_stat_user_tables s
+       join pg_class c on c.oid = s.relid
+     where s.n_dead_tup > ($OWN_VACUUM_LINE_SQL)
+       and (s.last_autovacuum is null
+            or s.last_autovacuum < now() - interval '$AUTOVACUUM_STALE_DAYS days')),
   (select pg_size_pretty(pg_database_size(current_database()))),
   (select coalesce(to_char(now() - stats_reset, 'DD"d "HH24"h"'), 'never reset')
      from pg_stat_statements_info);
@@ -96,7 +112,7 @@ note() { alerts="${alerts}- $1
 [ "$a_long_xact" -gt 0 ] && note "**${a_long_xact} transaction(s)** open longer than ${LONG_XACT}s"
 [ "$a_idle_xact" -gt 0 ] && note "**${a_idle_xact} connection(s)** idle in transaction longer than ${LONG_IDLE_XACT}s (these hold locks and pin xmin)"
 [ "$a_long_idle" -gt 0 ] && note "**${a_long_idle} connection(s)** idle longer than $((LONG_IDLE / 3600))h"
-[ "$a_bloated" -gt 0 ] && note "**${a_bloated} table(s)** over ${DEAD_TUPLES} dead tuples with no autovacuum in ${AUTOVACUUM_STALE_DAYS} days"
+[ "$a_bloated" -gt 0 ] && note "**${a_bloated} table(s)** past their own autovacuum trigger line with no autovacuum in ${AUTOVACUUM_STALE_DAYS} days"
 
 cat <<HEADER
 # Postgres checkup — $STAMP
@@ -108,12 +124,41 @@ measurement, with its 2026-09-17 recheck where one exists — so each section re
 before → now.
 
 Thresholds: disk ${DISK_PCT}%, transaction ${LONG_XACT}s, idle-in-transaction ${LONG_IDLE_XACT}s,
-idle $((LONG_IDLE / 3600))h, dead tuples ${DEAD_TUPLES} with autovacuum older than ${AUTOVACUUM_STALE_DAYS}d.
+idle $((LONG_IDLE / 3600))h, dead tuples past the table's own autovacuum trigger line with no
+autovacuum in ${AUTOVACUUM_STALE_DAYS}d.
 
 ## Alerts
 
 HEADER
 if [ -n "$alerts" ]; then printf '%s' "$alerts"; else echo "None: every reading below is inside its threshold."; fi
+cat <<SECTION
+
+The reading behind that count: dead tuples per table against that table's **own** autovacuum
+trigger line (\`autovacuum_vacuum_threshold + scale_factor x reltuples\`, table-level
+\`reloptions\` first — the arithmetic autovacuum itself uses). **${a_bloated} alerted**:
+\`alerted\` marks the rows the bullet above counted, and there is no such bullet when that
+number is 0. Past the line is not by itself a fault: it is where autovacuum becomes due, and a
+table past its line that autovacuum visited recently is autovacuum working. Section 6 carries
+the same readings beside the rest of the bloat picture.
+
+SECTION
+table <<SQL
+select
+  s.schemaname || '.' || s.relname as relation,
+  s.n_dead_tup,
+  round(($OWN_VACUUM_LINE_SQL)::numeric, 0) as own_trigger_line,
+  round(100 * s.n_dead_tup / nullif(($OWN_VACUUM_LINE_SQL)::numeric, 0), 1) as pct_of_line,
+  s.n_dead_tup > ($OWN_VACUUM_LINE_SQL)
+    and (s.last_autovacuum is null
+         or s.last_autovacuum < now() - interval '$AUTOVACUUM_STALE_DAYS days') as alerted,
+  s.last_autovacuum
+from pg_stat_user_tables s
+  join pg_class c on c.oid = s.relid
+where s.n_dead_tup > 0
+order by alerted desc,
+         (100 * s.n_dead_tup / nullif(($OWN_VACUUM_LINE_SQL)::numeric, 0)) desc nulls last
+limit $TOP_N;
+SQL
 
 # ---------------------------------------------------------------- 1. disk
 cat <<'SECTION'
@@ -380,25 +425,31 @@ not attempted: it would read every page of these tables.
 SECTION
 table <<SQL
 select
-  schemaname || '.' || relname as relation,
-  n_dead_tup,
-  n_live_tup,
-  round(100 * n_dead_tup::numeric / nullif(n_live_tup + n_dead_tup, 0), 1) as dead_pct,
-  last_autovacuum,
-  date_trunc('day', now() - last_autovacuum) as autovacuum_age,
-  last_autoanalyze,
-  autovacuum_count
-from pg_stat_user_tables
-where n_dead_tup > 0
-order by n_dead_tup desc
+  s.schemaname || '.' || s.relname as relation,
+  s.n_dead_tup,
+  round(($OWN_VACUUM_LINE_SQL)::numeric, 0) as own_trigger_line,
+  round(100 * s.n_dead_tup / nullif(($OWN_VACUUM_LINE_SQL)::numeric, 0), 1) as pct_of_line,
+  s.n_live_tup,
+  round(100 * s.n_dead_tup::numeric / nullif(s.n_live_tup + s.n_dead_tup, 0), 1) as dead_pct,
+  s.last_autovacuum,
+  date_trunc('day', now() - s.last_autovacuum) as autovacuum_age,
+  s.last_autoanalyze,
+  s.autovacuum_count
+from pg_stat_user_tables s
+  join pg_class c on c.oid = s.relid
+where s.n_dead_tup > 0
+order by s.n_dead_tup desc
 limit $TOP_N;
 SQL
 cat <<SECTION
 
-Tables over the alert threshold ($DEAD_TUPLES dead tuples and no autovacuum for
-${AUTOVACUUM_STALE_DAYS}d) are counted in the Alerts section. A stale \`last_autovacuum\` next to
-a growing \`n_dead_tup\` is the signal worth acting on: autovacuum's scale factor is proportional
-to table size, so on a large table the trigger point recedes as the table grows.
+\`own_trigger_line\` is each table's own vacuum trigger point and \`pct_of_line\` is how far into
+it the table is. Read the line before the reading: the scale factor is proportional to table
+size, so the trigger point recedes as a table grows and the same \`n_dead_tup\` means different
+things on a 400k-row table and on a 5k-row one. The Alerts section counts the tables **past
+that line** with no autovacuum for ${AUTOVACUUM_STALE_DAYS}d, which is the combination worth
+acting on: a stale \`last_autovacuum\` beside a table that should already have been vacuumed. A
+table below its line is autovacuum working as configured.
 
 **Baseline.** 2026-09-15: \`tool_call\` had 24,497 dead tuples and its \`last_autovacuum\` was
 stuck at **2026-09-05**.
