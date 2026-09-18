@@ -105,8 +105,20 @@ func runFakeClaude(dir string) int {
 	cwd, _ := os.Getwd()
 	appendJSONL(filepath.Join(dir, "spawns.jsonl"), fakeSpawn{PID: os.Getpid(), Argv: argv, Cwd: cwd})
 
+	// A `--resume` is a continuation of a conversation this machine is supposed to hold, and the
+	// real CLI refuses one it cannot find ("No conversation found with session ID") instead of
+	// starting a fresh one. That refusal is a property of the flag, which a single script cannot
+	// express, so a test that needs it writes script-resume.json beside script.json and gets that
+	// script for a --resume spawn and the ordinary one for every other. Absent — which is every
+	// other test — nothing changes.
+	scriptName := "script.json"
+	if argValue(argv, "--resume") != "" {
+		if _, statErr := os.Stat(filepath.Join(dir, "script-resume.json")); statErr == nil {
+			scriptName = "script-resume.json"
+		}
+	}
 	var steps []fakeStep
-	b, err := os.ReadFile(filepath.Join(dir, "script.json"))
+	b, err := os.ReadFile(filepath.Join(dir, scriptName))
 	if err == nil {
 		err = json.Unmarshal(b, &steps)
 	}
