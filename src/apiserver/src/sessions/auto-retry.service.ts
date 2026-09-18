@@ -33,11 +33,32 @@ const MAX_OFFLINE_WAIT_MS = 30 * 60_000;
 // is about this deployment (runner gone, session raced elsewhere) rather than about the
 // provider. The provider-side waits are decided when the retry is armed: a quota's own reset
 // time, or API_ERROR_RETRY_BACKOFF_MS. Past the last step here the session is handed back.
-const BACKOFF_MS = [2, 5, 10, 20, 30].map((m) => m * 60_000);
+//
+// It is also how long a retry is ARMED for after a failure that has no provider-side moment of its
+// own — see `nextAutoRetryAt` — which is why it is exported: a class armed on a schedule of its own
+// would be a second opinion about how many tries there are.
+export const BACKOFF_MS = [2, 5, 10, 20, 30].map((m) => m * 60_000);
 // One session per (runner, provider) per sweep. Both failures this retries are shared facts —
 // one account's quota, one provider's outage — so releasing a whole fleet at the first moment
 // it might be over is how you spend the quota again, or reproduce the overload.
 const PER_QUOTA_PER_SWEEP = 1;
+
+/**
+ * When the next re-send of a failure goes out, or null once the ladder is spent.
+ *
+ * Exported because ARMING decides it too, and there is one ladder: the wait a retry is armed with
+ * and the count this sweep gives up after are the same list, so a fourth failure class cannot be
+ * armed on a schedule this sweep would only disarm on its next tick. `runner-api.controller` uses
+ * it for a turn that produced nothing at all (`retryArmAt` there) — a failure whose whole fix is
+ * re-sending the message, which is exactly what the sweep below does.
+ *
+ * Null is a decision, not a missing value: past the last step the session is left saying what
+ * failed rather than handed another countdown.
+ */
+export function nextAutoRetryAt(attempts: number, now: Date): Date | null {
+  const step = BACKOFF_MS[attempts];
+  return step == null ? null : new Date(now.getTime() + step);
+}
 // Nothing here is worth waking a scheduler for at a fixed cost forever: read a bounded page,
 // and let a backlog drain over consecutive sweeps.
 const MAX_PER_SWEEP = 50;
@@ -81,18 +102,21 @@ const NOT_DISPATCH_HELD: Prisma.SessionWhereInput = {
 /**
  * Re-sends messages that a self-healing failure killed, once it is likely to work.
  *
- * Three failures qualify. Two arrive as the entire reply: the account's provider quota running
- * out, and the provider being briefly unable to answer ("API Error: 529 … overloaded_error").
- * The third arrives as no reply at all — the runner went away mid-turn and the reaper finalized
- * the session as 'runner offline'. None of the three says anything about the work, and all
- * three succeed on a plain re-send of the same message.
+ * Four failures qualify. Two arrive as the entire reply: the account's provider quota running
+ * out, and the provider being briefly unable to answer ("API Error: 529 … overloaded_error"). The
+ * third arrives as no reply at all — the runner went away mid-turn and the reaper finalized the
+ * session as 'runner offline'. The fourth is the engine that never came up: the turn produced
+ * nothing at all, no runtime turn ran and nothing was billed for one, and /turn-complete arms it
+ * (runner-api.controller's `retryArmAt`) for the ladder below. None of the four says anything
+ * about the work, and all four succeed on the same message being sent again.
  *
- * `Session.retryAt` is armed on event ingestion (runner-api.controller) for the first two, and
- * by the reaper for the third. This service is the other half: it waits for that moment,
- * confirms the thing that failed is actually available again — the provider's quota, or the
- * runner itself — and re-sends. It exists as its own sweeper rather than as another branch of
- * the reaper because the reaper's job is ending things that are stuck — this one starts things
- * that are merely waiting, and must not inherit "finalize it" as a fallback behaviour.
+ * `Session.retryAt` is armed on event ingestion (runner-api.controller) for the first two, by the
+ * reaper for the third, and by /turn-complete for the fourth. This service is the other half: it
+ * waits for that moment, confirms the thing that failed is actually available again — the
+ * provider's quota, or the runner itself — and re-sends. It exists as its own sweeper rather than
+ * as another branch of the reaper because the reaper's job is ending things that are stuck — this
+ * one starts things that are merely waiting, and must not inherit "finalize it" as a fallback
+ * behaviour.
  *
  * Single-replica, like the reaper: two of these would double-send. The armed row is claimed
  * with a conditional update before the resume, so a concurrent user message or a second

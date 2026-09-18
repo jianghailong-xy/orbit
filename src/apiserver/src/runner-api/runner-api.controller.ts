@@ -191,6 +191,7 @@ import {
   type ScheduledWakeupReceipt,
   scheduleWakeup,
 } from './scheduled-wakeup';
+import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { recordOwnerConfirmationRequest } from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
@@ -3182,6 +3183,9 @@ export class RunnerApiController {
           // intends to undo by itself" — which is what keeps the STATUS published below from
           // announcing a settlement that hasn't happened.
           retryAt: true,
+          // How much of that budget is spent, for the one failure class whose wait is decided
+          // here rather than by a reply's text — see `retryArmAt` below.
+          retryAttempts: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -3466,6 +3470,27 @@ export class RunnerApiController {
           },
           select: { id: true },
         })) == null;
+      // ...and of those, the one the server can undo BY ITSELF is the turn that produced nothing
+      // at all: no engine turn ran and nothing was billed for one, which is an engine that never
+      // came up (`--resume` on a conversation that was never opened, a runtime refusing its own
+      // flags). The person neither got an answer nor paid for one, so this is not an error to act
+      // on but a pause: the same message succeeds as soon as a runtime starts, and the wait is
+      // armed on the sweeper's own ladder (auto-retry.service), which is what turns it into a
+      // countdown rather than a hot loop of re-spawns.
+      //
+      // Said as the two counters the report carries, and not as a failure subtype: a user
+      // interrupt is the other way a turn ends with nothing said, and it is excluded above where
+      // the requeue decision is. `numTurns` is compared against 0 exactly and never `?? 0` — a
+      // runner too old to report it omits the field, and reading that omission as "produced
+      // nothing" would arm a retry on every failure of every older runner.
+      //
+      // Never over an arm already standing: one is set by the failure this turn is repeating, it
+      // is closer to firing than anything computed now, and re-deciding it here would restart the
+      // countdown on every attempt — the one shape that makes a bounded ladder unbounded.
+      const retryArmAt =
+        unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
+          ? nextAutoRetryAt(current.retryAttempts, new Date())
+          : null;
       // Idempotent ack: only the first turn-complete for this turn applies. `deliveredAt` is the
       // other half of that compare-and-set now that a completion can leave the row un-ANSWERED: a
       // turn put back in the queue is no longer out on a delivery, so a retried completion for it
@@ -3760,6 +3785,11 @@ export class RunnerApiController {
           sumOutputTokens: { increment: usage?.output_tokens ?? 0 },
           sumCacheRead: { increment: usage?.cache_read_input_tokens ?? 0 },
           sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
+          // Folded into the park for the same reason the merge-state clear is: one write, and
+          // conditional on the row still being the one this turn ran on. A turn put back in the
+          // queue with no arm behind it is what the "engine never came up" case used to look
+          // like — the message owed an answer, sitting where nothing would deliver it.
+          ...(retryArmAt ? { retryAt: retryArmAt } : {}),
           ...(acknowledgedCoordinatorContextKey
             ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
             : {}),
