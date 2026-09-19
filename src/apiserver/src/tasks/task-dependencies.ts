@@ -9,7 +9,7 @@ import {
   landingBranchesFor,
   taskLanding,
 } from '../projects/project-criterion-landing';
-import { successorChain, taskNotRetiredSql } from './task-supersession';
+import { successorChain, TASK_SUPERSESSION_MAX_HOPS, taskNotRetiredSql } from './task-supersession';
 import {
   VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN,
   VerificationEpochEntry,
@@ -396,6 +396,68 @@ function prerequisiteChainsSql(alias: string, epochOpen: string, landed: string)
 }
 
 /**
+ * The set of tasks whose chain tail is DONE — `task_dependency_tail_satisfied(id)` as a relation
+ * rather than a call per prerequisite.
+ *
+ * `task_dependency_tail_id` walks FORWARD from its argument along `superseded_by_task_id` and stops
+ * where the chain does; this builds the same set BACKWARD from where those walks stop, which is
+ * what makes it a relation one hash join can use instead of a plpgsql call per dependency EDGE.
+ * That difference is the whole point: the walk is a primary-key probe per call, and the one caller
+ * below asks it once for every edge in the deployment — on the 109,875-task project here that is
+ * 110,869 calls, 450,860 of the 463,659 blocks the guard costs alone and 95% of /panorama/ready.
+ * The closure answering the same question over the same project: 2,182 blocks — one index scan of
+ * the DONE rows (1,504 of them, 956 blocks) plus the supersession links, built once per statement
+ * and hashed into 88 kB. /panorama/ready goes 471,529 blocks → 23,181, /panorama 1,161,164 →
+ * 713,263; the same reads on a 57-edge project pay ~900 blocks more than the walk did, which is
+ * that one index scan and is where this stops being the cheaper of the two.
+ *
+ * Exact, not an approximation of the walk — the two disagree on 0 of the 111,775 tasks in that
+ * deployment, and this is why. Read against the loop in `task_dependency_tail_id`, whose branches
+ * it reproduces one for one:
+ *
+ *   - the walk RETURNS its cursor only when the row it just read has `superseded_by_task_id IS
+ *     NULL` and a `terminal_reason` that is not `SUPERSEDED` (with a successor, or superseded
+ *     without one, it returns NULL — the broken chain 0128's `ON DELETE SET NULL` leaves behind is
+ *     deliberately unresolved). So the seed is exactly those rows, filtered to `status = 'DONE'`,
+ *     which is why the seed is not simply "every DONE task": a DONE row that names a successor
+ *     ends its walk in NULL and satisfies nothing. `task_retirement_status_check` keeps a DONE row
+ *     from carrying either one, so on a schema that has it those two conditions are already true;
+ *     they are mirrored anyway, as the walk mirrors its own unreachable branches, because the
+ *     closure has to be the same SET if that CHECK is ever dropped;
+ *   - the walk takes a step only from a row that is FAILED or CANCELLED with
+ *     `terminal_reason = 'SUPERSEDED'`, which is the same filter on the recursion — so no OPEN or
+ *     DONE row is ever pulled in through a link it happens to carry;
+ *   - every row after the first must belong to the walk's ROOT owner (`current_owner <>
+ *     root_owner` returns NULL), and `succ.owner_id = chain.owner_id` carries that down the chain;
+ *   - the loop's `seen` array and this `UNION` answer the same cycles: a task on one reaches no
+ *     seed, so it is in neither.
+ *
+ * The `depth` column is the loop's other exit: it abandons a walk past `TASK_SUPERSESSION_MAX_HOPS`
+ * steps. Here it counts the links back to the seed, which is the same number for the row being
+ * decided — a row whose distance to its tail exceeds the cap is one the loop would have given up
+ * on, so the recursion stops rather than adding it.
+ */
+const tailDoneSetSql = `WITH RECURSIVE self_tail AS (
+      SELECT ts.id, ts.owner_id
+        FROM task ts
+       WHERE ts.status = 'DONE'
+         AND ts.superseded_by_task_id IS NULL
+         AND ts.terminal_reason IS DISTINCT FROM 'SUPERSEDED'
+    ), closure AS (
+      SELECT seed.id, seed.owner_id, 0 AS depth FROM self_tail seed
+      UNION
+      SELECT succ.id, succ.owner_id, chain.depth + 1
+        FROM task succ
+        JOIN closure chain
+          ON succ.superseded_by_task_id = chain.id
+         AND succ.owner_id = chain.owner_id
+       WHERE succ.status IN ('FAILED', 'CANCELLED')
+         AND succ.terminal_reason = 'SUPERSEDED'
+         AND chain.depth < ${TASK_SUPERSESSION_MAX_HOPS}
+    )
+    SELECT DISTINCT id FROM closure`;
+
+/**
  * `dependenciesSatisfiedSql` with both qualifiers dropped: every prerequisite's chain tail is DONE,
  * whatever its epoch and wherever its work is.
  *
@@ -405,15 +467,30 @@ function prerequisiteChainsSql(alias: string, epochOpen: string, landed: string)
  * `dependenciesSatisfiedSql` calls satisfied — with or without `ignoreLanding` — satisfies this
  * too. It is therefore a necessary condition for both, and a caller that has to evaluate one of
  * them over a whole project can evaluate this first and only ask the real question where it holds.
+ * `task-dependency-tail-id.pg.spec` holds this answer against the walk's own, row for row, so the
+ * implication above cannot be broken by a change to either one.
  *
  * That matters because the real question is not cheap: the landing and epoch clauses are
  * themselves correlated subqueries, and on the 109,874-task project measured here 170 of its
  * 109,850 OPEN tasks pass this guard — so the subtraction runs on those and not on the project.
  * The two project reads that count "held up by nothing but a landing" (`readProjectPanorama`,
  * `readProjectReadyToRun`) use it exactly that way.
+ *
+ * Unlike the two predicates above it is NOT written through `prerequisiteChainsSql`: that shape
+ * asks `task_dependency_tail_id` once per edge and cannot be asked of a whole project's worth of
+ * edges for what it returns (see `tailDoneSetSql`). What it must keep from that shape is the
+ * ANSWER, which is what the spec pins.
  */
 export function everyPrerequisiteTailDoneSql(alias = 't'): string {
-  return prerequisiteChainsSql(alias, 'TRUE', 'TRUE');
+  return `NOT EXISTS (
+    SELECT 1 FROM task_dependency dep
+     WHERE dep.task_id = ${alias}.id
+       AND NOT EXISTS (
+         SELECT 1
+           FROM (${tailDoneSetSql}) tail_done
+          WHERE tail_done.id = dep.depends_on_task_id
+       )
+  )`;
 }
 
 /**
