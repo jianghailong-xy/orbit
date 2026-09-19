@@ -133,9 +133,36 @@ export async function readProjectReadyToRun(
           FROM reach
           JOIN edge ON edge.blocker = reach.node
       ),
+      -- The prerequisite guard, once for the whole statement: every one of a task's prerequisite
+      -- chains ends in a DONE row. manualRunnableTaskSql's dependenciesSatisfied implies it — the
+      -- walk is the same one with the epoch and landing clauses dropped, so dropping them can only
+      -- make the inner EXISTS easier to satisfy and this harder — which makes it a NECESSARY
+      -- condition for both lanes below: a task outside this set passes neither, whatever else its
+      -- row says. Asked as one MATERIALIZED set rather than as a clause per lane, and asked FIRST,
+      -- because the predicate it guards walks the dependency graph once per row and today runs on
+      -- every row of the project.
+      --
+      -- It is shared with landing_candidate, which needs the same walk narrowed to OPEN rows, so the
+      -- guard is paid once instead of twice. Its own cost is why it is asked only where the answer
+      -- was already needed for something else: it walks every edge of every task it is asked about.
+      --
+      -- Narrowed to the rows that could pass ANY reader: manualRunnableTaskSql refuses a DONE row
+      -- before it asks anything else, so a finished task costs the walk nothing. Without that,
+      -- which is what this CTE would be if it were the whole project, the guard runs over every row
+      -- a mostly-finished project has and finds nothing — measured on the 65-task project here at
+      -- 776 blocks against the 7 the answer is worth.
+      dependency_candidate AS MATERIALIZED (
+        SELECT t.id
+          FROM task t
+         WHERE t.project_id = ${projectId}::uuid
+           AND t.owner_id = ${ownerId}::uuid
+           AND t.status <> 'DONE'::task_status
+           AND ${Prisma.raw(everyPrerequisiteTailDoneSql('t'))}
+      ),
       ready AS (
         SELECT t.id, t.title, t.status::text AS status
           FROM task t
+          JOIN dependency_candidate candidate ON candidate.id = t.id
          WHERE t.project_id = ${projectId}::uuid
            AND t.owner_id = ${ownerId}::uuid
            AND ${Prisma.raw(manualRunnableTaskSql('t'))}
@@ -150,6 +177,7 @@ export async function readProjectReadyToRun(
                (count(*) FILTER (WHERE t.auto_run_when_ready) OVER (PARTITION BY l.id))::int
                  AS "pausedListAutoRunReadyCount"
           FROM task t
+          JOIN dependency_candidate candidate ON candidate.id = t.id
           JOIN task_list l
             ON l.id = t.list_id
            AND l.owner_id = t.owner_id
@@ -197,14 +225,15 @@ export async function readProjectReadyToRun(
       -- The necessary condition for that subtraction, asked first and as a set: both halves of it
       -- require every prerequisite's chain tail to be DONE, so a task failing this cannot be
       -- waiting for a landing. MATERIALIZED because the point is to be a planner fence — inlined,
-      -- the two expensive predicates would be free to run on the whole project first.
+      -- the two expensive predicates would be free to run on the whole project first. Cut out of
+      -- dependency_candidate rather than re-derived — the same walk, so the same set — keeping the
+      -- OPEN narrowing the subtraction has always had.
       landing_candidate AS MATERIALIZED (
-        SELECT t.id
-          FROM task t
-         WHERE t.project_id = ${projectId}::uuid
-           AND t.owner_id = ${ownerId}::uuid
+        SELECT candidate.id
+          FROM dependency_candidate candidate
+          JOIN task t
+            ON t.id = candidate.id
            AND t.status = 'OPEN'::task_status
-           AND ${Prisma.raw(everyPrerequisiteTailDoneSql('t'))}
       ),
       waiting_for_landing AS (
         SELECT count(*)::int AS count

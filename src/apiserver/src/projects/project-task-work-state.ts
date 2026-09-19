@@ -76,10 +76,26 @@ export function liveTaskWorkSql(alias = 't'): string {
  * RUNNING while a Session holds it, READY while the shared execute predicate would start it. It has
  * possibly never been run, and reporting a wait on a check nobody has been asked for yet would put
  * it in the one lane no surface offers a next step from.
+ *
+ * `readyCandidates` is the one lane that can be narrowed from outside, because it is the one lane
+ * whose predicate is expensive: READY splices the shared execute predicate, whose
+ * `dependenciesSatisfied` walks the dependency graph once per row. A caller that already holds a
+ * MATERIALIZED set which is a SUPERSET of the rows that can be READY — panorama holds exactly that,
+ * its landing candidates — can hand it in and have it asked FIRST, so nothing after it is evaluated
+ * for the rows it leaves out. It is a narrowing and not a filter: a row the set leaves out is
+ * classified as though the execute predicate had said no, which is what it would have said, since
+ * `everyPrerequisiteTailDone` is implied by `dependenciesSatisfied`. A caller that hands in a set
+ * that is NOT a superset turns READY rows into BLOCKED ones, so the obligation is the caller's and
+ * it is why this option takes an expression rather than a name: there is no set to look up.
  */
-export function projectTaskWorkStateSql(alias = 't'): string {
+export function projectTaskWorkStateSql(
+  alias = 't',
+  { readyCandidates }: { readyCandidates?: string } = {},
+): string {
   const verificationSubject = verificationSubjectSql(alias);
   const verificationPassed = verificationSubjectPassedSql(alias);
+  // Absent, the arm is character for character what it always was.
+  const readySet = readyCandidates == null ? '' : `(${readyCandidates}) AND `;
   return `CASE
     WHEN ${alias}."status" = 'CANCELLED'::"task_status" THEN 'CANCELLED'
     WHEN ${alias}."status" = 'FAILED'::"task_status" THEN 'FAILED'
@@ -89,7 +105,7 @@ export function projectTaskWorkStateSql(alias = 't'): string {
          AND (${alias}."status" = 'IN_PROGRESS'::"task_status" OR ${liveTaskWorkSql(alias)})
       THEN 'RUNNING'
     WHEN ${alias}."status" = 'OPEN'::"task_status"
-         AND (${manualRunnableTaskSql(alias)}) THEN 'READY'
+         AND ${readySet}(${manualRunnableTaskSql(alias)}) THEN 'READY'
     ELSE 'BLOCKED'
   END`;
 }

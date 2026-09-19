@@ -48,3 +48,38 @@ test('AWAITING_VERIFICATION cannot land on a work row that has never run', () =>
   assert.doesNotMatch(projectTaskWorkStateSql('t'), /completion_criterion/u,
     'no work lane may be decided by the criterion column any more');
 });
+
+/** The READY arm's text between `WHEN` and `THEN 'READY'`. */
+function readyBranch(sql: string): string {
+  const end = sql.indexOf("THEN 'READY'");
+  assert.notEqual(end, -1, 'the READY lane must still exist');
+  return sql.slice(sql.lastIndexOf('WHEN ', end), end);
+}
+
+test('the READY lane can be narrowed by a caller that already owns the candidate set', () => {
+  // Nothing handed in: the lane is the shared execute predicate and nothing else, which is what
+  // the project list rollup, the task cards and the graph read.
+  const plain = readyBranch(projectTaskWorkStateSql('t'));
+  assert.match(plain, /t\.status <> 'DONE'::task_status/u);
+  assert.doesNotMatch(plain, /IN \(SELECT/u);
+
+  // Handed a set, it is asked FIRST. The whole point is that the rows it leaves out never reach
+  // the dependency walk, so an order the executor could reverse would buy nothing.
+  const narrowed = readyBranch(projectTaskWorkStateSql('t', {
+    readyCandidates: `t."id" IN (SELECT "id" FROM candidates)`,
+  }));
+  const set = narrowed.indexOf('IN (SELECT "id" FROM candidates)');
+  const walk = narrowed.indexOf('FROM task_dependency dep');
+  assert.notEqual(set, -1, 'the candidate set must be spliced into the arm');
+  assert.notEqual(walk, -1, 'the arm is still the execute predicate, not a replacement for it');
+  assert.ok(set < walk, 'the set must be asked before the graph walk it is there to avoid');
+  // The predicate itself is untouched — narrowing is not a second spelling of readiness.
+  assert.match(narrowed, /dispatch_hold = false/u);
+  assert.match(narrowed, /completion_policy = 'VERIFICATION_PASSED'/u);
+
+  // The lane is per alias, like every other one here.
+  assert.match(
+    projectTaskWorkStateSql('verifier_task', { readyCandidates: 'verifier_task."id" IN (SELECT 1)' }),
+    /WHEN verifier_task\."status" = 'OPEN'::"task_status"\s+AND \(verifier_task\."id" IN \(SELECT 1\)\)/u,
+  );
+});

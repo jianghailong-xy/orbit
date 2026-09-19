@@ -106,7 +106,15 @@ export async function readProjectPanorama(
   projectId: string,
 ): Promise<ProjectPanorama> {
   const facts = projectTaskDependencyFactsSql(ownerId, projectId);
-  const workState = Prisma.raw(projectTaskWorkStateSql('task_row'));
+  // The READY lane's execute predicate is the expensive half of this classifier — it walks the
+  // dependency graph per row — and the guard CTE below already computes a superset of the rows it
+  // can fire for: READY needs an OPEN row whose every prerequisite chain ends in DONE, which is
+  // what `landing_candidate` is. Handed in, so the arm is asked of the candidates and not of the
+  // project: measured on the 109,875-task project here, that arm's walk was 926,317 of the read's
+  // 2,102,528 blocks and is 453 of its 1,177,587 afterwards.
+  const workState = Prisma.raw(projectTaskWorkStateSql('task_row', {
+    readyCandidates: `task_row."id" IN (SELECT "id" FROM landing_candidate)`,
+  }));
   // The integration half (§7.2 V6), read in the SAME pass over `task` as the lanes above: the
   // three buckets `done` splits across are a partition of it, and computing them in a second query
   // would let the two disagree about one task across the gap between them.
