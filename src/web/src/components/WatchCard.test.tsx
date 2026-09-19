@@ -219,7 +219,7 @@ afterEach(async () => {
   vi.mocked(getSession).mockReset();
 });
 
-describe('a watch card', { timeout: 30_000 }, () => {
+describe('a watch card', () => {
   it('says what it watches, what it waits for, how stale that is and what happens next, with nothing opened', async () => {
     // Only the observer session is still read by id; the targets' names come with the watch.
     serve({}, { OBSERVER: 'Coordinator: Watch project' });

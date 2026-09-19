@@ -291,12 +291,12 @@ const shows = (text: string): boolean => container.innerHTML.includes(text);
  *  how a merge that kept both sides' copy of the fields shipped unnoticed. */
 const countOf = (text: string): number => container.innerHTML.split(text).length - 1;
 
-// Past the 5s default, because each of these mounts the WHOLE page: six answered reads, three
-// Markdown fields, the panorama's meter, the ranking, the acceptance column and now the
-// coordinator card, all through `act` on real timers. It takes about a second on an idle machine
-// and several on a busy one — and a run that runs out of time here poisons every test after it,
-// since the shared root is left mounted. Not a hang budget: a slow-render one.
-describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, () => {
+// Each of these mounts the WHOLE page: six answered reads, three Markdown fields, the panorama's
+// meter, the ranking, the acceptance column and now the coordinator card, all through `act` on real
+// timers. It takes about a second on an idle machine and several on a busy one — and a run that runs
+// out of time here poisons every test after it, since the shared root is left mounted. Not a hang
+// budget: a slow render against the suite's budget.
+describe('ProjectDetailPage — the panorama, assembled', () => {
   it('lays the four blocks out in the order the reader asks for them', async () => {
     serve();
     await mount(page());

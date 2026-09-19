@@ -293,9 +293,9 @@ async function commitAndAwaitOutcome(outcome: {
   });
 }
 
-// The loaded-suite peak for a real WorkspaceView/AntD mount is seconds, not milliseconds; the
-// budget covers the mount plus the commit round-trip, and is not a sleep.
-describe('a finished commit reports the runner line', { timeout: 20_000 }, () => {
+// A real WorkspaceView/AntD mount is seconds, not milliseconds, and these cases cover the mount plus
+// the commit round-trip — a slow render against the suite's budget, not a sleep.
+describe('a finished commit reports the runner line', () => {
   it('shows the runner message under "Changes committed"', async () => {
     await commitAndAwaitOutcome({ status: 'committed', message: RUNNER_MESSAGE });
 

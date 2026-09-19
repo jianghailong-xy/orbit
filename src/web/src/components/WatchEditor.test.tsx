@@ -155,7 +155,7 @@ afterEach(async () => {
   vi.mocked(getSession).mockReset();
 });
 
-describe('following a target', { timeout: 30_000 }, () => {
+describe('following a target', () => {
   it('sends a one-shot notify watch with the default condition and deadline', async () => {
     serve({ 'POST /watches': () => watch() });
     await open({ kind: 'create', targets: [{ kind: 'TASK', id: 'T1' }] });
@@ -268,7 +268,7 @@ describe('following a target', { timeout: 30_000 }, () => {
   });
 });
 
-describe('editing a watch', { timeout: 30_000 }, () => {
+describe('editing a watch', () => {
   it('keeps the deadline unless asked, and sends only what changed', async () => {
     serve({ 'PATCH /watches/W1': (init) => ({ ...watch(), ...(init?.body as object) }) });
     await open({ kind: 'edit', watch: watch() });

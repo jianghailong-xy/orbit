@@ -96,7 +96,7 @@ const wakeEvent = (block: string): RunEvent => ({
   payload: { text: block, controlPlaneNote: block },
 });
 
-describe('a wake turn in the transcript', { timeout: 30_000 }, () => {
+describe('a wake turn in the transcript', () => {
   let container: HTMLDivElement;
   let root: Root;
 

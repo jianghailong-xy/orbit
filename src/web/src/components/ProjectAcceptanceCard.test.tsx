@@ -247,9 +247,9 @@ async function click(element: HTMLElement): Promise<void> {
   await act(async () => element.click());
 }
 
-// The first antd render initializes its jsdom style registry and can cross Vitest's 5s default on
-// a loaded CI worker; the assertions themselves remain synchronous and bounded.
-describe('ProjectAcceptanceCard', { timeout: 20_000 }, () => {
+// The first antd render initializes its jsdom style registry before anything can be asserted, which
+// is why these cases are slower than their bodies; every assertion here is synchronous and bounded.
+describe('ProjectAcceptanceCard', () => {
   it('heads the card with what it is, and says where a row\'s answer comes from', () => {
     const qc = client();
     seed(qc, FIVE);
@@ -495,7 +495,7 @@ function standingOf(
   };
 }
 
-describe('ProjectAcceptanceCard without a confirmation of its own', { timeout: 20_000 }, () => {
+describe('ProjectAcceptanceCard without a confirmation of its own', () => {
   const standings: Array<[string, StandardSetConfirmationStanding | undefined]> = [
     ['not yet read', undefined],
     ['UNCONFIRMED', standingOf('UNCONFIRMED')],
@@ -521,7 +521,7 @@ describe('ProjectAcceptanceCard without a confirmation of its own', { timeout: 2
   }
 });
 
-describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 }, () => {
+describe('ProjectAcceptanceCard on what the work has done', () => {
   it('draws its three states as three shapes before it uses any colour', () => {
     const qc = client();
     seed(qc, DERIVED);
@@ -835,7 +835,7 @@ describe('ProjectAcceptanceCard on what the work has done', { timeout: 20_000 },
   });
 });
 
-describe('ProjectAcceptanceCard on a phone', { timeout: 20_000 }, () => {
+describe('ProjectAcceptanceCard on a phone', () => {
   it('shows four of seven criteria first, names the hidden count, and can reveal the rest', async () => {
     stubViewport(true);
     const qc = client();

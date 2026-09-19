@@ -200,9 +200,9 @@ const deleteEntry = (): HTMLButtonElement | null =>
 const confirmButton = (): HTMLButtonElement | null =>
   document.body.querySelector<HTMLButtonElement>('.ant-popconfirm .ant-btn-primary');
 
-// Past the 5s default because each case mounts the WHOLE detail page through `act` on real timers.
-// Not a hang budget: a slow-render one.
-describe('ProjectDetailPage — deleting a project', { timeout: 20_000 }, () => {
+// Each case mounts the WHOLE detail page through `act` on real timers, so it reads the suite's case
+// budget. Not a hang budget: a slow-render one.
+describe('ProjectDetailPage — deleting a project', () => {
   it('offers a delete entry that names the project it would remove', async () => {
     serve();
     await mount(page());

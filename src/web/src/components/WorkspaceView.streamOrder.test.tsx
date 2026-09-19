@@ -227,7 +227,7 @@ async function publish(events: ReadonlyArray<Record<string, unknown>>): Promise<
   });
 }
 
-describe('the live stream renders in the order it arrived', { timeout: 20_000 }, () => {
+describe('the live stream renders in the order it arrived', () => {
   it('keeps a tool call the model ran above the reply that explains it', async () => {
     await mount();
     await waitForUi(() => {

@@ -293,12 +293,7 @@ async function type(
 const searchBox = () =>
   mountedContainer().querySelector('input[aria-label="Search projects"]') as HTMLInputElement;
 
-// Cold clean-CI scheduling put the real ProjectsPage/AntD cases between 7.524s and 8.103s before
-// a 5s timeout left their act open and cascaded through the file. Keep one file-local 12s ceiling
-// around the 8s observable waits below; this neither changes Vitest globally nor waits by time.
-const PROJECTS_ANTD_TEST_TIMEOUT = 12_000;
-
-describe('ProjectsPage — status filter', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
+describe('ProjectsPage — status filter', () => {
   it('restores a terminal lifecycle directly from a deep link without first reading Open', async () => {
     serve({ '/projects?status=CANCELLED': [ABANDONED] });
     await mount('/projects?status=CANCELLED');
@@ -530,7 +525,7 @@ describe('ProjectsPage — status filter', { timeout: PROJECTS_ANTD_TEST_TIMEOUT
   });
 });
 
-describe('ProjectsPage — search', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
+describe('ProjectsPage — search', () => {
   it('matches the goal with its Markdown removed, which is what the row shows', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
@@ -634,7 +629,7 @@ describe('ProjectsPage — search', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () 
   });
 });
 
-describe('ProjectsPage — empty states', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
+describe('ProjectsPage — empty states', () => {
   it('tells "you have no projects" apart from "nothing here matches", and offers the way out of each', async () => {
     serve({ '/projects?status=OPEN': [REVAMP, LEDGER] });
     await mount();
@@ -726,7 +721,7 @@ describe('ProjectsPage — empty states', { timeout: PROJECTS_ANTD_TEST_TIMEOUT 
   });
 });
 
-describe('ProjectsPage — starting a project', { timeout: PROJECTS_ANTD_TEST_TIMEOUT }, () => {
+describe('ProjectsPage — starting a project', () => {
   it('opens project-intent compose in firstOpenableWorkspace order', async () => {
     serve(
       { '/projects?status=OPEN': [REVAMP] },

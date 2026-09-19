@@ -197,7 +197,7 @@ const tap = async (el: Element): Promise<void> => {
   });
 };
 
-describe('session row swipes on a phone', { timeout: 30_000 }, () => {
+describe('session row swipes on a phone', () => {
   it('swiping right exposes Complete then Pin, and Complete completes the session', async () => {
     const row = await mountRow();
     expect(labels(row, 'leading')).toEqual(['Complete', 'Pin']);

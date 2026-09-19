@@ -42,6 +42,10 @@ export default defineConfig({
   // with a swift build running beside it — so vitest's 5s default reds its specs on wall clock alone,
   // and a red gets read as a regression in whatever was just changed. 30s is the headroom those specs
   // were already asking for one file at a time (`{ timeout: 30_000 }`); a hung test still fails, later.
+  //
+  // The budget lives here and not in the files: a `{ timeout: n }` written on a describe/it REPLACES
+  // this one, and `--testTimeout` cannot raise it. A file-local number below 30s therefore reds on a
+  // loaded host with no flag that can help, and one at 30s is a ceiling nobody can retune either.
   test: {
     testTimeout: 30_000,
   },
