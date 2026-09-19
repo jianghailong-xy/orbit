@@ -149,6 +149,18 @@ export class ProjectOpenItemService {
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
       for (const item of owed) await this.deliver(item.id);
+      // The other half of "the assignee is always told": a failure opened with the OWNER on it
+      // already — no coordinator to read it, the conversation ended, or the chain ran out (§4.5
+      // X-C3) — is delivered to nobody, because a person is not a queue. Their devices are told
+      // instead (§7.6 V12). Read the same way the deliveries above are: from the committed rows,
+      // so a door that does not know whether it opened one is still right. A repeat is collapsed
+      // on the item by APNs rather than stacking a second banner about one waiting thing.
+      const mine = await this.prisma.projectOpenItem.findMany({
+        where: { taskId: { in: ids }, state: 'OPEN', assignee: 'OWNER' },
+        select: { id: true },
+        orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
+      });
+      for (const item of mine) void this.push?.notifyOwnerItem(item.id);
     });
   }
 
