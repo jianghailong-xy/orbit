@@ -132,3 +132,33 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate, and not for this file to keep. The owner asked what
+  # the background-activity marks look like on iOS, and a Linux session cannot draw SwiftUI.
+  # `.ios-probe/` lifts the app's own status views out of AgentsView.swift into a throwaway iPhone
+  # app and screenshots them on a simulator (verbatim bodies, copied by hash — see run.sh).
+  # Remove this job and `.ios-probe/` when the evidence is in: like the bar-snapshot job before it,
+  # it asserts nothing and would rot silently.
+  ios-glyph:
+    name: Status glyphs (simulator screenshots)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build, launch and capture
+        working-directory: .ios-probe
+        run: bash run.sh
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glyph-shots
+          path: .ios-probe/shots
+          if-no-files-found: error
