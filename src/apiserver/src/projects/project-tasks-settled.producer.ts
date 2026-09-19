@@ -11,6 +11,7 @@ import {
   type JudgmentOutcome,
 } from './coordinator-judgment.service';
 import {
+  SETTLED_TASK_STATUSES,
   type SettledCriterionReport,
   projectAcceptanceLandedFact,
   projectTasksSettledFact,
@@ -133,6 +134,48 @@ export class ProjectTasksSettledProducer {
     const deliveries: SettledProjectDelivery[] = [];
 
     for (const projectId of ids) {
+      // WHY THIS LOOP DOES NOT ALWAYS READ THE PROJECT
+      //
+      // The roster read below is scoped to the project rather than to the write, and that is
+      // correct — the fact is about the project's whole task set — but it is also the reason one
+      // task write ever cost a whole project. On this deployment one project holds 109,874 of the
+      // table's 111,766 rows, and measured 2026-09-19 this read was the largest single statement
+      // in `pg_stat_statements` by total execution time: 44,123 calls, 4.83 billion rows, 347M
+      // buffers and 9,849 s in a 34-hour window, against 223 ms and 7,992 buffers per call. The
+      // statements just below it in that list are the task updates that trigger it.
+      //
+      // The fact's predicate refuses it while ONE task is not terminal, so one such row answers
+      // what the roster read was being asked. Neither gate below can DERIVE the fact — neither
+      // can produce the affirmative answer the digest is computed from — and the only one that
+      // refuses on its own is the one that reads a row:
+      //
+      //   * `project_task_status_count` (0282) is the project's own tally, maintained by statement
+      //     triggers on `task`, and the same source `ProjectsService.get` serves `tasksByStatus`
+      //     from. One index range either way. It is asked FIRST for the shape the probe below is
+      //     bad at: a project large enough that the planner prefers a sequential scan for a
+      //     `LIMIT 1` (32,323 buffers measured on this deployment's largest project) and settled
+      //     enough that the scan has to run to the end to find that out. A tally saying there is
+      //     no unsettled work skips the probe entirely and does what this loop has always done.
+      //   * the probe is the exact one, and decides on its own: one row of `task`, stopping at the
+      //     first row the filter rejects, which on a project that is not settled is the first row
+      //     it reads (1 buffer measured on that project against the roster read's 7,992).
+      //
+      // A tally that is empty while the rows still hold unsettled work is therefore safe: the
+      // probe does not run, the roster read does, and the answer is the one it has always been.
+      const openWork = await this.prisma.projectTaskStatusCount.findFirst({
+        where: { projectId, count: { gt: 0 }, status: { notIn: [...SETTLED_TASK_STATUSES] } },
+        select: { status: true },
+      });
+      const unsettled = openWork
+        ? await this.prisma.task.findFirst({
+            where: { projectId, status: { notIn: [...SETTLED_TASK_STATUSES] } },
+            select: { id: true },
+          })
+        : null;
+      if (unsettled) {
+        deliveries.push({ projectId, outcome: 'NOT_SETTLED' });
+        continue;
+      }
       const tasks = await this.prisma.task.findMany({
         where: { projectId },
         select: { id: true, status: true },

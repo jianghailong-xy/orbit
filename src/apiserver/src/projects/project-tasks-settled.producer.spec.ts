@@ -19,11 +19,29 @@ function producerFixture(
   statuses: string[],
   coordinatorEnabled = true,
   criteria: StatedCriterion[] = [],
+  options: { tallyMissesOpenWork?: boolean } = {},
 ) {
   const order: string[] = [];
   const facts: Array<{ event: string; projectId: string; detail?: unknown }> = [];
   const prisma = {
+    // The 0282 tally, as the triggers maintain it: whatever the statuses say, unless the fixture
+    // is asked for the one shape the producer has to survive — a tally that has fallen behind.
+    projectTaskStatusCount: {
+      findFirst: async (args: { where: { status: { notIn: string[] } } }) => {
+        order.push('tally-read');
+        if (options.tallyMissesOpenWork) return null;
+        const open = statuses.find((status) => !args.where.status.notIn.includes(status));
+        return open ? { status: open } : null;
+      },
+    },
     task: {
+      // Honors the filter it is handed rather than re-deciding which statuses are terminal: the
+      // producer's own `SETTLED_TASK_STATUSES` is what the probe must be asking about.
+      findFirst: async (args: { where: { status: { notIn: string[] } } }) => {
+        order.push('unsettled-probe');
+        const unsettled = statuses.find((status) => !args.where.status.notIn.includes(status));
+        return unsettled ? { id: randomUUID() } : null;
+      },
       findMany: async () => {
         order.push('tasks-read');
         return statuses.map((status, index) => ({ id: randomUUID(), status }));
@@ -128,6 +146,38 @@ test('an unfinished or empty task set emits no PROJECT_TASKS_SETTLED wake', asyn
   }
 });
 
+test('one unfinished row answers the roster question, so the whole project is not read', async () => {
+  // The project that pays for this is the one with 109,874 rows in it, and the read it must not
+  // make is the one scoped to the whole project. `DONE, OPEN, DONE` is the common shape: the
+  // probe finds an unfinished row without walking the settled ones around it.
+  const fixture = producerFixture(['DONE', 'OPEN', 'DONE']);
+
+  assert.deepEqual(await fixture.producer.afterCommit([PROJECT]), [
+    { projectId: PROJECT, outcome: 'NOT_SETTLED' },
+  ]);
+  assert.deepEqual(
+    fixture.order,
+    ['tally-read', 'unsettled-probe'],
+    'the roster read and the criteria read are both behind the probe, and neither is reached',
+  );
+});
+
+test('a tally that has fallen behind cannot decide: the rows are still read', async () => {
+  // The one way a derived gate can be wrong in the direction that loses a wake. It cannot lose
+  // one here: a tally with no open work in it is not an answer, it is a reason not to ask the
+  // cheap question — the roster read below still runs and still sets the answer.
+  const fixture = producerFixture(['DONE', 'OPEN'], true, [], { tallyMissesOpenWork: true });
+
+  assert.deepEqual(await fixture.producer.afterCommit([PROJECT]), [
+    { projectId: PROJECT, outcome: 'NOT_SETTLED' },
+  ]);
+  assert.deepEqual(
+    fixture.order,
+    ['tally-read', 'tasks-read', 'criteria-read'],
+    'the probe is skipped on the tally\'s word, and the rows decide instead',
+  );
+});
+
 test('committed terminal rows deliver one project fact and authorize only after the claim', async () => {
   const fixture = producerFixture(['DONE', 'CANCELLED']);
 
@@ -139,8 +189,8 @@ test('committed terminal rows deliver one project fact and authorize only after 
   assert.equal(fixture.facts[0].projectId, PROJECT);
   assert.deepEqual(
     fixture.order,
-    ['tasks-read', 'criteria-read', 'wake-claimed', 'authorization-read', 'convergence',
-      'authorized'],
+    ['tally-read', 'tasks-read', 'criteria-read', 'wake-claimed', 'authorization-read',
+      'convergence', 'authorized'],
     'T2 requires claim before authorization, and the criteria read is not an authorization',
   );
 });
@@ -152,7 +202,8 @@ test('a disabled coordinator refuses after claim instead of opening a judgment',
     { projectId: PROJECT, outcome: 'REFUSED' },
   ]);
   assert.deepEqual(fixture.order, [
-    'tasks-read', 'criteria-read', 'wake-claimed', 'authorization-read', 'authorized',
+    'tally-read', 'tasks-read', 'criteria-read', 'wake-claimed', 'authorization-read',
+    'authorized',
   ]);
 });
 
@@ -180,8 +231,8 @@ test('a settled project whose criteria are all satisfied and landed is carded, n
   );
   assert.deepEqual(
     fixture.order,
-    ['tasks-read', 'criteria-read', 'card-claimed', 'authorization-read', 'convergence',
-      'authorized'],
+    ['tally-read', 'tasks-read', 'criteria-read', 'card-claimed', 'authorization-read',
+      'convergence', 'authorized'],
     'the card is claimed before it is authorized, exactly as the judgment is',
   );
 });
