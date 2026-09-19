@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Input, Modal, Tag } from 'antd';
+import { Alert, Button, Input, Modal, Tag, Typography } from 'antd';
 import { api } from '../api';
 
 /**
@@ -313,11 +313,22 @@ export function ProjectBlockersCard({
   const latest = blockers?.resolved[0];
 
   return (
-    <section className="project-blockers" aria-label="Blockers">
-      <header className="project-blockers-head">
-        <span className="project-blockers-title">Blockers</span>
-        <span className="project-blockers-count">{`${open.length} open`}</span>
-      </header>
+    <section className="project-blockers" aria-label="Blockers" style={{ marginBottom: 24 }}>
+      {/* The same heading the run queue below wears, because these two are one reading — what is
+          standing in the way, then what can be started. Plain, unboxed, level four: the graph,
+          the chain strip and the queue beside it are all sections of this zone, not cards. */}
+      <Typography.Title className="project-blockers-heading" level={4} style={{ marginBottom: 8 }}>
+        <span className="project-blockers-heading-label">Blockers</span>
+        <Typography.Text
+          className="project-blockers-summary"
+          type="secondary"
+          style={{ fontSize: 12, fontWeight: 400 }}
+          title={`${open.length} open`}
+        >
+          {' '}
+          {`${open.length} open`}
+        </Typography.Text>
+      </Typography.Title>
       <ul className="project-blockers-list">
         {open.map((blocker) => (
           <BlockerRow

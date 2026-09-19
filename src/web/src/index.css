@@ -11408,28 +11408,28 @@ button.composer-usage:focus-visible {
 }
 
 /* Blockers (mock 6): each open blocker's kind, the work it is about, what it asks for and its
-   files, with the press that resolves it. Drawn only while something is open. */
+   files, with the press that resolves it. Drawn only while something is open. A section of the
+   work zone rather than a card: it stands directly above the run queue and wears that section's
+   heading, so what is standing in the way and what can be started read as one block. */
 .project-blockers {
-  margin-bottom: 14px;
-  padding: 14px 18px 12px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  margin-bottom: 24px;
 }
-.project-blockers-head {
+.project-blockers-heading.ant-typography {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  min-width: 0;
 }
-.project-blockers-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-1);
+.project-blockers-heading-label {
+  flex: none;
+  white-space: nowrap;
 }
-.project-blockers-count {
-  font-size: 12.5px;
-  color: var(--text-3);
+.project-blockers-summary.ant-typography {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-blockers-list {
   margin: 0;
@@ -11441,7 +11441,7 @@ button.composer-usage:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px 12px;
   align-items: start;
-  padding: 10px 2px;
+  padding: 10px 0;
   border-top: 1px solid var(--border-subtle);
 }
 .project-blockers-headline {
@@ -11487,7 +11487,7 @@ button.composer-usage:focus-visible {
   white-space: nowrap;
 }
 .project-blockers-resolved {
-  padding: 8px 2px 0;
+  padding: 8px 0 0;
   border-top: 1px solid var(--border-subtle);
   font-size: 12.5px;
   color: var(--text-3);
