@@ -15,10 +15,20 @@ final class AutoRetryLogicTests: XCTestCase {
     }
 
     private func state(_ n: AutoRetryNotice, live: Bool = true, retryAt: Date? = nil,
-                       attempts: Int = 0, hasRetryText: Bool = true) -> AutoRetryLogic.State {
+                       attempts: Int = 0, hasRetryText: Bool = true,
+                       takenOver: TaskRunHandoff.Conflict? = nil) -> AutoRetryLogic.State {
         AutoRetryLogic.state(notice: n, live: live, retryAt: retryAt, attempts: attempts,
                              provider: "deepseek", runnerName: "wikova", hasRetryText: hasRetryText,
-                             now: now, rand: { 0 })
+                             now: now, takenOver: takenOver, rand: { 0 })
+    }
+
+    /// The answer a Retry gets once the task has moved on to another run.
+    private var handedOver: TaskRunHandoff.Conflict {
+        TaskRunHandoff.readConflict(APIError.http(status: 409, body: """
+        {"code":"TASK_ALREADY_RUNNING","taskId":"5Tkrnx1kbOyLZdlRiVN4Og",
+         "conflictingSessionId":"6vVUlXGyjjJEQtxymaTkCM","conflictingSessionStatus":"RUNNING",
+         "message":"task 5Tkr… could not be started: session 6vVU… (RUNNING) holds its execution claim"}
+        """))!
     }
 
     /// While a retry is armed the card is a status, not an alarm: neutral, counting down, with the
@@ -136,5 +146,49 @@ final class AutoRetryLogicTests: XCTestCase {
                        "Weekly limit reached")
         XCTAssertEqual(AutoRetryLogic.quotaWindow("You've hit your usage limit.").title,
                        "Usage limit reached")
+    }
+
+    /// The card stops offering a re-send once somebody else is already doing the work.
+    ///
+    /// This is why the refusal belongs to the CARD and not to a status line that flashes past:
+    /// Retry is the card's own control, and an answer that only appeared somewhere else for a
+    /// moment left the card exactly as it was — still offering the button, still reading as though
+    /// nothing had happened, which is indistinguishable from a press that did nothing. What has
+    /// stopped being true is the card's own claim ("this failed and can be re-sent").
+    func testARetryThatMeetsANewerRunTurnsTheCardIntoThatAnswer() throws {
+        let before = state(notice(.apiError))
+        XCTAssertEqual(before.retryNowTitle, "Retry now",
+                       "precondition: this is the card that offers the press")
+        XCTAssertNil(before.takenOver)
+
+        let after = state(notice(.apiError), takenOver: handedOver)
+        XCTAssertEqual(after.takenOver?.kind, .held)
+        XCTAssertEqual(after.takenOver?.title, TaskRunHandoff.heldTitle)
+        XCTAssertEqual(after.takenOver?.sessionID, "6vVUlXGyjjJEQtxymaTkCM",
+                       "the card carries the run to open, so the way out is one press")
+        XCTAssertNil(after.retryNowTitle, "a button whose only possible answer is that same 409")
+        XCTAssertNil(after.retryNowNote)
+        XCTAssertFalse(after.quotesRetryText, "nothing here is going to re-send those words")
+    }
+
+    /// An armed retry that has come due says "re-sending your message…" — which is a promise, and
+    /// it is false once the task has been taken over. Both lines at once would have the card
+    /// claiming to be doing the thing it just declined to do.
+    func testTheReSendingLineIsNotShownOverARunThatHasTheTask() {
+        let firing = state(notice(.apiError), retryAt: now.addingTimeInterval(-1))
+        XCTAssertTrue(firing.firing, "precondition: its moment has passed")
+
+        let takenOver = state(notice(.apiError), retryAt: now.addingTimeInterval(-1),
+                              takenOver: handedOver)
+        XCTAssertFalse(takenOver.firing)
+        XCTAssertNotNil(takenOver.takenOver)
+    }
+
+    /// Only a card with a session behind it can be taken over. A stale card is history — the
+    /// session went on — and the share page has no console at all; neither has a Retry to withdraw,
+    /// and putting a "go to the live run" card on one would invent a present tense it does not have.
+    func testAStaleCardIsHistoryRatherThanTakenOver() {
+        XCTAssertNil(state(notice(.apiError, stale: true), live: false,
+                           takenOver: handedOver).takenOver)
     }
 }

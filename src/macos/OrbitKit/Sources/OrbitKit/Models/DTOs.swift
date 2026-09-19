@@ -544,6 +544,16 @@ public struct TurnAccepted: Codable, Sendable {
     /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
     /// kind, which is the pre-steer behaviour: queued.
     public let kind: String?
+    /// Where the message actually landed, when that is not the session it was sent to.
+    ///
+    /// A task has one run at a time, and the platform re-dispatches a failed one within seconds —
+    /// so the session on screen can stop being the task's current run with nothing here changing.
+    /// This door now hands the message to whichever run holds the task instead of refusing it, and
+    /// says so by naming that run. Its PRESENCE is the fact: absent is the ordinary resume, which
+    /// is what every build before this one assumed unconditionally, so an older server that never
+    /// sends it keeps behaving exactly as it did.
+    /// Contract: `docs/session-message-routing-contract.md` §2.1.
+    public let routedToSessionId: String?
 }
 
 /// One still-PENDING user turn from GET /sessions/:id/turns. These rows have not entered the
@@ -897,9 +907,16 @@ public struct ResumeRequest: Codable, Sendable {
     /// the same vendor, say). Cross-runtime is rejected server-side. Sent only when the user picked
     /// one while the session was ended; nil keeps whatever it ended on.
     public let provider: String?
+    /// The one thing that authorises stopping a run that is doing work: the reader's answer to
+    /// `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED`, echoed back as the public id the server
+    /// put in `confirm.value`. It names the RUN rather than being a bare flag, so a claim that
+    /// changed hands between question and answer is asked about again instead of being stopped on
+    /// a confirmation about a different run. Never sent unasked — see contract §3.2.
+    public let stopSessionId: String?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                attachmentIds: [String]? = nil, provider: String? = nil) {
+                attachmentIds: [String]? = nil, provider: String? = nil,
+                stopSessionId: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -908,6 +925,7 @@ public struct ResumeRequest: Codable, Sendable {
         self.effort = effort
         self.attachmentIds = attachmentIds
         self.provider = provider
+        self.stopSessionId = stopSessionId
     }
 }
 

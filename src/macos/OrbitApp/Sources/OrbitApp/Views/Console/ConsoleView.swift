@@ -21,11 +21,12 @@ struct ConsoleView: View {
     @State private var imagePreviewTarget: ImagePreviewTarget?
     @State private var imagePreviewPages: [PreviewImage] = []
     @State private var fetchedToolImages = FetchedToolImages()
-    #if os(iOS)
-    // Looked up to build the nav-bar title (session name + "state · when"), mirroring how web's
-    // console header reads `selected` off the cached session list. iOS-only: macOS shows status in
-    // the in-transcript `statusBar` instead.
+    // Routes to the run a message followed (`handedOverSessionID`) and to the one a refusal names
+    // — both platforms. On iOS it also builds the nav-bar title (session name + "state · when"),
+    // mirroring how web's console header reads `selected` off the cached session list; macOS shows
+    // that status in the in-transcript `statusBar` instead.
     @Environment(AppModel.self) private var appModel
+    #if os(iOS)
     @State private var showShare = false
     /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
     /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
@@ -105,12 +106,47 @@ struct ConsoleView: View {
                             }
                             .padding(.bottom, .composerBandGap)
                         }
+                        // The message went somewhere — it just isn't here. Above the composer
+                        // because that is where the send was made from, and it carries the one
+                        // press that follows it.
+                        if let routed = console.handedOverSessionID {
+                            TaskRunHandedOverCard(
+                                sessionID: routed,
+                                onOpenRun: { appModel.route(to: .session($0)) },
+                                onDismiss: { console.dismissRunConflict() })
+                                .padding(.bottom, .composerBandGap)
+                        }
+                        // …and the refusals that used to be the server's English sentence in the
+                        // row above. Shown here rather than as a status line because each one
+                        // carries a way out that has to stay pressable.
+                        if let conflict = console.composerRunConflict {
+                            // A question is not dismissible into silence: `Keep it running` IS the
+                            // way to decline it, and an ✕ beside that would be a third answer that
+                            // leaves the message unsent with nothing on screen about why.
+                            let dismiss: (() -> Void)? = conflict.kind == .confirmSwitch
+                                ? nil : { console.dismissRunConflict() }
+                            TaskRunHandoffCard(
+                                conflict: conflict,
+                                onOpenRun: { appModel.route(to: .session($0)) },
+                                onStopAndContinue: { Task { await console.stopAndContinue() } },
+                                onKeepRunning: { console.keepRunning() },
+                                onDismiss: dismiss)
+                                .padding(.bottom, .composerBandGap)
+                        }
                         ComposerAttachmentsView(console: console)
                         // What this session waits on — a watch, not a process — above the real shells.
                         WatchingCardStack(sessionID: console.sessionID)
                         BackgroundTrayView(procs: console.state.background)
                         WorktreeBar(console: console)
                         ComposerView(console: console)
+                        // What the provider pick standing in the composer will do, and WHEN — the
+                        // part that matters, because a run keeps its provider for its whole life.
+                        // In flow under the composer, and it stays for as long as the pick does.
+                        if let note = console.providerSwitchNote {
+                            Text(note).font(.orbitMeta).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        }
                     }
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.

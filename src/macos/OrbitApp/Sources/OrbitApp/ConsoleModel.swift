@@ -89,6 +89,37 @@ final class ConsoleModel {
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
     /// from a console whose context has not loaded yet.
     private(set) var pendingResumeProvider: String?
+    /// The refusal this console's last send met, as structure rather than as the server's sentence.
+    /// Nil for every other failure, which still reads its own words out of `statusMessage`.
+    private(set) var runConflict: TaskRunHandoff.Conflict?
+    /// The run a message went to when it did not stay here (contract §2.1).
+    private(set) var handedOverSessionID: String?
+    /// What a provider pick standing in the composer will actually do, and when.
+    private(set) var providerSwitchNote: String?
+    /// The reader's answer to `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED`, alive for exactly
+    /// the one send it authorises. Never stored beyond it: stopping a run is destructive, so every
+    /// stop is its own answer to its own question.
+    private var confirmedStopSessionID: String?
+    /// Whether the send that met `runConflict` was the auto-retry card's own button. It decides
+    /// WHERE the answer is shown, which is the difference between an answer and a notification.
+    private var runConflictFromRetry = false
+    private var sendingAutoRetry = false
+
+    /// The refusal the auto-retry card shows instead of its Retry button.
+    ///
+    /// Only its OWN press: it is that card's offer to re-send that has stopped being true, and a
+    /// typed message's refusal belongs next to the composer it was typed in. Never a question
+    /// either — a confirmation is about the provider just picked in the composer, and it is
+    /// answered there, where the controls that can answer it live. Web parity: `AutoRetryHelp`.
+    var autoRetryTakenOver: TaskRunHandoff.Conflict? {
+        guard runConflictFromRetry, runConflict?.kind != .confirmSwitch else { return nil }
+        return runConflict
+    }
+
+    /// The same refusal when the card above is not the one showing it, so it is read once.
+    var composerRunConflict: TaskRunHandoff.Conflict? {
+        autoRetryTakenOver == nil ? runConflict : nil
+    }
     var isDraft: Bool { draftAgent != nil }
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
@@ -982,6 +1013,10 @@ final class ConsoleModel {
     /// the resume.
     func selectProvider(_ slug: String) async {
         guard !isDraft, slug != provider else { return }
+        // Read before the assignment below, because what the note is ABOUT is the move from one to
+        // the other — and the timing of it, which is the whole question: a run keeps its provider
+        // for its whole life, so a pick made over something that is going lands on the next turn.
+        let from = provider
         // The menu greys these out; refuse here too, so a stale render can't move a session onto
         // a CLI this runner can't start.
         guard providerSwitchChoices.first(where: { $0.slug == slug })?.unavailable == nil else { return }
@@ -998,6 +1033,7 @@ final class ConsoleModel {
             : permissionMode
         let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
                                                         catalog: modelCatalog)
+        providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
         provider = slug
         if nextModel != modelID {
             modelID = nextModel
@@ -1327,6 +1363,10 @@ final class ConsoleModel {
 
         sending = true
         defer { sending = false }
+        // Last send's answer, whichever it was: this one gets to say its own.
+        runConflict = nil
+        runConflictFromRetry = false
+        handedOverSessionID = nil
         // Decide the endpoint once, before any retry: a replay has to be the same request, and the
         // status it reads can move underneath a retry that's waiting out a gateway blip.
         let resuming = ComposerLogic.shouldResume(status: sessionStatus, capabilities: serverCapabilities)
@@ -1339,6 +1379,18 @@ final class ConsoleModel {
                 // re-resume a session that hasn't re-claimed yet.
                 serverStatus = nil
                 serverCapabilities = nil
+            }
+            // The pick has done what it said it would; the sentence describing it is spent.
+            providerSwitchNote = nil
+            // §2.1: the message was delivered, to the run that holds the task rather than to this
+            // session. So the bubble comes back down — it is not here — and the card says where it
+            // went, with one press to follow it.
+            if let routed = TaskRunHandoff.routedToSession(accepted) {
+                reducer.removeOptimisticUser(clientTurnId: clientTurnId)
+                awaitingReply = false
+                publishStateNow()
+                handedOverSessionID = routed
+                return
             }
             // Tag the optimistic bubble with the server's turnId so the durable `user` event
             // reconciles it instead of appending a duplicate (the runner echoes turnId, not
@@ -1365,8 +1417,44 @@ final class ConsoleModel {
             // The chips come back the same way — but only for a send that took them: a retry never
             // did, and putting them back would double them.
             if fromComposer { pendingAttachments = staged + pendingAttachments }
-            statusMessage = ComposerLogic.sendFailureMessage(error)
+            // The one place this end stops flattening a refusal into a sentence. A code it knows
+            // becomes a card with a way out; anything else — an older server, a code invented
+            // later, a connection that simply failed — still reads the server's own words.
+            if let held = error as? TaskRunStillHeld {
+                runConflict = held.conflict
+                runConflictFromRetry = sendingAutoRetry
+            } else if let conflict = TaskRunHandoff.readConflict(error) {
+                runConflict = conflict
+                runConflictFromRetry = sendingAutoRetry
+            } else {
+                statusMessage = ComposerLogic.sendFailureMessage(error)
+            }
         }
+    }
+
+    /// Answer the one question that authorises stopping a run that is doing work, and send the
+    /// message again — the same message, which the failed send handed back to the composer.
+    ///
+    /// The id comes from the server's own `confirm.value` by way of `stopSessionIdFor`, so it names
+    /// the run the reader was shown. A claim that changed hands between question and answer is
+    /// asked about again rather than stopped on a confirmation about a different run.
+    func stopAndContinue() async {
+        guard let stop = TaskRunHandoff.stopSessionID(runConflict, confirmed: true) else { return }
+        confirmedStopSessionID = stop
+        runConflict = nil
+        defer { confirmedStopSessionID = nil }
+        await send()
+    }
+
+    /// The other answer, and the default one: nothing is stopped, and the message stays where the
+    /// failed send put it — in the composer, for the reader to decide about.
+    func keepRunning() {
+        runConflict = nil
+    }
+
+    func dismissRunConflict() {
+        runConflict = nil
+        handedOverSessionID = nil
     }
 
     /// What a retry after a sign-in failure would re-send: the latest user turn in the transcript,
@@ -1428,6 +1516,8 @@ final class ConsoleModel {
         let last = lastUserMessage
         let text = last.text.isEmpty ? serverRetryText : last.text
         guard !text.isEmpty, !sending else { return }
+        sendingAutoRetry = true
+        defer { sendingAutoRetry = false }
         await send(overrideText: text, overrideAttachments: last.attachments)
     }
 
@@ -1463,6 +1553,10 @@ final class ConsoleModel {
         await worktree.loadDetail()
     }
 
+    /// A holder that did not let go within the resends. Carried as an error so the one catch below
+    /// decides what is shown, rather than the wait writing to the screen from inside the post.
+    private struct TaskRunStillHeld: Error { let conflict: TaskRunHandoff.Conflict }
+
     /// POST the turn, replaying it through a transient failure — the gateway answering 503 while the
     /// apiserver restarts, a mobile connection dropped mid-request. Safe to replay because the
     /// request carries a `clientTurnId` the server is idempotent on: a retry either queues the
@@ -1478,12 +1572,40 @@ final class ConsoleModel {
                                           // so Default clears a stale server-side model variant.
                                           effort: effort.rawValue,
                                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
-                                          provider: pendingResumeProvider)
+                                          provider: pendingResumeProvider,
+                                          // Only ever the answer to the question that asked about
+                                          // stopping this exact run, and only for this one send.
+                                          stopSessionId: confirmedStopSessionID)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds)
-        return try await retryingTransientFailures { () async throws -> TurnAccepted in
-            if resuming { return try await self.api.resume(sessionID: self.sessionID, resumeRequest) }
-            return try await self.api.sendTurn(sessionID: self.sessionID, turnRequest)
+        // A run that is letting go frees the task within a couple of seconds, so this waits it out
+        // rather than handing the reader a refusal about a situation that is already resolving.
+        // The identical request goes back out — same `clientTurnId` — so the server either queues
+        // the message once or answers from the receipt of an attempt that got through.
+        var waits = 0
+        while true {
+            do {
+                return try await retryingTransientFailures { () async throws -> TurnAccepted in
+                    if resuming { return try await self.api.resume(sessionID: self.sessionID, resumeRequest) }
+                    return try await self.api.sendTurn(sessionID: self.sessionID, turnRequest)
+                }
+            } catch {
+                guard let conflict = TaskRunHandoff.readConflict(error),
+                      conflict.kind == .ending else { throw error }
+                // Past this, whatever is holding the engine is not the shutdown this was waiting
+                // for, and going on would be a request every two seconds for as long as the window
+                // stays open. So it stops and says the true thing instead.
+                guard waits < TaskRunHandoff.resendMaxAttempts else {
+                    throw TaskRunStillHeld(conflict: TaskRunHandoff.stillHeldAfterWaiting(conflict))
+                }
+                waits += 1
+                runConflict = conflict
+                // Shown by whoever this send came from, the same as the settled answer below:
+                // a wait that appeared in a different place than its outcome would read as two
+                // separate events happening to one message.
+                runConflictFromRetry = sendingAutoRetry
+                try await Task.sleep(nanoseconds: UInt64(TaskRunHandoff.resendAfter * 1_000_000_000))
+            }
         }
     }
 

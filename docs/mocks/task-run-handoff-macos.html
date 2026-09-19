@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh"><meta charset="utf-8"><title>发消息跟到任务当前那一轮 — macOS mockup</title><style>
+  :root {
+    --win:#ffffff; --sidebar:#f2f2f4; --sunken:#f6f6f8; --sep:#e0e0e4; --sep-soft:#ededf0;
+    --t1:#1d1d1f; --t2:#6e6e73; --t3:#98989d;
+    --accent:#0a84ff; --accent-bg:#e8f2ff; --accent-bd:#b6d7ff;
+    --green:#1a7f37; --green-bg:#e9f7ee; --green-bd:#b4e3c4;
+    --orange:#b25000; --orange-bg:#fff2e5; --orange-bd:#ffd4ab;
+    --red:#c9302c; --red-bg:#fdeceb; --red-bd:#f5c2c0;
+    --gray-bg:#f0f0f2;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:34px 34px 52px; background:#e6e6ea; color:var(--t1);
+         font:13.5px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",
+              "PingFang SC","Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:23px; letter-spacing:-.015em; margin:0 0 5px; font-weight:680; }
+  .lede { color:var(--t2); max-width:1140px; margin:0 0 4px; font-size:13px; }
+  .lede b { color:var(--t1); font-weight:600; }
+  .legend { margin:12px 0 0; font-size:12px; color:var(--t2); display:flex; gap:18px;
+            align-items:center; flex-wrap:wrap; }
+  .legend .swatch { display:inline-block; width:30px; height:13px; border-radius:4px;
+                    border:1.6px dashed var(--accent); vertical-align:-2px; margin-right:6px; }
+  section { margin-top:30px; }
+  .sechead { font-size:16px; font-weight:660; margin:0 0 3px; letter-spacing:-.01em; }
+  .secsub { font-size:12.5px; color:var(--t2); margin:0 0 14px; max-width:1140px; }
+  code { font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; background:#dcdce1;
+         padding:1px 5px; border-radius:4px; }
+  .pair { display:flex; gap:24px; align-items:flex-start; }
+  figure { margin:0; width:548px; }
+  figcaption { margin-top:10px; font-size:12px; line-height:1.55; color:var(--t2); }
+  figcaption b { color:var(--t1); font-weight:600; }
+  .tag { display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.06em;
+         padding:2px 8px; border-radius:5px; margin-bottom:8px; text-transform:uppercase; }
+  .tag.now { background:#dcdce1; color:#6e6e73; }
+  .tag.new { background:var(--accent-bg); color:#0057b8; }
+  .win { background:var(--win); border:1px solid #d3d3d8; border-radius:11px; overflow:hidden;
+         box-shadow:0 1px 2px rgba(0,0,0,.06), 0 10px 26px rgba(0,0,0,.10); }
+  .titlebar { height:34px; background:linear-gradient(#fbfbfc,#f2f2f4);
+              border-bottom:1px solid var(--sep); display:flex; align-items:center;
+              padding:0 11px; gap:7px; }
+  .dot { width:11px; height:11px; border-radius:50%; }
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .titlebar .tt { margin-left:8px; font-size:12px; font-weight:600; color:var(--t2); }
+  .body { padding:14px 15px; }
+  .changed { outline:1.7px dashed var(--accent); outline-offset:4px; border-radius:9px; }
+
+  .srow { display:flex; align-items:center; gap:8px; padding-bottom:10px; margin-bottom:11px;
+          border-bottom:1px solid var(--sep-soft); }
+  .srow .st { font-size:13px; font-weight:600; }
+  .pill { font-size:11px; border:1px solid var(--sep); border-radius:20px; padding:1px 8px;
+          color:var(--t2); background:var(--sunken); }
+  .pill.dead { color:var(--red); border-color:var(--red-bd); background:var(--red-bg); }
+  .pill.live { color:var(--green); border-color:var(--green-bd); background:var(--green-bg); }
+  .bubble { background:var(--accent-bg); border:1px solid var(--accent-bd); border-radius:11px;
+            padding:8px 11px; font-size:12.5px; max-width:74%; margin-left:auto; }
+
+  .composer { margin-top:11px; border:1px solid var(--sep); border-radius:9px; padding:9px 11px;
+              background:var(--sunken); }
+  .composer .txt { color:var(--t3); font-size:12.5px; }
+  .bar { display:flex; gap:6px; align-items:center; margin-top:9px; }
+  .chip { font-size:11px; border:1px solid var(--sep); border-radius:6px; padding:2px 8px;
+          background:var(--win); color:var(--t2); }
+  .chip.on { border-color:var(--accent-bd); background:var(--accent-bg); color:#0057b8;
+             font-weight:600; }
+  .send { margin-left:auto; background:var(--accent); color:#fff; border-radius:6px;
+          padding:3px 13px; font-size:12px; font-weight:600; }
+
+  .banner { display:flex; gap:9px; align-items:flex-start; padding:9px 11px; border-radius:9px;
+            font-size:12.5px; }
+  .banner .ic { font-size:14px; line-height:1.3; }
+  .banner.err { background:var(--red-bg); border:1px solid var(--red-bd); color:#8a1f1c; }
+  .banner.err .mono { font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+                      word-break:break-word; }
+  .card { border-radius:9px; padding:10px 12px; }
+  .card .ct { font-size:13px; font-weight:640; display:flex; align-items:center; gap:7px; }
+  .card .cb { font-size:12.5px; color:var(--t2); margin-top:3px; }
+  .card.ok { background:var(--green-bg); border:1px solid var(--green-bd); }
+  .card.ok .ct { color:var(--green); }
+  .card.wait { background:var(--gray-bg); border:1px solid var(--sep); }
+  .card.warn { background:var(--orange-bg); border:1px solid var(--orange-bd); }
+  .card.warn .ct { color:var(--orange); }
+  .card.ask { background:var(--accent-bg); border:1px solid var(--accent-bd); }
+  .card.ask .ct { color:#0057b8; }
+  .btns { display:flex; gap:7px; margin-top:9px; flex-wrap:wrap; }
+  .btn { font-size:12px; border-radius:6px; padding:3px 11px; border:1px solid var(--sep);
+         background:var(--win); color:var(--t1); font-weight:500; }
+  .btn.p { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .btn.d { background:#fff0ee; border-color:var(--red-bd); color:var(--red); font-weight:600; }
+  .btn.dis { color:var(--t3); background:var(--sunken); }
+  .note { font-size:11.5px; color:var(--t2); margin-top:7px; }
+
+  .retry { background:var(--gray-bg); border:1px solid var(--sep); border-radius:9px;
+           padding:10px 12px; }
+  .retry .rt { font-size:13px; font-weight:640; display:flex; gap:7px; align-items:center; }
+  .retry .rb { font-size:12.5px; color:var(--t2); margin-top:3px; }
+  .retry .quote { background:#e4e4e8; border-radius:7px; padding:6px 8px; font-size:12px;
+                  color:var(--t2); margin-top:8px; }
+  .switchrow { display:flex; align-items:center; margin-top:9px; gap:9px; }
+  .switchrow .sl { font-size:12.5px; }
+  .switchrow .sd { font-size:11.5px; color:var(--t3); }
+  .knob { margin-left:auto; width:36px; height:21px; border-radius:11px; background:#34c759;
+          position:relative; }
+  .knob i { position:absolute; top:2px; right:2px; width:17px; height:17px; border-radius:50%;
+            background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  td { padding:7px 8px; border-bottom:1px solid var(--sep-soft); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .tstat { font-size:10.5px; font-weight:700; letter-spacing:.05em; padding:1px 7px;
+           border-radius:5px; }
+  .tstat.f { background:var(--red-bg); color:var(--red); }
+  .tstat.o { background:var(--gray-bg); color:var(--t2); }
+  .act { text-align:right; white-space:nowrap; color:var(--t2); font-size:12px; }
+  .glyph { display:inline-block; width:23px; height:23px; line-height:23px; text-align:center;
+           border-radius:6px; background:var(--sunken); border:1px solid var(--sep); }
+  .glyph.a { background:var(--accent-bg); border-color:var(--accent-bd); color:#0057b8; }
+  .detailhead { font-size:14px; font-weight:660; margin-bottom:2px; }
+  .detailsub { font-size:12px; color:var(--t2); margin-bottom:11px; }
+</style><body>
+<h1>发消息跟到任务当前那一轮 · macOS / OrbitKit</h1>
+<p class="lede">一个任务同时只有<b>一轮</b>在跑（<code>session_task_execution_claim_idx</code>）。
+上一轮失败后平台两秒内重派，手里这个会话就不再是任务当前那一轮 —— 但屏幕上什么都没变。
+发出去的下一句话撞上一条<b>写给程序看的</b> 409，一个字都没投出去。</p>
+<p class="lede">左边是现在，右边是改后。所有文案与 web 端<b>同一份常量</b>
+（<code>src/web/src/lib/taskRunHandoff.ts</code>），由 <code>TaskRunHandoffCopyParityTests</code> 钉住。</p>
+<p class="legend"><span><span class="swatch"></span>虚线框 = 这次改动的地方</span></p>
+<section>
+  <div class="sechead">1 · 在已被接手的旧 run 里发消息</div>
+  <p class="secsub">服务端已经把消息投给了持 claim 的那一轮，并在回答里写上
+    <code>routedToSessionId</code>（契约 §2.1）。客户端要做的是<b>跟过去</b>。</p>
+  <div class="pair">
+<figure><span class="tag now">现状</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">修 compose-topology 的祖传红 — Orbit</span></div>
+      <div class="body"><div class="srow"><span class="st">修 compose-topology 的祖传红</span>
+  <span class="pill dead">FAILED</span><span class="pill">claude</span></div>
+<div class="bubble">继续干活，刚才那条先别管</div>
+  <div class="banner err" style="margin-top:11px"><span class="ic">⚠️</span>
+    <span class="mono">task 5Tkrnx1kbOyLZdlRiVN4Og could not be started: session
+      6vVUlXGyjjJEQtxymaTkCM (RUNNING) holds its execution claim. Let that run reach a terminal
+      status of its own, then start the task again</span></div>
+  <div class="composer"><div class="txt">继续干活，刚才那条先别管</div>
+    <div class="bar"><span class="chip">claude</span><span class="chip">opus-5</span>
+      <span class="send">Send</span></div></div></div></div>
+      <figcaption>英文原句原样端出来：两个 id、一个索引概念，<b>没有一个可以按的东西</b>。消息退回 composer，用户唯一想做的事（继续干活）在这句话里找不到出路。</figcaption></figure><figure><span class="tag new">改后</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">修 compose-topology 的祖传红 — Orbit</span></div>
+      <div class="body"><div class="srow"><span class="st">修 compose-topology 的祖传红</span>
+  <span class="pill dead">FAILED</span><span class="pill">claude</span></div>
+<div class="bubble">继续干活，刚才那条先别管</div>
+  <div class="card ok changed" style="margin-top:11px">
+    <div class="ct">✓ Sent to the run working on this task</div>
+    <div class="cb">This session was replaced by a newer run, so your message went there.</div>
+    <div class="btns"><span class="btn p">Open the run</span></div>
+  </div>
+  <div class="composer"><div class="txt" style="color:var(--t3)">写点什么…</div>
+    <div class="bar"><span class="chip">claude</span><span class="chip">opus-5</span>
+      <span class="send">Send</span></div></div></div></div>
+      <figcaption>这是<b>成功</b>不是错误，所以用绿不用红。气泡不画在这儿（它不在这儿），按钮 <code>route(to: .session(routedToSessionId))</code> 直接把人带过去。composer 已清空。</figcaption></figure>
+  </div></section><section>
+  <div class="sechead">2 · 投不过去的三种情况，各自说各自的话；不认识的仍然照抄原文</div>
+  <p class="secsub">按 <code>code</code> 分支，不按句子。<code>TASK_ALREADY_RUNNING</code> 一个 code
+    覆盖两种处境，靠 <code>conflictingSessionEnding</code> 这个字段分开 ——
+    光看 <code>conflictingSessionStatus</code> 两边都是 RUNNING。</p>
+  <div class="pair">
+<figure><span class="tag now">现状</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">Orbit</span></div>
+      <div class="body">
+  <div class="banner err"><span class="ic">⚠️</span>
+    <span class="mono">task 5Tkr… could not be started: session 6vVU… (RUNNING) holds its
+      execution claim. Let that run reach a terminal status of its own, then start the task
+      again</span></div>
+  <div class="banner err" style="margin-top:9px"><span class="ic">⚠️</span>
+    <span class="mono">task 5Tkr… is pinned to provider deepseek but session 6vVU… is running on
+      claude; a run keeps its provider for its lifetime</span></div>
+  <div class="banner err" style="margin-top:9px"><span class="ic">⚠️</span>
+    <span class="mono">a refusal this build has never heard of</span></div></div></div>
+      <figcaption>三条都是英文原句，长得一模一样。第一条其实<b>一秒后就好了</b>，第二条有<b>第二条出路</b>（清掉 pin），而红条把三件事说成同一件「你自己看着办」。</figcaption></figure><figure><span class="tag new">改后</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">Orbit</span></div>
+      <div class="body">
+  <div class="card wait changed"><div class="ct">🕘 That run is stopping</div>
+    <div class="cb">The run working on this task is on its way out. Nothing is lost — this goes
+      through as soon as it lets go.</div>
+    <div class="note">自动重发 · 每 2 秒，最多 5 次</div></div>
+  <div class="card warn changed" style="margin-top:9px">
+    <div class="ct">⚠️ This task is pinned to a different provider</div>
+    <div class="cb">This task is pinned to deepseek, and the run working on it is on claude.
+      A run keeps its provider for its whole life, so deepseek starts with the next one.</div>
+    <div class="btns"><span class="btn p">Open the run</span>
+      <span class="btn">Clear the task&rsquo;s pin</span></div></div>
+  <div class="banner err" style="margin-top:9px"><span class="ic">⚠️</span>
+    <span class="mono">a refusal this build has never heard of</span></div></div></div>
+      <figcaption>「在收尾」自己解决自己 —— 消息还在手里，不麻烦用户；pin 冲突两条出路都摆出来。<b>未知 code / 老服务端仍然显示原文</b>（第三条没动）—— 兜底是特意留的，没人翻译过的拒绝，读得到也好过被吞掉。</figcaption></figure>
+  </div></section><section>
+  <div class="sechead">3 · 失败卡上的 Retry 撞到 409</div>
+  <p class="secsub">Retry 是这张卡自己的按钮。答案只在别处闪一下，卡片原封不动 ——
+    和「按下去什么也没发生」分不出来。</p>
+  <div class="pair">
+<figure><span class="tag now">现状</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">修 compose-topology 的祖传红 — Orbit</span></div>
+      <div class="body">
+  <div class="retry"><div class="rt">⚠️ Provider unavailable</div>
+    <div class="rb">The claude API could not answer — nothing about your message caused it.
+      Auto-retry is off.</div>
+    <div class="switchrow"><div><div class="sl">Auto-retry — this usually clears</div>
+      <div class="sd">Off — nothing will re-send until you do.</div></div>
+      <div class="knob" style="background:#d8d8dc"><i style="left:2px;right:auto"></i></div></div>
+    <div class="quote">继续干活，刚才那条先别管</div>
+    <div class="btns"><span class="btn">Retry now</span></div></div>
+  <div class="banner err" style="margin-top:9px"><span class="ic">⚠️</span>
+    <span class="mono">task 5Tkr… could not be started: session 6vVU… (RUNNING) holds its
+      execution claim…</span></div></div></div>
+      <figcaption>卡片还挂着一个 <b>Retry now</b>，按一次红一次 —— 而真相是这活<b>早就有人在干了</b>。红条飘一条走了，卡片还在原地说「可以重发」。</figcaption></figure><figure><span class="tag new">改后</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">修 compose-topology 的祖传红 — Orbit</span></div>
+      <div class="body">
+  <div class="retry"><div class="rt">⚠️ Provider unavailable</div>
+    <div class="rb">The claude API could not answer — nothing about your message caused it.
+      Auto-retry is off.</div>
+    <div class="switchrow"><div><div class="sl">Auto-retry — this usually clears</div>
+      <div class="sd">Off — nothing will re-send until you do.</div></div>
+      <div class="knob" style="background:#d8d8dc"><i style="left:2px;right:auto"></i></div></div>
+    <div class="card warn changed" style="margin-top:10px">
+      <div class="ct">⚠️ A newer run has this task</div>
+      <div class="cb">Another run is working on this task, so this one cannot take it.
+        Open the run that has it and carry on there.</div>
+      <div class="btns"><span class="btn p">Open the run</span></div></div></div></div></div>
+      <figcaption>卡片<b>自己进入「被接手」态</b>：Retry 与待重发的引文一起收起来，换成指向当前那一轮的入口 —— 换句话说，这张卡不再声称一件已经不成立的事。位置就在按钮原来的地方：<b>答案出现在按下去的地方</b>。</figcaption></figure>
+  </div></section><section>
+  <div class="sechead">4 · composer 换 provider：说清什么时候生效；要停掉在跑那轮时明着问</div>
+  <p class="secsub">一个 run 的 provider 在它生命周期内<b>固定</b>。换 provider 只能是
+    「停掉这一轮 + 用新 provider 起新一轮」—— 而停掉一轮在跑的活是破坏性的，必须有一次显式确认。</p>
+  <div class="pair">
+<figure><span class="tag now">现状</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">修 compose-topology 的祖传红 — Orbit</span></div>
+      <div class="body">
+  <div class="srow"><span class="st">修 compose-topology 的祖传红</span>
+    <span class="pill live">RUNNING</span><span class="pill">claude</span></div>
+  <div class="composer"><div class="txt">继续干活</div>
+    <div class="bar"><span class="chip on">deepseek</span><span class="chip">deepseek-v3</span>
+      <span class="send">Send</span></div>
+    <div class="note">Provider → deepseek</div></div>
+  <p class="note" style="margin-left:2px">（4 秒后这句也没了）</p></div></div>
+      <figcaption>只说了「改成了什么」，<b>没说什么时候生效</b>。用户按下 Send，要么静默落在别的 provider 上，要么撞 409 —— 两个结果都不是他选这一下时想要的。</figcaption></figure><figure><span class="tag new">改后</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">修 compose-topology 的祖传红 — Orbit</span></div>
+      <div class="body">
+  <div class="srow"><span class="st">修 compose-topology 的祖传红</span>
+    <span class="pill live">RUNNING</span><span class="pill">claude</span></div>
+  <div class="composer changed"><div class="txt">继续干活</div>
+    <div class="bar"><span class="chip on">deepseek</span><span class="chip">deepseek-v3</span>
+      <span class="send">Send</span></div>
+    <div class="note">The turn in flight finishes on claude. Your next one runs on deepseek.</div>
+  </div>
+  <div class="card ask changed" style="margin-top:11px">
+    <div class="ct">Stop the run that is going?</div>
+    <div class="cb">This task is being worked on claude. A run keeps its provider for its whole
+      life, so continuing on deepseek means stopping that one first — its branch and worktree
+      are kept.</div>
+    <div class="btns"><span class="btn d">Stop it and continue</span>
+      <span class="btn">Keep it running</span></div></div></div></div>
+      <figcaption>上：说明<b>生效时机</b>，并且这个选择还在就一直在（不是 4 秒）。<br>下：真要停掉在跑那轮时，<b>明着问一次</b>。不按「Stop it and continue」就不会带上 <code>stopSessionId</code> —— 没有任何一轮会被停掉。确认点名的是<b>那一轮</b>，所以 claim 中途换了手会重新问，不会拿旧确认去停一个用户没看过的 run。</figcaption></figure>
+  </div></section><section>
+  <div class="sechead">5 · 任务列表 / 任务详情的入口</div>
+  <p class="secsub">入口读的是<b>会话行</b>（<code>running</code>/<code>queued</code>/
+    <code>sessions[].status</code>），不是 <code>status</code> 这个会滞后的标签 ——
+    出事那次就是：任务失败、两秒后被重派，行上还写着 FAILED。</p>
+  <div class="pair">
+<figure><span class="tag now">现状</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">Tasks — Orbit</span></div>
+      <div class="body">
+  <table>
+   <tr><td><span class="tstat f">FAILED</span></td>
+       <td>修 compose-topology 的祖传红</td>
+       <td class="act"><span class="glyph">↻</span></td></tr>
+   <tr><td><span class="tstat o">OPEN</span></td><td>补 watch 的投影断言</td>
+       <td class="act"><span class="glyph">▶</span></td></tr>
+  </table>
+  <div style="border-top:1px solid var(--sep);margin:12px -15px 0;padding:12px 15px 0">
+    <div class="detailhead">修 compose-topology 的祖传红</div>
+    <div class="detailsub">FAILED · 3 runs</div>
+    <div class="btns"><span class="btn p">Retry</span><span class="btn">Mark done</span></div>
+  </div></div></div>
+      <figcaption>行上还写着 FAILED，于是给了一个 Retry —— 而服务端那边新一轮已经在跑。这个按钮<b>按下去必然失败</b>，它是这次事故的起点。</figcaption></figure><figure><span class="tag new">改后</span><div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="tt">Tasks — Orbit</span></div>
+      <div class="body">
+  <table>
+   <tr><td><span class="tstat f">FAILED</span></td>
+       <td>修 compose-topology 的祖传红</td>
+       <td class="act changed"><span class="glyph a">→</span></td></tr>
+   <tr><td><span class="tstat o">OPEN</span></td><td>补 watch 的投影断言</td>
+       <td class="act"><span class="glyph">▶</span></td></tr>
+  </table>
+  <div style="border-top:1px solid var(--sep);margin:12px -15px 0;padding:12px 15px 0">
+    <div class="detailhead">修 compose-topology 的祖传红</div>
+    <div class="detailsub">FAILED · 3 runs · 1 running</div>
+    <div class="btns changed"><span class="btn p">Open the run</span>
+      <span class="btn">Mark done</span></div>
+    <div class="note">A run of this task is going — open it</div>
+  </div></div></div>
+      <figcaption>有活 run 时入口<b>指向正在跑的那一轮</b>：详情知道是哪一轮，直接 <code>route(to: .session(id))</code>；列表行只有 <code>running</code> 这个旗子、没有会话 id，就打开任务本身而不是瞎猜。<b>没有活 run 时一切照旧</b>（第二行还是 Run）。</figcaption></figure>
+  </div></section>
+</body></html>
