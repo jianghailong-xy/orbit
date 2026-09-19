@@ -215,11 +215,13 @@ export class ProjectAcceptanceService {
     // is a compare-and-set on the value rather than a blind write because writing `true` over
     // `true` is not a change and must not be recorded as one: the predicate is what makes a second
     // confirmation — of a set that moved, or a re-issued request — match no row, bump no
-    // `configRevision`, and fire neither of the two triggers an UPDATE of this column carries
-    // (`project_dispatch_authority_fanout` rewrites every task's dispatch authority; the
-    // completion contract is re-derived). The bump is not optional when it DOES change: this
-    // column is one of `ProjectsService.AUTHORIZATION_FIELDS`, and every write of one of those
-    // bumps the revision by one so that an action racing an authorization change stays a
+    // `configRevision`, and not fire the one trigger an UPDATE of this column still carries — the
+    // completion contract being re-derived. (0290 retired the other, `project_dispatch_authority_
+    // fanout`, which rewrote every task's dispatch authority under this project's row lock; the CAS
+    // is still the right shape, and the off→on transition it does allow no longer costs anything
+    // proportional to how many tasks the project has.) The bump is not optional when it DOES
+    // change: this column is one of `ProjectsService.AUTHORIZATION_FIELDS`, and every write of one
+    // of those bumps the revision by one so that an action racing an authorization change stays a
     // comparison rather than an archaeology.
     //
     // A throw here leaves a confirmation on record with the project still not started, which is

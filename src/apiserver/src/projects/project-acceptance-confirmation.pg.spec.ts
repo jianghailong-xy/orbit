@@ -436,7 +436,9 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     // And it is idempotent. Re-issuing the confirmation appends a second row naming the same
     // version — that much is (3)'s behaviour — but writes nothing to the project: `true` over
     // `true` is not a change, and recording it as one would move a revision other readers compare
-    // against and re-fire this column's fanout over every task of the project.
+    // against. (Until 0290 it would also have re-fired `project_dispatch_authority_fanout` over
+    // every task of the project — the CAS is what kept that off the re-confirmation path, and is
+    // still the right shape now that the fanout is gone.)
     await acceptance.confirmStandardSet(
       ownerId, created.id, { criteriaDigest: standing.currentVersion.digest },
     );

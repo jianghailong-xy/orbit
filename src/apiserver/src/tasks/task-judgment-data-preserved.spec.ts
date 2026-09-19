@@ -923,6 +923,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        none is owed. Nothing reads the new column to allow or refuse a status — the event
   //        ingestion transaction maintains it, and the session payload and the counts endpoint
   //        decide freshness against it when they read.
+  //   0290 dropped `project_dispatch_authority_fanout` — the 0122 AFTER trigger on `project` that
+  //        rewrote `dispatch_authority` on every task of a project whose `coordinator_enabled` had
+  //        just flipped, in the caller's transaction. Read against every claim above: it is two
+  //        `DROP`s, one trigger and one function, and it carries no DML at all — so no task row is
+  //        read, locked or written by it, and the 0177 pair, `task_executable_acceptance_pair`,
+  //        `task.completion_criterion`'s labels and every `project_acceptance_*` object are out of
+  //        its reach. It names none of the six preserved triggers/functions and creates no function,
+  //        so it is not another writer of the DONE fence. The column itself — `task.dispatch_authority`
+  //        — is deliberately NOT dropped (that would discard 109,875 stored values and needs the
+  //        account owner, as 0272 did); so are `task_dispatch_authority_derive` and the
+  //        `task_dispatch_authority` enum, which keep stamping a task at birth. What the migration
+  //        does carry is a closing gate: it RAISEs if any function in `public` other than the derive
+  //        trigger still names the column, so the premise "nothing reads it" is enforced on the
+  //        deployment rather than asserted here.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -977,7 +991,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0286_project_promotion',
       '0287_task_list_done_count',
       '0288_session_running_bg_jobs',
-      '0289_session_running_bg_job_activity'],
+      '0289_session_running_bg_job_activity',
+      '0290_retire_dispatch_authority_fanout'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

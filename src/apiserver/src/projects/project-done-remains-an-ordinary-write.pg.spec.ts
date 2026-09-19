@@ -68,10 +68,14 @@ const skip = !URL;
  * Every trigger the `project` table carries, and the column each one watches.
  *
  * Not one of them watches `status`, and that is the shape of the claim rather than a coincidence
- * worth restating as a second assertion: the seven are the coordinator pointer, the coordinator's
+ * worth restating as a second assertion: the six are the coordinator pointer, the coordinator's
  * companion rows, and the authorization set. Acceptance had four here — `project_acceptance_
  * done_gate`, `_advance_epoch`, `_epoch_audit` and `_criteria_fact` — and migration 0229 dropped
  * all four when the account owner was offered a narrower guard and chose the other option.
+ * `project_dispatch_authority_fanout` was the seventh until 0290 dropped it: it rewrote
+ * `dispatch_authority` on every task of the project from this row, and the column it maintained had
+ * no reader left after 0272 removed `session_dispatch_authority_guard`. Its absence here is
+ * deliberate and this list is where that is visible.
  *
  * A trigger added to this table has to be added here too, with what it is for. That is the point
  * of the list being exact: an acceptance gate does not have to arrive under a name containing
@@ -93,9 +97,6 @@ const PROJECT_TRIGGERS: Record<string, string> = {
   project_coordinator_rotation_count:
     'deferred AFTER UPDATE OF coordinator_session_id — counts a rotation of the coordinator '
     + 'pointer (0112/0113)',
-  project_dispatch_authority_fanout:
-    'AFTER UPDATE OF coordinator_enabled — revoking the coordinator has to reach the work it had '
-    + 'already authorized (0122)',
   zz_project_completion_contract_project:
     'AFTER INSERT OR UPDATE OF the authorization set (goal, instructions, coordinator_enabled, '
     + 'automation_policy, max_concurrent_tasks, session_budget_per_day, config_revision, '
