@@ -1846,7 +1846,6 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"task","trigger":"task_claimed_project_move_guard","event":"BEFORE UPDATE OF \"project_id\"","kind":"ROW/STATEMENT","since":"0122_project_dispatch_boundary","takes":[]},
   {"table":"task","trigger":"task_convergence_counters_monotonic","event":"BEFORE UPDATE OF \"convergence_counters\", \"scope_revision\", \"attempt_generation\"","kind":"ROW/STATEMENT","since":"0138_task_convergence_ledger","takes":[]},
   {"table":"task","trigger":"task_dependency_revision_seed","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0132_task_dependency_revision","takes":["task_dependency_revision WRITE"]},
-  {"table":"task","trigger":"task_dispatch_authority_derive","event":"BEFORE INSERT OR UPDATE OF \"project_id\", \"dispatch_authority\"","kind":"ROW/STATEMENT","since":"0122_project_dispatch_boundary","takes":[]},
   {"table":"task","trigger":"task_dispatch_epoch_seed","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch WRITE"]},
   {"table":"task","trigger":"task_dispatch_epoch_update","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0137_task_run_request_receipt","takes":["task_dispatch_epoch LOCK"]},
   {"table":"task","trigger":"task_done_canonical_writer_fence","event":"BEFORE UPDATE OF \"status\", \"completion_fence_revision\"","kind":"ROW/STATEMENT","since":"0193_task_done_writer_fence","takes":[]},

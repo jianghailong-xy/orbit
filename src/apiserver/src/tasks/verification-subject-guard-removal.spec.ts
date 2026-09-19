@@ -299,7 +299,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 43,
+  assert.equal(core.length, 42,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -309,16 +309,18 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0271 added `task_progress_epoch_advance` to `task` with the lifecycle epoch, 40 once '
     + '0280 added the three `task_list_task_count_*` triggers to `task` — the maintained list '
     + 'count that replaced an unfiltered whole-table aggregate on every read of GET /task-lists — '
-    + 'and 43 once 0282 added the three `project_task_status_count_*` triggers to `task`, the same '
-    + 'maintained-count shape for one project\'s per-status tally');
+    + '43 once 0282 added the three `project_task_status_count_*` triggers to `task`, the same '
+    + 'maintained-count shape for one project\'s per-status tally, and 42 once 0329 removed '
+    + '0122\'s `task_dispatch_authority_derive` from `task` with the column it stamped');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
   // `since`, so it cannot be satisfied by editing a number.
   const olderThan0207 = core.filter((entry) => Number(entry.since.slice(0, 4)) < 207);
-  assert.equal(olderThan0207.length, 34,
-    'the 34 triggers on these tables that predate 0207 must all survive it — 37 until 0228 '
-    + 'removed three of them, all three being 0192 guards that read the judgment request table');
+  assert.equal(olderThan0207.length, 33,
+    'the 33 triggers on these tables that predate 0207 must all survive it — 37 until 0228 '
+    + 'removed three of them, all three being 0192 guards that read the judgment request table, '
+    + 'and 34 until 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
     ['project_task_status_count_delete', 'project_task_status_count_insert',

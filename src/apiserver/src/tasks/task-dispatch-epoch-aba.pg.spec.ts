@@ -118,8 +118,8 @@ async function fixture(
   await db.project.create({
     data: {
       id: ids.projectId, ownerId: ids.ownerId, title: label,
-      // LEGACY dispatch authority, which is what puts these dispatches through `execute` rather
-      // than through the Coordinator — the doors this unit is about.
+      // No Coordinator on this Project, which is what puts these dispatches through `execute`
+      // rather than through the Coordinator — the doors this unit is about.
       coordinatorEnabled: false,
     },
   });

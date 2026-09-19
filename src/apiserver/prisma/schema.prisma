@@ -89,15 +89,6 @@ enum ProjectRunState {
   @@map("project_run_state")
 }
 
-/// Which scheduler is currently authorized to create a task-bound Session. This is a database-
-/// maintained projection of Project.coordinatorEnabled, not a second policy setting.
-enum TaskDispatchAuthority {
-  LEGACY
-  COORDINATOR
-
-  @@map("task_dispatch_authority")
-}
-
 /// The authority under which a task-bound Session was inserted. Kept separate from runSource:
 /// runSource is product provenance, while this column is consumed by the database authorization
 /// trigger during mixed-version deployment.
@@ -3901,9 +3892,6 @@ model Task {
   /// work that outranks it. Equal priorities keep the order the pass read them in, so while every
   /// task says 0 every door dispatches exactly what it did before the column existed.
   priority         Int         @default(0)
-  // Derived by database triggers from (project_id, project.coordinator_enabled). No service may
-  // use this as a second policy knob; it is the mixed-version dispatch brake.
-  dispatchAuthority TaskDispatchAuthority @default(LEGACY) @map("dispatch_authority")
   // Monotonic action-key epoch. Every first observation of a Coordinator dispatch outcome advances
   // it in the same transaction; duplicate delivery of the same action key does not.
   dispatchAttempt   BigInt @default(0) @map("dispatch_attempt")

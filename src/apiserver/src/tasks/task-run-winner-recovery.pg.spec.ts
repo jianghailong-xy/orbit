@@ -110,8 +110,8 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   await db.project.create({
     data: {
       id: projectId, ownerId, title: label,
-      // LEGACY dispatch authority, which is what puts these presses through `execute` rather than
-      // through the Coordinator — the doors this unit is about.
+      // No Coordinator on this Project, which is what puts these presses through `execute` rather
+      // than through the Coordinator — the doors this unit is about.
       coordinatorEnabled: false,
     },
   });

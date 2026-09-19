@@ -21,17 +21,22 @@ import { TasksService } from './tasks.service';
 /**
  * T1 — whether a task runs by itself does not depend on whether a Coordinator exists.
  *
- * Migration 0122's `task_dispatch_authority_derive` stamps every task in a `coordinator_enabled`
+ * Migration 0122's `task_dispatch_authority_derive` stamped every task in a `coordinator_enabled`
  * Project with `dispatch_authority = 'COORDINATOR'` at birth, and the auto-run sweep used to
  * require LEGACY. That was a handover while the Coordinator had a dispatch pass of its own; once
  * that pass was removed with the control loop it became a handover to nobody, and every task in
  * every coordinated Project sat OPEN for ever — `auto_run_when_ready`, an assignee on a live
  * runner, prerequisites all DONE, and no starter that would look at it.
  *
- * Asserted against a real PostgreSQL because the fact that wedges these tasks is written by a
- * TRIGGER: a fake would have to be told the authority, which is exactly the thing under test. So
- * the Project is created coordinated, the derived column is read back off the row to prove the
- * trigger fired, and then the sweep is asked to do its job.
+ * The column is gone (0329), so the distinction those tasks were wedged on no longer exists to be
+ * read back: what the two groups below differ by is now `Project.coordinator_enabled` itself,
+ * which the sweep must not consult. This file used to read the derived column off the row to prove
+ * the trigger had really stamped what wedged them; with the trigger dropped there is nothing left
+ * to read, and the sweep's own SQL is what decides the rest.
+ *
+ * Still a real PostgreSQL, because what is asserted is the sweep's behaviour against the tables
+ * and triggers it runs on: the Project flag, the dependency edge, the runner bound to the assignee
+ * and the dispatch receipt are rows, not fixture objects.
  *
  * Destructive: it seeds rows, so it runs only against a disposable server.
  */
@@ -128,14 +133,6 @@ async function releasedTask(
   return taskId;
 }
 
-/** The derived column, straight off the row — what 0122's trigger actually wrote. */
-async function authorityOf(db: PrismaClient, taskId: string): Promise<string> {
-  const [row] = await db.$queryRaw<Array<{ authority: string }>>`
-    SELECT "dispatch_authority"::text AS "authority" FROM "task" WHERE "id" = ${taskId}::uuid`;
-  assert.ok(row, `task ${taskId} is missing`);
-  return row.authority;
-}
-
 const sessionCount = (db: PrismaClient, taskId: string) =>
   db.session.count({ where: { taskId } });
 
@@ -160,11 +157,6 @@ test('the auto-run sweep dispatches a coordinated Project\'s released task',
       const optedOut = await releasedTask(s.db, ids, 't1-opted-out', {
         coordinatorEnabled: true, autoRunWhenReady: false,
       });
-
-      // THE FACT THAT USED TO WEDGE IT, read rather than assumed: if the trigger ever stops
-      // stamping this the test below would pass without covering anything.
-      assert.equal(await authorityOf(s.db, coordinated), 'COORDINATOR');
-      assert.equal(await authorityOf(s.db, legacy), 'LEGACY');
 
       await sweep(s);
 
@@ -204,8 +196,6 @@ test('the scheduled sweep dispatches a coordinated Project\'s due task',
           status: TaskStatus.OPEN, runAt: new Date(Date.now() - 60 * 60_000),
         },
       });
-      assert.equal(await authorityOf(s.db, taskId), 'COORDINATOR');
-
       await (s.tasks as unknown as { dispatchDueScheduledTasks(): Promise<void> })
         .dispatchDueScheduledTasks();
 

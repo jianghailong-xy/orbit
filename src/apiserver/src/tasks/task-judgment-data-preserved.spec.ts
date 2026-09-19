@@ -1407,7 +1407,34 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or type is created, replaced or dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another
       // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or
       // DELETE: every new table starts empty.
-      '0325_wiki_plan'],
+      '0325_wiki_plan',
+      //   0329 dropped the rest of the machinery 0290 left standing: the column
+      //        `task.dispatch_authority`, its enum and 0122's `task_dispatch_authority_derive`, which
+      //        stamped it at birth. It is the first migration in this list that drops a column of
+      //        `task` — `ALTER TABLE "task" DROP COLUMN IF EXISTS "dispatch_authority"`; 0298 and
+      //        0304 each added one — so read it against the claims above rather than past them. The
+      //        column it removes is none of the data kept here: not `acceptance_command`, not
+      //        `acceptance_expected_exit_code`, not `completion_criterion`, which leaves the 0177
+      //        pair, `task_executable_acceptance_pair` and all three `task_completion_criterion`
+      //        labels exactly where they were. `DROP TYPE "task_dispatch_authority"` drops the
+      //        column's own enum, not the `task_completion_criterion` type it shares a prefix with —
+      //        that one keeps all three labels — and nothing here is dropped by pattern: each object
+      //        is named exactly, as 0272 named the six it removed. The trigger and function it drops
+      //        write `dispatch_authority` and nothing else, so they are not writers of the DONE
+      //        fence, and no `project_acceptance_*` object or preserved trigger/function is named. It
+      //        carries no INSERT, UPDATE, DELETE or ALTER TYPE: dropping a column is catalog-only —
+      //        PostgreSQL marks the attribute dropped and reclaims the dead values at vacuum — so no
+      //        task row is read, locked or rewritten, and no backfill is owed. Its closing gate
+      //        re-asserts on the deployment that no function in `public` still names the column and
+      //        that `task` carries none, the way 0290's gate did. The 111,774 stored values were
+      //        archived off the git tree before this file was written
+      //        (`/root/orbit/data/archive/task_dispatch_authority-2026-09-19/`, restorability
+      //        verified against the source fingerprint), and the drop is the account owner's decision
+      //        on task 34RNERPaIu0ZzyhbQuOJ0, as 0272's was. Written as
+      //        0291_drop_task_dispatch_authority on that task's branch and renumbered 0329 before it
+      //        reached this line, whose 0291 is `approval_background_job` (0326–0328 were already
+      //        claimed by branches not yet landed); it was never deployed under the old name.
+      '0329_drop_task_dispatch_authority'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
