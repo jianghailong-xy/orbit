@@ -34,11 +34,39 @@ var (
 	bgLaunchPath = regexp.MustCompile(`written to:\s+(\S+\.output)`)
 )
 
-// Parsed from the Monitor tool_result, which names the task and how long it may run:
+// Parsed from the Monitor tool_result, which names the task and how long it may run. A deadline
+// is stated one of two ways — the same instant, in whichever form the CLI's own flag selects —
+// and a Monitor with no deadline says "persistent" instead:
+// "Monitor started (task bbairyimf, expires in 5m unless the source ends first; you get one
+// notice at expiry — re-arm if you still need the watch). You will be notified on each event. …"
 // "Monitor started (task b97q4j1iy, timeout 2400000ms). You will be notified on each event. …"
 // "Monitor started (task blltn4ypz, persistent — runs until TaskStop or session end). …"
 // Anchored: the receipt is the whole result, and text that merely quotes one is not a Monitor.
-var monitorStarted = regexp.MustCompile(`^Monitor started \(task ([A-Za-z0-9_-]+), (?:timeout ([0-9]+)ms|(persistent)\b)`)
+var monitorStarted = regexp.MustCompile(`^Monitor started \(task ([A-Za-z0-9_-]+), (?:timeout ([0-9]+)ms|expires in ([^;)]+)|(persistent)\b)`)
+
+// monitorDeadline finds the deadline inside the duration a receipt states it as. Claude's own
+// formatter writes whole units, alone or run together: "5m", "45s", "1h 30m", "1d 2h". Anything
+// it does not understand reads as no deadline (0), which leaves the Monitor with the one defence
+// that does not need one (killEngineShells) rather than reporting a watch over while it still runs.
+var monitorDeadline = regexp.MustCompile(`([0-9]+)\s*([dhms])`)
+
+func monitorTimeoutMs(text string) int64 {
+	var ms int64
+	for _, part := range monitorDeadline.FindAllStringSubmatch(text, -1) {
+		n, _ := strconv.ParseInt(part[1], 10, 64)
+		switch part[2] {
+		case "d":
+			ms += n * 24 * 60 * 60 * 1000
+		case "h":
+			ms += n * 60 * 60 * 1000
+		case "m":
+			ms += n * 60 * 1000
+		case "s":
+			ms += n * 1000
+		}
+	}
+	return ms
+}
 
 // Text that only DESCRIBES that format matches both regexes as readily as a
 // launch does, and production carried three shells scraped out of such text
@@ -302,7 +330,8 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 // noteMonitorStart registers a Monitor from its start receipt, reporting whether content was one.
 // A Monitor runs its watch command inside the engine and wakes the agent on each event, so it ends
 // when the engine is recycled — and Claude writes a <task-notification> only for a Monitor that
-// ends on its own. Registering it is what lets killEngineShells say so. It writes nothing in the
+// ends on its own. Registering it is what lets killEngineShells say so, and, for the deadline the
+// receipt states, what lets the runner report the expiry itself. It writes nothing in the
 // checkout, so it is deliberately not declared to b.holds: a watcher left waiting on CI must neither
 // hold the checkout nor take an admission slot.
 func (b *bgTailer) noteMonitorStart(toolUseID, content string) bool {
@@ -310,19 +339,75 @@ func (b *bgTailer) noteMonitorStart(toolUseID, content string) bool {
 	if m == nil {
 		return false
 	}
-	monitor := engineMonitor{taskID: m[1], persistent: m[3] != ""}
-	if m[2] != "" {
+	monitor := engineMonitor{taskID: m[1], persistent: m[4] != ""}
+	switch {
+	case monitor.persistent: // no deadline of its own
+	case m[2] != "":
 		monitor.timeoutMs, _ = strconv.ParseInt(m[2], 10, 64)
+	default:
+		monitor.timeoutMs = monitorTimeoutMs(m[3])
 	}
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if !b.stopping {
-		if _, reregistered := b.monitors[toolUseID]; !reregistered {
-			b.monitorsLive.Add(1)
-		}
-		b.monitors[toolUseID] = monitor
+	if b.stopping {
+		b.mu.Unlock()
+		return true
+	}
+	if _, reregistered := b.monitors[toolUseID]; !reregistered {
+		b.monitorsLive.Add(1)
+	}
+	b.monitors[toolUseID] = monitor
+	// A Monitor with a deadline ends on its own at it, and Claude's notice of that event names the
+	// Monitor's task id and nothing else — no tool_use id to retire the launch with. Waiting the
+	// deadline out here is what reports it. Registered under the same lock as the Monitor it
+	// belongs to: stopAll closes this gate before it waits.
+	expires := monitor.timeoutMs > 0
+	if expires {
+		b.wg.Add(1)
+	}
+	b.mu.Unlock()
+	if expires {
+		go func() {
+			defer b.wg.Done()
+			b.expireMonitor(toolUseID, time.Duration(monitor.timeoutMs)*time.Millisecond)
+		}()
 	}
 	return true
+}
+
+// expireMonitor waits out the deadline the Monitor's receipt stated and then reports the watch
+// over, in a background_task naming the tool_use that launched it. That id is what
+// Session.runningBgShells holds, and only a terminal report naming it takes it out — so without
+// this the launch stays "running" for the rest of the session's life, and every later look at the
+// session reads "N background processes running" long after the wait it was doing is over.
+func (b *bgTailer) expireMonitor(toolUseID string, after time.Duration) {
+	deadline := time.NewTimer(after)
+	defer deadline.Stop()
+	select {
+	case <-b.ctx.Done():
+		return // the session is over; what its tailer knew goes with it
+	case <-deadline.C:
+	}
+	b.mu.Lock()
+	monitor, live := b.monitors[toolUseID]
+	if live {
+		delete(b.monitors, toolUseID)
+		b.monitorsLive.Add(-1)
+	}
+	b.mu.Unlock()
+	if !live {
+		return // it ended before its deadline, and whatever ended it said so
+	}
+	if !b.markTerminal(toolUseID) {
+		return
+	}
+	b.emit(evBackgroundTask, map[string]interface{}{
+		"shellId":   monitor.taskID,
+		"toolUseId": toolUseID,
+		"status":    "completed",
+		"tool":      "Monitor",
+		"timeoutMs": monitor.timeoutMs,
+		"summary":   "Monitor reached its timeout and stopped; it will send no more events",
+	})
 }
 
 // hasLiveMonitors reports whether any Monitor the engine started is still running. Called by
