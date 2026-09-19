@@ -2,7 +2,7 @@ import { ArrowRightOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, PlayC
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Avatar, Button, Input, Popconfirm, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
+import { Alert, Avatar, Button, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
 import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -250,6 +250,83 @@ export const VERIFIER_CARD_EMPTY = VERIFICATION_SUBJECT_HINT.MISSING;
 /** How the card gets into the check task — the entry that did not exist at all before. */
 export const VERIFIER_CARD_ENTRY = 'View';
 
+/**
+ * The header's way back from a status already written — the move the project page offers, on the
+ * row that has a status of its own.
+ *
+ * Offered on the three statuses that mean the work has STOPPED, and nowhere else: an open task is
+ * already open, and the verb there would be a second name for a state it is in. What the question
+ * explains is the half a reader cannot see from the button — reopening does not file a new attempt,
+ * it takes THIS one back — and, on a row carrying a supersession, the fact that this is also what
+ * makes it runnable again: Run refuses a replaced attempt while the record stands (§13.6 SU6).
+ *
+ * The write is one PATCH carrying `{status: OPEN}` together with both retirement fields as null,
+ * which is what `TasksService.update`'s SU4 guard asks for: it refuses a status write on a retired
+ * row that names neither. The same three fields are spelled again at the other doors
+ * (`src/runner-go/task_reopen.go` for MCP and the CLI, `OrbitKit`'s `TaskReopen.request` for the
+ * native client), because they are three transports onto one server rule rather than three rules.
+ */
+export const REOPENABLE_STATUSES: readonly string[] = ['DONE', 'CANCELLED', 'FAILED'];
+export const REOPEN_ACTION_LABEL = 'Reopen task';
+export const REOPEN_MODAL_TITLE = 'Reopen this task?';
+export const REOPEN_MODAL_OK = 'Reopen';
+export const REOPEN_RECORDED = 'Task reopened';
+export const REOPEN_MODAL_BODY = 'Reopening puts this task back to Open and changes nothing else: '
+  + 'its history, its evidence, its dependencies and the project it is filed under stay as they '
+  + 'are. It is how an attempt that stopped is picked up again as this task, rather than as a new '
+  + 'one filed beside it.';
+export const REOPEN_MODAL_PROJECT = 'If this task serves one of its project’s acceptance '
+  + 'criteria, the project stops reading as done while it is open again.';
+export const REOPEN_MODAL_RETIRED = 'This attempt is recorded as superseded or dropped, and '
+  + 'reopening clears that record — a replaced attempt cannot be run again until it is gone.';
+
+/**
+ * What the question says, in order, for the row it is asked about. Two sentences are conditional
+ * because two facts are: a task filed under a project is the one whose reopening can take that
+ * project out of DONE, and a row carrying a retirement is the one whose reopening has to clear a
+ * record before it can run again. `strong` marks the second — it is the sentence that is the reason
+ * the reader is here, not context around it.
+ */
+export function reopenParagraphs(
+  task: { projectId?: string | null; terminalReason?: string | null } | null | undefined,
+): Array<{ text: string; strong: boolean }> {
+  const out = [{ text: REOPEN_MODAL_BODY, strong: false }];
+  if (task?.projectId) out.push({ text: REOPEN_MODAL_PROJECT, strong: false });
+  if (task?.terminalReason != null) out.push({ text: REOPEN_MODAL_RETIRED, strong: true });
+  return out;
+}
+
+/**
+ * The write itself, as an options object, for the reason `runNowMutationOptions` gives: everything
+ * here happens after the server answers, behind a button no static render can press.
+ *
+ * The project is refreshed beside the task because its status is a projection of the work under it:
+ * reopening a task that serves one of its criteria takes the project out of DONE, and whatever is
+ * drawing that status has to read again.
+ */
+export function reopenMutationOptions(
+  qc: QueryClient,
+  message: WriteToast,
+  taskId: string,
+  projectId: string | null | undefined,
+  reopened: () => void,
+) {
+  return {
+    mutationFn: () =>
+      api(`/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: { status: 'OPEN', supersededByTaskId: null, terminalReason: null },
+      }),
+    onSuccess: () => {
+      reopened();
+      message.success(REOPEN_RECORDED);
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      if (projectId) qc.invalidateQueries({ queryKey: ['project', projectId] });
+    },
+  };
+}
+
 /** The statuses an OWNER_CONFIRMED task can still be confirmed from: the door's own two. */
 export const OWNER_CONFIRMABLE_STATUSES: readonly string[] = ['OPEN', 'IN_PROGRESS'];
 
@@ -397,6 +474,7 @@ export function TaskDetailPanel({
   const qc = useQueryClient();
   const message = useToast();
   const [draft, setDraft] = useState('');
+  const [reopening, setReopening] = useState(false);
   // Drag-resizable panel width (null until the user resizes — see TDP_WIDTH_* + startResize).
   const asideRef = useRef<HTMLElement>(null);
   const [width, setWidth] = useState<number | null>(() => {
@@ -608,6 +686,13 @@ export function TaskDetailPanel({
     },
     onError: (e: Error) => message.error(e.message),
   });
+
+  // Take a stopped task back to Open, in place (see REOPENABLE_STATUSES). Nothing is toasted on a
+  // refusal: the server's sentence is the QUESTION's answer, and it is shown inside the modal the
+  // press came from rather than in a toast that scrolls away with it.
+  const reopen = useMutation(
+    reopenMutationOptions(qc, message, taskId, q.data?.projectId, () => setReopening(false)),
+  );
 
   // Move the task into a list (string) or detach it to 未分组 (null). Refresh the panel,
   // the list rows, and the sidebar's per-list / 未分组 counts.
@@ -862,6 +947,8 @@ export function TaskDetailPanel({
   // `verifier` is the same current check the work lanes and the project page's graph read, so the
   // card cannot name a different check than the one that decides the row.
   const judgment = judgmentChip(q.data ?? {});
+  // The work has stopped: this is the row Reopen is for.
+  const reopenable = REOPENABLE_STATUSES.includes(String(task?.status ?? ''));
   const verifier: TaskVerifierRow | null = q.data?.verifier ?? null;
   // A gate row without a check still gets the card, because that is where its empty state belongs:
   // the row is settled by a check and there is none, which is worth saying in place rather than
@@ -989,6 +1076,13 @@ export function TaskDetailPanel({
               {OWNER_CONFIRM_ACTION}
             </Button>
           ) : null}
+          {/* Terminal rows only, and deliberately not drawn as the row's primary press: it does not
+              start anything. Run is the button that spends a run; this one takes the status back. */}
+          {reopenable && (
+            <Button loading={reopen.isPending} onClick={() => setReopening(true)}>
+              {REOPEN_ACTION_LABEL}
+            </Button>
+          )}
           {/* A run of this task is going and this panel knows which one, so the header's press is
               the way into it. It replaces a disabled button reading "Running" — true, and the one
               thing a reader who wants to see it cannot act on. */}
@@ -1444,6 +1538,40 @@ export function TaskDetailPanel({
           Send
         </Button>
       </div>
+
+      <Modal
+        open={reopening}
+        title={REOPEN_MODAL_TITLE}
+        okText={REOPEN_MODAL_OK}
+        cancelText="Back"
+        okButtonProps={{ loading: reopen.isPending }}
+        onOk={() => reopen.mutate()}
+        onCancel={() => {
+          reopen.reset();
+          setReopening(false);
+        }}
+      >
+        {reopenParagraphs(task).map((paragraph) => (
+          <Typography.Paragraph
+            key={paragraph.text}
+            strong={paragraph.strong}
+            type={paragraph.strong ? undefined : 'secondary'}
+          >
+            {paragraph.text}
+          </Typography.Paragraph>
+        ))}
+        {/* The server's own sentence, where the press earned one. Kept inside the question rather
+            than behind it: the reader is still deciding, and a refusal is part of what they are
+            deciding with. */}
+        {reopen.error ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Task status was not changed"
+            description={(reopen.error as Error).message}
+          />
+        ) : null}
+      </Modal>
     </aside>
   );
 }

@@ -17,6 +17,12 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let assigneeId: String?
     public let listId: String?
     public let dueDate: String?
+    /// The project this task is filed under, and how the attempt ended when it did so by being
+    /// replaced or dropped. Both are read by `TaskReopen`'s question and by nothing else here: the
+    /// panel's Reopen sentence about the project is only true of work filed under one, and the
+    /// sentence about a cleared record is only true of a row that carries one.
+    public let projectId: String?
+    public let terminalReason: String?
     /// Which of the four completion criteria settles this task. Carried on every task payload, so a
     /// panel can tell an OWNER_CONFIRMED task from the three a run or a verifier settles without a
     /// second read (`OwnerConfirmations.panelAction`).
@@ -73,6 +79,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status, assigneeId, listId, dueDate, provider, model
+        case projectId, terminalReason
         case completionCriterion
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
@@ -275,12 +282,21 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     public var model: FieldUpdate<String>
     public var dependsOnTaskIds: [String]?
     public var autoRunWhenReady: Bool?
+    /// `supersededByTaskId`/`terminalReason` are three-state like the four above, and the two are
+    /// one edit: a row that names a successor or a terminal reason is retired, and CLEARING both in
+    /// the same request as a status write is what `TasksService.update`'s SU4 guard asks for before
+    /// it will let a replaced attempt go back to OPEN. `TaskReopen.request` is the caller that does
+    /// exactly that; nothing else here writes either field.
+    public var supersededByTaskId: FieldUpdate<String>
+    public var terminalReason: FieldUpdate<String>
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
                 dueDate: FieldUpdate<String> = .keep, provider: FieldUpdate<String> = .keep,
                 model: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
-                autoRunWhenReady: Bool? = nil) {
+                autoRunWhenReady: Bool? = nil,
+                supersededByTaskId: FieldUpdate<String> = .keep,
+                terminalReason: FieldUpdate<String> = .keep) {
         self.title = title
         self.description = description
         self.status = status
@@ -291,11 +307,14 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         self.model = model
         self.dependsOnTaskIds = dependsOnTaskIds
         self.autoRunWhenReady = autoRunWhenReady
+        self.supersededByTaskId = supersededByTaskId
+        self.terminalReason = terminalReason
     }
 
     enum CodingKeys: String, CodingKey {
         case title, description, status, assigneeId, listId, dueDate, provider, model
         case dependsOnTaskIds, autoRunWhenReady
+        case supersededByTaskId, terminalReason
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -310,6 +329,8 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try model.encode(into: &c, forKey: .model)
         try c.encodeIfPresent(dependsOnTaskIds, forKey: .dependsOnTaskIds)
         try c.encodeIfPresent(autoRunWhenReady, forKey: .autoRunWhenReady)
+        try supersededByTaskId.encode(into: &c, forKey: .supersededByTaskId)
+        try terminalReason.encode(into: &c, forKey: .terminalReason)
     }
 }
 
