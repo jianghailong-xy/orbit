@@ -130,20 +130,24 @@ func orbitProgressInstructions(insideRecordedWork bool) string {
 // forms a session can be in.
 //
 // A session already running inside recorded work -- the task it was dispatched for, or a project
-// it coordinates -- gets the second form, which does not offer the proposal at all. The plan it
-// would be proposing already exists: work such a session turns up either belongs to the body of
-// work it is in (and `task_create` files it there by itself, since the server derives the project
-// from the session's scope) or is a separate undertaking that is the user's to start. Offering
-// both forms of the same paragraph to both kinds of session is what made the proposal read as
-// something to do on every turn rather than something to do rarely.
+// it coordinates -- gets the second form. It used to withhold the proposal altogether: work such
+// a session turns up either belongs to the body of work it is in (and `task_create` files it
+// there by itself, since the server derives the project from the session's scope) or is a
+// separate undertaking that is the user's to start. What that reasoning priced was the wrong
+// thing. The card is the ask, so a proposal costs the user one keystroke; and the write binds the
+// project to THIS conversation, so the coordinator knows the work firsthand. What the form says
+// instead is the default it would be trading away, and what agreeing costs. Offering both forms
+// of the same paragraph to both kinds of session is what made the proposal read as something to
+// do on every turn rather than something to do rarely, and that is still why the two differ.
 func orbitProjectInstructions(insideRecordedWork bool) string {
 	if insideRecordedWork {
 		return "You are running one task Orbit has already recorded, so newly discovered work has somewhere to go: file it " +
 			"as a task, saying first what you are filing. It lands under the same project this one belongs to, without your naming it. " +
-			"Do not propose recording it as an Orbit Project from here -- work found while executing either belongs to the " +
-			"body of work you are already in, or is a separate undertaking that is the user's to start, and the task you " +
-			"filed is what puts it in front of them. A project is only ever created by an explicit yes: never call " +
-			"project_create without one.\n\n"
+			"Work that is a separate undertaking is the user's to start, and you may put it in front of them rather than " +
+			"starting it yourself: project_create raises a confirmation card and waits for the answer, and on a yes this " +
+			"conversation becomes that project's coordinator -- opening the project later comes back here rather than " +
+			"starting a stranger. Filing the task is still the default, and the cheaper one. Nothing is created without " +
+			"the user's yes, and the card is the only place that yes comes from: never create a project another way.\n\n"
 	}
 	return "Most newly discovered work is one task: record it and move on. When you have already worked out a plan for it and " +
 		"that plan comes to 4 or more steps that depend on one another, or the work plainly needs several agents on different " +

@@ -141,8 +141,10 @@ func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) 
 
 // The two forms of the project paragraph, and the fact that ONLY that paragraph differs: a task
 // session must still be told what an Orbit task is for and which tool writes one. Asserted in both
-// directions, because the whole point of the split is what each form withholds — a task form that
-// still offered the proposal, or an open form that had lost it, would each pass a one-sided check.
+// directions, because the split is a difference of emphasis rather than of permission — a task
+// form that had lost the task default, or an open form that had gained it, would each pass a
+// one-sided check. What a task session is NOT told is the open form's bar; it starts from the home
+// the work already has and says what agreeing costs.
 func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	open := orbitCLIInstructions(exe, false, true)
@@ -169,7 +171,11 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	for _, want := range []string{
 		"file it as a task",
 		"lands under the same project this one belongs to",
-		"Do not propose recording it as an Orbit Project from here",
+		// The proposal is not withheld from a task session any more; what the form carries is the
+		// default it trades away and the thing agreeing costs — this conversation becomes the new
+		// project's coordinator.
+		"you may put it in front of them",
+		"this conversation becomes that project's coordinator",
 	} {
 		if !strings.Contains(inside, want) {
 			t.Errorf("task form does not contain %q", want)
@@ -209,7 +215,7 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 	if got := appendPromptFor(&ClaimedSession{}); !strings.Contains(got, "you may propose recording it") {
 		t.Errorf("free conversation did not get the open form: %q", got)
 	}
-	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "Do not propose recording it") {
+	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "file it as a task") {
 		t.Errorf("task session did not get the task form: %q", got)
 	}
 }
