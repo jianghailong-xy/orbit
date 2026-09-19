@@ -17,6 +17,8 @@ import {
   UndeliveredCtx,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
+import { ApiError } from '../api';
+import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { transcriptEventsWithDurableDeliveryReceipts } from '../lib/acceptedUserTurn';
 
 const LIST_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -1690,5 +1692,78 @@ describe('clipped screenshot results', () => {
     );
 
     expect(html).not.toContain('is-open');
+  });
+});
+
+/**
+ * The card's Retry goes through the same send as a typed message, so it meets the same refusal:
+ * this task has moved on to another run. Before this, that refusal was a toast — it flashed past
+ * and left the card exactly as it was, still offering the button, which is indistinguishable from
+ * a press that did nothing. The claim the card makes ("this failed and can be re-sent") is what
+ * stopped being true, so the card is where the answer belongs.
+ */
+describe('an auto-retry card whose task a newer run has taken', () => {
+  const LIMIT = "You've hit your session limit · resets 8:20pm (Europe/Berlin)";
+  const RUN = '34MOJw69NzKSq2X0exxf9';
+  const RAW =
+    `task 5Tkrnx1kbOyLZdlRiVN4Og could not be started: session ${RUN} (RUNNING) holds its `
+    + 'execution claim. Let that run reach a terminal status of its own, then start the task again';
+  const takenOver = readTaskRunConflict(
+    new ApiError(RAW, 409, 'TASK_ALREADY_RUNNING', {
+      code: 'TASK_ALREADY_RUNNING',
+      message: RAW,
+      taskId: '5Tkrnx1kbOyLZdlRiVN4Og',
+      conflictingSessionId: RUN,
+      conflictingSessionStatus: 'RUNNING',
+      retryable: true,
+    }),
+  );
+
+  const card = (help: Partial<AutoRetryHelp>) =>
+    renderToStaticMarkup(
+      <MemoryRouter>
+        <AutoRetryCtx.Provider
+          value={{ provider: 'claude', onRetry: () => {}, retryText: 'ship it', ...help }}
+        >
+          <Transcript events={[{ seq: 1, type: 'assistant', payload: { text: LIMIT } }]} />
+        </AutoRetryCtx.Provider>
+      </MemoryRouter>,
+    );
+
+  it('enters a taken-over state on the card rather than flashing a toast past it', () => {
+    const html = card({ takenOver });
+
+    // The card itself changed: it is still there, and it now says what happened.
+    expect(html).toContain('chat-quota');
+    expect(html).toContain('A newer run has this task');
+    // Its offer to re-send is withdrawn — it is the offer that stopped being true.
+    expect(html).not.toContain('Retry now');
+    // …and the way out is on it, pointing at the run that actually has the task.
+    expect(html).toContain(`href="/sessions/${encodeId(RUN)}"`);
+    expect(html).toContain('Open the run');
+    // Not one word of the server's sentence.
+    expect(html).not.toContain('execution claim');
+    expect(html).not.toContain('terminal status');
+  });
+
+  it('goes on offering the retry while nothing has taken the task', () => {
+    const html = card({});
+
+    expect(html).toContain('Retry now');
+    expect(html).not.toContain('A newer run has this task');
+  });
+
+  it('leaves a card with no context alone — the share page can neither retry nor be taken over', () => {
+    // `stale`/contextless cards are history, not an alarm, and this must not turn them into one.
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <AutoRetryCtx.Provider value={null}>
+          <Transcript events={[{ seq: 1, type: 'assistant', payload: { text: LIMIT } }]} />
+        </AutoRetryCtx.Provider>
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('chat-quota');
+    expect(html).not.toContain('A newer run has this task');
   });
 });

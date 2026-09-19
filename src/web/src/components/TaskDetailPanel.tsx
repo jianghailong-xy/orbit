@@ -1,4 +1,4 @@
-import { CheckOutlined, CloseOutlined, DeleteOutlined, PlayCircleOutlined, SafetyOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, PlayCircleOutlined, SafetyOutlined } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -10,6 +10,8 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
+import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
+import { taskRunEntry } from '../lib/taskRunHandoff';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -335,7 +337,7 @@ export interface RunNowVars {
  */
 export function runNowMutationOptions(
   qc: QueryClient,
-  message: WriteToast,
+  message: WriteToast & TaskRunConflictToast,
   taskId: string,
   projectId?: string | null,
 ) {
@@ -351,7 +353,9 @@ export function runNowMutationOptions(
       message.success('Assignee workspace triggered');
       return refreshTaskScheduleViews(qc, taskId, projectId);
     },
-    onError: (e: Error) => message.error(e.message),
+    // The task moved on between this panel's fetch and the press. The refusal names the run that
+    // has it, so it is reported as that run rather than as the server's sentence about claims.
+    onError: (e: Error) => reportTaskRunConflict(message, e),
   };
 }
 
@@ -867,6 +871,11 @@ export function TaskDetailPanel({
   // session. The button shows this state and stays disabled throughout — which also
   // debounces it against repeated clicks (no second trigger until the current run ends).
   const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s));
+  // What this header offers to press. A task with a run going points AT that run: this panel holds
+  // the task's sessions, so unlike a list row it can say which one and link straight to it —
+  // which is what "Running", a disabled button naming a state, never did. Read off the sessions
+  // rather than `status`, which lags behind a re-dispatch by however long this copy is old.
+  const entry = taskRunEntry({ status: q.data?.status ?? '', sessions });
   // Blocked tasks can't run until prerequisites clear; mirror the backend's execute gate.
   const executeDisabled = completionOwned || !canExecute || running || blocked;
   // The schedule the server holds, if any — read here as well as in the editor below, because
@@ -980,24 +989,39 @@ export function TaskDetailPanel({
               {OWNER_CONFIRM_ACTION}
             </Button>
           ) : null}
-          <Tooltip title={executeHint}>
-            <span style={{ display: 'inline-flex' }}>
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                loading={running}
-                disabled={executeDisabled}
-                onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
-                style={executeDisabled ? { pointerEvents: 'none' } : undefined}
-              >
-                {running
-                  ? 'Running'
-                  : completionOwned
-                    ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
-                    : 'Run now'}
-              </Button>
-            </span>
-          </Tooltip>
+          {/* A run of this task is going and this panel knows which one, so the header's press is
+              the way into it. It replaces a disabled button reading "Running" — true, and the one
+              thing a reader who wants to see it cannot act on. */}
+          {entry.kind === 'OPEN_RUN' && entry.href ? (
+            <Tooltip title={entry.hint}>
+              <Link to={entry.href}>
+                <Button icon={<ArrowRightOutlined />} type="primary">
+                  {entry.label}
+                </Button>
+              </Link>
+            </Tooltip>
+          ) : (
+            <Tooltip title={executeHint}>
+              <span style={{ display: 'inline-flex' }}>
+                <Button
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  loading={running}
+                  disabled={executeDisabled}
+                  onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
+                  style={executeDisabled ? { pointerEvents: 'none' } : undefined}
+                >
+                  {running
+                    ? 'Running'
+                    : completionOwned
+                      ? verificationSubjectAction(q.data?.status, q.data?.verificationState).label
+                      : entry.kind === 'RETRY'
+                        ? entry.label
+                        : 'Run now'}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
           {/* The row's trash is hover-only, so without this a touch screen has no way to delete. */}
           <Popconfirm
             title="Delete this task?"

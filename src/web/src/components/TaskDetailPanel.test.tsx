@@ -9,8 +9,11 @@ import {
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import { newRunRequestToken } from '../lib/runRequestToken';
+import { encodeId } from '../lib/idCodec';
+import { TASK_RUN_HELD_TITLE, TASK_RUN_PIN_TITLE } from '../lib/taskRunHandoff';
+import type { TaskRunConflictToast } from './TaskRunHandoffNotice';
 import type { WriteToast } from './TaskScheduleEditor';
 import { TaskDetailPanel, runNowHint, runNowMutationOptions } from './TaskDetailPanel';
 
@@ -32,9 +35,14 @@ const source = readFileSync(fileURLToPath(new URL('./TaskDetailPanel.tsx', impor
 
 /** A pair of spies in place of the real toast, which needs a router and a portal. */
 function toast() {
-  return { success: vi.fn(), error: vi.fn() } as unknown as WriteToast & {
+  return {
+    success: vi.fn(),
+    error: vi.fn(),
+    sessionNotice: vi.fn(),
+  } as unknown as WriteToast & TaskRunConflictToast & {
     success: ReturnType<typeof vi.fn>;
     error: ReturnType<typeof vi.fn>;
+    sessionNotice: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -71,6 +79,8 @@ const SHANGHAI = 'Asia/Shanghai';
 const TASK_ID = '3kL9pQr2';
 const PROJECT_ID = '7bV4mNc1';
 const OTHER_PROJECT_ID = '2wX8dHt5';
+/** A run of the task, as the public id the panel links by. */
+const LIVE_RUN = '34MOJw69NzKSq2X0exxf9';
 
 /** A runnable task: assigned, unblocked, nothing in flight. */
 function task(over: Record<string, unknown> = {}) {
@@ -247,10 +257,34 @@ describe('the task panel’s header action', () => {
     expect(out).not.toMatch(/<span>Run<\/span>/);
   });
 
-  it('still says Running, and stays disabled, while a session is busy', () => {
-    // The rename must not cost the state that debounces the button against a second trigger.
-    const out = renderPanel(task({ sessions: [{ id: 's1', status: 'RUNNING' }] }));
-    expect(primaryAction(out)).toEqual({ label: 'Running', disabled: true });
+  it('points at the run in flight, where it used to say Running and refuse to be pressed', () => {
+    // What it replaced: a disabled button naming a state. True, and the one thing a reader who
+    // wants to SEE that run cannot act on — and on a row whose status still reads FAILED the same
+    // gap drew a Retry whose only possible answer was a 409. The live run decides, not `status`
+    // (`lib/taskRunHandoff.ts#taskRunEntry`), and this panel holds the sessions so it can say
+    // which one.
+    const out = renderPanel(task({ sessions: [{ id: LIVE_RUN, status: 'RUNNING' }] }));
+    expect(primaryAction(out)).toEqual({ label: 'Open the run', disabled: false });
+    expect(out).toMatch(new RegExp(`<a[^>]*href="/sessions/${encodeId(LIVE_RUN)}"`, 'u'));
+    // The reported case: this copy still says FAILED because the platform re-dispatched the task
+    // seconds ago. The entry follows the run, not the label.
+    expect(
+      primaryAction(
+        renderPanel(task({ status: 'FAILED', sessions: [{ id: LIVE_RUN, status: 'RUNNING' }] })),
+      )!.label,
+    ).toBe('Open the run');
+    // A run still waiting for a slot holds the task's claim just as a running one does.
+    expect(
+      primaryAction(
+        renderPanel(task({ status: 'FAILED', sessions: [{ id: LIVE_RUN, status: 'PENDING' }] })),
+      )!.label,
+    ).toBe('Open the run');
+  });
+
+  it('is still a retry once nothing of the task is going', () => {
+    const out = renderPanel(task({ status: 'FAILED', sessions: [{ id: LIVE_RUN, status: 'FAILED' }] }));
+    expect(primaryAction(out)).toEqual({ label: 'Retry', disabled: false });
+    expect(out).not.toMatch(new RegExp(`<a[^>]*href="/sessions/${encodeId(LIVE_RUN)}"[^>]*>Open`, 'u'));
   });
 
   it('keeps every gate that decided whether it could be pressed at all', () => {
@@ -619,6 +653,62 @@ describe('what a successful Run now refreshes', () => {
     // ...and the reason reaches the reader whole, through the existing toast path.
     expect(message.error).toHaveBeenCalledWith('no runner available');
     expect(message.success).not.toHaveBeenCalled();
+  });
+
+  it('answers a task that has already moved on with the run, not with the server’s English', async () => {
+    // The panel's press meets the same gap the row's does: its copy of the task is from before
+    // the re-dispatch. The refusal names the run that has it, so that is what the reader is given.
+    const qc = seededCache();
+    const message = toast();
+    const RUN = '34MOJw69NzKSq2X0exxf9';
+    const raw =
+      `task ${TASK_ID} could not be started: session ${RUN} (RUNNING) holds its execution claim. `
+      + 'Let that run reach a terminal status of its own, then start the task again';
+    vi.mocked(api).mockClear();
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError(raw, 409, 'TASK_ALREADY_RUNNING', {
+        code: 'TASK_ALREADY_RUNNING',
+        message: raw,
+        taskId: TASK_ID,
+        conflictingSessionId: RUN,
+        conflictingSessionStatus: 'RUNNING',
+        retryable: true,
+      }),
+    );
+
+    await new MutationObserver(qc, {
+      ...runNowMutationOptions(qc, message, TASK_ID, PROJECT_ID),
+      retry: false,
+    })
+      .mutate({ triggerId: newRunRequestToken() })
+      .catch(() => {});
+
+    expect(message.error).not.toHaveBeenCalled();
+    const card = message.sessionNotice.mock.calls[0][0];
+    expect(card.sessionId).toBe(RUN);
+    expect(card.headline).toBe(TASK_RUN_HELD_TITLE);
+    expect(`${card.headline} ${card.detail}`).not.toContain('execution claim');
+    // A pin conflict is a different remedy and says so, rather than sharing one "wait" card.
+    const pinRaw = `task ${TASK_ID} is pinned to deepseek, but session ${RUN} holds its claim`;
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError(pinRaw, 409, 'TASK_RUN_PIN_CONFLICT', {
+        code: 'TASK_RUN_PIN_CONFLICT',
+        message: pinRaw,
+        taskId: TASK_ID,
+        conflictingSessionId: RUN,
+        pinnedTo: 'deepseek',
+        runningOn: 'claude',
+        retryable: true,
+      }),
+    );
+    await new MutationObserver(qc, {
+      ...runNowMutationOptions(qc, message, TASK_ID, PROJECT_ID),
+      retry: false,
+    })
+      .mutate({ triggerId: newRunRequestToken() })
+      .catch(() => {});
+    expect(message.sessionNotice.mock.calls[1][0].headline).toBe(TASK_RUN_PIN_TITLE);
+    expect(message.error).not.toHaveBeenCalled();
   });
 
   it('sends a NEW name when the reader presses Run now again over a failed run', async () => {

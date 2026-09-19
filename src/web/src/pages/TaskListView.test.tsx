@@ -9,7 +9,8 @@ import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { api } from '../api';
+import { ApiError, api } from '../api';
+import { TASK_RUN_HELD_TITLE } from '../lib/taskRunHandoff';
 import { encodeId } from '../lib/idCodec';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import { TaskListView, batchRunMutationOptions, runRowMutationOptions } from './TaskListView';
@@ -534,7 +535,12 @@ describe('what a Run from the task list refreshes', () => {
     qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
 
   /** Spies in place of the real toast, which needs a router and a portal. */
-  const toast = () => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() });
+  const toast = () => ({
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+    sessionNotice: vi.fn(),
+  });
 
   /** One turn of the queue — enough for a settled promise chain to run. */
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -630,6 +636,58 @@ describe('what a Run from the task list refreshes', () => {
     // The reason reaches the reader whole, through the existing toast path.
     expect(message.error).toHaveBeenCalledWith('no runner available');
     expect(message.success).not.toHaveBeenCalled();
+  });
+
+  it('answers a row whose task has already moved on with the run, not with the server’s English', async () => {
+    // The reported failure, at the row: this copy still says FAILED, the platform re-dispatched
+    // the task two seconds ago, and the press can only be refused. What the reader needs is the
+    // run that has it — which the refusal names — not a sentence about execution claims.
+    const qc = seededCache();
+    const message = toast();
+    const RUN = '34MOJw69NzKSq2X0exxf9';
+    const raw =
+      `task ${T1} could not be started: session ${RUN} (RUNNING) holds its execution claim. `
+      + 'Let that run reach a terminal status of its own, then start the task again';
+    vi.mocked(api).mockClear();
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError(raw, 409, 'TASK_ALREADY_RUNNING', {
+        code: 'TASK_ALREADY_RUNNING',
+        message: raw,
+        taskId: T1,
+        conflictingSessionId: RUN,
+        conflictingSessionStatus: 'RUNNING',
+        retryable: true,
+      }),
+    );
+
+    await new MutationObserver(qc, { ...runRowMutationOptions(qc, message), retry: false })
+      .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() })
+      .catch(() => {});
+
+    expect(message.error).not.toHaveBeenCalled();
+    expect(message.sessionNotice).toHaveBeenCalledTimes(1);
+    const card = message.sessionNotice.mock.calls[0][0];
+    // The card IS the way to the run: it names the session, and this toast opens what it names.
+    expect(card.sessionId).toBe(RUN);
+    expect(card.headline).toBe(TASK_RUN_HELD_TITLE);
+    expect(`${card.headline} ${card.detail}`).not.toContain('execution claim');
+    expect(`${card.headline} ${card.detail}`).not.toContain(RUN);
+  });
+
+  it('still hands over the server’s own words for a refusal this build cannot read', async () => {
+    // The fallback is the point, not a leftover: an older apiserver sends no code at all, and a
+    // newer one will grow cases this build predates. Untranslated is still better than swallowed.
+    const qc = seededCache();
+    const message = toast();
+    vi.mocked(api).mockClear();
+    vi.mocked(api).mockRejectedValueOnce(new ApiError('task is settled', 409, 'PROJECT_SETTLED'));
+
+    await new MutationObserver(qc, { ...runRowMutationOptions(qc, message), retry: false })
+      .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() })
+      .catch(() => {});
+
+    expect(message.error).toHaveBeenCalledWith('task is settled');
+    expect(message.sessionNotice).not.toHaveBeenCalled();
   });
 
   it('sends a NEW name when the reader presses again over a failed run', async () => {

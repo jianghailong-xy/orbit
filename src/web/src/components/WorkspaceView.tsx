@@ -243,6 +243,7 @@ import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
 import { tagChipLabels } from '../lib/tagColor';
 import {
+  isSessionBusy,
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
@@ -287,6 +288,18 @@ import {
   resolveConflictLogicalSendToken,
   type LogicalSendToken,
 } from '../lib/composerSendState';
+import {
+  TASK_RUN_RESEND_AFTER_MS,
+  TASK_RUN_RESEND_MAX_ATTEMPTS,
+  providerSwitchNote as providerSwitchNoteFor,
+  readTaskRunConflict,
+  routedToSession,
+  stillHeldAfterWaiting,
+  stopSessionIdFor,
+  type TaskRunConflict,
+  type TaskRunConflictAction,
+} from '../lib/taskRunHandoff';
+import { TaskRunHandedOverNotice, TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -387,6 +400,26 @@ interface ComposerImage {
   previewUrl?: string;
   status: 'uploading' | 'done';
   id?: string;
+}
+
+/** One press of Send, named so a refusal can be kept beside the message it refused and re-sent
+ *  unchanged once the reader has answered it. */
+interface ComposerSendVars {
+  content: string;
+  images: ComposerImage[];
+  /** Attachments the control plane already holds, referenced by id — what a re-send carries
+   *  of the message it re-sends. Nothing is uploaded again; the bytes never moved. */
+  attachmentIds?: string[];
+  shell?: boolean;
+  intent?: SessionTurnIntent;
+  /** Set only by answering a `CONFIRM_SWITCH` — the one thing that authorises stopping the
+   *  run that holds this task. Carried on the SEND rather than held in state so the
+   *  authorisation travels with the message it was given for. */
+  stopSessionId?: string;
+  /** Which control pressed Send. Only the auto-retry card's own Retry names itself, and only so
+   *  that a refusal about who holds the task is answered where the press was — on the card, whose
+   *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
+  source?: 'autoRetry';
 }
 
 // The image types Claude takes as inline content blocks: shown as a thumbnail and capped
@@ -2336,6 +2369,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [providerSwitchNote, setProviderSwitchNote] = useState<string | null>(null);
   const providerNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current); }, []);
+  // A refusal about who holds this session's task, kept BESIDE the send it refused so that
+  // answering it re-sends exactly that message rather than whatever the composer holds by then.
+  // Null while nothing is in the way, which is almost always.
+  const [runConflict, setRunConflict] = useState<
+    { conflict: TaskRunConflict; vars: ComposerSendVars } | null
+  >(null);
+  // Whether a run of this session's task is going right now — the thing that decides whether a
+  // provider pick can land on this turn or only on the next one. A HINT, and deliberately read
+  // off rows this view already holds rather than by asking: it changes what the composer SAYS,
+  // never what it does. What a pick is allowed to do is the server's answer to the send, which is
+  // where a stale read here turns into the confirmation below rather than into a wrong outcome.
+  const taskRunIsGoing = useMemo(() => {
+    if (live) return true;
+    const taskId = selectedSession?.taskId ?? null;
+    if (!taskId) return false;
+    return sessions.some((s: any) => s.id !== selectedId && s.taskId === taskId && isSessionBusy(s));
+  }, [live, selectedSession?.taskId, selectedId, sessions]);
+  // What the pick on an ended session will actually do, and when. It replaces a four-second
+  // `Model → X`, which named the change but not its timing — and the timing is the question,
+  // because a run keeps its provider for its whole life.
+  const composerProviderNote = pendingResumeProvider
+    ? providerSwitchNoteFor({
+        from: selected?.provider ?? detailForSelected?.provider ?? null,
+        to: pendingResumeProvider,
+        liveRun: taskRunIsGoing,
+      })
+    : null;
+  // Where a routed message landed. Kept as state rather than a toast because it survives the
+  // navigation that follows it: the reader arrives in the other run already knowing why.
+  const [handedOverTo, setHandedOverTo] = useState<string | null>(null);
   const pickDraftProvider = (slug: string): void => {
     setDraftProviderPick({ workspaceId, provider: slug });
     const picked = providerChoicesForRunner.find((c) => c.slug === slug);
@@ -3510,20 +3573,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   const send = useMutation({
     mutationFn: async (
-      vars: {
-        content: string;
-        images: ComposerImage[];
-        /** Attachments the control plane already holds, referenced by id — what a re-send carries
-         *  of the message it re-sends. Nothing is uploaded again; the bytes never moved. */
-        attachmentIds?: string[];
-        shell?: boolean;
-        intent?: SessionTurnIntent;
-      },
+      vars: ComposerSendVars,
     ): Promise<{
       id: string;
       turnId?: string;
       queuedItem?: QueuedTurn;
       created?: boolean;
+      /** Where the message actually landed, when the server routed it to the run that holds this
+       *  session's task (`docs/session-message-routing-contract.md` §2.1). */
+      routedToSessionId?: string;
       /** The provider this create actually sent, for the remember-on-the-workspace write-back. */
       provider?: string;
       /** The explicitly picked permission mode, for the same write-back. */
@@ -3663,7 +3721,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             attachmentIds,
             shell ? 'shell' : undefined,
             operation.clientTurnId,
+            vars.stopSessionId,
           );
+          // The task moved on to another run and the server delivered this there. Nothing was
+          // placed on THIS row, so there is no placement to honour and no bubble to paint here —
+          // onSuccess follows the message instead.
+          const routedToSessionId = routedToSession(res);
+          if (routedToSessionId)
+            return { id: selected.id, routedToSessionId, clientTurnId: operation.clientTurnId };
           // A genuinely terminal revive is accepted. If another client revived the row between
           // the capability read and this request, /resume routes through live createTurn and its
           // row-locked placement preserves a real queued/steer state here.
@@ -3743,13 +3808,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       };
     },
     onSuccess: (
-      { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId },
+      { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId, routedToSessionId },
       vars,
     ) => {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
         sendOperationRef.current = null;
       }
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
+      // Delivered, to the run that has this task rather than to the one it was typed in. Nothing
+      // about this row changed, so none of the optimistic painting below applies — the bubble is
+      // in the other session. Say where it went, clear the composer (it WAS sent), and take the
+      // reader there, which is the half the old 409 never did.
+      if (routedToSessionId) {
+        setRunConflict(null);
+        setHandedOverTo(routedToSessionId);
+        setText((draft) => composerDraftAfterSend(draft, true));
+        setComposerRefs({});
+        setImages([]);
+        setView('open');
+        qc.invalidateQueries({ queryKey: ['sessions'] });
+        navigate(`/sessions/${encodeId(routedToSessionId)}`);
+        return;
+      }
       // For a freshly created session, prime its detail cache so the sidebar resolves
       // its workspace row synchronously. Otherwise activeWorkspaceId (TasksSidePanel) falls
       // back to keepPreviousData — the previously open session's workspace — and the
@@ -3859,9 +3939,92 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
+      // One of the refusals about who holds this task. They arrive structured — a stable code, the
+      // run in the way, whether it is letting go — and `message.error(e.message)` is exactly the
+      // line that threw that away and put the server's English on screen. Anything this build has
+      // no reading for still goes to the toast below, server's words and all.
+      const conflict = readTaskRunConflict(e);
+      if (conflict) {
+        setHandedOverTo(null);
+        setRunConflict({ conflict, vars });
+        return;
+      }
       message.error(e.message);
     },
   });
+  const sendMutateForConflict = send.mutate;
+  // How many times this message has been held for a holder that was letting go. A ref and not
+  // state because it must survive the resend it causes: each resend produces its own refusal, and
+  // a counter reset by that would never reach its own bound.
+  const endingResendsRef = useRef(0);
+  // A holder that is letting go frees the task on its own, so this waits instead of asking. The
+  // resend carries the same `clientTurnId` — `logicalSendToken` mints one per distinct payload and
+  // this payload is unchanged — so a delivery that in fact landed is not duplicated by it.
+  useEffect(() => {
+    if (runConflict?.conflict.kind !== 'ENDING') {
+      endingResendsRef.current = 0;
+      return;
+    }
+    // Whatever is holding that engine is no longer the shutdown this was waiting for. Stop, and
+    // say the true thing — rather than a request every two seconds for as long as the tab is open.
+    if (endingResendsRef.current >= TASK_RUN_RESEND_MAX_ATTEMPTS) {
+      setRunConflict((current) =>
+        current && current.conflict.kind === 'ENDING'
+          ? { ...current, conflict: stillHeldAfterWaiting(current.conflict) }
+          : current,
+      );
+      return;
+    }
+    const vars = runConflict.vars;
+    const timer = setTimeout(() => {
+      endingResendsRef.current += 1;
+      setRunConflict(null);
+      sendMutateForConflict(vars);
+    }, runConflict.conflict.resendAfterMs ?? TASK_RUN_RESEND_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [runConflict, sendMutateForConflict]);
+  // A conflict is about ONE send in ONE session; carrying it to the next session would ask the
+  // reader to answer a question about a run they are no longer looking at.
+  useEffect(() => {
+    setRunConflict(null);
+    // …except the one that says where a message WENT: following it is what changes the selection,
+    // so clearing on that change would take the explanation away at the moment it is arrived at.
+    setHandedOverTo((to) => (to && to === selectedId ? to : null));
+  }, [selectedId]);
+  const clearTaskPin = useMutation({
+    mutationFn: (taskId: string) =>
+      api(`/tasks/${taskId}`, { method: 'PATCH', body: { provider: null, model: null } }),
+    onSuccess: () => {
+      setRunConflict(null);
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  /**
+   * The reader's answer to whichever question the conflict asked.
+   *
+   * `STOP_AND_CONTINUE` is the only path that stops a run, and it re-sends the SAME message with
+   * the confirmation the server asked for — never a flag remembered from a previous answer, and
+   * never a value derived from some other refusal that happened to name a session.
+   */
+  const answerRunConflict = (action: TaskRunConflictAction): void => {
+    if (!runConflict) return;
+    if (action.kind === 'KEEP_RUNNING') {
+      setRunConflict(null);
+      return;
+    }
+    if (action.kind === 'CLEAR_PIN') {
+      if (runConflict.conflict.taskId) clearTaskPin.mutate(runConflict.conflict.taskId);
+      return;
+    }
+    if (action.kind === 'STOP_AND_CONTINUE') {
+      const stopSessionId = stopSessionIdFor(runConflict.conflict, true);
+      if (!stopSessionId) return;
+      const vars = runConflict.vars;
+      setRunConflict(null);
+      sendMutateForConflict({ ...vars, stopSessionId });
+    }
+  };
   const control = useMutation({
     mutationFn: (id: string) => interruptSession(id),
     onSuccess: () => {
@@ -5213,9 +5376,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 content: autoRetryText,
                 images: [],
                 attachmentIds: retry.attachmentIds,
+                source: 'autoRetry',
               })
           : undefined,
       retryText: autoRetryText,
+      // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
+      // typed message's. Handed to the card rather than left to the toast: it is the card's offer
+      // to re-send that has stopped being true, so the card is where that has to show.
+      // …but never a QUESTION: a confirmation is about the provider the reader just picked in the
+      // composer, and it is answered there, where the only controls that can answer it live.
+      takenOver:
+        runConflict?.vars.source === 'autoRetry' && runConflict.conflict.kind !== 'CONFIRM_SWITCH'
+          ? runConflict.conflict
+          : null,
       onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       onCancelAuto: selected?.id
         ? () => {
@@ -5238,6 +5411,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      runConflict?.conflict,
       selectedTrashed,
       selectedMissing,
       sendMutate,
@@ -6644,6 +6818,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </button>
           </div>
         )}
+        {/* Where this task's current run is, said above the composer rather than in a toast: a
+            toast is gone by the time the reader has decided what to do about it, and every one of
+            these has something to decide. */}
+        {handedOverTo && (
+          <TaskRunHandedOverNotice
+            onDismiss={() => setHandedOverTo(null)}
+            sessionId={handedOverTo}
+          />
+        )}
+        {runConflict
+          && (runConflict.vars.source !== 'autoRetry'
+            || runConflict.conflict.kind === 'CONFIRM_SWITCH') && (
+          <TaskRunHandoffNotice conflict={runConflict.conflict} onAction={answerRunConflict} />
+        )}
+        {composerProviderNote && (
+          <div className="composer-provider-note" role="status">
+            {composerProviderNote}
+          </div>
+        )}
         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual
@@ -7138,6 +7331,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     // depend on it now — marking their seeds dirty, exactly as a manual Model or
                     // Mode edit does, so the seeding effect doesn't put the old values back.
                     setEndedProviderPick({ sessionId: selected!.id, provider: v });
+                    // A pick that may mean stopping a run is not a settled question any more:
+                    // whatever the last answer was, it was about the provider before this one.
+                    setRunConflict(null);
                     if (nextModel !== shownModel) {
                       modelSeedState.current = dirtyContextSeed(modelContextKey);
                       setModel(nextModel);
