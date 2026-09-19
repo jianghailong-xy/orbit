@@ -56,13 +56,19 @@ func (p *sessionPool) adoptRecordedJobs() {
 func adoptedJob(rec bgJobRecord) *bgJob {
 	pid := rec.PID
 	return &bgJob{
-		id:           rec.JobID,
-		kind:         rec.Kind,
-		command:      rec.Command,
-		description:  rec.Description,
-		outputPath:   rec.OutputPath,
-		pid:          pid,
-		startedAt:    rec.StartedAt,
+		id:          rec.JobID,
+		kind:        rec.Kind,
+		command:     rec.Command,
+		description: rec.Description,
+		outputPath:  rec.OutputPath,
+		pid:         pid,
+		startedAt:   rec.StartedAt,
+		// The image that started this job never told us when its output last moved, and the record
+		// does not carry it: a job whose output has been silent since it started (which is the
+		// honest reading of "no output before the re-exec") reports its age from its real start, so
+		// one that was already hung before the self-update is stale at once rather than after a
+		// fresh ten minutes.
+		lastOutputAt: rec.StartedAt,
 		done:         make(chan struct{}),
 		wakeOnExit:   rec.WakeOnExit,
 		wakeOnOutput: rec.WakeOnOutput,

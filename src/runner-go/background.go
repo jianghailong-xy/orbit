@@ -85,6 +85,15 @@ const (
 	transcriptRelevantLineCap = 1024 * 1024
 )
 
+// bgJobHeartbeatInterval is how often a running job re-states itself (heartbeatJobs). It is the
+// cadence of the FRESHNESS a job carries, not of its liveness: the control plane decides that a job
+// has stopped moving by measuring how long it has produced nothing from the last report it got, so
+// a job that is producing must keep saying so within the threshold the control plane applies
+// (BG_JOB_ACTIVITY_STALE_AFTER_MS, ten minutes — this is ten reports per threshold). Longer would
+// still be correct for the detection, and would only delay a job that resumed after a stall getting
+// its marker back; shorter would spend events saying nothing new.
+const bgJobHeartbeatInterval = time.Minute
+
 // worktreeHoldRegistry is where something that starts a long-lived writer
 // declares it, so the worktree GC and a merge or commit receipt can see it. A background
 // shell holds the checkout for as long as it runs, which is routinely past the
@@ -178,7 +187,7 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 	// Own a cancellable child so stopAll reliably ends the watcher goroutine even when the
 	// parent context outlives a normally-ended session run.
 	ctx, cancel := context.WithCancel(ctx)
-	return &bgTailer{
+	tailer := &bgTailer{
 		ctx:      ctx,
 		cancel:   cancel,
 		emit:     emit,
@@ -189,6 +198,11 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 		monitors: map[string]engineMonitor{},
 		jobs:     map[string]*bgJob{},
 	}
+	// Every running job states its freshness on a ticker, for as long as this tailer lives — see
+	// heartbeatJobs for why a job that is producing has to keep saying so. Started here so no caller
+	// has to remember it, and stopped by cancel with every other goroutine this ctx owns.
+	go tailer.heartbeatJobs()
+	return tailer
 }
 
 // notifyWhenCold installs the two halves of "tell the human": how to ask whether
@@ -609,6 +623,9 @@ func (b *bgTailer) tail(ctx context.Context, toolUseID, shellID, path string) {
 			return // unchanged — don't spam an identical snapshot
 		}
 		last = s
+		// The output moved, which for a runner-hosted job is the fact its freshness is made of:
+		// recorded before the event so a reader that sees the output also sees the job as moving.
+		b.noteOutput(toolUseID)
 		b.emit(evBackgroundOutput, map[string]interface{}{
 			"shellId": shellID, "toolUseId": toolUseID, "content": s,
 		})

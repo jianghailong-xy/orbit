@@ -1,0 +1,45 @@
+-- 0289 — "the work in flight is still moving", as a fact the clients can draw without reading events
+--
+-- WHAT IT ADDS
+-- ============
+--   * `session.running_bg_job_activity`: for a job in `running_bg_jobs`, the instant its output last
+--     moved, in the CONTROL PLANE's timebase. Written by the same event-ingestion transaction that
+--     maintains the three running sets beside it, pruned to that set, and read by the session
+--     payload and the counts endpoint.
+--
+-- WHY A SECOND COLUMN RATHER THAN A NARROWER `running_bg_jobs`
+-- ==========================================================
+-- `running_bg_jobs` (0288) answers "is a job in flight" — a `bg_run` that will end, as opposed to a
+-- `service` a workspace deliberately leaves up. It does not answer "and is that job still doing
+-- anything", because a job that deadlocks, waits on a lock nobody holds or hangs on a read is just
+-- as much a live process as one that is working. The clients draw that set as a breathing terminal
+-- glyph and a quiet dot on the workspace rail, so a hung job breathes for hours.
+--
+-- The two facts cannot be folded into one array, because they have different lifetimes: the job is
+-- in flight until it ENDS (something the runner reports), while it counts as moving until its
+-- output goes quiet for longer than a threshold (a fact about `now`, which no event announces —
+-- nothing happens at the moment a job stops moving). A row cannot hold the second one: it would be
+-- stale the instant it was written, and keeping it current would need a writer awake for exactly
+-- the jobs that have gone silent. So the column holds the raw fact — WHEN the output last moved —
+-- and every reader decides freshness against the threshold at the moment it reads
+-- (src/apiserver/src/sessions/background-job-activity.ts).
+--
+-- WHERE IT COMES FROM
+-- ===================
+-- The runner tails each job's `.output` file and knows when it last changed (runner-go
+-- background.go); it reports that as an idle DURATION — milliseconds since the last output — on the
+-- `running` background_task that already carries the job's kind, at launch, on adoption, and on a
+-- heartbeat while the job runs. The duration and not a timestamp, because the two machines do not
+-- share a clock: `receivedAt - idleMs` restates it in this server's own timebase and everything
+-- after that is measured by one clock.
+--
+-- WHAT IT DOES NOT TOUCH
+-- ======================
+-- One new column, NOT NULL with an empty-object default, so every existing row reads as "no job's
+-- progress has been reported" — which is what a runner that predates this column means, and what
+-- the readers treat as unknown rather than as stalled. No backfill is possible or wanted: nothing
+-- ever recorded when a job last wrote, and re-deriving it from the output files (which live on the
+-- runners, not here) would light markers for work that ended days ago. Readers that predate the
+-- column simply do not select it.
+ALTER TABLE "session"
+  ADD COLUMN "running_bg_job_activity" jsonb NOT NULL DEFAULT '{}'::jsonb;

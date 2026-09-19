@@ -905,6 +905,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `pg_attribute.attmissingval` and never rewrites the heap: there is no backfill here and
   //        none is owed. Nothing reads the new column to allow or refuse a status — the event
   //        ingestion transaction maintains it and the session payload counts it.
+  //   0289 added `session.running_bg_job_activity`: for each job in `running_bg_jobs`, the instant
+  //        its output last moved, so that a `bg_run` whose process is up but has produced nothing
+  //        for ten minutes stops counting as work in flight while staying in `running_bg_shells`
+  //        (it is still a process; it is just no longer moving). Read against every claim above:
+  //        like 0288 and 0253/0254 it is one `ALTER TABLE "session" ADD COLUMN ... NOT NULL DEFAULT
+  //        '{}'::jsonb` and nothing else. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, index, enum, type, function or trigger — so it is not another writer
+  //        of the DONE fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE, so no
+  //        preserved row is read or written. The default is a constant, so PG writes only
+  //        `pg_attribute.attmissingval` and never rewrites the heap: there is no backfill here and
+  //        none is owed. Nothing reads the new column to allow or refuse a status — the event
+  //        ingestion transaction maintains it, and the session payload and the counts endpoint
+  //        decide freshness against it when they read.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -958,7 +976,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0285_task_dependency_tail_id_single_read',
       '0286_project_promotion',
       '0287_task_list_done_count',
-      '0288_session_running_bg_jobs'],
+      '0288_session_running_bg_jobs',
+      '0289_session_running_bg_job_activity'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

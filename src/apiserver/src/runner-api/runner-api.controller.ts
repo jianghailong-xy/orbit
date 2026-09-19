@@ -25,6 +25,10 @@ import { MachineProtocol } from '../common/machine-protocol';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
+  bgJobActivityAfterReports,
+  sameBgJobActivity,
+} from '../sessions/background-job-activity';
+import {
   checkpointIdForCommit,
   reportedLandingAuthority,
 } from '../projects/task-checkpoint.service';
@@ -2068,6 +2072,7 @@ export class RunnerApiController {
             "inbox_lease_owner" = ${leaseOwner}::uuid,
             "running_bg_shells" = '{}'::text[],
             "running_bg_jobs" = '{}'::text[],
+            "running_bg_job_activity" = '{}'::jsonb,
             "running_subagents" = '{}'::text[],
             "engine_turn_active" = false
         WHERE id = ${sessionId}::uuid
@@ -4096,6 +4101,7 @@ export class RunnerApiController {
           cancelRequestedAt: true,
           runningBgShells: true,
           runningBgJobs: true,
+          runningBgJobActivity: true,
           runningSubagents: true,
           coordinatorContextEpoch: true,
           // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
@@ -4498,10 +4504,21 @@ export class RunnerApiController {
           const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
-        .map((e) => ({
-          id: String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''),
-          kind: String((e.payload as { kind?: unknown }).kind ?? ''),
-        }))
+        .map((e) => {
+          const { toolUseId, kind, idleMs } = e.payload as {
+            toolUseId?: unknown;
+            kind?: unknown;
+            idleMs?: unknown;
+          };
+          return {
+            id: String(toolUseId ?? ''),
+            kind: String(kind ?? ''),
+            // How long the job had produced nothing when this report was sent, on the runner's own
+            // clock (runner-go bgJob.idleMs). A runner that predates the field sends none, which is
+            // "unknown", not "silent" — see background-job-activity.ts.
+            idleMs: typeof idleMs === 'number' && Number.isFinite(idleMs) ? idleMs : null,
+          };
+        })
         .filter((report) => report.id !== '');
       const bgRunning = bgRunningReports.map((report) => report.id);
       // Which of those reports are WORK rather than something left standing. `service` is the one
@@ -4548,6 +4565,26 @@ export class RunnerApiController {
       if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
       if (!sameIds(jobs, session.runningBgJobs)) sessionData.runningBgJobs = jobs;
       if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
+      // When each of those jobs last produced output, folded from the same reports and pruned to the
+      // same set. This is what makes the marker mean "work in flight AND still moving": a job whose
+      // entry here is older than the threshold stops counting as in flight while staying in
+      // `runningBgShells`, which is the process that is genuinely still up. Recorded here rather
+      // than decided here — see background-job-activity.ts for why a duration from the runner, and
+      // not a timestamp, is what crosses the machine boundary, and why the threshold is applied by
+      // the readers instead of being stored.
+      //
+      // A heartbeat from a job that is producing nothing recomputes the same instant (the silence it
+      // reports grows exactly as the time since the last report does), so the comparison keeps an
+      // idle job's minute-by-minute report from writing the row for nothing.
+      const activity = bgJobActivityAfterReports(
+        session.runningBgJobActivity,
+        jobs,
+        bgRunningReports,
+        Date.now(),
+      );
+      if (!sameBgJobActivity(activity, session.runningBgJobActivity)) {
+        sessionData.runningBgJobActivity = activity;
+      }
 
       if (Object.keys(sessionData).length > 0) {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
@@ -4694,6 +4731,7 @@ export class RunnerApiController {
           // can't stay stuck on "Running Workspace…".
           runningBgShells: [],
           runningBgJobs: [],
+          runningBgJobActivity: {},
           runningSubagents: [],
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
         },

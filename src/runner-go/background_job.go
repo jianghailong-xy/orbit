@@ -186,6 +186,14 @@ type bgJob struct {
 	status   string
 	exitCode *int
 	endedAt  time.Time
+	// lastOutputAt is when this job's output last moved, as this runner's clock reads it — the
+	// instant the `idleMs` on its `running` reports counts from, and so the fact the control plane
+	// turns into "still moving" (Session.runningBgJobActivity, apiserver
+	// sessions/background-job-activity.ts). It starts at the job's launch, which is the truth:
+	// nothing can have been written before the process existed, so a job that has produced nothing
+	// at all reports its own age rather than an instant that never happened. The output tail moves
+	// it forward whenever the file changes (bgTailer.noteOutput). Written under bgTailer.mu.
+	lastOutputAt time.Time
 	// killReason records that this process is dying because we asked, so the
 	// waiter reports "killed" rather than inventing a completion out of the exit
 	// status a SIGKILL leaves behind.
@@ -354,6 +362,9 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	}
 	job.pid = cmd.Process.Pid
 	job.startedAt = time.Now()
+	// A job that has produced nothing yet has produced nothing since it existed: its first report
+	// says its age, not an instant. See bgJob.lastOutputAt.
+	job.lastOutputAt = job.startedAt
 	job.recorded = b.recordJob(job)
 
 	b.mu.Lock()
@@ -396,7 +407,7 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 	// this event and the terminal one below — see apiserver background-jobs-context.ts. `kind`
 	// rides along as the discriminator: an engine-owned shell has none, and it died with its
 	// engine, so it must never be offered as work to pick back up.
-	b.emit(evBackgroundTask, job.runningPayload())
+	b.emit(evBackgroundTask, job.runningPayload(time.Now()))
 	// Tails the output for live UI, registers the worktree hold, and — with
 	// engineOwned false — puts this job outside killEngineShells' reach.
 	b.startTail(jobID, jobID, outputPath, false)
@@ -431,10 +442,18 @@ func exitCodeFromWait(cmd *exec.Cmd, waitErr error) int {
 }
 
 // runningPayload is the `running` background_task a job is reported with while it runs: at its
-// launch, when the runner image that adopted it after a self-update takes it on, and again behind
-// every `resumed` handshake (announceRunningJobs). One shape for all three, since the control plane
-// reads the job off it (runner-api.controller bgRunning, background-jobs-context.ts).
-func (j *bgJob) runningPayload() map[string]interface{} {
+// launch, when the runner image that adopted it after a self-update takes it on, again behind every
+// `resumed` handshake (announceRunningJobs), and again on the heartbeat that keeps a long job's
+// freshness current (heartbeatJobs). One shape for all four, since the control plane reads the job
+// off it (runner-api.controller bgRunning, background-jobs-context.ts).
+//
+// `idleMs` is how long the job has produced NOTHING, and it is a duration rather than a timestamp
+// because the control plane is another machine with another clock: it restates this as
+// "receivedAt - idleMs" in its own timebase, and a timestamp from here would be wrong by however
+// far the two clocks disagree — wrong in the direction of a stalled job still looking busy. A
+// runner that predates the field sends none, which the control plane reads as unknown rather than
+// as silent.
+func (j *bgJob) runningPayload(at time.Time) map[string]interface{} {
 	return map[string]interface{}{
 		"shellId":    j.id,
 		"toolUseId":  j.id,
@@ -442,14 +461,35 @@ func (j *bgJob) runningPayload() map[string]interface{} {
 		"kind":       j.kind,
 		"command":    j.command,
 		"outputPath": j.outputPath,
+		"idleMs":     j.idleMillis(at),
 	}
+}
+
+// idleMillis is how long this job has produced nothing as of `at`, never negative: a clock that
+// stepped backwards while a job was writing must not report output the job has not written yet.
+// A job with neither an output stamp nor a start — one built by hand, not started here — reports no
+// silence rather than two thousand years of it: unknown is the safe direction, and it is what the
+// control plane does with a job it has never been told about.
+func (j *bgJob) idleMillis(at time.Time) int64 {
+	since := j.lastOutputAt
+	if since.IsZero() {
+		since = j.startedAt
+	}
+	if since.IsZero() {
+		return 0
+	}
+	if idle := at.Sub(since); idle > 0 {
+		return idle.Milliseconds()
+	}
+	return 0
 }
 
 // announceRunningJobs reports every job this tailer hosts that is still running, as its launch did.
 // emitThrough calls it behind each `resumed` handshake the session sends: on that handshake the
 // control plane empties the session's running background set (runner-api.controller bgReset), since
 // the replaced engine's own shells died with it — and these jobs did not (killEngineShells passes
-// them by).
+// them by). heartbeatJobs calls it on a ticker, for a reason that has nothing to do with the
+// handshake: freshness (see there).
 //
 // Emitted under b.mu, where a job's end is recorded before it is reported (finishJob), so a job that
 // ends meanwhile is announced before its end is reported or not at all. A `running` report that came
@@ -457,10 +497,51 @@ func (j *bgJob) runningPayload() map[string]interface{} {
 func (b *bgTailer) announceRunningJobs() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// One instant for the whole pass: every job's silence is stated as of the same moment, which is
+	// what anything comparing two of these reports would assume.
+	at := time.Now()
 	for _, job := range b.jobs {
 		if job.status == bgStatusRunning {
-			b.emit(evBackgroundTask, job.runningPayload())
+			b.emit(evBackgroundTask, job.runningPayload(at))
 		}
+	}
+}
+
+// heartbeatJobs re-reports every running job this tailer hosts, once a minute, for as long as the
+// tailer lives. Liveness is not why — the control plane holds a job in `runningBgJobs` until its
+// terminal report, and needs no reminding of it. FRESHNESS is: how long a job has produced nothing
+// is measured from the `idleMs` on its last report, so a job that IS producing has to keep saying
+// so, or its last report ages into "silent for eleven minutes" while it is still writing and the
+// marker it lights goes dark. The opposite case needs no report at all — a job that has really gone
+// quiet is seen as quiet by the same arithmetic, whose silence only grows — so this costs one event
+// per running job per minute, and it is what gives a job that resumes after a stall its marker back
+// within the minute rather than at its next launch.
+func (b *bgTailer) heartbeatJobs() {
+	tk := time.NewTicker(bgJobHeartbeatInterval)
+	defer tk.Stop()
+	for {
+		select {
+		case <-b.ctx.Done():
+			return
+		case <-tk.C:
+			b.announceRunningJobs()
+		}
+	}
+}
+
+// noteOutput records that a background shell's output just moved. For a runner-hosted job that is
+// the whole of "it is still working": the `running` report states it as `idleMs`, and the control
+// plane drops a job whose output has not moved within the threshold out of the clients' in-flight
+// marker while leaving it in `runningBgShells` — it is still a process, it is just no longer moving.
+//
+// Taken from the tail that saw the file change, not from the file's mtime: the tail is what a
+// reader could see move, so a job that rewrites the same bytes back into the file has produced
+// nothing, and a file something else touched is not this job's output.
+func (b *bgTailer) noteOutput(toolUseID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if job := b.jobs[toolUseID]; job != nil && job.status == bgStatusRunning {
+		job.lastOutputAt = time.Now()
 	}
 }
 

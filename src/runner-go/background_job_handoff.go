@@ -177,7 +177,7 @@ func (b *bgTailer) adoptJobs(jobs []*bgJob) {
 				job.kill()
 			}
 		})
-		b.emit(evBackgroundTask, job.runningPayload())
+		b.emit(evBackgroundTask, job.runningPayload(time.Now()))
 		b.startTail(job.id, job.id, job.outputPath, false)
 		if job.wakeOnOutput {
 			b.startOutputWakes(job)

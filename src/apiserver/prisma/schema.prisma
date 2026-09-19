@@ -1051,6 +1051,18 @@ model Session {
   // is no evidence it is finite work rather than a watcher, and guessing is what this column exists
   // to avoid. Only meaningful while live.
   runningBgJobs        String[]  @map("running_bg_jobs")
+  // Per job in `runningBgJobs`, the instant its output last moved — in THIS server's timebase, not
+  // the runner's. The runner tails each job's `.output` file and reports how long it has been
+  // silent, as a duration, on the `running` report that already carries the job's kind; this is
+  // that duration restated here (receivedAt - idleMs), maintained by the same event-ingestion
+  // transaction and pruned to `runningBgJobs`. A job whose entry is older than
+  // BG_JOB_ACTIVITY_STALE_AFTER_MS drops out of the clients' "in flight" marker while staying in
+  // `runningBgShells` — it is still a process, it is just no longer moving. That decision is made
+  // when the row is READ, never stored: staleness is a fact about `now`, and the case it exists for
+  // is the one where no event will arrive to trigger a write. An id with no entry is unknown (an
+  // older runner reports nothing) and counts as it did before this column existed. Only meaningful
+  // while live. See src/apiserver/src/sessions/background-job-activity.ts.
+  runningBgJobActivity Json      @default("{}") @map("running_bg_job_activity")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent

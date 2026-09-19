@@ -21,6 +21,21 @@ import (
 // Driven through the real supervisor, runInteractiveSession, against the fake CLI, with the jobs run
 // over the session's real socket; the verdict is read off what the control plane was actually sent.
 
+// withoutIdleMs is a `running` report with its `idleMs` taken off: the one field that legitimately
+// differs between a launch report and a re-announcement minutes later, since it is a duration that
+// grows while the job produces nothing — and both jobs here are `exec sleep 300`, which produce
+// nothing at all. Everything else about the report is the job's identity, and that is what has to
+// match: the control plane rebuilds the job off it.
+func withoutIdleMs(payload map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(payload))
+	for k, v := range payload {
+		if k != "idleMs" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // deliveredEvents is every event the control plane accepted, in the order it accepted them.
 func (c *runnerStopControlPlane) deliveredEvents() []RunEvent {
 	c.mu.Lock()
@@ -149,9 +164,12 @@ func TestEngineRebuiltForAConfigChangeAnnouncesTheJobsThatOutlivedIt(t *testing.
 				running.Kind, running.JobID)
 		case len(reports) > 1:
 			t.Errorf("%s %s was announced %d times after one handshake, want once: %v", running.Kind, running.JobID, len(reports), reports)
-		case !reflect.DeepEqual(reports[0], launched[running.JobID]):
+		case !reflect.DeepEqual(withoutIdleMs(reports[0]), withoutIdleMs(launched[running.JobID])):
 			t.Errorf("%s %s was announced as %v, want the report its launch sent: %v",
 				running.Kind, running.JobID, reports[0], launched[running.JobID])
+		case reports[0]["idleMs"] == nil:
+			t.Errorf("%s %s was announced without the idle duration that says it is still moving: %v",
+				running.Kind, running.JobID, reports[0])
 		}
 	}
 	if reports := again[lint.JobID]; len(reports) != 0 {
