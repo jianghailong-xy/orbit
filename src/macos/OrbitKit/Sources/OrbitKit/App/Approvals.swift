@@ -36,15 +36,18 @@ public enum Approvals {
     /// their yes. These carry the body about to be written rather than a preview.
     public static func isTaskCreate(toolName: String) -> Bool { toolName == "orbit_task_create" }
     public static func isProjectCreate(toolName: String) -> Bool { toolName == "orbit_project_create" }
+    /// Ending one of a project's blockers: the one ask here that creates nothing. The blocker IS
+    /// the project saying it needs a person, so the agent's part is to argue the condition is gone
+    /// and the owner's is to agree or not. Web keys the same tool off `isBlockerResolve`.
+    public static func isBlockerResolve(toolName: String) -> Bool { toolName == "orbit_blocker_resolve" }
+    /// Every ask Orbit raises for itself. What they share is how they are answered: a refusal is a
+    /// conversation rather than a press (the composer is armed with the reason), and none of them
+    /// can be waived with a standing rule — what is being asked for differs each time.
     public static func isOrbitAsk(toolName: String) -> Bool {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
+            || isBlockerResolve(toolName: toolName)
     }
-    /// Ending one of a project's blockers. Its own ask rather than one of the family above: the
-    /// blocker IS the project saying it needs a person, so the agent's part is to argue the
-    /// condition is gone and the owner's is to agree or not — nothing is created, and the denial
-    /// is a conversation about that blocker. Web keys the same tool off `isBlockerResolve`.
-    public static func isBlockerResolve(toolName: String) -> Bool { toolName == "orbit_blocker_resolve" }
 
     /// Classify an approval into the card it renders as. Keyed on `toolName` — the reliable
     /// signal the control plane always sends — because the question/plan data is nested under
@@ -150,7 +153,9 @@ public enum Approvals {
 
     /// What the composer's bar says it is declining, ahead of the ask's own subject.
     public static func decliningPrefix(toolName: String) -> String {
-        isDagChange(toolName: toolName) ? "Leaving the graph alone: " : "Not creating: "
+        if isDagChange(toolName: toolName) { return "Leaving the graph alone: " }
+        if isBlockerResolve(toolName: toolName) { return "Leaving this open: " }
+        return "Not creating: "
     }
 
     /// What the empty composer asks for while a decline is armed.
@@ -172,13 +177,12 @@ public enum Approvals {
         // yes to whatever comes next — which is the gate switched off, not a preference. Web
         // refuses it for the same reason; without this the two clients disagree about whether the
         // approval can be waived, and the weaker one wins.
-        // Nor does ending a blocker: "always let this session clear whatever stops its project" is
-        // the one rule that would make every card after it a formality. (It could not have worked
-        // here anyway — this ask comes from the runner's own gate, which asks every time whatever
-        // rules the engine holds.)
+        // Orbit's own asks are all in that family, ending a blocker included: "always let this
+        // session clear whatever stops its project" is the one rule that would make every card
+        // after it a formality. (The blocker ask could not have worked with a rule anyway — it
+        // comes from the runner's own gate, which asks every time whatever the engine holds.)
         if isQuestion(toolName: toolName) || isPlan(toolName: toolName)
-            || isOrbitAsk(toolName: toolName)
-            || isBlockerResolve(toolName: toolName) { return nil }
+            || isOrbitAsk(toolName: toolName) { return nil }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue, let prefix = bashPrefix(cmd) else { return nil }
             return PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*")

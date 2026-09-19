@@ -30,6 +30,79 @@ final class OrbitAskPreviewTests: XCTestCase {
         XCTAssertNotNil(Approvals.rememberRule(toolName: "orbit_task_get", input: json("{}")))
     }
 
+    // MARK: ending a blocker
+
+    /// What the runner puts on the ask: the project, the blocker's own facts from the project read,
+    /// and the agent's reason for ending it.
+    private func blockerInput() -> JSONValue {
+        json("""
+            {"projectTitle":"数据管道重建","blockerId":"b1","reason":"权限已在 09-18 由运维补齐，脚本重跑通过。",
+             "blocker":{"id":"b1","kind":"owner","owner":"2p7QMFOwEGtL5oaTxZHihm",
+                        "requiredAction":"需要你确认新集群的账号权限",
+                        "subjectType":"task","subjectTitle":"重跑 09-17 的导入"}}
+            """)
+    }
+
+    func testABlockerAsksWithWhatItWantedAndWhyThatIsNoLongerSo() {
+        let b = Approvals.blockerResolvePreview(toolName: "orbit_blocker_resolve", from: blockerInput())
+        XCTAssertEqual(b?.projectTitle, "数据管道重建")
+        XCTAssertEqual(b?.requiredAction, "需要你确认新集群的账号权限")
+        XCTAssertEqual(b?.reason, "权限已在 09-18 由运维补齐，脚本重跑通过。")
+        XCTAssertEqual(b?.about, "About 重跑 09-17 的导入")
+        XCTAssertEqual(b?.declineName, "重跑 09-17 的导入")
+
+        // Only this tool answers for this card: every other approval keeps its own.
+        XCTAssertNil(Approvals.blockerResolvePreview(toolName: "orbit_task_get", from: blockerInput()))
+    }
+
+    func testABlockerWithNothingToNameFallsBackToItsKind() {
+        let provider = Approvals.blockerResolvePreview(toolName: "orbit_blocker_resolve", from: json("""
+            {"projectTitle":"数据管道重建","blocker":{"kind":"provider","requiredAction":"恢复额度"}}
+            """))
+        XCTAssertEqual(provider?.about, "provider", "a wait on a provider has no task to name")
+        XCTAssertEqual(provider?.declineName, "provider")
+        XCTAssertEqual(provider?.reason, "")
+
+        let bare = Approvals.blockerResolvePreview(toolName: "orbit_blocker_resolve", from: json("{}"))
+        XCTAssertEqual(bare?.about, "", "with neither subject nor kind the card draws no such line")
+        XCTAssertEqual(bare?.declineName, "this blocker")
+    }
+
+    /// The card reads those two sentences instead of falling back to the generic "Approve tool
+    /// call" chrome. A source scan, because what it checks is wiring — which preview the branch
+    /// reads and what it prints — and layout is the one thing these tests cannot see.
+    func testABlockerCardIsDrawnFromTheBlockerFacts() throws {
+        let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
+        XCTAssertTrue(card.contains("Approvals.blockerResolvePreview(toolName:"),
+                      "the card reads the blocker's own facts")
+        for shown in ["blocker.requiredAction",
+                      "The agent says it no longer blocks",
+                      "blocker.reason",
+                      "\"Resolve it\""] {
+            XCTAssertTrue(card.contains(shown),
+                          "\(shown) is part of what this card shows and the press it offers")
+        }
+    }
+
+    private struct NoSuchFile: Error, CustomStringConvertible {
+        let path: String
+        var description: String { "\(path) was not found above this test" }
+    }
+
+    /// The same walk up from `#filePath` the other wiring tests use, so the check works from
+    /// `swift test`'s working directory whatever that is.
+    private func source(_ relative: String) throws -> String {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent(relative)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return try String(contentsOf: candidate, encoding: .utf8)
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        throw NoSuchFile(path: relative)
+    }
+
     // MARK: single create
 
     func testSingleCreateShowsWhatWouldBeWritten() {

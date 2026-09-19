@@ -74,6 +74,36 @@ public struct CreateApprovalPreview: Equatable, Sendable {
     public let criteria: [String]
 }
 
+/// What ending a blocker would write, read off the ask the runner raised. The one ask here that is
+/// not about creating something: a blocker is the project saying it needs a person, and
+/// `requiredAction` is addressed to whoever is reading the card — so the two sentences it carries
+/// are the decision itself: what it asked for, and why the agent says that no longer applies.
+public struct BlockerResolvePreview: Equatable, Sendable {
+    public let projectTitle: String
+    /// What the blocker asks for — the sentence written for a person to act on.
+    public let requiredAction: String
+    /// Why the agent says it no longer blocks.
+    public let reason: String
+    /// What kind of wait this is ("provider", "owner"…), for a blocker with nothing to name.
+    public let kind: String
+    /// The task (or other named subject) it is about, when it is about one.
+    public let subjectTitle: String
+
+    /// The line above the two sentences: what this wait is about. A blocker about the project
+    /// itself names no task, and then the kind stands in — and with neither, no line at all.
+    public var about: String {
+        subjectTitle.isEmpty ? kind : "About \(subjectTitle)"
+    }
+
+    /// What a refusal names, ahead of the reason to be typed: the subject, else the kind, else the
+    /// word for the thing itself. Web computes the same name (`declineSubject`).
+    public var declineName: String {
+        if !subjectTitle.isEmpty { return subjectTitle }
+        if !kind.isEmpty { return kind }
+        return "this blocker"
+    }
+}
+
 public extension Approvals {
 
     /// The body carried on an `orbit_task_create` / `orbit_project_create` approval, or nil for any
@@ -94,6 +124,21 @@ public extension Approvals {
             title: input["title"]?.stringValue ?? "",
             prose: input[isProject ? "goal" : "description"]?.stringValue ?? "",
             criteria: criteria)
+    }
+
+    /// The blocker facts carried on an `orbit_blocker_resolve` ask, or nil for any other approval.
+    /// The runner resolves the blocker against the project read before it asks, so the card carries
+    /// what it is about rather than an id nobody can answer.
+    static func blockerResolvePreview(toolName: String,
+                                      from input: JSONValue) -> BlockerResolvePreview? {
+        guard isBlockerResolve(toolName: toolName) else { return nil }
+        let blocker = input["blocker"]
+        return BlockerResolvePreview(
+            projectTitle: input["projectTitle"]?.stringValue ?? "",
+            requiredAction: blocker?["requiredAction"]?.stringValue ?? "",
+            reason: input["reason"]?.stringValue ?? "",
+            kind: blocker?["kind"]?.stringValue ?? "",
+            subjectTitle: blocker?["subjectTitle"]?.stringValue ?? "")
     }
 
     /// The restructure preview carried on an `orbit_dag_change` approval, or nil when absent.

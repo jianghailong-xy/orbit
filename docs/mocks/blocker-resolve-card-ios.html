@@ -261,6 +261,9 @@ had all along. Only the card differs between the three; everything above and bel
       卡片头改成它在问什么（哪个项目），正文两句就是人要在其间做决定的两句：blocker 当初要人做的那件事
       （<code>requiredAction</code>），和 agent 说它不再成立的理由（<code>reason</code>）；上面那行 About … 只在 blocker 挂在某个任务上时出现。
       按钮用 Orbit 自己那套：「Resolve it」＋「Chat about this」（按下后把 <code>Leaving this open: …</code> 送进输入框，和别的 Orbit 确认卡一致；web 那颗按钮直接把这句话写在按钮上）。
+      <b>已按这版实现</b>（会话分支 orbit/allow-remember-f6f94c），两处与图不同：芯片符号用 SF Symbol
+      <code>exclamationmark.octagon.fill</code>（原生 chip 只认 SF Symbols，画不出 🚧），
+      理由那行按原生层级用小字 secondary（跟验收标准同一档），要跟正文一样大说一声。
       头行这里比 web 短一句：web 的原文是整句 <code>Confirm: this no longer blocks {project}?</code>，
       手机上一定截断（15px 一行只放得下二十来个字符），所以收成 <code>Unblock “{project}”?</code>，跟原生别的卡一个节奏
       （Create project “…”? / Restructure dependencies in X?）。正文两行标号照抄 web。文案都可改。</figcaption>

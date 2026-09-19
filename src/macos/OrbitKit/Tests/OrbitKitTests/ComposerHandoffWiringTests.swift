@@ -162,6 +162,11 @@ final class ComposerHandoffWiringTests: XCTestCase {
         XCTAssertEqual(Approvals.decliningPrefix(toolName: "orbit_dag_change"),
                        "Leaving the graph alone: ",
                        "a restructure creates nothing, so it cannot be declined as a creation")
+        XCTAssertEqual(Approvals.decliningPrefix(toolName: "orbit_blocker_resolve"),
+                       "Leaving this open: ",
+                       "and a refused blocker stays open — nothing is being created either")
+        XCTAssertTrue(subject.contains("blocker.declineName"),
+                      "the bar names what stays open: the task it is about, else the kind of wait")
     }
 
     // MARK: 4 — an armed reply outlives a failed read, and not an answered question

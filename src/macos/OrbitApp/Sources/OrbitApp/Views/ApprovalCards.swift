@@ -196,6 +196,14 @@ struct ToolApprovalCard: View {
     private var create: CreateApprovalPreview? {
         approval.input.flatMap { Approvals.createPreview(toolName: approval.toolName ?? "", from: $0) }
     }
+    /// Ending a project's blocker: the sentence the blocker was filed with — addressed to whoever
+    /// reads this — over the agent's argument that it no longer applies. The two sentences are the
+    /// decision; web renders the same pair under the same two captions.
+    private var blocker: BlockerResolvePreview? {
+        approval.input.flatMap {
+            Approvals.blockerResolvePreview(toolName: approval.toolName ?? "", from: $0)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
@@ -237,6 +245,27 @@ struct ToolApprovalCard: View {
                              more: 0,
                              mono: false,
                              markdown: true)
+            } else if let blocker {
+                // What it asked for is the headline; why the agent says that no longer applies is
+                // the evidence under it — the same fork the batch card makes between counts and
+                // titles, and the same order web reads these two sentences in.
+                ApprovalHeader(symbol: "exclamationmark.octagon.fill",
+                               title: blocker.projectTitle.isEmpty
+                                   ? "Unblock this blocker?"
+                                   : "Unblock “\(blocker.projectTitle)”?",
+                               tone: .orange, badge: "blocker")
+                if !blocker.about.isEmpty {
+                    Text(blocker.about)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                OrbitAskBody(impact: [],
+                             note: blocker.requiredAction,
+                             detail: "The agent says it no longer blocks",
+                             rows: blocker.reason.isEmpty ? [] : [blocker.reason],
+                             more: 0,
+                             mono: false,
+                             markdown: true)
             } else {
                 ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                                tone: .orange, badge: approval.toolName ?? "Tool")
@@ -260,7 +289,10 @@ struct ToolApprovalCard: View {
 
     private var allowButton: some View {
         Button { decide(console, approval, .allow) } label: {
-            Text(batch != nil ? "Create them" : create != nil ? "Create it" : dag != nil ? "Apply changes" : "Allow")
+            Text(batch != nil ? "Create them"
+                 : create != nil ? "Create it"
+                 : dag != nil ? "Apply changes"
+                 : blocker != nil ? "Resolve it" : "Allow")
                 .approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
@@ -307,6 +339,7 @@ struct ToolApprovalCard: View {
         if let create { return create.title }
         if let batch { return "\(batch.taskCount) new task\(batch.taskCount == 1 ? "" : "s")" }
         if let dag { return dag.listTitle }
+        if let blocker { return blocker.declineName }
         return approval.toolName ?? ""
     }
 }
