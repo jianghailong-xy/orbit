@@ -69,6 +69,13 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One answer to such a revision, as the same read publishes it under `decided`. Carries
         /// the answer itself, for the reason `criteriaDecisionReceipt` gives.
         case evidenceDecisionReceipt(decided: RecordedEvidenceDecision)
+        /// The merge this project's branch is waiting to make into main, by the candidate the owner
+        /// is being asked about (§3.6). The candidate is the address because a new one is a new
+        /// question: the tasks it carries and the tree it was checked on are both different.
+        case promotionApproval(promotionID: String)
+        /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
+        /// answer door takes — the same address the push payload and the Needs-you bar carry.
+        case coordinatorQuestion(itemID: String)
     }
 
     public let kind: Kind
@@ -109,6 +116,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
             return "owner-decision-receipt-\(taskID)@\(decisionID)"
         case .evidenceDecisionReceipt(let decided):
             return "evidence-decision-receipt-\(decided.id)"
+        // The two owner cards, in the web's own DOM spelling (`question-<itemId>`), because the bar
+        // above the transcript and the push that opens it both point at these by id.
+        case .promotionApproval(let promotionID): return "promotion-\(promotionID)"
+        case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
         }
     }
 }
@@ -187,8 +198,11 @@ public enum DeliveryAnchor {
         case .ownerConfirmation:
             return nil
         // Exhaustive rather than defaulted: a card added later has to say which of the two it is.
+        // The two owner cards anchor where they arrived, like every question the platform files:
+        // what they are about happened before the read that found them.
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
-             .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt:
+             .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
+             .promotionApproval, .coordinatorQuestion:
             return items.last?.id
         }
     }

@@ -154,6 +154,29 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     }
 }
 
+/// Which of the four things a project waits on its OWNER in person for (contract §7.6 V13).
+///
+/// The server's `ownerItemKind`: the merge they confirm, the question their coordinator asked, the
+/// exception that became theirs however it got there, and the pause only they can lift. An
+/// exception the coordinator is still working on is not one of these and never arrives here — the
+/// owner is not told about work that is already being done.
+///
+/// A kind this client does not know decodes as ``unknown``, which the banner skips rather than
+/// naming: a control plane that learns a fifth kind must not make a session row fail to decode.
+public enum OwnerItemKind: String, Codable, Sendable {
+    case promotionApproval = "PROMOTION_APPROVAL"
+    case coordinatorQuestion = "COORDINATOR_QUESTION"
+    case escalated = "ESCALATED"
+    case fusePaused = "FUSE_PAUSED"
+    /// Forward-compatibility floor.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = OwnerItemKind(rawValue: raw) ?? .unknown
+    }
+}
+
 /// Legacy mixed lifecycle/filing state. Kept only as a compatibility fallback while old control
 /// planes are still in use; new presentation reads ``SessionRunState`` and ``SessionLifecycleState``.
 public enum SessionState: String, Codable, Sendable, CaseIterable {

@@ -59,6 +59,9 @@ function fakePrisma(
     // still statements about the first.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
+    // which these fixtures have none of either.
+    projectOpenItem: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 

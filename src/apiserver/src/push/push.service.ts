@@ -7,6 +7,7 @@ import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
+import { ownerItemAlert } from './owner-item-alert';
 import { settleAlert } from './settle-alert';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
@@ -351,6 +352,110 @@ export class PushService {
       this.log.warn(`agent notify failed: ${message}`);
       return { delivered: false, reason: `push failed: ${message}` };
     }
+  }
+
+  /**
+   * Tell the account owner that one of the four things only they can answer is waiting
+   * (`docs/project-integration-line-contract.md` §7.6 V12).
+   *
+   * WHY THESE FOUR AND NOTHING ELSE. A project files an item for every exception it hits, and most
+   * of them are the coordinator's to work through — a merge conflict, a failed check, a task that
+   * died. Pushing those would be ringing a person about work already being done, which is how a
+   * notification channel becomes one people turn off. So the owner's phone carries only what stops
+   * without them: the merge they confirm, the question their coordinator asked, the exception that
+   * became theirs, and the pause they are the only one who can lift (owner decision 10).
+   * `ownerItemAlert` is where that rule lives, and an item still with the coordinator answers null.
+   *
+   * CALLED AFTER THE COMMIT, AND ONLY ON THE EDGE. Every caller has already written the row — the
+   * item being opened, or its assignee becoming OWNER — so this re-reads it rather than being told
+   * what it says, and an item that was resolved in between simply is not pushed. Fire-and-forget
+   * like the others: callers `void` it, and a push that fails never costs the fact that caused it.
+   *
+   * The badge is left alone on purpose. It counts conversations needing a reply, and these ARE
+   * counted there — the coordinator's conversation carries them (`owner-decision-signal.ts`), which
+   * is the same number the silent sync reconciles. Setting it here from an item's own read would be
+   * a second opinion about a count that has one source.
+   */
+  async notifyOwnerItem(itemId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const item = await this.prisma.projectOpenItem.findUnique({
+        where: { id: itemId },
+        select: {
+          kind: true,
+          state: true,
+          assignee: true,
+          assigneeReason: true,
+          title: true,
+          payload: true,
+          waitingSince: true,
+          escalatedAt: true,
+          ownerId: true,
+          projectId: true,
+          promotionId: true,
+          project: { select: { title: true, coordinatorEnabled: true, coordinatorSessionId: true } },
+        },
+      });
+      // A resolved item is not waiting on anybody: the owner answered it in another window, or the
+      // fact it was about moved on while this call was on its way here.
+      if (!item || item.state !== 'OPEN') return;
+      const alert = ownerItemAlert({
+        ...item,
+        projectTitle: item.project?.title ?? null,
+        promotion: await this.promotionFor(item.promotionId),
+      });
+      if (!alert) return;
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: item.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+
+      const body = JSON.stringify({
+        aps: {
+          alert: { title: alert.title, body: alert.body },
+          sound: 'default',
+          // Its own category: the clients open the card this item is, which is not what the
+          // approval and session categories do with their taps.
+          category: 'ORBIT_OWNER_ITEM',
+          // One thread per project, so a project that asks twice reads as one conversation.
+          'thread-id': item.projectId,
+        },
+        kind: alert.kind,
+        // Where the card is drawn: the project's own coordinator conversation. Omitted when the
+        // project has none — the clients ignore a payload naming no session, and an item whose
+        // project is not coordinated has no conversation to open (the project page still has it).
+        ...(item.project?.coordinatorEnabled && item.project.coordinatorSessionId
+          ? { sessionID: item.project.coordinatorSessionId }
+          : {}),
+        projectID: item.projectId,
+        openItemID: itemId,
+      });
+
+      // Collapse on the item: an item can be pushed twice — handed to the owner and then escalated
+      // again, or re-announced by a replica that raced — and APNs replaces the delivered banner
+      // instead of stacking a second one about the same waiting thing.
+      await this.deliver(tokens, body, 'alert', '10', auth, `owner-item-${itemId}`);
+    } catch (err) {
+      this.log.warn(`owner item notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /** The candidate a merge approval is about: which branches, and how many tasks it carries.
+   *  Read only for that one kind — every other item names no promotion. */
+  private async promotionFor(
+    promotionId: string | null,
+  ): Promise<{ sourceRef: string; upstreamRef: string; taskCount: number } | null> {
+    if (!promotionId) return null;
+    const row = await this.prisma.projectPromotion.findUnique({
+      where: { id: promotionId },
+      select: { sourceRef: true, upstreamRef: true, includedTaskIds: true },
+    });
+    if (!row) return null;
+    return {
+      sourceRef: row.sourceRef,
+      upstreamRef: row.upstreamRef,
+      taskCount: row.includedTaskIds.length,
+    };
   }
 
   /**

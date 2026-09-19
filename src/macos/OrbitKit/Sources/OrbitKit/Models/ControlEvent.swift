@@ -103,6 +103,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// the same way: a summary that carries a count and no kind is a count of approvals, and the
     /// row that read "Waiting for your confirmation" stops saying so when the answer lands.
     public let waitingKind: SessionWaitingKind?
+    /// The four owner items waiting on this conversation (§7.6 V13), overwritten with the count
+    /// they are part of. Doubly optional because the three cases differ: `nil` is an older control
+    /// plane that never sends the key (keep what the row knows), `.some([])` is this server saying
+    /// nothing is waiting any more — which is how the Needs-you bar lets go of a card somebody
+    /// answered — and `.some(items)` is what is waiting now.
+    public let ownerItems: [SessionOwnerItem]??
     public let lastTurnAt: String?
     /// When the server will re-send the message this run's failure killed — part of the summary
     /// because it is part of what `runState == .failed` means (see `Session.retryPending`).
@@ -152,6 +158,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         // no `contains`: both spellings read as "nothing named", and an unrecognised name reads as
         // a kind this client cannot say anything about.
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
+        // `contains` rather than `decodeIfPresent` alone, for `retryAt`'s reason: an empty list is
+        // a statement ("nothing is waiting on you here") and a missing key is not.
+        ownerItems = values.contains(.ownerItems)
+            ? .some(try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems) ?? [])
+            : nil
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
         retryAt = values.contains(.retryAt)
             ? .some(try values.decodeIfPresent(String.self, forKey: .retryAt))

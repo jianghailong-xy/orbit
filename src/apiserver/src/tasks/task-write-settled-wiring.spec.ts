@@ -5,6 +5,7 @@ import { test } from 'node:test';
 
 import { Global, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -117,8 +118,12 @@ test('the census counts calls and not the injection that used to be all there wa
     { provide: QueueService, useValue: {} },
     { provide: RealtimeService, useValue: { publishForUser: () => undefined } },
     { provide: JwtService, useValue: {} },
+    // The push sender reads its APNs credentials out of this on construction, so a root
+    // without it cannot build the module: the owner items two of these providers open are
+    // announced to their owner's devices (contract §7.6 V12).
+    { provide: ConfigService, useValue: { get: () => undefined } },
   ],
-  exports: [PrismaService, QueueService, RealtimeService, JwtService],
+  exports: [PrismaService, QueueService, RealtimeService, JwtService, ConfigService],
 })
 class GlobalDoubles {}
 

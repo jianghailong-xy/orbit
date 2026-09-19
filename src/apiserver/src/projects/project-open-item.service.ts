@@ -7,10 +7,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import {
   AskedQuestion,
@@ -125,6 +127,10 @@ export class ProjectOpenItemService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
+    /** Tells the owner's phone about the items that become theirs (§7.6 V12). `@Optional()` because
+     *  a notification is one reader of an item and never a condition of filing one: a build without
+     *  PushModule — every spec that assembles this service by hand — writes the same rows. */
+    @Optional() private readonly push?: PushService,
   ) {}
 
   /**
@@ -353,7 +359,11 @@ export class ProjectOpenItemService {
       skipDuplicates: true,
       select: { id: true },
     });
-    if (created) return { itemId: created.id, state: 'OPEN' };
+    if (created) {
+      // R9: the question is filed and the owner is told, in that order and after the commit.
+      void this.push?.notifyOwnerItem(created.id);
+      return { itemId: created.id, state: 'OPEN' };
+    }
     const already = await this.prisma.projectOpenItem.findFirst({
       where: { projectId, dedupeKey, state: 'OPEN' },
       select: { id: true },
@@ -770,7 +780,7 @@ export class ProjectOpenItemService {
     assignedAt: Date,
     reason: Extract<OpenItemAssigneeReason, 'NO_COORDINATOR' | 'COORDINATOR_ENDED'>,
   ): Promise<void> {
-    await this.prisma.projectOpenItem.updateMany({
+    const handed = await this.prisma.projectOpenItem.updateMany({
       where: { id: itemId, state: 'OPEN', assignee: 'COORDINATOR', assignedAt },
       data: {
         assignee: 'OWNER',
@@ -779,6 +789,10 @@ export class ProjectOpenItemService {
         escalateAt: null,
       },
     });
+    // Only on the edge this call made: the compare-and-set above is what decides whether this
+    // process is the one that handed the item over, and a second announcement of the same
+    // handover is a second banner about one waiting thing.
+    if (handed.count > 0) void this.push?.notifyOwnerItem(itemId);
   }
 
   /** Every entry point here runs after somebody else's commit, so none of them may cost it. */
