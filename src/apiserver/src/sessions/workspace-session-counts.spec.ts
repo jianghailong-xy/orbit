@@ -58,6 +58,9 @@ test('workspace counts separate queued activity from Session-list spinner work',
     // And the third, an OWNER_CONFIRMED task's run waiting on its owner in the task's own session:
     // none here either, so every `needsYou` below is still a statement about the first two.
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
+    // which these fixtures have none of either.
+    projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

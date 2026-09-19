@@ -54,8 +54,16 @@ struct NeedsYouBannerView: View {
         } else if let banner = model.needsYouBanner(excluding: excluding) {
             bar(text: banner.text,
                 chevron: "chevron.forward",
-                hint: "Opens the session waiting on you") {
-                model.openNeedsYouSession(banner.target)
+                // One of the four owner items opens the CARD it names, inside the project's
+                // coordinator conversation; everything else opens the session, as it always did.
+                hint: banner.ownerItem == nil
+                    ? "Opens the session waiting on you"
+                    : "Opens the card waiting on you") {
+                if let item = banner.ownerItem {
+                    model.openNeedsYouItem(banner.target, item)
+                } else {
+                    model.openNeedsYouSession(banner.target)
+                }
             }
         }
     }

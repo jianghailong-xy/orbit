@@ -348,3 +348,192 @@ test('an empty message is refused before anything is looked up', async () => {
   assert.equal(result.delivered, false);
   assert.equal(sent.length, 0);
 });
+
+// ── notifyOwnerItem ────────────────────────────────────────────────────────
+//
+// Contract §7.6 V12: four owner items ring a phone, and an exception the coordinator is still
+// working on does not. The cases below are the two that section names, plus the one that keeps the
+// five "now yours" headings agreeing with the card the banner opens.
+
+/** One `project_open_item` row, as the push's own select reads it. */
+function openItem(over: Record<string, unknown> = {}) {
+  return {
+    kind: 'COORDINATOR_QUESTION',
+    state: 'OPEN',
+    assignee: 'OWNER',
+    assigneeReason: 'DEFAULT',
+    title: 'Coordinator asks: Take the slower fix?',
+    payload: {
+      question: 'Take the slower fix?',
+      options: [],
+      recommendedOption: null,
+      blocksTaskIds: [],
+      ifUnanswered: null,
+    },
+    waitingSince: new Date('2026-09-13T10:00:00Z'),
+    escalatedAt: null,
+    ownerId: 'owner-1',
+    projectId: 'project-1',
+    promotionId: null,
+    project: {
+      title: 'Integration line',
+      coordinatorEnabled: true,
+      coordinatorSessionId: 'coordinator',
+    },
+    ...over,
+  };
+}
+
+function ownerItemHarness(
+  item: Record<string, unknown> | null,
+  promotion: Record<string, unknown> | null = null,
+) {
+  const sent: { body: string; collapseId?: string }[] = [];
+  const prisma = {
+    projectOpenItem: { findUnique: async () => item },
+    projectPromotion: { findUnique: async () => promotion },
+    deviceToken: { findMany: async () => [{ token: 'device', environment: 'sandbox' }] },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  (service as any).deliver = async (
+    _t: unknown,
+    body: string,
+    _p: unknown,
+    _pr: unknown,
+    _a: unknown,
+    collapseId?: string,
+  ) => {
+    sent.push({ body, collapseId });
+  };
+  return { service, sent };
+}
+
+test('the four owner item kinds push', async () => {
+  const cases: Array<{
+    what: string;
+    item: Record<string, unknown>;
+    promotion?: Record<string, unknown>;
+    kind: string;
+    title: string;
+    body: string;
+  }> = [
+    {
+      what: 'a merge waiting to be confirmed',
+      item: openItem({ kind: 'PROMOTION_APPROVAL', title: 'Merge 3 tasks into main?', payload: {}, promotionId: 'promotion-1' }),
+      promotion: {
+        sourceRef: 'refs/heads/orbit/project-integration',
+        upstreamRef: 'refs/heads/main',
+        includedTaskIds: ['t1', 't2', 't3'],
+      },
+      kind: 'approve-merge-to-main',
+      title: 'Merge orbit/project-integration into main?',
+      body: '3 tasks passed checks on the combined tree · Integration line',
+    },
+    {
+      what: 'a question the coordinator asked',
+      item: openItem(),
+      kind: 'coordinator-question',
+      title: 'The coordinator has a question',
+      body: 'Take the slower fix? · Integration line',
+    },
+    {
+      what: 'an exception nobody acted on',
+      item: openItem({
+        kind: 'TASK_FAILED',
+        assigneeReason: 'ESCALATED',
+        title: 'Task failed: Add the landing receipt',
+        payload: {},
+        escalatedAt: new Date('2026-09-13T12:00:00Z'),
+      }),
+      kind: 'escalated-to-you',
+      title: 'Now yours — no one acted on this for 2h',
+      body: 'Task failed: Add the landing receipt · Integration line',
+    },
+    {
+      what: 'a coordinator that paused itself',
+      item: openItem({
+        kind: 'FUSE_PAUSED',
+        title: 'The coordinator paused itself',
+        payload: {
+          dimension: 'SELF_STARTED_TURNS',
+          observed: 41,
+          limit: 40,
+          spendToday: { selfStartedTurns: 41, sessionsOpened: 2, successorRetries: 0 },
+          heldCount: 1,
+        },
+      }),
+      kind: 'fuse-paused',
+      title: 'The coordinator paused itself',
+      body: 'It started 41 turns on its own today — the limit is 40 · Integration line',
+    },
+  ];
+
+  for (const c of cases) {
+    const { service, sent } = ownerItemHarness(c.item, c.promotion ?? null);
+    await service.notifyOwnerItem('item-1');
+
+    assert.equal(sent.length, 1, c.what);
+    const payload = JSON.parse(sent[0].body);
+    assert.equal(payload.kind, c.kind, c.what);
+    assert.equal(payload.aps.alert.title, c.title, c.what);
+    assert.equal(payload.aps.alert.body, c.body, c.what);
+    // Its own category, and the coordinator conversation the card is drawn in: a tap has to land on
+    // the card itself, which the item id in the payload names.
+    assert.equal(payload.aps.category, 'ORBIT_OWNER_ITEM', c.what);
+    assert.equal(payload.sessionID, 'coordinator', c.what);
+    assert.equal(payload.projectID, 'project-1', c.what);
+    assert.equal(payload.openItemID, 'item-1', c.what);
+    assert.equal(payload.aps['thread-id'], 'project-1', c.what);
+    assert.equal(sent[0].collapseId, 'owner-item-item-1', c.what);
+    // The badge counts conversations needing a reply; these are counted there by the coordinator's
+    // own row, so an item's push must not set a second opinion of it.
+    assert.equal(payload.aps.badge, undefined, c.what);
+  }
+});
+
+test('an item still with the coordinator does not push', async () => {
+  // A merge conflict on its way to the coordinator: somebody is on it, and the owner is not them.
+  const conflict = openItem({
+    kind: 'INTEGRATION_CONFLICT',
+    assignee: 'COORDINATOR',
+    assigneeReason: 'DEFAULT',
+    title: 'Merge conflict — needs a fix on the task branch',
+    payload: {},
+  });
+  const withCoordinator = ownerItemHarness(conflict);
+  await withCoordinator.service.notifyOwnerItem('item-1');
+  assert.equal(withCoordinator.sent.length, 0);
+
+  // The same item once the clock hands it over IS the owner's, so the fixture is witnessing the
+  // assignee and not the kind.
+  const escalated = ownerItemHarness({
+    ...conflict,
+    assignee: 'OWNER',
+    assigneeReason: 'ESCALATED',
+    escalatedAt: new Date('2026-09-13T12:00:00Z'),
+  });
+  await escalated.service.notifyOwnerItem('item-1');
+  assert.equal(escalated.sent.length, 1);
+
+  // And an item that was answered while this call was on its way is nobody's to be told about.
+  const answered = ownerItemHarness(openItem({ state: 'RESOLVED' }));
+  await answered.service.notifyOwnerItem('item-1');
+  assert.equal(answered.sent.length, 0);
+});
+
+test('an escalated item says which way it became yours', async () => {
+  const headings: Array<[string, string]> = [
+    ['COORDINATOR_ENDED', 'Now yours — the coordinator conversation ended'],
+    ['CHAIN_LIMIT', 'Now yours — the 3rd failure in this chain'],
+    ['HANDED_OVER', 'Now yours — the coordinator handed it over'],
+    ['NO_COORDINATOR', 'Now yours — this project has no coordinator'],
+  ];
+  for (const [reason, title] of headings) {
+    const { service, sent } = ownerItemHarness(
+      openItem({ kind: 'TASK_FAILED', assigneeReason: reason, title: 'Task failed: Add the receipt', payload: {} }),
+    );
+    await service.notifyOwnerItem('item-1');
+    assert.equal(JSON.parse(sent[0].body).aps.alert.title, title, reason);
+  }
+});

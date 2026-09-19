@@ -17,15 +17,20 @@ public struct SessionGroups: Equatable, Sendable {
 
 public enum SessionGrouping {
     /// Bucket the Open snapshot's actionable sessions, preserving input order within each bucket.
-    /// `needsYou` = has pending approvals; `running` = otherwise live (running / awaiting /
-    /// interrupted); `queued` = QUEUED. Terminal/dormant sessions are excluded from these buckets.
+    /// `needsYou` = has pending approvals, or carries one of the four owner items (§7.6 V13);
+    /// `running` = otherwise live (running / awaiting / interrupted); `queued` = QUEUED.
+    /// Terminal/dormant sessions are excluded from these buckets.
     /// All live sessions are grouped here because the separate System list has been removed.
     public static func group(_ sessions: [Session]) -> SessionGroups {
         var needsYou: [Session] = []
         var running: [Session] = []
         var queued: [Session] = []
         for s in sessions {
-            if (s.pendingApprovals ?? 0) > 0 {
+            // The count is the server's, and it already includes the owner items on the row
+            // (`owner-decision-signal.ts`). The second clause is not a second opinion of it: a row
+            // that carries one of the four is in this bucket even if the number arrived stale from
+            // an older snapshot, because the item itself is the evidence that somebody is waiting.
+            if (s.pendingApprovals ?? 0) > 0 || !(s.ownerItems ?? []).isEmpty {
                 needsYou.append(s)
             } else if s.effectiveRunState == .queued {
                 queued.append(s)

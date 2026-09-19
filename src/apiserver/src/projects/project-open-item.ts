@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import {
+  OwnerItemKind,
   SessionLifecycleState,
   SessionRunState,
   deriveSessionLifecycleState,
@@ -50,6 +51,47 @@ export const OPEN_ITEM_ASSIGNEE_REASONS = [
   'HANDED_OVER',
 ] as const;
 export type OpenItemAssigneeReason = (typeof OPEN_ITEM_ASSIGNEE_REASONS)[number];
+
+/**
+ * Every reason an item ENDED UP with the owner rather than having been theirs all along (§7.1 V1).
+ *
+ * The four owner-facing kinds are not the seven an item can be about: a merge approval, a question
+ * and a pause are the owner's from birth and say so in their own titles, and every exception that
+ * reached them — no coordinator, the conversation ended, the chain ran out, the clock took it, or
+ * somebody handed it over — is one thing to whoever is being told, "this is yours now".
+ */
+export const OPEN_ITEM_ESCALATION_REASONS: ReadonlyArray<OpenItemAssigneeReason> = [
+  'NO_COORDINATOR',
+  'COORDINATOR_ENDED',
+  'CHAIN_LIMIT',
+  'ESCALATED',
+  'HANDED_OVER',
+];
+
+/**
+ * Which of the four owner-facing kinds this item is (§7.6 V12/V13), or null when the owner is not
+ * the one being asked.
+ *
+ * The one place that decides it, because three surfaces turn on the same answer and a second
+ * derivation of it would be a third: the push that rings a phone, the count the Needs-you banner
+ * and the macOS menu bar read, and the chip on the project list. `assignee` is the whole of the
+ * negative case — an exception the coordinator is still working on is not the owner's to be told
+ * about (owner decision 10), however long it has been open.
+ */
+export function ownerItemKind(item: {
+  kind: OpenItemKind | string;
+  assignee: OpenItemAssignee | string;
+  assigneeReason: OpenItemAssigneeReason | string;
+}): OwnerItemKind | null {
+  if (item.assignee !== 'OWNER') return null;
+  if (item.kind === 'PROMOTION_APPROVAL' || item.kind === 'COORDINATOR_QUESTION'
+      || item.kind === 'FUSE_PAUSED') {
+    return item.kind;
+  }
+  return OPEN_ITEM_ESCALATION_REASONS.includes(item.assigneeReason as OpenItemAssigneeReason)
+    ? 'ESCALATED'
+    : null;
+}
 
 export const OPEN_ITEM_STATES = ['OPEN', 'RESOLVED', 'SUPERSEDED'] as const;
 export type OpenItemState = (typeof OPEN_ITEM_STATES)[number];
