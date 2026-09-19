@@ -35,8 +35,8 @@ import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
  * the work filed under a project has met every criterion it states.
  *
  * What is asserted is the condition and the two things the card may never do with it. The condition
- * is deliberately strict — an OPEN project, criteria stated, EVERY one of them met, and nothing
- * running — because the failure mode is a card that sits under every project forever asking
+ * is deliberately strict — an OPEN project, criteria stated, EVERY one of them met, and no task
+ * IN_PROGRESS — because the failure mode is a card that sits under every project forever asking
  * "is this done?", so every "no card" here is asserted on a fixture that then draws one once the
  * single fact under test changes. And a criterion with no merge receipt never disables the primary
  * action: the count is something the reader is told, not something that takes the decision off
@@ -69,7 +69,6 @@ function projectOf(over: Partial<SettlementProjectDocument> = {}): SettlementPro
   return {
     title: TITLE,
     status: 'OPEN',
-    buckets: { running: 0 },
     acceptanceCriteriaItems: criteriaOf(true, true, true),
     tasksByStatus: {},
     ...over,
@@ -103,10 +102,19 @@ describe('the copy', () => {
     expect(settlementReadLabel(5)).toBe('Show all 5 criteria');
   });
 
+  /** The card and the reply it arms may only state what the project document carries, and this
+   *  document carries no running count but the status tally. Both said "nothing is running under
+   *  it" until 2026-09-19, off a `buckets.running` that `GET /projects/:id` never serves — so the
+   *  claim was unbackable in every render, and false over live work. */
+  it('claims nothing about what is running, which this read cannot see', () => {
+    const project = projectOf({ tasksByStatus: { IN_PROGRESS: 2, OPEN: 1 } });
+    expect(settlementMeta(project)).not.toMatch(/running/i);
+    expect(projectSettlementContext(project)).not.toMatch(/running/i);
+  });
+
   it('says what the project is and what was counted, as one sentence each', () => {
     expect(settlementMeta(projectOf())).toBe(
-      `${TITLE} · every stated criterion has been met by the work filed under it · `
-      + `nothing is running under it`,
+      `${TITLE} · every stated criterion has been met by the work filed under it`,
     );
     expect(settlementTally(projectOf())).toBe(
       '3 stated criteria · 3 settled by the work filed under them · 0 with no merge receipt',
@@ -122,7 +130,7 @@ describe('whether a project is held on the settlement question', () => {
   it.each<[string, SettlementProjectDocument]>([
     ['a criterion nobody has answered for', projectOf({ acceptanceCriteriaItems: criteriaOf(true, undefined, true) })],
     ['a criterion the derivation says does not hold', projectOf({ acceptanceCriteriaItems: criteriaOf(true, false, true) })],
-    ['a task running under it', projectOf({ buckets: { running: 1 } })],
+    ['a task IN_PROGRESS under it', projectOf({ tasksByStatus: { IN_PROGRESS: 1 } })],
     ['the project recorded done', projectOf({ status: 'DONE' })],
     ['the project recorded cancelled', projectOf({ status: 'CANCELLED' })],
     ['a read that does not say where it stands', projectOf({ status: undefined })],
@@ -201,8 +209,7 @@ describe('what the card draws', () => {
     expect(markup).toContain(SETTLEMENT_HEADING);
     expect(markup).toContain(PROVENANCE_LABEL);
     expect(markup).toContain(
-      `${TITLE} · every stated criterion has been met by the work filed under it · `
-      + `nothing is running under it`,
+      `${TITLE} · every stated criterion has been met by the work filed under it`,
     );
     expect(markup).toContain('Settled · Landed');
     expect(markup).toContain('Settled · No receipt');
@@ -421,7 +428,7 @@ describe('the wired card', () => {
 
   it.each<[string, SettlementProjectDocument]>([
     ['a criterion nobody has answered for', projectOf({ acceptanceCriteriaItems: criteriaOf(true, undefined, true) })],
-    ['a task still running under it', projectOf({ buckets: { running: 2 } })],
+    ['a task still IN_PROGRESS under it', projectOf({ tasksByStatus: { IN_PROGRESS: 2 } })],
     ['the project already recorded done', projectOf({ status: 'DONE' })],
     ['no criteria stated at all', projectOf({ acceptanceCriteriaItems: [] })],
     ['a read carrying no criteria', projectOf({ acceptanceCriteriaItems: undefined })],

@@ -12,8 +12,12 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
 /**
  * The settlement question at the other end of the one `AcceptanceConfirmationCard` asks: the work
- * filed under this project has met every criterion it states, nothing is running under it, and the
- * project is still OPEN — so is this project done?
+ * filed under this project has met every criterion it states, no task under it is IN_PROGRESS, and
+ * the project is still OPEN — so is this project done?
+ *
+ * NOTHING HERE STATES A FACT THIS READ DOES NOT CARRY. The card and the reply it arms were both
+ * written against a "nothing is running" clause the project document cannot back; see
+ * `settlementMeta` and `tasksByStatus` for what replaced it and why.
  *
  * WHY IT IS A CARD IN THE COORDINATOR CONVERSATION
  * ------------------------------------------------
@@ -103,13 +107,16 @@ export interface SettlementProjectDocument {
   title: string;
   /** Absent from a read that did not say where the project stands, which is not an OPEN one. */
   status?: string;
-  /** `ProjectDetail extends Project`, and the buckets are in the same read — the running count
-   *  costs this card no request of its own. */
-  buckets?: { running?: number };
   acceptanceCriteriaItems?: SettlementCriterion[];
   /** Statuses with no tasks are absent from the server's tally entirely, so an empty object means
    *  "no tasks" rather than "counts unavailable" — which is why the sentence below is dropped from
-   *  a document that carried no tally at all, and not from one whose tally is empty. */
+   *  a document that carried no tally at all, and not from one whose tally is empty.
+   *
+   *  `IN_PROGRESS` here is also the only running count this read can honestly offer. The project
+   *  document carries no `buckets`: those are produced by the list rollup and the panorama read
+   *  (`project-list-rollup.ts`, `project-panorama.ts`), and `GET /projects/:id` attaches neither —
+   *  its own `buckets.running` would be `undefined` on every render, which reads as "nothing is
+   *  running" and would put this card up over live work. */
   tasksByStatus?: Record<string, number>;
 }
 
@@ -120,7 +127,8 @@ export function settlementReadLabel(count: number): string {
 }
 
 /** Whether this project is waiting for the owner's own answer, read off the project document:
- *  OPEN, criteria stated, every one of them met by the work filed under it, and nothing running.
+ *  OPEN, criteria stated, every one of them met by the work filed under it, and no task
+ *  IN_PROGRESS.
  *
  *  The middle condition is deliberately strict: a project with a criterion nobody has answered for
  *  is asked nothing here and goes to the project page instead. `satisfied` must be `true` — the
@@ -132,16 +140,21 @@ export function settlementHeldOnProject(
   const criteria = project.acceptanceCriteriaItems ?? [];
   if (criteria.length === 0) return false;
   if (!criteria.every((criterion) => criterion.satisfied === true)) return false;
-  return (project.buckets?.running ?? 0) === 0;
+  // The status, not the work state: `buckets.running` also counts an OPEN task with live work,
+  // and it is not in this read. This is the count the document carries, and it is the one the
+  // card may state.
+  return (project.tasksByStatus?.IN_PROGRESS ?? 0) === 0;
 }
 
-/** Which project, and the two facts that put the question: read as the meta line's own order, every
- *  criterion met, nothing running. */
+/** Which project, and the one fact that puts the question: every stated criterion has been met by
+ *  the work filed under it.
+ *
+ *  It carried a third clause, "nothing is running under it", until 2026-09-19. The document this
+ *  line is built from cannot back it — see `tasksByStatus` above — and a card that says nothing is
+ *  running while a task runs under it is worse than one that says less. What is still open under
+ *  the project is the tally's line, counted off the same document, in its own sentence. */
 export function settlementMeta(project: SettlementProjectDocument): string {
-  return (
-    `${project.title} · every stated criterion has been met by the work filed under it · `
-    + `nothing is running under it`
-  );
+  return `${project.title} · every stated criterion has been met by the work filed under it`;
 }
 
 /** What the server can say about ONE criterion, in the order the two facts have to be read: what
@@ -205,7 +218,7 @@ export function projectSettlementContext(project: SettlementProjectDocument): st
     .join('\n');
   return (
     `About “${project.title}” — every one of its ${criteria.length} stated criteria has been met by `
-    + `the work filed under it, and nothing is running under it:\n\n${numbered}\n\n`
+    + `the work filed under it:\n\n${numbered}\n\n`
     + settlementTally(project)
   );
 }

@@ -7596,7 +7596,7 @@ button.composer-usage:focus-visible {
 
 /* ── The project settlement card ─────────────────────────────────────────────────────────
    `ProjectSettlementCard.tsx`: the closing question, asked in the coordinator conversation when
-   every stated criterion has been met by its work and nothing is running. The same approval tone
+   every stated criterion has been met by its work and no task under it is IN_PROGRESS. The same approval tone
    as the start card it is the other end of — brand tint, no green and no tick — because a
    criterion's work having settled is not a verdict anybody reached (migration 0229 deleted the
    project acceptance judgment). The rows are a grid so the fact column lines up down the card,

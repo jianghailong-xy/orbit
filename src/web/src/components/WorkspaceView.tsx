@@ -6576,7 +6576,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               )}
               {/* The other end of that question: the work filed under this project has met every
-                  criterion it states and nothing is running, so is the project done? Drawn from the
+                  criterion it states and no task under it is IN_PROGRESS, so is the project done?
+                  Drawn from the
                   project page's own `['project', id]` read and pressed straight at the status door
                   with the browser's credential — the one shape that door accepts from a
                   conversation. Keyed by the session, because whether it was delivered belongs to
