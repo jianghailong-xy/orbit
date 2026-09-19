@@ -167,9 +167,9 @@ async function createProject(label, options = {}) {
   const criterionText = options.criterionText ?? `${label} outcome is demonstrably complete`;
   await pool.query(
     `INSERT INTO "project" (
-       "id","owner_id","title","goal","coordinator_enabled","automation_policy",
+       "id","owner_id","title","goal","coordinator_enabled",
        "max_concurrent_tasks","session_budget_per_day","updated_at"
-     ) VALUES ($1,$2,$3,$4,true,'GUARDED_AUTO'::"project_automation_policy",3,10,now())`,
+     ) VALUES ($1,$2,$3,$4,true,3,10,now())`,
     [projectId, ownerId, `${label} project`, `${label} exact owner goal`],
   );
   await pool.query(
@@ -250,9 +250,20 @@ function substituteExactlyOnce(source, pairs) {
   return out;
 }
 
-/** The six values the envelope stood in front of, and the key it read them out of. */
+/**
+ * The values the envelope stood in front of that a project still has, and the key it read them out
+ * of. It routed six until 0292, and `automationPolicy` was the other one.
+ *
+ * That pair is gone rather than substituted, and the difference matters: 0292 removed the VALUE,
+ * not just its routing -- the column, the type it was cast to, and the key inside `risk_material`
+ * and `risk_boundary` that carried it -- and recomputed every completion contract for that reason
+ * (`AUTOMATION_POLICY_REMOVED`). So it is a deliberate digest move, the one thing this test's
+ * proposition cannot cover. Keeping the pair here would break the proposition twice over:
+ * `substituteExactlyOnce` would find no needle in today's body to substitute, and the replayed
+ * "before" would carry a key the live "after" does not, so the two sides would differ by something
+ * other than the envelope indirection this test exists to isolate.
+ */
 const ENVELOPE_ROUTED_VALUES = [
-  ['automationPolicy', 'material."automation_policy"::text'],
   ['convergenceThresholds', 'material."convergence_thresholds"'],
   ['coordinatorEnabled', 'material."coordinator_enabled"'],
   ['maxConcurrentTasks', 'material."max_concurrent_tasks"'],
@@ -264,11 +275,15 @@ const ENVELOPE_ROUTED_VALUES = [
  * Install the composition contractDigest had BEFORE the envelope was removed, under its own schema.
  *
  * The four authority functions are still lifted verbatim out of 0216: they are what the removal
- * removed, they read nothing but `project`, and no migration since has touched them. One
- * substitution on them -- the envelope reader took the approved ceiling from
- * `project_completion_contract.authority_envelope`, and that column is dropped. It could only ever
- * be written by the ratification trigger 0218 deleted, so on any database carrying 0218 it holds
- * NULL for every row -- and NULL is what the replay hands the builder.
+ * removed, and no migration since has rewritten them. Two of the columns those bodies read are
+ * gone, and each is substituted to NULL rather than the body being edited around it. The envelope
+ * reader took the approved ceiling from `project_completion_contract.authority_envelope`, which
+ * 0219 dropped; it could only ever be written by the ratification trigger 0218 deleted, so on any
+ * database carrying 0218 it holds NULL for every row -- and NULL is what the replay hands the
+ * builder. It also took the live policy from `project.automation_policy`, which 0292 dropped: that
+ * one is inert here because `automationPolicy` is no longer a key the replay reads back out. The
+ * body is `LANGUAGE sql`, which is parsed and validated at CREATE rather than at first call, so
+ * leaving either column in place fails in this function instead of at an assertion.
  *
  * The snapshot around them is the INSTALLED body with the envelope indirection put back, not
  * 0218's frozen copy. 0218's copy also predates 0227, 0233 and 0234, each of which legitimately
@@ -276,7 +291,8 @@ const ENVELOPE_ROUTED_VALUES = [
  * material, the evaluation-plan version vector -- so replaying it now compares two functions that
  * differ for several reasons at once and, since 0233, does not even parse. Reinstating the
  * indirection on top of today's body isolates the one difference this test is about: the two sides
- * then differ in exactly the six values the envelope covered, and in nothing else.
+ * then differ in exactly the values the envelope covered that a project still has, and in nothing
+ * else.
  */
 async function installPreRemovalComposition() {
   const authority = [
@@ -286,9 +302,12 @@ async function installPreRemovalComposition() {
     historicalFunction('0216_project_authority_envelope', 'project_authority_envelope'),
   ].join('\n\n')
     .replaceAll('project_authority_', `${PRE_REMOVAL_SCHEMA}.authority_`)
-    .replace('contract."authority_envelope"', 'NULL::jsonb');
+    .replace('contract."authority_envelope"', 'NULL::jsonb')
+    .replace('p."automation_policy"::text', 'NULL::text');
   assert.doesNotMatch(authority, /contract\."authority_envelope"/,
     'the replay must not read the dropped column');
+  assert.doesNotMatch(authority, /p\."automation_policy"/,
+    'the replay must not read the column 0292 dropped');
 
   const body = substituteExactlyOnce(
     await installedFunction('project_completion_contract_snapshot'),
@@ -944,33 +963,36 @@ test('(r) the authority envelope is gone: six functions, its trigger, its column
 
 // (s) --------------------------------------------------------------------------------------------
 test('(s) contractDigest is byte-identical across the removal, for every project', async () => {
-  // Six shapes across every dimension the envelope covered, so "identical" is not identical on one
-  // uniform row: both limit maps null, empty and populated; sessionBudgetPerDay absent, zero and
-  // set; all three automation policies; the coordinator switch both ways.
+  // Six shapes across every dimension the envelope covered that a project still has, so
+  // "identical" is not identical on one uniform row: both limit maps null, empty and populated;
+  // sessionBudgetPerDay absent, zero and set; the coordinator switch both ways. One of the six
+  // values the envelope routed was `automationPolicy`, and 0292 removed the value itself rather
+  // than only the routing -- a project row has no policy to vary any more, which is why it is not
+  // in ENVELOPE_ROUTED_VALUES either.
   const shapes = [
-    { policy: 'GUARDED_AUTO', coordinator: true, concurrency: 3, sessions: 10,
+    { coordinator: true, concurrency: 3, sessions: 10,
       attempt: { maxAttempts: 4 }, thresholds: { maxRepeats: 2 } },
-    { policy: 'MANUAL', coordinator: false, concurrency: 1, sessions: null,
+    { coordinator: false, concurrency: 1, sessions: null,
       attempt: null, thresholds: null },
-    { policy: 'AUTO', coordinator: true, concurrency: 9, sessions: 0,
+    { coordinator: true, concurrency: 9, sessions: 0,
       attempt: { maxAttempts: 0 }, thresholds: {} },
-    { policy: 'GUARDED_AUTO', coordinator: true, concurrency: 7, sessions: 7,
+    { coordinator: true, concurrency: 7, sessions: 7,
       attempt: { a: null, b: 60 }, thresholds: { c: null } },
-    { policy: 'AUTO', coordinator: false, concurrency: 12, sessions: 99,
+    { coordinator: false, concurrency: 12, sessions: 99,
       attempt: {}, thresholds: null },
-    { policy: 'MANUAL', coordinator: true, concurrency: 2, sessions: 5,
+    { coordinator: true, concurrency: 2, sessions: 5,
       attempt: null, thresholds: { maxRepeats: 0 } },
   ];
-  for (const shape of shapes) {
+  for (const [index, shape] of shapes.entries()) {
     const projectId = randomUUID();
     await pool.query(
       `INSERT INTO "project" (
-         "id","owner_id","title","goal","coordinator_enabled","automation_policy",
+         "id","owner_id","title","goal","coordinator_enabled",
          "max_concurrent_tasks","session_budget_per_day","attempt_budget","convergence_thresholds",
          "updated_at"
-       ) VALUES ($1,$2,$3,$4,$5,$6::"project_automation_policy",$7,$8,$9::jsonb,$10::jsonb,now())`,
-      [projectId, ownerId, `envelope shape ${shape.policy}`, `goal for ${projectId}`,
-        shape.coordinator, shape.policy, shape.concurrency, shape.sessions,
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,now())`,
+      [projectId, ownerId, `envelope shape ${index}`, `goal for ${projectId}`,
+        shape.coordinator, shape.concurrency, shape.sessions,
         shape.attempt === null ? null : JSON.stringify(shape.attempt),
         shape.thresholds === null ? null : JSON.stringify(shape.thresholds)],
     );
@@ -1004,6 +1026,14 @@ test('(s) contractDigest is byte-identical across the removal, for every project
   // configuration it bounds. Handed it, the builder returns those same live values -- which is why
   // substituting them is neutral for that project too. The migration does not take this on trust:
   // it re-derives every project's whole snapshot and refuses to commit if one of them moved.
+  //
+  // `automationPolicy` stays in this object, and stays a bare `'GUARDED_AUTO'` in the call below,
+  // because both describe the envelope AS IT WAS RECORDED: a historical input, handed to a builder
+  // lifted verbatim out of 0216 whose signature still takes the policy as a parameter. Neither is a
+  // reference to the column 0292 dropped or to the type it was cast to -- writing the value here as
+  // `'GUARDED_AUTO'::"project_automation_policy"` would be one, which is exactly why it is not
+  // written that way. What the assertion holds is the historical builder's fixed point, and the
+  // recorded envelope is still the right thing to hold it against.
   const productionCeiling = {
     attemptBudget: null, automationPolicy: 'GUARDED_AUTO', convergenceThresholds: null,
     coordinatorEnabled: true, maxConcurrentTasks: 3, sessionBudgetPerDay: 10,
