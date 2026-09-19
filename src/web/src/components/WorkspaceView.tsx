@@ -211,6 +211,11 @@ import {
   acceptancePlanChangeContext,
 } from './AcceptanceConfirmationCard';
 import {
+  SETTLEMENT_CHAT_PLACEHOLDER,
+  SETTLEMENT_CHAT_PREFIX,
+  SessionProjectSettlementCard,
+} from './ProjectSettlementCard';
+import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
   type OwnerConfirmationWaiting,
@@ -1386,20 +1391,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [eventsSessionId, setEventsSessionId] = useState<string | null>(selectedId);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
   // An armed reply: the next composer send carries what is typed to one card's business instead of
-  // being an ordinary message, and the card that armed it stays until then. Four presses arm it — a
+  // being an ordinary message, and the card that armed it stays until then. Five presses arm it — a
   // question's "Chat about this", a decline of one of Orbit's own asks, the confirmation card's
-  // send-back, and the settlement card's "Chat about this" — because all four want a sentence, and
-  // the composer is where a sentence is typed. Null = normal send; `target` is the only thing that
-  // differs, and it is where the send goes.
+  // send-back, the settlement card's "Chat about this", and the project settlement card's — because
+  // all five want a sentence, and the composer is where a sentence is typed. Null = normal send;
+  // `target` is the only thing that differs, and it is where the send goes.
   //
-  // `planChange` is the one that goes through no door at all. The other three answer a call that is
-  // blocking on them; there the agent is idle and nothing is pending, so the send is an ordinary
-  // turn with the plan it is about carried in front of it (`context`).
+  // `planChange` and `projectSettlement` are the two that go through no door at all. The other
+  // three answer a call that is blocking on them; there the agent is idle and nothing is pending,
+  // so the send is an ordinary turn with the facts it is about carried in front of it (`context`).
   const [replyTo, setReplyTo] = useState<{
     target:
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
-      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string }
+      | { kind: 'projectSettlement'; projectId: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -3591,8 +3597,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // Nothing answers a plan change another way: no call is pending on it, so there is no question
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
-    // chip is dismissed.
-    if (replyTo.target.kind === 'planChange') return;
+    // chip is dismissed. The project settlement card's "Chat about this" is the same kind of armed
+    // reply — an ordinary turn at an idle agent — so it stays armed by the same rule.
+    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') return;
     // The same rule read from the other door — but only once the read has actually come back. A
     // read in flight is "this browser cannot say yet", and disarming on it would throw away a
     // reason somebody is in the middle of typing.
@@ -4810,11 +4817,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ownerDecision.mutate({ taskId, requestId, decision: 'SEND_BACK', note: c });
         return;
       }
-      // Talking about a plan before it is started reaches no door: this is an ordinary turn at an
-      // idle agent, with the project, its criteria and their seal carried in front of the message
-      // because nothing in the session holds them. The card that armed it is untouched — its own
-      // Start is still the other way out.
-      if (replyTo.target.kind === 'planChange') {
+      // Talking about a plan before it is started — and about a project whose criteria are all met —
+      // reaches no door either: both are ordinary turns at an idle agent, with the facts the card is
+      // drawn from carried in front of the message because nothing in the session holds them. The
+      // card that armed it is untouched: its own primary action is still the other way out.
+      if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') {
         if (!c) return;
         pinToBottom();
         const carried = replyTo.context;
@@ -5236,6 +5243,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       banner: ACCEPTANCE_PLAN_CHANGE_PREFIX + plan.projectTitle,
       placeholder: ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
       context: acceptancePlanChangeContext(plan),
+    });
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The project settlement card's "Chat about this": the next send is an ordinary turn saying what
+  // is still missing, with the card's own facts — the criteria and the two facts beside each —
+  // carried in front of it. Like the plan change above it answers nothing, so no door is named
+  // here. The card stays, with its own Confirm still live.
+  const startProjectSettlementChat = (talk: {
+    projectId: string;
+    projectTitle: string;
+    facts: string;
+  }): void => {
+    setReplyTo({
+      target: { kind: 'projectSettlement', projectId: talk.projectId },
+      banner: SETTLEMENT_CHAT_PREFIX + talk.projectTitle,
+      placeholder: SETTLEMENT_CHAT_PLACEHOLDER,
+      context: talk.facts,
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -6468,6 +6492,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   projectId={selectedSession?.projectId ?? null}
                   onOpenQuestion={reportSettlementQuestion}
                   onChatAbout={startPlanChangeChat}
+                />
+              )}
+              {/* The other end of that question: the work filed under this project has met every
+                  criterion it states and nothing is running, so is the project done? Drawn from the
+                  project page's own `['project', id]` read and pressed straight at the status door
+                  with the browser's credential — the one shape that door accepts from a
+                  conversation. Keyed by the session, because whether it was delivered belongs to
+                  this conversation, and by a key none of its siblings carries, for the reason the
+                  evidence card's note above gives. */}
+              {selected && selectedId && !selectedTrashed && (
+                <SessionProjectSettlementCard
+                  key={`settlement:${selectedId}`}
+                  projectId={selectedSession?.projectId ?? null}
+                  onChatAbout={startProjectSettlementChat}
                 />
               )}
               {selected &&

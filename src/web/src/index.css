@@ -7631,6 +7631,124 @@ button.composer-usage:focus-visible {
   color: var(--text-2);
 }
 
+/* ── The project settlement card ─────────────────────────────────────────────────────────
+   `ProjectSettlementCard.tsx`: the closing question, asked in the coordinator conversation when
+   every stated criterion has been met by its work and nothing is running. The same approval tone
+   as the start card it is the other end of — brand tint, no green and no tick — because a
+   criterion's work having settled is not a verdict anybody reached (migration 0229 deleted the
+   project acceptance judgment). The rows are a grid so the fact column lines up down the card,
+   which is the column the reader is checking. */
+.project-settlement .approval-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.project-settlement-heading {
+  min-width: 0;
+}
+.project-settlement-body {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.project-settlement-meta {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.project-settlement-stale {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.project-settlement-criteria {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.project-settlement-criteria li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+}
+.project-settlement-criteria li + li {
+  margin-top: 4px;
+}
+.project-settlement-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--brand-tint);
+  border: 1px solid var(--brand-border);
+  font-size: 11px;
+  color: var(--text-2);
+}
+/* One line, cut with an ellipsis: the row is a fact column with a label beside it, and a criterion
+   running to a paragraph would push its own facts off the row it belongs to. */
+.project-settlement-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.project-settlement-facts {
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* A reading control, not an action: it sits with the rows it unfolds rather than in the action row,
+   which is why it is not a `.card-action`. */
+.project-settlement-read {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  color: var(--brand);
+  cursor: pointer;
+}
+.project-settlement-read:hover {
+  text-decoration: underline;
+}
+.project-settlement-tally {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.project-settlement-explains {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.project-settlement-error {
+  margin-top: 10px;
+}
+.project-settlement-recorded {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.project-settlement-recorded-note {
+  margin-top: 2px;
+  color: var(--text-3);
+}
+/* The small print under the action row, inside the card's own bottom edge. */
+.project-settlement-hint {
+  margin: 0;
+  padding: 8px 14px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
 /* Free-text answer field: lets the user type their own answer to a question. */
 .chat-q-custom {
   margin-top: 4px;

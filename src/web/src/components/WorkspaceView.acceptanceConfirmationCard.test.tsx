@@ -449,12 +449,17 @@ describe('where the card is mounted', () => {
    * mount above is — the same thing `ComposerHandoffWiringTests.swift` does at the other end.
    *
    * What is pinned is the one way this target differs from the other three: it starts an ORDINARY
-   * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a `planChange` send
-   * that grew one would be this card answering a call that nobody made.
+   * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a send through this
+   * branch that grew one would have this card answering a call that nobody made. The branch is
+   * shared with the project settlement card's "Chat about this", which is the same kind of send.
    */
   it('sends a plan change as an ordinary turn carrying the plan, through no door', () => {
     const source = workspaceView();
-    const at = source.indexOf("if (replyTo.target.kind === 'planChange') {");
+    // The whole line: the disarm effect carries the same two kinds and ends in `return;`, and this
+    // is the branch that sends.
+    const at = source.indexOf(
+      "if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') {",
+    );
     expect(at, 'nothing in onSend handles an armed plan change').toBeGreaterThan(-1);
     // To the end of the branch: the `return` that leaves onSend's replyTo block.
     const branch = source.slice(at, source.indexOf('\n      }', at));
