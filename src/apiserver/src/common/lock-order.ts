@@ -186,8 +186,9 @@ export const LOCK_ORDER_EXCEPTIONS = [
   {
     where: 'task_list_task_count_sync (0280) — task_list (20) after the task write (50)',
     why:
-      'The three statement triggers that maintain task_list.task_count take FOR NO KEY UPDATE on ' +
-      'the counted list, which is rank 20 reached from a rank 50 write. Same shape and same ' +
+      'The three statement triggers that maintain task_list.task_count and task_list.task_done_count ' +
+      'take FOR NO KEY UPDATE on the counted list, which is rank 20 reached from a rank 50 write. ' +
+      'Same shape and same ' +
       'argument as the pause projector\'s watermark: every multi-row task write holds the owner ' +
       'graph mutex (I1) first, and the one path that takes task_list FOR UPDATE — ' +
       'TaskListsService.writePolicy — takes user FOR UPDATE before it, so a task write can never ' +
@@ -196,7 +197,11 @@ export const LOCK_ORDER_EXCEPTIONS = [
       'does: writePolicy writes no task row at all since 0276, and the projector takes the ' +
       'watermark last. FOR NO KEY UPDATE also does not conflict with the FOR KEY SHARE that ' +
       'task_list_id_fkey already takes on the insert path, so two concurrent inserts into one ' +
-      'list serialize on the counter rather than deadlocking on an upgrade.',
+      'list serialize on the counter rather than deadlocking on an upgrade. 0287 added the second ' +
+      'number to the same statement, so it reaches the same row under the same lock; the only ' +
+      'change to WHICH writes arrive is that a status write crossing DONE no longer nets to zero ' +
+      'for both numbers and so now takes this lock — about five such statements a day on this ' +
+      'deployment. It is the same edge, not a new one.',
   },
 ] as const;
 

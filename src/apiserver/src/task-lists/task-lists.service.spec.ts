@@ -229,10 +229,11 @@ test('the list index projects no instructions, whatever else it carries', async 
       taskList: {
         findMany: async (args: any) => {
           selected = args.select;
-          return [{ id: LIST_ID, title: 'FineWeb Parquet', taskCount: 27468 }];
+          return [{ id: LIST_ID, title: 'FineWeb Parquet', taskCount: 27468, taskDoneCount: 0 }];
         },
       },
-      // Both grouped counts: running tasks, then DONE tasks.
+      // The one grouped count left: running tasks. The DONE count used to be a second one here and
+      // is now a column of the row above (0287).
       task: { groupBy: async () => [] },
     } as never,
     {} as never,
@@ -247,6 +248,10 @@ test('the list index projects no instructions, whatever else it carries', async 
   // The count comes off the list row. Asking Prisma for the relation aggregate instead compiles to
   // an unfiltered `GROUP BY list_id` over the whole `task` table on every poll of this index (0280).
   assert.equal(selected.taskCount, true);
+  // The other half of `completed`, off the same row and for the same reason (0287). Asserted on the
+  // projection rather than only through the number, so a read that stopped selecting it fails here
+  // instead of quietly comparing `undefined` against the total and calling every list unfinished.
+  assert.equal(selected.taskDoneCount, true);
   assert.equal(selected._count, undefined);
   // …and is still answered as `_count: { tasks }`: it is what the shipped macOS/iOS clients decode
   // into `taskCount` for the drawer badge and the scope-menu labels, and what the `tasklist_list`

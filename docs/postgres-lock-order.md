@@ -148,7 +148,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | N8 legacy import / request backfill（0184） | import 先取 owner `FOR KEY SHARE`(10)，再锁单个 task(50)；backfill 的 batch owner FK 先取得同等锁，再按 UUID 以 `FOR UPDATE SKIP LOCKED` 锁有界 task 集(50)；两者最后写 evidence/request/inbox/delivery/audit 子行(60) | **新增** | import 的 reviewer FK 不会在 task 之后倒取 owner；backfill 在锁任何 task 前先创建审计 batch。schema migration 不扫描 task，批次默认把设备 ledger 终结为 `IN_APP_ONLY`，只有显式 allowlist 产生 due push。 |
 | ~~`project_acceptance_conclusion_validate` / `_reconcile`（0179）、`project_acceptance_done_gate` / `_advance_epoch` / `_epoch_audit`（0150）~~ | — | **已删除（0229_project_acceptance_judgment_removal）** | 项目验收判定整体移除：四张判定表、`project` 上的四个触发器与六个列一起消失。0179 的 conclusion → project 预锁边、0150 的 DONE 闸与 epoch 审计边在等待图中不复存在。`project.status = 'DONE'` 现在是普通列写入，没有任何数据库守卫。 |
 | `project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project） | 该 project 下**全部** `task` 行 | **保留** | 40 → 50，顺序内。只在协调开关翻转时发生。 |
-| `task_list_task_count_insert` / `_delete` / `_relist`（0280，语句级 + transition table） | 被计数的 `task_list` 行 `FOR NO KEY UPDATE`，每条语句每个列表一次 | **新增（0280）**，50 → 20，见 §5 第三条 | `GET /task-lists` 的 `_count` 原本编译成对整张 `task` 的无过滤聚合（占全库执行时间 22.1%），改成按写维护的列。`_relist` 挂在**全部** UPDATE 上（PG 不允许带列清单的触发器用 transition table），但函数是把两张 transition table 按列表**净增量**相加，status / progress / `dispatch_hold` 这类写净增量为 0，被 `HAVING` 丢掉，一行都不写也不锁。 |
+| `task_list_task_count_insert` / `_delete` / `_relist`（0280，语句级 + transition table；0287 在同一函数里加维护 `task_done_count`） | 被计数的 `task_list` 行 `FOR NO KEY UPDATE`，每条语句每个列表一次 | **新增（0280）**，50 → 20，见 §5 第三条 | `GET /task-lists` 的 `_count` 原本编译成对整张 `task` 的无过滤聚合（占全库执行时间 22.1%），改成按写维护的列；0287 把 `completed` 需要的 DONE 数也放进同一列组，去掉同一个方法里第二条分组读（该读走 `task_status_idx`，代价是**全库 DONE 行数**，2026-09-19 实测 935 块/次、约 370 次/小时）。`_relist` 挂在**全部** UPDATE 上（PG 不允许带列清单的触发器用 transition table），但函数是把两张 transition table 按列表**净增量**相加，`model` / progress / `dispatch_hold` 这类两个增量都为 0 的写被 `HAVING` 丢掉，一行都不写也不锁。0287 之后 `HAVING` 的条件是「总数增量非 0 **或** DONE 增量非 0」：跨越 DONE 的 status 写（全库约 5 次/天，窗口内 160 次调用）现在会写并锁这一行，这是这条边上唯一的行为变化，锁本身仍是同一行的同一个秩。 |
 | `project_task_status_count_insert` / `_delete` / `_move`（0282，语句级 + transition table） | `project_task_status_count` 行 `FOR NO KEY UPDATE`，每条语句每个 (project, status) 一次 | **新增（0282）**，50 → 60，**顺序内**，不是例外 | `GET /projects/:id` 的 `tasksByStatus` 原本是 `task.groupBy`：谓词真有过滤、索引也对，但代价是**项目的行数**而非页面的行数——全表 111,738 行里有 109,872 行属于同一个 project，对它一次读就是 3,679 块（生产实测 76–124 ms）的整条覆盖索引遍历。改成按写维护的计数行。表放在秩 60 而不是 `project` 列上：`project` 是秩 40，从 `task` 写(50)去写它就是 40 ← 50 的倒序（正是 §6 记的那条 residual 的形状），而计数行自己的 FK 父行（`project`）在触发时已经由 `task_project_id_fkey` 以 `FOR KEY SHARE` 持有，所以这是 40 → 50 → 60 的正序一步步。行按 (project_id, status) 排序、一条语句取到；`_move` 挂在**全部** UPDATE 上，函数把两张 transition table 按 (project, status) 净增量相加，`HAVING` 丢掉零增量，于是 `dispatch_hold`、`title` 这类写一行都不锁。 |
 | `Task.updated_at` 作为版本边界 | — | **已取消（0132）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
 | `Session.inbox_lease_owner` / `inbox_lease_generation` fencing | 与 `SELECT … FOR UPDATE` 同一条语句 | **保留，未触碰** | 本次没有任何改动会改变 lease fencing 的语义：`lockSessionLeaseOwner` 一字未动，`runner-write-lease-owner.spec.ts` 与 `inbox-lease-generation.spec.ts` 全绿。 |
@@ -168,8 +168,8 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
    模式是 `FOR KEY SHARE`，只与 `FOR UPDATE` 冲突；project 上的 `FOR UPDATE` 持有者不会回过头去等
    `task`/`session`，所以这条倒序没有可以配对的另一半。
 
-3. **`task_list_task_count_sync`（0280）：`task_list`(20) 在 `task` 写(50)之后。**
-   这三个语句级触发器把列表的任务计数按写维护，取的是被计数列表行的 `FOR NO KEY UPDATE`。
+3. **`task_list_task_count_sync`（0280；0287 在同一函数里加维护 `task_done_count`）：`task_list`(20) 在 `task` 写(50)之后。**
+   这三个语句级触发器把列表的任务计数与 DONE 计数按写维护，取的是被计数列表行的 `FOR NO KEY UPDATE`。
    形状与论证和暂停投影器的 watermark 写完全相同：多行 `task` 写一律先持 owner mutex（I1），而唯一
    对 `task_list` 取 `FOR UPDATE` 的路径 `TaskListsService.writePolicy` 先取 `user` 的 `FOR UPDATE`，
    所以一次 `task` 写不可能插进它中间。单行 DELETE 不取 owner 锁，但要成环，对手必须**同时**以冲突模式
@@ -177,6 +177,10 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
    行都不写，投影器的 watermark 是它那笔事务的最后一把锁。
    插入路径上 `task_list_id_fkey` 本来就已经取了同一行的 `FOR KEY SHARE`，而 `FOR NO KEY UPDATE` 与
    `FOR KEY SHARE` **不冲突**，所以同一个列表的两个并发插入是在计数上串行，不是在锁升级上死锁。
+   0287 没有新增触发器、没有新增关系、也没有改秩：它把第二个数写进**同一条 UPDATE 的同一行**。它改变的
+   只是「哪些写会到这里」——`HAVING` 现在还要看 DONE 增量，于是跨越 DONE 的 status 写不再净增量为 0。
+   量到的规模是每天约 5 条语句（窗口内全库 160 次调用，对 538,480 次 `task` UPDATE），而且它们取的是
+   同一行的同一把锁，所以这条边既没有变长，也没有出现第二个持有者。
 
 ## 6. 已解决：任务状态造成的 `task → project` 验收边
 

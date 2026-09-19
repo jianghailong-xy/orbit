@@ -44,7 +44,10 @@ test('concurrent task-list indexes for one owner execute one query group', async
   lists.resolve([]);
   assert.deepEqual(await first, []);
   assert.deepEqual(await second, []);
-  assert.deepEqual(calls, { lists: 1, aggregates: 2 });
+  // One aggregate, not two: `runningTasks` is the only statement this read still makes against
+  // `task`. The DONE group-by that used to be the second one is gone (0287) — the `completed`
+  // number now rides on the list row — so a restored second `groupBy` shows up here as 2.
+  assert.deepEqual(calls, { lists: 1, aggregates: 1 });
 });
 
 test('task-list index single-flight isolates owners', async () => {

@@ -3415,6 +3415,15 @@ model TaskList {
   /// `task` and let the triggers follow; nothing should assign this column directly.
   taskCount Int     @default(0) @map("task_count")
 
+  /// How many of those tasks are DONE, maintained by the same three triggers (0287).
+  ///
+  /// The index endpoint's `completed` is "at least one task, and every task DONE", so it needs
+  /// this number beside `taskCount` — and asking for it separately is what 0287 removed: a second
+  /// grouped read per poll, over `task_status_idx`, whose cost is the number of tasks the whole
+  /// deployment has ever finished (1,482 rows / 935 buffers on 2026-09-19, ~370 calls an hour).
+  /// Exact, database-maintained, and never assigned by application code — same contract as above.
+  taskDoneCount Int @default(0) @map("task_done_count")
+
   tasks     Task[]
   revisions TaskListRevision[]
   events    TaskListEvent[]

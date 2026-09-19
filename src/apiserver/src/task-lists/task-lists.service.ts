@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CreatorType, RunStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, RunStatus } from '@prisma/client';
 import {
   classifyFailure,
   FailureCause,
@@ -119,6 +119,13 @@ export class TaskListsService {
         // number and still exact (see `TaskList.taskCount` and migration 0280); it is answered from
         // the list row, and re-wrapped as `_count` below so no client sees a changed shape.
         taskCount: true,
+        // `completed` needs a second number and used to go back to `task` for it: the same list ids
+        // under `status: DONE`, which `task_status_idx` answers by visiting every DONE row this
+        // deployment has — 1,482 of them on 2026-09-19, for 935 buffers a call at ~370 calls an
+        // hour. That read is gone (migration 0287). This column is maintained by the same three
+        // triggers `taskCount` uses and fetched by the same statement, so `completed` costs nothing
+        // extra at all; see `TaskList.taskDoneCount` for what it holds and why it is exact.
+        taskDoneCount: true,
       },
     });
     // `runningTasks` = how many of the list's tasks are actually executing right now:
@@ -136,21 +143,16 @@ export class TaskListsService {
     });
     const running = new Map(grouped.map((g) => [g.listId, g._count._all]));
     // `completed` = the whole list is finished: it has at least one task and every
-    // task is DONE. Counted with the same grouped shape (one query, O(1) in list
-    // count); compared against the list's total task count below.
-    const doneGrouped = await this.prisma.task.groupBy({
-      by: ['listId'],
-      where: { listId: { in: listIds }, status: TaskStatus.DONE },
-      _count: { _all: true },
-    });
-    const done = new Map(doneGrouped.map((g) => [g.listId, g._count._all]));
-    return lists.map(({ taskCount, ...l }) => {
+    // task is DONE. Both numbers are maintained columns on the list row, so the
+    // comparison is free and exact — the same expression as before, with the
+    // DONE count read instead of recounted.
+    return lists.map(({ taskCount, taskDoneCount, ...l }) => {
       const total = taskCount ?? 0;
       return {
         ...l,
         _count: { tasks: total },
         runningTasks: running.get(l.id) ?? 0,
-        completed: total > 0 && (done.get(l.id) ?? 0) === total,
+        completed: total > 0 && taskDoneCount === total,
       };
     });
   }
