@@ -1935,6 +1935,14 @@ final class ConsoleModel {
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
     /// Whether the account owner has confirmed the standard set as it stands.
     private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
+    /// What this project still owes somebody a decision about (contract §4.8), or nil while the
+    /// read has not come back. Nil is `unread` here too, for the reason the two above give: a card
+    /// that quietly claimed its question went away would be indistinguishable from a broken read.
+    private(set) var openItems: ProjectOpenItemsView?
+    /// The merge this project is asking its owner to confirm (§3.6). Two nils, and they mean
+    /// different things: the property is nil while unread, and the read answers nil when this
+    /// project is asking nothing — which is the ordinary case and draws no card.
+    private(set) var promotion: ProjectPromotionView?
     /// The criteria themselves, carried on the confirmation card: confirming a set the reader
     /// cannot read is the "signed unread" the whole path exists to prevent.
     private(set) var projectCriteria: [ProjectCriteriaDocument.Item] = []
@@ -2011,6 +2019,12 @@ final class ConsoleModel {
             case .ownerDecisionReceipt:
                 // A receipt is a record, not a question: it stays on screen and is never counted.
                 return false
+            case .coordinatorQuestion(let itemID):
+                return CoordinatorQuestions.isOpen(questionStanding(itemID))
+            case .promotionApproval(let promotionID):
+                // Only state A is a question. B is landing on its own, C is a receipt and D is
+                // waiting on somebody else — none of the three is something to point a reader at.
+                return PromotionCards.stage(promotionStanding(promotionID)) == .askingYou
             }
         }.map(\.id)
     }
@@ -2066,7 +2080,31 @@ final class ConsoleModel {
             projectStatus = document.status
             projectStarted = document.coordinatorEnabled
         }
+        // The project's two owner cards. Same rule as the four above: each is independent, a read
+        // that fails leaves the last answer standing, and neither may close a card.
+        if let items = try? await api.projectOpenItems(projectID: projectID) {
+            openItems = items
+            for row in CoordinatorQuestions.open(items) {
+                deliver(.coordinatorQuestion(itemID: row.itemId))
+            }
+        }
+        // `do` rather than `try?`, because this door answers `null` for "asking nothing" and `try?`
+        // would flatten that into the same nil a failed read gives (SE-0230). The two are opposite
+        // instructions: a project with no candidate is a card this window should stop drawing,
+        // while a read that did not come back may never close one — the rule the four reads above
+        // are under as well.
+        do {
+            let current = try await api.currentPromotion(projectID: projectID)
+            promotion = current
+            if let current, PromotionCards.stage(current) != nil {
+                deliver(.promotionApproval(promotionID: current.promotionId))
+            }
+        } catch {
+            // Left exactly as it was: the card says what it last read, not that the merge vanished.
+        }
         if settlementHeldOnConfirmation { deliver(.acceptanceConfirmation) }
+        // A press that arrived before this read now has its row to land on.
+        scrollToPendingOwnerItem()
         lastRulerRead = Date()
     }
 
@@ -2306,6 +2344,140 @@ final class ConsoleModel {
             statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
             await refreshRulerQuestions(force: true)
         }
+    }
+
+    // MARK: the project's two owner cards — the merge to confirm, and the question it asked
+
+    /// The owner card a "needs you" press is on its way to, until its row exists to scroll to.
+    ///
+    /// The press arrives before the read does: the bar is derived from the session LIST, which
+    /// carries the items, while the card is drawn from this conversation's own read of them. So the
+    /// press is remembered and spent by the first read that produces its row — and dropped if that
+    /// read says the card is not here, because a scroll to a row nothing draws is a silent no-op
+    /// that would leave the reader looking at wherever they happened to be.
+    private var pendingOwnerItem: SessionOwnerItem?
+
+    /// Point this conversation at one of the four owner items (§7.6 V13). Called by the banner's
+    /// press, which knows which item it named.
+    func focus(ownerItem: SessionOwnerItem) {
+        pendingOwnerItem = ownerItem
+        // Spent by the read below and never here, even when the card is already on screen: this
+        // runs BEFORE the navigation that puts the console on screen, and a scroll requested while
+        // no view is listening is a scroll nobody makes — and the request, once spent, would not
+        // come back. The read is a round-trip, so by the time it answers the console is mounted.
+        Task { await refreshRulerQuestions(force: true) }
+    }
+
+    /// Spend the pending press, if the card it names is on screen now.
+    private func scrollToPendingOwnerItem() {
+        guard let item = pendingOwnerItem, let rowID = rowID(forOwnerItem: item) else { return }
+        pendingOwnerItem = nil
+        requestScroll(to: rowID)
+    }
+
+    /// Which row draws one owner item here: the question by its own address, and a merge approval
+    /// by the candidate on screen — a project has at most one live candidate, and the item names
+    /// the card rather than the candidate.
+    private func rowID(forOwnerItem item: SessionOwnerItem) -> String? {
+        switch item.kind {
+        case .coordinatorQuestion:
+            let id = DeliveredDecisionCard(kind: .coordinatorQuestion(itemID: item.itemId)).id
+            return decisionCards.contains { $0.id == id } ? id : nil
+        case .promotionApproval:
+            return decisionCards.first {
+                if case .promotionApproval = $0.kind { return true }
+                return false
+            }?.id
+        // No native card yet for an escalated exception or a pause: the press opens the
+        // conversation, and the project page is where those two are answered.
+        case .escalated, .fusePaused, .unknown:
+            return nil
+        }
+    }
+
+
+    /// Where one delivered question stands right now, re-derived from the read on every call.
+    func questionStanding(_ itemID: String) -> CoordinatorQuestionStanding {
+        CoordinatorQuestions.standing(items: openItems, itemId: itemID)
+    }
+
+    /// The candidate one delivered merge card is about, or nil when the read no longer publishes
+    /// it: a newer candidate superseded this one, and a card that drew the new candidate's numbers
+    /// under the old one's question would be describing a merge nobody was asked about.
+    func promotionStanding(_ promotionID: String) -> ProjectPromotionView? {
+        promotion?.promotionId == promotionID ? promotion : nil
+    }
+
+    /// How much of this project's ruler the work has met, for the merge card's Criteria row. Nil
+    /// until the criteria have been read — "0 of 0 met" would be a claim nobody checked.
+    var criteriaMet: (met: Int, total: Int)? {
+        guard !projectCriteria.isEmpty else { return nil }
+        return (projectCriteria.filter { $0.satisfied == true }.count, projectCriteria.count)
+    }
+
+    /// Answer the coordinator's question, with this device's own credential — no agent between the
+    /// press and the door, and no session header on the request (§5.2 R10).
+    ///
+    /// The receipt is handed back rather than kept here: the card that made the press is the one
+    /// that shows what was sent and where it went, which is also what the browser's card does. A
+    /// refusal leaves the card standing and says which refusal it met.
+    func answerQuestion(_ row: ProjectOpenItemRow, option: Int?, text: String) async -> OwnerAnswerReceipt? {
+        guard let projectID, let question = row.question,
+              let request = CoordinatorQuestions.request(question: question, chosen: option, text: text)
+        else { return nil }
+        do {
+            let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
+                                                       request)
+            await refreshRulerQuestions(force: true)
+            return receipt
+        } catch {
+            statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
+            return nil
+        }
+    }
+
+    /// M-T4: merge it. The candidate's own source SHA rides along, so a card rendered before a
+    /// newer candidate superseded it is refused rather than merging whatever is on the branch now.
+    ///
+    /// The card is not dropped: the interesting outcomes are the door's refusals and the states
+    /// that follow (it goes to CONFIRMED, then RECHECKING or MERGED), and the card is where a
+    /// reader watches that happen.
+    func confirmMergeToMain(_ view: ProjectPromotionView) async {
+        guard let projectID else { return }
+        do {
+            promotion = try await api.confirmPromotion(projectID: projectID,
+                                                       promotionID: view.promotionId,
+                                                       sourceSha: view.sourceSha)
+        } catch {
+            statusMessage = "That merge was not confirmed — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// M-T10: call it back, while the landing job has not reached the push. The card stays: what
+    /// the door answers is the state it left the candidate in, which is what the reader watches.
+    func cancelMergeToMain(_ view: ProjectPromotionView) async {
+        guard let projectID else { return }
+        do {
+            promotion = try await api.cancelPromotion(projectID: projectID,
+                                                      promotionID: view.promotionId)
+        } catch {
+            statusMessage = "That merge was not called back — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// M-T5: not now. The branch is left exactly where it is, and the next landing offers it again.
+    func declineMergeToMain(_ view: ProjectPromotionView) async {
+        guard let projectID else { return }
+        do {
+            promotion = try await api.declinePromotion(projectID: projectID,
+                                                       promotionID: view.promotionId)
+            close(.promotionApproval(promotionID: view.promotionId))
+        } catch {
+            statusMessage = "That was not recorded — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
     }
 
     private func close(_ kind: DeliveredDecisionCard.Kind) {

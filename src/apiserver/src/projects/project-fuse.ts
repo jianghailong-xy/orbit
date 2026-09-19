@@ -84,8 +84,9 @@ export interface FusePausedPayload {
   heldCount: number;
 }
 
-/** Which spend crossed, in the words the owner reads it in. */
-function why(payload: FusePausedPayload): string {
+/** Which spend crossed, in the words the owner reads it in. Exported because the push that
+ *  announces a pause carries this clause as its body (§7.6 V12) and must not reword it. */
+export function fusePausedWhy(payload: FusePausedPayload): string {
   const { observed, limit } = payload;
   switch (payload.dimension) {
     case 'SELF_STARTED_TURNS':
@@ -117,7 +118,7 @@ function onHold(held: number): string {
  */
 export function fusePausedDetailLine(payload: FusePausedPayload): string {
   const spend = payload.spendToday;
-  return `${why(payload)}. `
+  return `${fusePausedWhy(payload)}. `
     + `Spent today: ${spend.selfStartedTurns} self-started turns · `
     + `${spend.sessionsOpened} sessions opened · ${spend.successorRetries} retries on one chain. `
     + 'Tasks keep running and landing; task results, merges and your answers still reach it. '

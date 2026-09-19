@@ -83,6 +83,7 @@ import {
 import { QueueService } from '../queue/queue.service';
 import { mergeDispatchGate } from '../projects/task-checkpoint.service';
 import {
+  ownerItemsForRow,
   readOwnerDecisionSignals,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
@@ -2639,6 +2640,9 @@ export class SessionsService {
         ...s,
         pendingApprovals: approvals + (waiting?.count ?? 0),
         waitingKind: sessionWaitingKind(approvals, waiting),
+        // Which of the four owner items are waiting here, for the banner that has to name one and
+        // open its card rather than only say that a number is not zero (§7.6 V13).
+        ownerItems: ownerItemsForRow(waiting),
       };
     });
   }

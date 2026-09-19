@@ -422,6 +422,49 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)")
     }
 
+    // MARK: a project's owner items — the merge to confirm, and the coordinator's question
+
+    /// What this project still owes somebody a decision about, split by who is expected to act
+    /// (contract §4.8). The cards read the `needsYou` half; the other half is what the coordinator
+    /// is working through, which this client shows nobody.
+    public func projectOpenItems(projectID: String) async throws -> ProjectOpenItemsView {
+        try await get("projects/\(projectID)/open-items")
+    }
+
+    /// Answer the coordinator's question (§5.2 R10). The owner's own credential and no acting
+    /// session: the door refuses one, because a question put to the owner is the owner's to answer.
+    public func answerOpenItem(projectID: String, itemID: String,
+                               _ req: OwnerAnswerRequest) async throws -> OwnerAnswerReceipt {
+        try await post("projects/\(projectID)/open-items/\(itemID)/answer", body: req)
+    }
+
+    /// What this project is currently asking its owner to merge, or nil when it is asking nothing.
+    /// The door answers a bare `null` for that, which decodes straight into the optional.
+    public func currentPromotion(projectID: String) async throws -> ProjectPromotionView? {
+        let current: ProjectPromotionView? = try await get("projects/\(projectID)/promotions/current")
+        return current
+    }
+
+    /// M-T4: merge it. The candidate's source SHA travels with the press, so a card rendered before
+    /// a newer candidate superseded it is refused rather than merging something else.
+    public func confirmPromotion(projectID: String, promotionID: String,
+                                 sourceSha: String?) async throws -> ProjectPromotionView {
+        try await post("projects/\(projectID)/promotions/\(promotionID)/confirm",
+                       body: ConfirmPromotionRequest(sourceSha: sourceSha))
+    }
+
+    /// M-T5: not now. The branch stays exactly where it is and the next landing offers it again.
+    public func declinePromotion(projectID: String,
+                                 promotionID: String) async throws -> ProjectPromotionView {
+        try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/decline")
+    }
+
+    /// M-T10: call back a confirmed merge, while its job has not reached the push.
+    public func cancelPromotion(projectID: String,
+                                promotionID: String) async throws -> ProjectPromotionView {
+        try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
+    }
+
     // MARK: agents / runners
 
     public func agents() async throws -> [Agent] { try await get("agents") }
