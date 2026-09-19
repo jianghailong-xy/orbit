@@ -2194,7 +2194,10 @@ export class SessionsService {
    * (queued + dispatched); `running` is deliberately narrower and matches the Session list's blue
    * spinner: a dispatched turn, a self-driven engine turn, or a parked parent with a sub-agent
    * still working. Keeping both prevents queued-only workspaces from falsely looking as though the
-   * model is already running. `needsYou` is returned separately and wins the sidebar status slot.
+   * model is already running. `jobs` is neither: sessions with a background job in flight
+   * (`runningBgJobs`), which the rail draws as its own quieter mark — real work the workspace can
+   * be doing with nobody generating in it, and the one thing `running` deliberately does not cover.
+   * `needsYou` is returned separately and wins the sidebar status slot.
    * Sessions with no workspace belong to no row and are skipped.
    */
   async workspaceSessionCounts(ownerId: string) {
@@ -2205,7 +2208,7 @@ export class SessionsService {
       deletedAt: null,
       workspaceId: { not: null },
     } as const;
-    const [active, running, blocked] = await Promise.all([
+    const [active, running, jobs, blocked] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
         where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
@@ -2223,6 +2226,16 @@ export class SessionsService {
             },
           ],
         },
+        _count: { _all: true },
+      }),
+      // The third tally, and the only one that is neither "the model is generating" nor "somebody
+      // is being asked": sessions with a background JOB in flight (Session.runningBgJobs — a
+      // `bg_run` that will end, never a `service` left up). The workspace rail draws it as a
+      // quieter mark than the working dot, because it answers the question the rail was silent
+      // about: a workspace can be doing real work with nobody generating in it.
+      this.prisma.session.groupBy({
+        by: ['workspaceId'],
+        where: { ...open, runningBgJobs: { isEmpty: false } },
         _count: { _all: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
@@ -2249,12 +2262,12 @@ export class SessionsService {
           });
     const counts = new Map<
       string,
-      { workspaceId: string; active: number; running: number; needsYou: number }
+      { workspaceId: string; active: number; running: number; jobs: number; needsYou: number }
     >();
     const row = (workspaceId: string) => {
       const existing = counts.get(workspaceId);
       if (existing) return existing;
-      const fresh = { workspaceId, active: 0, running: 0, needsYou: 0 };
+      const fresh = { workspaceId, active: 0, running: 0, jobs: 0, needsYou: 0 };
       counts.set(workspaceId, fresh);
       return fresh;
     };
@@ -2263,6 +2276,9 @@ export class SessionsService {
     }
     for (const group of running) {
       if (group.workspaceId) row(group.workspaceId).running = group._count._all;
+    }
+    for (const group of jobs) {
+      if (group.workspaceId) row(group.workspaceId).jobs = group._count._all;
     }
     // One conversation is one row of this tally however many things are waiting on it: the number
     // is "sessions that need you", and a coordinator blocked on a tool call while a proposal is
@@ -2374,6 +2390,7 @@ export class SessionsService {
       pinnedAt: Date | null;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
+      runningBgJobCount: number;
       runningSubagentCount: number;
       engineTurnActive: boolean;
       engineStartedAt: Date | null;
@@ -2453,6 +2470,10 @@ export class SessionsService {
           WHERE stl.session_id = s.id
         ), '[]'::json) AS "tags",
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
+        -- The subset of the above that is work in flight (a job/watch, never a service): what the
+        -- clients draw as the pulsing terminal glyph, and what the workspace rail reads as
+        -- background activity. See Session.runningBgJobs.
+        cardinality(s.running_bg_jobs)::int AS "runningBgJobCount",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
         s.engine_started_at AS "engineStartedAt",
@@ -2579,6 +2600,7 @@ export class SessionsService {
         pinnedAt: r.pinnedAt,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
+        runningBgJobCount: r.runningBgJobCount,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
         engineStartedAt: r.engineStartedAt,
@@ -2699,6 +2721,11 @@ export class SessionsService {
     return withSessionCapabilities({
       ...rest,
       tags,
+      // Both shapes of the same fact, because the two faces of the API have always differed here:
+      // the row's `runningBgJobs`/`runningBgShells` arrays ride along in the spread above, and a
+      // client that only needs to draw the glyph should not have to count them itself. The list
+      // endpoint answers with the count and never the ids, so this is the one spelling both read.
+      runningBgJobCount: session.runningBgJobs.length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
     });

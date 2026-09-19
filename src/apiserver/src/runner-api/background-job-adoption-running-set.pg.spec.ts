@@ -62,6 +62,23 @@ const JOB_OUTPUT = `/root/.orbit/runs/adoption-spec/${JOB}.output`;
 /** An engine's own Bash(run_in_background) shell, started beside the job. */
 const SHELL = 'toolu_01EngineOwnedShell';
 
+/**
+ * The subset that is work rather than something left standing — `Session.runningBgJobs`, which the
+ * clients draw as the breathing terminal glyph. The pairs below assert the two sets together,
+ * because the interesting cases are the ones where they differ: a `service` (a dev server, a
+ * watcher) belongs to `running_bg_shells` and NOT to `running_bg_jobs`, and an engine's own shell
+ * belongs to neither.
+ */
+const SERVICE = 'bgj_9c7a51d2e0f3';
+const serviceRunning = (): Record<string, unknown> => ({
+  shellId: SERVICE,
+  toolUseId: SERVICE,
+  status: 'running',
+  kind: 'service',
+  command: 'vite dev',
+  outputPath: `/root/.orbit/runs/adoption-spec/${SERVICE}.output`,
+});
+
 /** The job's `running` report but for its kind: the one field the negatives below take away. */
 const JOB_RUNNING_WITHOUT_KIND = {
   shellId: JOB,
@@ -196,11 +213,24 @@ test('a background job adopted after a self-update is back in the running backgr
       });
       return [...stored.runningBgShells].sort();
     };
+    /** The same read for the jobs-only set: every assertion about one is paired with the other. */
+    const jobs = async () => {
+      const stored = await prisma.session.findUniqueOrThrow({
+        where: { id: sessionId },
+        select: { runningBgJobs: true },
+      });
+      return [...stored.runningBgJobs].sort();
+    };
 
     const p1 = randomUUID();
     await door.takeoverLeases(runner, sessionId, { leaseOwner: p1, expectedLeaseOwner: null } as never);
     await report(p1, [...jobLaunch(), ...shellLaunch()]);
     assert.deepEqual(await running(), [JOB, SHELL].sort(), 'the fixture: both launches are running');
+    assert.deepEqual(
+      await jobs(),
+      [JOB],
+      'the fixture: the job counts as work in flight, and the engine\'s own shell — which states no kind — does not',
+    );
 
     /** P2 takes the session over from P1; returns what P2 reports through. */
     const takeOver = async () => {
@@ -208,18 +238,20 @@ test('a background job adopted after a self-update is back in the running backgr
       await door.takeoverLeases(runner, sessionId, { leaseOwner: p2, expectedLeaseOwner: p1 } as never);
       return (events: Reported[]) => report(p2, events);
     };
-    return { report: (events: Reported[]) => report(p1, events), takeOver, running };
+    return { report: (events: Reported[]) => report(p1, events), takeOver, running, jobs };
   }
 
   /** The same session once P1 has re-executed into a self-update and P2 has taken it over. */
   async function selfUpdated() {
     const session = await bothRunning();
-    return { report: await session.takeOver(), running: session.running };
+    return { report: await session.takeOver(), running: session.running, jobs: session.jobs };
   }
 
   await t.test('the takeover empties the set, the adopted job\'s running report puts it back, and its end takes it out', async () => {
     const session = await selfUpdated();
     assert.deepEqual(await session.running(), [], 'the takeover left the predecessor\'s background work in the set');
+
+    assert.deepEqual(await session.jobs(), [], 'the takeover left the predecessor\'s jobs marked as in flight');
 
     await session.report([{ type: RunEventType.BACKGROUND_TASK, payload: jobRunning() }]);
     assert.deepEqual(
@@ -227,9 +259,38 @@ test('a background job adopted after a self-update is back in the running backgr
       [JOB],
       'the job the new process adopted is still running, and the session does not say so',
     );
+    assert.deepEqual(
+      await session.jobs(),
+      [JOB],
+      'the adopted job is back in the job set too: the report that restores one restores both',
+    );
 
     await session.report([{ type: RunEventType.BACKGROUND_TASK, payload: jobEnded() }]);
     assert.deepEqual(await session.running(), [], 'the adopted job ended, and the session still reads it as running');
+    assert.deepEqual(await session.jobs(), [], 'the adopted job ended, and the session still calls it work in flight');
+  });
+
+  await t.test('a `service` is a running process but never work in flight', async () => {
+    const session = await selfUpdated();
+
+    await session.report([{ type: RunEventType.BACKGROUND_TASK, payload: serviceRunning() }]);
+    assert.deepEqual(await session.running(), [SERVICE], 'the dev server the workspace left up is not a running process');
+    assert.deepEqual(
+      await session.jobs(),
+      [],
+      'a `service` never ends by itself, so marking it as work in flight would light the glyph for the rest of the session\'s life',
+    );
+
+    // The paired positive, on the same session: the same door with the same shape of report, and
+    // the kind is the only difference between the two.
+    await session.report([{ type: RunEventType.BACKGROUND_TASK, payload: jobRunning() }]);
+    assert.deepEqual(await session.jobs(), [JOB], 'the job beside the service was not counted as work');
+    assert.deepEqual(await session.running(), [JOB, SERVICE].sort());
+
+    // And both leave together when they end.
+    await session.report([{ type: RunEventType.BACKGROUND_TASK, payload: jobEnded() }]);
+    assert.deepEqual(await session.jobs(), []);
+    assert.deepEqual(await session.running(), [SERVICE], 'the service is still up, as a service is');
   });
 
   for (const [what, payload] of WITHOUT_KIND) {
@@ -250,6 +311,7 @@ test('a background job adopted after a self-update is back in the running backgr
     const session = await bothRunning();
     await session.report([RESUMED]);
     assert.deepEqual(await session.running(), [], 'the handshake left background work in the set');
+    assert.deepEqual(await session.jobs(), [], 'the handshake left a job marked as in flight');
   });
 
   await t.test('the job\'s running report behind a resumed handshake in the same batch leaves the job, and only the job, in the set', async () => {
@@ -260,5 +322,6 @@ test('a background job adopted after a self-update is back in the running backgr
       [JOB],
       'the batch runner-go sends when it replaces the engine under a live job: the job is still running, and the replaced engine\'s shell is not',
     );
+    assert.deepEqual(await session.jobs(), [JOB], 'the same batch: the job is work in flight, the engine\'s shell never was');
   });
 });

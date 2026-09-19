@@ -889,6 +889,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        rows that already have it — and it names none of the six preserved triggers or functions
   //        and drops no trigger or function at all. Nothing it creates uses the `project_acceptance_`
   //        prefix or the word `judgment`.
+  //   0288 added `session.running_bg_jobs`, the subset of `running_bg_shells` that is a
+  //        runner-hosted job with an end (a `bg_run` of kind `job` or `watch`, never a `service`,
+  //        which is a dev server or watcher the workspace deliberately left up). Read against every
+  //        claim above: like 0253 and 0254 it is one `ALTER TABLE "session" ADD COLUMN ... NOT NULL
+  //        DEFAULT ARRAY[]::text[]` and nothing else. It does not touch `task`, `project` or
+  //        `project_acceptance_criterion_definition`, so the 0177 pair,
+  //        `task_executable_acceptance_pair` and every stored row are out of its reach, and no
+  //        criterion's `text` or `verification_method` can move by one byte. It names no
+  //        `project_acceptance_*` object and none of the six preserved triggers/functions; it
+  //        creates no table, index, enum, type, function or trigger — so it is not another writer
+  //        of the DONE fence — carries no `ALTER TYPE` and no `DROP TYPE`, so all three
+  //        `task_completion_criterion` labels survive, and it has no INSERT/UPDATE/DELETE, so no
+  //        preserved row is read or written. The default is a constant, so PG writes only
+  //        `pg_attribute.attmissingval` and never rewrites the heap: there is no backfill here and
+  //        none is owed. Nothing reads the new column to allow or refuse a status — the event
+  //        ingestion transaction maintains it and the session payload counts it.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -941,7 +957,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0284_project_fuse_pause',
       '0285_task_dependency_tail_id_single_read',
       '0286_project_promotion',
-      '0287_task_list_done_count'],
+      '0287_task_list_done_count',
+      '0288_session_running_bg_jobs'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

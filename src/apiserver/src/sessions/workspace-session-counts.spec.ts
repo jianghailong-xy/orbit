@@ -10,19 +10,28 @@ test('workspace counts separate queued activity from Session-list spinner work',
     session: {
       groupBy: async (args: any) => {
         groupByCalls.push(args);
-        // First query is admitted work: w-queued is intentionally present here only. The second
-        // query is the exact spinner population: a normal RUNNING row, a self-driven engine turn,
-        // or a parked parent whose sub-agent is still working.
-        return groupByCalls.length === 1
-          ? [
-              { workspaceId: 'w-queued', _count: { _all: 1 } },
-              { workspaceId: 'w-running', _count: { _all: 2 } },
-            ]
-          : [
-              { workspaceId: 'w-running', _count: { _all: 1 } },
-              { workspaceId: 'w-engine-turn', _count: { _all: 1 } },
-              { workspaceId: 'w-subagent', _count: { _all: 1 } },
-            ];
+        // Three different populations reach this one method, told apart by what they ask for rather
+        // than by call order, so adding a tally elsewhere cannot silently rewire this fixture.
+        //
+        // The first is admitted work: w-queued is intentionally present here only. The second is
+        // the exact spinner population: a normal RUNNING row, a self-driven engine turn, or a
+        // parked parent whose sub-agent is still working. The third is the jobs-only set — work in
+        // flight with nobody generating, which is neither of the two: a workspace whose only live
+        // session is parked with a `bg_run` job and no turn in it.
+        if (args?.where?.runningBgJobs) {
+          return [{ workspaceId: 'w-jobs', _count: { _all: 1 } }];
+        }
+        if (args?.where?.status) {
+          return [
+            { workspaceId: 'w-queued', _count: { _all: 1 } },
+            { workspaceId: 'w-running', _count: { _all: 2 } },
+          ];
+        }
+        return [
+          { workspaceId: 'w-running', _count: { _all: 1 } },
+          { workspaceId: 'w-engine-turn', _count: { _all: 1 } },
+          { workspaceId: 'w-subagent', _count: { _all: 1 } },
+        ];
       },
       findMany: async (args: any) => {
         findManyCalls.push(args);
@@ -68,13 +77,24 @@ test('workspace counts separate queued activity from Session-list spinner work',
     workspaceId: 'w-queued',
     active: 1,
     running: 0,
+    jobs: 0,
     needsYou: 0,
   });
   assert.deepEqual(byWorkspace.get('w-running'), {
     workspaceId: 'w-running',
     active: 2,
     running: 1,
+    jobs: 0,
     needsYou: 1,
+  });
+  // The third tally, and the only row here that is neither generating nor waiting on anyone: the
+  // rail draws its own quieter mark for it rather than borrowing either of theirs.
+  assert.deepEqual(byWorkspace.get('w-jobs'), {
+    workspaceId: 'w-jobs',
+    active: 0,
+    running: 0,
+    jobs: 1,
+    needsYou: 0,
   });
   assert.equal(byWorkspace.get('w-engine-turn')?.running, 1);
   assert.equal(byWorkspace.get('w-subagent')?.running, 1);
@@ -82,6 +102,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     workspaceId: 'w-needs-you',
     active: 0,
     running: 0,
+    jobs: 0,
     needsYou: 1,
   });
   // The second source: a conversation with an unanswered owner decision on it and no approval row
@@ -91,6 +112,7 @@ test('workspace counts separate queued activity from Session-list spinner work',
     workspaceId: 'w-decision',
     active: 0,
     running: 0,
+    jobs: 0,
     needsYou: 1,
   });
   // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
@@ -98,6 +120,13 @@ test('workspace counts separate queued activity from Session-list spinner work',
   const decisionQuery = findManyCalls.find((call) => !call?.where?.approvals);
   assert.equal(decisionQuery.where.completedAt, null);
   assert.equal(decisionQuery.where.deletedAt, null);
+
+  // The jobs tally is a lookup on the denormalized set, not a scan of events, and it is over the
+  // same Open scope as the other two.
+  const jobsQuery = groupByCalls.find((call) => call?.where?.runningBgJobs);
+  assert.deepEqual(jobsQuery.where.runningBgJobs, { isEmpty: false });
+  assert.equal(jobsQuery.where.completedAt, null);
+  assert.equal(jobsQuery.where.deletedAt, null);
 
   assert.deepEqual(groupByCalls[0].where.status.in, [RunStatus.RUNNING, RunStatus.PENDING]);
   assert.deepEqual(groupByCalls[1].where.OR, [

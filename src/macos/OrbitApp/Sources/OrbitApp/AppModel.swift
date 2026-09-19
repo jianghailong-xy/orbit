@@ -251,6 +251,9 @@ final class AppModel {
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the iPhone drawer and iPad sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
+    /// Workspace ids with a background job in flight and nobody generating — read off the same
+    /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
+    private(set) var jobWorkspaceIDs: Set<String> = []
     #endif
 
     /// The compact drawer lists the open session twice when its runner group is expanded — once as the
@@ -533,6 +536,7 @@ final class AppModel {
         agentNeedsYou = [:]
         #if os(iOS)
         runningWorkspaceIDs = []
+        jobWorkspaceIDs = []
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -1101,6 +1105,7 @@ final class AppModel {
             agentNeedsYou = NeedsYouLogic.byAgent(list)
             #if os(iOS)
             runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
+            jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
             #endif
             // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
             // here instead of leaving it to fetch the identical payload on its own timer.

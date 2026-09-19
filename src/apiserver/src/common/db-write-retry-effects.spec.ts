@@ -212,6 +212,7 @@ test('a runner event batch that loses two deadlocks persists once and broadcasts
         runtimeSessionId: 'rt-1',
         cancelRequestedAt: null,
         runningBgShells: [],
+        runningBgJobs: [],
         runningSubagents: [],
       },
     },

@@ -4,10 +4,12 @@ import XCTest
 final class WorkspaceActivityLogicTests: XCTestCase {
     private func session(_ id: String, state: SessionRunState, agentID: String? = nil,
                          nestedAgentID: String? = nil, approvals: Int = 0,
-                         engineTurnActive: Bool = false, runningBgCount: Int = 0) -> Session {
+                         engineTurnActive: Bool = false, runningBgCount: Int = 0,
+                         runningBgJobCount: Int = 0) -> Session {
         Session(id: id, title: nil, status: .cancelled, runState: state,
                 agentId: agentID, assignedRunnerId: nil, pendingApprovals: approvals,
                 branch: nil, updatedAt: nil, runningBgCount: runningBgCount,
+                runningBgJobCount: runningBgJobCount,
                 engineTurnActive: engineTurnActive,
                 agent: nestedAgentID.map {
                     SessionAgentRef(id: $0, name: nil, provider: nil, model: nil, effort: nil)
@@ -44,6 +46,43 @@ final class WorkspaceActivityLogicTests: XCTestCase {
             session("one", state: .running, agentID: "workspace"),
             session("two", state: .running, agentID: "workspace"),
         ]), ["workspace"])
+    }
+
+    func testJobWorkspaceIDsCountJobsButNotProcessesLeftRunning() {
+        let ids = WorkspaceActivityLogic.jobWorkspaceIDs([
+            // Two processes up, one of them a job: this workspace is doing work.
+            session("job", state: .awaitingInput, agentID: "job",
+                    runningBgCount: 2, runningBgJobCount: 1),
+            // The same two processes, neither with an end: a dev server and a watcher, which is
+            // the case the rail stayed silent about on purpose.
+            session("service", state: .awaitingInput, agentID: "service", runningBgCount: 2),
+            // Generating, with a job beside it: NOT in this set, because the set is read off the
+            // same glyph the row draws and that glyph is the working spinner. The rail's `running`
+            // outranks `jobs` in the same slot, so the two can never disagree about one workspace.
+            session("generating", state: .running, agentID: "generating",
+                    engineTurnActive: false, runningBgCount: 1, runningBgJobCount: 1),
+            // Jobs belong to live work only: the server clears them as a session ends, and an
+            // ended session must not light the rail whatever the snapshot says.
+            session("ended", state: .ended, agentID: "ended",
+                    runningBgCount: 1, runningBgJobCount: 1),
+            session("idle", state: .awaitingInput, agentID: "idle"),
+        ])
+
+        XCTAssertEqual(ids, ["job"])
+    }
+
+    func testWorkspaceNavigationStatusPutsRunningAboveJobsAndOfflineAboveBoth() {
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: true, jobs: true, runnerOffline: false), .running)
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: false, jobs: true, runnerOffline: false), .jobs)
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: false, jobs: true, runnerOffline: true), .idle)
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 1, running: false, jobs: true, runnerOffline: false), .needsYou(1))
+        // Absent entirely: a caller that predates the mark keeps the old reading.
+        XCTAssertEqual(WorkspaceNavigationStatusLogic.resolve(
+            waiting: 0, running: false, runnerOffline: false), .idle)
     }
 
     func testRunnerOfflineRequiresAnExplicitOfflineSnapshot() {

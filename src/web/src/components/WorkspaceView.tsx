@@ -255,7 +255,7 @@ import {
 } from '../lib/sessionState';
 import { deliveryFailureExplanation, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { streamAnchorAfter } from '../lib/streamAnchor';
-import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
+import { backgroundWorkIsActive, isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
@@ -722,13 +722,18 @@ const isGenerating = (s: any, state: string): boolean =>
 // "waiting for your reply" — and agree on how emphatically to say so: a sub-workspace is the
 // workspace still working, while a background shell is usually a dev server or watcher the workspace
 // deliberately left up, which keeps reporting for the rest of the session's life.
-type ParkedWork = { text: string; kind: OutlivingWork };
+//
+// `active` splits that last case in two without changing a word of it: the same glyph and the same
+// "N background processes running" line, but breathing while at least one of those processes is a
+// JOB with an end (backgroundWorkIsActive). A job is work the agent started and is waiting on; a
+// `service` is the thing that made this static. Nothing else about the row moves.
+type ParkedWork = { text: string; kind: OutlivingWork; active: boolean };
 const parkedWorkLabel = (s: any): ParkedWork | null => {
   const kind = outlivingSessionWork(s);
   if (!kind) return null;
   return kind === 'subagent'
-    ? { text: subagentRunningLabel(s.runningSubagentCount), kind }
-    : { text: bgRunningLabel(s.runningBgCount), kind };
+    ? { text: subagentRunningLabel(s.runningSubagentCount), kind, active: true }
+    : { text: bgRunningLabel(s.runningBgCount), kind, active: backgroundWorkIsActive(s) };
 };
 
 // The line shown under a session title. For a LIVE (openable) session that's working we
@@ -975,15 +980,21 @@ export function StatusIcon({ session }: { session: any }) {
     // A sub-workspace is the workspace itself still working, so it keeps the working spinner. A
     // background shell isn't: workspaces routinely leave a dev server or watcher up, and it never
     // exits, so spinning at it would mark the session busy for the rest of its life and drown
-    // out the sessions that really are working. It gets a static, muted terminal-prompt glyph
-    // (the native port's SF `terminal`) and keeps its label.
+    // out the sessions that really are working. It gets a muted terminal-prompt glyph (the native
+    // port's SF `terminal`) and keeps its label — breathing while a job is in flight (a bg_run
+    // that will end), still while the only thing up is a `service`. Never spinning: the shape and
+    // the colour keep meaning "not the agent working", and only the motion says "work is happening
+    // here", which is the one claim a left-up process cannot make.
     if (work)
       return (
         <Tooltip title={work.text}>
           {work.kind === 'subagent' ? (
             <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
           ) : (
-            <CodeOutlined style={{ color: 'var(--text-3)', fontSize }} />
+            <CodeOutlined
+              className={work.active ? 'status-glyph-active' : undefined}
+              style={{ color: 'var(--text-3)', fontSize }}
+            />
           )}
         </Tooltip>
       );
@@ -1765,6 +1776,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     return {
       ...d,
       runningBgCount: Array.isArray(d.runningBgShells) ? d.runningBgShells.length : (d.runningBgCount ?? 0),
+      // The detail payload carries the ids; the list carries the count. Same normalization for
+      // both, so the glyph's motion cannot disagree with the tray's list of processes.
+      runningBgJobCount: Array.isArray(d.runningBgJobs)
+        ? d.runningBgJobs.length
+        : (d.runningBgJobCount ?? 0),
       runningSubagentCount: Array.isArray(d.runningSubagents)
         ? d.runningSubagents.length
         : (d.runningSubagentCount ?? 0),

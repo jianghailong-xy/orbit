@@ -3,6 +3,7 @@ import {
   BgColorsOutlined,
   CaretDownOutlined,
   CheckOutlined,
+  CodeOutlined,
   DesktopOutlined,
   DisconnectOutlined,
   EyeOutlined,
@@ -185,9 +186,16 @@ interface Workspace {
 }
 
 export function workspaceCountsPollInterval(
-  counts: readonly { active: number; running?: number }[],
+  counts: readonly { active: number; running?: number; jobs?: number }[],
 ): number {
-  return counts.some((count) => count.active > 0 || (count.running ?? 0) > 0) ? 5_000 : 15_000;
+  // A job in flight counts as live here too: its whole point is that it can start and end while
+  // nobody is generating, and at the slow cadence the pulse would arrive up to fifteen seconds
+  // after the work did — long enough to read as a stale mark rather than as activity.
+  return counts.some(
+    (count) => count.active > 0 || (count.running ?? 0) > 0 || (count.jobs ?? 0) > 0,
+  )
+    ? 5_000
+    : 15_000;
 }
 
 /** Show Offline only from an authoritative Runner snapshot. `undefined` means the runner query is
@@ -425,6 +433,15 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.running ?? 0])),
     [sessionCounts.data],
   );
+  // Neither of the two above: sessions with a background JOB in flight. The rail was silent about
+  // these — a workspace running a build or a stress test, with nobody generating in it, looked
+  // exactly like one that had left a dev server up. Drawn as its own muted mark (the session row's
+  // terminal glyph, breathing) rather than as the brand-blue dot, which keeps meaning "the agent
+  // is generating right now".
+  const workspaceJobs = useMemo(
+    () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.jobs ?? 0])),
+    [sessionCounts.data],
+  );
 
   // Open a workspace's console — the same destination the runner detail page uses.
   // Config-only workspaces (no runner) have no console to open.
@@ -577,6 +594,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                   runnerId ? runnerOnlineById.get(runnerId) : undefined,
                 )}
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                jobs={workspaceJobs.get(a.id) ?? 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                 runnerLabel={runnerLabel}
               />
@@ -632,6 +650,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                   runnerId ? runnerOnlineById.get(runnerId) : undefined,
                 )}
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                jobs={workspaceJobs.get(a.id) ?? 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                 shortcutLabel={workspaceShortcutLabel(index)}
                 onOpen={openWorkspace}
@@ -769,12 +788,15 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 export function WorkspaceStateMark({
   offline,
   running,
+  jobs = 0,
   needsYou,
   runnerLabel,
   compact = false,
 }: {
   offline: boolean;
   running: boolean;
+  /** Sessions in this workspace with a background job in flight — see `workspaceJobs`. */
+  jobs?: number;
   needsYou: number;
   runnerLabel?: string;
   compact?: boolean;
@@ -816,6 +838,23 @@ export function WorkspaceStateMark({
       </Tooltip>
     );
   }
+  // Below the spinner and said in the terminal glyph's own words: something is running here, but
+  // nobody is generating. A left-up process does not qualify (the server counts only jobs with an
+  // end) — otherwise this slot would be lit for the rest of the workspace's life.
+  if (jobs > 0) {
+    const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
+    return (
+      <Tooltip title={title}>
+        <CodeOutlined
+          // In the collapsed rail this mark sits at the avatar's corner like the spinner it
+          // replaces, and the desktop rule below turns it into a quiet dot there.
+          className={compact ? 'tp-rail-jobs status-glyph-active' : 'status-glyph-active'}
+          aria-label={title}
+          style={{ color: 'var(--text-3)', fontSize: 16 }}
+        />
+      </Tooltip>
+    );
+  }
   return null;
 }
 
@@ -828,6 +867,7 @@ export function WorkspaceRow({
   active,
   offline,
   running,
+  jobs,
   needsYou,
   shortcutLabel,
   onOpen,
@@ -837,6 +877,7 @@ export function WorkspaceRow({
   active: boolean;
   offline: boolean;
   running: boolean;
+  jobs: number;
   needsYou: number;
   shortcutLabel?: string | null;
   onOpen: (a: Workspace) => void;
@@ -845,6 +886,9 @@ export function WorkspaceRow({
   // Attention and disconnection remain higher priority than background activity. CSS reveals this
   // quiet mark on the expanded desktop sidebar; the mobile drawer keeps its trailing spinner.
   const showRunningDot = running && !offline && needsYou === 0;
+  // One slot, two greys: the blue dot means somebody is generating, this one means a job is in
+  // flight here (and generation, when it happens, is the louder of the two).
+  const showJobsDot = jobs > 0 && !running && !offline && needsYou === 0;
   return (
     <div
       className={`tp-item ${active ? 'active' : ''}`}
@@ -870,6 +914,14 @@ export function WorkspaceRow({
             title="Running"
             role="img"
             aria-label="Workspace has a running session"
+          />
+        )}
+        {showJobsDot && (
+          <span
+            className="tp-workspace-icon-jobs"
+            title={`${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`}
+            role="img"
+            aria-label="Workspace has a background job running"
           />
         )}
       </span>

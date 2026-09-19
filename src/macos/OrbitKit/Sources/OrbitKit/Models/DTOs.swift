@@ -250,6 +250,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// tool lands, so the row shows your pending message instead of the now-stale previous reply.
     public let lastUserText: String?
     public let runningBgCount: Int?
+    /// Of `runningBgCount`, the ones that are jobs with an end (a `bg_run` of kind `job`/`watch`,
+    /// never a `service`): the background work a session can be doing with nobody generating in it.
+    /// Drives the breathing terminal glyph — see `SessionStatusGlyph.pulse`. Absent from older
+    /// servers, which keeps the glyph still.
+    public let runningBgJobCount: Int?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
@@ -358,6 +363,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
+        runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
@@ -380,6 +386,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
+                runningBgJobCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
@@ -413,6 +420,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
         self.runningBgCount = runningBgCount
+        self.runningBgJobCount = runningBgJobCount
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason

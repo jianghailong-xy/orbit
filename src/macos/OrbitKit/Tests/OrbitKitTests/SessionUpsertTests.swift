@@ -26,7 +26,7 @@ final class SessionUpsertTests: XCTestCase {
          "provider":"claude","model":"opus","permissionMode":"dontAsk","effort":"high",
          "projectId":"p1","projectTitle":"Initial project",
          "lastAssistantText":"here you go","lastToolUse":"Read","lastUserText":"do it",
-         "runningBgCount":2,"error":"boom","endReason":"IDLE",
+         "runningBgCount":2,"runningBgJobCount":1,"error":"boom","endReason":"IDLE",
          "agent":{"id":"a1","name":"builder","provider":"claude","model":"opus","effort":"high"},
          "tags":[{"id":"t1","name":"Red","color":"#FF3B30","isSystem":true,"position":0}]}
         """##)
@@ -97,6 +97,9 @@ final class SessionUpsertTests: XCTestCase {
         XCTAssertEqual(merged.lastToolUse, "Read")
         XCTAssertEqual(merged.lastUserText, "do it")
         XCTAssertEqual(merged.runningBgCount, 2)
+        // The count of those that are jobs with an end, which the glyph's motion reads: an event
+        // arriving mid-job must not stop it breathing.
+        XCTAssertEqual(merged.runningBgJobCount, 1)
         XCTAssertEqual(merged.tags?.map(\.id), ["t1"])
         XCTAssertEqual(merged.pinnedAt, row.pinnedAt)
         XCTAssertEqual(merged.assignedRunnerId, "r1")

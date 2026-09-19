@@ -54,6 +54,7 @@ function harness(options: HarnessOptions = {}) {
             runtimeSessionId: 'runtime-1',
             cancelRequestedAt: null,
             runningBgShells: [],
+            runningBgJobs: [],
             runningSubagents: [],
           };
         }

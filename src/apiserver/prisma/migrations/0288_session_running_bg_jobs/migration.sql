@@ -1,0 +1,39 @@
+-- 0288 — "background work is in flight", as a thing the clients can draw without reading events
+--
+-- WHAT IT ADDS
+-- ============
+--   * `session.running_bg_jobs`: the subset of `running_bg_shells` that is a runner-hosted job with
+--     an end (a `bg_run` of kind `job` or `watch`), maintained by the same event-ingestion
+--     transaction that maintains the two sets beside it.
+--
+-- WHY A SECOND SET RATHER THAN A FLAG ON THE FIRST
+-- ===============================================
+-- `running_bg_shells` answers "is a process still up". A workspace that left a dev server or a
+-- watcher running answers yes for the rest of the session's life, which is why the clients were
+-- built to NOT draw that as working: the row says `N background processes running` behind a static
+-- terminal glyph, and the workspace rail draws no activity at all. The cost of that silence is the
+-- opposite failure — a session running a ten-minute stress test in the background, or waiting on a
+-- build, is indistinguishable from one that merely left `vite` up.
+--
+-- This column carries the narrower question: of the processes still up, which ones are JOBS — work
+-- the agent started and is waiting on, with a terminal report coming. Only a runner-hosted job
+-- states a kind; an engine's own shell (Bash run_in_background, Monitor) does not, and absence of
+-- evidence is deliberately not evidence here: such a shell stays out of this set and keeps the
+-- static glyph, because a watcher and a build look identical at launch.
+--
+-- WHERE IT COMES FROM
+-- ===================
+-- The job's own `running` background_task carries `kind` (runner-go background_job.go) and is
+-- already what re-adds a job to `running_bg_shells` after a self-update adoption; the same event
+-- adds it here when the kind is not `service`. The terminal background_task removes it, and the
+-- sets are cleared together on a `resumed` handshake and on takeover, exactly as the other two are.
+--
+-- BACKWARD COMPATIBLE
+-- ===================
+-- One new column, NOT NULL with an empty-array default, so every existing row reads as "no jobs in
+-- flight" — which is what a stopped process tree means and what the clients already draw. No
+-- backfill is possible or wanted: the kinds lived only in events, and re-deriving them for closed
+-- sessions would light glyphs for work that ended days ago. Readers that predate the column simply
+-- do not select it.
+ALTER TABLE "session"
+  ADD COLUMN "running_bg_jobs" text[] NOT NULL DEFAULT ARRAY[]::text[];

@@ -767,6 +767,44 @@ body {
      --brand-tint is translucent and would visually merge the dot back into the folder. */
   box-shadow: 0 0 0 1.5px var(--bg-raised);
 }
+/* The second, quieter activity mark: this workspace has a background JOB in flight (a bg_run that
+   will end), not a process it merely left up. Same slot and same dot, muted instead of brand blue —
+   the blue one above still means the agent is generating — and breathing rather than rotating,
+   which is the whole vocabulary here (see the session row's terminal glyph, which breathes for the
+   same reason). Motion is what separates it from the still dot at a glance; without it the two
+   would be the same shape in two greys. */
+@keyframes status-glyph-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.42; }
+}
+.status-glyph-active {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+.tp-workspace-icon-jobs {
+  display: none;
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  z-index: 2;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  box-shadow: 0 0 0 1.5px var(--bg-raised);
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+.tp-item:hover .tp-workspace-icon-jobs {
+  box-shadow: 0 0 0 1.5px var(--bg-hover);
+}
+.tp-item.active .tp-workspace-icon-jobs {
+  box-shadow: 0 0 0 1.5px var(--bg-raised);
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-glyph-active,
+  .tp-workspace-icon-jobs {
+    animation: none;
+  }
+}
 /* Runner availability belongs to the Workspace identity: a tiny disconnect badge overlays the
    folder only when that Runner is explicitly offline. Online folders stay visually quiet. */
 .tp-workspace-icon-offline {
@@ -1083,6 +1121,14 @@ body {
   border-radius: 50%;
   background: var(--bg-raised);
 }
+/* The collapsed rail's own slot for the background-work mark — same corner as the spinner. */
+.tp-rail-jobs {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+}
 
 /* Desktop collapse behaviour. Scoped to >960px so the ≤960 off-canvas drawer
    (which toggles on .open, not .collapsed) is never touched — there the panel
@@ -1092,6 +1138,11 @@ body {
      on the expanded folder or collapsed avatar. Session rows remain the only rotating indicators;
      the <=960px drawer keeps its existing spinner. */
   .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-running {
+    display: block;
+  }
+  /* Same reveal, same slot, one grey quieter — a rule of its own so the existing one keeps
+     reading as the single statement about the working dot. */
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-jobs {
     display: block;
   }
   .app-shell .app-nav:not(.collapsed) .tp-workspace-running {
@@ -1106,6 +1157,29 @@ body {
   .app-shell .app-nav.collapsed .tp-rail-running {
     background: transparent;
     animation: none !important;
+  }
+  /* Both activity kinds speak the same shape in the collapsed rail — a quiet dot — and differ by
+     colour: brand for the agent generating, muted and breathing for background work. */
+  .app-shell .app-nav.collapsed .tp-rail-jobs {
+    background: transparent;
+    animation: none !important;
+  }
+  .app-shell .app-nav.collapsed .tp-rail-jobs > svg {
+    visibility: hidden;
+    animation: none !important;
+  }
+  .app-shell .app-nav.collapsed .tp-rail-jobs::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-3);
+    box-shadow: 0 0 0 1.5px var(--bg-raised);
+    transform: translate(-50%, -50%);
+    animation: status-glyph-breathe 2.4s ease-in-out infinite;
   }
   .app-shell .app-nav.collapsed .tp-rail-running > svg {
     visibility: hidden;

@@ -25,6 +25,7 @@ function makeController(
   // being cleared has to start it non-empty — a write that would change nothing is not issued.
   stored: {
     runningBgShells?: string[];
+    runningBgJobs?: string[];
     runningSubagents?: string[];
     turnContents?: Record<string, string | null>;
     coordinatorContextEpoch?: number;
@@ -86,6 +87,7 @@ function makeController(
         runtimeSessionId,
         cancelRequestedAt: null,
         runningBgShells: stored.runningBgShells ?? [],
+        runningBgJobs: stored.runningBgJobs ?? [],
         runningSubagents: stored.runningSubagents ?? [],
         coordinatorContextEpoch: stored.coordinatorContextEpoch ?? 0,
       }),

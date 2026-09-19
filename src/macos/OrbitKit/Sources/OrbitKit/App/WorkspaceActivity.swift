@@ -17,6 +17,23 @@ public enum WorkspaceActivityLogic {
         }
         return ids
     }
+
+    /// Workspace ids doing background WORK — a session whose glyph breathes, which is exactly the
+    /// parked-with-a-job-in-flight state. Deliberately not "has a process up": a workspace that
+    /// left a dev server running would answer that for the rest of its life, which is the whole
+    /// reason the rail said nothing here before. Drawn quieter than `runningWorkspaceIDs`, because
+    /// nobody is generating in these workspaces — but something is happening in them, and until
+    /// this existed the rail could not tell that from idle.
+    public static func jobWorkspaceIDs(_ sessions: [Session]) -> Set<String> {
+        var ids: Set<String> = []
+        for session in sessions {
+            guard SessionStatusGlyph.make(for: session).pulse,
+                  let id = session.agent?.id ?? session.agentId
+            else { continue }
+            ids.insert(id)
+        }
+        return ids
+    }
 }
 
 /// Tri-state Runner availability for Workspace navigation. Absence means unknown, not offline:
@@ -47,14 +64,20 @@ public enum WorkspaceRunnerAvailabilityLogic {
 public enum WorkspaceNavigationStatus: Equatable, Sendable {
     case needsYou(Int)
     case running
+    /// Background work in flight and nobody generating (`jobWorkspaceIDs`) — the same slot, drawn
+    /// quieter than `running`: a breathing terminal rather than the working spinner.
+    case jobs
     case idle
 }
 
 public enum WorkspaceNavigationStatusLogic {
-    public static func resolve(waiting: Int, running: Bool,
+    public static func resolve(waiting: Int, running: Bool, jobs: Bool = false,
                                runnerOffline: Bool) -> WorkspaceNavigationStatus {
         if waiting > 0 { return .needsYou(waiting) }
+        // Offline suppresses both activity marks alike: neither can be described from a snapshot
+        // of a machine that is not answering.
         if running && !runnerOffline { return .running }
+        if jobs && !runnerOffline { return .jobs }
         return .idle
     }
 }

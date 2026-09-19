@@ -113,6 +113,7 @@ async function ingest(
         runtimeSessionId: 'runtime-1',
         cancelRequestedAt: null,
         runningBgShells: [],
+        runningBgJobs: [],
         runningSubagents: [],
         coordinatorContextEpoch: 0,
       }),

@@ -5,6 +5,7 @@ import XCTest
 /// carries the meaning, so each state is asserted on shape + tone + label.
 final class SessionStatusGlyphTests: XCTestCase {
     private func session(_ status: RunStatus, pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
+                         runningBgJobCount: Int? = nil,
                          engineTurnActive: Bool? = nil,
                          error: String? = nil, endReason: String? = nil,
                          runStatus: RunStatus? = nil,
@@ -17,7 +18,8 @@ final class SessionStatusGlyphTests: XCTestCase {
                 runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
-                runningBgCount: runningBgCount, engineTurnActive: engineTurnActive,
+                runningBgCount: runningBgCount, runningBgJobCount: runningBgJobCount,
+                engineTurnActive: engineTurnActive,
                 error: error, endReason: endReason, retryAt: retryAt)
     }
 
@@ -49,6 +51,24 @@ final class SessionStatusGlyphTests: XCTestCase {
         let g = SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3))
         XCTAssertEqual(g, .init(shape: .symbol("terminal"), tone: .neutral,
                                 label: "3 background processes running"))
+    }
+
+    /// The same glyph, breathing: at least one of those processes is a job with an end, so the
+    /// session is waiting on work rather than merely leaving something up. The words and the shape
+    /// do not move — a `service` beside a `job` reads the same in both cases.
+    func testAwaitingInputWithABackgroundJobPulses() {
+        let g = SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3,
+                                                     runningBgJobCount: 2))
+        XCTAssertEqual(g, .init(shape: .symbol("terminal"), tone: .neutral,
+                                label: "3 background processes running", pulse: true))
+
+        // The paired negative over the same counts: no job among them, no motion.
+        let services = SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3,
+                                                            runningBgJobCount: 0))
+        XCTAssertEqual(services, .init(shape: .symbol("terminal"), tone: .neutral,
+                                       label: "3 background processes running", pulse: false))
+        // And an older server's payload, which carries no count at all.
+        XCTAssertFalse(SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3)).pulse)
     }
 
     /// A turn the runtime started for itself IS the agent working, so unlike a left-up background

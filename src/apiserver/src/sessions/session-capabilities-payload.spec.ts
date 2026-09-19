@@ -35,6 +35,7 @@ function sessionRow() {
     tags: [],
     tagLinks: [],
     runningBgCount: 0,
+    runningBgJobCount: 0,
     runningSubagentCount: 0,
     workspaceId: null,
     workspaceName: null,
@@ -65,6 +66,8 @@ test('UI list and detail payloads include the same derived capabilities', async 
     session: {
       findFirst: async () => ({
         ...row,
+        // The detail counts the ids it spreads beside the count the list computes in SQL.
+        runningBgJobs: [],
         coordinatorForProject: { id: row.projectId, title: row.projectTitle },
         titleManagedByProject: true,
         titleBeforeProjectManagement: 'Dormant session',

@@ -220,6 +220,10 @@ export interface WorkspaceSessionCounts {
   /** Sessions that use the Session list's blue spinner (queued sessions deliberately excluded).
    *  Optional only for rolling compatibility with a control plane from before this field existed. */
   running?: number;
+  /** Sessions with a background job in flight (a `bg_run` that will end; a `service` never counts).
+   *  The rail's quieter activity mark — work a workspace can be doing with nobody generating in it.
+   *  Optional for the same rolling-compatibility reason as `running`. */
+  jobs?: number;
   /** Sessions blocked on an approval — the nav sidebar's per-workspace attention badge. */
   needsYou: number;
 }

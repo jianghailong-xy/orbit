@@ -52,6 +52,9 @@ struct WorkspaceNavigationRow: View {
     let selected: Bool
     let offline: Bool
     let running: Bool
+    /// Background work in flight in this Workspace (`AppModel.jobWorkspaceIDs`). Drawn below
+    /// `running` and never as the spinner: nobody is generating, something is happening anyway.
+    var jobs: Bool = false
     let waiting: Int
     /// The compact drawer keeps Workspace and Runner on one line. The regular-width iPad sidebar
     /// uses a calmer two-line identity treatment so status never competes with truncated metadata.
@@ -59,7 +62,7 @@ struct WorkspaceNavigationRow: View {
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
-            waiting: waiting, running: running, runnerOffline: offline)
+            waiting: waiting, running: running, jobs: jobs, runnerOffline: offline)
         HStack(spacing: 12) {
             WorkspaceFolderIcon(selected: selected, offline: offline)
             if runnerOnSecondLine {
@@ -103,6 +106,12 @@ struct WorkspaceNavigationRow: View {
                 // amber count above is the only thing in this column asking for you.
                 SpinnerGlyph(color: .secondary)
                     .accessibilityLabel("Session running")
+            } else if status == .jobs {
+                // The session row's own mark for the same fact, in the same slot: a background job
+                // in flight, with nobody generating. Breathing rather than turning, so it can never
+                // be read as the spinner above it.
+                BreathingGlyph(systemImage: "terminal")
+                    .accessibilityLabel("Background job running")
             }
         }
     }
@@ -144,6 +153,7 @@ struct AgentRowView: View {
         #if os(iOS)
         let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
         let running = model.runningWorkspaceIDs.contains(agent.id)
+        let jobs = model.jobWorkspaceIDs.contains(agent.id)
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
         WorkspaceNavigationRow(
             agent: agent,
@@ -151,6 +161,7 @@ struct AgentRowView: View {
             selected: selected,
             offline: offline,
             running: running,
+            jobs: jobs,
             // Regular-width iOS keeps its existing status policy: another Session waiting for the
             // user must not replace this Workspace's running cue. The compact drawer owns the
             // needs-you badge; the shared row only supplies its visual when that surface opts in.
@@ -1164,6 +1175,10 @@ struct StatusGlyphView: View {
             switch glyph.shape {
             case .spinner:
                 SpinnerGlyph(color: color)
+            case .symbol(let name) where glyph.pulse:
+                // The one state that moves without spinning: a background job in flight. Same
+                // symbol, same neutral tone as the still case — only the claim changes.
+                BreathingGlyph(systemImage: name)
             case .symbol(let name):
                 Image(systemName: name).font(.orbitGlyph).foregroundStyle(color)
             }
@@ -1185,10 +1200,11 @@ struct StatusGlyphView: View {
 
 /// The slim status cue used by the compact (iPhone) lists — the essence of the leading
 /// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
-/// when it needs you (approval), a red dot on failure. The calm states (dormant / done / queued)
-/// show nothing — the surrounding row states them in words + colour and in its VoiceOver value — so
-/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
-/// both show the exact same cue.
+/// when it needs you (approval), a red dot on failure, and — since a job in flight became a state
+/// the product shows — a breathing terminal for background work. The calm states (dormant / done /
+/// queued, and processes merely left running) show nothing: the surrounding row states them in
+/// words + colour and in its VoiceOver value, so the jump-back lists (the grouped session list and
+/// the drawer's Recents) stay light. Shared so both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
     @ViewBuilder var body: some View {
@@ -1200,10 +1216,51 @@ struct SessionLiveIndicator: View {
         // tappability: it used to sit inches from a blue tag chip on the same row, two unrelated
         // meanings in one hue.
         case (.spinner, _): SpinnerGlyph(color: .secondary)
+        // The one background state that is NOT quiet. A compact row's only live cue used to go
+        // silent here, which is exactly the reading the session row stopped giving: a job in
+        // flight is work happening with nobody generating, and this is the surface where the row
+        // says nothing else about it. Still not a spinner — the whole point is that it is calm
+        // work, so it breathes. Details, including the words, stay in the row's accessibility
+        // value (`SessionHeader.statusWord`), which is why this carries no label of its own.
+        case (.symbol, .neutral) where glyph.pulse:
+            BreathingGlyph(systemImage: "terminal")
         case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
         case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
         default:            EmptyView()
         }
+    }
+}
+
+/// A symbol that breathes — a slow opacity pulse, the web's `status-glyph-active`. It is the one
+/// motion in this vocabulary that is neither rotation nor a dot, and it means one thing: there is
+/// work happening here, without the agent generating. Drawn in the neutral tone, which is the tone
+/// of the only glyph that ever pulses (the terminal, for a background job in flight). Time-derived
+/// like `SpinnerGlyph`, so a row re-rendering many times a second (a streaming neighbour) cannot
+/// change its phase.
+struct BreathingGlyph: View {
+    let systemImage: String
+    private let period: Double = 2.4   // seconds per breath; the web's 2.4s keyframes
+    private let trough: Double = 0.42  // the web's 50% keyframe
+    private let frameInterval: Double = 1.0 / 30.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        if reduceMotion {
+            // The words are the state; the motion is only emphasis, and this is the ambient loop
+            // that reduced-motion exists to switch off.
+            symbol
+        } else {
+            TimelineView(.animation(minimumInterval: frameInterval)) { context in
+                let phase = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: period) / period
+                // cos gives the 1 → trough → 1 shape of an ease-in-out breath, without an
+                // animation that re-rendering would restart.
+                let wave = (1 - cos(phase * 2 * .pi)) / 2
+                symbol.opacity(1 - (1 - trough) * wave)
+            }
+        }
+    }
+    private var symbol: some View {
+        Image(systemName: systemImage).font(.orbitGlyph).foregroundStyle(.secondary)
     }
 }
 

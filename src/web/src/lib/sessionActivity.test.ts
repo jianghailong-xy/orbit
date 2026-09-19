@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isSessionTurnActive, outlivingSessionWork } from './sessionActivity';
+import {
+  backgroundWorkIsActive,
+  isSessionTurnActive,
+  outlivingSessionWork,
+} from './sessionActivity';
 
 describe('session activity', () => {
   it('keeps a parked parent active while a sub-workspace is still running', () => {
@@ -36,5 +40,21 @@ describe('session activity', () => {
 
   it('never treats a terminal session as an active turn', () => {
     expect(isSessionTurnActive({ runningSubagentCount: 1 }, false, false)).toBe(false);
+  });
+});
+
+describe('background work that is a job rather than a process left up', () => {
+  it('is active only for the shells the server counted as jobs', () => {
+    // Two processes up, one of them a job: the row breathes.
+    expect(backgroundWorkIsActive({ runningBgCount: 2, runningBgJobCount: 1 })).toBe(true);
+    // The same two processes, none of them a job — a dev server and a watcher. This is the case the
+    // static glyph exists for, and the one that must not animate however long it lasts.
+    expect(backgroundWorkIsActive({ runningBgCount: 2, runningBgJobCount: 0 })).toBe(false);
+  });
+
+  it('keeps the static reading against a control plane that predates the count', () => {
+    expect(backgroundWorkIsActive({ runningBgCount: 3 })).toBe(false);
+    expect(backgroundWorkIsActive({})).toBe(false);
+    expect(backgroundWorkIsActive(null)).toBe(false);
   });
 });

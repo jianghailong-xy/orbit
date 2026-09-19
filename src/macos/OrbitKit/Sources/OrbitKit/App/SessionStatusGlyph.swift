@@ -29,11 +29,21 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     public let tone: Tone
     /// Accessibility label / tooltip, matching the web tooltip wording so the glyph reads the same.
     public let label: String
+    /// Whether the view draws this glyph breathing (a slow opacity pulse) — the one motion in the
+    /// vocabulary that is neither rotation nor a dot, and the web's `status-glyph-active`.
+    ///
+    /// It is set for exactly one state: a parked session with a background JOB in flight. The
+    /// claim it makes is narrower than the spinning one — "there is work happening here", not "the
+    /// agent is working" — which is why the shape and the tone stay the ones that mean *not*
+    /// working. A process the workspace merely left up (a `service`) is in the same glyph with
+    /// `pulse == false`, so what moves is the fact, not the state.
+    public let pulse: Bool
 
-    public init(shape: Shape, tone: Tone, label: String) {
+    public init(shape: Shape, tone: Tone, label: String, pulse: Bool = false) {
         self.shape = shape
         self.tone = tone
         self.label = label
+        self.pulse = pulse
     }
 
     /// The glyph for a session. Lifecycle location never overrides the run's actual state.
@@ -43,6 +53,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
+             runningBgJobCount: s.runningBgJobCount,
              engineTurnActive: s.engineTurnActive == true,
              error: s.error,
              retryPending: s.retryPending(now: now),
@@ -56,6 +67,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             sessionState: SessionState? = nil,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
+                            runningBgJobCount: Int? = nil,
                             engineTurnActive: Bool = false,
                             error: String? = nil,
                             endReason: String? = nil,
@@ -64,6 +76,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                                                status: status, endReason: endReason),
              pendingApprovals: pendingApprovals,
              runningBgCount: runningBgCount,
+             runningBgJobCount: runningBgJobCount,
              engineTurnActive: engineTurnActive,
              error: error,
              retryPending: retryPending)
@@ -76,6 +89,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     public static func make(runState: SessionRunState,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
+                            runningBgJobCount: Int? = nil,
                             engineTurnActive: Bool = false,
                             error: String? = nil,
                             retryPending: Bool = false,
@@ -116,9 +130,14 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             if (runningBgCount ?? 0) > 0 {
                 // Not the agent working: a dev server or watcher the agent left up never exits,
                 // so the working spinner would mark the session busy for the rest of its life.
-                // A static, muted console glyph says "still something running" without it.
+                // A muted console glyph says "still something running" without it — and breathes
+                // when at least one of those processes is a job with an end, because that is work
+                // the session is actually waiting on (see `runningBgJobCount`). The words and the
+                // shape are the same either way; only the motion differs, so a left-up `service`
+                // can never make the row look busy.
                 return .init(shape: .symbol("terminal"), tone: .neutral,
-                             label: SessionLine.bgRunningLabel(runningBgCount ?? 0))
+                             label: SessionLine.bgRunningLabel(runningBgCount ?? 0),
+                             pulse: (runningBgJobCount ?? 0) > 0)
             }
             return .init(shape: .symbol("message"), tone: .neutral, label: "Waiting for your reply")
 

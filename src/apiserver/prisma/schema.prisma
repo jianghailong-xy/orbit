@@ -1041,6 +1041,16 @@ model Session {
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
   // header show "Background running" without scanning events. Only meaningful while live.
   runningBgShells      String[]  @map("running_bg_shells")
+  // The subset of `runningBgShells` that is a RUNNER-HOSTED JOB with an end: a `bg_run` whose kind
+  // is `job` or `watch`, never a `service`. The full set answers "is a process still up", which a
+  // dev server the workspace deliberately left running answers forever; this one answers "is work
+  // in flight", which is the question the clients draw (the pulsing terminal glyph) and the one the
+  // workspace rail asks of a workspace. Fed by the job's own `running` report — the only place the
+  // kind is stated — removed on its terminal report, cleared with the other sets. An engine's own
+  // background shell (Bash run_in_background / Monitor) carries no kind and never lands here: there
+  // is no evidence it is finite work rather than a watcher, and guessing is what this column exists
+  // to avoid. Only meaningful while live.
+  runningBgJobs        String[]  @map("running_bg_jobs")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent

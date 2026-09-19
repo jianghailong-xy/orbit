@@ -4,7 +4,22 @@
 export interface SessionActivity {
   runningSubagentCount?: number | null;
   runningBgCount?: number | null;
+  /** Of `runningBgCount`, the ones that are jobs with an end (server-tracked, from
+   *  Session.runningBgJobs). See `backgroundWorkIsActive`. */
+  runningBgJobCount?: number | null;
 }
+
+/** Whether the background work a parked session is holding is WORK rather than something left
+ * standing — a `bg_run` job that will report an end, never a `service` (a dev server, a watcher).
+ *
+ * The distinction is the server's, not a guess made here: only a runner-hosted job states a kind,
+ * and the control plane keeps the ones that are not `service` on the session row. It is what lets
+ * the terminal glyph breathe: "there is work in flight" is a claim worth animating, while "a
+ * process is still up" is the claim that made this glyph static in the first place — a workspace
+ * that leaves `vite` running would pulse forever. Absent on an older control plane, which keeps
+ * the static reading. */
+export const backgroundWorkIsActive = (session: SessionActivity | null | undefined): boolean =>
+  (session?.runningBgJobCount ?? 0) > 0;
 
 /** A parent turn may be AWAITING_INPUT while async sub-workspaces or background shells keep working.
  * Drives the status label/glyph, so a parked-but-still-working session never reads as "waiting

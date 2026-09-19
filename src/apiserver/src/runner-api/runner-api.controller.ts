@@ -2067,6 +2067,7 @@ export class RunnerApiController {
         SET "inbox_lease_generation" = ${fence}::uuid,
             "inbox_lease_owner" = ${leaseOwner}::uuid,
             "running_bg_shells" = '{}'::text[],
+            "running_bg_jobs" = '{}'::text[],
             "running_subagents" = '{}'::text[],
             "engine_turn_active" = false
         WHERE id = ${sessionId}::uuid
@@ -4094,6 +4095,7 @@ export class RunnerApiController {
           // them between this read and the single write below: the row is held FOR UPDATE.
           cancelRequestedAt: true,
           runningBgShells: true,
+          runningBgJobs: true,
           runningSubagents: true,
           coordinatorContextEpoch: true,
           // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
@@ -4490,14 +4492,28 @@ export class RunnerApiController {
       // would be a second row. Only a report carrying a `kind` counts — that is what marks a
       // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
       // shell carries none, and that shell died with its engine.
-      const bgRunning = events
+      const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
           const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
-        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
-        .filter(Boolean);
+        .map((e) => ({
+          id: String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''),
+          kind: String((e.payload as { kind?: unknown }).kind ?? ''),
+        }))
+        .filter((report) => report.id !== '');
+      const bgRunning = bgRunningReports.map((report) => report.id);
+      // Which of those reports are WORK rather than something left standing. `service` is the one
+      // kind the runner defines as never ending (a dev server, a watcher) — it is what a workspace
+      // deliberately leaves up, so it keeps the static glyph and stays out of Session.runningBgJobs.
+      // Everything else (`job`, `watch`) has a terminal report coming, which is what makes "there is
+      // work in flight here" a claim the control plane can stand behind. An engine's own shell is
+      // absent from these reports entirely (only a runner-hosted job states a kind) and so is never
+      // marked active whatever it is doing — see the column's note in schema.prisma.
+      const bgJobRunning = bgRunningReports
+        .filter((report) => report.kind !== 'service')
+        .map((report) => report.id);
       // The two running sets, folded in the order the separate statements used to apply them:
       // reset, then the launches, then the terminal notifications, then the synchronous
       // sub-workspace completions. Computed from the values read under the row lock rather than
@@ -4506,17 +4522,21 @@ export class RunnerApiController {
       // replaces, including under an event-batch retry, which replays the same ids onto the same
       // starting state.
       let shells = bgReset ? [] : [...session.runningBgShells];
+      let jobs = bgReset ? [] : [...session.runningBgJobs];
       let subagents = bgReset ? [] : [...session.runningSubagents];
       for (const id of bgStarted) shells = [...shells.filter((v) => v !== id), id];
       // A `running` report counts with the launches, and adds only an id that is missing — the
       // adoption. At launch the tool_use has already added it, and moving it would write the row
       // for nothing.
       for (const id of bgRunning) if (!shells.includes(id)) shells = [...shells, id];
+      // Same fold, narrower set: a shell an engine launched is in `shells` and never here.
+      for (const id of bgJobRunning) if (!jobs.includes(id)) jobs = [...jobs, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {
         shells = shells.filter((v) => v !== id);
+        jobs = jobs.filter((v) => v !== id);
         subagents = subagents.filter((v) => v !== id);
       }
       if (subEnded.length > 0) {
@@ -4526,6 +4546,7 @@ export class RunnerApiController {
       // Only when they actually moved, so an ordinary tool_result — the vast majority — does not
       // put the hot Session row into this write at all.
       if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
+      if (!sameIds(jobs, session.runningBgJobs)) sessionData.runningBgJobs = jobs;
       if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
 
       if (Object.keys(sessionData).length > 0) {
@@ -4672,6 +4693,7 @@ export class RunnerApiController {
           // its own terminal signal (e.g. an async workspace killed with the session), so the list
           // can't stay stuck on "Running Workspace…".
           runningBgShells: [],
+          runningBgJobs: [],
           runningSubagents: [],
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
         },

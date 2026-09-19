@@ -155,6 +155,9 @@ describe('TasksSidePanel workspace navigation', () => {
   it('keeps polling the aggregate quickly for running-only work that coarse SSE omits', () => {
     expect(workspaceCountsPollInterval([{ active: 0, running: 1 }])).toBe(5_000);
     expect(workspaceCountsPollInterval([{ active: 1, running: 0 }])).toBe(5_000);
+    // A job in flight is live work the coarse stream cannot see either: at the slow cadence the
+    // rail's mark would arrive after the job it is describing.
+    expect(workspaceCountsPollInterval([{ active: 0, running: 0, jobs: 1 }])).toBe(5_000);
     expect(workspaceCountsPollInterval([{ active: 0, running: 0 }])).toBe(15_000);
     expect(source).not.toContain('controlLive ? false');
   });
@@ -192,6 +195,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running={false}
+        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -211,6 +215,7 @@ describe('TasksSidePanel workspace rows', () => {
         active
         offline={false}
         running={false}
+        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -236,6 +241,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running={false}
+        jobs={0}
         needsYou={0}
         shortcutLabel="⌘1"
         onOpen={() => undefined}
@@ -248,6 +254,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running
+        jobs={0}
         needsYou={0}
         shortcutLabel="⌘1"
         onOpen={() => undefined}
@@ -260,6 +267,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running
+        jobs={0}
         needsYou={2}
         shortcutLabel="⌘1"
         onOpen={() => undefined}
@@ -303,6 +311,7 @@ describe('TasksSidePanel workspace rows', () => {
         active
         offline={false}
         running
+        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -358,6 +367,70 @@ describe('TasksSidePanel workspace rows', () => {
     expect(collapsedDotRule).not.toContain('animation');
   });
 
+  it('marks background work the rail was silent about, one slot below the working dot', () => {
+    const row = (jobs: number, running = false) =>
+      renderToStaticMarkup(
+        <WorkspaceRow
+          workspace={workspace}
+          runnerLabel="wikova"
+          active={false}
+          offline={false}
+          running={running}
+          jobs={jobs}
+          needsYou={0}
+          onOpen={() => undefined}
+        />,
+      );
+
+    // A job in flight with nobody generating: the workspace row was previously blank here.
+    const jobsOnly = row(2);
+    expect(jobsOnly).toContain('tp-workspace-icon-jobs');
+    expect(jobsOnly).toContain('title="2 background jobs running"');
+    expect(jobsOnly).toContain('aria-label="Workspace has a background job running"');
+    expect(jobsOnly).not.toContain('tp-workspace-icon-running');
+
+    // The same count with a turn also in flight: generation is the louder claim and keeps the slot.
+    const both = row(2, true);
+    expect(both).toContain('tp-workspace-icon-running');
+    expect(both).not.toContain('tp-workspace-icon-jobs');
+
+    // The mobile fallback for the same state, and the reason it is not a spinner: a background job
+    // is not the agent working, so the tray's rotating indicator never stands for it.
+    const trailing = renderToStaticMarkup(
+      <WorkspaceStateMark offline={false} running={false} jobs={1} needsYou={0} />,
+    );
+    expect(trailing).toContain('anticon-code');
+    expect(trailing).toContain('status-glyph-active');
+    expect(trailing).toContain('aria-label="1 background job running"');
+    expect(trailing).not.toContain('anticon-spin');
+
+    // Muted, and the only animated mark in this rail — the brand dot beside it stays still.
+    const jobsRule = styles.match(/\.tp-workspace-icon-jobs\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+    expect(jobsRule).toMatch(/background:\s*var\(--text-3\)/);
+    expect(jobsRule).toContain('animation: status-glyph-breathe');
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.tp-workspace-icon-jobs\s*\{\s*animation:\s*none;/,
+    );
+    expect(styles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.app-shell \.app-nav:not\(\.collapsed\) \.tp-workspace-icon-jobs\s*\{\s*display:\s*block;/,
+    );
+
+    // The collapsed rail keeps the language it already has for the spinner: the mark sits at the
+    // avatar's corner and becomes a quiet dot there, muted instead of brand.
+    const collapsed = renderToStaticMarkup(
+      <WorkspaceStateMark compact offline={false} running={false} jobs={1} needsYou={0} />,
+    );
+    expect(collapsed).toContain('tp-rail-jobs');
+    expect(styles).toMatch(/\.tp-rail-jobs\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*1px;/);
+    const desktopBlock = styles.slice(styles.indexOf('@media (min-width: 961px)'));
+    expect(desktopBlock).toMatch(
+      /\.app-shell \.app-nav\.collapsed \.tp-rail-jobs > svg\s*\{\s*visibility:\s*hidden;/,
+    );
+    expect(
+      desktopBlock.match(/\.app-shell \.app-nav\.collapsed \.tp-rail-jobs::after\s*\{([\s\S]*?)\}/)?.[1] ?? '',
+    ).toMatch(/background:\s*var\(--text-3\);[\s\S]*animation:\s*status-glyph-breathe/);
+  });
+
   it('keeps needs-you and offline states ahead of the quiet running dot', () => {
     const needsYou = renderToStaticMarkup(
       <WorkspaceRow
@@ -366,6 +439,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline={false}
         running
+        jobs={3}
         needsYou={2}
         onOpen={() => undefined}
       />,
@@ -377,15 +451,18 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline
         running
+        jobs={3}
         needsYou={0}
         onOpen={() => undefined}
       />,
     );
     expect(needsYou).toContain('tp-count needs-you');
     expect(needsYou).not.toContain('tp-workspace-icon-running');
+    expect(needsYou).not.toContain('tp-workspace-icon-jobs');
     expect(needsYou).not.toContain('anticon-loading');
     expect(offline).toContain('tp-workspace-icon-offline');
     expect(offline).not.toContain('tp-workspace-icon-running');
+    expect(offline).not.toContain('tp-workspace-icon-jobs');
     expect(offline).not.toContain('anticon-loading');
   });
 
@@ -397,6 +474,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline
         running
+        jobs={0}
         needsYou={0}
         onOpen={() => undefined}
       />,
@@ -425,6 +503,7 @@ describe('TasksSidePanel workspace rows', () => {
         active={false}
         offline
         running
+        jobs={0}
         needsYou={2}
         onOpen={() => undefined}
       />,
