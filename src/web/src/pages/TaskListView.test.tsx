@@ -677,10 +677,22 @@ describe('what a Run from the task list refreshes', () => {
   it('still hands over the server’s own words for a refusal this build cannot read', async () => {
     // The fallback is the point, not a leftover: an older apiserver sends no code at all, and a
     // newer one will grow cases this build predates. Untranslated is still better than swallowed.
+    //
+    // The body NAMES A RUN on purpose. Without one there is nothing a card could have shown, so
+    // this would pass whether or not the unknown code was translated — it would assert the shape
+    // of the fixture rather than the behaviour. Naming a session is what makes a build that
+    // invented words for a code it cannot read fail here.
     const qc = seededCache();
     const message = toast();
     vi.mocked(api).mockClear();
-    vi.mocked(api).mockRejectedValueOnce(new ApiError('task is settled', 409, 'PROJECT_SETTLED'));
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError('task is settled', 409, 'PROJECT_SETTLED', {
+        code: 'PROJECT_SETTLED',
+        message: 'task is settled',
+        taskId: T1,
+        conflictingSessionId: '34MOJw69NzKSq2X0exxf9',
+      }),
+    );
 
     await new MutationObserver(qc, { ...runRowMutationOptions(qc, message), retry: false })
       .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() })
