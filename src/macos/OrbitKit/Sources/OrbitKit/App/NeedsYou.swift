@@ -16,11 +16,18 @@ public struct NeedsYouBanner: Equatable, Sendable {
     public let target: Session
     /// The one line the bar shows.
     public let text: String
+    /// The owner item the line is about, when the oldest thing waiting is one of the four (§7.6
+    /// V13): the merge to confirm, the coordinator's question, the exception that became yours, the
+    /// pause to lift. Carried rather than re-derived so the press lands on the CARD — the target
+    /// conversation is where it is drawn, and this is which one it is. Nil when the oldest thing
+    /// waiting is an ordinary blocked tool call, which is the bar as it always was.
+    public let ownerItem: SessionOwnerItem?
 
-    public init(count: Int, target: Session, text: String) {
+    public init(count: Int, target: Session, text: String, ownerItem: SessionOwnerItem? = nil) {
         self.count = count
         self.target = target
         self.text = text
+        self.ownerItem = ownerItem
     }
 }
 
@@ -95,6 +102,16 @@ public enum NeedsYouLogic {
     ///     after it: that one is `below(rowIDs:)`, which points down into this same conversation.
     public static func banner(waiting: [Session], excluding focused: String? = nil) -> NeedsYouBanner? {
         let elsewhere = waiting.filter { $0.id != focused }
+        // An owner item wins when there is one, whatever else is waiting: the other rows are a
+        // blocked tool call, which the drawer's badge and every list already say, while these four
+        // are the things that stop a whole project and have nowhere else to be seen from here. The
+        // oldest one is the one named, by the instant the server says it has been waiting since —
+        // the same FIFO the session target below uses, and the same one the project page sorts by.
+        if let oldest = oldestOwnerItem(elsewhere) {
+            return NeedsYouBanner(count: elsewhere.count, target: oldest.session,
+                                  text: ownerItemText(oldest.item, project: oldest.session.projectTitle),
+                                  ownerItem: oldest.item)
+        }
         // Longest-waiting first (FIFO). Ordered on the same parsed recency key Recents uses rather
         // than on the server's array order, so a re-sorted or locally-upserted snapshot can't
         // quietly change which session a tap opens.
@@ -102,6 +119,44 @@ public enum NeedsYouLogic {
         else { return nil }
         return NeedsYouBanner(count: elsewhere.count, target: target,
                               text: text(count: elsewhere.count, target: target))
+    }
+
+    /// The owner item that has waited longest across these conversations, with the one it is on.
+    ///
+    /// A kind this build does not know is skipped rather than named: the count already includes it
+    /// (the server counted it), and a bar reading "needs you ·" with nothing after it would be
+    /// worse than the bar the older wording gives.
+    static func oldestOwnerItem(_ sessions: [Session]) -> (session: Session, item: SessionOwnerItem)? {
+        var oldest: (session: Session, item: SessionOwnerItem, at: Date)?
+        for session in sessions {
+            for item in session.ownerItems ?? [] where item.kind != .unknown {
+                // An unparseable instant sorts last rather than first: it must not beat an item
+                // whose wait is known, and it is still named when it is the only one.
+                let at = RelativeTime.parse(item.since) ?? Date.distantFuture
+                if oldest == nil || at < oldest!.at { oldest = (session, item, at) }
+            }
+        }
+        guard let found = oldest else { return nil }
+        return (found.session, found.item)
+    }
+
+    /// What the bar says about one owner item: which of the four, and which project (§7.6 V13).
+    ///
+    /// The project and not the item's own title, because the title is a sentence written for a
+    /// card — "Coordinator asks: should the migration keep the old column?" — and this is one line
+    /// that has to answer "is this mine to go and do now" at a glance. A conversation that names no
+    /// project says only the first half rather than trailing an empty separator.
+    static func ownerItemText(_ item: SessionOwnerItem, project: String?) -> String {
+        let what: String
+        switch item.kind {
+        case .promotionApproval: what = "Approve merge to main"
+        case .coordinatorQuestion: what = "Question from coordinator"
+        case .escalated: what = "Escalated to you"
+        case .fusePaused: what = "Paused"
+        case .unknown: what = "Needs you"
+        }
+        guard let project, !project.isEmpty else { return what }
+        return "\(what) · \(project)"
     }
 
     /// One session names its workspace; several collapse to a count. The workspace name (not the

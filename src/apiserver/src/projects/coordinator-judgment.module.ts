@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 
+import { PushModule } from '../push/push.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
@@ -57,7 +58,9 @@ import { WakeDispositionService } from './wake-disposition.service';
   // `forwardRef` because SessionsModule now imports this one back: `MergeReceiptService` delivers
   // through `CompletionInputRouter` after a receipt commits, which is the other half of the edge
   // this module's producers are derived on. Both sides declare it; neither can be resolved first.
-  imports: [forwardRef(() => SessionsModule)],
+  // PushModule provides the one sender; it has no imports of its own, so there is no cycle to
+  // forward-declare. Two of this module's providers announce the items that become the owner's.
+  imports: [forwardRef(() => SessionsModule), PushModule],
   providers: [
     CoordinatorWakeService,
     CompletionInputRouter,

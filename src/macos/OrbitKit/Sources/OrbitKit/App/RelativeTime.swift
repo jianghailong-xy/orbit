@@ -30,6 +30,33 @@ public enum RelativeTime {
         return "\(Int(diff / day))d"
     }
 
+    /// A span in the web's own words: "45s", "12m", "3h 20m", "23h", "2d 4h", "12d"
+    /// (`src/web/src/lib/watches.ts` `formatSpan`). Ported rather than approximated because both
+    /// clients write the same sentences around it — "waiting 3h 20m", "asked 2h 10m ago" — and two
+    /// roundings of one duration read as two different facts.
+    public static func span(_ seconds: TimeInterval) -> String {
+        let abs = Swift.max(0, seconds)
+        let minute = 60.0, hour = 3600.0, day = 86_400.0
+        if abs < minute { return "\(Swift.max(1, Int(abs)))s" }
+        if abs < hour { return "\(Int(abs / minute))m" }
+        if abs < day {
+            let h = Int(abs / hour)
+            let m = Int(abs.truncatingRemainder(dividingBy: hour) / minute)
+            return h < 6 && m > 0 ? "\(h)h \(m)m" : "\(h)h"
+        }
+        let d = Int(abs / day)
+        let h = Int(abs.truncatingRemainder(dividingBy: day) / hour)
+        return d < 3 && h > 0 ? "\(d)d \(h)h" : "\(d)d"
+    }
+
+    /// "just now" under ten seconds, "3h 20m ago" above it — the web's `ago`, for the footnotes
+    /// the two clients share. Nil when the instant cannot be read at all.
+    public static func ago(_ iso: String, now: Date = Date()) -> String? {
+        guard let date = parse(iso) else { return nil }
+        let diff = now.timeIntervalSince(date)
+        return diff < 10 ? "just now" : "\(span(diff)) ago"
+    }
+
     // Formatters are built ONCE and reused. Each `ISO8601DateFormatter()` spins up an ICU date
     // parser, which is orders of magnitude more expensive than the parse itself — and these sit on
     // the app's hottest paths: the recency sort behind the drawer's Recents (which called this from

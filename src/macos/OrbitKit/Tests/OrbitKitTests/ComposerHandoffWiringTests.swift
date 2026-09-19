@@ -220,10 +220,12 @@ final class ComposerHandoffWiringTests: XCTestCase {
     /// own, or a send routed through `decideOwnerConfirmation`, fails here.
     func testTheSettlementCardArmsTheComposerAndItsSendReachesNoDoor() throws {
         let file = try source(Self.cardPath)
-        guard let at = file.range(of: "private struct AcceptanceConfirmationCard: View") else {
-            throw WiringError.missing("AcceptanceConfirmationCard")
-        }
-        let card = String(file[at.lowerBound...])
+        // This card and no other: the file goes on after it (the two cards a project's OWNER
+        // answers, §7.6 V13), and a slice that ran to the end of the file would hold every later
+        // card to a rule that is this one's — the settlement card hands its sentence to the
+        // composer, while a question with no options is answered in a box on its own card.
+        let card = try section(file, from: "private struct AcceptanceConfirmationCard: View",
+                               to: "\n// MARK: -")
 
         // The press's own body, read as STATEMENTS: a commented-out call still contains its own
         // words, so a `contains` over the file would stay green on exactly the day the handoff was

@@ -38,6 +38,9 @@ public extension Session {
             // reports an owner confirmation answered carries a count and no kind, and a row left
             // saying "Waiting for your confirmation" would be pointing at a card that is gone.
             waitingKind: .some(summary.waitingKind),
+            // Travelling with the same count, and cleared by the same rule: a summary that says
+            // nothing is waiting here has to be able to take the bar's card away with it.
+            ownerItems: summary.ownerItems,
             taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
             // The row's nested agent is richer than the summary's (it carries provider + effort, which
@@ -97,6 +100,9 @@ public extension Session {
                          // keeps the row's, `.some(nil)` is the server saying nothing is named any
                          // more, `.some(kind)` names what is waiting.
                          waitingKind: SessionWaitingKind?? = nil,
+                         // Doubly optional for the same reason: nil keeps the row's items, and
+                         // `.some([])` is the server saying there are none.
+                         ownerItems: [SessionOwnerItem]?? = nil,
                          taskId: String? = nil,
                          lastTurnAt: String? = nil,
                          agent: SessionAgentRef? = nil,
@@ -124,6 +130,7 @@ public extension Session {
                 provider: provider,
                 pendingApprovals: pendingApprovals ?? self.pendingApprovals,
                 waitingKind: waitingKind ?? self.waitingKind,
+                ownerItems: ownerItems ?? self.ownerItems,
                 taskId: taskId ?? self.taskId,
                 branch: branch,
                 updatedAt: updatedAt,

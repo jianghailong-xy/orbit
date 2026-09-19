@@ -1,9 +1,11 @@
 import { Prisma } from '@prisma/client';
+import type { SessionOwnerItem } from '@orbit/shared';
 
 import { countPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
+import { ownerItemKind } from './project-open-item';
 
 /**
  * How many decisions only the ACCOUNT OWNER can take are waiting on each of their conversations,
@@ -64,8 +66,15 @@ import { stillUnanswered } from './criteria-pending-decisions';
  * Which kind of question a signal counts. `PROJECT_DECISION` is a coordinator's: a held criteria
  * proposal or an evidence revision. `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting
  * for its owner to confirm it done or send it back, counted on the task's own session.
+ *
+ * `OWNER_ITEM` is the third: one of the four things a project waits on its owner in person for —
+ * the merge they confirm, the question their coordinator asked, the exception that became theirs,
+ * the pause they lift (contract §7.6 V13). It lands on the coordinator's conversation for the same
+ * reason `PROJECT_DECISION` does: that is where the card is drawn. An item still with the
+ * coordinator is not counted at all — somebody is already on it, and a badge about it would be
+ * telling the owner to go do work that is being done (owner decision 10).
  */
-export type OwnerDecisionKind = 'PROJECT_DECISION' | 'OWNER_CONFIRMATION';
+export type OwnerDecisionKind = 'PROJECT_DECISION' | 'OWNER_CONFIRMATION' | 'OWNER_ITEM';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -76,6 +85,10 @@ export interface OwnerDecisionSignal {
   /** How many owner decisions are waiting there. Always ≥ 1; a zero is simply not a row. */
   count: number;
   kind: OwnerDecisionKind;
+  /** The owner items themselves, oldest first — only for `OWNER_ITEM`. The count alone can say
+   *  that something is waiting; the Needs-you banner has to say WHICH of the four it is and open
+   *  the card, and a client cannot re-derive either from a number (§7.6 V13). */
+  items?: Array<SessionOwnerItem<Date>>;
 }
 
 /**
@@ -97,6 +110,7 @@ export async function readOwnerDecisionSignals(
   const confirmations = await readWaitingOwnerConfirmations(tx, ownerId, scope);
   return [
     ...(await readProjectDecisionSignals(tx, ownerId, sessionIds)),
+    ...(await readOwnerItemSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
       sessionId: waiting.sessionId,
       projectId: waiting.projectId,
@@ -178,10 +192,72 @@ async function readProjectDecisionSignals(
   return signals;
 }
 
-/** What is waiting on the owner on one conversation: how many, and of which kinds. */
+/**
+ * The four owner items open on each of this owner's coordinator conversations (§7.6 V13).
+ *
+ * One query. The scope is the coordinated projects' — an item is drawn on the project's own page
+ * whatever happens, and this decides only whether a badge points at a conversation, so a project
+ * with no coordinator bound, or one whose conversation the owner filed away, is not counted here
+ * for the same reason a held proposal is not: a lit badge that opens nothing is worse than a dark
+ * one. What is counted is decided by `ownerItemKind` and nothing else, so the count, the push and
+ * the chip on the project list cannot come to disagree about which items are the owner's.
+ */
+async function readOwnerItemSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const rows = await tx.projectOpenItem.findMany({
+    where: {
+      ownerId,
+      state: 'OPEN',
+      assignee: 'OWNER',
+      project: {
+        coordinatorEnabled: true,
+        coordinatorSessionId: sessionIds ? { in: [...sessionIds] } : { not: null },
+        coordinatorSession: { completedAt: null, archivedAt: null, deletedAt: null },
+      },
+    },
+    // Oldest first: the banner shows the one that has waited longest, and a stable order is what
+    // keeps two reads of the same set from pointing at different cards.
+    orderBy: { waitingSince: 'asc' },
+    select: {
+      id: true,
+      kind: true,
+      assignee: true,
+      assigneeReason: true,
+      title: true,
+      waitingSince: true,
+      projectId: true,
+      project: { select: { coordinatorSessionId: true } },
+    },
+  });
+
+  const bySession = new Map<string, OwnerDecisionSignal>();
+  for (const row of rows) {
+    const kind = ownerItemKind(row);
+    const sessionId = row.project.coordinatorSessionId;
+    if (kind === null || sessionId == null) continue;
+    const signal = bySession.get(sessionId) ?? {
+      sessionId,
+      projectId: row.projectId,
+      count: 0,
+      kind: 'OWNER_ITEM' as const,
+      items: [],
+    };
+    signal.count += 1;
+    signal.items?.push({ itemId: row.id, kind, title: row.title, since: row.waitingSince });
+    bySession.set(sessionId, signal);
+  }
+  return [...bySession.values()];
+}
+
+/** What is waiting on the owner on one conversation: how many, of which kinds, and — for the four
+ *  owner items — which ones, so the banner above a session list can name and open them. */
 export interface OwnerDecisionsOnSession {
   count: number;
   kinds: ReadonlySet<OwnerDecisionKind>;
+  ownerItems: Array<SessionOwnerItem<Date>>;
 }
 
 /** The same answer folded per conversation, which is what a session row wants. */
@@ -190,11 +266,17 @@ export async function readOwnerDecisionsBySession(
   ownerId: string,
   scope?: { sessionIds?: readonly string[] },
 ): Promise<Map<string, OwnerDecisionsOnSession>> {
-  const folded = new Map<string, { count: number; kinds: Set<OwnerDecisionKind> }>();
+  const folded = new Map<string, {
+    count: number;
+    kinds: Set<OwnerDecisionKind>;
+    ownerItems: Array<SessionOwnerItem<Date>>;
+  }>();
   for (const signal of await readOwnerDecisionSignals(tx, ownerId, scope)) {
-    const entry = folded.get(signal.sessionId) ?? { count: 0, kinds: new Set<OwnerDecisionKind>() };
+    const entry = folded.get(signal.sessionId)
+      ?? { count: 0, kinds: new Set<OwnerDecisionKind>(), ownerItems: [] };
     entry.count += signal.count;
     entry.kinds.add(signal.kind);
+    entry.ownerItems.push(...(signal.items ?? []));
     folded.set(signal.sessionId, entry);
   }
   return folded;
@@ -208,6 +290,24 @@ export async function countOwnerDecisionsBySession(
 ): Promise<Map<string, number>> {
   const folded = await readOwnerDecisionsBySession(tx, ownerId, scope);
   return new Map([...folded].map(([sessionId, entry]) => [sessionId, entry.count]));
+}
+
+/**
+ * The owner items on a row, with their instants in the wire's own format (§7.6 V13).
+ *
+ * Always an array, never absent: the clients fold a session summary into a row they already hold,
+ * where an absent key means "unchanged" — so an item the owner just answered has to arrive as an
+ * empty list, or the banner above their session list would keep pointing at a card that is gone.
+ */
+export function ownerItemsForRow(
+  decisions: OwnerDecisionsOnSession | undefined,
+): Array<SessionOwnerItem> {
+  return (decisions?.ownerItems ?? []).map((item) => ({
+    itemId: item.itemId,
+    kind: item.kind,
+    title: item.title,
+    since: item.since.toISOString(),
+  }));
 }
 
 /** The one waiting kind a session row names in words of its own. */

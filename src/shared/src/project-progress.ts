@@ -304,3 +304,54 @@ export interface ProjectPromotionView<Instant = string> {
   recheckedAt: Instant | null;
   merged: { sha: string; byUserId: string | null; at: Instant } | null;
 }
+
+/**
+ * The four things a project can be waiting on its OWNER for (§7.1 V1, §7.6 V12/V13).
+ *
+ * Not the same list as `OpenItemKind`, and deliberately: the three kinds that are the owner's from
+ * birth keep their own names, and every exception that BECAME theirs — because nobody acted, the
+ * conversation ended, the chain ran out, somebody handed it over, or there was never a coordinator
+ * — collapses into `ESCALATED`, because what the owner has to know about those is that they are now
+ * theirs and not which door they came through. An exception still with the coordinator is not here
+ * at all: it is the coordinator's to handle, and the owner is not told about it (owner decision 10).
+ */
+export type OwnerItemKind =
+  | 'PROMOTION_APPROVAL'
+  | 'COORDINATOR_QUESTION'
+  | 'ESCALATED'
+  | 'FUSE_PAUSED';
+
+/**
+ * What a "needs you" push says it is about (§7.6 V12) — the same four reasons the project list
+ * draws its chips from (§7.1 V2), in the same words, so the phone and the page name one thing once.
+ */
+export type OwnerItemPushKind =
+  | 'approve-merge-to-main'
+  | 'coordinator-question'
+  | 'escalated-to-you'
+  | 'fuse-paused';
+
+/** The push slug for an owner item's kind. One direction only: the slug is what leaves the server. */
+export const OWNER_ITEM_PUSH_KINDS: Record<OwnerItemKind, OwnerItemPushKind> = {
+  PROMOTION_APPROVAL: 'approve-merge-to-main',
+  COORDINATOR_QUESTION: 'coordinator-question',
+  ESCALATED: 'escalated-to-you',
+  FUSE_PAUSED: 'fuse-paused',
+};
+
+/**
+ * One owner item on a conversation's summary (§7.6 V13).
+ *
+ * It rides on the session row the clients already hold, so the Needs-you banner can say WHICH of
+ * the four is waiting and open the card without a request of its own — the count alone could only
+ * say that something was. `itemId` is what makes the second half of that true: it is the address
+ * the banner's tap and the push payload's `openItemID` both carry.
+ */
+export interface SessionOwnerItem<Instant = string> {
+  itemId: string;
+  kind: OwnerItemKind;
+  /** The item's own title, as the server wrote it when the item was opened. */
+  title: string;
+  /** Since when it has been waiting on the owner. The banner shows the oldest. */
+  since: Instant;
+}

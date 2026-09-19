@@ -1283,6 +1283,19 @@ final class AppModel {
         show(.console(sessionID: s.id, origin: .banner), agent: s.agent?.id ?? s.agentId)
     }
 
+    /// The same press, when the bar named one of the four owner items (§7.6 V13): it is going to a
+    /// CARD and not only to a conversation.
+    ///
+    /// Not a fifth way into a console — it opens the same frame through the same entry above, which
+    /// is what `NavigationEntrancesWiringTests` holds every entrance to. What it adds is telling
+    /// the console which card first, so the read that console runs on appearing is the one that
+    /// spends the press: a card delivered by that read is scrolled to as it arrives, rather than a
+    /// moment after the reader has looked away.
+    func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem) {
+        consoleRegistry?.model(for: s.id, agentID: s.agent?.id ?? s.agentId).focus(ownerItem: item)
+        openNeedsYouSession(s)
+    }
+
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents
     /// section. Out of range (fewer agents than the digit pressed) is a no-op. Mirrors the sidebar's
     /// agent-selection binding.

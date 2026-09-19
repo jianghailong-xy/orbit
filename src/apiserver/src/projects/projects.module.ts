@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PushModule } from '../push/push.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
 import { ProjectPromotionController } from './project-promotion.controller';
@@ -21,6 +22,9 @@ import { ProjectsService } from './projects.service';
 @Module({
   imports: [
     SessionsModule,
+    // For the escalation clock below: an item it hands to the owner is one of the four their phone
+    // is told about (§7.6 V12).
+    PushModule,
     ProjectHandoffModule,
     ProjectAttributionModule,
     CoordinatorJudgmentModule,

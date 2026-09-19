@@ -7,6 +7,7 @@ import {
   SessionState,
 } from './enums';
 import type { SessionCapabilities } from './dto';
+import type { SessionOwnerItem } from './project-progress';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -140,6 +141,12 @@ export interface ControlSessionSummary {
    *  `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
    *  owner to confirm it done. Null otherwise; absent from an older control plane. */
   waitingKind?: 'OWNER_CONFIRMATION' | null;
+  /** Which of the four owner items are waiting on this conversation, oldest first (§7.6 V13) — so
+   *  the "needs you" banner can name one and open its card instead of only counting. Always sent
+   *  by a server that knows about them, as `[]` when none: a client folds this summary into a row
+   *  it holds, and an item that was answered clears the banner by arriving as an empty list. An
+   *  absent key is an older control plane, and leaves whatever the row had. */
+  ownerItems?: SessionOwnerItem[];
   lastTurnAt: string | null;
   /** When the server will re-send the message this run's failure killed, or null if nothing is
    *  armed. Part of the summary because it is part of what `runState: FAILED` means here: a

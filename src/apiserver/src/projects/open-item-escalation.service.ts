@@ -1,7 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 
 /**
  * How often the clock looks. Not how long anything waits: each item carries its own
@@ -45,11 +46,23 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
   private readonly logger = new Logger(ProjectOpenItemEscalationService.name);
   private timer?: ReturnType<typeof setInterval>;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** X-E1's one reader: an item that became the owner's is one of the four things their phone is
+     *  told about (§7.6 V12). `@Optional()`, so a build or a spec without PushModule escalates
+     *  exactly as before — the assignee is the fact, and the banner is a consequence of it. */
+    @Optional() private readonly push?: PushService,
+  ) {}
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      this.sweep().catch((e) => this.logger.error(`sweep failed: ${(e as Error).message}`));
+      this.sweep()
+        .then((escalated) => {
+          // Told to the person it just became the problem of, and to nobody else: the sweep itself
+          // stays a write of one column, which is what makes it safe to run on every replica.
+          for (const item of escalated) void this.push?.notifyOwnerItem(item.itemId);
+        })
+        .catch((e) => this.logger.error(`sweep failed: ${(e as Error).message}`));
     }, TICK_MS);
     this.timer.unref();
   }

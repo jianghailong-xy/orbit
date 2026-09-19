@@ -127,4 +127,128 @@ final class NeedsYouLogicTests: XCTestCase {
     func testNoQuestionsBelowIsNoBar() {
         XCTAssertNil(NeedsYouLogic.below(rowIDs: []))
     }
+
+    // MARK: the four owner items (contract §7.6 V13)
+
+    /// A project's coordinator conversation carrying one thing the account owner has to answer.
+    /// Parked, because none of the four holds a turn open: the item is a row, and the conversation
+    /// went on (or stopped) underneath it.
+    private func coordinator(_ id: String, project: String?, items: [SessionOwnerItem],
+                             approvals: Int? = nil) -> Session {
+        Session(id: id, title: "Project coordinator", status: .awaitingInput, agentId: "orbit",
+                assignedRunnerId: "runner",
+                pendingApprovals: approvals ?? items.count,
+                ownerItems: items,
+                branch: nil, updatedAt: nil,
+                projectId: "p-\(id)", projectTitle: project,
+                agent: SessionAgentRef(id: "orbit", name: "orbit", provider: nil, model: nil, effort: nil),
+                lastTurnAt: "2026-09-13T09:00:00Z")
+    }
+
+    private func ownerItem(_ kind: OwnerItemKind, since: String,
+                           id: String = "item-1", title: String = "Waiting") -> SessionOwnerItem {
+        SessionOwnerItem(itemId: id, kind: kind, title: title, since: since)
+    }
+
+    /// All four are "needs you": they are counted, they are grouped there, and the bar names the
+    /// one that has waited longest — with the project, because that is what decides whether to go
+    /// now. Each kind is asserted on its own, so a wording that drifts fails on its own line.
+    func testOwnerItemsCountTowardNeedsYou() {
+        let expected: [(OwnerItemKind, String)] = [
+            (.promotionApproval, "Approve merge to main · Integration line"),
+            (.coordinatorQuestion, "Question from coordinator · Integration line"),
+            (.escalated, "Escalated to you · Integration line"),
+            (.fusePaused, "Paused · Integration line"),
+        ]
+        for (kind, text) in expected {
+            let session = coordinator("c1", project: "Integration line",
+                                      items: [ownerItem(kind, since: "2026-09-13T10:00:00Z")])
+            let groups = SessionGrouping.group([session])
+            XCTAssertEqual(groups.needsYou.map(\.id), ["c1"], "\(kind) is something that needs you")
+            XCTAssertTrue(groups.running.isEmpty, "\(kind) is not work in progress")
+            // The macOS menu bar and its Dock badge are this same grouping, counted.
+            XCTAssertEqual(MenuBar.summary(from: [session]).needsYou, 1, "\(kind) in the menu bar")
+            XCTAssertEqual(MenuBar.summary(from: [session]).badge, "1", "\(kind) on the badge")
+
+            let banner = NeedsYouLogic.banner(waiting: groups.needsYou)
+            XCTAssertEqual(banner?.text, text)
+            XCTAssertEqual(banner?.target.id, "c1", "and a tap lands in the coordinator conversation")
+            XCTAssertEqual(banner?.ownerItem?.itemId, "item-1", "on the card the item is")
+        }
+    }
+
+    /// An exception the coordinator is still working on never reaches this client as an owner item
+    /// — the server does not put it on the row (`owner-decision-signal.ts`) — so a conversation
+    /// carrying none is not in the bucket, is not counted in the menu bar, and lights no bar. The
+    /// same fixture with one item is, which is what makes this witness the items and not the shape.
+    func testCoordinatorItemsDoNotCount() {
+        let handling = coordinator("c1", project: "Integration line", items: [], approvals: 0)
+        let groups = SessionGrouping.group([handling])
+        XCTAssertTrue(groups.needsYou.isEmpty, "the coordinator is handling it; the owner is not")
+        XCTAssertEqual(groups.running.map(\.id), ["c1"], "it is an ordinary live conversation")
+        XCTAssertEqual(MenuBar.summary(from: [handling]).needsYou, 0)
+        XCTAssertNil(MenuBar.summary(from: [handling]).badge)
+        XCTAssertNil(NeedsYouLogic.banner(waiting: groups.needsYou))
+
+        let escalated = coordinator("c1", project: "Integration line",
+                                    items: [ownerItem(.escalated, since: "2026-09-13T10:00:00Z")])
+        XCTAssertEqual(SessionGrouping.group([escalated]).needsYou.map(\.id), ["c1"])
+    }
+
+    /// Several at once: the bar carries the oldest, across conversations, by the instant the
+    /// server says each has been waiting since — not by which row the snapshot happened to list
+    /// first, and not by the conversation's own recency, which is a different clock entirely.
+    func testTheOldestOwnerItemIsTheOneNamed() {
+        let newer = coordinator("c1", project: "Newer project",
+                                items: [ownerItem(.coordinatorQuestion, since: "2026-09-13T12:00:00Z", id: "new")])
+        let older = coordinator("c2", project: "Older project",
+                                items: [ownerItem(.promotionApproval, since: "2026-09-13T08:00:00Z", id: "old")])
+        let banner = NeedsYouLogic.banner(waiting: SessionGrouping.group([newer, older]).needsYou)
+        XCTAssertEqual(banner?.ownerItem?.itemId, "old")
+        XCTAssertEqual(banner?.target.id, "c2")
+        XCTAssertEqual(banner?.text, "Approve merge to main · Older project")
+        // Two conversations are waiting, and the bar still says so.
+        XCTAssertEqual(banner?.count, 2)
+    }
+
+    /// An owner item wins over a blocked tool call: a stopped project is the thing with nowhere
+    /// else to be seen from here, while an approval is on every list and the drawer's own badge.
+    func testAnOwnerItemOutranksABlockedToolCall() {
+        let blocked = session("s1", approvals: 1, agentID: "dev", agentName: "wikova-develop")
+        let waiting = coordinator("c1", project: "Integration line",
+                                  items: [ownerItem(.fusePaused, since: "2026-09-13T10:00:00Z")])
+        let banner = NeedsYouLogic.banner(waiting: [blocked, waiting])
+        XCTAssertEqual(banner?.text, "Paused · Integration line")
+        XCTAssertEqual(banner?.target.id, "c1")
+    }
+
+    /// A kind a later control plane invents is counted (the server counted it) but not named: the
+    /// bar falls through to the wording it has always had rather than saying half a sentence.
+    func testAnUnknownKindDoesNotNameTheBar() {
+        let unknown = coordinator("c1", project: "Integration line",
+                                  items: [ownerItem(.unknown, since: "2026-09-13T10:00:00Z")])
+        let banner = NeedsYouLogic.banner(waiting: SessionGrouping.group([unknown]).needsYou)
+        XCTAssertEqual(banner?.text, "orbit needs you")
+        XCTAssertNil(banner?.ownerItem)
+    }
+
+    /// The row decodes what the server sends, `ownerItems` included — the whole banner is derived
+    /// from it, so a key that did not arrive would make every case above test only the fixture.
+    func testOwnerItemsDecodeFromASessionRow() throws {
+        let json = """
+        {"id":"c1","status":"RUNNING","pendingApprovals":2,"projectTitle":"Integration line",
+         "ownerItems":[{"itemId":"i1","kind":"PROMOTION_APPROVAL","title":"Merge 3 tasks into main?",
+                        "since":"2026-09-13T10:00:00Z"},
+                       {"itemId":"i2","kind":"WHAT_IS_THIS","title":"From a later server",
+                        "since":"2026-09-13T11:00:00Z"}]}
+        """
+        let row = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(row.ownerItems?.count, 2)
+        XCTAssertEqual(row.ownerItems?.first?.kind, .promotionApproval)
+        XCTAssertEqual(row.ownerItems?.first?.title, "Merge 3 tasks into main?")
+        // The unknown kind decodes rather than failing the row it arrived on.
+        XCTAssertEqual(row.ownerItems?.last?.kind, .unknown)
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.text,
+                       "Approve merge to main · Integration line")
+    }
 }

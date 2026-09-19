@@ -34,6 +34,7 @@ import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
+  ownerItemsForRow,
   readOwnerDecisionsBySession,
   sessionWaitingKind,
   type OwnerDecisionsOnSession,
@@ -899,6 +900,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
+      // The four owner items, sent with every summary — including as an empty list, which is how a
+      // row learns that the one it was showing has been answered (§7.6 V13).
+      ownerItems: ownerItemsForRow(decisions),
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".

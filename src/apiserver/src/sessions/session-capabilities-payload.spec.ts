@@ -88,6 +88,9 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // are unaffected either way.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
+    // which these fixtures have none of either.
+    projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

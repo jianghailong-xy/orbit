@@ -208,6 +208,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// `SessionHeader`) — the words only: neither carries a button, because the one place to answer
     /// is the card in this session.
     public let waitingKind: SessionWaitingKind?
+    /// The four owner items waiting on THIS conversation, oldest first — the merge to confirm, the
+    /// coordinator's question, the exception that became yours, the pause to lift (§7.6 V13). They
+    /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
+    /// open its card. Empty (or nil, from an older control plane) when none.
+    public let ownerItems: [SessionOwnerItem]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
     /// question it may have to draw a card for (`OwnerConfirmation.swift`) — a card is drawn in the
     /// run's own session, and only there.
@@ -346,6 +351,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
+        ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -379,7 +385,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 capabilities: SessionCapabilities? = nil,
                 agentId: String?,
                 assignedRunnerId: String?, provider: String? = nil,
-                pendingApprovals: Int?, waitingKind: SessionWaitingKind? = nil, taskId: String? = nil,
+                pendingApprovals: Int?, waitingKind: SessionWaitingKind? = nil,
+                ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 effort: String? = nil, source: String? = nil,
@@ -407,6 +414,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.provider = provider
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
+        self.ownerItems = ownerItems
         self.taskId = taskId
         self.branch = branch
         self.updatedAt = updatedAt
@@ -431,6 +439,33 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastTurnAt = lastTurnAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
+    }
+}
+
+/// One thing waiting on the account owner, riding on the conversation its card is drawn in
+/// (contract §7.6 V13).
+///
+/// The count beside it (`pendingApprovals`) can only say that something is waiting; this says WHICH
+/// of the four it is and where the card is, which is what lets the "needs you" bar name it and a
+/// press open it without a request of its own. Absent from an older control plane, which leaves
+/// the bar saying what it always said.
+public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
+    /// The `project_open_item` row. Also the address the card is answered at, and the one the
+    /// push payload carries as `openItemID`.
+    public let itemId: String
+    public let kind: OwnerItemKind
+    /// The item's own title, as the server wrote it when the item was opened.
+    public let title: String
+    /// Since when it has been waiting on the owner (ISO-8601). The bar shows the oldest.
+    public let since: String
+
+    public var id: String { itemId }
+
+    public init(itemId: String, kind: OwnerItemKind, title: String, since: String) {
+        self.itemId = itemId
+        self.kind = kind
+        self.title = title
+        self.since = since
     }
 }
 
