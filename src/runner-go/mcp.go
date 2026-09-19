@@ -2254,8 +2254,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"this session runs in — so opening the project's coordinator later comes back to " +
 				"this conversation rather than starting a fresh one that knows none of it. There " +
 				"is nothing to pass and nothing to choose; created outside a session there is no " +
-				"such binding. One session coordinates at most one project: recording a second " +
-				"one from this same conversation is refused, and nothing is created. Existing " +
+				"such binding. One session coordinates at most one project, so a second project " +
+				"recorded from this conversation is not coordinated by it: the server opens the " +
+				"new project its own coordinator conversation in the same workspace, and says so " +
+				"in the result. Existing " +
 				"legacy acceptanceCriteria text remains readable through project_get and writable " +
 				"through the old user/JWT API compatibility path. It is not an agent fallback: this " +
 				"runner tool refuses it because a criterion is authored one item at a time, each " +

@@ -1058,6 +1058,10 @@ func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 		{"puts a confirmation card in front of the user", "it asks rather than silently creating"},
 		{"nothing is created if they decline", "a no leaves nothing behind"},
 		{"do not ask twice", "one answer settles it for this body of work"},
+		// The second project a coordinator opens is not refused — it is handed to a coordinator of
+		// its own, in the same workspace. This sentence said "refused, and nothing is created" long
+		// after that stopped being true, which is how a coordinator came to read the call as closed.
+		{"the server opens the new project its own coordinator conversation", "the second project is created, not refused"},
 	} {
 		if !strings.Contains(description, want.phrase) {
 			t.Fatalf("project_create description does not mention %q (%s): %q", want.phrase, want.why, description)
