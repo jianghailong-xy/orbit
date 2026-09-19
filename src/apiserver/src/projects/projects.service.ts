@@ -9,7 +9,6 @@ import {
 } from '@nestjs/common';
 import {
   Prisma,
-  ProjectAutomationPolicy,
   ProjectIdentitySource,
   ProjectRole,
   ProjectStatus,
@@ -770,11 +769,15 @@ export class ProjectsService {
    * door refuses all of them (an agent does not widen its own authority). A field that can change
    * what the coordinator is allowed to do and is not in here is a hole in both.
    *
+   * `automationPolicy` was the third until the column went: it said HOW FAR the coordinator may go,
+   * and it was the one entry that could widen what a decider was allowed to do without any action
+   * being named. What is left decides whether there is a coordinator, how much of it runs at once,
+   * and what it may spend — all of it a bound rather than a grant.
+   *
    * `coordinatorAgentId` is deliberately NOT one: it says WHO decides, not what a decider may do.
    */
   static readonly AUTHORIZATION_FIELDS = [
     'coordinatorEnabled',
-    'automationPolicy',
     'maxConcurrentTasks',
     'sessionBudgetPerDay',
   ] as const;
@@ -1838,18 +1841,9 @@ export class ProjectsService {
             ownerId,
             goal: ProjectsService.blankToNull(dto.goal),
             instructions: ProjectsService.blankToNull(dto.instructions),
-            // HOW FAR the coordinator may go is a default for a NEW project, written here rather
-            // than left to the column default — and they are different values. The column defaults
-            // to MANUAL because that is what every project that existed before this feature has to
-            // keep; a project created now is one somebody is recording in order to have it
-            // coordinated, so it starts at the guarded level. Doing it the other way round
-            // (new-project values as the column defaults, old rows rewritten by the migration)
-            // turns every project created between the migration and this code into an automatic
-            // one, and rewrites exactly the rows nobody asked about.
-            //
-            // WHETHER it may run at all is not written here, and that is the difference between
-            // the two: it is an authorization rather than a setting, and the person who gives it
-            // is the one who confirms what would settle this project
+            // WHETHER it may run at all is written only when the caller names it, and that is what
+            // makes it an authorization rather than a setting: the person who gives it is the one
+            // who confirms what would settle this project
             // (`ProjectAcceptanceService.confirmStandardSet`, which turns the column on). So a new
             // project lands on the column default, false, and stays there until somebody has said
             // what done means — a project nobody has answered that for is not one to dispatch
@@ -1858,7 +1852,6 @@ export class ProjectsService {
             ...(dto.coordinatorEnabled !== undefined
               ? { coordinatorEnabled: dto.coordinatorEnabled }
               : {}),
-            automationPolicy: dto.automationPolicy ?? ProjectAutomationPolicy.GUARDED_AUTO,
             ...(dto.maxConcurrentTasks !== undefined
               ? { maxConcurrentTasks: dto.maxConcurrentTasks }
               : {}),
@@ -3046,18 +3039,13 @@ export class ProjectsService {
   async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      select: { id: true, coordinatorEnabled: true, coordinatorSessionId: true },
+      select: { id: true, coordinatorSessionId: true },
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
-
-    // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
-    // below, which is the one that decides: what a project was when this read ran is not what it
-    // is when the write commits.
-    ProjectsService.assertLevelNamedWhenTurningOn(current.coordinatorEnabled, dto);
 
     const agentId =
       dto.coordinatorAgentId === undefined || dto.coordinatorAgentId === null
@@ -3078,7 +3066,6 @@ export class ProjectsService {
       ...(dto.coordinatorEnabled !== undefined
         ? { coordinatorEnabled: dto.coordinatorEnabled }
         : {}),
-      ...(dto.automationPolicy !== undefined ? { automationPolicy: dto.automationPolicy } : {}),
       ...(dto.maxConcurrentTasks !== undefined
         ? { maxConcurrentTasks: dto.maxConcurrentTasks }
         : {}),
@@ -3115,12 +3102,11 @@ export class ProjectsService {
         // whichever commits first, the other sees it. It also fixes the order of the two writes
         // below (project before its team row), which is the order every path takes.
         const select = Prisma.sql`
-          SELECT "coordinator_enabled", "config_revision", "status"::text AS "status",
+          SELECT "config_revision", "status"::text AS "status",
                  "coordinator_session_id" AS "coordinator_session_id"
             FROM "project"
            WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
         const [locked] = await tx.$queryRaw<Array<{
-          coordinator_enabled: boolean;
           config_revision: bigint;
           status: string;
           coordinator_session_id: string | null;
@@ -3136,9 +3122,6 @@ export class ProjectsService {
         // Throwing here rolls the transaction back, which is the whole guarantee a stale write
         // needs: refused AND nothing written, including the team row below.
         ProjectsService.assertConfigRevision(dto.expectedConfigRevision, locked.config_revision);
-        // The value the lock produced, not the one read before it: a concurrent write that turned
-        // this project off is exactly the case the check has to see.
-        ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
 
         // The integration line, under its binding's own lock: rank 55, after the project row above
         // and before any criterion row below.
@@ -3328,28 +3311,6 @@ export class ProjectsService {
       expectedConfigRevision: expected,
       configRevision: String(actual),
     });
-  }
-
-  /**
-   * Switching automation ON is the one write that may not inherit a value.
-   *
-   * "Carry on with whatever is safe" is already spelled by not sending the field at all, so a
-   * request that turns a project into an automatic one without saying how far it may go is one
-   * whose author has not decided yet — and the level they would have been given by default is
-   * something they would then have to discover from its behaviour. Changing an already-enabled
-   * project's other fields is untouched by this: it has a level, and its owner is looking at it.
-   * Turning it off never needs one either — "stop" is unambiguous.
-   */
-  private static assertLevelNamedWhenTurningOn(
-    enabledNow: boolean,
-    dto: UpdateProjectDto,
-  ): void {
-    if (dto.coordinatorEnabled !== true || enabledNow || dto.automationPolicy !== undefined) return;
-    throw new BadRequestException(
-      'turning on this project’s coordinator requires an explicit automationPolicy ' +
-        `(${Object.values(ProjectAutomationPolicy).join(', ')}) in the same request — ` +
-        'leaving it out would pick a level of automation on your behalf',
-    );
   }
 
   /**
@@ -3605,10 +3566,6 @@ export class ProjectsService {
       select: {
         id: true,
         title: true,
-        // §9.2's policy is part of what a coordination run is opened WITH (v1.18, `PC-CX-65`):
-        // the opening tells the coordinator what the control loop does on its own, and that
-        // sentence is different under each of the three.
-        automationPolicy: true,
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
         // Both halves of the fold `deriveSessionLifecycleState` takes, rather than a second reading

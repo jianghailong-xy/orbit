@@ -14,16 +14,16 @@ import { ProjectDetailPage } from './ProjectsPage';
  *
  * The field decides whether a project starts its own ready tasks AND whether any of the six
  * producers may wake a judgment session. Twelve projects in production sit at
- * `coordinator_enabled = false` with an automation policy that says GUARDED_AUTO, and until this
- * switch no page could say why they were silent.
+ * `coordinator_enabled = false` with nothing on the wire saying why they are silent, and until this
+ * switch no page could say it either.
  *
  * `fetch` is stubbed rather than the `api` module, exactly as ProjectsPage.status.test.tsx does it,
  * so what these assert is the REQUEST that leaves the client: the method, the path and the JSON
- * body. Two halves of that body are load-bearing and neither is visible from "the mutation was
- * called" — `automationPolicy`, without which turning the switch ON is a 400, and
- * `expectedConfigRevision`, without which two editors silently overwrite each other. Each has a
- * red-proving negative recorded in the commit message: deleting either half from the
- * implementation turns exactly one assertion below red.
+ * body. Two facts about that body are load-bearing and neither is visible from "the mutation was
+ * called". `expectedConfigRevision`, without which two editors silently overwrite each other — and
+ * its absence, now that the switch is the whole write: the `automationPolicy` the body used to
+ * carry went with the column, and a request still naming one would be a page still asking for a
+ * decision the server no longer takes.
  */
 vi.mock('../components/ProjectDependencyGraph', async () => {
   const { createElement } = await import('react');
@@ -326,7 +326,7 @@ describe('ProjectsPage — the Automatic switch', { timeout: 60_000 }, () => {
     expect(cardText()).not.toContain('4 ready tasks');
   });
 
-  it('turning it ON names the automation level in the SAME request', async () => {
+  it('turning it ON sends the switch and nothing else', async () => {
     serve(detail({ coordinatorEnabled: false }));
     await mount();
     await press(toggle()!);
@@ -335,13 +335,14 @@ describe('ProjectsPage — the Automatic switch', { timeout: 60_000 }, () => {
     const write = writes()[0];
     expect(write.method).toBe('PATCH');
     expect(write.url).toBe(`/api/projects/${PROJECT}`);
-    // The server refuses a bare `coordinatorEnabled: true` with a 400 — turning a project automatic
-    // without saying how far it may go would pick a level of automation on the reader's behalf.
-    // Deleting the `automationPolicy` half of the body turns THIS assertion red.
-    expect(write.body).toMatchObject({
+    // The whole body, not a subset: `coordinatorEnabled: true` is the entire write now. Putting the
+    // `automationPolicy` half back turns THIS assertion red, which is the point — the server used to
+    // refuse a bare switch with a 400 and no longer accepts a level at all.
+    expect(write.body).toEqual({
       coordinatorEnabled: true,
-      automationPolicy: 'GUARDED_AUTO',
+      expectedConfigRevision: REVISION,
     });
+    expect(write.body).not.toHaveProperty('automationPolicy');
   });
 
   it('turning it ON fences the write against the revision it was drawn at', async () => {
@@ -354,7 +355,7 @@ describe('ProjectsPage — the Automatic switch', { timeout: 60_000 }, () => {
     expect(writes()[0].body).toMatchObject({ expectedConfigRevision: '42' });
   });
 
-  it('turning it OFF sends no level, because stopping needs no permission to be named', async () => {
+  it('turning it OFF writes the same one field, and the fence', async () => {
     serve(detail({ coordinatorEnabled: true }));
     await mount();
     await press(toggle()!);

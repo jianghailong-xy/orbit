@@ -75,7 +75,9 @@ export type HandoffKind = (typeof HANDOFF_KINDS)[number];
 export const HANDOFF_STORED_STATES = ['PENDING', 'APPROVED', 'DENIED', 'APPLIED'] as const;
 export type HandoffStoredState = (typeof HANDOFF_STORED_STATES)[number];
 
-/** Who answered. `POLICY` is only ever written where §4 R-p below allows it. */
+/** Who answered. `POLICY` is read-only vocabulary now: rows an older build accepted automatically
+ *  still carry it, and spending one is refused rather than honoured (see `assertStandingAtEffect`).
+ *  No writer in this build produces it. */
 export const HANDOFF_DECIDERS = ['USER', 'POLICY'] as const;
 export type HandoffDecider = (typeof HANDOFF_DECIDERS)[number];
 
@@ -314,7 +316,6 @@ export function sessionTriggerEvent(session: {
 /** A project, as the acceptance rule below reads it. */
 export interface HandoffProjectFacts {
   status: 'OPEN' | 'DONE' | 'CANCELLED';
-  automationPolicy: 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
 }
 
 export type HandoffAcceptedBy = HandoffDecider;
@@ -322,28 +323,24 @@ export type HandoffAcceptedBy = HandoffDecider;
 export interface HandoffAcceptanceDecision {
   acceptedBy: HandoffAcceptedBy;
   /** The rule that answered. Recorded on the row, so "why was this auto-accepted" has an answer. */
-  rule: 'HP1_TARGET_NOT_OPEN' | 'HP2_NOT_BOTH_AUTO' | 'HP3_BOTH_AUTO';
+  rule: 'HP1_TARGET_NOT_OPEN' | 'HP2_NOT_BOTH_AUTO';
 }
 
 /**
  * WHO may accept the work — the project instruction's "目标 Project／登录用户按策略接受工作", as one
- * rule with three rows.
+ * rule.
  *
  * HP1. The target is not OPEN: only a person, ever. R8 already refuses the write outright
  *      (`PROJECT_REOPEN_REQUIRED`, and reopening is L5's door), and this row makes the same claim
  *      about the ANSWER: an approval must never be able to buy a way into a settled project, or an
  *      accepted project gains work while its acceptance record still claims to describe it.
  *
- * HP2. Anything short of both ends on AUTO: a person. This is the task's "guarded-auto 下跨项目 …
- *      必须等待人工" and it is stated as BOTH ends on purpose. The target's policy alone would let a
- *      guarded source push work into an automatic project without anybody looking; the source's
- *      alone would let an automatic coordinator sign for a project that asked to be asked. Under
- *      GUARDED_AUTO — the default for every new project — this is the row that answers.
- *
- * HP3. Both ends on AUTO and both open: the policy accepts, and the row records `POLICY` as the
- *      decider with this rule beside it. This is the only automatic yes in the unit, and it is not
- *      an agent signing for another agent (§7 RB2): no coordinator decided it, the two projects'
- *      OWNER did, in advance, by putting both of them on AUTO.
+ * HP2. Everything else: a person. This is the task's "跨项目 … 必须等待人工", and it has no
+ *      exceptions left. The rule it replaced was `HP3_BOTH_AUTO` — both ends on AUTO and both open,
+ *      accepted by the two projects' owner in advance rather than by anybody looking — and it went
+ *      with `automation_policy`, the only column either end's half of it could be read from. Rows an
+ *      older build wrote under it still exist and are still read; nothing writes a new one, and
+ *      `assertStandingAtEffect` is where spending one is refused.
  */
 export function decideHandoffAcceptance(
   from: HandoffProjectFacts,
@@ -352,10 +349,7 @@ export function decideHandoffAcceptance(
   if (to.status !== 'OPEN' || from.status !== 'OPEN') {
     return { acceptedBy: 'USER', rule: 'HP1_TARGET_NOT_OPEN' };
   }
-  if (from.automationPolicy !== 'AUTO' || to.automationPolicy !== 'AUTO') {
-    return { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO' };
-  }
-  return { acceptedBy: 'POLICY', rule: 'HP3_BOTH_AUTO' };
+  return { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO' };
 }
 
 /** The stored row, as everything below reads it. */

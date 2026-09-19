@@ -1243,11 +1243,10 @@ export function replaceProjectCoordinator(projectId: string): Promise<Coordinato
  * What flipping a project's Automatic switch WRITES — held here rather than at the call site,
  * because the body is the unit and the path is not.
  *
- * `automationPolicy` rides along only on the way ON, and it is not optional there: the server
- * refuses a bare `coordinatorEnabled: true` with a 400, because turning a project automatic
- * without saying how far it may go would pick a level of automation on the reader's behalf.
- * `GUARDED_AUTO` is the level every project is CREATED with, which makes this switch a return to
- * that level and not a new decision. Turning it off names none: "stop" is unambiguous.
+ * The switch is the whole body on the way on: `coordinatorEnabled: true` is now the entire write,
+ * because the level of automation that used to have to be named beside it — without which the
+ * server refused the bare request with a 400 — is gone from the contract. Turning it off names the
+ * same field with `false`: "stop" was never anything else.
  *
  * `expectedConfigRevision` is the compare-and-swap. This field is edited from the user API and a
  * coordinator's own session as well as from here, and last-write-wins between them is one person
@@ -1257,7 +1256,6 @@ export function replaceProjectCoordinator(projectId: string): Promise<Coordinato
 function automaticBody(next: boolean, configRevision: string | undefined) {
   return {
     coordinatorEnabled: next,
-    ...(next ? { automationPolicy: 'GUARDED_AUTO' } : {}),
     expectedConfigRevision: configRevision,
   };
 }

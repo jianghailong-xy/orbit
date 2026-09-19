@@ -139,20 +139,22 @@ function makeService(fx: Fixture = {}) {
 
 // ── What a new project starts as, and what an old one keeps (§12.1 G1) ────────────────────────
 
-test('a new project is created un-started, at the guarded level, with its runtime row', async () => {
+test('a new project is created un-started, with its runtime row', async () => {
   const f = makeService();
 
   const project = await f.service.create(OWNER_ID, { title: 'Ship it' } as never);
 
-  // HOW FAR it may go is written EXPLICITLY rather than left to the column default, which says the
-  // opposite: that pair is what keeps the migration from turning every project that already exists
-  // into an automatic one, while still making "somebody recorded this to have it coordinated" the
-  // new default.
-  assert.equal(f.projectWrites[0].automationPolicy, 'GUARDED_AUTO');
   // WHETHER it may run at all is not written here at all. It is an authorization rather than a
   // setting, and the person who gives it is the one who confirms what would settle this project —
   // so the insert names no value and the row lands on the column's false.
   assert.equal('coordinatorEnabled' in f.projectWrites[0], false);
+  // The one field that used to be written beside it is gone with its column: HOW FAR the coordinator
+  // may go is no longer a fact about a project, so `create` has no default to pick and no field to
+  // name. The whole insert for a new project is named here, which is what makes that a property of
+  // the write rather than of this assertion.
+  assert.deepEqual(Object.keys(f.projectWrites[0]).sort(), [
+    'goal', 'instructions', 'ownerId', 'runtime', 'title',
+  ]);
   // An owner naming the field in the create request still gets what they asked for; that door is
   // unchanged, and it is the only way a project is born already started.
   const named = makeService();
@@ -204,37 +206,31 @@ test('the migration lands false and MANUAL, and switches no existing project on'
   assert.doesNotMatch(sql, /DROP COLUMN/i);
 });
 
-// ── Turning it on is a decision, not an inheritance (§12.1 G3) ────────────────────────────────
+// ── Turning it on is one field (§12.1 G3) ─────────────────────────────────────────────────────
 
-test('switching a project into automation requires saying how far it may go', async () => {
+test('switching a project into automation is the switch alone, and it reads back on', async () => {
   const f = makeService({ project: { coordinatorEnabled: false } });
 
-  await assert.rejects(
-    () => f.service.update(OWNER_ID, PROJECT_ID, { coordinatorEnabled: true } as never),
-    (e: any) => e.status === 400 && /automationPolicy/.test(e.message),
-  );
-  assert.deepEqual(f.projectWrites, []);
-});
-
-test('naming the level in the same request is what turns it on', async () => {
-  const f = makeService({ project: { coordinatorEnabled: false } });
-
-  await f.service.update(OWNER_ID, PROJECT_ID, {
+  // The 400 that used to stand here — "turning this on requires an explicit automationPolicy" — is
+  // gone with the field it named. A caller that sends only the switch gets the write, which is the
+  // whole of the judgement criterion this case exists for.
+  const project = await f.service.update(OWNER_ID, PROJECT_ID, {
     coordinatorEnabled: true,
-    automationPolicy: 'MANUAL',
   } as never);
 
   assert.equal(f.projectWrites[0].coordinatorEnabled, true);
-  assert.equal(f.projectWrites[0].automationPolicy, 'MANUAL');
+  // Read back rather than inferred from the write: the row the service returns is what a caller
+  // sees, and nothing else on this request names a second field.
+  assert.equal(project.coordinatorEnabled, true);
+  assert.deepEqual(Object.keys(f.projectWrites[0]).sort(), ['configRevision', 'coordinatorEnabled']);
 });
 
 test('a project that is already coordinated changes one field at a time', async () => {
   const f = makeService({ project: { coordinatorEnabled: true } });
 
-  // Already enabled: the level exists and its owner is looking at it, so a budget change does not
-  // have to restate it.
+  // Enabling hands nothing to the next write: a budget change does not have to restate anything.
   await f.service.update(OWNER_ID, PROJECT_ID, { maxConcurrentTasks: 5 } as never);
-  // Turning it OFF never needs one either — "stop" is unambiguous.
+  // Turning it OFF names the same one field — "stop" was never anything else.
   await f.service.update(OWNER_ID, PROJECT_ID, { coordinatorEnabled: false } as never);
 
   assert.equal(f.projectWrites[0].maxConcurrentTasks, 5);
@@ -243,10 +239,10 @@ test('a project that is already coordinated changes one field at a time', async 
 
 // ── The authorization set, and its revision (§9.6 AU2/AU3) ────────────────────────────────────
 
-test('the authorization set is exactly the four fields that decide what may happen', () => {
+test('the authorization set is exactly the three fields that decide what may happen', () => {
   assert.deepEqual(
     [...ProjectsService.AUTHORIZATION_FIELDS],
-    ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks', 'sessionBudgetPerDay'],
+    ['coordinatorEnabled', 'maxConcurrentTasks', 'sessionBudgetPerDay'],
   );
   // Who decides is not the same question as what a decider may do: the two are set, revoked and
   // read separately, so the coordinator's identity is deliberately not in the set above.
@@ -262,7 +258,6 @@ test('writing any of them bumps the revision once, and prose never does', async 
   await f.service.update(OWNER_ID, PROJECT_ID, { goal: 'A goal', title: 'Renamed' } as never);
   await f.service.update(OWNER_ID, PROJECT_ID, { maxConcurrentTasks: 2 } as never);
   await f.service.update(OWNER_ID, PROJECT_ID, {
-    automationPolicy: 'AUTO',
     maxConcurrentTasks: 4,
     sessionBudgetPerDay: 40,
     coordinatorEnabled: true,
@@ -272,7 +267,7 @@ test('writing any of them bumps the revision once, and prose never does', async 
   // anything, and a revision that moved for it would make every audit of a revoke read as a race.
   assert.equal(f.projectWrites[0].configRevision, undefined);
   assert.deepEqual(f.projectWrites[1].configRevision, { increment: 1 });
-  // One bump per write, however many of the four it carried: a revision is a version of the set,
+  // One bump per write, however many of the three it carried: a revision is a version of the set,
   // not a count of columns.
   assert.deepEqual(f.projectWrites[2].configRevision, { increment: 1 });
 });
@@ -462,16 +457,14 @@ test('a base62 coordinatorAgentId arrives as the uuid the column keys by', async
 test('the budgets refuse the value nobody meant', async () => {
   assert.deepEqual(await validateDto({ maxConcurrentTasks: 1 }), []);
   assert.deepEqual(await validateDto({ maxConcurrentTasks: 100 }), []);
-  // Zero is not a budget: "run nothing" is already spelled by coordinatorEnabled false and by
-  // MANUAL, both of which a reader can tell apart from a cap that silently admits nothing.
+  // Zero is not a budget: "run nothing" is already spelled by coordinatorEnabled false, which a
+  // reader can tell apart from a cap that silently admits nothing.
   assert.deepEqual(await validateDto({ maxConcurrentTasks: 0 }), ['maxConcurrentTasks']);
   assert.deepEqual(await validateDto({ maxConcurrentTasks: 101 }), ['maxConcurrentTasks']);
   assert.deepEqual(await validateDto({ maxConcurrentTasks: 2.5 }), ['maxConcurrentTasks']);
-  // null is how a daily budget is cleared, and it is the only field of the four that has one.
+  // null is how a daily budget is cleared, and it is the only one of the two that has that state.
   assert.deepEqual(await validateDto({ sessionBudgetPerDay: null }), []);
   assert.deepEqual(await validateDto({ sessionBudgetPerDay: 0 }), ['sessionBudgetPerDay']);
-  assert.deepEqual(await validateDto({ automationPolicy: 'GUARDED_AUTO' }), []);
-  assert.deepEqual(await validateDto({ automationPolicy: 'SOMETIMES' }), ['automationPolicy']);
   assert.deepEqual(await validateDto({ coordinatorEnabled: 'yes' }), ['coordinatorEnabled']);
 });
 
@@ -479,7 +472,7 @@ test('the budgets refuse the value nobody meant', async () => {
 //
 // `@IsOptional()` skips `undefined` AND `null`, so `null` on a NOT NULL column used to pass every
 // validator on its property, reach Prisma, and come back as a `PrismaClientValidationError` — no
-// status, no code, a 500 for a request that was simply invalid. The three fields below have no
+// status, no code, a 500 for a request that was simply invalid. The two fields below have no
 // "cleared" state to spell; `sessionBudgetPerDay` does, and keeps it.
 
 /** The pipe exactly as `main.ts` configures it, which is the one both doors go through. */
@@ -489,7 +482,7 @@ const appPipe = () =>
 const BODY = { type: 'body', metatype: UpdateProjectDto } as const;
 
 test('an explicit null on a NOT NULL policy field is refused, not forwarded', async () => {
-  for (const field of ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks']) {
+  for (const field of ['coordinatorEnabled', 'maxConcurrentTasks']) {
     assert.deepEqual(await validateDto({ [field]: null }), [field], `${field}: null is a value`);
     await assert.rejects(
       () => appPipe().transform({ [field]: null }, BODY as never),
@@ -509,8 +502,24 @@ test('omitting those fields still means "leave them alone"', async () => {
   // `!== undefined`. (The key itself may exist: class-transformer materialises declared
   // properties, which is exactly why `in` is not the question.)
   assert.equal(forwarded.coordinatorEnabled, undefined);
-  assert.equal(forwarded.automationPolicy, undefined);
   assert.equal(forwarded.maxConcurrentTasks, undefined);
+});
+
+// The field the switch used to have to name in the same request. It is not a property of this DTO
+// any more, and a client still sending one gets it STRIPPED rather than refused — the pipe's
+// `whitelist` is what drops it, so an older client's `automationPolicy` stops at the door instead of
+// reaching a service that would have to ignore it.
+test('a body still naming the automation policy has it dropped at the door', async () => {
+  const forwarded = await appPipe().transform(
+    { coordinatorEnabled: true, automationPolicy: 'GUARDED_AUTO' },
+    BODY as never,
+  );
+
+  assert.equal(forwarded.automationPolicy, undefined);
+  assert.equal('automationPolicy' in forwarded, false);
+  // The field the request DID name is untouched by the drop: this is a strip of an unknown property,
+  // not a refusal of the whole body.
+  assert.equal(forwarded.coordinatorEnabled, true);
 });
 
 test('the one field that can be cleared still can be', async () => {
@@ -528,7 +537,7 @@ test('the runner door refuses those nulls too, before anything can be written', 
   const controller = new RunnerProjectsController(projects as never, acceptanceDouble(), {} as never, {} as never);
   const runner = { ownerId: OWNER_ID, id: 'runner-1' } as never;
 
-  for (const field of ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks']) {
+  for (const field of ['coordinatorEnabled', 'maxConcurrentTasks']) {
     await assert.rejects(
       () => appPipe().transform({ [field]: null }, BODY as never),
       (e: { status?: number }) => e.status === 400,

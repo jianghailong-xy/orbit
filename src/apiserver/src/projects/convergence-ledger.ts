@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from './canonical-json';
 import {
   CLASSIFICATION_OUTCOME,
-  ConvergenceAutomationPolicy,
   ConvergenceClassification,
   ConvergenceCounters,
   ConvergenceEvent,
@@ -512,7 +511,6 @@ export interface PlannedScopeRevision {
   acceptanceCriteria: string | null;
   actor: ScopeActor;
   principal: string;
-  policy: ConvergenceAutomationPolicy;
   reason: string;
   /** §4 PV4's licence: a new question gets a new budget, and the old revision keeps its spend. */
   counters: ConvergenceCounters;
@@ -530,9 +528,8 @@ export interface PlannedScopeRevision {
 export function planScopeRevision(
   current: { scopeRevision: number; scopeHash: string },
   proposal: ScopeRevisionProposal,
-  policy: ConvergenceAutomationPolicy,
 ): PlannedScopeRevision | ScopeRevisionRefusal {
-  const authority = authorizeScopeAction(proposal.actor, 'REVISE_SCOPE', policy);
+  const authority = authorizeScopeAction(proposal.actor, 'REVISE_SCOPE');
   if (authority !== 'ALLOWED') return authority;
   if (proposal.principal.trim() === '') return 'SCOPE_AUTHOR_UNIDENTIFIED';
 
@@ -552,7 +549,6 @@ export function planScopeRevision(
     acceptanceCriteria: proposal.acceptanceCriteria,
     actor: proposal.actor,
     principal: proposal.principal,
-    policy,
     reason: proposal.reason,
     counters: { ...ZERO_COUNTERS },
   };

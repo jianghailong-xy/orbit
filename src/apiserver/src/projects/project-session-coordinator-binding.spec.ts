@@ -322,7 +322,6 @@ test('both halves of the binding are part of the insert, not a second write', as
   // `coordinatorEnabled` is not among them and belongs to no statement here: a project is created
   // un-started and is turned on by the owner confirming what would settle it.
   assert.deepEqual(Object.keys(f.creates[0]).sort(), [
-    'automationPolicy',
     'coordinatorSessionId',
     'coordinatorWorkspaceId',
     'goal',

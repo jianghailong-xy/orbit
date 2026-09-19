@@ -1,9 +1,9 @@
 /**
  * Unit T6: authority by ACTION, not by a project-wide level.
  *
- * §0 — WHY THE THREE-LEVEL SWITCH IS THE WRONG SHAPE
- * ==================================================
- * `project.automation_policy` has three values — MANUAL, GUARDED_AUTO, AUTO — and one of them has
+ * §0 — WHY A PROJECT-WIDE LEVEL IS THE WRONG SHAPE
+ * =================================================
+ * A project used to carry `automation_policy` — MANUAL, GUARDED_AUTO, AUTO — and one of its values had
  * to answer for every act a coordinator can perform. Those acts are not one kind of thing. Starting
  * a task whose prerequisites are all DONE costs a few minutes of machine time if it was wrong.
  * Writing `verdict = PASS` records that unfinished work is finished, and nothing downstream ever
@@ -18,10 +18,10 @@
  *   HUMAN_ONLY          owner review through an owner-authenticated channel, with action-specific
  *                       traceability.
  *
- * The column stays. What changed is that nothing here reads it: every function below is total over
- * (principal, action) and takes no policy, so the same write is refused at MANUAL, at GUARDED_AUTO
- * and at AUTO alike. That is asserted rather than asserted-in-prose — see
- * `coordinator-authority.spec.ts`, "the refusal does not depend on the project automation policy".
+ * The column is gone now, and the conclusion it forced is what outlived it: every function below is
+ * total over (principal, action) and takes no level, so a write is refused for the same reason at
+ * every project rather than differently at each one. That is asserted rather than asserted-in-prose
+ * — see `coordinator-authority.spec.ts`, which reads this file's source and refuses it the word.
  *
  * §1 — WHO IS RESTRICTED
  * ======================

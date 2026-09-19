@@ -237,27 +237,20 @@ test('a dependency crossing names the dependent, by id or by whole plan', () => 
   assert.notEqual(handoffDependentDigest({ taskId: TASK }), handoffDependentDigest({ identity: identity() }));
 });
 
-test('who may accept: both ends AUTO and open, or a person', () => {
-  const open = (policy: 'MANUAL' | 'GUARDED_AUTO' | 'AUTO') =>
-    ({ status: 'OPEN', automationPolicy: policy }) as const;
-  assert.deepEqual(decideHandoffAcceptance(open('AUTO'), open('AUTO')),
-    { acceptedBy: 'POLICY', rule: 'HP3_BOTH_AUTO' });
-  // The task's own words: under guarded-auto a crossing waits for a person.
-  for (const [from, to] of [
-    ['GUARDED_AUTO', 'AUTO'], ['AUTO', 'GUARDED_AUTO'], ['MANUAL', 'AUTO'], ['AUTO', 'MANUAL'],
-    ['GUARDED_AUTO', 'GUARDED_AUTO'],
-  ] as const) {
-    assert.deepEqual(decideHandoffAcceptance(open(from), open(to)),
-      { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO' });
-  }
-  // A settled end is a person's decision whatever the policies say — and R8 refuses the write
-  // outright, so this is only about who could ever answer.
+test('who may accept: a person, at every project', () => {
+  const open = { status: 'OPEN' } as const;
+  // What used to be here was the one automatic yes in the unit: both ends on AUTO and both open, the
+  // owner's standing instruction answering in advance. It went with `automation_policy` — the column
+  // is the only thing either end's half of it could be read from — so the rule that answered it has
+  // nothing left to answer, and a crossing between two open projects is a question for a person.
+  assert.deepEqual(decideHandoffAcceptance(open, open),
+    { acceptedBy: 'USER', rule: 'HP2_NOT_BOTH_AUTO' });
+  // A settled end is a person's decision too — and R8 refuses the write outright, so this is only
+  // about who could ever answer.
   for (const status of ['DONE', 'CANCELLED'] as const) {
-    assert.equal(
-      decideHandoffAcceptance({ status, automationPolicy: 'AUTO' }, open('AUTO')).acceptedBy, 'USER');
-    assert.equal(
-      decideHandoffAcceptance(open('AUTO'), { status, automationPolicy: 'AUTO' }).rule,
-      'HP1_TARGET_NOT_OPEN');
+    assert.equal(decideHandoffAcceptance({ status }, open).acceptedBy, 'USER');
+    assert.equal(decideHandoffAcceptance({ status }, open).rule, 'HP1_TARGET_NOT_OPEN');
+    assert.equal(decideHandoffAcceptance(open, { status }).rule, 'HP1_TARGET_NOT_OPEN');
   }
 });
 

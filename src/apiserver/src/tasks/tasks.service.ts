@@ -3318,7 +3318,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 handoffId: edge.handoffId!,
                 taskId: created.id,
               })),
-          ], now, scopeWorld.scope?.generation);
+          ], now);
           if (dependsOnTaskIds.length) {
             await tx.taskDependency.createMany({
               data: dependsOnTaskIds.map((dependsOnTaskId) => ({
@@ -4284,7 +4284,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
-      await this.handoffs.spendAll(tx, handoffSpends, now, scopeWorld.scope?.generation);
+      await this.handoffs.spendAll(tx, handoffSpends, now);
       return rows;
     }, this.transientWriteRetry('tasks.createMany')).catch(async (e) => {
       // §13.1 AG6's activation guard, FIRST and for the same reason `create` puts it first: 0132

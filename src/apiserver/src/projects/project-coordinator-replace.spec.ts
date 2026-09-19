@@ -78,7 +78,6 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
         const session = find(project.coordinatorSessionId);
         return {
           ...project,
-          automationPolicy: 'MANUAL',
           coordinatorSession: session
             ? {
                 id: session.id,

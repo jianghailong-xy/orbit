@@ -367,6 +367,10 @@ export class ProjectHandoffService {
       if (existing) return existing;
 
       const acceptance = await this.acceptanceUnderLock(tx, ownerId, declaration);
+      // Asked rather than assumed, and it can only come back a person's answer: the one row that
+      // used to say `POLICY` was the automatic acceptance, and the column it was read from is gone.
+      // So a declaration its author is allowed to make files a QUESTION, and nothing here writes a
+      // `decided_by` of its own.
       const decided = acceptance.acceptedBy === 'POLICY';
       const state: HandoffStoredState = decided ? 'APPROVED' : 'PENDING';
       await tx.$executeRaw(Prisma.sql`
@@ -550,10 +554,10 @@ export class ProjectHandoffService {
    * §4 R-p under the locks this transaction already holds: who may accept this work.
    *
    * Read after `assertDeclarationIsDerivable`, so by the time this runs the asker has been shown to
-   * be who they say they are. What is left is the two projects' statuses and policies — read from
-   * the rows under the rank-40 lock, never from anything the caller said about them, which is what
-   * makes an auto-acceptance a fact about the world at the instant of the insert rather than about
-   * the world when the caller started.
+   * be who they say they are. What is left is the two projects' statuses — read from the rows under
+   * the rank-40 lock, never from anything the caller said about them, which is what makes the
+   * answer a fact about the world at the instant of the insert rather than about the world when the
+   * caller started.
    */
   private async acceptanceUnderLock(
     tx: Prisma.TransactionClient,
@@ -562,14 +566,14 @@ export class ProjectHandoffService {
   ): Promise<HandoffAcceptanceDecision> {
     const ends = await tx.project.findMany({
       where: { id: { in: [declaration.fromProjectId, declaration.toProjectId] }, ownerId },
-      select: { id: true, status: true, automationPolicy: true },
+      select: { id: true, status: true },
     });
     const from = ends.find((row) => row.id === declaration.fromProjectId);
     const to = ends.find((row) => row.id === declaration.toProjectId);
     if (!from || !to) throw new ForbiddenException('project not found');
     return decideHandoffAcceptance(
-      { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED', automationPolicy: from.automationPolicy },
-      { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED', automationPolicy: to.automationPolicy },
+      { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED' },
+      { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED' },
     );
   }
 
@@ -705,14 +709,8 @@ export class ProjectHandoffService {
     handoffId: string,
     taskId: string,
     now: Date,
-    /**
-     * The generation the caller was admitted under, when it holds a scope. Compared for a yes the
-     * POLICY gave: an automatic acceptance is a standing instruction from the owner about the world
-     * as it stands, and a scope that has rotated away is not the one that instruction was about.
-     */
-    expectedSourceGeneration?: string,
   ): Promise<void> {
-    await this.assertStandingAtEffect(tx, authority, handoffId, expectedSourceGeneration);
+    await this.assertStandingAtEffect(tx, authority, handoffId);
     const spent = await tx.$executeRaw(Prisma.sql`
       UPDATE "project_handoff_approval"
          SET "state" = 'APPLIED',
@@ -751,14 +749,14 @@ export class ProjectHandoffService {
   }
 
   /**
-   * A yes the POLICY gave, re-derived at the moment it is spent.
+   * A yes the POLICY gave, refused at the moment it is spent.
    *
    * A user's yes is a decision about a crossing and stands until it expires or they take it back.
-   * An automatic one is not a decision at all — it is the owner's standing instruction that these
-   * two projects may hand work to each other unattended, and that instruction is a fact about the
-   * world RIGHT NOW. Between the declaration and the spend either end can be moved to
-   * GUARDED_AUTO, accepted, cancelled, or have its coordination rotated away; every one of those
-   * withdraws the instruction, and none of them touches the row, so nothing else would notice.
+   * An automatic one was not a decision at all — it was the owner's standing instruction that these
+   * two projects may hand work to each other unattended — and there is nothing left to re-derive:
+   * `decideHandoffAcceptance` is the one place that says who may accept, and it answers `USER` at
+   * every pair of projects. So this refusal is what such a row meets instead of the spend, and the
+   * only rows that can still carry `POLICY` are ones an older build wrote.
    *
    * Read under the caller's own rank-40 locks — both ends are in the project set its fence takes —
    * so what is read here cannot change before the write it authorises.
@@ -767,7 +765,6 @@ export class ProjectHandoffService {
     tx: Prisma.TransactionClient,
     authority: HandoffAuthority,
     handoffId: string,
-    expectedSourceGeneration?: string,
   ): Promise<void> {
     const row = (await tx.projectHandoffApproval.findFirst({
       where: { id: handoffId, ownerId: authority.ownerId },
@@ -783,36 +780,23 @@ export class ProjectHandoffService {
         id: { in: [authority.fromProjectId, authority.toProjectId] },
         ownerId: authority.ownerId,
       },
-      select: {
-        id: true,
-        status: true,
-        automationPolicy: true,
-        runtime: { select: { coordinatorGeneration: true } },
-      },
+      select: { id: true, status: true },
     });
     const from = ends.find((end) => end.id === authority.fromProjectId);
     const to = ends.find((end) => end.id === authority.toProjectId);
-    const stillAutomatic = from && to && decideHandoffAcceptance(
-      { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED', automationPolicy: from.automationPolicy },
-      { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED', automationPolicy: to.automationPolicy },
+    // Asked the way the declaration asks it, rather than assumed: an automatic yes was a fact about
+    // the world RIGHT NOW, and the world no longer has a state that produces one.
+    const stillAutomatic = !!from && !!to && decideHandoffAcceptance(
+      { status: from.status as 'OPEN' | 'DONE' | 'CANCELLED' },
+      { status: to.status as 'OPEN' | 'DONE' | 'CANCELLED' },
     ).acceptedBy === 'POLICY';
     if (!stillAutomatic) {
       throw new ConflictException({
         code: 'CROSS_PROJECT_APPROVAL_REQUIRED',
         message:
           'this crossing was accepted automatically because both projects were on AUTO and open, '
-          + 'and one of them no longer is — nothing was written; ask a person for this one',
+          + 'which no project is any more — nothing was written; ask a person for this one',
         requiredAction: 'AWAIT_HANDOFF_APPROVAL',
-      });
-    }
-    if (expectedSourceGeneration !== undefined
-        && String(from!.runtime?.coordinatorGeneration ?? 0n) !== expectedSourceGeneration) {
-      throw new ConflictException({
-        code: 'COORDINATOR_GENERATION_MOVED',
-        message:
-          'the coordination scope this automatic acceptance was given to has moved; nothing was '
-          + 'written and the scope that holds it now will decide again',
-        requiredAction: 'YIELD_TO_CURRENT_SCOPE',
       });
     }
   }
@@ -829,13 +813,10 @@ export class ProjectHandoffService {
     tx: Prisma.TransactionClient,
     spends: ReadonlyArray<{ authority: HandoffAuthority; handoffId: string; taskId: string }>,
     now: Date,
-    expectedSourceGeneration?: string,
   ): Promise<void> {
     const ordered = [...spends].sort((a, b) => (a.handoffId < b.handoffId ? -1 : a.handoffId > b.handoffId ? 1 : 0));
     for (const spend of ordered) {
-      await this.spend(
-        tx, spend.authority, spend.handoffId, spend.taskId, now, expectedSourceGeneration,
-      );
+      await this.spend(tx, spend.authority, spend.handoffId, spend.taskId, now);
     }
   }
 }

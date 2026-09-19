@@ -12,7 +12,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   AttemptBudget,
-  ConvergenceAutomationPolicy,
   ConvergenceCounters,
   ConvergenceDispatchRefusal,
   ConvergenceThresholds,
@@ -233,19 +232,19 @@ export class ConvergenceLedgerService {
   ): Promise<{ revision: number; scopeHash: string }> {
     return withTransactionRetry(this.prisma, async (tx) => {
       const state = await this.lockAndRead(tx, taskId, ownerId);
-      const planned = planScopeRevision(state, proposal, state.policy);
+      const planned = planScopeRevision(state, proposal);
       if (typeof planned === 'string') throw new ConflictException(planned);
 
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "task_scope_revision" (
           "id", "task_id", "owner_id", "revision", "scope_hash", "title", "description",
           "acceptance_criteria", "authorized_by_actor", "authorized_by_principal",
-          "automation_policy", "reason", "supersedes_revision"
+          "reason", "supersedes_revision"
         ) VALUES (
           ${randomUUID()}::uuid, ${taskId}::uuid, ${ownerId}::uuid, ${planned.revision},
           ${planned.scopeHash}, ${planned.title}, ${planned.description},
           ${planned.acceptanceCriteria}, ${planned.actor}, ${planned.principal},
-          ${planned.policy}, ${planned.reason}, ${planned.supersedesRevision}
+          ${planned.reason}, ${planned.supersedesRevision}
         )
       `);
 
@@ -319,7 +318,6 @@ export class ConvergenceLedgerService {
       acceptanceCriteria: string | null;
       authorizedByActor: string | null;
       authorizedByPrincipal: string | null;
-      automationPolicy: string | null;
       reason: string;
       supersedesRevision: number | null;
       createdAt: Date;
@@ -328,7 +326,7 @@ export class ConvergenceLedgerService {
              "acceptance_criteria" AS "acceptanceCriteria",
              "authorized_by_actor" AS "authorizedByActor",
              "authorized_by_principal" AS "authorizedByPrincipal",
-             "automation_policy" AS "automationPolicy", "reason",
+             "reason",
              "supersedes_revision" AS "supersedesRevision", "created_at" AS "createdAt"
         FROM "task_scope_revision" WHERE "task_id" = ${taskId}::uuid
        ORDER BY "revision"
@@ -368,7 +366,6 @@ export class ConvergenceLedgerService {
       attemptBudget: state.attemptBudget,
       lastProgressAt: state.lastProgressAt,
       knownGoodSha: state.knownGoodSha,
-      automationPolicy: state.policy,
       // `authorizedByPrincipal` is free text naming whoever signed, and whoever writes it may well
       // write an id. Publicizing is a no-op on anything that was never one.
       revisions: revisions.map((row) => ({
@@ -467,7 +464,7 @@ export class ConvergenceLedgerService {
    * `FOR UPDATE` on the task and nothing else. It is the whole concurrency story of this service:
    * every write here is about one task, so one row lock serialises them, and `seq` can be allocated
    * as `MAX + 1` without a second writer computing the same one. Nothing takes a lock on `project`
-   * — the policy is read, not written — so this adds no edge to the project/task lock order.
+   * — its thresholds are read, not written — so this adds no edge to the project/task lock order.
    *
    * Public for `[K5]`: a finding is triaged against the same committed state a decision is planned
    * against, so it takes the SAME lock in the SAME transaction and reads the SAME row. Two readers
@@ -505,7 +502,6 @@ export class ConvergenceLedgerService {
              t."known_good_sha" AS "knownGoodSha",
              t."title", t."description", t."acceptance_criteria" AS "acceptanceCriteria",
              r."scope_hash" AS "scopeHash",
-             coalesce(p."automation_policy"::text, 'GUARDED_AUTO') AS "automationPolicy",
              p."convergence_thresholds" AS "thresholdOverrides",
              p."attempt_budget" AS "budgetOverrides",
              p."unbounded_authorized_by" AS "unboundedAuthorizedBy"
@@ -519,7 +515,6 @@ export class ConvergenceLedgerService {
 
     const last = await this.entries(tx, taskId, 1);
     const previous = last[0];
-    const policy = row.automationPolicy as ConvergenceAutomationPolicy;
     const authorization = row.unboundedAuthorizedBy as ScopeAuthorization | null;
 
     return {
@@ -541,7 +536,6 @@ export class ConvergenceLedgerService {
       lastFingerprint: previous?.scopeRevision === row.scopeRevision
         ? previous.failureFingerprint
         : null,
-      policy,
       thresholds: resolveThresholds(
         row.thresholdOverrides as Partial<ConvergenceThresholds> | null,
         authorization,
@@ -610,7 +604,6 @@ interface ReadState {
   knownGoodSha: string | null;
   progressVector: ProgressVector | null;
   lastFingerprint: string | null;
-  policy: ConvergenceAutomationPolicy;
   thresholds: ConvergenceThresholds;
   attemptBudget: AttemptBudget;
 }
@@ -626,7 +619,6 @@ interface TaskStateRow {
   description: string | null;
   acceptanceCriteria: string | null;
   scopeHash: string | null;
-  automationPolicy: string;
   thresholdOverrides: unknown;
   budgetOverrides: unknown;
   unboundedAuthorizedBy: unknown;

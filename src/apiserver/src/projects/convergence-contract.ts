@@ -581,7 +581,7 @@ export type ScopeAuthorityRefusal =
 
 export type ScopeAuthorityDecision = 'ALLOWED' | ScopeAuthorityRefusal;
 
-/** The `GUARDED_AUTO` table — the default, and the one §8's thresholds are calibrated for. */
+/** The table §1 is, and the only answer there is: nothing reads it conditionally any more. */
 export const SCOPE_AUTHORITY: Readonly<
   Record<ScopeActor, Readonly<Record<ScopeAction, ScopeAuthorityDecision>>>
 > = {
@@ -594,7 +594,8 @@ export const SCOPE_AUTHORITY: Readonly<
   },
   COORDINATOR: {
     // OW3: the coordinator's answer to "this needs to be a different task" is to stop and ask,
-    // not to write the different task. Under `AUTO` the user has signed for that; see below.
+    // not to write the different task. There was one setting that let it write it anyway; both it
+    // and the column behind it are gone, so this row is the whole answer.
     REVISE_SCOPE: 'REPLAN_REQUIRES_AUTHORIZATION',
     ADD_ACCEPTANCE_CRITERION: 'ACCEPTANCE_CHANGE_REQUIRES_USER',
     REQUEST_SCOPE_EXPANSION: 'ALLOWED',
@@ -621,21 +622,17 @@ export const SCOPE_AUTHORITY: Readonly<
   },
 };
 
-/** The policies §1 reads. Mirrors `ProjectAutomationPolicy`; kept local so this file stays pure. */
-export type ConvergenceAutomationPolicy = 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
-
 /**
- * §1 OW1–OW3. The table above is the answer under every policy but one: `AUTO` is the user saying
- * in advance that the coordinator may re-plan without being asked each time, so that ONE cell
- * opens. Nothing else moves — `AUTO` is not a licence to add acceptance criteria or to switch the
- * breaker off, because those are the two ways an autonomous loop stops being bounded at all.
+ * §1 OW1–OW3, as a function of (actor, action) and nothing else. The table above is the answer; no
+ * project-wide setting moves a cell of it, because the only one that ever did — `AUTO`, read as the
+ * user saying in advance that the coordinator may re-plan without being asked each time — is gone
+ * with the column that carried it. A coordinator asking to revise a scope is now refused at every
+ * project, and the refusal names the user as the one to ask.
  */
 export function authorizeScopeAction(
   actor: ScopeActor,
   action: ScopeAction,
-  policy: ConvergenceAutomationPolicy,
 ): ScopeAuthorityDecision {
-  if (actor === 'COORDINATOR' && action === 'REVISE_SCOPE' && policy === 'AUTO') return 'ALLOWED';
   return SCOPE_AUTHORITY[actor][action];
 }
 
@@ -718,5 +715,5 @@ export function resolveCoordinatorSpendLimits(
 function unboundedIsAuthorized(by: ScopeAuthorization | null | undefined): boolean {
   return !!by
     && by.principal.trim() !== ''
-    && authorizeScopeAction(by.actor, 'AUTHORIZE_UNBOUNDED', 'AUTO') === 'ALLOWED';
+    && authorizeScopeAction(by.actor, 'AUTHORIZE_UNBOUNDED') === 'ALLOWED';
 }

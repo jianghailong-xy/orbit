@@ -21,7 +21,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
+import { ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
@@ -29,7 +29,6 @@ import { MAX_QUESTION_CHARS } from './project-open-item';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
-const PROJECT_AUTOMATION_POLICIES = Object.values(ProjectAutomationPolicy);
 
 /**
  * Bounds on a project's prose fields.
@@ -52,7 +51,7 @@ export const MAX_PROJECT_ACCEPTANCE_VERIFICATION_METHOD_CHARS = 4_000;
  * here to catch the value nobody meant (a pasted timestamp, an extra zero) at the edit that made
  * it, instead of letting it be stored as a limit that never limits anything. A cap of one is the
  * lowest that still admits work; zero would spell "run nothing", which is what
- * `coordinatorEnabled: false` and MANUAL already spell, with a state a reader can tell apart.
+ * `coordinatorEnabled: false` already spells, with a state a reader can tell apart.
  */
 export const MAX_PROJECT_CONCURRENT_TASKS = 100;
 export const MAX_PROJECT_SESSION_BUDGET_PER_DAY = 10_000;
@@ -234,7 +233,6 @@ export class CreateProjectDto {
   /** Owner-selected governance, settable in the same request that creates the project. Runner
    * callers are refused these fields at their boundary. */
   @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
-  @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
   @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
   /**
    * Where this project's coordinator conversation opens — and, because naming one OPENS it, the
@@ -296,17 +294,15 @@ export class UpdateProjectDto {
   integration?: UpdateProjectIntegrationDto;
 
   // ── What the project's coordinator is allowed to do ────────────────────────────────────────
-  // The four fields below are the authorization set: they are the only fields whose value decides
+  // The three fields below are the authorization set: they are the only fields whose value decides
   // whether an action the coordinator wants to take may happen. Writing any of them bumps
   // `configRevision` by one (see ProjectsService.update), which is what makes a revoke that races
   // an action readable afterwards. Everything else on this DTO is prose or filing.
 
-  /** Whether the coordinator may act at all. Turning it ON requires `automationPolicy` in the same
-   *  request: "carry on with the safe default" is spelled by not sending this at all, so switching
-   *  a project into automation is a choice someone made rather than one it inherited. */
+  /** Whether the coordinator may act at all. There is nothing else to name in the same request:
+   *  the level of automation it used to have to be given here is gone, so turning it on is the
+   *  whole write. */
   @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
-  /** How far it may go when it runs: MANUAL, GUARDED_AUTO or AUTO. */
-  @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
   /** How many of this project's tasks may be in flight at once. An admission limit: lowering it
    *  never stops anything already running. */
   @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;

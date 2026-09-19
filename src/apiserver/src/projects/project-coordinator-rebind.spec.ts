@@ -128,7 +128,6 @@ function store(options: StoreOptions = {}) {
     return {
       id: row.id,
       title: 'Ship the coordinator',
-      automationPolicy: 'MANUAL',
       coordinatorSessionId: row.coordinatorSessionId,
       coordinatorWorkspaceId: row.coordinatorWorkspaceId,
       coordinatorSession: session

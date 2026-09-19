@@ -473,19 +473,22 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.deepEqual(await rows(w.ownerId), []);
   });
 
-  await t.test('guarded-auto waits for a person; both ends on AUTO do not', async () => {
+  await t.test('an open crossing waits for a person, and no project says otherwise', async () => {
     const guarded = await seed('guarded');
     const first = await handoffs.declare(guarded.ownerId, declarationFor(guarded), await scopeOf(guarded), new Date());
     assert.equal(first.row.state, 'PENDING');
     assert.equal(first.row.decidedBy, null);
 
+    // The pair that used to be accepted on the spot: both ends seeded on the old `AUTO`, which is
+    // exactly the value that has to change nothing now. The seeds go when the column does; until
+    // then they are the strongest form of the assertion — the policy that once meant "yes" is on
+    // both rows and the answer a person has to give is still the one the row waits for.
     const auto = await seed('auto', { a: 'AUTO', b: 'AUTO' });
     const second = await handoffs.declare(auto.ownerId, declarationFor(auto), await scopeOf(auto), new Date());
-    assert.equal(second.row.state, 'APPROVED');
-    assert.equal(second.row.decidedBy, 'POLICY');
-    assert.equal(second.row.decidedByUserId, null);
+    assert.equal(second.row.state, 'PENDING');
+    assert.equal(second.row.decidedBy, null);
 
-    // One end guarded is enough to need a person.
+    // One end guarded is the same answer, which is the other half of "no policy decides this".
     const half = await seed('half', { a: 'AUTO', b: 'GUARDED_AUTO' });
     const third = await handoffs.declare(half.ownerId, declarationFor(half), await scopeOf(half), new Date());
     assert.equal(third.row.state, 'PENDING');
@@ -855,34 +858,36 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     assert.equal(owned.projectId, w.projectA);
   });
 
-  await t.test('an automatic acceptance is re-derived when it is spent, not when it was given', async () => {
-    const w = await seed('barrier-policy', { a: 'AUTO', b: 'AUTO' });
+  // What used to stand here was the re-derivation of an automatic acceptance at the moment it was
+  // spent: both ends on AUTO, the owner's standing instruction saying yes, and a barrier moving one
+  // end off AUTO while the spend waited for the row. There is no such acceptance to re-derive — the
+  // declaration below is a QUESTION on a pair of rows that still say AUTO, and what is left to
+  // assert is the same property seen from the other side: nothing crosses until a person answers,
+  // and their yes is what spends it.
+  await t.test('a crossing between two AUTO projects lands on a person’s yes, not before', async () => {
+    const w = await seed('auto-needs-a-person', { a: 'AUTO', b: 'AUTO' });
     const create = () => tasks.create(w.ownerId, {
       title: 'the crossing', projectId: w.projectB, handoff: { reason: 'both ends are automatic' },
     } as never, AGENT(w.ownerId), w.sessionA);
-    // Both ends on AUTO: the owner's standing instruction accepts it, and the write goes through.
-    const declared = await handoffs.declare(w.ownerId, declarationFor(w), await scopeOf(w), new Date());
-    assert.equal(declared.row.state, 'APPROVED');
-    assert.equal(declared.row.decidedBy, 'POLICY');
 
-    await barrier.query('BEGIN');
-    await barrier.query('SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', [w.projectB]);
-    await barrier.query(
-      `UPDATE "project" SET "automation_policy" = 'GUARDED_AUTO'::"project_automation_policy",
-        "updated_at" = now() WHERE "id" = $1::uuid`, [w.projectB]);
-    const creating = create();
-    creating.catch(() => undefined);
-    await awaitBlockedBy(barrierPid, 'the crossing parking behind its target');
-    await barrier.query('COMMIT');
-    const refusal = await refusalOf(() => creating) as { code: string };
-    // The instruction was withdrawn between the yes and the spend. An automatic acceptance is a
-    // fact about the world right now, so it stops being one the moment the world says otherwise.
-    assert.equal(refusal.code, 'CROSS_PROJECT_APPROVAL_REQUIRED');
-    assert.deepEqual(
-      (await rows(w.ownerId)).map((row) => row.state), ['APPROVED'],
-      'the yes was not spent, and nothing was written',
-    );
-    assert.equal((await tasksIn(w.projectB)).length, 1, 'only the fixture task is there');
+    const declared = await handoffs.declare(w.ownerId, declarationFor(w), await scopeOf(w), new Date());
+    assert.equal(declared.row.state, 'PENDING');
+    assert.equal(declared.row.decidedBy, null);
+
+    // Open question, and the write says WHICH wait it is on: the yes is pending, not missing.
+    const refusal = await refusalOf(create) as Record<string, unknown>;
+    assert.equal(
+      JSON.stringify(refusal).includes('APPROVAL_PENDING'), true,
+      `unexpected refusal ${JSON.stringify(refusal)}`);
+    assert.equal((await tasksIn(w.projectB)).length, 1, 'the plan wrote nothing');
+
+    const [question] = await rows(w.ownerId);
+    await handoffs.decide(w.ownerId, w.ownerId, question.id, 'APPROVE', new Date());
+    const landed = await create();
+    const [spent] = await rows(w.ownerId);
+    assert.equal(spent.state, 'APPLIED');
+    assert.equal(spent.decided_by, 'USER', 'the only decider a new yes can have');
+    assert.equal(spent.applied_task_id, landed.id, 'the yes names the task it was spent on');
   });
 
   await t.test('a plan takes the owner row before the workspace it names', async () => {
