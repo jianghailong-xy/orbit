@@ -76,6 +76,36 @@ jobs:
       - name: Gate a second push mechanism
         run: bash scripts/ci/nav-push-gate.sh
 
+  # TEMPORARY — an evidence run, not a gate, and not for this file to keep. Task
+  # 34OEEAV0AnK22u1YYnnOA's criterion 13 asks for a simulator screenshot of the needs-you bar beside
+  # effect image 1, and a Linux session cannot draw SwiftUI. `.ios-probe/` copies the app's own
+  # NeedsYouBannerView into a throwaway app and screenshots it on an iPhone simulator. Remove this
+  # job and `.ios-probe/` when the evidence is in: like the card-snapshot job before it, it asserts
+  # nothing and would rot silently.
+  ios-bar:
+    name: Needs-you bar (simulator screenshots)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build, launch and capture
+        working-directory: .ios-probe
+        run: bash run.sh
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: needs-you-bar-shots
+          path: .ios-probe/shots
+          if-no-files-found: error
+
   macos:
     name: macOS (build + test)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.

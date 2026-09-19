@@ -1,0 +1,30 @@
+name: Probe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  OrbitKit:
+    path: ../src/macos/OrbitKit
+targets:
+  Probe:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.probe
+        PRODUCT_NAME: Probe
+        GENERATE_INFOPLIST_FILE: YES
+        # An iPhone, portrait: the bar under test is the phone's, and the effect image it is
+        # compared against is an iPhone.
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_ALLOWED: NO

@@ -1,0 +1,8 @@
+# Copied from the app by run.sh (never committed — the point is that they are the app's files),
+# plus everything the build writes.
+Sources/NeedsYouBannerView.swift
+Sources/Typography.swift
+Sources/Platform.swift
+Probe.xcodeproj/
+.dd/
+shots/
