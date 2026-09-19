@@ -10,7 +10,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, api } from '../api';
-import { TASK_RUN_HELD_TITLE } from '../lib/taskRunHandoff';
+import {
+  OPEN_THE_RUN,
+  RETRY_ENTRY_LABEL,
+  RUN_ENTRY_LABEL,
+  TASK_RUN_HELD_TITLE,
+} from '../lib/taskRunHandoff';
 import { encodeId } from '../lib/idCodec';
 import { newRunRequestToken } from '../lib/runRequestToken';
 import { TaskListView, batchRunMutationOptions, runRowMutationOptions } from './TaskListView';
@@ -183,6 +188,86 @@ describe('opening one task list', () => {
     const html = renderList({ items: [], nextCursor: null, total: 0, counts: { ...counts, total: 0 } }, []);
 
     expect(html).not.toContain('This list could not be loaded.');
+  });
+});
+
+/** Every row, cut at the next one — so a press found in one row cannot be a button belonging to a
+ *  different row, or to the pinned "Happening now" strip's copy of the same task. */
+const rows = (html: string): string[] => html.split(/<div class="task-row /).slice(1);
+
+/** One row's action cell, from its own start to the end of that row. */
+const actionCell = (row: string): string => row.slice(row.indexOf('class="row-actions"'));
+
+/** Which press a cell offers, read off what the press DOES — the icon it draws. The pre-fix row
+ *  was an unnamed icon, so an assertion that only read accessible names would pass by finding
+ *  nothing; this one answers "no press at all" differently from "a different press". */
+const pressIcon = (cell: string): string | null =>
+  /\banticon-(arrow-right|reload|play-circle)\b/.exec(cell)?.[1] ?? null;
+
+/** …and the copy it announces. A row's press is an icon with no visible word, so the accessible
+ *  name is the whole of its 文案, and the delete button's `aria-label` is not one of these. */
+const pressName = (cell: string): string | null =>
+  [...cell.matchAll(/\baria-label="([^"]*)"/g)]
+    .map((m) => m[1])
+    .find((l) => [OPEN_THE_RUN, RETRY_ENTRY_LABEL, RUN_ENTRY_LABEL].includes(l)) ?? null;
+
+/**
+ * What a row offers to press while a run of its task is going.
+ *
+ * A task card must not offer a press whose only possible answer is a refusal. The platform
+ * re-dispatches a failed task within seconds, so a row can be holding a copy — `status` is a label
+ * the workspace maintains and it lags — while a newer run already holds the task's execution
+ * claim. The row reads the live flags the server derives from the session rows on every read
+ * (`tasks.service.ts#withRunning`), not the label, and offers the way into the task, where the run
+ * is named and the panel links to it. The list payload carries no session ids, so the row cannot
+ * name the run itself; what it must not do is draw a Retry, which is a press into the 409 that
+ * this whole change exists to answer.
+ */
+describe('the press a row offers while a run of its task is going', () => {
+  /** A workspace bound to a runner: without one the Run/Retry press is not offered at all, so a
+   *  fixture missing it would make "and no Retry" true for the wrong reason. */
+  const ASSIGNEE = { id: 'w1', name: 'alpha', runner: { id: 'r1', name: 'wikova' } };
+  const rowWith = (over: Record<string, unknown>) =>
+    actionCell(rows(renderList(
+      { items: [task('1', 'Download shard 000', { assignee: ASSIGNEE, ...over })], nextCursor: null, total: 1 },
+      [{ id: LIST_ID, title: 'FineWeb Parquet' }],
+    ))[0]);
+
+  it('hands the row to the run instead of a retry that could only be refused', () => {
+    // The reported case, verbatim: this copy still says FAILED, because the run that failed was
+    // re-dispatched two seconds ago and the label has not caught up — while the server, on this
+    // very read, says a session of it is going. `status` is what lags; `running` is derived from
+    // the session rows every time.
+    const stale = rowWith({ status: 'FAILED', running: true });
+
+    // It is a way INTO the task — the arrow — and not either of the two icons the Run/Retry
+    // presses draw. This is the assertion that fails if the entry is drawn off `status`: that row
+    // offers no press at all, because `canDispatchTask` refuses to arm one over a running task.
+    expect(pressIcon(stale)).toBe('arrow-right');
+    expect(pressName(stale)).toBe(OPEN_THE_RUN);
+
+    // A run that has not started yet holds the task just as a running one does.
+    const queued = rowWith({ status: 'FAILED', queued: true });
+    expect(pressIcon(queued)).toBe('arrow-right');
+    // And the row says so whether or not the task would otherwise be startable.
+    expect(pressIcon(rowWith({ status: 'FAILED', running: true, blocked: true })))
+      .toBe('arrow-right');
+  });
+
+  it('is still the retry when nothing of the task is going', () => {
+    // The other half of the criterion: this change is about the third case, not about the two that
+    // already worked. Nothing changed for a task that is simply failed.
+    const failed = rowWith({ status: 'FAILED' });
+
+    expect(pressIcon(failed)).toBe('reload');
+    expect(pressName(failed)).toBe(RETRY_ENTRY_LABEL);
+  });
+
+  it('leaves an ordinary row’s Run exactly as it was', () => {
+    const open = rowWith({ status: 'OPEN' });
+
+    expect(pressIcon(open)).toBe('play-circle');
+    expect(pressName(open)).toBe(RUN_ENTRY_LABEL);
   });
 });
 
