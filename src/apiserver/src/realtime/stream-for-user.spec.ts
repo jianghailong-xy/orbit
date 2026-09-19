@@ -37,6 +37,10 @@ type Row = {
   lastTurnAt: Date | null;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   coordinatorForProject?: { id: string; title: string } | null;
+  /** Read by the approval count: whose cards are still being asked depends on whether the
+   *  conversation is generating, and — when it is not — on which of these processes are up. */
+  engineTurnActive?: boolean | null;
+  runningBgShells?: string[];
 };
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
@@ -47,12 +51,25 @@ type Row = {
 // for the cross-replica NOTIFY.
 function fakePrisma(
   rows: Record<string, Row>,
-  pendingApprovals = 0,
+  pendingApprovals: number | ((where: Record<string, never>) => number) = 0,
 ): PrismaService {
   return {
     $executeRawUnsafe: async () => 0,
-    session: { findUnique: async ({ where }: { where: { id: string } }) => rows[where.id] ?? null },
-    approval: { count: async () => pendingApprovals },
+    session: {
+      findUnique: async ({ where }: { where: { id: string } }) => {
+        const row = rows[where.id];
+        if (!row) return null;
+        // `runningBgShells` is NOT NULL DEFAULT '{}' (schema.prisma), so a fixture that does not
+        // spell it answers with the empty set — as the row would if it had been inserted without it.
+        return { ...row, runningBgShells: row.runningBgShells ?? [] };
+      },
+    },
+    // A number stands in for "the table answers this much"; a function is the table itself, for the
+    // one case where the count is a predicate over WHICH rows answer (`backgroundJobId ∈ …`).
+    approval: {
+      count: async ({ where }: { where: Record<string, never> }) =>
+        typeof pendingApprovals === 'function' ? pendingApprovals(where) : pendingApprovals,
+    },
     // `pendingApprovals` on the wire is blocked tool calls PLUS the owner decisions the
     // conversation is the surface for (`projects/owner-decision-signal.ts`). These fixtures
     // coordinate no project, so the second half contributes nothing and the numbers below are
@@ -86,7 +103,10 @@ const rowA: Row = {
 
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
 // sets up the in-memory hub, which is all these tests exercise.
-function svcWith(rows: Record<string, Row>, pending = 0): RealtimeService {
+function svcWith(
+  rows: Record<string, Row>,
+  pending: number | ((where: Record<string, never>) => number) = 0,
+): RealtimeService {
   // These tests exercise streamForUser only; a no-op push stub satisfies the new constructor dep.
   const push = { scheduleBadgeSync: () => undefined } as unknown as PushService;
   return new RealtimeService(fakePrisma(rows, pending), push);
@@ -139,6 +159,67 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   });
   assert.equal(data.projectId, 'projectA');
   assert.equal(data.projectTitle, 'Fix the project');
+});
+
+test('a parked conversation counts the cards a live runner-hosted job is still reading', async () => {
+  // The row this count was blind to: AWAITING_INPUT with the engine gone, a runner-hosted job still
+  // up, and one card that job is polling for. The table holds two PENDING cards — the live job's and
+  // one whose job has already gone — so an answer of 0 (the old "not generating, so nothing") and an
+  // answer of 2 (every pending row) both fail here, and only the rule passes.
+  const parked: Row = {
+    ...rowA,
+    id: 'sessParked',
+    ownerId: 'userB',
+    status: RunStatus.AWAITING_INPUT,
+    engineTurnActive: false,
+    runningBgShells: ['bgj_up'],
+  };
+  const cards = [{ backgroundJobId: 'bgj_up' }, { backgroundJobId: 'bgj_gone' }];
+  const whereSeen: Array<{ in: string[] }> = [];
+  const svc = svcWith({ sessParked: parked }, (where) => {
+    const live = where.backgroundJobId as unknown as { in: string[] };
+    whereSeen.push(live);
+    return cards.filter((c) => live.in.includes(c.backgroundJobId)).length;
+  });
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userB').subscribe((e) => got.push(e));
+  svc.publish('sessParked', {
+    seq: 1,
+    type: RunEventType.STATUS,
+    ts: '2026-06-26T00:05:00.000Z',
+    payload: { status: RunStatus.AWAITING_INPUT },
+  });
+  await delay(30);
+  sub.unsubscribe();
+
+  assert.equal(got.length, 1);
+  const data = got[0]!.data as Record<string, unknown>;
+  assert.equal(data.status, 'AWAITING_INPUT');
+  assert.equal(data.pendingApprovals, 1,
+    'a card a live runner-hosted job is reading is not counted on the parked conversation');
+  // And the question really was asked of the table as the job-membership rule: the live shell set,
+  // on a PENDING card. A count over the whole table would have answered 2 without this.
+  assert.deepEqual(whereSeen, [{ in: ['bgj_up'] }]);
+
+  // The paired control: the same conversation with the job gone is not read at all. Nothing can be
+  // waiting on a process that is not there, which is the same skip the generating check made.
+  let reads = 0;
+  const quiet = svcWith({ sessParked: { ...parked, runningBgShells: [] } }, () => {
+    reads += 1;
+    return 2;
+  });
+  const quietGot: ControlEvent[] = [];
+  const quietSub = quiet.streamForUser('userB').subscribe((e) => quietGot.push(e));
+  quiet.publish('sessParked', {
+    seq: 1,
+    type: RunEventType.STATUS,
+    ts: '2026-06-26T00:05:00.000Z',
+    payload: { status: RunStatus.AWAITING_INPUT },
+  });
+  await delay(30);
+  quietSub.unsubscribe();
+  assert.equal((quietGot[0]!.data as Record<string, unknown>).pendingApprovals, 0);
+  assert.equal(reads, 0, 'the approval table was read for a conversation with no live job');
 });
 
 test("another user's stream never sees the event", async () => {

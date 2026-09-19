@@ -35,6 +35,10 @@ function sessionRow() {
     tags: [],
     tagLinks: [],
     runningBgCount: 0,
+    // The raw shell ids, which the list reads (and never ships) to decide whether a card is still
+    // being asked — `approval.background_job_id` versus this set, so the mapper needs the ids and
+    // not the cardinality beside them.
+    runningBgShells: [],
     // The two columns the list's `runningBgJobCount` is derived from: the live job set, and when each
     // of those jobs last produced output. The count is not one of the row's columns any more — which
     // jobs still count is a fact about `now` (background-job-activity.ts), so the mapper decides it.

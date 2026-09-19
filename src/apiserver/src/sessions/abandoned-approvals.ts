@@ -1,4 +1,6 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+
+import { isSessionGenerating } from '../common/session-generating';
 
 /**
  * Collecting the approvals whose tool call can never be answered — on a committed fact, never on a
@@ -153,6 +155,61 @@ export async function reapApprovalsOfEndedTurns(
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_MESSAGE },
   });
   return lostItsJob.count + lostItsTurn.count;
+}
+
+/**
+ * Whether the runner-hosted job a card names is still there to read an answer.
+ *
+ * The read side of the rule the reaper above collects on, and the same expression on purpose: a
+ * card that names a job is settled by that job alone, so it is still a question while the process
+ * is up — whatever the conversation is doing, and whether or not a turn was ever in flight — and
+ * it stops being one exactly where the reap would take it. `running_bg_shells` is the column that
+ * means "a process is still up", the same one and for the same reason the reap reads it.
+ *
+ * Written here, beside the reap, because the two are one rule: an approval reader that asked the
+ * question its own way is how a card stops being shown while it is still answerable, which is the
+ * defect this pair exists to end.
+ */
+export function readByLiveBackgroundJob(
+  approval: { backgroundJobId: string | null },
+  runningBgShells: readonly string[],
+): boolean {
+  return approval.backgroundJobId !== null && runningBgShells.includes(approval.backgroundJobId);
+}
+
+/**
+ * How many of a session's cards are still being asked, over the two readers above.
+ *
+ * The count half of that read, as one function so the surfaces that report a number cannot answer it
+ * differently: a generating session holds its turn's cards and counts every pending row it has —
+ * what this number has always been, and deliberately a superset, because the door re-reads the facts
+ * and this is the signal — while a conversation that is NOT generating counts only the cards a
+ * runner-hosted job is still reading, which it can be holding while parked. The session list
+ * decides the same total per row (it has the page in hand); this is the shape for a caller that has
+ * one session and asks for its number.
+ *
+ * The session is typed as the generating predicate's own input, so the two cannot come to different
+ * verdicts about which states count (it reads the Prisma `RunStatus`, callers the shared one).
+ */
+export async function countLiveApprovals(
+  db: Pick<PrismaClient, 'approval'>,
+  session: { id: string; runningBgShells: readonly string[] } & Parameters<
+    typeof isSessionGenerating
+  >[0],
+): Promise<number> {
+  if (isSessionGenerating(session)) {
+    return db.approval.count({ where: { sessionId: session.id, status: 'PENDING' } });
+  }
+  if (session.runningBgShells.length === 0) return 0;
+  return db.approval.count({
+    where: {
+      sessionId: session.id,
+      status: 'PENDING',
+      // The predicate above as the query spells it. `in` over the session's own live set is the
+      // whole rule: a card is a question while the job it named is up.
+      backgroundJobId: { in: [...session.runningBgShells] },
+    },
+  });
 }
 
 /** The trace, in the row itself, of why a card whose reader was replaced will never be answered. */

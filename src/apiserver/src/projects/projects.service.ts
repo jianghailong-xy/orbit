@@ -26,7 +26,7 @@ import {
   type SessionRunState,
   toUuid,
 } from '@orbit/shared';
-import { isSessionGenerating } from '../common/session-generating';
+import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { SingleFlight } from '../common/single-flight';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -631,6 +631,9 @@ const COORDINATOR_STATUS_SESSION_SELECT = {
   archivedAt: true,
   deletedAt: true,
   engineTurnActive: true,
+  // Read by the approval count below: the live set a card's `background_job_id` has to be in to
+  // still be a question on a conversation that is not generating (migration 0291).
+  runningBgShells: true,
 } satisfies Prisma.SessionSelect;
 
 type CoordinatorStatusSessionRow = Prisma.SessionGetPayload<{
@@ -4103,13 +4106,12 @@ export class ProjectsService {
           ? ('COORDINATION_WORKSPACE_TRASHED' as const)
           : null;
 
-    // Only a generating session can be holding a live approval, and the count is gated exactly the
-    // way the session list gates it — including a self-driven turn, which stays at AWAITING_INPUT
-    // while it runs and whose prompt is no less blocking for it.
-    const pendingApprovals =
-      session != null && isSessionGenerating(session)
-        ? await this.prisma.approval.count({ where: { sessionId: session.id, status: 'PENDING' } })
-        : 0;
+    // The cards the conversation is still being asked, counted the way the session list counts them
+    // — one function, so the two surfaces cannot come to different totals for the same row. That
+    // includes a self-driven turn, which stays at AWAITING_INPUT while it runs and whose prompt is
+    // no less blocking for it, and the card a runner-hosted job is still reading on a conversation
+    // that is parked: a coordinator conversation is exactly the shape such a job asks on.
+    const pendingApprovals = session == null ? 0 : await countLiveApprovals(this.prisma, session);
 
     // The two progress rows (§7.2 V9). Read here rather than on their own endpoint because they are
     // the same subject as everything else on this card — what the conversation is doing and whether

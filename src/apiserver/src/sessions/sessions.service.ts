@@ -126,6 +126,7 @@ import {
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
+import { readByLiveBackgroundJob } from './abandoned-approvals';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   normalizeBuiltinPermissionMode,
@@ -2236,7 +2237,7 @@ export class SessionsService {
       deletedAt: null,
       workspaceId: { not: null },
     } as const;
-    const [active, running, jobs, blocked] = await Promise.all([
+    const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
         by: ['workspaceId'],
         where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
@@ -2278,6 +2279,25 @@ export class SessionsService {
       this.prisma.session.findMany({
         where: { ...open, ...GENERATING_SESSION_FILTER, approvals: { some: { status: 'PENDING' } } },
         select: { id: true, workspaceId: true },
+      }),
+      // The second kind of card a person still has to answer, and the one the query above cannot
+      // see: a card that names the runner-hosted job reading it (approval.background_job_id,
+      // migration 0291) is a question while that process is up, whatever the conversation is
+      // doing — and a job may file one while no turn is in flight at all, which is the ordinary
+      // shape of a watch that decides an hour later. Candidate set: the sessions with any shell
+      // up, because only those can hold one, which keeps this a lookup too; the membership test
+      // inside is the same fact `abandoned-approvals.ts` collects on, read by the same predicate.
+      this.prisma.session.findMany({
+        where: { ...open, runningBgShells: { isEmpty: false } },
+        select: {
+          id: true,
+          workspaceId: true,
+          runningBgShells: true,
+          approvals: {
+            where: { status: 'PENDING', backgroundJobId: { not: null } },
+            select: { backgroundJobId: true },
+          },
+        },
       }),
     ]);
     // The other half of "needs you": decisions only the account owner can take, waiting on the
@@ -2326,6 +2346,14 @@ export class SessionsService {
     const needsYou = new Set<string>();
     for (const session of [...blocked, ...awaitingDecision]) {
       if (!session.workspaceId || needsYou.has(session.id)) continue;
+      needsYou.add(session.id);
+      row(session.workspaceId).needsYou += 1;
+    }
+    // The job cards from the query above, on the same one-row-per-conversation rule: a session
+    // already lit by a blocked turn is not lit twice by the card a job filed beside it.
+    for (const session of jobCards) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      if (!session.approvals.some((a) => readByLiveBackgroundJob(a, session.runningBgShells))) continue;
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
     }
@@ -2430,6 +2458,7 @@ export class SessionsService {
       pinnedAt: Date | null;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
+      runningBgShells: string[];
       // The live job set with its per-job freshness, shipped raw so the mapper below can count it:
       // which of those jobs still count as work in flight is a fact about `now` (see
       // background-job-activity.ts), so it cannot be a cardinality in the query.
@@ -2513,6 +2542,11 @@ export class SessionsService {
           WHERE stl.session_id = s.id
         ), '[]'::json) AS "tags",
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
+        -- The ids themselves, read by the mapper and never shipped: whether a card is still being
+        -- asked depends on its background_job_id being IN this set (readByLiveBackgroundJob in
+        -- sessions/abandoned-approvals.ts), which a cardinality cannot answer. A client that wants
+        -- the processes asks the count.
+        s.running_bg_shells AS "runningBgShells",
         -- The subset of the above that is work in flight (a job/watch, never a service), minus the
         -- ones that have gone quiet: what the clients draw as the pulsing terminal glyph, and what
         -- the workspace rail reads as background activity. See Session.runningBgJobs and
@@ -2679,18 +2713,40 @@ export class SessionsService {
       }),
     );
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
-    // "running" from "waiting for approval" without this count. Only a generating session can
-    // hold a live approval; skip the query otherwise. That includes a self-driven turn, which
-    // stays at AWAITING_INPUT while it runs — its prompt is no less blocking for it.
-    const generating = sessions.filter(isSessionGenerating).map((s) => s.id);
-    const counts = generating.length === 0
+    // "running" from "waiting for approval" without this count. A conversation can be holding a
+    // card in two ways, and it has to be one of them to have one: its turn is live — a generating
+    // session, including a self-driven turn, which stays at AWAITING_INPUT while it runs and whose
+    // prompt is no less blocking for it — or a runner-hosted job is still reading the card it
+    // named (migration 0291), which a PARKED conversation holds just as well. That second class is
+    // the one a generating-only count was blind to, and the one this list has to show if a job's
+    // card is to be answerable at all; the rail's `needsYou` counts the same pair.
+    //
+    // Rows rather than a `groupBy`, because the second class is not a predicate the query can
+    // carry: the question is whether a card's `background_job_id` is IN its session's
+    // `running_bg_shells`. The candidate set is the sessions that are generating plus the ones with
+    // a shell up — a handful even on a busy account — so this stays a lookup. What the turn half
+    // counts is unchanged from when it was the only half: every PENDING card of a generating
+    // session, which is the signal this number has always been, and the door re-reads the facts.
+    const generating = new Set(sessions.filter(isSessionGenerating).map((s) => s.id));
+    // Off the raw rows, not the mapped ones: the shell ids are read here and deliberately not
+    // shipped to the client, so they do not survive into the payload above.
+    const shells = new Map(
+      rows.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
+    );
+    const candidates = [...new Set([...generating, ...shells.keys()])];
+    const cards = candidates.length === 0
       ? []
-      : await this.prisma.approval.groupBy({
-          by: ['sessionId'],
-          where: { sessionId: { in: generating }, status: 'PENDING' },
-          _count: { _all: true },
+      : await this.prisma.approval.findMany({
+          where: { sessionId: { in: candidates }, status: 'PENDING' },
+          select: { sessionId: true, backgroundJobId: true },
         });
-    const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));
+    const byId = new Map<string, number>();
+    for (const card of cards) {
+      if (!generating.has(card.sessionId) && !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? [])) {
+        continue;
+      }
+      byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
+    }
     // Plus the owner decisions each row is the surface for. A blocked tool call and an unanswered
     // criteria decision are one question to the reader of this list — "is somebody waiting on me
     // here" — so they are one number, and the row's own `projectId` is where the second kind leads.
@@ -5501,13 +5557,22 @@ export class SessionsService {
    * turn; a surface that looks answerable and silently is not is worse than no surface
    * (`docs/completion-input-routing.md` §A2 D1).
    *
-   * Two committed facts therefore take a row out of the pending answer, and only those two:
+   * A row is offered while either reader this product has is still there to take an answer, and
+   * there are exactly two:
    *
-   *   - the session is not generating — `isSessionGenerating` is already the predicate for "which
-   *     sessions can be holding a live approval", and the one the per-workspace badge counts with,
-   *     so a dead card stopped being counted long before it stopped being shown;
-   *   - the tool call this approval was raised for already has a result, which is what the engine
-   *     abandoning the call writes and the only trace it leaves while the turn runs on.
+   *   - the turn it was raised in. That is the whole of `stillBeingAsked` for a card that names no
+   *     job, and two committed facts end it: the session is not generating — `isSessionGenerating`
+   *     is already the predicate for "which sessions can be holding a live approval", and the one
+   *     the per-workspace badge counts with, so a dead card stopped being counted long before it
+   *     stopped being shown — and the tool call this approval was raised for already has a result,
+   *     which is what the engine abandoning the call writes and the only trace it leaves while the
+   *     turn runs on;
+   *   - the runner-hosted job a card names (`approval.background_job_id`, migration 0291). That
+   *     process is the asker's reader and it OUTLIVES the turn by construction, so the turn decides
+   *     nothing for such a card: it is a question while the job is up, and `abandoned-approvals.ts`
+   *     collects it when the job goes. Without this half the card a job is polling for was simply
+   *     invisible on a parked conversation — the job waiting, the row PENDING, and every surface
+   *     saying nobody was asking.
    *
    * Neither is a clock and neither writes anything: the row is left as it stands, a listing that
    * asks for any other status is untouched, and the question an unanswered evidence card was about
@@ -5516,7 +5581,7 @@ export class SessionsService {
   async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, engineTurnActive: true },
+      select: { id: true, status: true, engineTurnActive: true, runningBgShells: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
@@ -5527,23 +5592,57 @@ export class SessionsService {
     return answerable.map((a) => this.toApprovalInfo(a));
   }
 
-  /** The `PENDING` rows an answer could still reach, on the two facts `listApprovals` names. */
-  private async stillBeingAsked<T extends { toolUseId: string | null }>(
-    session: { id: string; status: RunStatus; engineTurnActive: boolean },
+  /**
+   * The `PENDING` rows an answer could still reach, on the readers `listApprovals` names.
+   *
+   * Which reader a card has is decided by the card: one that names a runner-hosted job is read by
+   * that process and by nothing else — it may have been filed while no turn was in flight at all —
+   * so its job settles it and the turn is not consulted. Everything else is read by the turn it was
+   * raised in, which is why the generating check and the finished-call read apply to those and to
+   * those only. Both halves are the reaper's own rule (`readByLiveBackgroundJob`,
+   * `abandoned-approvals.ts`), so a card leaves this list exactly where it stops being answerable.
+   */
+  private async stillBeingAsked<
+    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null },
+  >(
+    session: {
+      id: string;
+      status: RunStatus;
+      engineTurnActive: boolean;
+      runningBgShells: string[];
+    },
     approvals: T[],
   ): Promise<T[]> {
     if (approvals.length === 0) return approvals;
-    if (!isSessionGenerating(session)) return [];
-    const raised = approvals.map((a) => a.toolUseId).filter((id): id is string => id !== null);
-    if (raised.length === 0) return approvals;
+    const generating = isSessionGenerating(session);
+    const raised = approvals
+      .filter((a) => a.backgroundJobId === null)
+      .map((a) => a.toolUseId)
+      .filter((id): id is string => id !== null);
     // An old runtime sent no tool_use id, so its rows can never be paired with a result and are
-    // left alone: this drops a card on evidence that it is over, never on the absence of it.
-    const answered = await this.prisma.toolCall.findMany({
-      where: { sessionId: session.id, toolUseId: { in: raised }, finishedAt: { not: null } },
-      select: { toolUseId: true },
-    });
-    const over = new Set(answered.map((call) => call.toolUseId));
-    return approvals.filter((a) => a.toolUseId === null || !over.has(a.toolUseId));
+    // left alone: this drops a card on evidence that it is over, never on the absence of it. The
+    // read is skipped when there is nothing the turn could tell us about — no id to pair against,
+    // or a turn that is not running, which leaves its cards over whatever the calls say.
+    const over =
+      raised.length === 0 || !generating
+        ? new Set<string>()
+        : new Set(
+            (
+              await this.prisma.toolCall.findMany({
+                where: {
+                  sessionId: session.id,
+                  toolUseId: { in: raised },
+                  finishedAt: { not: null },
+                },
+                select: { toolUseId: true },
+              })
+            ).map((call) => call.toolUseId),
+          );
+    return approvals.filter((a) =>
+      a.backgroundJobId === null
+        ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
+        : readByLiveBackgroundJob(a, session.runningBgShells),
+    );
   }
 
   /** Record a human allow/deny on a pending approval; the runner's long-poll picks
@@ -5630,6 +5729,7 @@ export class SessionsService {
     toolName: string;
     input: Prisma.JsonValue;
     toolUseId: string | null;
+    backgroundJobId: string | null;
     status: string;
     message: string | null;
     createdAt: Date;
@@ -5641,6 +5741,7 @@ export class SessionsService {
       toolName: a.toolName,
       input: a.input,
       toolUseId: a.toolUseId ?? undefined,
+      backgroundJobId: a.backgroundJobId ?? undefined,
       status: a.status as ApprovalStatus,
       message: a.message ?? undefined,
       createdAt: a.createdAt.toISOString(),

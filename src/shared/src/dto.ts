@@ -1176,6 +1176,12 @@ export interface ApprovalInfo {
   toolName: string;
   input: unknown;
   toolUseId?: string;
+  /** The runner-hosted job reading this card, for an ask that came from one rather than from the
+   *  turn it names (`ApprovalCreateRequest.backgroundJobId`) — the reader that outlives the turn.
+   *  A client holding a card and a session can decide whether that reader is still there the same
+   *  way the server does: the id is in the session's `runningBgShells` or it is not. Absent on
+   *  in-turn asks, which is every ask that names no job. */
+  backgroundJobId?: string;
   status: ApprovalStatus;
   message?: string;
   createdAt: string;

@@ -30,6 +30,7 @@ import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
+import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
@@ -771,7 +772,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         break;
       case ControlEventType.APPROVAL_REQUESTED:
       case ControlEventType.APPROVAL_RESOLVED: {
-        const approvals = await this.countPendingApprovals(sessionId);
+        // The same count the summary and the list compute, which is not "every pending row": a card
+        // a live runner-hosted job is still reading is a question on a conversation that is parked,
+        // and this is the number the client overwrites its row with.
+        const reader = await this.prisma.session.findUnique({
+          where: { id: sessionId },
+          select: { id: true, status: true, engineTurnActive: true, runningBgShells: true },
+        });
+        const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, meta.ownerId);
         data = {
           approvalId: approvalIdOf(ev.payload),
@@ -825,6 +833,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         title: true,
         status: true,
         engineTurnActive: true,
+        // Read by the approval count below: the set a card's `background_job_id` has to be in to
+        // be a question on a conversation that is not generating (migration 0291).
+        runningBgShells: true,
         engineStartedAt: true,
         enginePhase: true,
         runClaimedAt: true,
@@ -854,10 +865,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const lifecycleState = deriveSessionLifecycleState(s);
     const filingState = deriveSessionFilingState(s);
     const capabilities = deriveSessionCapabilities(s);
-    // A blocked permission keeps a session generating, so only a generating session can hold a
-    // live approval — skip the count otherwise (mirrors the list endpoint). A self-driven turn
-    // counts: it stays at AWAITING_INPUT while it runs, and its prompt still blocks it.
-    const approvals = isSessionGenerating(s) ? await this.countPendingApprovals(sessionId) : 0;
+    // A blocked permission keeps a session generating, and a card a runner-hosted job is still
+    // reading is live on a conversation that is parked — the two readers a card has, counted the
+    // same way the list endpoint counts them (see `countLiveApprovals`). A self-driven turn counts
+    // as generating: it stays at AWAITING_INPUT while it runs, and its prompt still blocks it.
+    const approvals = await countLiveApprovals(this.prisma, s);
     // Outside that gate on purpose: an owner decision is not held open by a turn, so it is still
     // waiting after the conversation parks. That gap is why the badge was dark for a decision
     // that had been sitting unanswered.
@@ -901,10 +913,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       runClaimedAt: s.runClaimedAt ? s.runClaimedAt.toISOString() : null,
       enginePhaseSince: s.enginePhaseSince ? s.enginePhaseSince.toISOString() : null,
     };
-  }
-
-  private countPendingApprovals(sessionId: string): Promise<number> {
-    return this.prisma.approval.count({ where: { sessionId, status: 'PENDING' } });
   }
 
   /** Owner decisions asked on this conversation: how many and of which kinds, never a key; the

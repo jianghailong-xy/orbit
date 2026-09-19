@@ -35,6 +35,18 @@ import { SessionsService } from './sessions.service';
  * `GET /sessions/:id/approvals?status=PENDING`) offers, and asserts it while the question was still
  * live as the paired positive.
  *
+ * THE READER THAT IS NOT THE TURN — AND THE ONE THAT WAS INVISIBLE
+ * ===============================================================
+ * Both cases above end the asking by ending the turn, which is right for every card whose reader IS
+ * the turn. A runner-hosted job is the reader that outlives it (`approval.background_job_id`,
+ * migration 0291; the reap and the reasoning are in `abandoned-approvals.ts`), and the surfaces
+ * went on reading "the engine is not running" as "nothing is being asked": the row stayed PENDING,
+ * the job stayed up and polling, and the owner was shown nothing to answer. The third case is that
+ * reading, with the turn's card parked beside it as the negative control — one conversation, one
+ * session status, two cards, and the reader each names deciding which of them is still a question.
+ * It asserts all three of the reads that were blind: the door, the session list's
+ * `pendingApprovals`, and the rail's per-workspace `needsYou`.
+ *
  * WHY THIS FILE IS HERE
  * =====================
  * Until 2026-09-10 these two cases were half of `tasks/coordinator-evidence-unanswered.pg.spec.ts`,
@@ -99,6 +111,8 @@ async function connect(): Promise<Stack> {
 interface Fixture {
   ownerId: string;
   runnerId: string;
+  /** The workspace the conversation runs in — the rail tallies `needsYou` per workspace. */
+  workspaceId: string;
   /** The conversation the card is raised in. */
   sessionId: string;
 }
@@ -157,11 +171,14 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       status: 'ANSWERED',
     },
   });
-  return { ownerId, runnerId, sessionId };
+  return { ownerId, runnerId, workspaceId, sessionId };
 }
 
 /** The tool-use id the card is raised under, one per fixture. */
 const askToolUseId = (f: Fixture) => `toolu_ask_${f.sessionId}`;
+
+/** The runner-hosted job this file's second kind of asker is, one per fixture. */
+const backgroundJobIdOf = (f: Fixture) => `bgj_${f.sessionId}`;
 
 /** What the engine asks with: one question, two options, and nothing behind it but the asking. */
 const QUESTION = {
@@ -251,9 +268,70 @@ async function theTurnIsReclaimed(db: PrismaClient, f: Fixture): Promise<void> {
   });
 }
 
+/**
+ * A runner-hosted job claims itself as the reader of the card it is asking.
+ *
+ * The other kind of asker, and the one that makes the turn rule above false: the job goes on
+ * running — and polling — after the turn that started it ends, because that is what hosting the
+ * process on the runner is FOR. The runner exports the job's id to the job's own environment
+ * (`ORBIT_BG_JOB_ID`), the CLI hands it back on the create request, and the row carries it
+ * (`approval.background_job_id`, migration 0291). `Session.running_bg_shells` is where the runner
+ * reports which of those processes are still up.
+ *
+ * No `tool_call` row beside this one, deliberately: the ask was made through the runner's own MCP
+ * server, not by an engine tool_use, so there is no call for the engine to have abandoned and
+ * nothing on the row that could pair with one. What the card is read by is the job.
+ */
+async function theJobAsks(stack: Stack, f: Fixture): Promise<string> {
+  const raised = await stack.runner.createApproval(
+    { id: f.runnerId },
+    f.sessionId,
+    {
+      toolName: 'orbit_blocker_resolve',
+      input: { projectId: f.sessionId, blockerId: f.sessionId, reason: 'the condition is gone' },
+      toolUseId: `toolu_job_${f.sessionId}`,
+      backgroundJobId: backgroundJobIdOf(f),
+    },
+  );
+  return raised.id;
+}
+
+/** The job is up, as the runner reports it: its id is in the session's live shell set. */
+async function theJobIsUp(db: PrismaClient, f: Fixture): Promise<void> {
+  await db.session.update({
+    where: { id: f.sessionId },
+    data: { runningBgShells: [backgroundJobIdOf(f)] },
+  });
+}
+
+/** The job ends — the runner reports its id gone, and the poll loop goes with the process. */
+async function theJobGoes(db: PrismaClient, f: Fixture): Promise<void> {
+  await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [] } });
+}
+
 /** What the browser is offered when it asks for this conversation's pending approvals. */
 function cardsOffered(stack: Stack, f: Fixture) {
   return stack.sessions.listApprovals(f.ownerId, f.sessionId, 'PENDING');
+}
+
+/** The ids it is offered, sorted: the listing orders by `created_at`, which ties for cards filed
+ *  in the same millisecond, so a case holding two of them compares the set rather than a sequence. */
+async function cardsOfferedById(stack: Stack, f: Fixture): Promise<string[]> {
+  return (await cardsOffered(stack, f)).map((card) => card.id).sort();
+}
+
+/** The conversation's row as the session list serves it — the other read the count is on. */
+async function listedRow(stack: Stack, f: Fixture) {
+  const rows = await stack.sessions.list(f.ownerId, {});
+  const row = rows.find((s: { id: string }) => s.id === f.sessionId);
+  assert.ok(row, 'the conversation is in this owner’s Open list');
+  return row as { id: string; status: RunStatus; pendingApprovals: number };
+}
+
+/** The per-workspace tally the rail draws, for the workspace this conversation runs in. */
+async function workspaceTally(stack: Stack, f: Fixture) {
+  const rows = await stack.sessions.workspaceSessionCounts(f.ownerId);
+  return rows.find((r) => r.workspaceId === f.workspaceId) ?? null;
 }
 
 test('the engine abandons the card: it stops being offered, and the row is left as it was',
@@ -320,6 +398,67 @@ test('the turn is reclaimed: the card goes with it, and the row is left as it wa
       assert.deepEqual(
         await cardsOffered(stack, f), [],
         'a card left behind by a reclaimed turn is still offered as the live question',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('the job is still reading: the card outlives the turn, and goes when the job does',
+  { skip, timeout: 300_000 }, async () => {
+    const stack = await connect();
+    try {
+      const f = await fixture(stack.db, 'job-read');
+      await theRunnerTakesTheTurn(stack.db, f);
+      // Two cards on one conversation, and the only thing that tells them apart is the reader each
+      // names: one the turn is asking, one a runner-hosted job is asking. Both are live while the
+      // turn is — asserted before anything ends, so what follows is a difference the parking made
+      // and not a card that was never offered.
+      const turnCard = await theModelAsks(stack, f);
+      const jobCard = await theJobAsks(stack, f);
+      await theJobIsUp(stack.db, f);
+      assert.deepEqual(
+        await cardsOfferedById(stack, f), [jobCard, turnCard].sort(),
+        'a card a live job is reading was not offered while the turn was running too',
+      );
+
+      await theTurnIsReclaimed(stack.db, f);
+
+      // The negative control, in the same conversation and the same state: "the engine is not
+      // running" is true of both rows, and it is still the whole answer for the turn's card. The
+      // job's card is the one thing parked beside it that it does not speak for.
+      assert.equal(
+        (await stack.db.approval.findUniqueOrThrow({ where: { id: turnCard } })).status, 'PENDING',
+        'the reclaimed turn wrote to the card, which is not how this failure presents',
+      );
+      assert.deepEqual(
+        await cardsOfferedById(stack, f), [jobCard],
+        'the card a live runner-hosted job is still reading was taken down with the turn',
+      );
+
+      // The two counting reads a surface draws from agree with the door, and they count the same
+      // one: the list row a person clicks, and the rail's tally for the workspace behind it.
+      assert.equal((await listedRow(stack, f)).pendingApprovals, 1,
+        'the session list does not say a question is waiting on the parked conversation');
+      assert.equal((await workspaceTally(stack, f))?.needsYou ?? 0, 1,
+        'the workspace rail does not light for a conversation a job is asking on');
+
+      // The job goes. Nothing writes to the row: this listing answers what is still being ASKED,
+      // and the reap that collects an unanswerable one is the other module's
+      // (`abandoned-approvals.ts`), on the same fact and at the boundary that commits it.
+      await theJobGoes(stack.db, f);
+
+      assert.deepEqual(
+        await cardsOffered(stack, f), [],
+        'a card whose job has gone is still offered as the live question',
+      );
+      assert.equal((await listedRow(stack, f)).pendingApprovals, 0,
+        'the session list still counts a card whose job has gone');
+      assert.equal((await workspaceTally(stack, f))?.needsYou ?? 0, 0,
+        'the workspace rail still lights for a card whose job has gone');
+      assert.equal(
+        (await stack.db.approval.findUniqueOrThrow({ where: { id: jobCard } })).status, 'PENDING',
+        'the listing collected the row, which is not its job',
       );
     } finally {
       await stack.db.$disconnect();

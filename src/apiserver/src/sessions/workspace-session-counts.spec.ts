@@ -52,12 +52,14 @@ test('workspace counts separate queued activity from Session-list spinner work',
       },
       findMany: async (args: any) => {
         findManyCalls.push(args);
-        // Three different questions reach this method, told apart by what they ask for rather than
+        // Four different questions reach this method, told apart by what they ask for rather than
         // by call order. The first is the jobs-only set — work in flight with nobody generating,
-        // which is neither of the other two: a workspace whose only live session is parked with a
+        // which is neither of the others: a workspace whose only live session is parked with a
         // `bg_run` job and no turn in it. The second is the blocked-on-a-tool-call population; the
-        // third resolves the conversations an owner DECISION is waiting on
-        // (`projects/owner-decision-signal.ts`) to the workspaces they run in.
+        // third is the cards a runner-hosted JOB is still reading — the one population a turn rule
+        // cannot see, since there need not be a live turn at all — and the fourth resolves the
+        // conversations an owner DECISION is waiting on (`projects/owner-decision-signal.ts`) to
+        // the workspaces they run in.
         if (args?.where?.runningBgJobs) {
           return sessionsWithJobs;
         }
@@ -65,6 +67,33 @@ test('workspace counts separate queued activity from Session-list spinner work',
           return [
             { id: 's-running', workspaceId: 'w-running' },
             { id: 's-needs-you', workspaceId: 'w-needs-you' },
+          ];
+        }
+        if (args?.where?.runningBgShells) {
+          // Two conversations spelled the same way, told apart only by whether the card names the
+          // job that is up: `bgj_up` is in the shell set and `bgj_gone` is not, which is the whole
+          // rule. The third row holds a card with no job at all on a conversation with a shell up —
+          // an in-turn card left on a parked session, which is nobody's question and must not be
+          // lit by this path.
+          return [
+            {
+              id: 's-job-live',
+              workspaceId: 'w-job-live',
+              runningBgShells: ['bgj_up'],
+              approvals: [{ backgroundJobId: 'bgj_up' }],
+            },
+            {
+              id: 's-job-gone',
+              workspaceId: 'w-job-gone',
+              runningBgShells: ['bgj_up'],
+              approvals: [{ backgroundJobId: 'bgj_gone' }],
+            },
+            {
+              id: 's-turn-card',
+              workspaceId: 'w-turn-card',
+              runningBgShells: ['bgj_up'],
+              approvals: [{ backgroundJobId: null }],
+            },
           ];
         }
         return [{ id: 's-coordinator', workspaceId: 'w-decision' }];
@@ -145,6 +174,20 @@ test('workspace counts separate queued activity from Session-list spinner work',
     jobs: 0,
     needsYou: 1,
   });
+  // The third source, and the one the other two cannot see: a card a runner-hosted job is still
+  // reading on a conversation that is parked — no turn in flight, a live process polling for the
+  // answer. The rail lights for it, and lights for exactly it: the same conversation shape with the
+  // job gone is not a question (its card is what the reap collects), and a card naming no job at all
+  // is the turn's, which is over.
+  assert.deepEqual(byWorkspace.get('w-job-live'), {
+    workspaceId: 'w-job-live',
+    active: 0,
+    running: 0,
+    jobs: 0,
+    needsYou: 1,
+  });
+  assert.equal(byWorkspace.get('w-job-gone'), undefined);
+  assert.equal(byWorkspace.get('w-turn-card'), undefined);
   // The second source: a conversation with an unanswered owner decision on it and no approval row
   // anywhere. It is neither running nor queued, so `needsYou` is the only thing this workspace has
   // — which is exactly the state the tally used to report as nothing at all.
@@ -158,10 +201,28 @@ test('workspace counts separate queued activity from Session-list spinner work',
   // And it is scoped to the Open list the same way the blocked query is, so a decision waiting on
   // a conversation the owner filed away does not light a workspace they are not looking at.
   const decisionQuery = findManyCalls.find(
-    (call) => !call?.where?.approvals && !call?.where?.runningBgJobs,
+    (call) => !call?.where?.approvals && !call?.where?.runningBgJobs && !call?.where?.runningBgShells,
   );
   assert.equal(decisionQuery.where.completedAt, null);
   assert.equal(decisionQuery.where.deletedAt, null);
+
+  // The job-card tally is the same kind of lookup: candidates are the conversations with any shell
+  // up, the same Open scope, and it reads only what the rule needs — the shell set, and the pending
+  // cards' job ids. The card rows are fetched narrowed to the ones that name a job, because a card
+  // that names none is the turn's and this question is not about the turn.
+  const jobCardsQuery = findManyCalls.find((call) => call?.where?.runningBgShells);
+  assert.deepEqual(jobCardsQuery.where.runningBgShells, { isEmpty: false });
+  assert.equal(jobCardsQuery.where.completedAt, null);
+  assert.equal(jobCardsQuery.where.deletedAt, null);
+  assert.deepEqual(jobCardsQuery.select, {
+    id: true,
+    workspaceId: true,
+    runningBgShells: true,
+    approvals: {
+      where: { status: 'PENDING', backgroundJobId: { not: null } },
+      select: { backgroundJobId: true },
+    },
+  });
 
   // The jobs tally is still a lookup on the denormalized set — candidates that hold no job in
   // flight are never read — and still over the same Open scope as the other two.

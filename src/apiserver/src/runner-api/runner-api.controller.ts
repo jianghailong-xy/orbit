@@ -3003,6 +3003,11 @@ export class RunnerApiController {
           toolName: approval.toolName,
           input: approval.input,
           toolUseId: approval.toolUseId ?? undefined,
+          // The reader that outlives the turn, to a client that has to answer "is this still a
+          // question" itself: a card raised by a runner-hosted job is live while that process is
+          // up, whatever the conversation is doing, and a client that reads only the turn would
+          // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
+          backgroundJobId: approval.backgroundJobId ?? undefined,
         },
         ts: new Date().toISOString(),
       });

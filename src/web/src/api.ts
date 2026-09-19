@@ -586,6 +586,10 @@ export interface ApprovalInfo {
   toolName: string;
   input: unknown;
   toolUseId?: string;
+  /** The runner-hosted job reading this card, when the ask came from one rather than from the turn
+   *  it names (`shared/dto.ts`): the reader that outlives the turn, and what the local
+   *  "is this still a question" predicate below reads against `Session.runningBgShells`. */
+  backgroundJobId?: string;
   status: 'PENDING' | 'ALLOWED' | 'DENIED';
   message?: string;
   createdAt: string;

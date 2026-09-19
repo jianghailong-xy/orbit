@@ -27,6 +27,11 @@ import { UNANSWERABLE_NOTE } from './ApprovalPanel';
  * an answer and says why, and a card on the same screen whose turn
  * is still alive is untouched. The second half is not decoration — without it an ApprovalPanel that
  * rendered nothing at all would satisfy the first.
+ *
+ * The third test is the same read from the other side, and the reason the first two cannot be the
+ * whole rule: not every card's reader is the turn. A card a runner-hosted job named is read by that
+ * process, which outlives the turn (`approval.background_job_id`, migration 0291), so it survives
+ * the parking — while a card whose job has gone does not, on the same screen and in the same state.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -104,6 +109,25 @@ const TOOL_CALLS = [
 const APPROVAL_FRAMES = [
   { seq: 0, type: 'approval_request', payload: { id: 'approval-abandoned', toolName: 'Bash', input: { command: ABANDONED_COMMAND }, toolUseId: 'call-abandoned' }, ts: '2026-09-07T13:25:02Z' },
   { seq: 0, type: 'approval_request', payload: { id: 'approval-live', toolName: 'Bash', input: { command: LIVE_COMMAND }, toolUseId: 'call-live' }, ts: '2026-09-07T13:25:03Z' },
+];
+
+/** The job the runner still reports as up, and one it does not — the only thing that separates the
+ *  two cards below, and the pair the server's own read is built on (`approval.background_job_id`
+ *  against `Session.running_bg_shells`, migration 0291). */
+const LIVE_JOB_ID = 'bgj_still_polling';
+const GONE_JOB_ID = 'bgj_finished_while_parked';
+
+/** The conversation the runner is still hosting a job in, after the turn that started it ended. */
+const PARKED_WITH_JOB = { ...PARKED, runningBgShells: [LIVE_JOB_ID] };
+
+/** The two asks a runner-hosted job filed, each carrying the id of the job reading it — the field
+ *  `runner-api.controller.ts` publishes on the frame. Distinct blocker ids rather than quoted
+ *  prose: the card renders its input as JSON, where a quote comes back escaped. */
+const JOB_LIVE_COMMAND = 'orbit project resolve-blocker 01a0b85c-7627-715e-b9e5-fa71ae8bbdf0';
+const JOB_GONE_COMMAND = 'orbit project resolve-blocker 01a0b85f-2f5e-7000-9a10-6f2b6a4e0c31';
+const JOB_FRAMES = [
+  { seq: 0, type: 'approval_request', payload: { id: 'approval-job-live', toolName: 'Bash', input: { command: JOB_LIVE_COMMAND }, toolUseId: 'call-job-live', backgroundJobId: LIVE_JOB_ID }, ts: '2026-09-07T13:25:04Z' },
+  { seq: 0, type: 'approval_request', payload: { id: 'approval-job-gone', toolName: 'Bash', input: { command: JOB_GONE_COMMAND }, toolUseId: 'call-job-gone', backgroundJobId: GONE_JOB_ID }, ts: '2026-09-07T13:25:05Z' },
 ];
 
 /** The engine giving up on one call while the turn runs on — the only trace it leaves. */
@@ -291,6 +315,19 @@ async function bothCardsArriveLive(): Promise<void> {
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 }
 
+/** The two cards a runner-hosted job filed, having arrived only as frames. */
+async function theJobsCardsArriveLive(): Promise<void> {
+  await mount();
+  await publish([...TOOL_CALLS, ...JOB_FRAMES]);
+  await waitForUi(() => {
+    expect(mounted().querySelectorAll('.approval-card')).toHaveLength(2);
+  });
+  // Both are questions while the turn that started the job is still running — asserted before
+  // anything ends, so the difference below is the parking, not a card that was never pressable.
+  expect(primaryOf(cardFor(JOB_LIVE_COMMAND)).disabled).toBe(false);
+  expect(primaryOf(cardFor(JOB_GONE_COMMAND)).disabled).toBe(false);
+}
+
 describe('an approval that arrived live outlives the question it was raised for', () => {
   it('stops offering an answer once the call it asks about has a result', async () => {
     await bothCardsArriveLive();
@@ -332,6 +369,27 @@ describe('an approval that arrived live outlives the question it was raised for'
     // while the session was generating, both of these were pressable.
     expect(primaryOf(cardFor(LIVE_COMMAND)).disabled).toBe(true);
     expect(mounted().querySelectorAll('.approval-card')).toHaveLength(2);
+  });
+
+  it('keeps answering for the card a live runner-hosted job is still reading', async () => {
+    await theJobsCardsArriveLive();
+
+    // The turn is over while the jobs are not — the state a runner-hosted ask is FOR. What the two
+    // cards are read by is a process apiece, and the server offers the live one on a parked
+    // conversation; this pass must not take it down with the turn it merely happened to ride in on.
+    sessionRow = PARKED_WITH_JOB;
+    await publish([TURN_END]);
+
+    // The job that has gone takes its card out of the answerable set, exactly as the server does
+    // (`readByLiveBackgroundJob`) — the half that keeps this from being "parked cards are fine".
+    await waitForUi(() => {
+      expect(primaryOf(cardFor(JOB_GONE_COMMAND)).disabled).toBe(true);
+    });
+    expect(
+      primaryOf(cardFor(JOB_LIVE_COMMAND)).disabled,
+      'the card a live runner-hosted job is still polling was taken down with the turn',
+    ).toBe(false);
+    expect(cardFor(JOB_LIVE_COMMAND).textContent).not.toContain(UNANSWERABLE_NOTE);
   });
 
   it('says why it stopped offering an answer instead of going quiet', async () => {

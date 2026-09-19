@@ -26,6 +26,9 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
     archivedAt: null,
     deletedAt: null,
     engineTurnActive: false,
+    // NOT NULL DEFAULT '{}' on the column, and the count the card carries reads it: a conversation
+    // that is not generating can still be holding a card a live runner-hosted job is reading.
+    runningBgShells: [],
     ...overrides,
   };
 }
@@ -66,6 +69,8 @@ type Fixture = {
 
 function serviceWith(fixture: Fixture = {}) {
   const queries: string[] = [];
+  /** The `where` of every `approval.count` this read made — the rule is the filter, not the total. */
+  const approvalWheres: Array<Record<string, unknown>> = [];
   const prisma = {
     project: {
       findFirst: async ({ where }: any) => {
@@ -76,8 +81,9 @@ function serviceWith(fixture: Fixture = {}) {
       },
     },
     approval: {
-      count: async () => {
+      count: async ({ where }: any) => {
         queries.push('approval.count');
+        approvalWheres.push(where);
         return fixture.pendingApprovals ?? 0;
       },
     },
@@ -135,7 +141,7 @@ function serviceWith(fixture: Fixture = {}) {
     undefined as never,
     convergence as never,
   );
-  return { service, queries };
+  return { service, queries, approvalWheres };
 }
 
 // ── The five states, each asserting WHICH reason rather than merely that a value is missing ──
@@ -468,7 +474,9 @@ test('the session’s three derived states are the ones withSessionState derives
   }
 });
 
-test('only a generating session is asked for its pending approvals', async () => {
+test('the count is taken for a live reader: the turn, or the job a card names', async () => {
+  // Nothing is reading a card on a conversation that has ended, so the read is not made at all —
+  // not merely answered 0 — and the row says nothing is waiting.
   const idle = serviceWith({
     pendingApprovals: 7,
     project: projectRow({
@@ -482,6 +490,23 @@ test('only a generating session is asked for its pending approvals', async () =>
   const idleStatus = await idle.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
   assert.equal(idleStatus.coordination.session?.pendingApprovals, 0);
   assert.equal(idle.queries.includes('approval.count'), false);
+  // Including a parked conversation whose shells have all gone: the job that was reading is not up
+  // any more, which is the state the reap collects the row in.
+  const parked = serviceWith({
+    pendingApprovals: 7,
+    project: projectRow({
+      coordinatorSessionId: SESSION_ID,
+      coordinatorWorkspaceId: WORKSPACE_ID,
+      coordinatorSession: sessionRow(),
+      coordinatorWorkspace: workspaceRow(),
+      members: COORDINATOR_MEMBER,
+    }),
+  });
+  assert.equal(
+    (await parked.service.coordinatorStatus(OWNER_ID, PROJECT_ID)).coordination.session?.pendingApprovals,
+    0,
+  );
+  assert.equal(parked.queries.includes('approval.count'), false);
 
   // A self-driven turn stays at AWAITING_INPUT while it runs; its prompt is no less blocking.
   const waking = serviceWith({
@@ -497,6 +522,29 @@ test('only a generating session is asked for its pending approvals', async () =>
   const wakingStatus = await waking.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
   assert.equal(wakingStatus.coordination.session?.pendingApprovals, 7);
   assert.equal(waking.queries.includes('approval.count'), true);
+  // A generating session holds its turn's cards, so the count is of the session and nothing narrower.
+  assert.deepEqual(waking.approvalWheres, [{ sessionId: SESSION_ID, status: 'PENDING' }]);
+
+  // And the second reader, on the conversation shape a runner-hosted job asks on: PARKED, with the
+  // runner still reporting the job up. The card that job is polling for is a question the owner has
+  // to be shown — the count that was blind to it is the one the card went dark under.
+  const jobbed = serviceWith({
+    pendingApprovals: 1,
+    project: projectRow({
+      coordinatorSessionId: SESSION_ID,
+      coordinatorWorkspaceId: WORKSPACE_ID,
+      coordinatorSession: sessionRow({ runningBgShells: ['bgj_still_polling'] }),
+      coordinatorWorkspace: workspaceRow(),
+      members: COORDINATOR_MEMBER,
+    }),
+  });
+  const jobbedStatus = await jobbed.service.coordinatorStatus(OWNER_ID, PROJECT_ID);
+  assert.equal(jobbedStatus.coordination.session?.pendingApprovals, 1);
+  // Asked for that job's cards and no others: a card whose own job has gone is not this one's, and
+  // a card naming no job at all is the turn's, which is over.
+  assert.deepEqual(jobbed.approvalWheres, [
+    { sessionId: SESSION_ID, status: 'PENDING', backgroundJobId: { in: ['bgj_still_polling'] } },
+  ]);
 });
 
 // ── Wire-shape rules the interceptors impose on this payload ──

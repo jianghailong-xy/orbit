@@ -3397,12 +3397,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
    * pressable, and the answer reaches nobody because the poll loop that would have consumed it died
    * with the turn (`docs/completion-input-routing.md` §A2 D1). Nothing polls it back to the truth.
    *
-   * So the same pair of facts is recomputed here, from rows this component already holds: the
-   * session is still generating, and the call this approval was raised for has no result yet. The
-   * failure direction is the server's — a card is taken out of the answerable set on evidence that
-   * it is over, never on the absence of evidence — so a session row that has not arrived yet, and
-   * an old runtime's approval with no tool_use id to pair, both stay answerable. Not a clock:
-   * elapsed time is not a committed fact (`coordinator-wake.ts` §0).
+   * So the same facts are recomputed here, from rows this component already holds. Which facts
+   * depends on the card's reader, exactly as on the server: an in-turn card is answerable while
+   * the session is still generating and the call it was raised for has no result yet, and a card
+   * that names a runner-hosted job (`backgroundJobId`, migration 0291) is answerable while that
+   * process is up — the job outlives the turn, which is why the server offers such a card on a
+   * PARKED conversation and this predicate has to agree with it rather than take the card down
+   * with the turn. The failure direction is the server's — a card is taken out of the answerable
+   * set on evidence that it is over, never on the absence of evidence — so a session row that has
+   * not arrived yet, a session row with no shell list on it (the list payload carries the count
+   * and not the ids), and an old runtime's approval with no tool_use id to pair, all stay
+   * answerable. Not a clock: elapsed time is not a committed fact (`coordinator-wake.ts` §0).
    */
   const settledToolUseIds = useMemo(() => {
     const ids = new Set<string>();
@@ -3415,9 +3420,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [transcriptEvents]);
   const turnStillGenerating =
     !selectedSession || isGenerating(selectedSession, sessionRunStateOf(selectedSession));
+  // The live processes this session reported, or null when the row in hand says nothing about them
+  // (the list carries the count, never the ids) — which is not evidence that a job is gone.
+  const liveBackgroundJobIds = Array.isArray(selectedSession?.runningBgShells)
+    ? new Set(selectedSession.runningBgShells)
+    : null;
+  const readByLiveJob = (a: ApprovalInfo): boolean =>
+    !!a.backgroundJobId && (liveBackgroundJobIds === null || liveBackgroundJobIds.has(a.backgroundJobId));
   const answerableApprovalIds = new Set(
     approvals
-      .filter((a) => turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId)))
+      .filter(
+        (a) =>
+          readByLiveJob(a) ||
+          (turnStillGenerating && !(a.toolUseId && settledToolUseIds.has(a.toolUseId))),
+      )
       .map((a) => a.id),
   );
   // The card that owns the ⌘/Ctrl+Enter shortcut is the first one the key could actually reach.
