@@ -15,14 +15,19 @@ final class OrbitAskPreviewTests: XCTestCase {
 
     func testOrbitsOwnAsksCannotBeRemembered() {
         // Every batch creates a different set of tasks and every restructure releases a different
-        // set; a standing yes is the gate switched off, not a preference. Web refuses it too, and
-        // the weaker client would otherwise win.
-        for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create"] {
+        // set; a standing yes is the gate switched off, not a preference. Ending a blocker is the
+        // same shape from the other side — the blocker IS the project asking for a person, so
+        // "always let this session clear whatever stops its project" would make every card after
+        // it a formality. Web refuses all of them too, and the weaker client would otherwise win.
+        for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
+                     "orbit_blocker_resolve"] {
             XCTAssertNil(Approvals.rememberRule(toolName: tool, input: json("{}")),
                          "\(tool) must not offer Allow & remember")
         }
-        // An ordinary tool still can.
+        // An ordinary tool still can — an ordinary orbit MCP tool included, which is the control
+        // for this being about those asks and not about the `orbit_` prefix.
         XCTAssertNotNil(Approvals.rememberRule(toolName: "Read", input: json("{}")))
+        XCTAssertNotNil(Approvals.rememberRule(toolName: "orbit_task_get", input: json("{}")))
     }
 
     // MARK: single create

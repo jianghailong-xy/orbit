@@ -40,6 +40,11 @@ public enum Approvals {
         isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
             || isTaskCreate(toolName: toolName) || isProjectCreate(toolName: toolName)
     }
+    /// Ending one of a project's blockers. Its own ask rather than one of the family above: the
+    /// blocker IS the project saying it needs a person, so the agent's part is to argue the
+    /// condition is gone and the owner's is to agree or not — nothing is created, and the denial
+    /// is a conversation about that blocker. Web keys the same tool off `isBlockerResolve`.
+    public static func isBlockerResolve(toolName: String) -> Bool { toolName == "orbit_blocker_resolve" }
 
     /// Classify an approval into the card it renders as. Keyed on `toolName` — the reliable
     /// signal the control plane always sends — because the question/plan data is nested under
@@ -167,8 +172,13 @@ public enum Approvals {
         // yes to whatever comes next — which is the gate switched off, not a preference. Web
         // refuses it for the same reason; without this the two clients disagree about whether the
         // approval can be waived, and the weaker one wins.
+        // Nor does ending a blocker: "always let this session clear whatever stops its project" is
+        // the one rule that would make every card after it a formality. (It could not have worked
+        // here anyway — this ask comes from the runner's own gate, which asks every time whatever
+        // rules the engine holds.)
         if isQuestion(toolName: toolName) || isPlan(toolName: toolName)
-            || isOrbitAsk(toolName: toolName) { return nil }
+            || isOrbitAsk(toolName: toolName)
+            || isBlockerResolve(toolName: toolName) { return nil }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue, let prefix = bashPrefix(cmd) else { return nil }
             return PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*")
