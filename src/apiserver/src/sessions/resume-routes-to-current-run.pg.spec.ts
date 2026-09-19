@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Module, ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
   PrismaClient,
@@ -12,11 +14,18 @@ import {
 } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PublicIdExceptionFilter } from '../common/public-id.filter';
+import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { SessionTagsService } from '../session-tags/session-tags.service';
+import { AutoRetryService } from './auto-retry.service';
+import { MergeReceiptService } from './merge-receipt.service';
+import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -464,6 +473,166 @@ test('a server-driven resume keeps the refusal: only a person routes a message',
       );
       assert.deepEqual(await turnsFor(db, dto.clientTurnId), []);
     } finally {
+      await db.$disconnect();
+    }
+  });
+
+/**
+ * The same facts through the door the clients actually knock on: `POST /api/sessions/:id/resume`
+ * over real HTTP, through the real controller, the real pipe, and the same PostgreSQL.
+ *
+ * WHY THESE TWO CASES EXIST, when every case above already pins the behaviour. Every one of them
+ * calls `SessionsService.resume` with an object literal, which is one layer INSIDE that door, and
+ * two of the things criterion 2 needs live only in that layer:
+ *
+ *   * the value the client is told to echo back is a base62 PUBLIC id, and the only thing that
+ *     turns it into the uuid the service compares is `PublicIdPipe.forFields('attachmentIds',
+ *     'stopSessionId')` on the route. A DTO field the pipe did not name would leave the guess
+ *     inside a literal invisible: the service would compare a base62 string against a uuid, never
+ *     match, and ask its question again — for ever — with every case above still green.
+ *   * `routeToCurrentRun: true` is set by this door and by no other (`entry-point-contract.spec.ts`
+ *     pins which door sets it; nothing there proves the door WORKS end to end).
+ *
+ * So these drive the round trip the contract tells a client to make — post the value the answer
+ * named, under the name the answer gave — and read the outcome off the rows.
+ */
+
+/** Read when Nest builds the module below. The decorator is at file scope; the owner is not. */
+const doorState: { ownerId: string; sessions: SessionsService | null } = {
+  ownerId: '',
+  sessions: null,
+};
+
+@Module({
+  controllers: [SessionsController],
+  providers: [
+    { provide: SessionsService, useFactory: () => doorState.sessions },
+    // The controller's remaining dependencies. The resume route touches none of them, and Nest
+    // only needs them resolvable — stubs rather than the real classes, so a route that starts
+    // using one shows up here as a crash rather than as a silent third copy of its behaviour.
+    { provide: PrismaService, useValue: {} },
+    { provide: RealtimeService, useValue: {} },
+    { provide: SessionTagsService, useValue: {} },
+    { provide: MergeReceiptService, useValue: {} },
+    { provide: AutoRetryService, useValue: {} },
+    JwtAuthGuard,
+    Reflector,
+    // The guard reads `sub`; this door is the person's, and this is who the person is.
+    { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: doorState.ownerId }) } },
+  ],
+})
+class ResumeDoorModule {}
+
+/** The door, up and reachable. `main.ts`'s own set-up: the two global layers around the handler. */
+async function openDoor(ownerId: string, sessions: SessionsService) {
+  doorState.ownerId = ownerId;
+  doorState.sessions = sessions;
+  const app = await NestFactory.create(ResumeDoorModule, { logger: false, abortOnError: false });
+  app.setGlobalPrefix('api');
+  app.useGlobalPipes(
+    new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }),
+  );
+  app.useGlobalInterceptors(new PublicIdInterceptor());
+  app.useGlobalFilters(new PublicIdExceptionFilter(app.getHttpAdapter()));
+  await app.listen(0, '127.0.0.1');
+  const base = await app.getUrl();
+  return { base, close: () => app.close() };
+}
+
+async function resumeOverHttp(base: string, sessionPublicId: string, payload: unknown) {
+  const response = await fetch(`${base}/api/sessions/${sessionPublicId}/resume`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer an-ordinary-actor', 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const text = await response.text();
+  return { status: response.status, body: text, json: JSON.parse(text) as Record<string, unknown> };
+}
+
+test('a person\'s confirmed switch over the door stops the run in the way and continues on the chosen provider',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const { db, sessions } = connect();
+    const f = await fixture(db, 'door-switch', RunStatus.PENDING);
+    const door = await openDoor(f.ownerId, sessions);
+    try {
+      const dto = message({ provider: f.sameRuntime });
+      const address = uuidToBase62(f.replaced);
+
+      // 1. The ask. Another provider was named, so the platform answers the structured question —
+      //    over HTTP, through the pipe, naming the run it is about the way the client must name it
+      //    back.
+      const asked = await resumeOverHttp(door.base, address, dto);
+      assert.equal(asked.status, 409, asked.body);
+      assert.equal(asked.json.code, 'TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED');
+      assert.equal(asked.json.confirmationRequired, true);
+      const confirm = asked.json.confirm as { field: string; value: string };
+      assert.deepEqual(confirm, { field: 'stopSessionId', value: uuidToBase62(f.holder) });
+      assert.equal(asked.json.runningProvider, 'claude');
+      assert.equal(asked.json.requestedProvider, f.sameRuntime);
+
+      // A question is not an authorisation: nothing was stopped and nothing was delivered.
+      const asked2 = await sessionRow(db, f.holder);
+      assert.equal(asked2.cancelRequestedAt, null);
+      assert.equal(asked2.status, RunStatus.PENDING);
+      assert.deepEqual(await turnsFor(db, dto.clientTurnId), []);
+
+      // 2. The answer, made exactly as `docs/session-message-routing-contract.md` §2.2 tells a
+      //    client to make it: the field name the server gave, the value the server gave. This is
+      //    the step no case above can take — the value is a public id, and the door's pipe is the
+      //    only thing that decodes it into the uuid the service compares.
+      const answered = await resumeOverHttp(door.base, address, {
+        ...dto, [confirm.field]: confirm.value,
+      });
+      assert.equal(answered.status, 201, answered.body);
+
+      // The run holding the claim was STOPPED, and stopped rather than rewritten: a run keeps the
+      // provider it ran on (rule 1).
+      const stopped = await sessionRow(db, f.holder);
+      assert.ok(stopped.cancelRequestedAt, 'the run in the way was stopped');
+      assert.equal(stopped.status, RunStatus.CANCELLED);
+      assert.equal(stopped.provider, 'claude');
+
+      // The round continuing the message is on the provider the person chose…
+      const continued = await sessionRow(db, f.replaced);
+      assert.equal(continued.provider, f.sameRuntime);
+      assert.equal(continued.status, RunStatus.PENDING);
+      // …and this message, delivered to it and to nothing else, is its opening.
+      assert.deepEqual(await turnsFor(db, dto.clientTurnId), [f.replaced]);
+    } finally {
+      await door.close();
+      await db.$disconnect();
+    }
+  });
+
+test('the door stops nothing for a message that names no provider, or the one already running',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const { db, sessions } = connect();
+    const f = await fixture(db, 'door-quiet', RunStatus.RUNNING);
+    const door = await openDoor(f.ownerId, sessions);
+    try {
+      const address = uuidToBase62(f.replaced);
+      const quiet: Array<[string, ReturnType<typeof message>]> = [
+        ['no provider named at all', message()],
+        ['the provider the run in flight is on', message({ provider: 'claude' })],
+      ];
+      for (const [which, dto] of quiet) {
+        const answer = await resumeOverHttp(door.base, address, dto);
+        assert.equal(answer.status, 201, `${which}: ${answer.body}`);
+        assert.equal(answer.json.routedToSessionId, uuidToBase62(f.holder), which);
+        assert.deepEqual(await turnsFor(db, dto.clientTurnId), [f.holder], which);
+
+        const holder = await sessionRow(db, f.holder);
+        assert.equal(holder.cancelRequestedAt, null, `${which}: nothing authorised a stop`);
+        assert.equal(holder.status, RunStatus.RUNNING, which);
+        assert.equal(holder.provider, 'claude', which);
+      }
+      // …and the run the person was looking at was not revived behind the message either: it is
+      // still the ended row it was, with the work carried on in the run that holds the task.
+      assert.equal((await sessionRow(db, f.replaced)).status, RunStatus.FAILED);
+    } finally {
+      await door.close();
       await db.$disconnect();
     }
   });

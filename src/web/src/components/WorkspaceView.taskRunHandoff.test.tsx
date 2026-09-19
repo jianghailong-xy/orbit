@@ -330,16 +330,19 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     }
   });
 
-  const pickProvider = async (label: string): Promise<void> => {
+  const pickProvider = async (label: string, pill?: HTMLElement): Promise<HTMLElement> => {
     // `.ant-select-content`, not `.ant-select-selector`: antd 6 renamed its private DOM classes.
-    const selector = Array.from(
-      mounted().querySelectorAll<HTMLElement>('.composer-pills .ant-select-content'),
+    // A test that picks TWICE has to hold the `.ant-select` around it: the first pick changes the
+    // text this finds the control by, and it is still the same control.
+    const root = pill ?? Array.from(
+      mounted().querySelectorAll<HTMLElement>('.composer-pills .ant-select'),
     ).find((el) => el.textContent?.toLowerCase().includes('claude'));
-    if (!selector) {
+    const selector = root?.querySelector<HTMLElement>('.ant-select-content');
+    if (!root || !selector) {
       throw new Error(
         'no provider pill on the composer; pills say '
         + JSON.stringify(
-          Array.from(mounted().querySelectorAll('.composer-pills .ant-select-content')).map(
+          Array.from(mounted().querySelectorAll('.composer-pills .ant-select')).map(
             (el) => el.textContent,
           ),
         ),
@@ -368,6 +371,7 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       option.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
+    return root;
   };
 
   it('says when a provider pick takes effect, while the pick still stands', async () => {
@@ -392,6 +396,38 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
       await new Promise((resolve) => setTimeout(resolve, 4_500));
     });
     expect(providerNote()).toBe(note);
+  });
+
+  it('leaves the reader alone when the pick is the provider the live run is already on', async () => {
+    // The other half of the confirmation, and the half a bug would hide in: a pick that is NOT a
+    // switch must not become a question. The task's run in flight is on claude, and so is the run
+    // the reader is looking at — so picking claude back is picking what is already running. The
+    // composer says nothing, and nothing about stopping a run is ever put in front of the reader.
+    resumeMock.mockResolvedValue({
+      turnId: 't-3', seq: 5, kind: 'message', placement: 'queued', routedToSessionId: LIVE_PUBLIC,
+    } as never);
+    await mount();
+
+    // Two picks, because a select does not report a click on the value it is already showing: the
+    // first is a real switch and says so, which is what makes the second one's silence mean
+    // something rather than "no pick was ever made".
+    const pill = await pickProvider('DeepSeek');
+    await act(async () => {
+      await vi.waitFor(() => expect(providerNote()).not.toBe(''), { timeout: 20_000, interval: 20 });
+    });
+    await pickProvider('Claude', pill);
+    expect(providerNote()).toBe('');
+
+    await type('继续干活');
+    await send();
+
+    // The pick LANDED: the resume names claude, the provider the run in flight is on.
+    expect(resumeMock).toHaveBeenCalledTimes(1);
+    expect(resumeMock.mock.calls[0][2]).toMatchObject({ provider: 'claude' });
+    // Nothing was asked and nothing was authorised: the send carries no `stopSessionId` — the one
+    // field that can ever stop a run — and no confirmation is on screen.
+    expect(resumeMock.mock.calls[0][6]).toBeUndefined();
+    expect(mounted().querySelector('.run-handoff[data-conflict="CONFIRM_SWITCH"]')).toBeNull();
   });
 
   it('carries the message to the run that has the task, and takes the reader there', async () => {
