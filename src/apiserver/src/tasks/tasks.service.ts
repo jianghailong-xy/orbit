@@ -3059,14 +3059,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * help, because the Session was inserted before the link existed.
    *
    * Read AFTER the predecessor's row is locked `FOR UPDATE` by the caller, which is what makes this
-   * a fence rather than a check: `session_dispatch_authority_guard` and 0130's own guard both take
-   * `FOR SHARE` on that same task row before inserting, so the two orders are the only two, and
-   * each has a typed answer —
+   * a fence rather than a check: 0130's `session_admission_lock_order` — whose name sorts before
+   * every other BEFORE trigger on `session`, so it runs first on every insert — and its
+   * `session_superseded_task_guard` both take `FOR SHARE` on that same task row before inserting,
+   * so the two orders are the only two, and each has a typed answer —
    *
    *   Session commits first → its `FOR SHARE` is released, this UPDATE proceeds, and the read below
    *     sees the live Session and refuses the link;
-   *   link commits first → the insert's `FOR SHARE` waits on this UPDATE's row lock, then sees the
-   *     retirement and refuses the Session.
+   *   link commits first → the insert is refused by name rather than left queueing behind this
+   *     UPDATE, because every acquisition in the admission trigger is NOWAIT — `SESSION_TASK_BUSY`
+   *     on that row, or `SESSION_PROJECT_BUSY` on the project it takes ahead of it. Behind that
+   *     trigger, `session_superseded_task_guard` is what answers `TASK_SUPERSEDED` for the
+   *     retirement itself.
    *
    * Neither can observe the other as absent, and neither outcome is a half-written world.
    *
@@ -3077,35 +3081,40 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * §13.6 SU8's lock, taken NOWAIT — and why it is not an ordinary `FOR UPDATE`.
    *
-   * There are two orders in which this pair of rows is taken, and they are opposite:
+   * 0130's header states the system's one order for these three rows — PROJECT, then TASK, then
+   * SESSION — and this path takes it: the prelock above holds the project (rank 40), and this
+   * takes the task (rank 50) after it. PostgreSQL locks the TARGET row of an UPDATE before any
+   * BEFORE ROW trigger runs, so without that prelock the project would arrive from the AFTER
+   * trigger the supersession columns reach, under a task lock this transaction already holds — the
+   * inversion, not merely a different order.
    *
-   *   Project → Task   this path. The supersession columns are inputs to §13.4's acceptance, so
-   *                    0130 puts them on `project_acceptance_task_fact_update`, which reaches
-   *                    `project_acceptance_reopen` and takes the PROJECT row. The prelock above
-   *                    takes it first so that AFTER trigger is not the thing that takes it.
-   *   Task → Project   a Session INSERT. Its `BEFORE INSERT` triggers fire in NAME order:
-   *                    `session_dispatch_authority_guard` takes the task `FOR SHARE`, and then
-   *                    `session_project_capacity_serialize` updates the project row.
+   * A Session write is the other party to this pair, and after 0130 it takes the same direction.
+   * Its `BEFORE INSERT` triggers fire in NAME order, and `session_admission_lock_order` is named to
+   * run ahead of every other one: it takes the project `FOR NO KEY UPDATE NOWAIT` and then the task
+   * `FOR SHARE NOWAIT`. The direction it replaced — task, then project — was
+   * `session_dispatch_authority_guard`'s: that guard's name sorted before
+   * `session_project_capacity_serialize`, which is what made a Session INSERT run task-first. 0164
+   * dropped it, with the dispatch authority that retired with the coordinator loop (`6418a1e5`,
+   * 2026-08-23).
    *
-   * Interleaved, that is a cycle: this transaction holds the project and wants the task, the insert
-   * holds the task and wants the project. PostgreSQL resolves it — by killing whichever it likes,
-   * with a 40P01 that reaches a caller as a 500 and reaches an operator as noise. "Deterministic"
-   * is the whole property this unit is about, and a deadlock detector picking a victim is the
-   * opposite of it.
-   *
-   * NOWAIT makes the outcome a function of who committed first rather than of who was scheduled:
+   * So both sides refuse instead of waiting, and this one is no exception: every acquisition in the
+   * admission trigger is NOWAIT, and so is this. An ordinary `FOR UPDATE` here would queue behind
+   * any Session transaction holding that row, and a queue is the shape a detector resolves by
+   * killing whichever transaction it likes — a 40P01 that reaches a caller as a 500 and reaches an
+   * operator as noise. "Deterministic" is the whole property this unit is about, and NOWAIT makes
+   * the outcome a function of who committed first rather than of who was scheduled:
    *
    *   the Session got there first → this fails IMMEDIATELY with 55P03, and the caller is told a run
    *     is starting on that attempt (the same sentence `assertNotRunningBeforeRetiring` gives when
    *     the run is already visible — one refusal, two ways of arriving at it);
-   *   this got there first → the insert's `FOR SHARE` waits on this transaction, and when it wakes
-   *     up `session_superseded_task_guard` sees the retirement and refuses the Session.
+   *   this got there first → the Session write that arrives second is refused by name and writes
+   *     nothing (`SESSION_PROJECT_BUSY`, or `SESSION_TASK_BUSY` on the task itself) instead of
+   *     queueing behind this transaction's commit.
    *
    * Neither side ever waits on a lock the other side is waiting on, so no cycle can form and the
-   * caller always receives a refusal it can act on. Reversing this path to Task → Project instead
-   * would mean the acceptance reopen took the project from inside an AFTER trigger, which is the
-   * inversion against the Coordinator's own project-lease-then-task order that the prelock exists
-   * to remove — the cycle would move rather than close.
+   * caller always receives a refusal it can act on. Reversing THIS path to Task → Project instead
+   * would put a task-first taker back on the pair, holding a task row while it reaches for the
+   * project the prelock exists to take first.
    */
   private async lockTaskForSupersessionWrite(
     tx: Prisma.TransactionClient,
@@ -10726,8 +10735,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // Rank 40, and the same lock `project_acceptance_reopen` takes from an AFTER trigger on
         // every one of the DELETEs below — moved ahead of the task lock so this transaction is
         // never caught holding a task row while asking for its project, which is the reverse of
-        // the order the Project authorization adapter takes them in. Ordered, and read under the
-        // owner mutex, which is the only lock a task's project can move under.
+        // the order every live taker of these two rows uses (`SessionsService.resume` takes the
+        // project FOR NO KEY UPDATE and only then confirms its scope with `FOR SHARE OF t NOWAIT`;
+        // 0130's `session_admission_lock_order` takes the same pair in the same direction from a
+        // Session write). Ordered, and read under the owner mutex, which is the only lock a task's
+        // project can move under.
         await tx.$queryRaw`
           SELECT "id" FROM "project"
           WHERE "id" IN (
