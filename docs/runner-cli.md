@@ -18,6 +18,7 @@ registered.
 orbit task list --status OPEN --json
 orbit task create --title "Check deployment" --description "Verify health and logs" --json
 orbit task update <task-id> --status DONE --json
+orbit task reopen <task-id> --json
 orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 ```

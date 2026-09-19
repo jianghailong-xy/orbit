@@ -8,7 +8,8 @@ import XCTest
 /// `COMPLETION_CRITERION_CHIP`, `VERIFICATION_SUBJECT_HINT`, `VERIFIER_CARD_HEADING`,
 /// `VERIFIER_CARD_ENTRY` and the card's `Open` / `PASS` / `FAIL`). The two clients share no
 /// compiler, so a sentence reworded at one end simply never appears at the other — and this is the
-/// one surface where both tell a reader what settles the row in front of them.
+/// one surface where both tell a reader what settles the row in front of them. The Reopen question
+/// is stated on that same panel, so its words are pinned here too.
 ///
 /// Shaped after `WatchStripCopyParityTests`, including the part that matters most: a missing
 /// counterpart is a FAILURE and never an `XCTSkip`. A check that quietly opts out reports green on
@@ -163,5 +164,34 @@ final class TaskJudgmentCopyParityTests: XCTestCase {
         XCTAssertEqual(Set(VerifierOutcome.allCases.map(\.label)), theirs,
                        "the check card's outcome words drifted — first is this client's, second is "
                            + "what verifierOutcome returns in \(Self.webPanel).")
+    }
+
+    /// The way back from a status already written: the button, the question's two labels, and the
+    /// three sentences the question is made of. The conditional sentences are compared like the
+    /// rest — which one a reader gets is a fact about the row in front of them, not a freedom each
+    /// client gets — and what makes each of them appear is held by `TaskReopenTests` here and by the
+    /// browser's own `reopenParagraphs`.
+    ///
+    /// Deliberately NOT compared, and why: the browser toasts `Task reopened` when the write lands,
+    /// and no task mutation in this app toasts — the row redrawing is the answer here. The
+    /// dismiss label is per-client too (`Back` on the web's modal, `Cancel` on a native dialog),
+    /// and the question's title is the browser's own declaration rather than a sentence it shares.
+    func testTheReopenCopyIsTheBrowsersCopy() throws {
+        let web = try flat()
+        let pairs: [(what: String, declaration: String, mine: String)] = [
+            ("the header button", "REOPEN_ACTION_LABEL", TaskReopenCopy.actionLabel),
+            ("the question's title", "REOPEN_MODAL_TITLE", TaskReopenCopy.modalTitle),
+            ("the question's confirm", "REOPEN_MODAL_OK", TaskReopenCopy.modalOK),
+            ("what the write does", "REOPEN_MODAL_BODY", TaskReopenCopy.modalBody),
+            ("the project sentence", "REOPEN_MODAL_PROJECT", TaskReopenCopy.modalProject),
+            ("the supersession sentence", "REOPEN_MODAL_RETIRED", TaskReopenCopy.modalRetired),
+        ]
+        for pair in pairs {
+            let theirs = try capture(web, "const \(pair.declaration) = ([\"'])(.+?)\\1;",
+                                     pair.declaration, group: 2)
+            XCTAssertEqual(pair.mine, theirs,
+                           "\(pair.what) drifted — first is this client's, second is "
+                               + "\(pair.declaration) in \(Self.webPanel).")
+        }
     }
 }

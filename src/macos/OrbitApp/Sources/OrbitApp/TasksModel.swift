@@ -641,6 +641,16 @@ final class TasksModel {
         _ = await mutate(id) { _ = try await self.api.updateTask(id, UpdateTaskRequest(status: status)) }
     }
 
+    /// Take a stopped task back to Open, in place — the same task carrying the next attempt rather
+    /// than a new one filed beside it, with any supersession record cleared in the same write
+    /// (`TaskReopen.request`). Unlike `setStatus`, this one has no status to choose: OPEN is what
+    /// the verb means, and the refusals (a verification task holding a verdict, say) are the
+    /// server's, landing in `errorText` like every other mutation's.
+    @discardableResult
+    func reopen(_ id: String) async -> Bool {
+        await mutate(id) { _ = try await self.api.updateTask(id, TaskReopen.request) }
+    }
+
     func setAutoRun(_ id: String, _ on: Bool) async {
         _ = await mutate(id) { _ = try await self.api.updateTask(id, UpdateTaskRequest(autoRunWhenReady: on)) }
     }

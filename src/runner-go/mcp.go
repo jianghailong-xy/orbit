@@ -703,6 +703,19 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_reopen":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.updateTask(s.sessionID, id, reopenTaskBody())
+		if err != nil {
+			// Verbatim, like task_update: a model told only "request failed" retries the same write,
+			// and the refusal block already carries the code and the next step.
+			return toolResult("reopen task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_delete":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2625,6 +2638,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Why this task stopped, when its status alone does not say. Setting supersededByTaskId implies SUPERSEDED and needs no second spelling; ABANDONED is the other case — dropped on purpose, with nothing replacing it. FAILED and CANCELLED are not values here because they are already `status`.",
 				},
 			}),
+		},
+		{
+			"name":        "task_reopen",
+			"description": "Take a stopped task — DONE, CANCELLED or FAILED — back to OPEN, in place, so THIS task carries the next attempt rather than a new one being filed. One write: status OPEN, plus clearing any SUPERSEDED/ABANDONED retirement in the same request, which is the whole point of the tool — Run refuses a replaced attempt (§13.6 SU6, 'the work is being done by the successor') and the same guard refuses the status write that would clear the record unless it is named, so `task_update {status: OPEN}` alone cannot pick a superseded attempt back up. History stays: evidence, comments, dependencies, the project it is filed under and its criterion declaration. The run's progress does not — reopening starts a new lifecycle epoch, so a report aimed at the old revision loses its compare-and-set. Nothing is derived from this write: a task serving one of its project's acceptance criteria takes that project out of DONE (the status is a projection of the work), and a verification task holding a verdict is refused with the sentence that says to revoke it first — do not work around that reframing it as this call; revoking a PASS reopens the subject it settled. taskId defaults to the current task.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
 			"name":        "task_delete",

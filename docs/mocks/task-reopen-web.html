@@ -1,0 +1,147 @@
+<!doctype html>
+<!-- Design mock for the task-level Reopen affordance (web). Geometry copied from the live panel:
+     .tdp-head / .tdp-head-actions / .tdp-badge and the palette in src/web/src/index.css, plus the
+     project page's status modal (ProjectsPage.tsx) for the dialog's shape. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+    --bg-hover:#f5f6f7; --bg-hover-strong:#e3e6eb; --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+    --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+    --warning:#c2710c; --warning-bg:#fff7e6; --warning-border:#ffd591;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:#eef0f3; font:14px/1.5 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; color:var(--text-1); }
+  h1 { font-size:15px; margin:0 0 14px; color:var(--text-2); font-weight:600; }
+  .grid { display:flex; gap:18px; align-items:flex-start; }
+  .grid.pull { margin-top:30px; }
+  .col { display:flex; flex-direction:column; gap:10px; }
+  .tag { font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--text-3); }
+  .scope { position:relative; }
+  .scope.new::after { content:''; position:absolute; inset:-7px; border:1.5px dashed #ff6a00; border-radius:8px; pointer-events:none; }
+  .callout { position:absolute; right:-10px; top:-38px; background:#ff6a00; color:#fff; font-size:11px; padding:2px 7px; border-radius:9px; white-space:nowrap; }
+
+  /* ---- the task detail panel, at its default 600px width ---- */
+  .panel { width:600px; background:var(--bg-raised); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .tdp-head { display:flex; align-items:flex-start; gap:8px; padding:18px 12px 14px 20px; border-bottom:1px solid var(--border-subtle); }
+  .tdp-head-main { flex:1; min-width:0; }
+  .tdp-title { font-size:16px; font-weight:600; line-height:1.4; }
+  .tdp-meta { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px; font-size:12px; color:var(--text-2); }
+  .tdp-meta-item.muted { color:var(--text-3); }
+  .tdp-badge { font-size:12px; line-height:18px; padding:0 8px; border-radius:9px; border:1px solid transparent; }
+  .tone-green { background:var(--success-bg); color:var(--success-solid); border-color:var(--success-border); }
+  .tone-muted { background:var(--bg-hover); color:var(--text-3); border-color:var(--bg-hover-strong); }
+  .tdp-judgment { margin-top:8px; font-size:12px; color:var(--text-2); display:flex; gap:6px; align-items:center; }
+  .judgment-pill { background:var(--bg-hover); border:1px solid var(--bg-hover-strong); border-radius:9px; padding:0 8px; line-height:18px; font-size:12px; color:var(--text-2); }
+  .tdp-head-actions { display:flex; align-items:center; gap:4px; flex:none; }
+
+  .btn { border-radius:6px; border:1px solid var(--border); background:var(--bg-raised); color:var(--text-1); font-size:14px; line-height:1; padding:7px 13px; display:inline-flex; align-items:center; gap:6px; }
+  .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500; }
+  .btn.text { border:none; background:transparent; color:var(--text-2); padding:7px 8px; }
+  .btn.danger { color:var(--error); }
+  .btn.small { font-size:13px; padding:5px 10px; }
+
+  .tdp-body { padding:16px 20px 22px; }
+  .skeleton { height:9px; border-radius:5px; background:var(--bg-hover); margin:0 0 10px; }
+  .skeleton.w60 { width:60%; } .skeleton.w85 { width:85%; } .skeleton.w72 { width:72%; }
+
+  /* ---- the dialog, shaped after the project page's status modal ---- */
+  .modal { width:560px; background:var(--bg-raised); border-radius:10px; box-shadow:0 12px 40px rgba(15,23,42,.18); overflow:hidden; }
+  .modal-head { padding:16px 22px 0; font-size:16px; font-weight:600; }
+  .modal-body { padding:12px 22px 4px; color:var(--text-2); font-size:13.5px; }
+  .modal-body p { margin:0 0 10px; }
+  .modal-body strong { color:var(--text-1); font-weight:600; }
+  .modal-foot { display:flex; justify-content:flex-end; gap:8px; padding:12px 22px 18px; }
+  .note { font-size:12px; color:var(--text-3); max-width:600px; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>Task detail panel · Reopen — before / after (web)</h1>
+
+<div class="grid">
+  <!-- BEFORE -->
+  <div class="col">
+    <div class="tag">Before — a stopped task has no way back</div>
+    <div class="panel">
+      <div class="tdp-head">
+        <div class="tdp-head-main">
+          <div class="tdp-title">Wire the collect step into the pipeline</div>
+          <div class="tdp-meta">
+            <span class="tdp-badge tone-green">Done</span>
+            <span class="tdp-meta-item muted">· Sep 18, 3:04 PM</span>
+          </div>
+          <div class="tdp-judgment"><span class="judgment-pill">Judged by · its acceptance command</span></div>
+        </div>
+        <div class="tdp-head-actions">
+          <span class="btn text danger">🗑</span>
+          <span class="btn text">✕</span>
+        </div>
+      </div>
+      <div class="tdp-body">
+        <div class="skeleton w85"></div><div class="skeleton w72"></div><div class="skeleton w60"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AFTER -->
+  <div class="col">
+    <div class="tag">After — the same panel, terminal status</div>
+    <div class="panel">
+      <div class="tdp-head">
+        <div class="tdp-head-main">
+          <div class="tdp-title">Wire the collect step into the pipeline</div>
+          <div class="tdp-meta">
+            <span class="tdp-badge tone-green">Done</span>
+            <span class="tdp-meta-item muted">· Sep 18, 3:04 PM</span>
+          </div>
+          <div class="tdp-judgment"><span class="judgment-pill">Judged by · its acceptance command</span></div>
+        </div>
+        <div class="tdp-head-actions">
+          <span class="scope new"><span class="callout">新增：Reopen</span><span class="btn">Reopen task</span></span>
+          <span class="btn text danger">🗑</span>
+          <span class="btn text">✕</span>
+        </div>
+      </div>
+      <div class="tdp-body">
+        <div class="skeleton w85"></div><div class="skeleton w72"></div><div class="skeleton w60"></div>
+      </div>
+    </div>
+    <div class="note">Non-terminal rows (Open / In progress) are unchanged — Reopen is offered only from DONE, CANCELLED and FAILED, where the work has stopped.</div>
+  </div>
+</div>
+
+<div class="grid pull">
+  <!-- MODAL: plain -->
+  <div class="col">
+    <div class="tag">Dialog — a task that simply stopped</div>
+    <div class="modal">
+      <div class="modal-head">Reopen this task?</div>
+      <div class="modal-body">
+        <p>Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under stay as they are. It is how an attempt that stopped is picked up again as this task, rather than as a new one filed beside it.</p>
+        <p>If this task serves one of its project's acceptance criteria, the project stops reading as done while it is open again.</p>
+      </div>
+      <div class="modal-foot"><span class="btn">Back</span><span class="btn primary">Reopen</span></div>
+    </div>
+  </div>
+
+  <!-- MODAL: superseded -->
+  <div class="col">
+    <div class="tag">Dialog — an attempt a later one replaced</div>
+    <div class="modal">
+      <div class="modal-head">Reopen this task?</div>
+      <div class="modal-body">
+        <p>Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under stay as they are. It is how an attempt that stopped is picked up again as this task, rather than as a new one filed beside it.</p>
+        <p><strong>This attempt is recorded as superseded or dropped, and reopening clears that record</strong> — a replaced attempt cannot be run again until it is gone.</p>
+      </div>
+      <div class="modal-foot"><span class="btn">Back</span><span class="btn primary">Reopen</span></div>
+    </div>
+    <div class="note">One extra sentence appears only on rows that carry a SUPERSEDED / ABANDONED record, because that is the sentence a server refusal would otherwise be needed to explain.</div>
+  </div>
+</div>
+</body>
+</html>

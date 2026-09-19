@@ -721,6 +721,7 @@ private struct TaskDetailContent: View {
 
     @State private var newComment = ""
     @State private var confirmingDelete = false
+    @State private var confirmingReopen = false
     @State private var showingDependencyPicker = false
 
     var body: some View {
@@ -810,6 +811,21 @@ private struct TaskDetailContent: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
+        }
+        // The way back from a status already written — offered on the three statuses that mean the
+        // work has stopped, and asked once. Answered with `TaskReopen.modalOK` rather than the
+        // question's words: the press has already been made once.
+        .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
+                            titleVisibility: .visible) {
+            Button(TaskReopenCopy.modalOK) {
+                Task { _ = await tasks.reopen(taskID) }
+            }
+            .disabled(tasks.isMutating(taskID))
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            // The sentences the browser's question carries, in the same order — the conditional ones
+            // are included by `paragraphs` only when they are true of this row.
+            Text(TaskReopen.paragraphs(tasks.detail).joined(separator: "\n\n"))
         }
     }
 
@@ -917,6 +933,20 @@ private struct TaskDetailContent: View {
                         Task { await tasks.setStatus(task.id, .done) }
                     } label: {
                         Label("Mark done", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(busy)
+                }
+                // Beside Run/Retry rather than instead of it, and deliberately not the prominent
+                // press: this one starts nothing. Run spends a run and lets the server clear a
+                // FAILED label on the way past; this one only takes the status back — which is the
+                // sole move for a DONE task, and the only one that lifts a supersession record a
+                // replaced attempt's Run is refused by.
+                if TaskReopen.isOffered(task) {
+                    Button {
+                        confirmingReopen = true
+                    } label: {
+                        Label(TaskReopenCopy.actionLabel, systemImage: "arrow.uturn.backward")
                     }
                     .buttonStyle(.bordered)
                     .disabled(busy)
