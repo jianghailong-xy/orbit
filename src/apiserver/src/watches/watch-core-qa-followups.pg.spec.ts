@@ -284,7 +284,28 @@ async function insertSession(owner: string, status: string, runnerId: string): P
   return id;
 }
 
-/** The turn a RUNNING observer is executing, leased to its runner: whatever is queued waits behind it. */
+/**
+ * A reply under a turn, as the engine writes one — the event that makes a completed turn ANSWERED
+ * rather than one handed back to the queue (criterion 3).
+ */
+async function say(turnId: string, sessionId: string, text: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"),0)+1 FROM "run_event" WHERE "session_id" = $2),
+             'assistant',$3::jsonb,$4)`,
+    [randomUUID(), sessionId, JSON.stringify({ text }), turnId],
+  );
+}
+
+/**
+ * The turn a RUNNING observer is executing, leased to its runner: whatever is queued waits behind it.
+ *
+ * It has already said something. A turn is ANSWERED because something answered it and not because
+ * the engine stopped, so a completion over a turn with none of the workspace's own reply events
+ * under it hands that turn back to the queue — and the runner's next `take` would be handed this
+ * turn again instead of the wake waiting behind it, which is the queue shape every case below
+ * reads. A turn an engine actually ran has this event.
+ */
 async function insertRunningTurn(sessionId: string): Promise<string> {
   const id = randomUUID();
   await sql.query(
@@ -292,6 +313,7 @@ async function insertRunningTurn(sessionId: string): Promise<string> {
      VALUES ($1,$2,1,$3,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '2 hours')`,
     [id, sessionId, `current-${id}`],
   );
+  await say(id, sessionId, 'working on it');
   return id;
 }
 
@@ -614,8 +636,14 @@ qa('F-01', 'every kind of wake against every exit that takes it off its observer
       await doors.complete(observer, current, 'SUCCEEDED');
       const taken = await doors.take(observer);
       let refused = false;
-      if (control === 'its own turn fails') await doors.complete(observer, wake.wakeId, 'FAILED');
-      else if (control === 'the observer is interrupted') await by.sessions.interrupt(owner, observer);
+      if (control === 'its own turn fails') {
+        // The wake RAN and then its run failed, which is what this control is about. A completed
+        // turn is ANSWERED because something answered it and not because the engine stopped, so the
+        // reply the engine produced goes in first: a turn that produced none is handed back to the
+        // queue, and a run that ends with a wake queued drains that wake as one no runner ever took.
+        await say(wake.wakeId, observer, 'the wake ran');
+        await doors.complete(observer, wake.wakeId, 'FAILED');
+      } else if (control === 'the observer is interrupted') await by.sessions.interrupt(owner, observer);
       else refused = await by.sessions.cancelQueuedTurn(owner, observer, wake.wakeId).then(() => false, () => true);
       const settled = await deliveryOf(wake.deliveryId);
       const turn = await turnById(wake.wakeId);
