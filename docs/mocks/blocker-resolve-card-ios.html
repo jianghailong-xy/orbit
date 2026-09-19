@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Blocker-resolve approval card — iPhone mockup</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 28px 64px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 6px; }
+  .lede { color: #55555e; max-width: 900px; margin: 0 0 28px; }
+  .row { display: flex; flex-wrap: wrap; gap: 36px; align-items: flex-start; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption > b:first-child { display: block; font-size: 14.5px; color: #16161a; margin-bottom: 3px; }
+  .tag { display: inline-block; font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+         padding: 3px 7px; border-radius: 5px; vertical-align: 1px; }
+  .tag.now { background: #ffe4e0; color: #b3261e; }
+  .tag.done { background: #e3f0ff; color: #0b57d0; }
+  .tag.idea { background: #fff0d1; color: #9a6000; }
+
+  /* ── phone ─────────────────────────────────────────────────── */
+  .phone {
+    width: 393px; height: 852px; border-radius: 48px; overflow: hidden; background: var(--surface);
+    color: var(--label); display: flex; flex-direction: column; position: relative;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.08);
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 26px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .right { display: flex; gap: 5px; align-items: center; color: #000; }
+  .nav { padding: 2px 16px 10px; display: flex; align-items: center; gap: 10px;
+         border-bottom: 1px solid var(--sep); }
+  .nav .back { width: 30px; height: 30px; border-radius: 50%; background: var(--fill);
+               display: grid; place-items: center; font-size: 15px; color: #000; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; }
+  .nav .t { font-size: 15px; font-weight: 600; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); }
+  .nav .badge { background: var(--fill); border-radius: 6px; padding: 2px 6px; font-size: 11px;
+                color: var(--label-2); margin-left: 4px; vertical-align: 1px; }
+  .nav .share { width: 30px; height: 30px; border-radius: 50%; background: var(--fill);
+                display: grid; place-items: center; font-size: 14px; }
+
+  /* The transcript is scrolled to its tail, so the newest turn — the card — sits at the bottom,
+     right above the background bar, exactly as on the real screen. */
+  .thread { flex: 1; padding: 12px 14px 0; overflow: hidden; display: flex; flex-direction: column; }
+  .thread .spacer { flex: 1 1 auto; }
+  .ask { font-size: 13px; color: var(--label-2); padding-bottom: 10px; margin-bottom: 2px;
+         border-bottom: 1px solid var(--sep); }
+  .ask b { color: var(--label); font-weight: 600; }
+  .row-t { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; color: var(--label-2); }
+  .row-t .g { font-size: 13px; }
+  .row-t .x { font-size: 13.5px; }
+  .tool { display: flex; align-items: center; gap: 7px; margin: 0 0 12px; font-size: 13px; }
+  .tool .chip { width: 22px; height: 22px; border-radius: 6px; background: var(--fill-2);
+                display: grid; place-items: center; font-size: 11px; color: var(--label-2); }
+  .tool code { font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tool .ok { margin-left: 2px; color: #34C759; font-size: 12px; }
+
+  /* ── approval card (native language: toned wash + hairline) ── */
+  .card { padding: 14px; border-radius: 14px; background: rgba(255, 149, 0, .07);
+          border: 1px solid rgba(255, 149, 0, .28); }
+  .card.plain { background: var(--fill-2); border-color: rgba(120,120,128,.22); }
+  .head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .head .icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                font-size: 12px; background: rgba(255,149,0,.16); color: #b26a00; flex: none; }
+  /* One line, truncated — what `ApprovalHeader` does (`lineLimit(1)`): the badge keeps its room. */
+  .head .title { font-size: 15px; font-weight: 700; flex: 1; white-space: nowrap;
+                 overflow: hidden; text-overflow: ellipsis; }
+  .head .name { font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b26a00;
+                background: rgba(255,149,0,.16); border-radius: 999px; padding: 3px 8px; }
+  .body { font-size: 13.5px; line-height: 1.45; color: var(--label); }
+  .body .cap { font-size: 12px; color: var(--label-2); margin: 10px 0 3px; }
+  .body .cap:first-child { margin-top: 0; }
+  .body p { margin: 0; }
+  .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .btn { min-height: 44px; border-radius: 24px; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; padding: 10px 12px; text-align: center;
+         font-size: 16.5px; }
+  .btn.primary { background: var(--blue); color: #fff; font-weight: 440; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .btn.danger { background: var(--fill); color: var(--red); }
+  .btn .rule { font: 12.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--blue);
+               margin-top: 2px; }
+  .btn.tinted.denyish { color: var(--red); }
+
+  /* what the panels are comparing */
+  .cut { outline: 1.5px dashed #b3261e; outline-offset: 4px; border-radius: 8px; }
+  .cut.good { outline-color: #0b57d0; }
+  .gap { position: relative; }
+  .gap::after { content: attr(data-gone); position: absolute; inset: 0; display: grid; place-items: center;
+                font: 600 12px/1.3 -apple-system, sans-serif; color: #b3261e; text-align: center; }
+  .ghost { border: 1.5px dashed #b3261e; border-radius: 24px; min-height: 44px; display: grid;
+           place-items: center; font-size: 12.5px; color: #b3261e; background: rgba(255,59,48,.05); }
+
+  .tail { padding: 10px 14px 0; }
+  .bgbar { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 11px 14px;
+           border-radius: 12px; background: var(--fill-2); }
+  .bgbar .n { color: var(--label-2); font-size: 13px; }
+  .bgbar .chev { margin-left: auto; color: var(--label-3); }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-top: 10px;
+              border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
+  .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 50%;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .footbar { display: flex; align-items: center; gap: 14px; padding: 10px 18px 26px;
+             font-size: 13px; color: var(--label-2); }
+  .footbar .on { color: var(--label); font-weight: 600; }
+  .footbar .ctx { margin-left: auto; }
+  .dial { display: inline-block; width: 15px; height: 15px; border-radius: 50%;
+          border: 2px solid var(--blue); border-right-color: rgba(0,122,255,.25);
+          border-bottom-color: rgba(0,122,255,.25); vertical-align: -2px; margin-right: 5px; }
+</style>
+
+<h1>Blocker-resolve approval on iPhone</h1>
+<p class="lede">The card an agent's <code>project_blocker_resolve</code> raises. Three states: what shipped
+(the screenshot), what this session's commit changes, and — if you want it — the dedicated card the web has
+had all along. Only the card differs between the three; everything above and below it is the same screen.</p>
+
+<div class="row">
+
+  <!-- ── 1. today ────────────────────────────────────────────── -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>12:18</span><span class="right">▮▮▮ ⌾ ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">换 provider 后发…<span class="badge">Coordinator</span></div>
+          <div class="s">Waiting for approval · Open · just now</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　agent 现在可以接受 blocker</div>
+        <div class="row-t"><span class="g">🧠</span><span class="x">Thought · 1.6k chars ›</span></div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_blocker_resolve</code><span class="ok">✓</span></div>
+        <div class="row-t"><span class="g">🧠</span><span class="x">Thought · 102 chars ›</span></div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_blocker_resolve</code><span class="ok">✓</span></div>
+        <div class="spacer"></div>
+        <div class="card">
+          <div class="head">
+            <div class="icon">✋</div>
+            <div class="title">Approve tool call</div>
+            <div class="name">orbit_blo…er_resolve</div>
+          </div>
+          <div class="actions">
+            <div class="btn primary">Allow</div>
+            <div class="ghost">Allow &amp; remember orbit_blocker_resolve</div>
+            <div class="btn danger">Deny</div>
+          </div>
+        </div>
+      </div>
+      <div class="tail">
+        <div class="bgbar">▣ <b>Background processes</b> <span class="n">3 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ Message…<span class="send">■</span></div>
+      </div>
+      <div class="footbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span>
+        <span class="ctx"><span class="dial"></span>42%</span></div>
+    </div>
+    <figcaption><b>① 现状（你截图那张）</b>
+      卡片只有一个工具名可看：不知道是哪个项目、哪条 blocker、agent 凭什么说它不阻塞了。
+      第三颗按钮「Allow &amp; remember…」在这张卡上还特别糟 —— 它是给「以后这类调用都别问我」签字，
+      而且在这里根本不会生效（这个询问来自 runner 自己的闸门，无论引擎手里有什么规则都会再问一次）。</figcaption>
+  </figure>
+
+  <!-- ── 2. this commit ──────────────────────────────────────── -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>12:18</span><span class="right">▮▮▮ ⌾ ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">换 provider 后发…<span class="badge">Coordinator</span></div>
+          <div class="s">Waiting for approval · Open · just now</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　agent 现在可以接受 blocker</div>
+        <div class="row-t"><span class="g">🧠</span><span class="x">Thought · 1.6k chars ›</span></div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_blocker_resolve</code><span class="ok">✓</span></div>
+        <div class="row-t"><span class="g">🧠</span><span class="x">Thought · 102 chars ›</span></div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_blocker_resolve</code><span class="ok">✓</span></div>
+        <div class="spacer"></div>
+        <div class="card">
+          <div class="head">
+            <div class="icon">✋</div>
+            <div class="title">Approve tool call</div>
+            <div class="name">orbit_blo…er_resolve</div>
+          </div>
+          <div class="actions cut good">
+            <div class="btn primary">Allow</div>
+            <div class="btn danger">Deny</div>
+          </div>
+        </div>
+      </div>
+      <div class="tail">
+        <div class="bgbar">▣ <b>Background processes</b> <span class="n">3 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ Message…<span class="send">■</span></div>
+      </div>
+      <div class="footbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span>
+        <span class="ctx"><span class="dial"></span>42%</span></div>
+    </div>
+    <figcaption><b>② 本次提交（已改，2e4a0d6a3）</b>
+      只有这张卡少一颗按钮，别的卡（Bash / Read / Edit…）和整套 remember 管线一行没动。
+      相机能看见的部分只有这一处：动作行从三颗变两颗。</figcaption>
+  </figure>
+
+  <!-- ── 3. the web's card, in native dress ──────────────────── -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>12:18</span><span class="right">▮▮▮ ⌾ ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">换 provider 后发…<span class="badge">Coordinator</span></div>
+          <div class="s">Waiting for approval · Open · just now</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your question</b>　agent 现在可以接受 blocker</div>
+        <div class="row-t"><span class="g">🧠</span><span class="x">Thought · 1.6k chars ›</span></div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_blocker_resolve</code><span class="ok">✓</span></div>
+        <div class="row-t"><span class="g">🧠</span><span class="x">Thought · 102 chars ›</span></div>
+        <div class="tool"><span class="chip">◫</span><code>orbit · project_blocker_resolve</code><span class="ok">✓</span></div>
+        <div class="spacer"></div>
+        <div class="card cut">
+          <div class="head">
+            <div class="icon">🚧</div>
+            <div class="title">Unblock “数据管道重建”?</div>
+            <div class="name">blocker</div>
+          </div>
+          <div class="body">
+            <div class="cap">About 重跑 09-17 的导入</div>
+            <p>需要你确认新集群的账号权限</p>
+            <div class="cap">The agent says it no longer blocks</div>
+            <p>权限已在 09-18 由运维补齐，脚本重跑通过。</p>
+          </div>
+          <div class="actions">
+            <div class="btn primary">Resolve it</div>
+            <div class="btn tinted">Chat about this</div>
+          </div>
+        </div>
+      </div>
+      <div class="tail">
+        <div class="bgbar">▣ <b>Background processes</b> <span class="n">3 total</span><span class="chev">›</span></div>
+        <div class="composer">Leaving this open: 重跑 09-17 的导入<span class="send">■</span></div>
+      </div>
+      <div class="footbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span>
+        <span class="ctx"><span class="dial"></span>42%</span></div>
+    </div>
+    <figcaption><b>③ 可选：照 web 给这张卡做专属外观</b>
+      卡片头改成它在问什么（哪个项目），正文两句就是人要在其间做决定的两句：blocker 当初要人做的那件事
+      （<code>requiredAction</code>），和 agent 说它不再成立的理由（<code>reason</code>）；上面那行 About … 只在 blocker 挂在某个任务上时出现。
+      按钮用 Orbit 自己那套：「Resolve it」＋「Chat about this」（按下后把 <code>Leaving this open: …</code> 送进输入框，和别的 Orbit 确认卡一致；web 那颗按钮直接把这句话写在按钮上）。
+      头行这里比 web 短一句：web 的原文是整句 <code>Confirm: this no longer blocks {project}?</code>，
+      手机上一定截断（15px 一行只放得下二十来个字符），所以收成 <code>Unblock “{project}”?</code>，跟原生别的卡一个节奏
+      （Create project “…”? / Restructure dependencies in X?）。正文两行标号照抄 web。文案都可改。</figcaption>
+  </figure>
+
+</div>
+</html>
