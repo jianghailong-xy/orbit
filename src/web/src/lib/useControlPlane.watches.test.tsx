@@ -4,16 +4,19 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlPlaneProvider } from './useControlPlane';
-import { watchesQuery } from './queries';
+import { watchQuery, watchesQuery } from './queries';
 
 /**
  * The watches read rides the control-plane stream as a refetch nudge, never as data.
  *
- * No event names a watch: what moves one is the evaluator reading a session or task row after the
- * event that hinted at it (docs/watch-contract.md §8). So the events that can move a watch —
- * a session's, an approval's, a task's — invalidate the read at once and again a few seconds later,
- * and the library events that cannot, leave it alone. Mounted over a fake EventSource, read off the
- * cache's own `isInvalidated` flag with keys from the factory the pages use.
+ * Two kinds of event reach it. A `watch.changed` NAMES a watch and arrives after the server already
+ * moved it (docs/watch-contract.md §8.1): a delivery, a deadline, a dead letter, an agent making or
+ * releasing one — none of which writes a task or a session row, so before this event the list found
+ * them only on its 60s poll. A session's, an approval's or a task's event names no watch, and
+ * arrives BEFORE the evaluator reads the row it hints at (§8), so those invalidate the read at once
+ * and again a few seconds later. The library events that can move no watch leave it alone. Mounted
+ * over a fake EventSource, read off the cache's own `isInvalidated` flag with keys from the factory
+ * the pages use.
  */
 
 vi.mock('../api', () => ({ getToken: () => 'token' }));
@@ -33,8 +36,10 @@ class FakeEventSource {
 }
 
 const WATCHES: QueryKey = watchesQuery().queryKey;
+const ONE_WATCH: QueryKey = watchQuery('W1').queryKey;
 const TAGS: QueryKey = ['session-tags'];
 const TASKS: QueryKey = ['tasks'];
+const SESSIONS: QueryKey = ['sessions'];
 
 const frame = (type: string, data: Record<string, unknown>, sessionId = '') => ({
   type,
@@ -135,6 +140,37 @@ describe('the watches read rides the control-plane stream', { timeout: 30_000 },
     client.setQueryData(WATCHES, []);
     await publish(frame('task.changed', { taskId: 'T1', taskIds: ['T1'], resync: false }));
     await untilInvalidated(client, WATCHES);
+  });
+
+  it('a watch.changed re-reads the watches at once, without the 60s poll', async () => {
+    const client = await mount([WATCHES, ONE_WATCH]);
+
+    // What the server sends for a NOTIFY_USER delivery, an expiry, a dead letter, or an agent
+    // making or releasing a watch: the watch's id and nothing else about it.
+    await publish(frame('watch.changed', { id: 'W1' }));
+    await untilInvalidated(client, WATCHES);
+    // The whole group, so a wake card drawn from `['watches', 'one', id]` is re-read with the list.
+    await untilInvalidated(client, ONE_WATCH);
+  });
+
+  it('a watch.changed re-reads only the watches', async () => {
+    const client = await mount([WATCHES, SESSIONS, TASKS]);
+
+    await publish(frame('watch.changed', { id: 'W1' }));
+    await untilInvalidated(client, WATCHES);
+
+    // The nudge says a watch moved, and says nothing about a session or a task: re-reading those
+    // would be work the event gives no reason for.
+    expect(invalidated(client, SESSIONS)).toBe(false);
+    expect(invalidated(client, TASKS)).toBe(false);
+  });
+
+  it('keeps the 60s poll the event only accelerates', () => {
+    // The nudge is an accelerant with no delivery guarantee (docs/watch-contract.md §8.1): a replica
+    // restarting or a socket going quiet drops it without a word, and the read may not go a minute
+    // stale for that. Asserted here because this is the file that would otherwise make the poll look
+    // redundant.
+    expect(watchesQuery().refetchInterval).toBe(60_000);
   });
 
   it('library events leave the watches alone', async () => {

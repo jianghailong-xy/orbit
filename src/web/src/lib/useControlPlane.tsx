@@ -15,10 +15,11 @@ const REFRESH_DEBOUNCE_MS = 500;
 // already declares 5s of staleness acceptable there, so refetching it faster than that is strictly
 // more work than the poll this stream replaced.
 const LISTS_MIN_INTERVAL_MS = 5_000;
-// How long after a nudge the watch list is read a second time. No event names a watch: the evaluator
-// moves one by reading the database AFTER the session or task event that hinted at it
-// (docs/watch-contract.md §8), so the refetch riding the burst mostly reads the watch just before it
-// lands — a settled turn is matched in about a second and a half.
+// How long after a nudge the watch list is read a second time. `watch.changed` names a watch and
+// arrives AFTER the change landed, so it needs no second look — but a session or task event arrives
+// BEFORE the evaluator has read the row it hints at (docs/watch-contract.md §8), so the refetch
+// riding that burst mostly reads the watch just before it moves. A settled turn is matched in about
+// a second and a half, which is what this waits out.
 const WATCH_SETTLE_MS = 3_000;
 // The server pings ~every 20s (EventsController keepalive); 45s of total silence means the socket
 // went half-dead without firing onerror. EventSource has no read timeout, so we watch for it.
@@ -136,6 +137,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     };
     // The owner's watches: re-read with the burst, then once more WATCH_SETTLE_MS later for the
     // evaluation that burst set off. A later burst restarts that second read instead of adding one.
+    // `['watches']` is the whole group — the four list reads and any single watch under
+    // `['watches', 'one', id]` (queries.ts) — so one invalidation reaches every card on screen.
     const refetchWatches = (): void => {
       void qc.invalidateQueries({ queryKey: ['watches'] });
       if (watchesTimer) clearTimeout(watchesTimer);
@@ -164,6 +167,13 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (type.startsWith('workspace.')) return ['workspaces', 'sessions'];
       if (type.startsWith('tag.')) return ['tags', 'sessions'];
       if (type.startsWith('provider.')) return ['providers'];
+      // The server naming a watch itself: it was made, edited, paused, resumed or stopped; it
+      // matched, expired or ended unmatched; or one of its deliveries delivered or dead-lettered
+      // (docs/watch-contract.md §8.1). These are the changes NO other event accompanies — a
+      // NOTIFY_USER delivery writes no task or session row, and a deadline passing writes none
+      // either — so before this event the list only found them on its 60s poll, which still runs
+      // and is still what makes a dropped event a latency bug and nothing more.
+      if (type.startsWith('watch.')) return ['watches'];
       // What a watch's leaves read besides a task's status: a session's status and filing, and its
       // pending approvals (docs/watch-contract.md §2.2).
       if (type.startsWith('session.') || type.startsWith('approval.')) return ['sessions', 'watches'];

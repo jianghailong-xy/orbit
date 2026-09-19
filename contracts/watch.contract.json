@@ -397,7 +397,26 @@
       "consequence": "session.completed_at is NOT in that column list, so moving a Session to Completed writes no outbox row at all, and Approval writes are on a different table entirely. SESSION_LIFECYCLE_TERMINAL and SESSION_NEEDS_ATTENTION therefore have leaves no durable event covers: the sweep is load-bearing for them, not a backstop."
     },
     "invariant": "Dropping every hint changes only latency. Liveness is owned by nextEvaluateAt plus the leased reconciliation sweep.",
-    "forbidden": "A Match must never be derived from the content of an event payload."
+    "forbidden": "A Match must never be derived from the content of an event payload.",
+    "announces": {
+      "event": "watch.changed",
+      "type": "ControlEventType.WATCH_CHANGED in src/shared/src/realtime.ts (RunEventType.WATCH_CHANGED on the hub)",
+      "scope": "The watch's OWNER, on the user-scoped control-plane stream (GET /api/events). The envelope names no session: a watch belongs to its owner, and a NOTIFY_USER watch observes from no session at all.",
+      "payload": ["id"],
+      "redaction": "The watch's id and nothing else — never its state, its targets, a target state, a snapshot or a Match reason. deliveryGuards.redaction holds for this channel too, and this one is neither authenticated per event nor scoped to a session allowed to read a target: a client re-reads GET /watches, which redacts, and learns what changed from the answer.",
+      "publishedBy": [
+        "watches.service.ts#create — a watch was made. Not on the idempotent replay of one, which changes nothing.",
+        "watches.service.ts#transition — cancelled, paused, resumed or edited, and only when the compare-and-set wrote.",
+        "watch-evaluator.service.ts#evaluate — MATCHED, EXPIRED, REVOKED or UNRESOLVABLE, after the landing commits. Not SCHEDULED (only nextEvaluateAt moved, which no client is shown) and not SETTLED (nothing was written).",
+        "watch-delivery.service.ts#attempt — DELIVERED, and DEAD_LETTER on the attempt that made it one. Not a failed attempt with another to come, which would announce the retry schedule."
+      ],
+      "notPublishedBy": [
+        "watch-delivery.service.ts#reclaimExpired — a dead letter the lease sweep records: reconciliation noticed it, no worker is there to announce it, and the client's poll is what finds it.",
+        "watch-wake-drain.ts#deadLetterQueuedWatchWakes — a queued wake taken off its observer's queue unrun: it rides a session ending, which the clients already see.",
+        "watches.service.ts#retryDelivery — the owner's own redrive, answered to the client that asked for it."
+      ],
+      "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: the web watch list polls every 60s (watchesQuery, src/web/src/lib/queries.ts) and re-reads on reconnect. The server decides nothing from it — no evaluation, no Match and no delivery is derived from an announcement, and the evaluator does not take this type as a hint — so it is the same at-most-once, unordered, unreplayable channel as accelerantOnly above, in the other direction."
+    }
   },
 
   "agentSurface": {

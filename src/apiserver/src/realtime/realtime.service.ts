@@ -598,6 +598,28 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * One of the owner's watches changed — made, edited, paused, resumed or stopped; matched, expired
+   * or ended unmatched; or one of its deliveries delivered or dead-lettered. User-scoped, because a
+   * watch belongs to its owner and not to the session observing it (a NOTIFY_USER watch observes
+   * from no session at all), and because the watch workers that publish most of these run on a
+   * replica no client is attached to — the NOTIFY bridge is how it reaches the owner's tabs.
+   *
+   * THE PAYLOAD IS THE WATCH'S ID AND NOTHING ELSE. Not its state, not its targets' states, not the
+   * snapshot and not the Match reason: the redaction rules (contract `deliveryGuards.redaction`,
+   * `watches/watch-redaction.ts`) hold for every channel, and this one is neither authenticated per
+   * event nor scoped to the session that may read a target. A client re-reads `GET /watches`, which
+   * applies those rules, and learns what changed from the answer.
+   *
+   * An accelerant only (contract `factSource`, docs/watch-contract.md §8.1): every one of these may
+   * be dropped — pg_notify failing, a replica restarting, a tab reconnecting — and nothing about a
+   * watch is decided differently for it. What makes a watch correct is `nextEvaluateAt` plus the
+   * leased reconciliation sweep on the server, and the watch list's own poll on the client.
+   */
+  publishWatchChanged(ownerId: string, watchId: string): void {
+    this.publishForUser(ownerId, RunEventType.WATCH_CHANGED, watchId);
+  }
+
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
    *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
   publishForAllUsers(type: RunEventType, id: string): void {

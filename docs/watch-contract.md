@@ -34,7 +34,8 @@
 ## 0. 一页结论
 
 1. **数据库是事实源，实时事件只是加速器。** 谓词只读各 leaf 声明的列；丢掉全部提示只改变延迟，
-   不改变结论（§8）。
+   不改变结论（§8）。反方向同理：服务端把 watch 的变化发成 `watch.changed`，载荷只有 watchId，
+   客户端收到后重新读；丢掉这条事件也只是让客户端多等一轮轮询（§8.1）。
 2. **Match 是事实，Delivery 是效果。** 条件成立记一行不可变 Match；通知或唤醒是可重试的交付，
    两者分开持久化（§1）。
 3. **`AWAITING_INPUT` 是「turn settled」，不是 Task 完成，也不是终态。** 三个概念各有 leaf，
@@ -389,6 +390,45 @@ AFTER UPDATE OF "status", "deleted_at", "merge_status" ON "session"
 
 **因此：Match 绝不能从事件载荷的内容推导出来。** 事件只用来把一次求值提前安排。
 
+### 8.1 反过来：Watch 自己发出的那条事件 `watch.changed`
+
+上面讲的是**进来**的提示。出去的只有一条，`ControlEventType.WATCH_CHANGED = "watch.changed"`
+（hub 上是 `RunEventType.WATCH_CHANGED`），契约里是 `factSource.announces`。
+
+**它存在的理由**：有四种变化**不伴随任何 task / session 行的改动**，于是控制面上没有任何事件指向它们，
+Web 的 watch 列表只能等自己那 60s 轮询：
+
+1. **NOTIFY_USER 的交付**——只推一条 APNs，不写 task 也不写 session；
+2. **TTL 到期**——只是时间过去了，没有任何行被谁改过；
+3. **交付变成死信**——`PERMISSION_REVOKED` / `OBSERVER_SESSION_*` / `WAKE_*` 那些码；
+4. **agent 在会话里建立或释放 watch**——`watch_create` / `watch_cancel`。
+
+**语义**：user-scoped（按 owner 路由，信封里 `sessionId` 为空——watch 属于它的 owner，
+而 NOTIFY_USER 的 watch 根本没有观察者会话）。**载荷只有 `{ id }`**：不带状态、不带目标、
+不带目标状态、不带快照、不带 Match reason。脱敏规则（`deliveryGuards.redaction`，
+`watches/watch-redaction.ts`）在这条通道上照样成立，而这条通道既不逐事件鉴权、也不按
+「谁有权读这个目标」划分范围。客户端收到后**重新读 `GET /watches`**——那条读会脱敏——
+从答案里知道变了什么。
+
+**谁发**（契约 `announces.publishedBy`）：`watches.service.ts#create`（幂等重放不发，因为没变化）、
+`#transition`（cancel / pause / resume / update，且只在 CAS 真写了的时候）、
+`watch-evaluator.service.ts#evaluate`（MATCHED / EXPIRED / REVOKED / UNRESOLVABLE，落地提交之后；
+SCHEDULED 不发——只动了 `nextEvaluateAt`，客户端本来就看不到；SETTLED 不发——什么都没写）、
+`watch-delivery.service.ts#attempt`（DELIVERED，以及把行变成死信的那一次 DEAD_LETTER；
+还会重试的失败不发，否则就是在广播重试计划）。**谁不发**见 `announces.notPublishedBy`：
+租约过期扫出来的死信、被清空的排队唤醒、owner 自己的 redrive。
+
+**谁消费**：目前只有 Web（`useControlPlane.tsx` 把 `watch.` 前缀映射到 `['watches']` 组）。
+macOS/iOS 的 `ControlEventType` 有 `.unknown` 兜底，认不出的类型直接忽略
+（`ControlEventCodableTests.testUnknownTypeDecodesToUnknownNotError`），所以它们照旧走自己的读，
+不会因为多了一个类型而坏掉（`project.criteria_decisions.changed` 早就是同样的处境）。
+
+**正确性不依赖它。** 丢掉全部 `watch.changed` 只改变客户端要等多久：Web 的
+`watchesQuery`（`src/web/src/lib/queries.ts`）仍然 60s 轮询一次，重连时还会整份重读；
+服务端不从它推导任何东西——没有求值、没有 Match、没有交付是从这条事件得出的，
+evaluator 也不把这个类型当提示吃。与上面那张表同样的 at-most-once、不保证顺序、不可重放，
+只是方向相反。
+
 ---
 
 ## 9. 边界：Watch 与它的三个邻居
@@ -662,4 +702,8 @@ bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-api.pg.spec.ts      
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-security.pg.spec.ts   # 安全、限流、重试/DLQ 与指标
 bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-advanced.pg.spec.ts   # §12，隔离 PostgreSQL
 bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/runner-task-progress.pg.spec.ts   # §12.1 runner 门：owner 隔离、revision 冲突、终态拒绝
+bash scripts/run-pg-spec.sh src/apiserver/src/watches/watch-events.pg.spec.ts     # §8.1 watch.changed：四类变化各一条、载荷只有 id
 ```
+
+§8.1 客户端那一半在 `src/web/src/lib/useControlPlane.watches.test.tsx`（`npx vitest run` 于 `src/web`），
+服务端信封那一半在 `src/apiserver/src/realtime/stream-for-user.spec.ts`（`npm test` 于 `src/apiserver`）。

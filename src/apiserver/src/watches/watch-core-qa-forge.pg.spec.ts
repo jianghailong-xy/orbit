@@ -87,7 +87,7 @@ const ALL_TERMINAL = { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' }
 const inert = <T>(): T =>
   new Proxy({}, { get: (_target, property) => (property === 'then' ? undefined : () => undefined) }) as T;
 const push = { notifyWatchMatched: async () => undefined } as unknown as PushService;
-const noHints = { localPublications: () => EMPTY } as unknown as RealtimeService;
+const noHints = { localPublications: () => EMPTY, publishWatchChanged: () => undefined } as unknown as RealtimeService;
 
 // ── the harness ────────────────────────────────────────────────────────────────────────────────
 

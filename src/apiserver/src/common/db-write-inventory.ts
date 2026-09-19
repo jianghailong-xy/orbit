@@ -603,7 +603,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Every attempt re-reads the targets and decides the predicate again inside the closure, and writes only rows it creates, so a rolled-back attempt leaves nothing for the next one to meet. The same argument covers the runs outside the retry: a unit rolled back because another create of the account held its turn, or ended by a P2028 that wrote nothing (it could not start in time, or its timeout rolled it back before the commit), runs again whole once the turn is free.',
-    effects: 'None inside. The delivery it records is a PENDING row for the delivery worker; the response is read after commit.',
+    effects: 'None inside. The delivery it records is a PENDING row for the delivery worker; the response is read after commit, and the `watch.changed` announcement is published after that — never on the idempotent replay, which changed nothing, and never from inside the closure, where a retried attempt would publish one per attempt.',
     answer: 'Typed 503; the client re-sends, and a key makes the re-send the same watch. A create that has not had its turn when its wait runs out (10s by default) answers the same TRANSIENT_DB_CONFLICT body itself, having written nothing.',
   },
   {
@@ -957,7 +957,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything the decision is a function of is read inside the closure under the row lock — the watch, its targets, every source column its leaves name, and the clock (`now()`). A re-run against the world the aborted attempt saw decides the same; against a world that moved it decides the newer one, which is the one to land. A watch another landing already settled is left alone.',
-    effects: 'None inside. The next pass is started by the caller, outside any transaction.',
+    effects: 'None inside. The next pass is started by the caller, outside any transaction, and the `watch.changed` announcement for a landing that MATCHED, EXPIRED, REVOKED or ended UNRESOLVABLE is published after the commit — an attempt that rolled back announced nothing.',
     answer: 'The pass logs it and goes on to the next watch; the claim lapses and the watch is due again on a later pass.',
   },
   {
@@ -1089,7 +1089,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // together. It takes only the delivery's row, after createTurn holds the observer session, and
   // nothing holding a delivery row waits on a session. Also issued on its own, as one compare-and-set
   // on the lease generation, for a notification and for a turn an earlier attempt already queued.
-  { at: 'watches/watch-delivery.service.ts#acknowledgeDelivery', under: 'sessions.createTurn' },
+  { at: 'watches/watch-delivery.service.ts#acknowledgeDelivery', under: "sessions.createTurn — or, for a notification and for a turn an earlier attempt already queued, on its own as one compare-and-set on the claim's lease generation. Its caller announces `watch.changed` after it commits, which for a NOTIFY_USER delivery is the only thing that tells the owner's other clients anything: that delivery writes no task and no session row" },
   // A Watch wake taken off its observer's queue unrun — drained by an ending, deleted by an interrupt or
   // a withdrawal: the delivery that acknowledged it becomes a dead letter in the transaction that takes
   // the turn off. It takes only the delivery rows of that session's own wakes, after the caller holds
@@ -1355,13 +1355,13 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },
   { at: "watches/watch-delivery.service.ts#claimDue", class: "MANY_ROWS", statements: 1, note: "The delivery lease: a batch of due PENDING deliveries moved to IN_FLIGHT, each under its own lease generation. `FOR UPDATE SKIP LOCKED` passes over a row another claim or settlement holds instead of waiting for it, so the statement has no wait edge; a delivery it skips is still due on the next pass." },
   { at: "watches/watch-delivery.service.ts#defer", class: "ONE_ROW_CAS", statements: 1, note: "A wake a continuous watch may not give yet, put back to PENDING until its window ends, only while the claim's lease generation is still the row's. No attempt is counted; a lost CAS means a takeover holds the row and settles it." },
-  { at: "watches/watch-delivery.service.ts#fail", class: "ONE_ROW_CAS", statements: 1, note: "A failed attempt, recorded only while the claim's lease generation is still the row's: back to PENDING on the backoff, or a dead letter at the attempt cap or on a refusal. A lost CAS means a takeover holds the row and settles it." },
+  { at: "watches/watch-delivery.service.ts#fail", class: "ONE_ROW_CAS", statements: 1, note: "A failed attempt, recorded only while the claim's lease generation is still the row's: back to PENDING on the backoff, or a dead letter at the attempt cap or on a refusal. A lost CAS means a takeover holds the row and settles it. Its caller announces `watch.changed` for the attempt that made the row a dead letter, and for none that still has a retry to come." },
   { at: "watches/watch-delivery.service.ts#reclaimExpired", class: "MANY_ROWS", statements: 1, note: "The lease-expiry sweep: in-flight deliveries whose lease ran out go back to PENDING with the lost attempt counted, or become dead letters. `FOR UPDATE SKIP LOCKED`, so a row whose worker is still settling it is left to that worker's CAS." },
   { at: "watches/watch-evaluator.service.ts#claimDueWithDelay", class: "MANY_ROWS", statements: 1, note: "The evaluation lease: a batch of due watches, each moved forward by the lease. `FOR UPDATE SKIP LOCKED` passes over any row a claim, hint or landing holds instead of waiting for it, so the statement has no wait edge and cannot be a deadlock victim; a watch it skips is still due on the next pass." },
   { at: "watches/watch-evaluator.service.ts#markDue", class: "MANY_ROWS", statements: 1, note: "A hint: the live watches targeting a few rows are made due now. `FOR UPDATE SKIP LOCKED` passes over a row a landing, claim, transition or other hint holds instead of waiting for it, so the statement has no wait edge, cannot be a deadlock victim, and holds its pooled connection no longer than itself. A watch it passed over is asked about again by the same statement after a pause, until it is found free or a reconciliation period has passed, and is then made due only if a landing that began before the first ask has moved its `last_evaluated_at` since. A conflict it loses is a lost hint, which the reconciliation sweep already absorbs." },
   { at: "watches/watches.service.ts#awaitOwnerTurn", class: "NOT_A_ROW_WRITE", statements: 1, note: "A create's ask whether its account's turn is free, made between two attempts and outside any transaction: `pg_try_advisory_xact_lock` on the owner, which never waits and is let go as its own statement ends. It locks no row and waits on nothing, so nothing waits on it for longer than the statement." },
   { at: "watches/watches.service.ts#retryDelivery", class: "ONE_ROW_CAS", statements: 1, note: "An owner's redrive of one dead letter: back to PENDING, due at once, its attempts from zero, only while the row is still the DEAD_LETTER with the last_error the decision read. A lost CAS answers 409." },
-  { at: "watches/watches.service.ts#transition", class: "ONE_ROW_CAS", statements: 1, note: "One compare-and-set per attempt, on the state and expiry the decision was read from. A lost CAS re-reads and decides again, at most three times, then answers 409." },
+  { at: "watches/watches.service.ts#transition", class: "ONE_ROW_CAS", statements: 1, note: "One compare-and-set per attempt, on the state and expiry the decision was read from. A lost CAS re-reads and decides again, at most three times, then answers 409. The `watch.changed` announcement follows the CAS that wrote, and a decision that changed nothing publishes none." },
   { at: "workspaces/workspaces.service.ts#create", class: "INSERT", statements: 1 },
   { at: "workspaces/workspaces.service.ts#removePermissionRule", class: "ONE_ROW_CAS", statements: 1 },
   { at: "workspaces/workspaces.service.ts#requestRepoCleanup", class: "ONE_ROW_CAS", statements: 1 },

@@ -31,6 +31,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
     controlTypeFor(RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED),
     ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
   );
+  assert.equal(controlTypeFor(RunEventType.WATCH_CHANGED), ControlEventType.WATCH_CHANGED);
 });
 
 test('only the owner-library events are user-scoped', () => {
@@ -39,6 +40,9 @@ test('only the owner-library events are user-scoped', () => {
     ControlEventType.TAG_CHANGED,
     ControlEventType.PROVIDER_CHANGED,
     ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
+    // A watch belongs to its owner, and the workers that announce most of them run on a replica
+    // with no client attached: routing it by owner is what gets it onto the NOTIFY bridge at all.
+    ControlEventType.WATCH_CHANGED,
   ]) {
     assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
   }

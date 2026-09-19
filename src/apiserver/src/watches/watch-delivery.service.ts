@@ -24,6 +24,7 @@ import {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import {
   countWatchDeadLetter,
@@ -251,6 +252,11 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     private readonly sessions: SessionsService,
     private readonly push: PushService,
     @Optional() @Inject(WATCH_DELIVERY_OPTIONS) options: WatchDeliveryOptions = {},
+    // Only the two settlements a client can see announce through it (`watch.changed`, an accelerant
+    // only — docs/watch-contract.md §8.1). Defaulted so the specs that construct this worker by hand
+    // do not each have to stub a hub they never read; `RealtimeModule` is global, so Nest injects the
+    // real one by type, not by position.
+    private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
   ) {
     this.leaseMs = options.leaseMs ?? WATCH_DELIVERY_LEASE_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? WATCH_DELIVERY_POLL_INTERVAL_MS;
@@ -430,9 +436,12 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     });
     if (!delivery) return 'LEASE_LOST';
     const { match, watch } = delivery;
+    // Whose watch this delivery is for, and which one: a Match's delivery names it through the
+    // Match, an end's names it directly. `watch_delivery_kind_shape_chk` guarantees one of the two.
+    const subject = match?.watch ?? watch!;
     try {
       // Before anything about the targets is built into a payload (GUARDS above).
-      const revoked = await permissionRecheck(this.prisma, match?.watch ?? watch!, delivery.kind);
+      const revoked = await permissionRecheck(this.prisma, subject, delivery.kind);
       if (revoked) throw revoked;
       if (!match && delivery.kind === 'EXPIRY') {
         // An expiry. `watch_delivery_kind_shape_chk` guarantees such a row names its watch, carries its
@@ -456,7 +465,12 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       if (error instanceof DeliveryLeaseLost) return 'LEASE_LOST';
       if (error instanceof DeliveryDeferred) return this.defer(claim, error);
-      return this.fail(claim, error);
+      const outcome = await this.fail(claim, error);
+      // Only the last attempt: a dead letter is what an owner is shown and has to decide about
+      // (`?needsAttention=true`). A failed attempt with another to come changed nothing they read,
+      // and announcing each one would announce the retry schedule.
+      if (outcome === 'DEAD_LETTER') this.realtime?.publishWatchChanged(subject.ownerId, subject.id);
+      return outcome;
     }
     countWatchEffectiveWake(delivery.action);
     if (match && delivery.action === 'NOTIFY_USER') {
@@ -468,6 +482,10 @@ export class WatchDeliveryService implements OnModuleInit, OnModuleDestroy {
         reason: redactReason(match.reason),
       });
     }
+    // The acknowledgement is committed. A NOTIFY_USER delivery writes no task or session row, so
+    // this is the ONLY thing that tells the owner's other clients their watch has fired — without
+    // it the web list waits out its poll (docs/watch-contract.md §8.1).
+    this.realtime?.publishWatchChanged(subject.ownerId, subject.id);
     return 'DELIVERED';
   }
 

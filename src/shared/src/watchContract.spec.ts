@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ControlEventType } from './realtime';
 import {
   WATCH_ATTENTION_EXPIRED_ACTIONS,
   WATCH_ATTENTION_STATES,
@@ -117,6 +118,20 @@ describe('watch contract', () => {
     expect(l.defaultTtlSeconds).toBeLessThanOrEqual(l.maxTtlSeconds);
     expect(l.maxDeliveryAttempts).toBeGreaterThan(1);
     expect(l.maxPredicateDepth).toBeGreaterThanOrEqual(2);
+  });
+
+  it('announces a watch by its id alone, under the name the control plane actually ships', () => {
+    const announces = CONTRACT.factSource.announces;
+    // The contract names an event; the enum is what the server sends. Drift between them would be a
+    // contract describing a channel nobody is on.
+    expect(announces.event).toBe(ControlEventType.WATCH_CHANGED);
+    // The whole payload. A watch's state, its targets, their states, the snapshot and the Match
+    // reason are all redacted elsewhere (deliveryGuards.redaction) and none of them may reach an
+    // event the server pushes unasked to every one of an owner's tabs.
+    expect(announces.payload).toEqual(['id']);
+    // And it stays an accelerant: the moment anything decides from it, factSource's own invariant
+    // ("dropping every hint changes only latency") stops being true of this contract.
+    expect(announces.correctness).toMatch(/Nothing depends on it/u);
   });
 
   it('records that the durable session trigger does not cover every leaf it would need to', () => {

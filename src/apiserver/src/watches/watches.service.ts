@@ -29,6 +29,7 @@ import {
 } from '@orbit/shared';
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive, countWatchRolloutRefusal } from './watch-metrics';
 import {
@@ -219,6 +220,11 @@ export class WatchesService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() @Inject(WATCHES_OPTIONS) options: WatchesOptions = {},
+    // Only the writes that change what a watch reads as announce through it (`watch.changed`, an
+    // accelerant only — docs/watch-contract.md §8.1). Defaulted so the specs that construct this
+    // service by hand do not each have to stub a hub they never read; `RealtimeModule` is global,
+    // so Nest injects the real one by type, not by position.
+    private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
   ) {
     this.maxLiveWatchesPerOwner = options.maxLiveWatchesPerOwner ?? WATCH_LIMITS.maxLiveWatchesPerOwner;
     this.maxLiveWatchesPerTarget = options.maxLiveWatchesPerTarget ?? WATCH_LIMITS.maxLiveWatchesPerTarget;
@@ -345,6 +351,9 @@ export class WatchesService {
     }
     const watch = await this.get(ownerId, watchId);
     countWatchCreate(watch.state === 'MATCHED' ? 'matched_at_create' : 'created');
+    // After the commit, and not on the replay above: a retry of a create that already happened
+    // announces nothing, because nothing changed for it to announce.
+    this.realtime?.publishWatchChanged(ownerId, watch.id);
     return watch;
   }
 
@@ -839,7 +848,13 @@ export class WatchesService {
         where: { id, ownerId, state: watch.state, expiresAt: watch.expiresAt },
         data,
       });
-      if (count === 1) break;
+      if (count === 1) {
+        // After the write, so a client that re-reads on this nudge reads what landed. A decision
+        // that changed nothing (`data === null`: a second cancel, a pause of a paused watch) left
+        // the loop above without one: there is nothing for another client to see.
+        this.realtime?.publishWatchChanged(ownerId, id);
+        break;
+      }
       if (attempt === TRANSITION_ATTEMPTS) {
         throw new ConflictException('the watch kept changing while this request decided; read it again and retry');
       }

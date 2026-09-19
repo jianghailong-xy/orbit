@@ -162,7 +162,7 @@ test('under drain every write that adds a wait or a wake is refused before the d
 });
 
 test('off leaves the evaluator and the delivery worker unstarted; drain starts both', async () => {
-  const noHints = { localPublications: () => EMPTY } as unknown as RealtimeService;
+  const noHints = { localPublications: () => EMPTY, publishWatchChanged: () => undefined } as unknown as RealtimeService;
   const loopOf = (worker: unknown) => (worker as { loop: string }).loop;
 
   const off = untouchable();

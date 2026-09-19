@@ -56,6 +56,14 @@ export enum ControlEventType {
    *  the owner decided one. USER-SCOPED (see above). `data` is a `ControlResourceChanged` naming the
    *  project: a nudge to re-read that project's pending decisions, never the proposal or its key. */
   PROJECT_CRITERIA_DECISIONS_CHANGED = 'project.criteria_decisions.changed',
+  /** One of the owner's watches changed — made, edited, paused, resumed, stopped, matched, expired,
+   *  ended unmatched, or one of its deliveries delivered or dead-lettered. USER-SCOPED (see above).
+   *  `data` is a `ControlResourceChanged` naming the watch and NOTHING else: not its state, not its
+   *  targets' states, not a snapshot and not a Match reason (contract `deliveryGuards.redaction`).
+   *  A nudge to re-read the watch list, and only that — a client may not conclude from its arrival
+   *  what changed, and Watch's correctness never depends on it arriving at all
+   *  (docs/watch-contract.md §8.1). */
+  WATCH_CHANGED = 'watch.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -65,8 +73,8 @@ export enum ControlEventType {
 export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
-   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed`), which belong to the
-   *  owner, not to any one session. Clients must dispatch on `type`, not on the presence of a
+   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` / `watch.changed`),
+   *  which belong to the owner, not to any one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
   agentId: string | null;
@@ -226,9 +234,9 @@ export interface ControlAgentChanged {
 }
 
 /** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `provider.changed` /
- *  `project.criteria_decisions.changed`). Same contract as the two above: refetch the matching
- *  read; the id is for future fine-grained updates and logging, except on the last, where it names
- *  the project whose pending decisions to re-read. */
+ *  `project.criteria_decisions.changed` / `watch.changed`). Same contract as the two above: refetch
+ *  the matching read; the id is for future fine-grained updates and logging, except on the last two,
+ *  where it names the project whose pending decisions to re-read, and the watch to re-read. */
 export interface ControlResourceChanged {
   id: string;
 }

@@ -626,9 +626,11 @@ export const projectIntegrationQuery = (projectId: string) =>
  * each watch is kept once. The Following page, every watch card and the Following / Followed by
  * relations on sessions and tasks are all drawn from this one read, so a watch reads the same
  * wherever it is shown. The control-plane
- * stream nudges it on the session, approval and task events that can move a watch (useControlPlane);
- * the slow poll is for what no event reports — a deadline passing, or a delivery settling in a server
- * worker.
+ * stream nudges it on the session, approval and task events that can move a watch, and on the
+ * server's own `watch.changed` for the four changes none of those accompany — a delivery, a
+ * deadline, a dead letter, an agent making or releasing one (useControlPlane, docs/watch-contract.md
+ * §8.1). The slow poll stays: that event is an accelerant, dropped without a word when a replica
+ * restarts or a socket goes quiet, and a watch may not be read a minute late because one was lost.
  */
 export const watchesQuery = () =>
   queryOptions({

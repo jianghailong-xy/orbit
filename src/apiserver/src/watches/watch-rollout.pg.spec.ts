@@ -58,7 +58,7 @@ function rollout(id: string, title: string, body: () => Promise<void>, timeout =
 const queue = { notifySessionQueued: () => undefined };
 const realtime = { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined };
 const push = { notifyWatchMatched: async () => undefined } as unknown as PushService;
-const noHints = { localPublications: () => EMPTY } as unknown as RealtimeService;
+const noHints = { localPublications: () => EMPTY, publishWatchChanged: () => undefined } as unknown as RealtimeService;
 
 let sql: Client;
 let prisma: PrismaClient;

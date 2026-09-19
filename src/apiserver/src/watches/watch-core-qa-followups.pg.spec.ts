@@ -86,7 +86,7 @@ const queue = new Proxy({}, {
 const push = { notifyWatchMatched: async () => undefined } as unknown as PushService;
 const silentPush = { scheduleBadgeSync: () => undefined, notifySessionSettled: async () => undefined } as unknown as PushService;
 /** A hint source that emits nothing: an evaluation here comes from a sweep or a direct call. */
-const noHints = { localPublications: () => EMPTY } as unknown as RealtimeService;
+const noHints = { localPublications: () => EMPTY, publishWatchChanged: () => undefined } as unknown as RealtimeService;
 
 /** A replica's realtime hub without the cross-replica LISTEN connection: publishing works as in production. */
 class Hub extends RealtimeService {

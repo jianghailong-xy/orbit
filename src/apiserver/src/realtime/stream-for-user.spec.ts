@@ -398,6 +398,36 @@ test('publishForUser reaches only that owner, with no session scope', async () =
   assert.equal(theirs.length, 0);
 });
 
+/**
+ * A watch belongs to its owner, not to any one session — a NOTIFY_USER watch observes from no
+ * session at all — so `watch.changed` rides the owner key like the libraries do, and reaches that
+ * owner's stream and nobody else's. This is the event that carries a delivery, a deadline, a dead
+ * letter or an agent's create/release to the clients: none of those writes a task or session row,
+ * so before it the web watch list only found them on its 60s poll (docs/watch-contract.md §8.1).
+ */
+test('watch.changed reaches its owner\'s stream, carrying the watch id and nothing else', async () => {
+  const svc = svcWith({}, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishWatchChanged('userA', 'watch-1');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].type, 'watch.changed');
+  // The whole payload, asserted as a whole: no state, no targets, no snapshot, no Match reason
+  // (contract `deliveryGuards.redaction`). A client re-reads GET /watches, which redacts.
+  assert.deepEqual(mine[0].data, { id: 'watch-1' });
+  // The owner's, not a session's: the envelope names none, and nothing looked one up.
+  assert.equal(mine[0].sessionId, '');
+  assert.equal(mine[0].agentId, null);
+  assert.equal(theirs.length, 0);
+});
+
 test('task.changed carries a bounded row set or an explicit full-resync signal', async () => {
   const svc = svcWith({}, 0);
   const events: ControlEvent[] = [];
@@ -514,6 +544,7 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   svc.publishWorkspaceChanged('sessA', 'workspaceNew', false);
   svc.publishSessionUpdated('sessA');
   svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
+  svc.publishWatchChanged('userA', 'watch-1');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });
   await delay(20);
   sub.unsubscribe();

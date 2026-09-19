@@ -68,7 +68,7 @@ const queue = { notifySessionQueued: () => { queueSignals += 1; } };
 const realtime = { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined };
 const push = { notifyWatchMatched: async () => undefined } as unknown as PushService;
 /** A hint source that emits nothing: every evaluation here comes from the sweep or a direct call. */
-const noHints = { localPublications: () => EMPTY } as unknown as RealtimeService;
+const noHints = { localPublications: () => EMPTY, publishWatchChanged: () => undefined } as unknown as RealtimeService;
 
 // ── the harness ────────────────────────────────────────────────────────────────────────────────
 

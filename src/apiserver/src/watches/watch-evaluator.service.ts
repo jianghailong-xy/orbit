@@ -137,6 +137,20 @@ const END_DELIVERY_KIND: Partial<Record<WatchEvaluationOutcome, string>> = {
 };
 
 /**
+ * The outcomes that change what a watch reads as, and so are announced to the owner's clients as
+ * `watch.changed` after the landing commits: it matched, or it ended — a deadline passed, a
+ * permission was revoked, its targets went. SCHEDULED is not one: nothing about the watch changed
+ * except when it is next due, which no client is shown. SETTLED is not one either: nothing was
+ * written at all. An accelerant, never a fact — see `publishWatchChanged`.
+ */
+const ANNOUNCED_OUTCOMES: ReadonlySet<WatchEvaluationOutcome> = new Set<WatchEvaluationOutcome>([
+  'MATCHED',
+  'EXPIRED',
+  'REVOKED',
+  'UNRESOLVABLE',
+]);
+
+/**
  * Session events that can move a session leaf's source columns: status, lifecycle and approvals.
  * SESSION_UPDATED is among them because it is the only one a turn that ends without failing
  * publishes after /turn-complete commits the settled status: the TURN_END the runner flushed ahead
@@ -475,9 +489,13 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     // What the attempt that committed wrote, for the counters: a retried attempt overwrites an aborted one's.
     let gone = 0;
     let adopted = false;
+    // Whose watch this is, read inside the transaction and used after it: the announcement is
+    // routed by owner, and a watch already settled (`SETTLED`) leaves this null.
+    let ownerId: string | null = null;
     const evaluation = await withTransactionRetry(this.prisma, async (tx): Promise<WatchEvaluation> => {
       gone = 0;
       adopted = false;
+      ownerId = null;
       const [watch] = await tx.$queryRaw<WatchRow[]>`
         SELECT "owner_id" AS "ownerId", "state", "mode", "action", "predicate",
                "predicate_version" AS "predicateVersion", "generation",
@@ -491,6 +509,7 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
       if (!watch || (watch.state !== 'ACTIVE' && watch.state !== 'PAUSED')) {
         return { watchId, outcome: 'SETTLED', matchId: null };
       }
+      ownerId = watch.ownerId;
       const targets = await readTargets(tx, watchId);
       const decision = decide(watch, targets, await readFacts(tx, targets), this.reconcileIntervalMs);
       const matchId = await this.land(tx, watchId, watch, decision);
@@ -502,6 +521,11 @@ export class WatchEvaluatorService implements OnModuleInit, OnModuleDestroy {
     if (evaluation.outcome === 'SETTLED') countWatchDuplicateSuppressed('settled_evaluation');
     if (adopted) countWatchDuplicateSuppressed('match');
     countWatchReconcileRepair('target_gone', gone);
+    // After the commit, outside the retried closure: an attempt that rolled back announced nothing,
+    // and an announcement is an effect a re-run would repeat.
+    if (ownerId && ANNOUNCED_OUTCOMES.has(evaluation.outcome)) {
+      this.realtime.publishWatchChanged(ownerId, watchId);
+    }
     return evaluation;
   }
 
