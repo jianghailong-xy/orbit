@@ -3,12 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import {
-  ProjectAutomationPolicy,
-  SessionDispatchOrigin,
-  TaskStatus,
-  type Runner,
-} from '@prisma/client';
+import { SessionDispatchOrigin, TaskStatus, type Runner } from '@prisma/client';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
@@ -145,14 +140,22 @@ function runnerController() {
 
 // ═══ project_update: the acceptance criteria, and status = DONE ═══════════════════════════════
 
-function projectFixture(policy: ProjectAutomationPolicy = ProjectAutomationPolicy.GUARDED_AUTO) {
+/**
+ * The project row every decision in this block is made against.
+ *
+ * It used to carry `automationPolicy`, and `projectFixture` took it as an argument so a control
+ * below could run the same write at all three of its values. There is no such column (0292) and no
+ * such field on a project row, so the row is the whole input and it has nothing left to vary.
+ */
+const PROJECT_ROW = {
+  id: PROJECT,
+  coordinatorEnabled: true,
+};
+
+function projectFixture() {
   const prisma = {
     project: {
-      findFirst: async () => ({
-        id: PROJECT,
-        coordinatorEnabled: true,
-        automationPolicy: policy,
-      }),
+      findFirst: async () => PROJECT_ROW,
     },
     session: {
       findFirst: async ({ where }: { where: { id: string; ownerId: string } }) =>
@@ -219,14 +222,15 @@ test('a caller with no acting session may still write a direct DONE', async () =
 });
 
 // §0's replacement claim, end to end. The three-level dial used to be the answer to "how far may
-// this coordinator go"; if any of it still were, the same write would come out differently at the
-// three levels. It does not: the refusal below is the same one at every policy.
-test('the outcome does not depend on the project automation policy', async () => {
-  for (const policy of Object.values(ProjectAutomationPolicy)) {
-    const body = await refusalOf(
-      () => projectFixture(policy).update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION));
-    assert.equal(body.code, 'PROJECT_STATUS_NOT_SESSION_WRITABLE');
-  }
+// this coordinator go", and this control ran the same write at each of the three levels to show the
+// answer never moved with them. There is no dial to turn now — so the claim is stated against what
+// is left: the row the decision is made against carries no policy at all, and the refusal is the
+// same one the write above got.
+test('the outcome depends on the write, not on a project automation policy', async () => {
+  assert.equal('automationPolicy' in PROJECT_ROW, false, 'a project row has no policy to vary');
+  const body = await refusalOf(
+    () => projectFixture().update(OWNER, PROJECT, { status: 'DONE' } as never, SESSION));
+  assert.equal(body.code, 'PROJECT_STATUS_NOT_SESSION_WRITABLE');
 });
 
 test('a judgment session may still write the prose that says what the work is', async () => {

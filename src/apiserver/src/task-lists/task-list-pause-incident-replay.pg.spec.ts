@@ -52,7 +52,6 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAutomationPolicy,
   RunnerStatus,
   TaskStatus,
 } from '@prisma/client';
@@ -260,7 +259,6 @@ async function project(db: PrismaClient, ids: World, label: string): Promise<str
       title: `${label}-${RUN}`,
       coordinatorEnabled: true,
       maxConcurrentTasks: 8,
-      automationPolicy: ProjectAutomationPolicy.AUTO,
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, id, `${label}-${RUN}`);

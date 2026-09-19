@@ -139,9 +139,9 @@ suite('the removal keeps every stated criterion decidable and every recorded fac
       const verificationMethod = `read the ${label} evidence against the assertion`;
       await sql.query(
         `INSERT INTO "project" (
-           "id","owner_id","title","goal","coordinator_enabled","automation_policy",
+           "id","owner_id","title","goal","coordinator_enabled",
            "max_concurrent_tasks","session_budget_per_day","updated_at"
-         ) VALUES ($1,$2,$3,$4,true,'GUARDED_AUTO'::"project_automation_policy",3,10,now())`,
+         ) VALUES ($1,$2,$3,$4,true,3,10,now())`,
         [projectId, ownerId, `${label} project`, `${label} goal`],
       );
       await sql.query(

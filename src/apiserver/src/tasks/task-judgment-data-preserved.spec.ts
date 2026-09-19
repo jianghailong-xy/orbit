@@ -937,6 +937,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        does carry is a closing gate: it RAISEs if any function in `public` other than the derive
   //        trigger still names the column, so the premise "nothing reads it" is enforced on the
   //        deployment rather than asserted here.
+  //   0292 dropped `project.automation_policy` and `task_scope_revision.automation_policy`, the
+  //        enum `project_automation_policy`, the check `task_scope_revision_policy_chk`, and
+  //        rewrote the two objects that still read the column. Read against every claim above: it
+  //        is the first later migration that ALTERs a preserved relation — `project` — so that has
+  //        to be answered rather than waved at. It drops exactly one column from it, and that
+  //        column is neither of the 0177 pair, nor `task_executable_acceptance_pair`, nor any
+  //        `task_completion_criterion` label: no task row is read, locked or written, and `task`
+  //        is not named by any statement here at all. The TYPE it drops is
+  //        `project_automation_policy`, which is not the criterion enum — all of that type's labels
+  //        and both of `task_completion_criterion`'s surviving lanes stand. It names none of the
+  //        six preserved triggers/functions and none of the `project_acceptance_*` objects; its two
+  //        `CREATE OR REPLACE FUNCTION`s are `project_completion_contract_snapshot` and
+  //        `task_scope_revision_authority_guard`, neither of which any later migration has
+  //        rewritten, so no later body is reverted. It DOES carry DML, which the 0291 paragraph
+  //        could say it had none of: one `SELECT project_refresh_completion_contract(...)` over
+  //        every row of `project_completion_contract`. That table is not preserved, and the write
+  //        lands only on it — the function takes `project FOR NO KEY UPDATE` and reads its columns,
+  //        so a preserved `project` row is locked but not written. The three
+  //        `project_acceptance_*` tables are out of its reach entirely.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -996,7 +1015,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `approval.background_job_id`: one nullable column, no function, no trigger, and nothing it
       // touches is one of the six preserved objects — the row it lives on was never in the
       // judgment tables this file guards.
-      '0291_approval_background_job'],
+      '0291_approval_background_job',
+      // `project.automation_policy` and `task_scope_revision.automation_policy`, the enum
+      // `project_automation_policy`, and the check `task_scope_revision_policy_chk` all go; the
+      // two live readers are rewritten (`project_completion_contract_snapshot` loses one key from
+      // each of risk_material and risk_boundary; `task_scope_revision_authority_guard` loses the
+      // arm that let `policy = 'AUTO'` widen a COORDINATOR to a scope revision). The first of
+      // those moves two stored digests, so the migration recomputes every completion contract at
+      // the end with reason AUTOMATION_POLICY_REMOVED — the one statement in it that writes
+      // anything, and it writes only `project_completion_contract`. `zz_project_completion_
+      // contract_project` is rebuilt without the column in its `UPDATE OF` list, which it has to
+      // be: PostgreSQL refuses the `DROP COLUMN` with 2BP01 while that list still names it.
+      '0292_drop_project_automation_policy'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

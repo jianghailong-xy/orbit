@@ -7,7 +7,6 @@ import { promisify } from 'node:util';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAutomationPolicy,
   RunStatus,
   RunnerStatus,
   TaskStatus,
@@ -121,7 +120,7 @@ async function fixture(
       id: ids.projectId, ownerId: ids.ownerId, title: label,
       // LEGACY dispatch authority, which is what puts these dispatches through `execute` rather
       // than through the Coordinator — the doors this unit is about.
-      coordinatorEnabled: false, automationPolicy: ProjectAutomationPolicy.AUTO,
+      coordinatorEnabled: false,
     },
   });
   await db.task.create({

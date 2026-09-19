@@ -41,7 +41,6 @@ import { Logger } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAutomationPolicy,
   RunnerStatus,
   TaskStatus,
 } from '@prisma/client';
@@ -422,7 +421,6 @@ test('(2b) both automatic candidate sweeps select nothing from a paused list, wh
         title: `o2b-${RUN}`,
         coordinatorEnabled: true,
         maxConcurrentTasks: 8,
-        automationPolicy: ProjectAutomationPolicy.AUTO,
       },
     });
     await establishProjectContractForPgTest(s.db, ids.ownerId, projectId, `o2b-${RUN}`);

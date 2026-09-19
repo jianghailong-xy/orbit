@@ -86,7 +86,7 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
   );
   const AGENT = (ownerId: string) => ({ type: CreatorType.AGENT, id: ownerId });
 
-  async function seed(label: string, policies: { a?: string; b?: string } = {}): Promise<World> {
+  async function seed(label: string): Promise<World> {
     const w: World = {
       ownerId: randomUUID(),
       otherOwnerId: randomUUID(),
@@ -117,15 +117,11 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
        VALUES ($1,$2,$3,$4,true,true)`,
       [w.workspaceId, w.ownerId, `${label}-agent`, runnerId],
     );
-    for (const [id, policy] of [
-      [w.projectA, policies.a ?? 'GUARDED_AUTO'],
-      [w.projectB, policies.b ?? 'GUARDED_AUTO'],
-      [w.projectC, 'GUARDED_AUTO'],
-    ] as const) {
+    for (const id of [w.projectA, w.projectB, w.projectC]) {
       await admin.query(
-        `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy","updated_at")
-         VALUES ($1,$2,$3,true,$4::"project_automation_policy",now())`,
-        [id, w.ownerId, `${label}-${id.slice(0, 4)}`, policy],
+        `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","updated_at")
+         VALUES ($1,$2,$3,true,now())`,
+        [id, w.ownerId, `${label}-${id.slice(0, 4)}`],
       );
       await admin.query(
         `INSERT INTO "project_runtime" ("project_id","updated_at") VALUES ($1,now())
@@ -474,24 +470,15 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
   });
 
   await t.test('an open crossing waits for a person, and no project says otherwise', async () => {
-    const guarded = await seed('guarded');
-    const first = await handoffs.declare(guarded.ownerId, declarationFor(guarded), await scopeOf(guarded), new Date());
-    assert.equal(first.row.state, 'PENDING');
-    assert.equal(first.row.decidedBy, null);
-
-    // The pair that used to be accepted on the spot: both ends seeded on the old `AUTO`, which is
-    // exactly the value that has to change nothing now. The seeds go when the column does; until
-    // then they are the strongest form of the assertion — the policy that once meant "yes" is on
-    // both rows and the answer a person has to give is still the one the row waits for.
-    const auto = await seed('auto', { a: 'AUTO', b: 'AUTO' });
-    const second = await handoffs.declare(auto.ownerId, declarationFor(auto), await scopeOf(auto), new Date());
-    assert.equal(second.row.state, 'PENDING');
-    assert.equal(second.row.decidedBy, null);
-
-    // One end guarded is the same answer, which is the other half of "no policy decides this".
-    const half = await seed('half', { a: 'AUTO', b: 'GUARDED_AUTO' });
-    const third = await handoffs.declare(half.ownerId, declarationFor(half), await scopeOf(half), new Date());
-    assert.equal(third.row.state, 'PENDING');
+    // This case used to seed a second and a third pair with the ends on the old `AUTO` /
+    // `GUARDED_AUTO` values, to assert that the policy that once meant "accepted in advance"
+    // changes nothing. The column is gone (0292), so those two pairs were the same seed as this
+    // one and asserted the same thing three times; the claim they were making is now a claim about
+    // the absence of the column, which the migration's own gate is where it is checked.
+    const w = await seed('open-crossing');
+    const declared = await handoffs.declare(w.ownerId, declarationFor(w), await scopeOf(w), new Date());
+    assert.equal(declared.row.state, 'PENDING');
+    assert.equal(declared.row.decidedBy, null);
   });
 
   await t.test('the same words about a different source are a different question', async () => {
@@ -860,14 +847,14 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
 
   // What used to stand here was the re-derivation of an automatic acceptance at the moment it was
   // spent: both ends on AUTO, the owner's standing instruction saying yes, and a barrier moving one
-  // end off AUTO while the spend waited for the row. There is no such acceptance to re-derive — the
-  // declaration below is a QUESTION on a pair of rows that still say AUTO, and what is left to
-  // assert is the same property seen from the other side: nothing crosses until a person answers,
-  // and their yes is what spends it.
-  await t.test('a crossing between two AUTO projects lands on a person’s yes, not before', async () => {
-    const w = await seed('auto-needs-a-person', { a: 'AUTO', b: 'AUTO' });
+  // end off AUTO while the spend waited for the row. Then it was a QUESTION on a pair of rows that
+  // still said AUTO. `AUTO` is gone from both rows and from the schema (0292), so the pair is
+  // ordinary — and what is left to assert is the property the whole sequence existed for: nothing
+  // crosses until a person answers, and their yes is what spends it.
+  await t.test('a crossing lands on a person’s yes, not before', async () => {
+    const w = await seed('a-crossing-needs-a-person');
     const create = () => tasks.create(w.ownerId, {
-      title: 'the crossing', projectId: w.projectB, handoff: { reason: 'both ends are automatic' },
+      title: 'the crossing', projectId: w.projectB, handoff: { reason: 'a crossing that needs a person' },
     } as never, AGENT(w.ownerId), w.sessionA);
 
     const declared = await handoffs.declare(w.ownerId, declarationFor(w), await scopeOf(w), new Date());

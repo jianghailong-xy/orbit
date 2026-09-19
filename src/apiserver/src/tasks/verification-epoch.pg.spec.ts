@@ -145,9 +145,8 @@ async function world(db: Db, shape: CheckShape = {}): Promise<World> {
     agentId, OWNER, `agent-${agentId.slice(0, 8)}`, RUNNER,
   );
   await db.$executeRawUnsafe(
-    `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
-       "updated_at")
-     VALUES ($1,$2,'h0g',true,'AUTO'::"project_automation_policy",now())`,
+    `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","updated_at")
+     VALUES ($1,$2,'h0g',true,now())`,
     projectId, OWNER,
   );
   await db.$executeRawUnsafe(
@@ -705,9 +704,8 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
       agentId, ownerId, `agent-${agentId.slice(0, 8)}`, runnerId,
     );
     await db.$executeRawUnsafe(
-      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
-         "updated_at")
-       VALUES ($1,$2,'h0g2',true,'AUTO'::"project_automation_policy",now())`,
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","updated_at")
+       VALUES ($1,$2,'h0g2',true,now())`,
       projectId, ownerId,
     );
     await db.$executeRawUnsafe(
@@ -727,9 +725,8 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
       agentId, OWNER, `agent-${agentId.slice(0, 8)}`, RUNNER,
     );
     await db.$executeRawUnsafe(
-      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
-         "updated_at")
-       VALUES ($1,$2,'h0g-sib',true,'AUTO'::"project_automation_policy",now())`,
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","updated_at")
+       VALUES ($1,$2,'h0g-sib',true,now())`,
       projectId, OWNER,
     );
     await db.$executeRawUnsafe(
@@ -817,9 +814,8 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
   await t.test('a foreign check cannot invent an epoch for a subject that has none', async () => {
     const projectId = randomUUID();
     await db.$executeRawUnsafe(
-      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
-         "updated_at")
-       VALUES ($1,$2,'h0g-plain',true,'AUTO'::"project_automation_policy",now())`,
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","updated_at")
+       VALUES ($1,$2,'h0g-plain',true,now())`,
       projectId, OWNER,
     );
     await db.$executeRawUnsafe(

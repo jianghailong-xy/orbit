@@ -111,9 +111,8 @@ test('unit L3: a rotation cannot be written past', { skip, concurrency: 1, timeo
       [w.workspaceId, w.ownerId, `${label}-agent`, runnerId],
     );
     await admin.query(
-      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
-         "updated_at")
-       VALUES ($1,$2,$3,true,'AUTO'::"project_automation_policy",now())`,
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","updated_at")
+       VALUES ($1,$2,$3,true,now())`,
       [w.projectId, w.ownerId, `${label}-project`],
     );
     await admin.query(

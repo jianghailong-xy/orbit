@@ -5,7 +5,6 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAutomationPolicy,
   RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
@@ -119,7 +118,7 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   await db.project.create({
     data: {
       id: ids.projectId, ownerId: ids.ownerId, title: label, coordinatorEnabled: false,
-      maxConcurrentTasks: 10, automationPolicy: ProjectAutomationPolicy.AUTO,
+      maxConcurrentTasks: 10,
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, ids.projectId, label);

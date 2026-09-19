@@ -5,7 +5,6 @@ import test from 'node:test';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAutomationPolicy,
   RunnerStatus,
   TaskStatus,
 } from '@prisma/client';
@@ -111,7 +110,6 @@ async function releasedTask(
     data: {
       id: projectId, ownerId: ids.ownerId, title: label,
       coordinatorEnabled: opts.coordinatorEnabled,
-      automationPolicy: ProjectAutomationPolicy.AUTO,
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
@@ -195,7 +193,6 @@ test('the scheduled sweep dispatches a coordinated Project\'s due task',
       await s.db.project.create({
         data: {
           id: projectId, ownerId: ids.ownerId, title: 't1-due', coordinatorEnabled: true,
-          automationPolicy: ProjectAutomationPolicy.AUTO,
         },
       });
       await establishProjectContractForPgTest(s.db, ids.ownerId, projectId, 't1-due');

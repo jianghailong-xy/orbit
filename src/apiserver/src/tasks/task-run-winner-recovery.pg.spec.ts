@@ -8,7 +8,6 @@ import { ConflictException } from '@nestjs/common';
 import {
   CreatorType,
   PrismaClient,
-  ProjectAutomationPolicy,
   RunStatus,
   RunnerStatus,
   SessionDispatchOrigin,
@@ -113,7 +112,7 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
       id: projectId, ownerId, title: label,
       // LEGACY dispatch authority, which is what puts these presses through `execute` rather than
       // through the Coordinator — the doors this unit is about.
-      coordinatorEnabled: false, automationPolicy: ProjectAutomationPolicy.AUTO,
+      coordinatorEnabled: false,
     },
   });
   await db.task.create({

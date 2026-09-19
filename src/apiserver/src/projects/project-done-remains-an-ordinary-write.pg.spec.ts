@@ -99,8 +99,9 @@ const PROJECT_TRIGGERS: Record<string, string> = {
     + 'pointer (0112/0113)',
   zz_project_completion_contract_project:
     'AFTER INSERT OR UPDATE OF the authorization set (goal, instructions, coordinator_enabled, '
-    + 'automation_policy, max_concurrent_tasks, session_budget_per_day, config_revision, '
-    + 'convergence_thresholds, attempt_budget, unbounded_authorized_by) — the completion contract',
+    + 'max_concurrent_tasks, session_budget_per_day, config_revision, '
+    + 'convergence_thresholds, attempt_budget, unbounded_authorized_by) — the completion contract '
+    + '(rebuilt without automation_policy in 0292)',
 };
 
 /** The verification method every criterion here states; never the thing under test. */
