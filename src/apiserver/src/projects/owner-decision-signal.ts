@@ -252,6 +252,21 @@ async function readOwnerItemSignals(
   return [...bySession.values()];
 }
 
+/**
+ * The coordinator conversations carrying one of the four owner items, for the caller that needs the
+ * conversations and not the items: `PushService.needsYouSessions` counts them on the APNs badge, so
+ * the number a locked phone shows is the same one the session list, the menu bar and the banner
+ * derive (§7.6 V13). Same query, same predicate as the signals above — `ownerItemKind` is the one
+ * spelling of "this item is the owner's", so the badge cannot come to disagree with the card.
+ */
+export async function readOwnerItemSessionIds(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+): Promise<string[]> {
+  const signals = await readOwnerItemSignals(tx, ownerId, undefined);
+  return signals.map((signal) => signal.sessionId);
+}
+
 /** What is waiting on the owner on one conversation: how many, of which kinds, and — for the four
  *  owner items — which ones, so the banner above a session list can name and open them. */
 export interface OwnerDecisionsOnSession {

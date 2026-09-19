@@ -22,6 +22,8 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
         return [{ id: 's-open' }];
       },
     },
+    // The owner-item half of the count reads its own rows (see the two tests below); none here.
+    projectOpenItem: { findMany: async () => [] },
   };
   const service = new PushService(prisma as any, enabledConfig());
 
@@ -35,6 +37,59 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
     cancelRequestedAt: null,
     approvals: { some: { status: 'PENDING' } },
   });
+});
+
+// ── the four in the badge count (§7.6 V13) ─────────────────────────────────
+//
+// The badge is one of the places the four have to be counted, and it is the one that cannot read
+// them off a session summary: it is computed server-side for a phone that is not running the app.
+
+/** The badge's other half: one RUNNING session stopped on a tool call. */
+function approvalPrisma() {
+  return {
+    session: { findMany: async (): Promise<Array<{ id: string }>> => [{ id: 's-blocked' }] },
+    // Overridden per test with the rows that half should or should not count.
+    projectOpenItem: { findMany: async (): Promise<any[]> => [] },
+  };
+}
+
+/** One `project_open_item` row, as `readOwnerItemSignals` selects it: which of the four it is is
+ *  decided by `ownerItemKind` from exactly these three columns. */
+function ownerItemRow(id: string, coordinatorSessionId: string, over: Record<string, unknown> = {}) {
+  return {
+    id,
+    kind: 'COORDINATOR_QUESTION',
+    assignee: 'OWNER',
+    assigneeReason: 'DEFAULT',
+    title: 'Coordinator asks: Take the slower fix?',
+    waitingSince: new Date('2026-09-13T10:00:00Z'),
+    projectId: 'project-1',
+    project: { coordinatorSessionId },
+    ...over,
+  };
+}
+
+test('needs-you counts the coordinator conversation carrying one of the four', async () => {
+  const prisma = approvalPrisma();
+  const service = new PushService(prisma as any, enabledConfig());
+  // A project stopped on a person, in the conversation its card is drawn in. PARKED, which is the
+  // normal state of a coordinator waiting for an answer — so the approval query above can never
+  // reach it, and this is the half that has to.
+  prisma.projectOpenItem.findMany = async () => [ownerItemRow('item-1', 'c-coordinator')];
+
+  assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-blocked', 'c-coordinator']);
+});
+
+test('needs-you does not count an item the coordinator is still working on', async () => {
+  const prisma = approvalPrisma();
+  const service = new PushService(prisma as any, enabledConfig());
+  // Owner-assigned rows that are NOT one of the four: the ownerItemKind predicate rejects them, so
+  // pushing or badging them would interrupt somebody about work already being done (decision 10).
+  prisma.projectOpenItem.findMany = async () => [
+    ownerItemRow('item-2', 'c-coordinator', { kind: 'INTEGRATION_CONFLICT' }),
+  ];
+
+  assert.deepEqual(await service.needsYouSessions('owner-1'), ['s-blocked']);
 });
 
 test('approval push is suppressed when completion wins the race', async () => {
