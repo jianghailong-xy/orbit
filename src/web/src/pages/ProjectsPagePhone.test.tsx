@@ -213,10 +213,7 @@ const rowTags = (): string[] =>
 const createButton = (): HTMLButtonElement =>
   mountedContainer().querySelector('.projects-new-button') as HTMLButtonElement;
 
-// The loaded-suite peak observed for the first ProjectsPage/AntD case was 6.3s (8.23s for all six
-// targeted cases). Keep this local 12s case budget around the 8s observable UI wait; it neither
-// changes the global timeout nor sleeps blindly.
-describe('projects list on a phone', { timeout: 12_000 }, () => {
+describe('projects list on a phone', () => {
   it('drops the OPEN tag the section header already states', async () => {
     stubViewport(true);
     await mount();

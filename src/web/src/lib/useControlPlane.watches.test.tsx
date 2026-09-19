@@ -118,7 +118,7 @@ afterEach(async () => {
   }
 });
 
-describe('the watches read rides the control-plane stream', { timeout: 30_000 }, () => {
+describe('the watches read rides the control-plane stream', () => {
   it('session.updated invalidates the watches, and again once the evaluation it set off can have landed', async () => {
     const client = await mount([WATCHES]);
 

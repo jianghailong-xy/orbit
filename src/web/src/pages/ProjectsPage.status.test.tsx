@@ -281,8 +281,8 @@ async function open(label: RegExp): Promise<string> {
   return dialogText();
 }
 
-// Past the 5s default because each case mounts the WHOLE detail page through `act` on real timers.
-describe('ProjectDetailPage — recording the project’s own status', { timeout: 20_000 }, () => {
+// Whole detail page mounts through `act` on real timers: the suite's case budget, not a local one.
+describe('ProjectDetailPage — recording the project’s own status', () => {
   it('offers the status write on the project page, and offers a REOPEN once one was written', async () => {
     serve(detail());
     await mount(page());

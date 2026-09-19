@@ -190,7 +190,7 @@ afterEach(async () => {
   vi.mocked(getSession).mockReset();
 });
 
-describe('the Following page', { timeout: 30_000 }, () => {
+describe('the Following page', () => {
   it('files every watch under exactly one tab, counts all three, and opens on Active', async () => {
     serve(() => WATCHES);
     await visit('/following');

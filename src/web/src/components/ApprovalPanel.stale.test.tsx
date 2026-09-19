@@ -291,7 +291,7 @@ async function bothCardsArriveLive(): Promise<void> {
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 }
 
-describe('an approval that arrived live outlives the question it was raised for', { timeout: 30_000 }, () => {
+describe('an approval that arrived live outlives the question it was raised for', () => {
   it('stops offering an answer once the call it asks about has a result', async () => {
     await bothCardsArriveLive();
 

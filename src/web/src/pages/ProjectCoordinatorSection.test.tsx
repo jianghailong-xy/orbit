@@ -550,9 +550,9 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
   });
 
   // The one test here that drives antd's own machinery — a Modal portal, a Select dropdown and
-  // two more paints — rather than just this section's. Given room past the 5s default because
-  // what it is waiting on is a loaded machine's render, not a hang.
-  it('rebinds the landing rather than retrying, from a read that already says no press can win', { timeout: 20_000 }, async () => {
+  // two more paints — rather than just this section's. What it waits on is a loaded machine's
+  // render, not a hang, so the case budget is the suite's.
+  it('rebinds the landing rather than retrying, from a read that already says no press can win', async () => {
     const writes: Array<[string, unknown]> = [];
     serve(unavailableStatus(), (path) => {
       writes.push([path, apiMock.mock.calls.at(-1)?.[1]]);
@@ -623,7 +623,7 @@ describe('ProjectCoordinatorSection — what a press costs', () => {
   // be confused: a project that has never opened a coordinator is not repaired by RECORDING a
   // landing — that leaves it naming a workspace with no conversation in it. The choice rides along
   // with the open instead.
-  it('opens a FIRST coordinator in the workspace the reader names, rather than recording a landing first', { timeout: 20_000 }, async () => {
+  it('opens a FIRST coordinator in the workspace the reader names, rather than recording a landing first', async () => {
     const writes: Array<[string, unknown]> = [];
     apiMock.mockImplementation((path: string, init?: unknown) => {
       if (path === '/workspaces') {

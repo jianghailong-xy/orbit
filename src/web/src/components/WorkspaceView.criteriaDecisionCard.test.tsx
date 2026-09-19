@@ -366,7 +366,7 @@ async function answeredElsewhereAfterRereads(): Promise<void> {
   });
 }
 
-describe('the criteria decision card in an open coordinator conversation', { timeout: 30_000 }, () => {
+describe('the criteria decision card in an open coordinator conversation', () => {
   it('is on the page once for its intent, through every re-read and after the answer elsewhere', async () => {
     await answeredElsewhereAfterRereads();
     expect(

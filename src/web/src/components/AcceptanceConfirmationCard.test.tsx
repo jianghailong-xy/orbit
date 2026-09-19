@@ -278,10 +278,7 @@ async function delivered(): Promise<{ node: HTMLElement; qc: QueryClient; card: 
   return { node, qc, card };
 }
 
-/** Generous, because a busy host can stretch the turns these wait on well past vitest's 5s default. */
-const SLOW = { timeout: 30_000 };
-
-describe('whether a coordinator conversation is drawn the card', SLOW, () => {
+describe('whether a coordinator conversation is drawn the card', () => {
   it.each<State>(['UNCONFIRMED', 'STALE'])(
     'draws exactly one while the set is %s and NOT ONE criterion is met, through every re-read',
     async (state) => {
@@ -363,7 +360,7 @@ describe('whether a coordinator conversation is drawn the card', SLOW, () => {
  * them, and on 2026-09-18 seven OPEN projects were in that state: the coordinator handing work out,
  * and not one confirmation ever recorded. The card called every one of them "not started".
  */
-describe('where the meta line says the project stands', SLOW, () => {
+describe('where the meta line says the project stands', () => {
   it('says started — not "not started" — for a started project whose criteria nobody ever confirmed', async () => {
     server.standing = standingOf('UNCONFIRMED');
     server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
@@ -420,7 +417,7 @@ describe('where the meta line says the project stands', SLOW, () => {
  * takes a delivered one away. What a delivered card SAYS after a failed re-read is OrbitKit's rule
  * for a standing it does not have: nothing to confirm, and why.
  */
-describe('when a read fails', SLOW, () => {
+describe('when a read fails', () => {
   it.each<[string, () => void]>([
     ['the confirmation standing', () => { server.standing = new Error('503 on the standing'); }],
     ['the project document', () => { server.document = new Error('503 on the document'); }],
@@ -452,7 +449,7 @@ describe('when a read fails', SLOW, () => {
   });
 });
 
-describe('a delivered card that can no longer be answered', SLOW, () => {
+describe('a delivered card that can no longer be answered', () => {
   it.each<[string, (qc: QueryClient) => Promise<void>]>([
     [
       'the next read says the set was confirmed at another end',
@@ -538,7 +535,7 @@ describe('a delivered card that can no longer be answered', SLOW, () => {
   });
 });
 
-describe('the two actions, reading the set, and starting the project', SLOW, () => {
+describe('the two actions, reading the set, and starting the project', () => {
   /**
    * Two, and the reading toggle is neither of them. There was a third — the one that put the
    * question down — which meant "ask me once the work settles" at the end of a project and means

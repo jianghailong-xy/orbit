@@ -134,7 +134,7 @@ afterEach(async () => {
   }
 });
 
-describe('the pending-decision reads ride the control-plane stream', { timeout: 30_000 }, () => {
+describe('the pending-decision reads ride the control-plane stream', () => {
   it('task.changed — evidence submitted or decided — invalidates every session’s pending decisions', async () => {
     const client = await mount([decisionsOf(SESSION_A), decisionsOf(SESSION_B), criteriaOf(PROJECT_A)]);
 

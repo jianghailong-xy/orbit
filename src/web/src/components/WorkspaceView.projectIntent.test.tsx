@@ -176,10 +176,10 @@ const one = (selector: string): HTMLElement => {
   return element!;
 };
 
-// The loaded-suite peak observed for the real WorkspaceView/AntD mount was 5.112s (3.54s
-// targeted). Keep a local 12s case budget around the 8s observable UI wait; neither changes the
-// global timeout nor sleeps blindly.
-describe('New Session project intent', { timeout: 12_000 }, () => {
+// No local budget: the case budget is the suite's (vite.config.ts, 30s) and `--testTimeout` moves
+// it. The `{ timeout: 12_000 }` that used to sit here was a ceiling no flag could raise, and this
+// file's mount alone runs ~6.4s on a modestly loaded host — a busy one red it on wall clock alone.
+describe('New Session project intent', () => {
   it('renders the intent strip and project hero when the compose route carries ?intent=project', async () => {
     await mount(`${NEW_SESSION_PATH}?intent=project`, 'Start a new project');
 

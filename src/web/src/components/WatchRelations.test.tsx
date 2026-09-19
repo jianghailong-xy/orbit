@@ -165,7 +165,7 @@ afterEach(async () => {
   vi.mocked(getSession).mockReset();
 });
 
-describe('a task’s Followed by', { timeout: 30_000 }, () => {
+describe('a task’s Followed by', () => {
   it('lists the live watches that name the task, counts the ended ones, and follows it', async () => {
     serve([
       watch('LIVE', { targets: [target('TASK', 'T_X'), target('TASK', 'T_Y')], ...resumes('S_COORD') }),
@@ -201,7 +201,7 @@ describe('a task’s Followed by', { timeout: 30_000 }, () => {
   });
 });
 
-describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
+describe('a session’s Following and Followed by', () => {
   const watches = () => [
     watch('WAITING', { targets: [target('TASK', 'T1'), target('TASK', 'T2')], ...resumes('S_ME') }),
     watch('ON_ME', { targets: [target('SESSION', 'S_ME')] }),
@@ -476,7 +476,7 @@ describe('a session’s Following and Followed by', { timeout: 30_000 }, () => {
   });
 });
 
-describe('a live watch older than the newest 100', { timeout: 30_000 }, () => {
+describe('a live watch older than the newest 100', () => {
   // The session's own settled waits, each one ended: what every session_create(wait) it made leaves behind.
   const ended = Array.from({ length: 100 }, (_, i) =>
     watch(`ENDED_${i}`, { state: 'MATCHED', targets: [target('TASK', `T_DONE_${i}`)], ...resumes('S_ME') }),

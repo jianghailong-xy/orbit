@@ -152,9 +152,7 @@ function promisedTiming(copy: string): boolean | null {
   return midTurn ? true : nextTurn ? false : null;
 }
 
-// The loaded-suite peak for one real AntD tooltip mount was 5.241s. Keep a local 12s case budget
-// around the 8s role=tooltip wait; it changes no global timeout and introduces no blind delay.
-describe('what the config pills promise about when a change lands', { timeout: 12_000 }, () => {
+describe('what the config pills promise about when a change lands', () => {
   it('tells the control-channel half from the spawn-only half on a Claude session', async () => {
     const copy = await copyForEachField(LIVE_CLAUDE);
 

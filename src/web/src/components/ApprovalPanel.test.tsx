@@ -388,7 +388,7 @@ describe('DAG change approval', () => {
  * It has to be the real page. A card rendered on its own is handed only what a test passes it, so
  * it cannot see a page that hands the question the pending read again.
  */
-describe('one waiting completion decision on the session page', { timeout: 30_000 }, () => {
+describe('one waiting completion decision on the session page', () => {
   const RUNNER_ID = '0195c0de-0000-7000-8000-000000000041';
   const WORKSPACE_ID = encodeId('0195c0de-0000-7000-8000-000000000042');
   const SESSION_ID = encodeId('0195c0de-0000-7000-8000-000000000043');
