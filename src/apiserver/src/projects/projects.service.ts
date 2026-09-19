@@ -2839,7 +2839,7 @@ export class ProjectsService {
       where: { ownerId, projectId },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: PROJECT_GRAPH_MAX_TASKS + 1,
-      select: { id: true, title: true, status: true, parentTaskId: true },
+      select: { id: true, title: true, status: true, parentTaskId: true, createdAt: true },
     });
     const overCeiling = rows.length > PROJECT_GRAPH_MAX_TASKS;
     const rowsInGraph = overCeiling ? rows.slice(0, PROJECT_GRAPH_MAX_TASKS) : rows;
@@ -2857,7 +2857,7 @@ export class ProjectsService {
           new Map<string, { running: boolean; queued: boolean }>(),
           new Map(),
         ];
-    const tasks = rowsInGraph.map((task) => ({
+    const tasks = rowsInGraph.map(({ createdAt: _createdAt, ...task }) => ({
       ...task,
       ...(liveByTaskId.get(task.id) ?? {}),
       ...(workStates.get(task.id) ?? {}),
@@ -2865,9 +2865,30 @@ export class ProjectsService {
 
     // Scoped by the two ends' project rather than by a list of task ids: the id list would be as
     // long as the project, and a 23,442-element `IN` is a query plan nobody wants.
+    //
+    // ...and, once the node read has truncated, by the same window it truncated to. An edge with
+    // an end past the ceiling is one `foldProjectGraph` discards — it keeps only edges whose two
+    // ends are both drawn — so this drops exactly those and nothing else, rather than capping the
+    // edge count at a number of its own. That distinction is the whole point: an edge cap ordered
+    // by `created_at` would drop the NEWEST edges, including edges between two tasks this graph
+    // does draw, and leave the picture disconnected while `truncated` went on meaning only "too
+    // many tasks". On the 109,874-task project here the endpoint reads 109,710 edges to draw at
+    // most 49,922 of them. The window is the keyset spelling of the node read's own ORDER BY.
+    const boundary = overCeiling ? rowsInGraph[rowsInGraph.length - 1] : null;
+    const withinGraph = boundary
+      ? {
+          OR: [
+            { createdAt: { lt: boundary.createdAt } },
+            { createdAt: boundary.createdAt, id: { lte: boundary.id } },
+          ],
+        }
+      : {};
     const dependencies = tasks.length
       ? await this.prisma.taskDependency.findMany({
-          where: { task: { ownerId, projectId }, dependsOnTask: { ownerId, projectId } },
+          where: {
+            task: { ownerId, projectId, ...withinGraph },
+            dependsOnTask: { ownerId, projectId, ...withinGraph },
+          },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           select: { taskId: true, dependsOnTaskId: true },
         })

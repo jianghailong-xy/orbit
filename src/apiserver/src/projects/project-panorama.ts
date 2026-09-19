@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { ProjectIntegrationBuckets } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { dependenciesSatisfiedSql } from '../tasks/task-dependencies';
+import { dependenciesSatisfiedSql, everyPrerequisiteTailDoneSql } from '../tasks/task-dependencies';
 import { projectTaskDependencyFactsSql } from './project-dependency-facts';
 import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criterion-landing';
 import { projectTaskWorkStateSql } from './project-task-work-state';
@@ -121,16 +121,50 @@ export async function readProjectPanorama(
     `(NOT (${dependenciesSatisfiedSql('task_row')})`
     + ` AND ${dependenciesSatisfiedSql('task_row', { ignoreLanding: true })})`,
   );
+  // The necessary condition for that subtraction, which is what keeps it off 109,874 rows: both
+  // halves of it require every prerequisite's chain tail to be DONE, and on the project measured
+  // here 170 of those rows do. Asked as a set here rather than as a sixth column below, because a
+  // column is a correlated subquery the planner runs once per row, while this is one anti join.
+  const tailsDone = Prisma.raw(everyPrerequisiteTailDoneSql('task_row'));
   // An aggregate with no GROUP BY returns exactly one row over zero input rows, which is what
   // makes an empty project a row of zeroes rather than an empty result to guess at.
   //
   const [row] = await prisma.$queryRaw<PanoramaRow[]>(Prisma.sql`
-    WITH work AS MATERIALIZED (
+    WITH line_started AS MATERIALIZED (
+      -- One project, so one answer. Read per task it is the same EXISTS 109,874 times over; the
+      -- one-row relation is what lets the shared definition go on reading a project_id column.
+      SELECT (${lineStarted}) AS "lineStarted"
+        FROM (SELECT ${projectId}::uuid AS "project_id") task_row
+    ),
+    landing_candidate AS MATERIALIZED (
+      SELECT task_row."id"
+        FROM "task" task_row
+       WHERE task_row."owner_id" = ${ownerId}::uuid
+         AND task_row."project_id" = ${projectId}::uuid
+         -- OPEN for the same reason ProjectReadyToRun counts this over OPEN rows: the one
+         -- consumer of the column below also asks for BLOCKED, and projectTaskWorkStateSql
+         -- reaches BLOCKED only from an OPEN row — every other status is answered by an earlier
+         -- branch of its CASE. Without it a project whose tasks are mostly finished pays the
+         -- guard for rows whose answer the aggregate discards.
+         AND task_row."status" = 'OPEN'::"task_status"
+         AND ${tailsDone}
+    ),
+    -- MATERIALIZED on both, so the cheap half is a fence the expensive half cannot be planned
+    -- across: the subtraction below runs on the candidates, not on the project.
+    landing_wait AS MATERIALIZED (
+      SELECT task_row."id"
+        FROM "task" task_row
+        JOIN landing_candidate ON landing_candidate."id" = task_row."id"
+       WHERE ${blockedByLanding}
+    ),
+    work AS MATERIALIZED (
       SELECT task_row."id" AS "taskId", (${workState})::text AS "workState",
              (${landing})::text AS "landing",
              (${isCode}) AS "isCode",
-             (${lineStarted}) AS "lineStarted",
-             (${blockedByLanding}) AS "waitingForLanding"
+             (SELECT "lineStarted" FROM line_started) AS "lineStarted",
+             -- Blocked BY A LANDING: false for every row the candidate set above leaves out,
+             -- which is why it is read only under a BLOCKED filter.
+             (task_row."id" IN (SELECT "id" FROM landing_wait)) AS "waitingForLanding"
         FROM "task" task_row
        WHERE task_row."owner_id" = ${ownerId}::uuid
          AND task_row."project_id" = ${projectId}::uuid

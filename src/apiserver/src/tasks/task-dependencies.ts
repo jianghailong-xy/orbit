@@ -345,6 +345,17 @@ export function dependenciesSatisfiedSql(
   // required" — and it exists for exactly one reader: the run queue, which subtracts the two to say
   // how many tasks are held up by nothing but a landing (§7.2 V6). It is never the dispatch gate.
   const landed = ignoreLanding ? 'TRUE' : prerequisiteLandedSql('chain_task');
+  return prerequisiteChainsSql(alias, verificationEpochOpenSql('chain_task', alias), landed);
+}
+
+/**
+ * The walk itself, with whatever qualifies a DONE tail passed in.
+ *
+ * Both predicates here are this one shape with different qualifiers, and they are written through
+ * it rather than beside it so that a change to the walk — the depth cap, the fail-closed cases,
+ * the tail function — cannot reach one of them and miss the other.
+ */
+function prerequisiteChainsSql(alias: string, epochOpen: string, landed: string): string {
   return `NOT EXISTS (
     SELECT 1 FROM task_dependency dep
      WHERE dep.task_id = ${alias}.id
@@ -353,10 +364,31 @@ export function dependenciesSatisfiedSql(
            FROM task chain_task
           WHERE chain_task.id = task_dependency_tail_id(dep.depends_on_task_id)
             AND chain_task.status = 'DONE'
-            AND ${verificationEpochOpenSql('chain_task', alias)}
+            AND ${epochOpen}
             AND ${landed}
        )
   )`;
+}
+
+/**
+ * `dependenciesSatisfiedSql` with both qualifiers dropped: every prerequisite's chain tail is DONE,
+ * whatever its epoch and wherever its work is.
+ *
+ * NOT a readiness answer and never a dispatch gate — it is deliberately WEAKER than both spellings
+ * above, which is the only property it is used for. Dropping conjuncts from the inner EXISTS can
+ * only make that EXISTS easier to satisfy, so the `NOT EXISTS` around it is harder, so anything
+ * `dependenciesSatisfiedSql` calls satisfied — with or without `ignoreLanding` — satisfies this
+ * too. It is therefore a necessary condition for both, and a caller that has to evaluate one of
+ * them over a whole project can evaluate this first and only ask the real question where it holds.
+ *
+ * That matters because the real question is not cheap: the landing and epoch clauses are
+ * themselves correlated subqueries, and on the 109,874-task project measured here 170 of its
+ * 109,850 OPEN tasks pass this guard — so the subtraction runs on those and not on the project.
+ * The two project reads that count "held up by nothing but a landing" (`readProjectPanorama`,
+ * `readProjectReadyToRun`) use it exactly that way.
+ */
+export function everyPrerequisiteTailDoneSql(alias = 't'): string {
+  return prerequisiteChainsSql(alias, 'TRUE', 'TRUE');
 }
 
 /**

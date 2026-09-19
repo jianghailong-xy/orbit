@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
-import { dependenciesSatisfiedSql } from '../tasks/task-dependencies';
+import { dependenciesSatisfiedSql, everyPrerequisiteTailDoneSql } from '../tasks/task-dependencies';
 import { BLOCKING_MAX_UNFINISHED_TASKS } from './project-panorama-blocking';
 
 export type ProjectReadyToRunState = 'READY' | 'QUEUED' | 'RUNNING' | 'PAUSED';
@@ -194,13 +194,23 @@ export async function readProjectReadyToRun(
       -- same predicate with the landing clause lifted would not. Subtracting the two is what makes
       -- this "waiting for a prerequisite to land" rather than "blocked", which every task with an
       -- unfinished prerequisite also is.
-      waiting_for_landing AS (
-        SELECT count(*)::int AS count
+      -- The necessary condition for that subtraction, asked first and as a set: both halves of it
+      -- require every prerequisite's chain tail to be DONE, so a task failing this cannot be
+      -- waiting for a landing. MATERIALIZED because the point is to be a planner fence — inlined,
+      -- the two expensive predicates would be free to run on the whole project first.
+      landing_candidate AS MATERIALIZED (
+        SELECT t.id
           FROM task t
          WHERE t.project_id = ${projectId}::uuid
            AND t.owner_id = ${ownerId}::uuid
            AND t.status = 'OPEN'::task_status
-           AND NOT (${Prisma.raw(dependenciesSatisfiedSql('t'))})
+           AND ${Prisma.raw(everyPrerequisiteTailDoneSql('t'))}
+      ),
+      waiting_for_landing AS (
+        SELECT count(*)::int AS count
+          FROM task t
+          JOIN landing_candidate ON landing_candidate.id = t.id
+         WHERE NOT (${Prisma.raw(dependenciesSatisfiedSql('t'))})
            AND ${Prisma.raw(dependenciesSatisfiedSql('t', { ignoreLanding: true }))}
       ),
       active_size AS (
