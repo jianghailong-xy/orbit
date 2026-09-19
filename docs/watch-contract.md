@@ -610,6 +610,10 @@ v2 在 v1 之上加四样东西，全部仍然只从数据库行判定。`predic
 - observer 是 `X-Orbit-Session-Id` 指向、由本 runner 承载的会话；body 里没有能指定别的 observer 的字段。
 - 读和改只作用于该会话观察的 watch（`WatchesService.get/list` 的 `observerSessionId` 作用域）。
 - `action` 缺省 `RESUME_SESSION`，可显式 `NOTIFY_USER`。
+- `mode` 只有 `ONE_SHOT`，这是决定不是遗漏（契约 `agentSurface.runnerDoor.mode` 与 `continuous.reach`）：body 里带
+  `mode: CONTINUOUS`、`debounceSeconds` 或 `wakeBudget` 会被 `CONTINUOUS_POLICY_INVALID` **拒绝**，而不是剥掉之后
+  发回一个一次性 watch。这道门建的 watch 唤醒的就是请求方自己，continuous 会按窗口把它一叫再叫，而「一生最多叫几次」
+  的 `wakeBudget` 由请求方自己填、花的却是全账号共享的每日唤醒预算。continuous 由账号自己的 API 建（§5、§12.4）。
 - 目标里有 SESSION 时，另要该会话的 orchestration 凭据；只有 TASK 时不要。`WatchesService` 逐目标的权限检查照旧。
 - 没有 headless 路径。
 

@@ -20,6 +20,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerCreateWatchDto, UpdateWatchDto } from '../watches/dto';
+import { assertAgentDoorOneShot } from '../watches/watch-request';
 import {
   type BareWatchEnd,
   watchEndTurnClientId,
@@ -77,6 +78,9 @@ export class RunnerWatchesController {
     @Body() dto: RunnerCreateWatchDto,
   ) {
     const observerSessionId = await this.callingSession(runner, callingSessionId);
+    // Who is calling, then what they asked for: refused here, before any orchestration check or write
+    // (contract `agentSurface.runnerDoor.mode`).
+    assertAgentDoorOneShot(dto);
     const targets = dto.targets ?? [];
     if (targets.some((target) => target.kind === 'SESSION')) {
       await this.orchestration.assert(runner, observerSessionId, orchestrationToken);

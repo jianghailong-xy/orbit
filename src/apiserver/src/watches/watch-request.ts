@@ -165,6 +165,24 @@ export function continuousPolicy(
   return { debounceSeconds: debounce, wakeBudget: budget };
 }
 
+/**
+ * Contract `agentSurface.runnerDoor.mode`: the door an agent asks through makes ONE_SHOT watches, and says
+ * so when asked for another. Refused by name rather than dropped by the request whitelist, because a caller
+ * that asked to be woken again and again would otherwise be handed a watch that wakes it once and never
+ * learn the difference. Where a CONTINUOUS watch is made instead: `continuous.reach`.
+ */
+export function assertAgentDoorOneShot(request: { mode?: unknown; debounceSeconds?: unknown; wakeBudget?: unknown }): void {
+  const HERE = 'a watch made from inside a session wakes the session that asked for it, once;'
+    + " a CONTINUOUS watch is the account's own to create (POST /api/watches)";
+  if (request.mode !== undefined && request.mode !== 'ONE_SHOT') {
+    throw watchRefusal('CONTINUOUS_POLICY_INVALID', `\`mode\` here is ONE_SHOT: ${HERE}`);
+  }
+  const policy = request.debounceSeconds !== undefined ? 'debounceSeconds' : request.wakeBudget !== undefined ? 'wakeBudget' : null;
+  if (policy !== null) {
+    throw watchRefusal('CONTINUOUS_POLICY_INVALID', `\`${policy}\` belongs to a CONTINUOUS watch, and this door makes none: ${HERE}`);
+  }
+}
+
 function isIntegerIn(value: number, min: number, max: number): boolean {
   return Number.isInteger(value) && value >= min && value <= max;
 }

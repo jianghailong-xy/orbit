@@ -26,6 +26,9 @@ const SESSION_PREDICATE = { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TUR
 
 // From build/runner-api back to the repository root.
 const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/watch.contract.json'), 'utf8'));
+// The refusal the contract's agentSurface.runnerDoor.mode names, read out of the sentence that names it:
+// the door and the contract answer a continuous request with the same word, or these tests say so.
+const DOOR_REFUSAL = /refused ([A-Z][A-Z_]+)/u.exec(CONTRACT.agentSurface.runnerDoor.mode)?.[1];
 
 function view(overrides: Record<string, unknown> = {}) {
   return {
@@ -229,6 +232,58 @@ test('an agent may ask for a notification to its person instead of a wake', asyn
     action: 'NOTIFY_USER',
   });
   assert.equal((calls[0].args[1] as { action: string }).action, 'NOTIFY_USER');
+});
+
+test('the agent door makes ONE_SHOT watches, and refuses a continuous one by name instead of stripping it', async () => {
+  // contracts/watch.contract.json agentSurface.runnerDoor.mode with continuous.reach: a caller asking to be
+  // woken again and again is told where such a watch is made, rather than whitelisted down to a watch that
+  // wakes it once and never told the difference.
+  // Over a session target, so the refusal is also shown to come before the orchestration check a session asks for.
+  const base = { predicateVersion: 1, predicate: SESSION_PREDICATE, targets: [{ kind: 'SESSION' as const, id: randomUUID() }] };
+  for (const asked of [{ mode: 'CONTINUOUS' }, { mode: 'continuous' }, { debounceSeconds: 60 }, { wakeBudget: 5 }]) {
+    const where = JSON.stringify(asked);
+    const { controller, methods, sessionLookups } = harness();
+    const refused = await controller.create(RUNNER, CALLER, TOKEN, { ...base, ...asked } as never).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(refused instanceof BadRequestException, `${where} was not refused`);
+    const body = refused.getResponse() as { code: string; kind: string; message: string };
+    assert.equal(body.code, DOOR_REFUSAL, where);
+    assert.equal(body.kind, 'REFUSAL', where);
+    // The refusal says where a continuous watch is made instead, or it is only a no.
+    assert.match(body.message, /POST \/api\/watches/u, where);
+    // Who is calling was settled first, and nothing else was asked anything.
+    assert.deepEqual(sessionLookups.length, 1, where);
+    assert.deepEqual(methods(), [], where);
+  }
+});
+
+test('the one mode this door makes may be spelled out, and no mode reaches the service either way', async () => {
+  for (const body of [{}, { mode: 'ONE_SHOT' }]) {
+    const { controller, calls } = harness();
+    await controller.create(RUNNER, CALLER, TOKEN, {
+      predicateVersion: 1,
+      predicate: TASK_PREDICATE,
+      targets: [{ kind: 'TASK', id: randomUUID() }],
+      ...body,
+    } as never);
+    const created = calls[0].args[1] as Record<string, unknown>;
+    for (const field of ['mode', 'debounceSeconds', 'wakeBudget']) {
+      assert.ok(!(field in created), `${field} reached WatchesService from ${JSON.stringify(body)}`);
+    }
+  }
+});
+
+test('the contract names the refusal this door makes, and says where a continuous watch is made', () => {
+  assert.ok(DOOR_REFUSAL, 'contracts/watch.contract.json agentSurface.runnerDoor.mode names no refusal code');
+  assert.ok(
+    CONTRACT.refusals.some((refusal: { code: string }) => refusal.code === DOOR_REFUSAL),
+    `${DOOR_REFUSAL} is not one of the contract's refusals`,
+  );
+  assert.match(CONTRACT.agentSurface.runnerDoor.mode, /ONE_SHOT/u);
+  // The decision is written where a reader of the continuous semantics will meet it, not only at the door.
+  assert.match(CONTRACT.continuous.reach, /POST \/api\/watches/u);
 });
 
 test('a watch that names a session asks for the credential session_get asks for, and is not created without it', async () => {

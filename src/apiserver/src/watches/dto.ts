@@ -78,6 +78,12 @@ export class CreateWatchDto {
  * A watch an agent asks for from inside its session (RunnerWatchesController). CreateWatchDto's fields
  * without the observer, which is the session asking, so no field can name another; the action defaults
  * to waking that session.
+ *
+ * And it makes ONE_SHOT watches only, by decision (contract `agentSurface.runnerDoor.mode` and
+ * `continuous.reach`): a CONTINUOUS watch made here would wake its own caller once per window, out of the
+ * account's shared wake budget, on a budget the caller picked for itself. The three continuous fields are
+ * declared all the same — `@Allow()`ed past the whitelist — so the door can refuse one by name instead of
+ * stripping it and handing back a one-shot watch nobody asked for.
  */
 export class RunnerCreateWatchDto {
   @Allow()
@@ -85,6 +91,15 @@ export class RunnerCreateWatchDto {
 
   @Allow()
   predicate?: unknown;
+
+  @Allow()
+  mode?: unknown;
+
+  @Allow()
+  debounceSeconds?: unknown;
+
+  @Allow()
+  wakeBudget?: unknown;
 
   @IsArray()
   @ValidateNested({ each: true })

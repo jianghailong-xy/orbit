@@ -265,7 +265,7 @@
     { "code": "WAKE_LOOP", "when": "A RESUME_SESSION watch names a session its own observer already wakes, directly or through a chain of live (ACTIVE or PAUSED) RESUME_SESSION watches: the new watch would close a wake cycle." },
     { "code": "TTL_OUT_OF_RANGE", "when": "ttl is outside [minTtlSeconds, maxTtlSeconds]." },
     { "code": "WATCH_QUOTA_EXCEEDED", "when": "A watch that stays live after its first evaluation would give the account more than limits.maxLiveWatchesPerOwner live watches, or one of its targets more than limits.maxLiveWatchesPerTarget. A watch matched at create occupies no live slot and is not refused." },
-    { "code": "CONTINUOUS_POLICY_INVALID", "when": "debounceSeconds is outside [continuousDebounceSeconds, maxContinuousDebounceSeconds], wakeBudget is outside [1, maxContinuousWakeBudget], or either is given for a ONE_SHOT watch." },
+    { "code": "CONTINUOUS_POLICY_INVALID", "when": "debounceSeconds is outside [continuousDebounceSeconds, maxContinuousDebounceSeconds], wakeBudget is outside [1, maxContinuousWakeBudget], either is given for a ONE_SHOT watch, or the agent door is asked for a CONTINUOUS watch, which it does not make (agentSurface.runnerDoor.mode)." },
     { "code": "PERMISSION_DENIED", "when": "The observer cannot read every target at create time." }
   ],
 
@@ -359,7 +359,8 @@
     "stormBound": "At most one Match, one delivery and one wake per debounceSeconds, and at most wakeBudget in all, however fast the targets change.",
     "ends": "An expiry, revocation or unresolvable end while a window is open ends the watch without that window's Match; an expiry's snapshot names the open window.",
     "edit": "A predicate edit resets holding and drops an open window: the new condition's first holding is its first crossing.",
-    "create": "A CONTINUOUS watch is never matched at create. It starts due and not holding, so a condition already true is the first crossing its first evaluation sees."
+    "create": "A CONTINUOUS watch is never matched at create. It starts due and not holding, so a condition already true is the first crossing its first evaluation sees.",
+    "reach": "Created by the account's own API (POST /api/watches), and only there. The agent door refuses one (agentSurface.runnerDoor.mode) and no client editor offers one. This is the decision, not a gap: everything else about CONTINUOUS is served, and the number that decides how much one watch may ever deliver is wakeBudget, which the requester chooses. An account choosing its own is deliberate; an agent choosing its own spends limits.maxWakesPerOwnerPerDay, which every watch of that account shares, and leaves one OBSERVER_SESSION_ENDED dead letter per remaining Match once the session it would have woken is over."
   },
 
   "quorum": {
@@ -413,6 +414,7 @@
       ],
       "observer": "The calling session named by X-Orbit-Session-Id, which must be a session this runner hosts. It observes every watch this door creates; a body cannot name another, and every read and edit is confined to the watches that session observes.",
       "action": "RESUME_SESSION unless the request names NOTIFY_USER.",
+      "mode": "ONE_SHOT, and the body may not ask for another: mode CONTINUOUS, debounceSeconds or wakeBudget is refused CONTINUOUS_POLICY_INVALID, named as such, rather than dropped and answered with a one-shot watch. A watch made here wakes the session that asked for it, so what a CONTINUOUS one would wake is the caller itself, once per window until its own budget ran out; continuous.reach says where such a watch is made instead.",
       "sessionTargets": "A watch that names a SESSION target also needs the calling session's orchestration credential, the authority session_get needs. A watch over TASK targets needs none, as task_get needs none.",
       "headless": "Refused: outside a session there is nothing to wake."
     },

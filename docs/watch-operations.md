@@ -330,14 +330,25 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" "$ORBIT/api/watches/deliveries
 4. 租约停滞：`IN_FLIGHT` 交付的租约过期后没被回收，说明没有 worker 在跑（回收发生在每一轮开始时）。恢复 apiserver 即可：
    回收会把这些交付放回 `PENDING` 并计一次失败，不需要手工改库。
 
-## 8. 已知限制
+## 8. 已知限制与产品决定
 
 - 唤醒环只在创建时沿 live `RESUME_SESSION` Watch 的会话链检查，最多 32 跳。经由 Task 状态间接形成的环，以及总在对方的等待结束后
   才重建、从不同时存在的环，由唤醒风暴上限兜底。
 - 每日预算是软上限，并发交付可能超出几次；风暴上限是精确的。
-- continuous Watch 只能由用户 API 创建：`POST /api/watches` 收 `mode` / `debounceSeconds` / `wakeBudget`
-  （`CreateWatchDto`），而会话里的 runner 门（`RunnerCreateWatchDto`）没有 `mode`，Web 与 macOS 的编辑器也不提供这个选项，
-  所以 agent 自己建不出 continuous Watch。求值器会为它记录 Match：一次跨越开一个合并窗口，窗口关闭时写一个 Match，
+- **产品决定：continuous Watch 由账号自己的 API 创建——不由会话里的 agent 创建，也不由客户端编辑器创建。**
+  `POST /api/watches` 收 `mode` / `debounceSeconds` / `wakeBudget`（`CreateWatchDto`）。会话里的 runner 门
+  （`RunnerCreateWatchDto`）带这三个字段的请求会被 `CONTINUOUS_POLICY_INVALID` **拒绝**——是拒绝，不是静默剥掉，
+  请求方会被告知 continuous 在哪个门建（契约 `agentSurface.runnerDoor.mode` 与 `continuous.reach`，
+  由 `src/apiserver/src/runner-api/runner-watches.controller.spec.ts` 钉住）。三条理由：
+  1. 决定「一个 continuous Watch 一生唤醒多少次」的是 `wakeBudget`（`[1, 100]`），**由请求方自己填**。账号本人填它是一次深思熟虑，
+     模型填它不是；而花掉的是全账号共享的每日 1000 次唤醒预算（§1），超出的部分不是拒绝创建，而是把**别的** Watch 的唤醒
+     打成 `WAKE_BUDGET_EXHAUSTED` 死信（§7.6）。护栏挡得住单点失控，挡不住「一个等待把别的等待挤掉」。
+  2. 会话结束不取消它观察的 live Watch。求值器照常记 Match，交付层每次以 `OBSERVER_SESSION_ENDED` 失败（不可重投、要人看）。
+     一次性 Watch 最多留一条这种死信，而且有 `POST /api/runner/watches/:id/release` 专门避免它；continuous 会一直留到预算用完。
+  3. 客户端这边：macOS/iOS 没有创建 Watch 的路径（`APIClient` 只有读、改、暂停/恢复/取消），`WatchEditing.swift` 是编辑表单，
+     而 mode 创建后不可改。只给 Web 加这个选项，两端在「创建」这件事上就会各说各的。要做「持续关注」，该做的是这个关注关系
+     在两端的形态，不是在创建对话框上挂三个数字。
+  求值器与交付层照常服务 continuous：一次跨越开一个合并窗口，窗口关闭时写一个 Match，
   用掉一次唤醒预算（§2、§7.5），间隔限制在交付层生效。
 - `NOTIFY_USER` 的提醒按 Match 算，不按状态算：iOS 走 APNs，服务端每个 Match 推一条；macOS 自己 diff 两次读到的列表，
   按 `generation` 递增判定（`WatchDelta.matched`），所以 continuous Watch 每个合并窗口提醒一次，与 iOS 一致。
