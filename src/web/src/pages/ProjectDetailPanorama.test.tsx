@@ -47,6 +47,32 @@ const P1 = '0195c0de-0000-7000-8000-000000000001';
  *  param to this, so a fixture keyed any other way would answer a request nobody makes. */
 const PROJECT = encodeId(P1);
 
+/** One open blocker — the card draws nothing at all without one, so its place on the page is only
+ *  observable through a project that has something standing in its way. */
+const BLOCKERS = {
+  open: [
+    {
+      id: 'bl-1',
+      kind: 'AWAITING_USER_APPROVAL',
+      owner: 'USER' as const,
+      severity: 'WARNING' as const,
+      requiredAction: 'Accept the changed files or send the work back',
+      subjectType: 'TASK',
+      subjectId: 'tk-2',
+      subjectTitle: 'Backend: panorama buckets',
+      criterionOrdinal: null,
+      criterionRevision: null,
+      detail: { reason: 'OUTSIDE_DECLARED_SCOPE', paths: ['src/apiserver/src/x.ts'] },
+      firstSeenAt: '2026-08-20T10:00:00.000Z',
+      resolvedAt: null,
+      resolvedBy: null,
+      resolutionNote: null,
+    },
+  ],
+  resolved: [],
+  resolvedCount: 0,
+};
+
 const DETAIL = {
   id: P1,
   title: 'Website Revamp',
@@ -62,6 +88,8 @@ const DETAIL = {
     { id: 'c1', text: 'Every page scores 90 or better', ordinal: 1, revision: 1 },
     { id: 'c2', text: 'No console errors on load', ordinal: 2, revision: 1 },
   ],
+  // As are the blockers, which is why their card adds no request either.
+  blockers: BLOCKERS,
 };
 
 /** `running: 1` on purpose: a project whose queue is being served is not stalled, so the header
@@ -310,6 +338,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const goal = at('Ship the new marketing site');
     const tasks = at('>Tasks<');
     const ready = at('Run queue');
+    const blockers = at('aria-label="Blockers"');
     const acceptance = at('Acceptance criteria</div>');
 
     // The changing work account and its Coordinator lead. The stable goal follows both as one
@@ -322,11 +351,14 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(coordinator).toBeGreaterThan(-1);
     expect(coordinator).toBeGreaterThan(header);
     expect(coordinator).toBeLessThan(graph);
-    // The picture the counts above summarize is followed by the chain-specific reading of the
-    // same shape, then the queue that turns that context into action.
+    // The picture the counts above summarize is followed by the chain-specific reading of the same
+    // shape, then the reader's own work in the order they do it: what is standing in the way, and
+    // the queue that turns that context into action. The blockers sit WITH the queue, not leading
+    // the page.
     expect(graph).toBeGreaterThan(header);
     expect(chain).toBeGreaterThan(graph);
-    expect(ready).toBeGreaterThan(chain);
+    expect(blockers).toBeGreaterThan(chain);
+    expect(ready).toBeGreaterThan(blockers);
     // After the graph's actionable and chain readings comes the outcome measure, then the work
     // itself. Acceptance leads the task list rather than trailing it:
     // "did this meet its bar" is the question the counts below cannot answer.

@@ -1096,17 +1096,12 @@ export function ProjectDetailPage() {
             />
           ) : null}
 
-          {/* What is standing in this project's way, above everything that describes it: each open
-              blocker's kind, what it asks for and its files, and the press that resolves it. Drawn
-              from this same document, and not at all while nothing is open. */}
-          <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
-
           {/* Everything this project still owes somebody, in the two groups that say who is
               expected to act (mock 2 ②): what waits for the reader in person, and what its
               coordinator is handling — each with how long it has waited and when it stops being
-              the coordinator's. Beside the blockers because it is the same question — what is
-              standing in the way — answered from the exceptions rather than from the platform's
-              own guards. It draws nothing while nothing is open. */}
+              the coordinator's. The same question the blockers answer — what is standing in the
+              way — answered from the exceptions rather than from the platform's own guards. It
+              draws nothing while nothing is open. */}
           <ProjectOpenItems projectId={id} />
 
           {/* The questions among those items, as the cards that answer them (mock 5). The rows
@@ -1151,9 +1146,17 @@ export function ProjectDetailPage() {
               page decides to show — it is something a chain-shaped project has. */}
           <ProjectChainProgress projectId={id} />
 
-          {/* After the graph and its chain-specific reading, this queue turns that context into
-              action. Full width, with active work retained above the remaining runnable tasks so
-              a Run press changes the row's state instead of making it disappear. */}
+          {/* What is standing in this project's way, directly above what can be started: each
+              open blocker's kind, what it asks for and its files, and the press that resolves it.
+              Drawn from this same document, and not at all while nothing is open. It sits with
+              the queue rather than leading the page because the two are the reader's own work in
+              order — what has to be answered before what can be run. */}
+          <ProjectBlockersCard projectId={id!} blockers={p.blockers} />
+
+          {/* After the graph, its chain-specific reading and the blockers standing in front of
+              it, this queue turns that context into action. Full width, with active work retained
+              above the remaining runnable tasks so a Run press changes the row's state instead of
+              making it disappear. */}
           <ProjectReadyToRun projectId={id} />
 
           {/* The criteria live HERE and nowhere else on this page, in the slot they always had:
