@@ -5,6 +5,7 @@ import * as jwt from 'jsonwebtoken';
 import { RunStatus } from '@prisma/client';
 import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
@@ -496,23 +497,38 @@ export class PushService {
   }
 
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
-   *  Mirrors the client's SessionGrouping.needsYou exactly: an Open, non-ending RUNNING session
-   *  with at least one PENDING approval. Counting sessions (not approval rows) keeps the badge equal
-   *  to what the app shows, and excludes approvals on completed, trashed, or ending sessions. */
+   *  Mirrors the client's SessionGrouping.needsYou: an Open, non-ending RUNNING session with at
+   *  least one PENDING approval, plus the coordinator conversations carrying one of the four owner
+   *  items (§7.6 V13). Counting sessions (not approval rows) keeps the badge equal to what the app
+   *  shows, and excludes approvals on completed, trashed, or ending sessions.
+   *
+   *  THE FOUR ARE IN THE SAME COUNT, and that is not a second opinion about them: the session list,
+   *  the menu bar and the needs-you banner all read them off the same rows, and a phone whose badge
+   *  says 0 above a banner saying "Approve merge to main" is one fact told two ways. Only the four
+   *  — an exception the coordinator is still working through is not the owner's and is not counted
+   *  (owner decision 10) — which is what `ownerItemKind` decides, in one place.
+   *
+   *  The owner-item half does not carry the RUNNING gate: a coordinator conversation sits at
+   *  AWAITING_INPUT precisely while it is waiting for the answer, which is the state this exists to
+   *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
+   *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const rows = await this.prisma.session.findMany({
-      where: {
-        ownerId,
-        status: RunStatus.RUNNING,
-        completedAt: null,
-        archivedAt: null,
-        deletedAt: null,
-        cancelRequestedAt: null,
-        approvals: { some: { status: 'PENDING' } },
-      },
-      select: { id: true },
-    });
-    return rows.map((r) => r.id);
+    const [rows, blockedOnOwner] = await Promise.all([
+      this.prisma.session.findMany({
+        where: {
+          ownerId,
+          status: RunStatus.RUNNING,
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+          approvals: { some: { status: 'PENDING' } },
+        },
+        select: { id: true },
+      }),
+      readOwnerItemSessionIds(this.prisma, ownerId),
+    ]);
+    return [...new Set([...rows.map((r) => r.id), ...blockedOnOwner])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval
