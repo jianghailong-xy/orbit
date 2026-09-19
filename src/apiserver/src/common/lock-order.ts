@@ -28,15 +28,24 @@ import type { Prisma } from '@prisma/client';
  *  `task_dependency_revision` (rank 70) instead and takes no Session lock at all, so the pure
  *  edge paths take rank 10 and nothing else.
  *
- *  **I4 — a dispatch takes the owner row at rank 10 before it reaches rank 70.** An edge writer
+ *  **I4 — a dispatch took the owner row at rank 10 before it reached rank 70.** An edge writer
  *  holds `lockOwnerTaskGraph` (10, `FOR UPDATE`) from its first statement and advances
- *  `task_dependency_revision` (70) from its last. A dispatch does the reverse by nature: it wants
- *  the revision during its decision, and it takes the owner row only IMPLICITLY, several
- *  statements later, when `session_owner_id_fkey` fires on its Session insert. So
- *  `ProjectTaskDispatcherService.dispatchInTransaction` takes `FOR KEY SHARE` on the owner in its
- *  FIRST statement — the same mode and the same row that insert would have taken anyway, moved
- *  earlier, exactly as I2 does for a Task write. Measured, not assumed:
+ *  `task_dependency_revision` (70) from its last. A dispatch did the reverse by nature: it wanted
+ *  the revision during its decision, and it took the owner row only IMPLICITLY, several
+ *  statements later, when `session_owner_id_fkey` fired on its Session insert. So its first
+ *  statement took `FOR KEY SHARE` on the owner — the same mode and the same row that insert would
+ *  have taken anyway, moved earlier, exactly as I2 does for a Task write. Measured, not assumed:
  *  `dependency-revision.pg.spec.ts` runs the same pair with that clause removed and gets a 40P01.
+ *
+ *  THE DISPATCH HALF OF I4 IS HISTORY (`6418a1e5`, 2026-08-23). `ProjectTaskDispatcherService` and
+ *  `ProjectAuthorizationService` — the rank-10 pre-lock and the rank-70 read — were deleted with
+ *  the coordinator loop, and nothing in this tree reads `task_dependency_revision` now. What
+ *  remains is the database's half of 0132: the table, its three advance triggers (that table's
+ *  only taker now), and `session_dispatch_dependency_check` at COMMIT. The regression still runs
+ *  because it is a HISTORICAL lock regression — it replays the boundary 0132 installed, not a
+ *  statement any code issues today — and the spec pins it to the migration's own text so that
+ *  record cannot drift. The path that starts a run today (`TasksService.execute` →
+ *  `sessions.create` / `sessions.resume`) reaches rank 70 not at all.
  *
  *  **I3 — one write per Session row per transaction.** PostgreSQL skips a foreign key's re-check
  *  when no key column changed, *except* when the row being updated was written by the current

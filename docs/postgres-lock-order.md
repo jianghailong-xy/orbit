@@ -78,9 +78,20 @@ Session 时的那把 `FOR UPDATE`。
 **I4 — dispatch 必须先拿到秩 10 的 owner 行，才能去要秩 70。**（0132 加）边写入方从第一条语句就持有
 `lockOwnerTaskGraph`（10，`FOR UPDATE`），到最后一条语句才推进 `task_dependency_revision`（70）；
 dispatch 天生是反的——它在决策期间就要 revision，而 owner 行要等到几条语句之后 Session INSERT 的
-`session_owner_id_fkey` 才**隐式**取到。所以 `ProjectTaskDispatcherService.dispatchInTransaction` 在
-**第一条**语句里就 `FOR KEY SHARE OF u`：同一行、同一模式、只是提前，和 I2 对 Task 写做的事一模一样。
-实测：`dependency-revision.pg.spec.ts` 把这一句删掉重跑同一对事务，拿到 `40P01`。
+`session_owner_id_fkey` 才**隐式**取到。0132 给这条不变量的解，是让 dispatch 的第一条语句就把 owner 行
+取到手：~~`ProjectTaskDispatcherService.dispatchInTransaction`~~ 在**第一条**语句里就
+`FOR KEY SHARE OF u`——同一行、同一模式、只是提前，和 I2 对 Task 写做的事一模一样。实测：
+`dependency-revision.pg.spec.ts` 把这一句删掉重跑同一对事务，拿到 `40P01`。
+
+**这一条今天在 dispatch 侧没有现役实现**——它的两半都随 coordinator 控制环删除了（`6418a1e5`，
+2026-08-23）：产生上面那个 `40P01` 的 `ProjectTaskDispatcherService`，与它秩 70 的对手
+`ProjectAuthorizationService`。所以今天 `src/apiserver/src` 里没有一处读 `task_dependency_revision`，
+只剩注释、夹具与 migration。留下的是库里那一半：表、三个推进触发器（`task_dependency_revision` 现在
+唯一的取锁方），以及 Session INSERT 的提交边界 `session_dispatch_dependency_check`（见 §4）。回归照旧跑，
+但它跑的是**历史锁回归**——重放的是 0132 装上的那套边界，不是今天谁会发出的语句；
+`dependency-revision.pg.spec.ts` 直接把夹具与 migration 的文本钉住，正是为了让这段历史不漂。今天启动一条
+run 的路径（`TasksService.execute` → `sessions.create` / `sessions.resume`）一条 revision 都不碰：它的
+Session INSERT 只按外键取 `user`(10)、`workspace`/`runner`/`task` 的 `FOR KEY SHARE`。
 
 **I3 — 一个事务对同一行 `session` 只写一次。** 理由见 §0。修复前 `POST /runner/sessions/:id/events`
 一个批次最多写八次同一行（telemetry 一次、runtime id 一次、预览反规范化一次、每个后台 shell / 子 Agent
@@ -121,7 +132,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `POST /runner/sessions/:id/inbox`（dequeue） | `session`(30) → conversation_turn(60) | 不写 `session` 行 |
 | `QueueService.trySessionClaim` | advisory → `session`(30) → `project`(40，容量 fence) | 顺序合规 |
 | `SessionsService` 生命周期（cancel/end/complete/delete） | `session`(30) → `project`(40，容量 fence) | 每条分支都只写一次 `session` 行（分支互斥） |
-| `ProjectTaskDispatcherService.dispatchInTransaction`（0132 起） | `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | I4。`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。这个适配器自身的 40→10 形状与 0178 删除的 task-acceptance 触发器无关。 |
+| ~~`ProjectTaskDispatcherService.dispatchInTransaction`（0132 起）~~ | 曾经是 `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | **已删除（`6418a1e5`，2026-08-23）**。这就是 I4 的 dispatch 侧：`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。秩 70 的另一半——读取方 `ProjectAuthorizationService`——同一次删除，所以今天应用侧对 `task_dependency_revision` 只有触发器在写、没有读者。今天启动一条 run 的路径见 §1 I4 末段。 |
 
 ## 4. 逐项审查：trigger / constraint trigger / fencing
 
