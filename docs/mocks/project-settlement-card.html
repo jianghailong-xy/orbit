@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>项目收尾卡 — 现状与改后</title>
+<style>
+  :root { --bg-raised:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7;
+          --border:#dee0e3; --border-subtle:#eceef1;
+          --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+          --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+          --success:#1a7f37; --warning:#c2710c; --warning-border:#ffd591; --mark:#e8590c; }
+  * { box-sizing:border-box; }
+  body { margin:0; width:1780px; padding:38px 40px 44px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",Roboto,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.02em; margin:0 0 9px; }
+  .lede { color:#55555e; max-width:1200px; margin:0 0 2px; }
+  .lede b { color:#16161a; }
+  .lede code { background:#e3e3e8; padding:1px 5px; border-radius:4px; font-size:12.5px; }
+  .row { display:flex; gap:44px; align-items:flex-start; margin-top:26px; }
+  figure { margin:0; width:806px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  figcaption { margin-top:13px; font-size:12.5px; line-height:1.62; color:#55555e; }
+  figcaption b { color:#16161a; }
+  figcaption code { background:#e3e3e8; padding:1px 4px; border-radius:3px; font-size:11.5px; color:#3a3a42; }
+  figcaption ul { margin:5px 0 0; padding-left:17px; }
+  figcaption li { margin-top:3px; }
+
+  .win { width:806px; height:884px; border-radius:12px; background:var(--bg-raised);
+         border:1px solid #d3d5d9; overflow:hidden; position:relative;
+         box-shadow:0 1px 3px rgba(0,0,0,.1), 0 14px 34px rgba(0,0,0,.16); }
+  .winbar { height:44px; border-bottom:1px solid var(--border-subtle); display:flex;
+            align-items:center; gap:9px; padding:0 14px; background:var(--bg-subtle); }
+  .winbar .dot { width:10px; height:10px; border-radius:50%; background:#dcdee1; }
+  .winbar .title { font-size:13px; font-weight:600; color:var(--text-1); margin-left:6px;
+                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:430px; }
+  .winbar .sub { font-size:11.5px; color:var(--text-3); margin-left:auto; }
+  .pill { font-size:11px; font-weight:600; padding:1px 7px; border-radius:20px;
+          background:var(--brand-tint); color:var(--brand-strong); }
+  .scroll { padding:12px 18px 0; height:calc(884px - 44px - 104px); overflow:hidden; position:relative; }
+  .composer { position:absolute; left:0; right:0; bottom:0; height:104px; padding:12px 18px;
+              border-top:1px solid var(--border-subtle); background:var(--bg-raised); }
+  .cbox { border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px;
+          color:var(--text-4); height:52px; }
+  .cmeta { margin-top:8px; font-size:11px; color:var(--text-3); display:flex; gap:14px; }
+
+  .who { font-size:11.5px; font-weight:600; letter-spacing:.03em; color:var(--text-3); margin:2px 0 4px; }
+  .md { font-size:14px; line-height:1.6; color:var(--text-1); }
+  .md p { margin:0 0 7px; }
+  .md b { font-weight:600; }
+  .md ul { margin:0 0 7px; padding-left:19px; }
+  .md li { margin-top:2px; }
+  .md .dim { color:var(--text-2); }
+
+  .card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint);
+          margin:10px 0; overflow:hidden; }
+  .head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+          border-bottom:1px solid var(--brand-border); display:flex; align-items:center; gap:10px; }
+  .prov { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+          border-radius:4px; background:var(--bg-raised); color:var(--warning);
+          font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .body { padding:10px 14px; font-size:13.5px; color:var(--text-1); }
+  .meta { font-size:12px; line-height:1.6; color:var(--text-3); }
+  .crit { margin:10px 0 0; padding:0; list-style:none; font-size:13px; line-height:1.55; }
+  .crit li { display:flex; gap:9px; align-items:flex-start; padding:5px 0;
+             border-top:1px solid rgba(188,211,255,.75); }
+  .crit li:first-child { border-top:none; }
+  .no { flex:none; width:19px; height:19px; border-radius:50%; background:var(--text-1);
+        color:#fff; font-size:11px; font-weight:600; line-height:19px; text-align:center; margin-top:1px; }
+  .ctext { flex:1; color:var(--text-1); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .facts { flex:none; font-size:11.5px; color:var(--text-2); white-space:nowrap; margin-top:1px; }
+  .facts .nr { color:var(--warning); }
+  .more { margin:7px 0 0; font-size:12.5px; color:var(--brand); }
+  .tally { margin:10px 0 0; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  .explains { margin:10px 0 0; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  .actions { padding:10px 14px; border-top:1px solid var(--brand-border);
+             display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+  .btn { padding:6px 16px; border-radius:6px; font-size:13px; border:1px solid transparent; }
+  .btn.primary { background:var(--brand); color:#fff; }
+  .btn.secondary { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); }
+  .afoot { flex-basis:100%; margin:2px 0 0; font-size:11.5px; line-height:1.55; color:var(--text-3); }
+
+  .callout { position:absolute; border:2px dashed var(--mark); border-radius:10px; pointer-events:none; }
+  .note { position:absolute; font-size:12px; font-weight:600; color:var(--mark);
+          background:#fff; border:1px solid var(--mark); border-radius:6px; padding:3px 8px;
+          box-shadow:0 2px 8px rgba(0,0,0,.12); }
+  .elsewhere { position:absolute; left:96px; top:392px; width:600px; border-radius:10px;
+               background:var(--bg-raised); border:1px solid #d3d5d9; overflow:hidden;
+               box-shadow:0 2px 6px rgba(0,0,0,.1), 0 18px 40px rgba(0,0,0,.22); }
+  .ew-head { padding:9px 13px; border-bottom:1px solid var(--border-subtle); display:flex;
+             align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:var(--text-1);
+             background:var(--bg-subtle); }
+  .ew-tag { font-size:10.5px; font-weight:600; padding:1px 6px; border-radius:4px;
+            background:var(--brand-tint); color:var(--brand-strong); }
+  .ew-where { margin-left:auto; font-size:11px; font-weight:500; color:var(--text-3); }
+  .ew-body { padding:9px 13px; font-size:12px; line-height:1.6; color:var(--text-3); }
+  .ew-actions { padding:0 13px 11px; display:flex; gap:14px; }
+  .ew-btn { font-size:12.5px; color:var(--text-1); }
+  .ew-btn.mark { color:var(--mark); font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+</style>
+<body>
+  <h1>项目收尾卡：把「这个项目完成了吗」带进协调会话</h1>
+  <p class="lede">真实取自 <b>Orbit 原生 Watch</b> 项目（<code>34DGqqkpCEVavXwRLFWKU</code>）与它的协调会话 <code>34NvlUSPiXQYp2g9I34SW</code>：
+     8 条判据全部被各自的工作满足、3 条有合并回执、5 条没有，项目下还剩 1 条未结算、4 条 FAILED。
+     协调会话把话说完了，<b>最后一句是「由你在 App 裁定」——而对话里没有任何可以裁定的东西。</b></p>
+
+  <div class="row">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="win">
+        <div class="winbar">
+          <span class="dot"></span>
+          <span class="title">Orbit 原生 Watch：跨 Session / Task 持久监控</span>
+          <span class="pill">协调会话</span>
+          <span class="sub">AWAITING INPUT · 1099 turns</span>
+        </div>
+        <div class="scroll">
+          <div class="who">ORBIT · 刚刚</div>
+          <div class="md">
+            <p>项目验收条件全部齐备。最终汇报：</p>
+            <p><b>8/8 判据 satisfied</b>，且全部有 main 落地证据（刚补四条：<span class="dim">34RFXFlynE8CsAs2g3LHj</span> 等）。全部 Watch 交付已合 main（最新 <span class="dim">644128e08</span>，回执成链）。</p>
+            <p><b>已无执行中的 Watch 工作</b>。剩余账目：</p>
+            <ul>
+              <li>4 条 FAILED 全部是 SUPERSEDED 终态记录</li>
+              <li>OPEN 仅 epic 根任务</li>
+            </ul>
+            <p><b>待你裁定：</b></p>
+            <p>1. <b>项目 DONE</b> —— 8 判据全绿、独立 QA PASS（活栈矩阵 12 例 271 断言）、全部交付落地。<b>是否记为 DONE 由你在 App 裁定</b></p>
+            <p>2. epic 根任务的 EVIDENCE_JUDGMENT 由你裁定</p>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="cbox">给这个协调会话发消息…</div>
+          <div class="cmeta"><span>deepseek-v4-pro</span><span>max</span><span>⌘↵ 发送</span></div>
+        </div>
+        <div class="elsewhere">
+          <div class="ew-head">Orbit 原生 Watch：跨 Session / Task 持久监控 <span class="ew-tag">OPEN</span>
+            <span class="ew-where">另一个页面 · Projects → 这个项目</span></div>
+          <div class="ew-body">65 tasks · 57 done · 1 open · 4 failed · 3 cancelled　—　8 stated criteria</div>
+          <div class="ew-actions"><span class="ew-btn mark">Record as done</span><span class="ew-btn">Record as cancelled</span></div>
+        </div>
+        <div class="callout" style="left:12px; top:272px; width:782px; height:60px;"></div>
+        <div class="note" style="left:368px; top:340px;">话说完了 — 这一句是死路</div>
+        <div class="note" style="left:96px; top:520px;">所有者唯一的门在这里：离开对话 → 打开项目 → 一个小号文字按钮</div>
+      </div>
+      <figcaption>
+        <b>为什么这是缺口。</b>项目页上那个 <code>Record as done</code> 按钮注释里写着它存在的原因：
+        「一个每条判据都已满足的项目 OPEN 了一整天，最后是被一个 agent 写掉的」。
+        今天这个缺口只是换了位置——<b>所有者人在对话里，按钮在别处</b>；而服务端的门（<code>PROJECT_STATUS_NOT_SESSION_WRITABLE</code>）
+        刻意不让 agent 代按，于是对话只能以一句「由你裁定」收尾。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag new">改后（本次定稿）</span>
+      <div class="win">
+        <div class="winbar">
+          <span class="dot"></span>
+          <span class="title">Orbit 原生 Watch：跨 Session / Task 持久监控</span>
+          <span class="pill">协调会话</span>
+          <span class="sub">AWAITING INPUT · 1099 turns</span>
+        </div>
+        <div class="scroll">
+          <div class="who">ORBIT · 刚刚</div>
+          <div class="md">
+            <p><b>8/8 criteria satisfied</b>, all deliverables merged to main (latest <span class="dim">644128e08</span>). <b>No Watch work is running.</b></p>
+          </div>
+
+          <div class="card">
+            <div class="head">
+              <span>Is this project done?</span>
+              <span class="prov">FROM ORBIT</span>
+            </div>
+            <div class="body">
+              <div class="meta">Orbit 原生 Watch：跨 Session / Task 持久监控 · every stated criterion has been met by the work filed under it · nothing is running under it</div>
+              <ul class="crit">
+                <li><span class="no">1</span><span class="ctext">用户或 Agent 可以针对明确的 Session/Task 集合创建、查看、暂停、恢复、编辑和取消 one-shot Watch…</span><span class="facts">Settled · Landed</span></li>
+                <li><span class="no">2</span><span class="ctext">Watch 在客户端关闭、协调 Session 不运行、runner 或 apiserver 重启后仍然存在…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+                <li><span class="no">3</span><span class="ctext">等待中的协调 Session 不使用 Bash/sleep 轮询，不占用模型 turn 或 active runner slot…</span><span class="facts">Settled · Landed</span></li>
+              </ul>
+              <p class="more">Show all 8 criteria</p>
+              <p class="tally">8 stated criteria · 8 settled by the work filed under them · 5 with no merge receipt · 1 task still unsettled, 4 ended FAILED</p>
+              <p class="explains">Nothing decides this for you. Confirming it is a claim you are making about the goal, not a conclusion Orbit reached — so here is everything Orbit can put beside it. Confirming the project done neither closes nor stops the work still filed under it.</p>
+            </div>
+            <div class="actions">
+              <button class="btn primary">Confirm the project is done</button>
+              <button class="btn secondary">Chat about this</button>
+              <span class="afoot">“Chat about this” hands the card’s own facts to the composer below, so you can say what is still missing instead of confirming.</span>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="cbox">给这个协调会话发消息…</div>
+          <div class="cmeta"><span>deepseek-v4-pro</span><span>max</span><span>⌘↵ 发送</span></div>
+        </div>
+        <div class="callout" style="left:12px; top:74px; width:782px; height:596px;"></div>
+        <div class="note" style="left:360px; top:40px;">新增：Orbit 画的收尾卡，与开工卡同一族</div>
+      </div>
+      <figcaption>
+        <b>它是开工卡的收尾对称件。</b>同一个协调会话在项目开始时已经画过一张
+        <code>When is this project done?</code>（<code>AcceptanceConfirmationCard</code>，按下即确认判据并启动项目）。
+        这张卡是同一个承诺的兑现：<b>当初你写下的那 N 条全部被工作满足时，它回来问你那一句话</b>。
+        <ul>
+          <li><b>全英文。</b>与同族三张卡（判据卡 / 证据卡 / 开工卡）一致，走跨端 copy 的同一份源；中文只留在项目页那个全双语的状态对话框里。</li>
+          <li><b>按钮是 “Confirm the project is done”。</b>卡片标题是个问句，按钮就是那个答句——主语是人，不是系统；同页那句 “Nothing decides this for you” 兜住了 confirm 不被读成「系统已核验」。</li>
+          <li><b>不经 agent。</b><code>FROM ORBIT</code> 标同族共用：卡片由 Orbit 依项目自己的读组装，按下直达 <code>PATCH /projects/:id</code>，带的是浏览器凭证、没有 acting session——正好是服务端唯一放行的那条路。</li>
+          <li><b>证据和反证一起摆。</b>沿用项目页 <code>CriteriaEvidence</code> 的两个事实（结算 / 合并回执）；再补一句还剩多少未结算的工作。按钮永不因证据不全而禁用——5 条没有回执是「Orbit 手上没有能证明它落地的回执」，不是「没落地」。</li>
+        </ul>
+      </figcaption>
+    </figure>
+  </div>
+</body>
+</html>

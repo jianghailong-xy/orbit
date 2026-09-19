@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>项目收尾卡 — 什么时候出现、四种状态、一个被否的画法</title>
+<style>
+  :root { --bg-raised:#fff; --bg-subtle:#fafbfc; --bg-hover:#f5f6f7;
+          --border:#dee0e3; --border-subtle:#eceef1;
+          --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+          --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+          --success:#1a7f37; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+          --warning:#c2710c; --warning-border:#ffd591; --mark:#e8590c; }
+  * { box-sizing:border-box; }
+  body { margin:0; width:1780px; padding:38px 40px 40px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",Roboto,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.02em; margin:0 0 9px; }
+  .lede { color:#55555e; max-width:1340px; margin:0; }
+  .lede b { color:#16161a; }
+  .lede code { background:#e3e3e8; padding:1px 5px; border-radius:4px; font-size:12.5px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 540px); gap:40px 40px; margin-top:26px; }
+  figure { margin:0; width:540px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:9px; }
+  .tag.a { background:#d8ecff; color:#0a5ca8; }
+  .tag.b { background:#e3e3e8; color:#55555e; }
+  .tag.rej { background:#ffe2d3; color:#a2400a; }
+  figcaption { margin-top:12px; font-size:12.5px; line-height:1.62; color:#55555e; }
+  figcaption b { color:#16161a; }
+  figcaption code { background:#e3e3e8; padding:1px 4px; border-radius:3px; font-size:11.5px; color:#3a3a42; }
+  .stage { border-radius:12px; padding:14px; background:#f4f4f6; border:1px solid #e0e0e4; }
+  .stage.dark { background:#202023; border-color:#38383c; }
+
+  .card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint); overflow:hidden; }
+  .head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+          border-bottom:1px solid var(--brand-border); display:flex; align-items:center; gap:10px; }
+  .prov { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+          border-radius:4px; background:var(--bg-raised); color:var(--warning);
+          font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .body { padding:10px 14px; font-size:13.5px; color:var(--text-1); }
+  .meta { font-size:12px; line-height:1.6; color:var(--text-3); }
+  .stale { margin:10px 0 0; font-size:12px; line-height:1.6; color:var(--text-2); }
+  .crit { margin:9px 0 0; padding:0; list-style:none; font-size:12.5px; line-height:1.5; }
+  .crit li { display:flex; gap:8px; align-items:flex-start; padding:4px 0;
+             border-top:1px solid rgba(188,211,255,.75); }
+  .crit li:first-child { border-top:none; }
+  .no { flex:none; width:18px; height:18px; border-radius:50%; background:var(--text-1);
+        color:#fff; font-size:10.5px; font-weight:600; line-height:18px; text-align:center; }
+  .ctext { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .facts { flex:none; font-size:11px; color:var(--text-2); white-space:nowrap; }
+  .facts .nr { color:var(--warning); }
+  .more { margin:6px 0 0; font-size:12px; color:var(--brand); }
+  .tally { margin:9px 0 0; font-size:12px; line-height:1.6; color:var(--text-2); }
+  .explains { margin:9px 0 0; font-size:12px; line-height:1.6; color:var(--text-2); }
+  .recorded { margin:10px 0 0; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  .actions { padding:10px 14px; border-top:1px solid var(--brand-border);
+             display:flex; flex-wrap:wrap; align-items:center; gap:9px; }
+  .btn { padding:6px 14px; border-radius:6px; font-size:12.5px; border:1px solid transparent; white-space:nowrap; }
+  .btn.primary { background:var(--brand); color:#fff; }
+  .btn.secondary { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); }
+  .btn.dead { background:var(--bg-raised); color:var(--brand); border-color:var(--brand-border); opacity:.5; }
+  .btn.dead2 { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); opacity:.5; }
+  .afoot { flex-basis:100%; margin:2px 0 0; font-size:11.5px; line-height:1.5; color:var(--text-3); }
+
+  .dark { --bg-raised:#2b2b2e; --bg-subtle:#252528; --border:#424246; --border-subtle:#343437;
+          --text-1:#c9ced5; --text-2:#a7adb6; --text-3:#8b9099; --text-4:#71767f;
+          --brand:#5b8cff; --brand-strong:#7aa2ff; --brand-tint:rgba(91,140,255,.16);
+          --brand-border:rgba(91,140,255,.32); --warning:#e0a23b; --warning-border:rgba(250,140,22,.38);
+          --success:#4ac26b; --success-bg:rgba(46,161,33,.18); --success-border:rgba(46,161,33,.35); }
+  .dark .crit li { border-top-color:rgba(91,140,255,.22); }
+  .dark .no { background:var(--text-1); color:#202023; }
+  .dark .btn.primary { color:#16171a; }
+
+  .quiet { border:1px dashed var(--border); border-radius:10px; background:var(--bg-raised);
+           padding:14px; color:var(--text-3); font-size:12.5px; line-height:1.7; }
+  .quiet b { color:var(--text-1); }
+  .cond { margin:10px 0 0; padding:0; list-style:none; font-size:12.5px; line-height:1.75; color:var(--text-2); }
+  .cond li { display:flex; gap:8px; }
+  .cond .k { flex:none; width:16px; color:var(--text-3); }
+  .cond .yes { color:var(--success); font-weight:600; }
+  .cond .noq { color:var(--mark); font-weight:600; }
+  .rule { margin:0; padding:14px 16px; border-radius:10px; background:var(--bg-raised);
+          border:1px solid var(--border); font-size:12.5px; line-height:1.72; color:var(--text-2); }
+  .rule h3 { margin:0 0 7px; font-size:13px; color:var(--text-1); }
+  .rule ul { margin:0; padding-left:18px; }
+  .rule li { margin-top:5px; }
+  .rule b { color:var(--text-1); }
+
+  .bad { border:1px solid var(--success-border); border-radius:10px; background:var(--success-bg); overflow:hidden; }
+  .bad .head { border-bottom-color:var(--success-border); }
+  .bighook { display:flex; align-items:center; gap:12px; padding:16px 14px 6px; }
+  .hookmark { width:42px; height:42px; border-radius:50%; background:var(--success); color:#fff;
+              font-size:23px; line-height:42px; text-align:center; font-weight:700; }
+  .hooktext { font-size:15px; font-weight:600; color:var(--success); }
+  .hooksub { font-size:12px; color:var(--text-2); font-weight:400; margin-top:2px; }
+  .bad .actions { border-top-color:var(--success-border); }
+  .btn.badprimary { background:var(--success); color:#fff; }
+  .xnote { margin-top:10px; font-size:12.5px; line-height:1.62; color:#a2400a; background:#fff4ed;
+           border:1px solid #ffd3bb; border-radius:8px; padding:9px 11px; }
+  .xnote b { color:#8a3608; }
+</style>
+<body>
+  <h1>收尾卡：什么时候出现、四种状态、以及一个被否的画法</h1>
+  <p class="lede">卡片只在<b>项目自己写下的完成定义全部被工作满足</b>时出现，而且只出现在这个项目的协调会话里。它不是催促：
+     两个动作都是真答案，主动作永不因证据不全而禁用，次动作把「还差什么」交回对话。
+     <b>全英文</b>，与同族三张卡走同一份源；中文只留在项目页那个全双语的状态对话框里。</p>
+
+  <div class="grid">
+    <figure>
+      <span class="tag b">① 条件不满足 — 不出现</span>
+      <div class="stage">
+        <div class="quiet">
+          <b>什么都不画。</b>还在推进的项目不需要有人来裁定它是否结束；一张「可以收尾了吧？」的卡片挂在那里，
+          就是每天问一次同一个问题。
+          <ul class="cond">
+            <li><span class="k">1</span><span>项目 <b>status = OPEN</b> <span class="yes">✓</span></span></li>
+            <li><span class="k">2</span><span>它声明了判据，且<b>每一条都 satisfied</b> <span class="noq">✗ 8 条里 6 条满足</span></span></li>
+            <li><span class="k">3</span><span>此刻<b>没有任务在跑</b> <span class="noq">✗ 2 条 IN_PROGRESS</span></span></li>
+          </ul>
+        </div>
+      </div>
+      <figcaption>
+        <b>三个条件，全部来自已有的那一个读</b>（<code>GET /projects/:id</code> 的 <code>acceptanceCriteriaItems</code>、
+        <code>status</code> 与 <code>buckets.running</code>）。不需要新端点、新表、新的服务端判定——
+        <b>「什么时候算完」用的是项目自己写下的那句话，不是 Orbit 发明的标准</b>。
+        条件 2 按你的决定<b>保持严格</b>：判据没全绿就不问，那种项目走项目页。条件 3 只是「不打断」。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag a">② 条件满足 — 卡片浮出（暗色同一张）</span>
+      <div class="stage dark">
+        <div class="card dark">
+          <div class="head"><span>Is this project done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion has been met by the work filed under it · nothing is running under it</div>
+            <ul class="crit">
+              <li><span class="no">1</span><span class="ctext">用户或 Agent 可以创建、查看、暂停、恢复、编辑和取消 one-shot Watch…</span><span class="facts">Settled · Landed</span></li>
+              <li><span class="no">2</span><span class="ctext">Watch 在客户端关闭、协调 Session 不运行、runner 重启后仍然存在…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+              <li><span class="no">3</span><span class="ctext">等待中的协调 Session 不使用 Bash/sleep 轮询…</span><span class="facts">Settled · Landed</span></li>
+            </ul>
+            <p class="more">Show all 8 criteria</p>
+            <p class="tally">8 stated criteria · 8 settled by the work filed under them · 5 with no merge receipt · 1 task still unsettled, 4 ended FAILED</p>
+            <p class="explains">Nothing decides this for you. Confirming it is a claim you are making about the goal, not a conclusion Orbit reached — so here is everything Orbit can put beside it.</p>
+          </div>
+          <div class="actions">
+            <button class="btn primary">Confirm the project is done</button>
+            <button class="btn secondary">Chat about this</button>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        判据在卡上<b>默认只铺三条、可展开全部</b>——与开工卡「全部铺开」不同，因为这一次读者要核对的是事实列（结算 / 回执），
+        不是逐字读一份他自己写过的定义。暗色下卡片仍是 brand tint 而非绿底：
+        <b>它是一个待答的问题，不是一条捷报。</b>
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag b">③ 已在别处记过 — 原地变灰，不消失</span>
+      <div class="stage">
+        <div class="card">
+          <div class="head"><span>Is this project done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion has been met by the work filed under it</div>
+            <p class="stale">This project was recorded as <b>done</b> at another end, 2 minutes ago. Nothing here was pressed.</p>
+            <ul class="crit">
+              <li><span class="no">1</span><span class="ctext">用户或 Agent 可以创建、查看、暂停、恢复、编辑和取消 one-shot Watch…</span><span class="facts">Settled · Landed</span></li>
+              <li><span class="no">2</span><span class="ctext">Watch 在客户端关闭、协调 Session 不运行、runner 重启后仍然存在…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+            </ul>
+            <p class="more">Show all 8 criteria</p>
+          </div>
+          <div class="actions">
+            <button class="btn dead">Confirm the project is done</button>
+            <button class="btn dead2">Chat about this</button>
+            <span class="afoot">按钮禁用而不是消失：读到一半的卡不应该在眼前蒸发，也不该留一个会被服务端拒绝的亮按钮。</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        项目页、手机、另一个标签页——任何一处记过之后，这张卡<b>原地变灰并说出原因</b>（沿用开工卡的 stale 规则）。
+        两个面写的是同一个幂等 <code>PATCH</code>，不是先到先得的抢答，所以这里不会重演
+        <code>EVIDENCE_JUDGMENT_ALREADY_DECIDED</code> 那种「谁先按谁赢、输的人从报错里得知」。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag a">④ 按下之后 — 回执留在对话里</span>
+      <div class="stage">
+        <div class="card">
+          <div class="head"><span>Is this project done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion has been met by the work filed under it</div>
+            <ul class="crit">
+              <li><span class="no">1</span><span class="ctext">用户或 Agent 可以创建、查看、暂停、恢复、编辑和取消 one-shot Watch…</span><span class="facts">Settled · Landed</span></li>
+              <li><span class="no">2</span><span class="ctext">Watch 在客户端关闭、协调 Session 不运行、runner 重启后仍然存在…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+            </ul>
+            <p class="more">Show all 8 criteria</p>
+            <p class="recorded"><b>Confirmed done</b> · 19 Sep 09:12 · by you, from this conversation.
+              The project is recorded DONE; the 1 unsettled task and the 4 FAILED ones under it are untouched.</p>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        按钮整排消失、换成回执行——和开工卡按下后的收束一致。<b>没有第二条 agent 消息去复述它</b>：
+        这件事不是对话里的哪一轮做的，转录里不该多出一句谁也没说过的话。协调会话在自己的下一轮里
+        从项目读里看到 DONE，自然就不再追问。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag rej">⑤ 被否的画法（对照）</span>
+      <div class="stage">
+        <div class="bad">
+          <div class="head"><span>Project complete</span><span class="prov">FROM ORBIT</span></div>
+          <div class="bighook">
+            <span class="hookmark">✓</span>
+            <span class="hooktext">All 8 criteria passed
+              <span class="hooksub">Orbit checked this project against its acceptance criteria.</span></span>
+          </div>
+          <div class="actions">
+            <button class="btn badprimary">Mark done</button>
+            <button class="btn secondary">Not now</button>
+          </div>
+        </div>
+        <div class="xnote">
+          <b>为什么不这么画：</b>①「passed / Orbit checked」把一个<b>无人作出的判定</b>说成 Orbit 的结论——
+          项目验收判定在 0229 迁移里已被刻意删除，绿勾正是它借尸还魂；一个绿勾还盖掉了「5 条没有合并回执、
+          1 条任务未结算」，把读者最需要知道的反证收进了装饰里；
+          ②「Not now」是<b>把问题推迟</b>而不是回答它——卡片会一直挂着，次日再问一遍；
+          ③ 真正要给的是两列事实和一句「没有任何机制会替你判定」。
+        </div>
+      </div>
+      <figcaption>
+        同族卡片的既有规则：<b>形状先于色相、事实先于结论、不把缺证画成红也不把缺证画成绿。</b>
+        定稿的主按键是 <b>Confirm the project is done</b>：标题是问句、按钮是答句，主语落在人身上；
+        同页那句 Nothing decides this for you 兜住了 confirm 不被读成「系统已核验」。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag b">⑥ 这张卡守的规矩</span>
+      <div class="stage">
+        <div class="rule">
+          <h3>与既有三张卡完全同构</h3>
+          <ul>
+            <li><b>只画在该项目的协调会话里。</b>普通会话、别的项目的会话都不画——和证据卡、判据卡、开工卡同一条规矩。</li>
+            <li><b>不经 agent。</b><code>FROM ORBIT</code> 标；内容由 Orbit 依项目自己的读组装，agent 打的任何字都进不来。</li>
+            <li><b>全英文，与同族同源。</b>跨端 copy 走同一份常量；中文只在项目页那个刻意双语的状态对话框里。</li>
+            <li><b>delivered once，每次渲染重算。</b>条件一旦成立就留下，不会在读者眼前忽隐忽现。</li>
+            <li><b>事实与项目页同一份计算。</b>结算 / 合并回执两列取自同一个读；不把缺证画成红，也不画成绿。</li>
+            <li><b>服务端零改动。</b>按下走的是所有者凭证、无 acting session 的 <code>PATCH /projects/:id</code>，
+                正是 <code>PROJECT_STATUS_NOT_SESSION_WRITABLE</code> 那扇门唯一放行的路。</li>
+          </ul>
+        </div>
+      </div>
+      <figcaption>
+        要让 iOS / macOS 的「需要你」横幅也提示它，需要的是另一件事：让服务端在同一条件下开一条 owner 的 open item。
+        <b>那是第二步，与这张卡不冲突</b>——卡片照样从项目读里画。
+      </figcaption>
+    </figure>
+  </div>
+</body>
+</html>
