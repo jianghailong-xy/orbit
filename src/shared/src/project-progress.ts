@@ -11,6 +11,7 @@
  * as `Date`, everything downstream of JSON holds them as ISO strings. Parameterising it is what
  * lets both sides name the same interface instead of keeping two that drift.
  */
+import type { IntegrationCheckResult } from './dto';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -169,6 +170,7 @@ export type OpenItemDeliveryState =
  * the card draws what it is given.
  */
 export type OpenItemAction =
+  | 'REVIEW'
   | 'OPEN_COORDINATOR'
   | 'OPEN_TASK_SESSION'
   | 'RETRY'
@@ -246,4 +248,59 @@ export interface CoordinatorFuseUsage {
   paused: boolean;
   /** The open pause, for the card that resumes it; null while nothing is paused. */
   episodeId: string | null;
+}
+
+/**
+ * Where a candidate for merging into the upstream stands (§3.3, the four states mock 4 draws).
+ *
+ * `CHECKING` asks nobody anything — the checks are running — and the four terminal-ish states at
+ * the end are candidates nothing is waiting on. The card draws `READY`, `CONFIRMED` / `RECHECKING`,
+ * `MERGED` and `BLOCKED`, which are exactly states A, B, C and D.
+ */
+export type PromotionState =
+  | 'CHECKING'
+  | 'READY'
+  | 'CONFIRMED'
+  | 'RECHECKING'
+  | 'MERGED'
+  | 'BLOCKED'
+  | 'DECLINED'
+  | 'CANCELLED'
+  | 'SUPERSEDED';
+
+/** What is being merged: the project's own branch, or one task's branch on a `MAIN` line (§3.2). */
+export type PromotionSourceKind = 'PROJECT_BRANCH' | 'TASK_BRANCH';
+
+/**
+ * What the confirmation card is drawn from, as `GET /projects/:id/promotions/current` serves it
+ * (§3.6).
+ *
+ * One declaration for the server that writes it and the clients that draw it, for the reason at the
+ * top of this file: every field here is a fact about a merge that has not happened yet, and a client
+ * holding its own copy of the shape would be free to describe that merge differently from the row
+ * the owner is actually confirming.
+ */
+export interface ProjectPromotionView<Instant = string> {
+  promotionId: string;
+  state: PromotionState;
+  sourceKind: PromotionSourceKind;
+  sourceRef: string;
+  /** The tip being offered. Travels back with the confirmation, so a card drawn from a candidate
+   *  the branch has since moved past is refused rather than merging something else (M-F3). */
+  sourceSha: string;
+  upstreamRef: string;
+  commitsAhead: number | null;
+  filesChanged: number | null;
+  taskIds: string[];
+  checks: IntegrationCheckResult[];
+  conflicts: string[];
+  /** Null until a check has passed; after that, the upstream tip that check ran against. */
+  upstreamShaChecked: string | null;
+  /** The tree the checks passed on, which is the tree that lands (M6). Null before they have. */
+  landsTreeSha: string | null;
+  landsAs: 'MERGE_COMMIT' | 'FAST_FORWARD';
+  askedAt: Instant | null;
+  /** When the re-check after a moved upstream began (M5, state B); null while none has. */
+  recheckedAt: Instant | null;
+  merged: { sha: string; byUserId: string | null; at: Instant } | null;
 }

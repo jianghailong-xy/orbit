@@ -121,6 +121,7 @@ export function ownerLine(row: ProjectOpenItemRow, now: number): string {
  *  note): the server lists `RETRY` and `CANCEL_TASK` for a task item, and neither has an entry
  *  point in this client, so pressing one could do nothing but fail. */
 const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
+  REVIEW: 'Review',
   ANSWER: 'Answer',
   RESUME: 'Resume',
   OPEN_COORDINATOR: 'Open coordinator',
@@ -130,6 +131,10 @@ const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
 /** Where a press goes, or null when this row does not carry the address it would need. */
 function actionHref(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
   switch (action) {
+    case 'REVIEW':
+      // The merge card, mounted beside this list by both hosts — the same anchor the question's
+      // press uses, and for the same reason: one merge, confirmed in one place (§7.5).
+      return row.promotionId ? `#promotion-${row.promotionId}` : null;
     case 'ANSWER':
       // The question's own card, already on this page and in the coordinator's conversation. An
       // anchor rather than a second copy of the card: one question, answered in one place.
@@ -358,8 +363,10 @@ function ItemAsCard({
     return <FusePauseCard projectId={projectId} row={row} now={now} />;
   }
   // A question has its own card, mounted beside this one by both hosts — drawing it again here
-  // would be two cards answering one question, and only one of them could win.
-  if (row.kind === 'COORDINATOR_QUESTION') return null;
+  // would be two cards answering one question, and only one of them could win. A merge approval is
+  // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
+  // land and what the checks came to actually live.
+  if (row.kind === 'COORDINATOR_QUESTION' || row.kind === 'PROMOTION_APPROVAL') return null;
   return escalationHeading(row, now) != null ? (
     <EscalatedItemCard row={row} now={now} />
   ) : (

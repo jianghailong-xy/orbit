@@ -13602,3 +13602,98 @@ button.composer-usage:focus-visible {
 .project-coordinator-meter i.is-paused {
   background: var(--warning-solid);
 }
+
+/* ── The merge-into-main confirmation card (`ProjectPromotionCard`, mock 4) ────────────────────
+   The criteria card's chrome, because it is the same kind of object: something Orbit filed that
+   the account owner — and only they — answers. What differs is the body, which is a short table
+   rather than a paragraph: the reader is weighing four facts, and four labelled rows is how they
+   can be weighed without reading a sentence twice. */
+.approval-card.project-promotion {
+  margin: 10px 0;
+}
+.project-promotion-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* The receipt is not a question: green, and with the neutral mark the other receipts carry. */
+.project-promotion.is-merged {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.project-promotion.is-merged .approval-head {
+  background: var(--success-bg);
+  border-bottom-color: var(--success-border);
+  color: var(--success);
+  font-weight: 600;
+}
+.project-promotion .approval-body.project-promotion-body {
+  background: var(--bg-raised);
+  padding: 10px 14px 6px;
+}
+.project-promotion-row + .project-promotion-row {
+  margin-top: 2px;
+}
+.project-promotion-body .criteria-decision-k {
+  width: 84px;
+}
+.promotion-mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+}
+.promotion-ok {
+  color: var(--success);
+  font-weight: 600;
+}
+.promotion-bad {
+  color: var(--error);
+  font-weight: 600;
+}
+/* Something is happening on a runner right now and this card is watching it: the one place the
+   card moves on its own, so it is the one place a spinner belongs. */
+.promotion-spin {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 6px;
+  border: 2px solid var(--brand-border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: promotion-spin 0.9s linear infinite;
+}
+@keyframes promotion-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .promotion-spin { animation: none; }
+}
+.card-actions.project-promotion-actions {
+  background: var(--bg-raised);
+  border-top-color: var(--warning-border);
+}
+.project-promotion.is-merged .card-actions.project-promotion-actions {
+  border-top-color: var(--success-border);
+}
+.project-promotion-link {
+  font-size: 12.5px;
+}
+/* Pushed to the far end of the action row: how long this has been asked is context, not a press. */
+.project-promotion-asked {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.project-promotion-error {
+  margin: 0 14px 10px;
+}
+/* B5's row: the blockers this merge would decide along with it, as a short list under the sentence
+   that says so — the same shape the Tasks row would take, and never a second blockers card. */
+.promotion-warn {
+  color: var(--warning);
+  font-weight: 600;
+}
+.project-promotion-blockers {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}

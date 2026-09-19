@@ -72,7 +72,7 @@ export interface OpenItemRow {
     at: Date | null;
   };
   /** Doors that exist today. An action nobody can perform is not offered. */
-  actions: Array<'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK' | 'RESUME' | 'ANSWER'>;
+  actions: Array<'REVIEW' | 'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK' | 'RESUME' | 'ANSWER'>;
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
 }
@@ -690,6 +690,10 @@ export class ProjectOpenItemService {
           ? ['RESUME']
           : question
           ? ['ANSWER']
+          // A merge into main is decided on its own card, which says what would land and what the
+          // checks came to (§7.5, mock 4). The row is the way in, the same way a question's row is.
+          : row.promotionId
+          ? ['REVIEW']
           : row.taskId
             ? row.assignee === 'COORDINATOR'
               ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']

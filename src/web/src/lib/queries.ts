@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 import type {
   EventSearchResponse,
   ProjectIntegrationView,
+  ProjectPromotionView,
   SessionSearchResponse,
   WatchView,
 } from '@orbit/shared';
@@ -598,6 +599,24 @@ export const projectOpenItemsQuery = (projectId: string) =>
     queryKey: ['project', projectId, 'open-items'] as const,
     queryFn: () =>
       api<ProjectOpenItemsView>(`/projects/${encodeURIComponent(projectId)}/open-items`),
+  });
+
+/**
+ * The candidate this project is currently asking its owner to merge into main, or nothing
+ * (contract §3.6). One row at a time by construction: the server serves the newest, and only one
+ * candidate per source is ever live.
+ *
+ * Polled beside the open items on both hosts: the states it passes through — checked, confirmed,
+ * re-checking after main moved, merged — are written by a runner reporting in, and the card is how
+ * the reader watches them happen.
+ */
+export const projectPromotionQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'promotion'] as const,
+    queryFn: () =>
+      api<ProjectPromotionView | null>(
+        `/projects/${encodeURIComponent(projectId)}/promotions/current`,
+      ),
   });
 
 /**

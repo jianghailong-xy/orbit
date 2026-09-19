@@ -31,6 +31,7 @@ import {
 } from '../components/ProjectAcceptanceCard';
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
+import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import {
@@ -1103,6 +1104,13 @@ export function ProjectDetailPage() {
               way — answered from the exceptions rather than from the platform's own guards. It
               draws nothing while nothing is open. */}
           <ProjectOpenItems projectId={id} />
+
+          {/* The one merge nobody but the reader may make (mock 4): what it would put on main, what
+              the checks came to on the combined tree, and the two presses that answer it. Here
+              rather than inside the row above for the reason the questions are: the row is the way
+              in, and the card is where it is decided. It draws nothing while no candidate is
+              asking or telling anything. */}
+          <ProjectPromotion projectId={id} />
 
           {/* The questions among those items, as the cards that answer them (mock 5). The rows
               above link here rather than drawing a second copy: one question, answered in one

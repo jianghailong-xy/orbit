@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import type { ProjectPromotionView as SharedPromotionView } from '@orbit/shared';
 import type { IntegrationCheckResult } from './project-integration-job';
 
 /**
@@ -153,26 +154,16 @@ export const PROMOTION_COLUMNS = {
 
 export type PromotionRow = Prisma.ProjectPromotionGetPayload<{ select: typeof PROMOTION_COLUMNS }>;
 
-/** What the confirmation card is drawn from (§3.6). */
-export interface ProjectPromotionView {
-  promotionId: string;
-  state: PromotionState;
-  sourceKind: PromotionSourceKind;
-  sourceRef: string;
-  sourceSha: string;
-  upstreamRef: string;
-  commitsAhead: number | null;
-  filesChanged: number | null;
-  taskIds: string[];
-  checks: IntegrationCheckResult[];
-  conflicts: string[];
-  /** Null until a check has passed; after that, the upstream tip that check ran against. */
-  upstreamShaChecked: string | null;
-  landsAs: 'MERGE_COMMIT' | 'FAST_FORWARD';
-  askedAt: Date | null;
-  recheckedAt: Date | null;
-  merged: { sha: string; byUserId: string | null; at: Date } | null;
-}
+/**
+ * What the confirmation card is drawn from (§3.6), holding its instants as the `Date`s this side of
+ * the wire has them.
+ *
+ * The shape itself is `@orbit/shared`'s, not a second copy of it: the card in `src/web` and the one
+ * in OrbitKit draw the same fields, and §7.0 keeps them in one declaration so a field added for one
+ * client cannot go missing in another. The closed sets above stay here, where migration 0285's CHECK
+ * constraints are mirrored — if the two ever drift, the assignment below stops compiling.
+ */
+export type ProjectPromotionView = SharedPromotionView<Date>;
 
 /**
  * M6, said once: a project branch lands as a merge commit so the tasks it carries stay ancestors of
@@ -196,6 +187,7 @@ export function promotionView(row: PromotionRow): ProjectPromotionView {
     checks: Array.isArray(row.checks) ? (row.checks as unknown as IntegrationCheckResult[]) : [],
     conflicts: row.conflicts,
     upstreamShaChecked: row.upstreamShaChecked,
+    landsTreeSha: row.mergeTreeSha,
     landsAs: promotionLandsAs(row.sourceKind),
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,

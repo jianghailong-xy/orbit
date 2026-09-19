@@ -146,7 +146,7 @@ const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'ta
 // beside it until migration 0229 removed the acceptance epoch it previewed.
 const attributionKeys = (projectUuid: string) => [['project', encodeId(projectUuid), 'crossings']];
 
-// Every entry the head and panorama cards register, in the order they mount:
+// Every entry the head, promotion and panorama cards register, in the order they mount:
 //
 //  1. the four buckets — asked for by the work overview, the first card in the command centre;
 //  2. the Coordinator surface's own read, under the SAME `['project', id]` prefix as the document,
@@ -171,6 +171,10 @@ const headerKeys = (projectUuid: string) => {
     // Ahead of the panorama because that is where the card sits: beside the blockers, above the
     // command centre, since both answer "what is standing in this project's way".
     ['project', id, 'open-items'],
+    // The candidate waiting to be merged into main, read by the confirmation card that sits in the
+    // same place (§3.6). Its card also reads the open items and the document — both under keys the
+    // page already holds, so it adds exactly this one entry.
+    ['project', id, 'promotion'],
     ['project', id, 'panorama'],
     ['project', id, 'coordinator', 'status'],
     ['project', id, 'panorama', 'blocking', 5],

@@ -202,6 +202,12 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [] });
     }
+    // Nothing is waiting to be merged into main either: the promotion card reads this door
+    // wherever a conversation coordinates a project, and null is the ordinary answer —
+    // no candidate, no card (contract §3.6).
+    if (path === `/projects/${PROJECT_PUBLIC}/promotions/current`) {
+      return reply(null);
+    }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       criteriaReads += 1;
       return reply(criteriaRead);

@@ -535,6 +535,12 @@ describe('one waiting completion decision on the session page', () => {
       if (path === `/projects/${PROJECT_ID}/open-items`) {
         return reply({ needsYou: [], withCoordinator: [] });
       }
+      // Nothing is waiting to be merged into main either: the promotion card reads this door
+      // wherever a conversation coordinates a project, and null is the ordinary answer —
+      // no candidate, no card (contract §3.6).
+      if (path === `/projects/${PROJECT_ID}/promotions/current`) {
+        return reply(null);
+      }
       if (path.startsWith(`/projects/${PROJECT_ID}/acceptance/criteria-decisions/pending`)) {
         return reply({ readAt: '2026-09-10T13:27:00Z', projectId: PROJECT_ID, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
       }

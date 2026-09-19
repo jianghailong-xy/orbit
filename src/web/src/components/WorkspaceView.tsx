@@ -203,6 +203,7 @@ import {
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
 import { ProjectExceptionCards } from './ProjectProgressStatus';
+import { ProjectPromotion } from './ProjectPromotionCard';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import {
   DECISION_SEND_BACK_LABEL,
@@ -6501,6 +6502,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       [result.intentId]: result.reply ?? null,
                     }))
                   }
+                />
+              )}
+              {/* The merge this project is asking its owner to make, drawn in the conversation that
+                  is coordinating it (mock 4, §3.3): what would land on main, what the checks came
+                  to, and — while it is under way or blocked — why nobody is being asked to press
+                  anything yet. Read from the candidate itself rather than from any turn, so it is
+                  the same card the project page shows and it becomes a receipt when it merges.
+                  Keyed apart from its siblings for the reason the evidence card's note gives
+                  below. */}
+              {selected && selectedId && !selectedTrashed && (
+                <ProjectPromotion
+                  key={`promotion:${selectedId}`}
+                  projectId={coordinatedProjectId}
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked

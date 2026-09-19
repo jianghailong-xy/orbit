@@ -151,7 +151,7 @@ const PROMOTION = item({
   sessionId: null,
   promotionId: '3fFMHLbE7JTsr3vHFOzIDM',
   delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
-  actions: [],
+  actions: ['REVIEW'],
 });
 
 function client(items: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[] }) {
@@ -214,6 +214,15 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
     expect(html).toContain('Open coordinator');
     expect(html).not.toContain('Retry');
     expect(html).not.toContain('Cancel task');
+  });
+
+  it('opens a merge approval on the card that decides it, rather than in the row', () => {
+    const html = paint(STANDING, () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />);
+
+    // The row is the way in: Review points at `ProjectPromotionCard`, which the page mounts below
+    // this card and which is where what would land and what the checks came to are said (§7.5).
+    expect(html).toContain('Review');
+    expect(html).toContain('href="#promotion-3fFMHLbE7JTsr3vHFOzIDM"');
   });
 
   it('renders the pause card first', () => {
@@ -297,6 +306,15 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
     expect(html).toContain('The coordinator paused itself');
     expect(html).toContain('3 things it would have started are on hold');
     expect(html).toContain('Resume');
+  });
+
+  it('leaves a merge approval to its own card, the way it leaves a question to its own', () => {
+    // Drawing it here too would be two cards about one merge, and the one that says what would
+    // land is the other one.
+    expect(paint(
+      { needsYou: [PROMOTION], withCoordinator: [] },
+      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    )).toBe('');
   });
 
   it('draws nothing while nothing is open', () => {
