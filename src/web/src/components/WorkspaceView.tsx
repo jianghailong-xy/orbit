@@ -190,7 +190,12 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
-import { SessionDecisionStrip, decisionRowKey, revealCriteriaCard } from './DecisionRail';
+import {
+  SessionDecisionStrip,
+  decisionRowKey,
+  revealCriteriaCard,
+  type PendingDecisionRow,
+} from './DecisionRail';
 import {
   CriteriaDecisionReceipt,
   SessionCriteriaDecisionCard,
@@ -200,9 +205,13 @@ import { CoordinatorQuestions } from './CoordinatorQuestionCard';
 import { ProjectExceptionCards } from './ProjectProgressStatus';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import {
+  DECISION_SEND_BACK_LABEL,
+  DECISION_SENDING_BACK_PREFIX,
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
   evidenceDecisionCardRows,
+  evidenceDecisionRefusal,
+  sendEvidenceDecision,
 } from './EvidenceDecisionCard';
 import {
   ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
@@ -1393,17 +1402,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // An armed reply: the next composer send carries what is typed to one card's business instead of
   // being an ordinary message, and the card that armed it stays until then. Five presses arm it — a
   // question's "Chat about this", a decline of one of Orbit's own asks, the confirmation card's
-  // send-back, the settlement card's "Chat about this", and the project settlement card's — because
-  // all five want a sentence, and the composer is where a sentence is typed. Null = normal send;
-  // `target` is the only thing that differs, and it is where the send goes.
+  // send-back, the settlement card's "Chat about this", the project settlement card's, and the
+  // evidence card's — because all six want a sentence, and the composer is where a sentence is
+  // typed. Null = normal send; `target` is the only thing that differs, and it is where the send
+  // goes.
   //
-  // `planChange` and `projectSettlement` are the two that go through no door at all. The other
-  // three answer a call that is blocking on them; there the agent is idle and nothing is pending,
-  // so the send is an ordinary turn with the facts it is about carried in front of it (`context`).
+  // `planChange` and `projectSettlement` are the two that go through no door at all. The other four
+  // answer a call that is blocking on them; there the agent is idle and nothing is pending, so the
+  // send is an ordinary turn with the facts it is about carried in front of it (`context`).
   const [replyTo, setReplyTo] = useState<{
     target:
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
+      | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string }
       | { kind: 'planChange'; projectId: string; criteriaDigest: string }
       | { kind: 'projectSettlement'; projectId: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
@@ -3498,6 +3509,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     onError: (error: Error) => void message.error(ownerDecisionRefusal(error).title),
     onSettled: (_data, _error, press) => refreshOwnerConfirmationViews(qc, press.taskId),
   });
+  // The send-back the composer completes from the evidence card's "Chat about this": it presses the
+  // same door the card's own confirm presses, from the same session — the door checks that
+  // the deciding session is independent of the submission, so it is the session the card is drawn
+  // in and not the browser that answers. It re-reads the queue after it, which is where the receipt
+  // for this decision comes from. It lives here rather than in the card because the press that
+  // finishes it happens at the composer, after the card armed it.
+  const evidenceDecision = useMutation({
+    mutationFn: (press: {
+      sessionId: string;
+      taskId: string;
+      evidenceRevision: string;
+      note: string;
+    }) => sendEvidenceDecision(press, press.sessionId, 'SEND_BACK', press.note),
+    // Said as staleness when that is what the door's code means, for the reason the card gives: a
+    // reader told only "it failed" has been told the button is broken.
+    onError: (error: Error) => void message.error(evidenceDecisionRefusal(error).title),
+    onSettled: (_data, _error, press) =>
+      qc.invalidateQueries({ queryKey: pendingDecisionsQuery(press.sessionId).queryKey }),
+  });
   // A run ending its turn moves this session's row, not the task, so no task event re-reads the
   // confirmation. Re-read it when the row moves, and the card arrives with the report rather than
   // on the card's next poll.
@@ -3600,6 +3630,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // chip is dismissed. The project settlement card's "Chat about this" is the same kind of armed
     // reply — an ordinary turn at an idle agent — so it stays armed by the same rule.
     if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'projectSettlement') return;
+    // An evidence version: the row leaving the pending read is what says it was answered elsewhere
+    // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
+    // the card is drawn from, and only once that read has come back, for the reason below.
+    if (replyTo.target.kind === 'evidenceDecision') {
+      const read = pendingDecisions.data;
+      if (!read) return;
+      const address = decisionRowKey(replyTo.target);
+      const still = evidenceDecisionCardRows(read, selectedSession?.projectId ?? null).some(
+        (row) => decisionRowKey(row) === address,
+      );
+      if (!still) setReplyTo(null);
+      return;
+    }
     // The same rule read from the other door — but only once the read has actually come back. A
     // read in flight is "this browser cannot say yet", and disarming on it would throw away a
     // reason somebody is in the middle of typing.
@@ -3608,7 +3651,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const { requestId } = replyTo.target;
     const answered = view.decisions.some((d) => d.requestId === requestId);
     if (answered || ownerWaiting?.requestId !== requestId) setReplyTo(null);
-  }, [approvals, replyTo, ownerConfirmation.data, ownerWaiting]);
+  }, [
+    approvals,
+    replyTo,
+    ownerConfirmation.data,
+    ownerWaiting,
+    pendingDecisions.data,
+    selectedSession?.projectId,
+  ]);
 
   const send = useMutation({
     mutationFn: async (
@@ -4817,6 +4867,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ownerDecision.mutate({ taskId, requestId, decision: 'SEND_BACK', note: c });
         return;
       }
+      // A send-back reaches the evidence decision door, and that door refuses one carrying no note
+      // — so, as with the confirmation card, an image alone cannot stand in for the reason. Nothing
+      // is sent and the bar stays armed.
+      if (replyTo.target.kind === 'evidenceDecision') {
+        if (!c || !selectedId) return;
+        const { taskId, evidenceRevision } = replyTo.target;
+        pinToBottom();
+        setReplyTo(null);
+        setText('');
+        setComposerRefs({});
+        setHistIdx(-1);
+        evidenceDecision.mutate({ sessionId: selectedId, taskId, evidenceRevision, note: c });
+        return;
+      }
       // Talking about a plan before it is started — and about a project whose criteria are all met —
       // reaches no door either: both are ordinary turns at an idle agent, with the facts the card is
       // drawn from carried in front of the message because nothing in the session holds them. The
@@ -5225,6 +5289,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       target: { kind: 'ownerConfirmation', taskId: selectedTaskId, requestId: waiting.requestId },
       banner: OWNER_SENDING_BACK_PREFIX + title,
       placeholder: OWNER_SEND_BACK_LABEL,
+    });
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The evidence card's "Chat about this": the next send carries the typed text to the evidence
+  // decision door as the SEND_BACK's note — the reason the next version of the evidence has to
+  // answer, which is the only thing the door's refusal will accept. The card stays until then, with
+  // its own confirm still live — pressing that is the other way out.
+  const startEvidenceSendBack = (row: PendingDecisionRow): void => {
+    setReplyTo({
+      target: {
+        kind: 'evidenceDecision',
+        taskId: row.taskId,
+        evidenceRevision: row.evidenceRevision,
+      },
+      banner: DECISION_SENDING_BACK_PREFIX + row.title,
+      placeholder: DECISION_SEND_BACK_LABEL,
     });
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -6463,6 +6543,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
+                  onSendBack={startEvidenceSendBack}
                 />
               )}
               {/* An OWNER_CONFIRMED task's confirmation card, in the task's own session — in any

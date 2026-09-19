@@ -79,7 +79,8 @@ const decisionCard = (over: { answered?: boolean } = {}): string => {
   const row = decisionRow();
   const read = decisionQueue(over.answered ? [] : [row]);
   return renderToStaticMarkup(
-    <EvidenceDecisionCard standing={evidenceDecisionStanding(read, PROJECT_ID, row)} onDecide={() => {}} />,
+    <EvidenceDecisionCard standing={evidenceDecisionStanding(read, PROJECT_ID, row)}
+                          onConfirm={() => {}} onChatAbout={() => {}} />,
   );
 };
 

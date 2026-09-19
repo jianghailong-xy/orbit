@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>证据判定卡 · Chat about this — mockup</title>
+<style>
+  /* 真实 token，抄自 src/web/src/index.css :root（light） */
+  :root {
+    --bg-raised:#ffffff; --bg-base:#ffffff; --bg-sunken:#f7f8fa; --bg-hover:#f2f3f5;
+    --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-solid:#2ea121;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 40px 52px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+         "Noto Serif CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:26px; letter-spacing:-.02em; margin:0 0 10px; }
+  .lede { color:#55555e; max-width:1180px; margin:0 0 6px; font-size:14.5px; }
+  .lede b { color:#16161a; }
+  .row { display:flex; gap:44px; align-items:flex-start; margin-top:32px; }
+  figure { margin:0; width:520px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#e3e3e8; color:#55555e; }
+  .tag.new { background:#d8ecff; color:#0a5ca8; }
+  figcaption { margin-top:14px; font-size:13px; line-height:1.6; color:#55555e; }
+  figcaption b { color:#16161a; }
+  figcaption ul { margin:6px 0 0; padding-left:18px; }
+  figcaption li { margin-top:3px; }
+  h2.sec { font-size:16px; margin:44px 0 12px; color:#16161a; }
+  h2.sec span { color:#8b8b95; font-weight:500; font-size:14px; }
+
+  /* ── 卡片本体：抄 .approval-card / .decision-ask / .evidence-decision ── */
+  .approval-card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint);
+                   overflow:hidden; }
+  .approval-head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+                   background:var(--brand-tint); border-bottom:1px solid var(--brand-border);
+                   display:flex; align-items:center; gap:10px; }
+  .provenance { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+                border-radius:4px; background:var(--bg-raised); color:var(--warning);
+                font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .approval-body { padding:4px 14px 14px; font-size:13.5px; color:var(--text-1); }
+  .chip { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--text-3); margin:8px 0 4px; }
+  .standard { margin-top:10px; padding:8px 10px; border:1px solid var(--brand-border);
+              border-radius:8px; background:var(--bg-raised); }
+  .standard .h { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--text-3); }
+  .standard .t { margin-top:2px; font-size:13px; line-height:1.55; color:var(--text-1); }
+  .gaps { margin-top:10px; padding:8px 10px; border:1px solid var(--warning-border);
+          border-radius:8px; background:var(--warning-bg); }
+  .gaps .h { font-size:11px; font-weight:600; letter-spacing:.03em; color:var(--warning); }
+  .gaps ul { margin:4px 0 0; padding-left:18px; font-size:13px; line-height:1.5; color:var(--text-1); }
+  .gaps li + li { margin-top:4px; }
+  .toggle { display:inline-flex; align-items:center; gap:5px; margin-top:8px; font-size:12.5px;
+            color:var(--text-2); }
+  .toggle.plain { text-decoration:underline; color:var(--text-2); }
+  .account { margin-top:10px; }
+  .meta { margin-top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+          font-size:11.5px; color:var(--text-3); }
+  .actions { display:flex; flex-direction:column; align-items:stretch; gap:8px; margin-top:12px; }
+  .btn { padding:6px 16px; border-radius:6px; font-size:13px; border:1px solid transparent;
+         text-align:center; }
+  .btn.primary { background:var(--brand); color:#fff; }
+  .btn.secondary { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); }
+  .hint { margin-top:8px; font-size:12px; line-height:1.5; color:var(--text-3); }
+  /* 改后的第三颗按钮：和另外三张卡同一个控件、同一个词，虚线框标出改动处 */
+  .mark { position:relative; }
+  .mark:before { content:''; position:absolute; inset:-6px -5px; border:2px dashed var(--warning);
+                 border-radius:10px; pointer-events:none; }
+
+  /* 改前卡片里那只自带的框 */
+  .why { display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--border);
+         border-radius:8px; background:var(--bg-raised); }
+  .why .lbl { font-size:12px; color:var(--text-2); }
+  .why .field { height:70px; padding:6px 8px; border:1px solid var(--border); border-radius:6px;
+                background:var(--bg-base); font-size:12.5px; color:var(--text-4); }
+
+  /* ── 底部主输入框：抄 .composer / .composer-replyto / .composer-box ── */
+  .composer { width:1180px; border:1px solid var(--border); border-radius:12px;
+              background:var(--bg-raised); padding:10px 12px 12px; }
+  .replyto { display:flex; align-items:center; gap:8px; margin-bottom:8px; padding:6px 10px;
+             border:1px solid var(--brand-border); border-radius:8px; background:var(--brand-tint);
+             font-size:12.5px; color:var(--text-2); }
+  .replyto .ic { flex:none; color:var(--brand); font-weight:600; }
+  .replyto .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .replyto .x { flex:none; color:var(--text-3); }
+  .cbox { display:flex; align-items:flex-end; gap:8px; border:1px solid var(--brand); border-radius:10px;
+          padding:6px; }
+  .cbox .ph { flex:1; padding:6px 2px; font-size:14px; color:var(--text-4); }
+  .cbox .ph:after { content:'|'; color:var(--brand); margin-left:1px; animation:none; }
+  .cbox .send { flex:none; width:30px; height:30px; border-radius:6px; background:var(--brand);
+                color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; }
+
+  table.copy { border-collapse:collapse; margin-top:6px; font-size:13px; width:1180px; }
+  table.copy th, table.copy td { text-align:left; vertical-align:top; padding:7px 12px 7px 0;
+                                 border-bottom:1px solid #dcdce1; }
+  table.copy th { font-size:12px; letter-spacing:.03em; color:#55555e; }
+  table.copy code { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:#16161a; }
+  table.copy td.k { width:340px; }
+  .del { color:#b3261e; } .add { color:#1a7f37; }
+</style>
+<body>
+<h1>证据判定卡：第二个答案也交给主输入框</h1>
+<p class="lede"><b>按钮文案从 Send back 换成 Chat about this</b>——和问题卡、确认卡、结算卡、创建卡同一个词、同一个控件（web 的 <code>OWNER_SEND_BACK_ACTION</code> / Swift 的 <code>Approvals.chatAction</code>）。
+按下之后<b>卡片不再自己长出输入框</b>：它接管屏幕底部的主输入框，上方出现一条说明这次要答什么的横条，<b>下一次发送就是这次作答</b>——判定门的 <b>SEND_BACK + note</b>，和确认卡走 SEND_BACK + note 是同一条路。</p>
+<p class="lede">卡片本身原地不动，<b>Confirm done 仍然可按</b>，那是另一条出路。记录的措辞不变：回执与「Decision recorded」那行仍写 <code>Send back</code>（按钮换了词，记录没有——同确认卡的 <code>Asked for more</code>）。</p>
+
+<div class="row">
+  <figure>
+    <span class="tag now">改前</span>
+    <div class="approval-card">
+      <div class="approval-head">Does this evidence settle the task?<span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">清掉 runner-go 的死常量 projectStatusJSON：它仍写着 automationPolicy（判据 1 的唯一残留）</div>
+        <div class="standard">
+          <div class="h">WHAT IT HAS TO SATISFY</div>
+          <div class="t">删除之后，数据库里没有任何对象再读或写 <code>automation_policy</code>：函数体、约束、索引、视图、触发器五处全部为零；仓库全域只剩历史迁移与注释。</div>
+        </div>
+        <div class="gaps">
+          <div class="h">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 5</div>
+          <ul>
+            <li>本任务不确立判据 1 的全部内容。判据 1 还要求「数据库里函数体 / 约束 / 索引 / 视图 / 触发器五处全部为零」…</li>
+            <li>改动只在分支 orbit/runner-go-projectstatusjson-automationpo-a29b64 上（05d11844a，base cdadf7185），尚未合入 main…</li>
+            <li>只跑了 -run TestProject（判据 ② 指定的那一条），没有跑 runner-go 整包的套件…</li>
+          </ul>
+          <div class="toggle">2 more ▾</div>
+        </div>
+        <div class="toggle">3 checked for you ▾</div>
+        <div class="account"><div class="toggle">the submitter’s full account (1034 characters) ▾</div></div>
+        <div class="meta">34RbuNXw8QaZQj2wxuG6hJ · rev 2 · P1j4o9DGjyjzmqoCr1cLQ</div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="btn secondary">Send back</div>
+          <div class="why">
+            <div class="lbl">What does the next version of the evidence have to show? It is the only thing the next attempt can aim at.</div>
+            <div class="field">For example: run the pg spec, and show the raw output of it failing before the fix…</div>
+            <div class="btn secondary">Send it back</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>改前：卡片自己带一只框</b>
+      <ul>
+        <li><b>Send back</b> 是展开器，点开在卡片里长出 label + 三行 textarea + <b>Send it back</b>。</li>
+        <li>句子在卡片里打字，和底部本来就在收句子的输入框是<b>两个地方收同一句话</b>。</li>
+        <li>按钮文案是 <b>Send back</b>——另外四张卡做同一件事时叫 <b>Chat about this</b>。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag new">改后</span>
+    <div class="approval-card">
+      <div class="approval-head">Does this evidence settle the task?<span class="provenance">FROM ORBIT</span></div>
+      <div class="approval-body">
+        <div class="chip">清掉 runner-go 的死常量 projectStatusJSON：它仍写着 automationPolicy（判据 1 的唯一残留）</div>
+        <div class="standard">
+          <div class="h">WHAT IT HAS TO SATISFY</div>
+          <div class="t">删除之后，数据库里没有任何对象再读或写 <code>automation_policy</code>：函数体、约束、索引、视图、触发器五处全部为零；仓库全域只剩历史迁移与注释。</div>
+        </div>
+        <div class="gaps">
+          <div class="h">WHAT THIS EVIDENCE DOES NOT ESTABLISH · 5</div>
+          <ul>
+            <li>本任务不确立判据 1 的全部内容。判据 1 还要求「数据库里函数体 / 约束 / 索引 / 视图 / 触发器五处全部为零」…</li>
+            <li>改动只在分支 orbit/runner-go-projectstatusjson-automationpo-a29b64 上（05d11844a，base cdadf7185），尚未合入 main…</li>
+            <li>只跑了 -run TestProject（判据 ② 指定的那一条），没有跑 runner-go 整包的套件…</li>
+          </ul>
+          <div class="toggle">2 more ▾</div>
+        </div>
+        <div class="toggle">3 checked for you ▾</div>
+        <div class="account"><div class="toggle">the submitter’s full account (1034 characters) ▾</div></div>
+        <div class="meta">34RbuNXw8QaZQj2wxuG6hJ · rev 2 · P1j4o9DGjyjzmqoCr1cLQ</div>
+        <div class="actions">
+          <div class="btn primary">Confirm done</div>
+          <div class="mark"><div class="btn secondary">Chat about this</div></div>
+        </div>
+        <div class="hint">Your next message is sent back as the reason — the only thing the next attempt can aim at. The task stays open.</div>
+      </div>
+    </div>
+    <figcaption><b>改后：一句话交给主输入框</b>
+      <ul>
+        <li>框没了。卡片矮了一截，标准、缺口、两颗按钮都在一屏里。</li>
+        <li>按钮换成 <b>Chat about this</b>（虚线框处），和另外四张卡一字不差。</li>
+        <li>按钮下多一行承诺：<b>下一次发送就是理由，任务不会关</b>——触屏没有 hover，tooltip 读不到。</li>
+      </ul>
+    </figcaption>
+  </figure>
+</div>
+
+<h2 class="sec">按下去的同一刻 <span>底部输入框接管：横条说明这次要答什么，占位符就是要写的东西</span></h2>
+<div class="composer">
+  <div class="replyto">
+    <span class="ic">↩</span>
+    <span class="t">Sending back: 清掉 runner-go 的死常量 projectStatusJSON：它仍写着 automationPolicy（判据 1 的唯一残留）</span>
+    <span class="x">✕</span>
+  </div>
+  <div class="cbox">
+    <span class="ph">What does the next version have to show?</span>
+    <span class="send">➤</span>
+  </div>
+</div>
+
+<h2 class="sec">文案对照 <span>两端同步改（web <code>EvidenceDecisionCard.tsx</code> / Swift <code>EvidenceDecisions</code>）</span></h2>
+<table class="copy">
+  <tr><th>字段</th><th>改前</th><th>改后</th></tr>
+  <tr><td class="k"><code>DECISION_SEND_BACK_ACTION</code>（按钮）</td><td class="del">Send back</td>
+      <td class="add">Chat about this（复用四张卡共用的那个常量）</td></tr>
+  <tr><td class="k">记录里的措辞（回执 / Decision recorded）</td><td>Send back</td>
+      <td>Send back<span class="add">（不变：按钮换了词，记录不换）</span></td></tr>
+  <tr><td class="k">输入框横条</td><td class="del">—</td><td class="add">Sending back: &lt;任务标题&gt;</td></tr>
+  <tr><td class="k">输入框占位符</td><td class="del">（卡片里的 label）What does the next version of the evidence have to show? It is the only thing the next attempt can aim at.</td>
+      <td class="add">What does the next version have to show?</td></tr>
+  <tr><td class="k">按钮下的承诺</td><td class="del">—</td><td class="add">Your next message is sent back as the reason — the only thing the next attempt can aim at. The task stays open.</td></tr>
+  <tr><td class="k">卡片里的框</td><td class="del">label + placeholder + <code>Send it back</code> 三处一起删</td><td class="add">—</td></tr>
+</table>
+</body>
+</html>

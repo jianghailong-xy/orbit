@@ -216,16 +216,11 @@ final class EvidenceDecisionDoorTests: XCTestCase {
                          "a send-back with note \(String(describing: note)) must not be sendable")
         }
 
-        // And the control that would send one is dead by the same rule, until the moment there is
-        // a reason — at which point the request carries exactly that reason.
-        var box = EvidenceSendBackState(open: true)
-        XCTAssertFalse(box.canSend, "an open box is not a reason")
-        box.note = "  \n "
-        XCTAssertFalse(box.canSend, "whitespace is not a reason either")
-        box.note = " 把 pg spec 跑一遍 "
-        XCTAssertTrue(box.canSend)
+        // And the reason is sent trimmed, so whitespace a composer handed over still counts as
+        // none: the draft lives at the composer now (`Chat about this` arms it), and this is the
+        // only gate the door has.
         XCTAssertEqual(EvidenceDecisions.request(row: pending, decision: .sendBack,
-                                                 note: box.trimmedNote,
+                                                 note: " 把 pg spec 跑一遍 ",
                                                  decidingSessionID: Self.decidingSession)?.note,
                        "把 pg spec 跑一遍")
     }

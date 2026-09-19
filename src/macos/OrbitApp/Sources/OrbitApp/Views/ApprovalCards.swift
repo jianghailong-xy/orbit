@@ -589,10 +589,6 @@ private struct EvidenceDecisionCard: View {
     let taskID: String
     let evidenceRevision: String
     @State private var deciding = false
-    /// The send-back's whole state, as one value OrbitKit owns the rules of — including the one
-    /// that matters: it cannot be sent without a reason, because the decision door refuses a
-    /// SEND_BACK carrying none and writes nothing at all.
-    @State private var sendBack = EvidenceSendBackState()
 
     private var standing: EvidenceDecisionStanding {
         console.evidenceStanding(taskID, evidenceRevision)
@@ -633,9 +629,11 @@ private struct EvidenceDecisionCard: View {
                 confirmButton(standing)
                 sendBackButton(standing)
             }
-            // Below the actions rather than inside them: on macOS those are one row, and a growing
-            // reason box wedged into it would push Confirm off its line.
-            if sendBack.open { reasonBox(standing) }
+            // Under the buttons rather than in the second one's tooltip: a touch screen has no
+            // hover, so the one sentence saying the task stays open was unreadable on a phone.
+            Text(EvidenceDecisions.sendBackHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .approvalChrome(.blue)
     }
@@ -654,48 +652,34 @@ private struct EvidenceDecisionCard: View {
         .disabled(deciding || !standing.answerable)
     }
 
+    /// The reason does not get a box here: the press hands it to the main composer, which is where
+    /// a message to this conversation is typed anyway, and the door's "no reason, no write" rule is
+    /// then the composer's own refusal to send an empty line. The same control, and the same word
+    /// for it (`Approvals.chatAction`), as the other four cards that hand a reply to the composer.
     private func sendBackButton(_ standing: EvidenceDecisionStanding) -> some View {
         Button {
+            guard let row = standing.row else { return }
             PlatformHaptics.tap()
-            sendBack.open.toggle()
+            console.startEvidenceSendBackReply(row)
         } label: {
-            Text(EvidenceDecisions.sendBackAction).approvalActionLabel()
+            Text(Approvals.chatAction).approvalActionLabel()
         }
         .buttonStyle(.bordered)
         .disabled(deciding || !standing.answerable)
-    }
-
-    private func reasonBox(_ standing: EvidenceDecisionStanding) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(EvidenceDecisions.noteLabel)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            TextField(EvidenceDecisions.notePlaceholder, text: $sendBack.note, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .font(.orbitControl)
-                .lineLimit(3...6)
-                .disabled(deciding || !standing.answerable)
-            Button {
-                decide(standing, .sendBack, note: sendBack.trimmedNote)
-            } label: {
-                Text(EvidenceDecisions.sendAction).approvalActionLabel()
-            }
-            .buttonStyle(.bordered)
-            // A send-back with no reason is refused by the door and writes nothing at all, so the
-            // control that would send one is not pressable until there is one.
-            .disabled(deciding || !standing.answerable || !sendBack.canSend)
-        }
+        // The same promise the card prints under these buttons, kept as a pointer's tooltip for a
+        // mouse that hovers before it presses.
+        .help(EvidenceDecisions.sendBackHint)
     }
 
     /// The press re-checks what the buttons were rendered from, so a race between a render and a
-    /// tap cannot send an answer the standing says is dead.
-    private func decide(_ standing: EvidenceDecisionStanding, _ decision: EvidenceDecisionAnswer,
-                        note: String? = nil) {
+    /// tap cannot send an answer the standing says is dead. `Confirm done` is the only answer this
+    /// card presses itself: a send-back is finished at the composer, which carries its reason.
+    private func decide(_ standing: EvidenceDecisionStanding, _ decision: EvidenceDecisionAnswer) {
         guard let row = standing.row, standing.answerable, !deciding else { return }
         PlatformHaptics.tap()
         deciding = true
         Task {
-            await console.decideEvidence(row, decision, note: note)
+            await console.decideEvidence(row, decision)
             deciding = false
         }
     }

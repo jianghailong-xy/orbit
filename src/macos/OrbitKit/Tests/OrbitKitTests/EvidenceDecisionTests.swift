@@ -110,24 +110,23 @@ final class EvidenceDecisionTests: XCTestCase {
         XCTAssertFalse(EvidenceDecisions.noClaim.isEmpty)
     }
 
-    // MARK: 2 — the send-back needs its reason
+    // MARK: 2 — the second answer's two words, and the sentence it promises
 
-    /// The send-back's control is dead until there is a reason, and alive the moment there is.
-    /// NEGATIVE CONTROL: make `canSend` unconditional and both halves of this go red.
-    func testSendBackIsUnsendableWithoutAReason() {
-        var state = EvidenceSendBackState()
-        XCTAssertFalse(state.open, "the reason box is closed until Send back is pressed")
-        XCTAssertFalse(state.canSend)
-
-        state.open = true
-        XCTAssertFalse(state.canSend, "opening the box is not a reason")
-
-        state.note = "   \n  "
-        XCTAssertFalse(state.canSend, "whitespace is not a reason either")
-
-        state.note = "  把 pg spec 跑一遍  "
-        XCTAssertTrue(state.canSend)
-        XCTAssertEqual(state.trimmedNote, "把 pg spec 跑一遍", "and the reason is sent trimmed")
+    /// The button says one thing and the record says another, deliberately. The button is
+    /// `Approvals.chatAction` — the word the four other cards that hand their reply to the composer
+    /// use — and the receipt a send-back leaves keeps the answer's own name. What the card no
+    /// longer holds is the reason itself: the composer holds the draft, and the rule that a
+    /// send-back needs one lives where the request is built (`EvidenceDecisionDoorTests`).
+    func testTheSecondAnswerHasOneWordForTheButtonAndOneForTheRecord() {
+        XCTAssertEqual(EvidenceDecisions.sendBackAction, "Send back")
+        XCTAssertNotEqual(EvidenceDecisions.sendBackAction, Approvals.chatAction,
+                          "the record keeps the answer's own name; the button is the shared control")
+        // What the card prints under the buttons, and what the armed composer asks for. Both are
+        // compared word for word against the web card by `EvidenceDecisionCopyParityTests`.
+        XCTAssertTrue(EvidenceDecisions.sendBackHint.contains("The task stays open."),
+                      "the promise that pressing it closes nothing has to be on the card")
+        XCTAssertFalse(EvidenceDecisions.sendBackLabel.isEmpty)
+        XCTAssertFalse(EvidenceDecisions.sendingBackPrefix.isEmpty)
     }
 
     // MARK: 3 — which rows get a card

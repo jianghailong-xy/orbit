@@ -21,8 +21,8 @@ import {
   DECISION_NO_CLAIM,
   DECISION_NO_CRITERION,
   DECISION_NO_GAPS,
-  DECISION_SEND_ACTION,
   DECISION_SEND_BACK_ACTION,
+  DECISION_SEND_BACK_HINT,
   EVIDENCE_DECISION_ALREADY_DECIDED,
   EVIDENCE_DECISION_RECORDED_HEADING,
   EVIDENCE_DECISION_STALE_HEADING,
@@ -40,6 +40,7 @@ import {
   type EvidenceDecisionResult,
   type EvidenceDecisionStanding,
 } from './EvidenceDecisionCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
 /**
  * The evidence-decision card as a system card: what it draws from the pending read, what one press
@@ -53,11 +54,12 @@ import {
  * button dead could not pass.
  *
  * Static renders carry most of it, as in `CriteriaDecisionCard.test.tsx`. The file runs under jsdom
- * for the two things a static render cannot do: type a reason into the box before `Send it back` is
- * asked about, and press a button all the way through to the (mocked) `api()` call and the re-read
- * it. `renderToStaticMarkup` writes `&` as `&amp;`, so every text assertion goes through
- * `escaped()` — the fixture's claim carries an ampersand and its title angle brackets to keep that
- * honest.
+ * for the things a static render cannot do: open a fold, and press a button all the way through to
+ * the (mocked) `api()` call and the re-read it. The second answer is asserted as the handoff it is
+ * — the view is called with the row, and no textarea exists anywhere on the card, because the place
+ * a reason is typed is the composer this press arms. `renderToStaticMarkup` writes `&` as `&amp;`,
+ * so every text assertion goes through `escaped()` — the fixture's claim carries an ampersand and
+ * its title angle brackets to keep that honest.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -141,12 +143,17 @@ function card(
   over: { error?: Error | null; recorded?: EvidenceDecisionResult | null } = {},
 ): string {
   return renderToStaticMarkup(
-    <EvidenceDecisionCard standing={standing} onDecide={() => {}} {...over} />,
+    <EvidenceDecisionCard
+      standing={standing}
+      onConfirm={() => {}}
+      onChatAbout={() => {}}
+      {...over}
+    />,
   );
 }
 
-/** Every rendered button, as its opening tag and its text. Labels are matched exactly: `Send back`
- *  is a prefix of `Send it back`, so nothing here may match loosely. */
+/** Every rendered button, as its opening tag and its text. Labels are matched exactly: the
+ *  card's actions are two whole sentences, and nothing here may match loosely. */
 function buttons(html: string): Array<{ tag: string; text: string }> {
   return [...html.matchAll(/(<button\b[^>]*>)([\s\S]*?)<\/button>/gu)].map((match) => ({
     tag: match[1],
@@ -177,13 +184,22 @@ function newClient(): QueryClient {
   return qc;
 }
 
-/** The wired cards over a read that has already come back. */
-function sessionCards(rows: PendingDecisionRow[], projectId: string | null = PROJECT_ID): string {
+/** The wired cards over a read that has already come back. The send-back arms the composer one
+ *  level up, so it is a callback the view supplies and this asserts nothing about. */
+function sessionCards(
+  rows: PendingDecisionRow[],
+  projectId: string | null = PROJECT_ID,
+  onSendBack: (row: PendingDecisionRow) => void = () => {},
+): string {
   const qc = newClient();
   qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue(rows));
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
-      <SessionEvidenceDecisionCard sessionId={SESSION_ID} projectId={projectId} />
+      <SessionEvidenceDecisionCard
+        sessionId={SESSION_ID}
+        projectId={projectId}
+        onSendBack={onSendBack}
+      />
     </QueryClientProvider>,
   );
 }
@@ -237,15 +253,6 @@ function press(scope: HTMLElement, label: string): HTMLButtonElement {
 async function click(button: HTMLButtonElement): Promise<void> {
   await act(async () => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
-}
-
-/** Typing, the way a controlled React field hears it. */
-async function type(field: HTMLTextAreaElement, value: string): Promise<void> {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-  await act(async () => {
-    setter?.call(field, value);
-    field.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
 
@@ -312,7 +319,8 @@ describe('the card is drawn from the row the pending read published', () => {
     const rendered = await mount(
       <EvidenceDecisionCard
         standing={evidenceDecisionStanding(queue([long]), PROJECT_ID, long)}
-        onDecide={() => {}}
+        onConfirm={() => {}}
+        onChatAbout={() => {}}
       />,
     );
 
@@ -348,7 +356,8 @@ describe('the card is drawn from the row the pending read published', () => {
     const rendered = await mount(
       <EvidenceDecisionCard
         standing={evidenceDecisionStanding(queue([live]), PROJECT_ID, live)}
-        onDecide={() => {}}
+        onConfirm={() => {}}
+        onChatAbout={() => {}}
       />,
     );
 
@@ -418,34 +427,55 @@ describe('what one press sends to the door', () => {
   });
 });
 
-describe('a send-back needs its reason', () => {
-  it('keeps Send it back disabled while the reason box is empty or blank, and sends the reason once it is not', async () => {
-    const onDecide = vi.fn();
+describe('the second answer is a composer handoff', () => {
+  it('is the same word the other cards use, printed under the buttons with what pressing it does not do', () => {
+    const live = row();
+    const html = card(evidenceDecisionStanding(queue([live]), PROJECT_ID, live));
+
+    // One control, one name: the confirmation card, the question card, the settlement card and the
+    // create/restructure cards all say this, and a card that declared its own word would be the
+    // sixth name for one thing. `DECISION_SEND_BACK_ACTION` is what the RECORD says about an answer
+    // already given, not what the button says.
+    expect(buttons(html).map((button) => button.text)).toContain(OWNER_SEND_BACK_ACTION);
+    expect(OWNER_SEND_BACK_ACTION).not.toBe(DECISION_SEND_BACK_ACTION);
+    // The promise, on the card rather than in a tooltip: a touch screen never shows a hover.
+    expect(html).toContain(escaped(DECISION_SEND_BACK_HINT));
+    expect(html).toContain('The task stays open.');
+  });
+
+  it('grows no box — the card holds no textarea, and the reason is typed at the composer', async () => {
+    const onChatAbout = vi.fn();
+    const onConfirm = vi.fn();
     const live = row();
     const rendered = await mount(
       <EvidenceDecisionCard
         standing={evidenceDecisionStanding(queue([live]), PROJECT_ID, live)}
-        onDecide={onDecide}
+        onConfirm={onConfirm}
+        onChatAbout={onChatAbout}
       />,
     );
 
-    // Nothing to press before the reason box exists.
-    expect(action(rendered, DECISION_SEND_ACTION)).toBeUndefined();
-    await click(press(rendered, DECISION_SEND_BACK_ACTION));
-    expect(press(rendered, DECISION_SEND_ACTION).disabled).toBe(true);
+    expect(rendered.querySelector('textarea')).toBeNull();
+    await click(press(rendered, OWNER_SEND_BACK_ACTION));
+    // Arming the composer is the whole of the press: the card presses no door and stays put, and
+    // its own confirm is still the other way out.
+    expect(onChatAbout).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(action(rendered, DECISION_CONFIRM_ACTION)).not.toBeUndefined();
+    expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
+  });
 
-    const field = rendered.querySelector<HTMLTextAreaElement>('textarea.decision-ask-note');
-    expect(field).not.toBeNull();
-    await type(field!, '   ');
-    expect(press(rendered, DECISION_SEND_ACTION).disabled).toBe(true);
-    await click(press(rendered, DECISION_SEND_ACTION));
-    expect(onDecide).not.toHaveBeenCalled();
-
-    // The lit twin of the two assertions above, in the same card.
-    await type(field!, '把 pg spec 跑一遍');
-    expect(press(rendered, DECISION_SEND_ACTION).disabled).toBe(false);
-    await click(press(rendered, DECISION_SEND_ACTION));
-    expect(onDecide.mock.calls).toEqual([['SEND_BACK', '把 pg spec 跑一遍']]);
+  it('offers it exactly where the card can be answered, dead in every standing where nothing can', () => {
+    const live = row();
+    expect(isDisabled(card(evidenceDecisionStanding(queue([live]), PROJECT_ID, live)),
+      OWNER_SEND_BACK_ACTION)).toBe(false);
+    for (const dead of [
+      evidenceDecisionStanding(queue([]), PROJECT_ID, live),
+      evidenceDecisionStanding(queue([row({ evidenceRevision: '3' })]), PROJECT_ID, live),
+      evidenceDecisionStanding(null, PROJECT_ID, live),
+    ]) {
+      expect(isDisabled(card(dead), OWNER_SEND_BACK_ACTION), dead.state).toBe(true);
+    }
   });
 });
 
@@ -458,7 +488,7 @@ describe('where a card stands, and what it lets a reader press', () => {
 
     const html = card(standing);
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(false);
-    expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(false);
+    expect(isDisabled(html, OWNER_SEND_BACK_ACTION)).toBe(false);
     expect(html).toContain(DECISION_ASK_HEADING);
     expect(html).not.toContain('evidence-decision-stale');
   });
@@ -469,7 +499,7 @@ describe('where a card stands, and what it lets a reader press', () => {
 
     const html = card(standing);
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(true);
-    expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(true);
+    expect(isDisabled(html, OWNER_SEND_BACK_ACTION)).toBe(true);
     expect(html).toContain(EVIDENCE_DECISION_STALE_HEADING);
     expect(html).toContain('Already answered');
     expect(html).toContain(EVIDENCE_DECISION_ALREADY_DECIDED);
@@ -485,7 +515,7 @@ describe('where a card stands, and what it lets a reader press', () => {
 
     const html = card(standing);
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(true);
-    expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(true);
+    expect(isDisabled(html, OWNER_SEND_BACK_ACTION)).toBe(true);
     expect(html).toContain(EVIDENCE_DECISION_STALE_HEADING);
     expect(html).toContain('Superseded');
     expect(html).toContain('version 3');
@@ -513,7 +543,7 @@ describe('where a card stands, and what it lets a reader press', () => {
 
     const html = card(standing);
     expect(isDisabled(html, DECISION_CONFIRM_ACTION)).toBe(true);
-    expect(isDisabled(html, DECISION_SEND_BACK_ACTION)).toBe(true);
+    expect(isDisabled(html, OWNER_SEND_BACK_ACTION)).toBe(true);
     expect(html).toContain(EVIDENCE_DECISION_UNREAD_HEADING);
     expect(html).toContain('The pending read did not come back just now');
     // A failed read is not an answer: the card must not tell the reader somebody decided.
@@ -622,7 +652,11 @@ describe('a press, end to end inside the browser', () => {
 
     const rendered = await mount(
       <QueryClientProvider client={qc}>
-        <SessionEvidenceDecisionCard sessionId={SESSION_ID} projectId={PROJECT_ID} />
+        <SessionEvidenceDecisionCard
+          sessionId={SESSION_ID}
+          projectId={PROJECT_ID}
+          onSendBack={() => {}}
+        />
       </QueryClientProvider>,
     );
     expect(apiMock).not.toHaveBeenCalled();
@@ -649,6 +683,32 @@ describe('a press, end to end inside the browser', () => {
     expect(rendered.textContent).toContain(evidenceDecisionRecordedLine(receipt()));
     expect(rendered.querySelectorAll(`button.${CARD_ACTION_CLASS}`)).toHaveLength(0);
     expect(rendered.querySelectorAll('[data-decision-row]')).toHaveLength(1);
+  });
+
+  it('hands the send-back to the view with the row it is about, and asks the door for nothing itself', async () => {
+    const live = row();
+    const onSendBack = vi.fn();
+    const qc = newClient();
+    qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([live]));
+
+    const rendered = await mount(
+      <QueryClientProvider client={qc}>
+        <SessionEvidenceDecisionCard
+          sessionId={SESSION_ID}
+          projectId={PROJECT_ID}
+          onSendBack={onSendBack}
+        />
+      </QueryClientProvider>,
+    );
+    await click(press(rendered, OWNER_SEND_BACK_ACTION));
+    await settle();
+
+    // The row, whole: the composer needs its address, and the bar it draws needs the title.
+    expect(onSendBack.mock.calls).toEqual([[live]]);
+    // Arming is not answering: nothing has gone to the door, and the card is still there to press.
+    expect(apiMock).not.toHaveBeenCalled();
+    expect(rendered.querySelectorAll('[data-decision-row]')).toHaveLength(1);
+    expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
   });
 });
 

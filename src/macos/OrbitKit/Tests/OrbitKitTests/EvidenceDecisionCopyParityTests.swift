@@ -100,12 +100,16 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
                        "the heading of a card that could not be re-read")
         assertDeclares(web, "DECISION_CONFIRM_ACTION", EvidenceDecisions.confirmAction,
                        "the confirm action")
+        // What the RECORD calls the answer. The BUTTON is not this: it is the shared
+        // `Chat about this`, asserted below.
         assertDeclares(web, "DECISION_SEND_BACK_ACTION", EvidenceDecisions.sendBackAction,
                        "the send-back action")
-        assertDeclares(web, "DECISION_SEND_ACTION", EvidenceDecisions.sendAction, "the send action")
-        assertDeclares(web, "DECISION_NOTE_LABEL", EvidenceDecisions.noteLabel, "the reason's label")
-        assertDeclares(web, "DECISION_NOTE_PLACEHOLDER", EvidenceDecisions.notePlaceholder,
-                       "the reason's placeholder")
+        assertDeclares(web, "DECISION_SENDING_BACK_PREFIX", EvidenceDecisions.sendingBackPrefix,
+                       "what the composer's bar says it is answering")
+        assertDeclares(web, "DECISION_SEND_BACK_LABEL", EvidenceDecisions.sendBackLabel,
+                       "what the armed composer asks for")
+        assertDeclares(web, "DECISION_SEND_BACK_HINT", EvidenceDecisions.sendBackHint,
+                       "the promise printed under the buttons")
         assertDeclares(web, "DECISION_NO_CLAIM", EvidenceDecisions.noClaim, "the empty-claim line")
         assertDeclares(web, "DECISION_NO_CRITERION", EvidenceDecisions.noCriterion,
                        "the no-criterion line")
@@ -114,6 +118,21 @@ final class EvidenceDecisionCopyParityTests: XCTestCase {
                        "the heading over the criterion's own text")
         assertDeclares(web, "DECISION_CLAIM_HIDE", EvidenceDecisions.claimHide,
                        "the account's fold-up")
+    }
+
+    /// The second action, at both ends, is the word four other controls already use. A card that
+    /// declared its own would be the sixth name for one thing — and the two ends would be free to
+    /// drift apart on the one control they are supposed to share.
+    func testTheSecondActionTakesItsWordFromTheSharedComposerHandoffControl() throws {
+        let web = try flatWebCard()
+
+        XCTAssertTrue(web.contains("{OWNER_SEND_BACK_ACTION}"),
+                      "the web card no longer takes its second action's word from the constant the "
+                          + "other composer handoffs share (`Approvals.chatAction` at this end)")
+        // And what this end keeps as `sendBackAction` is the RECORD's word, not the button's:
+        // rendering the receipt a send-back leaves with `Chat about this` would read as an answer
+        // nobody gave.
+        XCTAssertNotEqual(EvidenceDecisions.sendBackAction, Approvals.chatAction)
     }
 
     /// The counted strings, which are templates on one side and interpolations on the other.

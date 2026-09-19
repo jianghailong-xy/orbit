@@ -74,20 +74,43 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let confirm = try section(card, from: "private func confirmButton",
                                   to: "private func sendBackButton")
         let sendBack = try section(card, from: "private func sendBackButton",
-                                   to: "private func reasonBox")
-        let reason = try section(card, from: "private func reasonBox", to: "private func decide")
+                                   to: "/// The press re-checks")
 
         XCTAssertTrue(confirm.contains(".disabled(deciding || !standing.answerable)"),
                       "Confirm done must be dead while the standing says the door would refuse it: a lit "
                           + "button that is refused every time it is pressed is the bug this rule "
                           + "was written for")
         XCTAssertTrue(sendBack.contains(".disabled(deciding || !standing.answerable)"),
-                      "and so must Send back, which opens the reason box")
-        XCTAssertTrue(reason.contains(".disabled(deciding || !standing.answerable || !sendBack.canSend)"),
-                      "the send control is dead without a reason as well — the door refuses a "
-                          + "SEND_BACK with no note and writes nothing at all")
-        XCTAssertTrue(reason.contains("decide(standing, .sendBack, note: sendBack.trimmedNote)"),
-                      "and what it sends is the trimmed reason the state vouches for")
+                      "and so must the answer that hands its reason to the composer")
+    }
+
+    /// The second answer is the composer handoff, not a box: the press arms the composer with the
+    /// row it is about, and the card keeps no text and no second submit of its own. What the
+    /// composer then does with the typed sentence is asserted next door
+    /// (`ComposerHandoffWiringTests`).
+    func testTheSecondAnswerArmsTheComposerInsteadOfOpeningABox() throws {
+        let card = try card()
+        let sendBack = try section(card, from: "private func sendBackButton",
+                                   to: "/// The press re-checks")
+
+        XCTAssertTrue(sendBack.contains("console.startEvidenceSendBackReply(row)"),
+                      "the press must hand the reply to the composer, with the row it was drawn "
+                          + "for; without the row there is nothing to answer")
+        XCTAssertTrue(sendBack.contains("Text(Approvals.chatAction).approvalActionLabel()"),
+                      "the second action must be labelled from the word the other composer "
+                          + "handoffs share — not from `EvidenceDecisions.sendBackAction`, which is "
+                          + "what the RECORD says about an answer already given")
+        // The old box, gone from the card entirely: not a field, not a second submit, and no local
+        // reason state. A card that kept one would be a second place to type the same sentence.
+        XCTAssertFalse(card.contains("TextField"), "the card must not take text: the composer does")
+        XCTAssertFalse(card.contains("EvidenceSendBackState"),
+                       "the card holds no reason state — the composer's draft is the reason")
+        XCTAssertFalse(card.contains("EvidenceDecisions.sendAction"),
+                       "the in-card submit is gone; the composer's own Send is the submit")
+        // And the promise, on the card rather than in a tooltip alone: a touch screen never shows
+        // a hover.
+        XCTAssertTrue(card.contains("Text(EvidenceDecisions.sendBackHint)"),
+                      "the card must print what pressing it does not do")
     }
 
     func testThePressReChecksTheStandingItWasRenderedFrom() throws {
@@ -95,7 +118,8 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         XCTAssertTrue(press.contains("guard let row = standing.row, standing.answerable, !deciding else { return }"),
                       "a race between a render and a tap cannot send an answer the standing says "
                           + "is dead")
-        XCTAssertTrue(press.contains("await console.decideEvidence(row, decision, note: note)"))
+        XCTAssertTrue(press.contains("await console.decideEvidence(row, decision)"),
+                      "and the one answer this card presses itself is the confirm")
     }
 
     func testTheStandingIsDerivedOnEveryRenderAndNeverKept() throws {
@@ -139,6 +163,25 @@ final class EvidenceDecisionWiringTests: XCTestCase {
                       "and only this project's rows that the door would take from here become cards")
         XCTAssertTrue(console.contains("EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))"),
                       "the bar stops counting a card that went stale, by OrbitKit's rule")
+    }
+
+    /// The arming half of the handoff, on the console's side: the press hands the ROW over and
+    /// everything the bar says is built from it — OrbitKit's prefix and OrbitKit's question — so
+    /// the words a reader sees while typing are the browser's too
+    /// (`EvidenceDecisionCopyParityTests`). What the send then does with them is asserted next door
+    /// (`ComposerHandoffWiringTests`).
+    func testTheArmingPressNamesTheVersionItIsAbout() throws {
+        let console = try source(Self.consolePath)
+        let arm = try section(console, from: "func startEvidenceSendBackReply(",
+                              to: "/// Talk about a plan before the project is started on it")
+
+        XCTAssertTrue(arm.contains("target: .evidenceDecision(row)"),
+                      "the armed reply carries the row: the send that follows needs its address, "
+                          + "and the reconcile needs to re-derive its standing")
+        XCTAssertTrue(arm.contains("banner: EvidenceDecisions.sendingBackPrefix + row.title"),
+                      "the bar names the task the evidence is about")
+        XCTAssertTrue(arm.contains("placeholder: EvidenceDecisions.sendBackLabel"),
+                      "and the composer asks for the reason the door requires")
     }
 
     func testThePressGoesToTheDoorAsTheRequestOrbitKitBuilds() throws {

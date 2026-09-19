@@ -4,21 +4,23 @@ import XCTest
 
 /// The wires that make the composer the one place a reply is typed.
 ///
-/// Three cards used to answer a question by growing a text box of their own, or by not offering one
-/// at all. They now hand the sentence to the composer at the bottom of the screen: a question's
-/// `Chat about this`, a decline of one of Orbit's own asks, and a confirmation's — three controls
-/// saying the same words because they do the same thing (`Approvals.chatAction`). The
-/// rules those replies are under live in OrbitKit and are proved next door
-/// (`OwnerConfirmationDoorTests`, `ApprovalsTests`) — but none of that says the cards are attached
-/// to them, and no compiler on this platform can: SwiftUI does not exist here, and
-/// `ApprovalCards.swift` / `ConsoleModel.swift` are compiled only by the macOS and iOS jobs.
+/// Cards used to answer a question by growing a text box of their own, or by not offering one at
+/// all. They now hand the sentence to the composer at the bottom of the screen: a question's
+/// `Chat about this`, a decline of one of Orbit's own asks, a confirmation's send-back and the
+/// evidence card's — controls saying the same words because they do the same thing
+/// (`Approvals.chatAction`). The rules those replies are under live in OrbitKit and are proved next
+/// door (`OwnerConfirmationDoorTests`, `ApprovalsTests`, `EvidenceDecisionDoorTests`) — but none of
+/// that says the cards are attached to them, and no compiler on this platform can: SwiftUI does not
+/// exist here, and `ApprovalCards.swift` / `ConsoleModel.swift` are compiled only by the macOS and
+/// iOS jobs.
 ///
 /// So the attachment is asserted the one way it can be from Linux — over the source — and each
 /// assertion is written so that UNDOING the handoff is what turns it red:
 ///
-///  - the confirmation card arms the composer and keeps no reason of its own;
-///  - the composer's send routes each armed reply to that reply's own door, and a send-back to the
-///    owner-confirmation door rather than to `POST /turns`;
+///  - the confirmation and the evidence card arm the composer and keep no reason of their own;
+///  - the composer's send routes each armed reply to that reply's own door — the owner-confirmation
+///    door for a confirmation, the evidence decision door for one version of the evidence — and
+///    neither to `POST /turns`;
 ///  - declining one of Orbit's own asks arms the composer, while a plain tool `Deny` stays one
 ///    press and done;
 ///  - an armed reply is dropped when its question is answered elsewhere, but NOT when a read
@@ -114,6 +116,13 @@ final class ComposerHandoffWiringTests: XCTestCase {
         XCTAssertTrue(
             reroute.contains("await decideOwnerConfirmation(waiting, .sendBack, note: text)"),
             "the typed text must reach the owner-confirmation door as the SEND_BACK's reason")
+        XCTAssertTrue(reroute.contains("case .evidenceDecision(let row):"),
+                      "one version of the evidence must be a branch of the send too, not a card's "
+                          + "own request")
+        XCTAssertTrue(reroute.contains("await decideEvidence(row, .sendBack, note: text)"),
+                      "the typed text must reach the evidence decision door as the SEND_BACK's "
+                          + "reason: it is what the next version has to answer, and the door takes "
+                          + "nothing else")
         XCTAssertTrue(reroute.contains("replyContext = nil"),
                       "the bar is disarmed by the send that consumed it")
     }
@@ -183,6 +192,13 @@ final class ComposerHandoffWiringTests: XCTestCase {
                       "the confirmation branch must clear on `isOpen`, which keeps `unread` armed")
         XCTAssertFalse(reconcile.contains("standing.answerable"),
                        "clearing on `answerable` would disarm the composer on a failed read")
+        // The evidence card's armed reply is under the same rule, read off the version's own
+        // standing: a version that has left the read was answered elsewhere or displaced by a newer
+        // one, and that is what the row being gone from the queue means.
+        XCTAssertTrue(reconcile.contains("case .evidenceDecision(let row):"),
+                      "a version's armed reply is reconciled like the confirmation's")
+        XCTAssertTrue(reconcile.contains("EvidenceDecisions.isOpen(standing)"),
+                      "and it clears on `isOpen` for the confirmation's reason")
         XCTAssertTrue(reconcile.contains("state.pendingApprovals.contains(where: { $0.id == id })"),
                       "the approval branch still drops a reply whose approval resolved elsewhere")
 

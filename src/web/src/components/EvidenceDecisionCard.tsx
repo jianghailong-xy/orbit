@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -6,6 +6,12 @@ import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
+// The word this card's second action uses. Imported rather than re-declared, and read inside the
+// component rather than bound at module scope: `OwnerConfirmationCard` reaches this module for
+// `decisionReceiptTime`, so a top-level alias would be evaluated while that binding is still in
+// its temporal dead zone depending on which of the two a bundle enters first. Same arrangement,
+// and the same reason, as the settlement card's.
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import {
   decisionRowKey,
   type PendingDecisionQueue,
@@ -46,6 +52,15 @@ import {
  * press, so the door's receipt for it is kept too: an answer given HERE reads as recorded, not as
  * answered somewhere else.
  *
+ * AND ONE PLACE TO TYPE
+ * ---------------------
+ * The send-back's reason is an ordinary message to this conversation, and the composer at the
+ * bottom of the screen already is one. So the second action grows no box: it arms that composer
+ * (`WorkspaceView`'s `replyTo`), the bar there names what the next send answers, and that send
+ * reaches this door as SEND_BACK + note instead of starting a turn. The card stays through it,
+ * with `Confirm done` still live. The words the button uses are the ones the four other cards
+ * that make this handoff use, because it is one control doing one thing.
+ *
  * ONE ENTRY FOR ONE QUESTION
  * --------------------------
  * This is the only place on the web a verdict about evidence is pressed. `ApprovalPanel` takes no
@@ -61,18 +76,25 @@ export const DECISION_ASK_HEADING = 'Does this evidence settle the task?';
  *  with several questions and several picks per question; in a two-way judgment it buys nothing
  *  but one more click between a reader and the thing they already decided. */
 export const DECISION_CONFIRM_ACTION = 'Confirm done';
+/** What the RECORD calls the second answer: the receipt line and the `Decision recorded` line quote
+ *  it (`Send back · rev 2 · 09:31`). Deliberately not what the BUTTON says — the button says
+ *  `Chat about this`, the word the four other cards that hand their reply to the composer use
+ *  (`OWNER_SEND_BACK_ACTION`), because it is one control doing one thing. The record keeps the
+ *  answer's own name, as the confirmation card's does (`Asked for more`). */
 export const DECISION_SEND_BACK_ACTION = 'Send back';
-/** The send-back's own submit, behind the reason box rather than beside it. */
-export const DECISION_SEND_ACTION = 'Send it back';
-/** Why the reason is required rather than a placeholder somebody may ignore: the decision door
- *  refuses a SEND_BACK carrying no note and writes nothing at all. The generic form could not know
- *  that, so it offered a permanently-present `Or type your own answer…` that reads like an
- *  invitation to say something rather than like the one thing that makes the button work. */
-export const DECISION_NOTE_LABEL =
-  'What does the next version of the evidence have to show? It is the only thing the next '
-  + 'attempt can aim at.';
-export const DECISION_NOTE_PLACEHOLDER =
-  'For example: run the pg spec, and show the raw output of it failing before the fix…';
+/** What the composer's bar says it is about to send back, ahead of the task's own title. */
+export const DECISION_SENDING_BACK_PREFIX = 'Sending back: ';
+/** What the armed composer asks for. The door refuses a SEND_BACK carrying no note and writes
+ *  nothing at all, and that note is what the next revision has to answer — so the box asks for
+ *  exactly that, in the words the door's own refusal action uses. */
+export const DECISION_SEND_BACK_LABEL = 'What does the next version have to show?';
+/** What the second action promises, printed under the buttons rather than hidden in its tooltip: a
+ *  touch screen has no hover, and a reader who cannot see this cannot tell whether pressing it
+ *  closes the task. Two facts, and no third: where the sentence goes, and that nothing is settled
+ *  by it. It is the same sentence the confirmation card prints, for its own door. */
+export const DECISION_SEND_BACK_HINT =
+  'Your next message is sent back as the reason — the only thing the next attempt can aim at. '
+  + 'The task stays open.';
 /** The gaps that did not fit, counted rather than dropped: they are the body of this card. */
 export const decisionGapsMore = (rest: number): string => `${rest} more`;
 /** Evidence from before the envelope has no claim at all; the line says so rather than rendering
@@ -272,67 +294,44 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
 }
 
 /**
- * The two verdicts: confirm on one press, or send back with the reason the door requires.
+ * The two verdicts: confirm on one press, or say why it is going back — through the composer.
  *
  * There is no third: a press goes to the door, and not deciding yet is simply not pressing.
+ *
+ * WHY THE SECOND ONE OWNS NO BOX
+ * ------------------------------
+ * The reason is an ordinary message to this conversation, and the composer at the bottom of the
+ * screen already is one. So `Chat about this` grows no textarea here: it arms that composer, the
+ * bar there names what the next send answers, and that send reaches the decision door as
+ * SEND_BACK + note instead of starting a turn. The door's "no note, no write" rule becomes the
+ * composer's own refusal to send an empty line. Two places on screen taking the same sentence is
+ * what this avoids — and it is the handoff the other four cards make.
  */
 export function EvidenceDecisionActions({
   disabled,
   onConfirm,
-  onSendBack,
+  onChatAbout,
 }: {
   /** Whether no answer from here could succeed right now. Every control below follows it. */
   disabled: boolean;
   onConfirm: () => void;
-  /** Called with the reason, trimmed — and never with an empty one. */
-  onSendBack: (note: string) => void;
+  /** Hand the reply to the composer; the reason is whatever is sent next. */
+  onChatAbout: () => void;
 }): JSX.Element {
-  const noteId = useId();
-  const [backOpen, setBackOpen] = useState(false);
-  const [note, setNote] = useState('');
   return (
-    <CardActions className="decision-ask-actions">
-      <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
-        {DECISION_CONFIRM_ACTION}
-      </CardActionButton>
-      <div className="decision-ask-back">
-        <CardActionButton
-          tone="secondary"
-          disabled={disabled}
-          onClick={() => setBackOpen(!backOpen)}
-        >
-          {DECISION_SEND_BACK_ACTION}
+    <>
+      <CardActions className="decision-ask-actions">
+        <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
+          {DECISION_CONFIRM_ACTION}
         </CardActionButton>
-        {backOpen && (
-          <div className="decision-ask-why">
-            <label className="decision-ask-why-label" htmlFor={noteId}>
-              {DECISION_NOTE_LABEL}
-            </label>
-            <textarea
-              id={noteId}
-              className="decision-ask-note"
-              rows={3}
-              placeholder={DECISION_NOTE_PLACEHOLDER}
-              value={note}
-              disabled={disabled}
-              onChange={(event) => setNote(event.target.value)}
-            />
-            {/* The one rule both cards are under: an action that cannot succeed is disabled.
-                A send-back with no note is refused by the door and writes nothing, so the
-                control that would send it is not pressable until there is one. */}
-            <CardActions className="decision-ask-send">
-              <CardActionButton
-                tone="secondary"
-                disabled={disabled || note.trim() === ''}
-                onClick={() => onSendBack(note.trim())}
-              >
-                {DECISION_SEND_ACTION}
-              </CardActionButton>
-            </CardActions>
-          </div>
-        )}
-      </div>
-    </CardActions>
+        <CardActionButton tone="secondary" disabled={disabled} onClick={onChatAbout}>
+          {OWNER_SEND_BACK_ACTION}
+        </CardActionButton>
+      </CardActions>
+      {/* Under the buttons and not inside the second one's tooltip, for the reason the
+          confirmation card gives: a touch screen never shows a hover. */}
+      <div className="decision-ask-hint">{DECISION_SEND_BACK_HINT}</div>
+    </>
   );
 }
 
@@ -512,7 +511,8 @@ export function EvidenceDecisionCard({
   busy = false,
   error = null,
   recorded = null,
-  onDecide,
+  onConfirm,
+  onChatAbout,
 }: {
   standing: EvidenceDecisionStanding;
   /** A press from this card is on its way to the door. */
@@ -521,7 +521,10 @@ export function EvidenceDecisionCard({
   error?: Error | null;
   /** The door's receipt for an answer given from this card, once there is one. */
   recorded?: EvidenceDecisionResult | null;
-  onDecide: (decision: EvidenceDecision, note?: string) => void;
+  /** `Confirm done` presses the door from here. The other answer does not: it arms the composer,
+   *  and the door is pressed by the send that follows. */
+  onConfirm: () => void;
+  onChatAbout: () => void;
 }): JSX.Element {
   const row = standing.state === 'DECIDABLE' ? standing.row : null;
   const stale = recorded ? null : evidenceDecisionStaleExplanation(standing);
@@ -570,8 +573,8 @@ export function EvidenceDecisionCard({
           ) : (
             <EvidenceDecisionActions
               disabled={busy || row === null}
-              onConfirm={() => onDecide('CONFIRM')}
-              onSendBack={(note) => onDecide('SEND_BACK', note)}
+              onConfirm={onConfirm}
+              onChatAbout={onChatAbout}
             />
           )}
         </section>
@@ -626,25 +629,26 @@ export function sendEvidenceDecision(
   return api<EvidenceDecisionResult>(request.path, { method: 'POST', body: request.body });
 }
 
-/** One card and its own press: busy, refused and recorded belong to the card that was pressed. */
+/**
+ * One card and its own press: busy, refused and recorded belong to the card that was pressed.
+ *
+ * The press it makes is `Confirm done` only. A send-back is pressed at the composer, one level up,
+ * so its busy, its refusal and its receipt belong to that press — this card is armed and left
+ * standing, and its own confirm stays live.
+ */
 function EvidenceDecisionSlot({
   sessionId,
   standing,
+  onSendBack,
 }: {
   sessionId: string;
   standing: EvidenceDecisionStanding;
+  /** Hand this version back to the composer to say why. */
+  onSendBack: (row: PendingDecisionRow) => void;
 }): JSX.Element {
   const qc = useQueryClient();
   const answer = useMutation({
-    mutationFn: ({
-      row,
-      decision,
-      note,
-    }: {
-      row: PendingDecisionRow;
-      decision: EvidenceDecision;
-      note?: string;
-    }) => sendEvidenceDecision(row, sessionId, decision, note),
+    mutationFn: (row: PendingDecisionRow) => sendEvidenceDecision(row, sessionId, 'CONFIRM'),
     // Re-read whichever way the door answered: a recorded decision leaves the queue, and a refusal
     // for staleness means the queue has moved. Returned rather than fired off, so the card stays
     // busy until the read it derives from has caught up with the press.
@@ -657,9 +661,13 @@ function EvidenceDecisionSlot({
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}
       recorded={answer.isSuccess ? answer.data : null}
-      onDecide={(decision, note) => {
+      onConfirm={() => {
         if (standing.state !== 'DECIDABLE') return;
-        answer.mutate({ row: standing.row, decision, note });
+        answer.mutate(standing.row);
+      }}
+      onChatAbout={() => {
+        if (standing.state !== 'DECIDABLE') return;
+        onSendBack(standing.row);
       }}
     />
   );
@@ -682,11 +690,16 @@ function EvidenceDecisionSlot({
 export function SessionEvidenceDecisionCard({
   sessionId,
   projectId,
+  onSendBack,
 }: {
   /** The session a press decides FROM, and the one the pending read is scoped to. */
   sessionId: string;
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
+  /** Arm the bottom composer to send this version back, given the row it is about: it is handed
+   *  the row, and the send that follows presses the door with the typed reason. The card stays
+   *  put, with its own `Confirm done` still live — pressing that is the other way out. */
+  onSendBack: (row: PendingDecisionRow) => void;
 }): JSX.Element | null {
   const [seen, setSeen] = useState<EvidenceDecisionAddress[]>([]);
   const pending = useQuery({
@@ -730,6 +743,7 @@ export function SessionEvidenceDecisionCard({
           key={decisionRowKey(address)}
           sessionId={sessionId}
           standing={evidenceDecisionStanding(read, projectId, address)}
+          onSendBack={onSendBack}
         />
       ))}
     </>

@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
-import { DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION } from './EvidenceDecisionCard';
+import { DECISION_CONFIRM_ACTION } from './EvidenceDecisionCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import type { Runner } from './TasksSidePanel';
 
 // The census at the bottom of this file mounts the real session page. It reaches the server through
@@ -467,7 +468,11 @@ describe('one waiting completion decision on the session page', () => {
     },
   } as ApprovalInfo;
 
-  const VERDICTS = [DECISION_CONFIRM_ACTION, DECISION_SEND_BACK_ACTION];
+  // The evidence card's two actions, as they are worded on it: the verdict, and the control that
+  // hands the reason to the composer (`OWNER_SEND_BACK_ACTION`, which the confirmation, question,
+  // settlement and create/restructure cards carry too). `DECISION_SEND_BACK_ACTION` is what the
+  // RECORD calls an answer already given — it is on the receipts, not on a button.
+  const VERDICTS = [DECISION_CONFIRM_ACTION, OWNER_SEND_BACK_ACTION];
 
   class FakeEventSource {
     onmessage: ((e: { data: string }) => void) | null = null;

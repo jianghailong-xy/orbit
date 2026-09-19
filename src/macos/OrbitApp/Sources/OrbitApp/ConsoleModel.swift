@@ -42,6 +42,9 @@ struct QuestionReply: Equatable, Sendable {
         case approval(id: String)
         /// The confirmation waiting in this session, sent back with the typed text as its reason.
         case ownerConfirmation(OwnerConfirmationWaiting)
+        /// One version of one task's evidence this session may decide, sent back with the typed
+        /// text as the reason the next version has to answer.
+        case evidenceDecision(EvidenceDecisionRow)
         /// The plan a project has not been started on. The one target that answers no door: the
         /// next send is an ordinary turn, with this plan carried in front of the typed message
         /// because nothing in the session holds it.
@@ -656,6 +659,15 @@ final class ConsoleModel {
             let standing = OwnerConfirmations.standing(ownerConfirmation, sessionID: sessionID,
                                                        requestID: waiting.requestId)
             if !OwnerConfirmations.isOpen(standing) { replyContext = nil }
+        case .evidenceDecision(let row):
+            // The same rule the confirmation's branch follows, read off the version's own standing:
+            // a version that has left the read was answered elsewhere or displaced by a newer one,
+            // and a bar left hanging over it is an offer to answer nothing. A read that has not come
+            // back leaves the standing `unread` — "this device cannot say" rather than "there is
+            // nothing to answer" — so a reason somebody is mid-sentence over is not thrown away by
+            // one failed poll.
+            let standing = evidenceStanding(row.taskId, row.evidenceRevision)
+            if !EvidenceDecisions.isOpen(standing) { replyContext = nil }
         case .planChange:
             // Nothing answers a plan change another way: no call is pending on it, so there is no
             // question that can go out from under the reader mid-sentence. It stays armed until it
@@ -1285,6 +1297,12 @@ final class ConsoleModel {
             case .ownerConfirmation(let waiting):
                 localSendTick &+= 1   // an answer is a send too — pin the transcript to the tail
                 await decideOwnerConfirmation(waiting, .sendBack, note: text)
+            // Send this version of the evidence back with this text as the reason the door
+            // requires. `send` already refuses an empty composer, which is the same rule the door
+            // enforces.
+            case .evidenceDecision(let row):
+                localSendTick &+= 1   // an answer is a send too — pin the transcript to the tail
+                await decideEvidence(row, .sendBack, note: text)
             // Talking about a plan before it is started reaches no door: this is an ordinary turn
             // at an idle agent, with the project, its criteria and their seal carried in front of
             // the message. Handed back to `send` whole, with the composer already cleared above —
@@ -1981,6 +1999,17 @@ final class ConsoleModel {
             target: .ownerConfirmation(waiting),
             banner: OwnerConfirmations.sendingBackPrefix + title,
             placeholder: OwnerConfirmations.sendBackLabel)
+    }
+
+    /// Send this version of a task's evidence back: the next composer send carries the typed text
+    /// to the evidence decision door as the SEND_BACK's reason — what the next version has to
+    /// answer, which is the only note the door will take. The card stays until then, with
+    /// `Confirm done` still live — pressing it is the other way out.
+    func startEvidenceSendBackReply(_ row: EvidenceDecisionRow) {
+        replyContext = QuestionReply(
+            target: .evidenceDecision(row),
+            banner: EvidenceDecisions.sendingBackPrefix + row.title,
+            placeholder: EvidenceDecisions.sendBackLabel)
     }
 
     /// Talk about a plan before the project is started on it: the next composer send is an ordinary

@@ -24,10 +24,20 @@ import Foundation
    has to remember to clear. Nothing on the card is summarised, re-worded or inferred: each visible
    string is a field of the row or a count of one.
 
+   AND ONE PLACE TO TYPE
+   ---------------------
+   The send-back's reason is an ordinary message to this conversation, and the composer at the
+   bottom of the screen already is one. So the second action grows no box here: it arms that
+   composer (`ConsoleModel`'s `replyContext`), the bar there names what the next send answers, and
+   that send reaches this door as SEND_BACK + note instead of starting a turn. The card stays
+   through it, with `Confirm done` still live. The words the button uses are `Approvals.chatAction`
+   — the ones the four other cards that make this handoff use — because it is one control doing one
+   thing; what THIS file keeps is the word the RECORD says, `sendBackAction`.
+
    ONE SOURCE FOR TWO CLIENTS
    --------------------------
-   The derivation, the order of the body, the copy and the send-back gate live here so macOS and
-   iOS cannot disagree about them, and so they can be tested on Linux where no SwiftUI exists. What
+   The derivation, the order of the body and the copy live here so macOS and iOS cannot disagree
+   about them, and so they can be tested on Linux where no SwiftUI exists. What
    does NOT live here is the one thing that genuinely differs between a 390pt phone and a macOS
    window: how much of a claim fits before it folds — see `claimClampCompact` /
    `claimClampRegular`. Structure is shared; width is not.
@@ -339,34 +349,6 @@ public struct GapPreview: Equatable, Sendable {
     public let rest: [String]
 }
 
-/// The send-back half of the action area, as state a view holds and a test can assert on.
-///
-/// It is a value rather than three loose `@State` booleans so that "the send control is dead until
-/// a reason exists" is one testable predicate instead of a condition spelled into a view modifier.
-/// The rule it encodes belongs to the server: the decision door refuses a SEND_BACK carrying no
-/// note and writes NOTHING at all, so a control that would send one cannot be pressable.
-public struct EvidenceSendBackState: Equatable, Sendable {
-    /// Whether the reason box is open. Closed until `Send back` is pressed: a permanently visible
-    /// box reads like an invitation to say something rather than like the one thing that makes the
-    /// button work — which is exactly how the generic form's `Or type your own answer…` read.
-    public var open: Bool
-    public var note: String
-
-    public init(open: Bool = false, note: String = "") {
-        self.open = open
-        self.note = note
-    }
-
-    /// The note as it would be sent: trimmed, because whitespace is not a reason.
-    public var trimmedNote: String {
-        note.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Whether the send control may be pressed. The one rule both clients are under: an action
-    /// that cannot succeed is disabled.
-    public var canSend: Bool { !trimmedNote.isEmpty }
-}
-
 // MARK: - the logic
 
 public enum EvidenceDecisions {
@@ -451,16 +433,26 @@ public enum EvidenceDecisions {
     /// judgment it buys nothing but one more press between a reader and the thing they already
     /// decided.
     public static let confirmAction = "Confirm done"
+    /// What the RECORD calls the second answer (`DECISION_SEND_BACK_ACTION`): the receipt line and
+    /// the `Decision recorded` line quote it (`Send back · rev 2 · 09:31`). Deliberately not what
+    /// the BUTTON says — the button says `Approvals.chatAction`, the word the four other cards that
+    /// hand their reply to the composer use, because it is one control doing one thing. The record
+    /// keeps the answer's own name, as the confirmation card's does (`Asked for more`).
     public static let sendBackAction = "Send back"
-    /// The send-back's own submit, behind the reason box rather than beside it.
-    public static let sendAction = "Send it back"
-    /// Why the reason is required rather than a placeholder somebody may ignore: the decision door
-    /// refuses a SEND_BACK carrying no note and writes nothing at all.
-    public static let noteLabel =
-        "What does the next version of the evidence have to show? It is the only thing the next "
-        + "attempt can aim at."
-    public static let notePlaceholder =
-        "For example: run the pg spec, and show the raw output of it failing before the fix…"
+    /// What the composer's bar says it is about to send back, ahead of the task's own title
+    /// (`DECISION_SENDING_BACK_PREFIX`).
+    public static let sendingBackPrefix = "Sending back: "
+    /// What the armed composer asks for (`DECISION_SEND_BACK_LABEL`). The door refuses a SEND_BACK
+    /// carrying no note and writes nothing at all, and that note is what the next revision has to
+    /// answer — so the box asks for exactly that, in the words the door's own refusal action uses.
+    public static let sendBackLabel = "What does the next version have to show?"
+    /// What the second action promises (`DECISION_SEND_BACK_HINT`), printed under the buttons
+    /// rather than hidden in its tooltip: a touch screen has no hover, and a reader who cannot see
+    /// this cannot tell whether pressing it closes the task. It is the sentence the confirmation
+    /// card prints, for its own door.
+    public static let sendBackHint =
+        "Your next message is sent back as the reason — the only thing the next attempt can aim "
+        + "at. The task stays open."
     /// Evidence from before the envelope has no claim at all; the line says so rather than
     /// rendering a blank where the card's lead should be.
     public static let noClaim = "This version of the evidence states no claim."
