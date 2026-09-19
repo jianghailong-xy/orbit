@@ -30,6 +30,7 @@ Usage:
   orbit task attribution [task-id] [--json]
   orbit task create --title TITLE [options]
   orbit task create-batch (--tasks JSON | --tasks-file -) [--dry-run] [--json]
+  orbit task batch-pin (--task-id ID | --project ID | --list-id ID | --label L) (--provider P | --clear-provider) (--model M | --clear-model) [--json]
   orbit task update [task-id] [options]
   orbit task reopen [task-id] [--json]
   orbit task delete [task-id] [--json]
@@ -412,6 +413,38 @@ it from the refusal, which is after the decision has been made.
 
 task-id defaults to ORBIT_TASK_ID.
 `,
+	"batch-pin": `orbit task batch-pin — re-pin many tasks in one request
+
+Usage:
+  orbit task batch-pin (--task-id ID | --project ID | --list-id ID | --label L)
+                       (--provider SLUG | --clear-provider) (--model MODEL | --clear-model) [--json]
+
+Sets provider and/or model on every task a selector matches. This is the door for "change the
+model of every task in this project": 'orbit task update --model' can only spell that as one call
+per task, which for a project of a hundred thousand is a hundred thousand round trips and as many
+non-HOT rewrites — of the rows whose model did not change included.
+
+--task-id, --project, --list-id and --label all narrow rather than exclude: naming more than one
+re-pins the intersection. At least one is required; without one the request would mean every task
+this owner has, and that is refused rather than guessed at. --label matches tasks carrying ALL of
+the labels given, exactly, case included ('orbit task labels' reports how each is spelled).
+
+--provider/--model are as on 'orbit task update': a string pins, --clear-provider/--clear-model
+returns the task to inheriting its assignee workspace's, and omitting both leaves the pin alone.
+Naming neither provider nor model is refused — the request would write nothing.
+
+A row already carrying the value being written is NOT written at all. That is the difference from
+running 'orbit task update' once per row: the value is the same, and updated_at is not bumped. The
+one reader of a task's updated_at is the project list's lastActivityAt, so this makes it more
+accurate rather than less — a project stops reporting activity for a write that changed nothing.
+
+Tasks with a run in flight are re-pinned like any other. The task row is what changes; a session
+already holding the task keeps the model it started on, and the disagreement is reported when the
+NEXT attempt starts, as TASK_RUN_PIN_CONFLICT.
+
+Prints {"changed": N} — how many rows were actually written, which is how a caller sees the
+difference between "the whole project moved" and "the whole project was already there".
+`,
 	"update": `orbit task update — update a task
 
 Usage:
@@ -679,6 +712,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskCreate(args[1:], in, out)
 	case "create-batch":
 		return cliTaskCreateBatch(args[1:], in, out)
+	case "batch-pin":
+		return cliTaskBatchPin(args[1:], out)
 	case "update":
 		return cliTaskUpdate(args[1:], in, out)
 	case "reopen":
@@ -1630,6 +1665,96 @@ func cliCapabilityActor() string {
 	return "runner_owner"
 }
 
+// cliTaskBatchPin re-pins many tasks in one request — the terminal door for "change the model of
+// every task in this project".
+//
+// It exists because the loop it replaces is 109,875 of them: one `orbit task update --model` per
+// task, each a round trip and a non-HOT rewrite of a row that in that project's case was often
+// already carrying the value being written. The selection is a filter the server applies, and the
+// write skips the rows already at the target, so both halves of that cost go.
+func cliTaskBatchPin(args []string, out io.Writer) error {
+	fs := newCLIFlagSet("orbit task batch-pin")
+	var taskIDs csvFlag
+	fs.Var(&taskIDs, "task-id", "re-pin only these tasks (comma-separated, repeatable)")
+	projectID := fs.String("project", "", "re-pin every task filed under this project")
+	listID := fs.String("list-id", "", "re-pin every task filed in this list")
+	var labels csvFlag
+	fs.Var(&labels, "label", "re-pin every task carrying ALL of these labels (comma-separated, repeatable)")
+	provider := fs.String("provider", "", "run these tasks on this provider instead of the assignee's")
+	clearProvider := fs.Bool("clear-provider", false, "inherit the assignee's provider again")
+	model := fs.String("model", "", "run these tasks on this model instead of the assignee's")
+	clearModel := fs.Bool("clear-model", false, "inherit the assignee's model again")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if *clearProvider && flagWasSet(fs, "provider") {
+		return fmt.Errorf("--clear-provider and --provider cannot be used together")
+	}
+	if *clearModel && flagWasSet(fs, "model") {
+		return fmt.Errorf("--clear-model and --model cannot be used together")
+	}
+	// Both refusals are the server's own, repeated here for the same reason `--model cannot be
+	// empty` is: at a terminal the mistake is a missing or mis-typed flag, and naming it beats
+	// returning a request the caller has to decode. Neither is a substitute for the server's check.
+	if !flagWasSet(fs, "task-id") && !flagWasSet(fs, "project") && !flagWasSet(fs, "list-id") &&
+		!flagWasSet(fs, "label") {
+		return fmt.Errorf("name at least one of --task-id, --project, --list-id or --label; a " +
+			"batch pin with no selector would mean every task this owner has")
+	}
+	if !*clearProvider && !flagWasSet(fs, "provider") && !*clearModel && !flagWasSet(fs, "model") {
+		return fmt.Errorf("name --provider and/or --model; a batch pin that changes neither writes nothing")
+	}
+	body := map[string]interface{}{}
+	if ids := uniqueStrings(taskIDs); len(ids) > 0 {
+		body["taskIds"] = ids
+	}
+	if flagWasSet(fs, "project") {
+		if strings.TrimSpace(*projectID) == "" {
+			return fmt.Errorf("--project cannot be empty")
+		}
+		body["projectId"] = strings.TrimSpace(*projectID)
+	}
+	if flagWasSet(fs, "list-id") {
+		if strings.TrimSpace(*listID) == "" {
+			return fmt.Errorf("--list-id cannot be empty")
+		}
+		body["listId"] = strings.TrimSpace(*listID)
+	}
+	if found := uniqueStrings(labels); len(found) > 0 {
+		body["labels"] = found
+	}
+	if *clearProvider {
+		body["provider"] = nil
+	} else if flagWasSet(fs, "provider") {
+		if strings.TrimSpace(*provider) == "" {
+			return fmt.Errorf("--provider cannot be empty; use --clear-provider")
+		}
+		body["provider"] = strings.TrimSpace(*provider)
+	}
+	if *clearModel {
+		body["model"] = nil
+	} else if flagWasSet(fs, "model") {
+		if strings.TrimSpace(*model) == "" {
+			return fmt.Errorf("--model cannot be empty; use --clear-model")
+		}
+		body["model"] = strings.TrimSpace(*model)
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	agentID, sessionID := cliTaskAttribution()
+	raw, err := t.pinTasksBatch(agentID, sessionID, body)
+	if err != nil {
+		return fmt.Errorf("batch pin: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task create-batch")
 	tasks := fs.String("tasks", "", "JSON array of task objects")
@@ -2506,6 +2631,7 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_evidence_decide", Argv: []string{"orbit", "task", "evidence-decide"}, Usage: "orbit task evidence-decide [task-id] --decision CONFIRM|SEND_BACK --evidence-revision N [--note TEXT] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--decision <CONFIRM|SEND_BACK> (required)", "--evidence-revision <N> (required, as evidence-list returns it)", "--note <text> (required for SEND_BACK, max 4000 characters)", "--json"}, Description: "Record this session's decision about ONE version of a task's completion evidence, as one row and nothing else — no task status, no session state, no comment. The revision answered must still be the task's latest, the criterion the evidence quotes must still be worded the way the project states it today, and the deciding session must not have done the work: each refusal carries its code and the action that would clear it. SEND_BACK carries a note saying what the next revision must show and leaves the task OPEN. The deciding Session is ORBIT_SESSION_ID, never a flag.", Mutates: true},
 	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id and status: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. The acceptance lane went with migration 0229, which removed the project acceptance judgment: the criteria are still stated, and nothing judges them. Every absent fact is null beside a reason, so \"nothing is holding this up\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion, and an item that crosses into another project carries \"handoff\": {\"reason\": \"...\"} beside its own projectId)", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create, \"runAt\" (an item's one-time scheduled start, as --run-at is on task create) among them; nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. Inside a session a real write (not --dry-run) first puts the batch on a confirmation card and waits for the user's answer; nothing is written if they decline. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title and status), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
+	{Tool: "task_batch_pin", Argv: []string{"orbit", "task", "batch-pin"}, Usage: "orbit task batch-pin (--task-id ID | --project ID | --list-id ID | --label L) (--provider SLUG | --clear-provider) (--model MODEL | --clear-model) [--json]", Arguments: []string{"--task-id <id[,id...]> (repeatable; narrows rather than excludes — naming it beside a filter re-pins the intersection)", "--project <id> (taskIds: re-pin every task filed under this project — the selector this command exists for, since a project of a hundred thousand tasks cannot be spelled as an id list)", "--list-id <id>", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--json"}, Description: "Re-pin many tasks at once: set provider and/or model on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\", which task_update can only spell as one call per task — a hundred thousand round trips and as many non-HOT rewrites, of the rows whose model did not change included. A row already carrying the target value is not written at all, so its updated_at is not bumped; that column's one reader is the project list's lastActivityAt, so this makes it more accurate, not less. At least one selector is required (a request naming none is refused rather than read as \"every task this owner has\"), and at least one of provider/model (naming neither writes nothing). Tasks with a run in flight are re-pinned like any other: a session already holding the task keeps the model it started on, and the disagreement is reported when the NEXT attempt starts, as TASK_RUN_PIN_CONFLICT. Prints {\"changed\": N}.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--project <id> | --no-project (projectId: which project this task is filed under — how a mis-filing is corrected once the task exists. --no-project takes it out of every project, --project files it under another one. Both are the ACCOUNT OWNER's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for the first and PROJECT_SCOPE_MISMATCH for the second, and a declared crossing then waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING. Read the row with `orbit project crossings`; no agent answers it)", "--handoff-reason <text> (handoff: DECLARE that this edit crosses into the project --project names, and why. Needs that --project — a crossing has to name where it is going — and carries no authority; only the ACCOUNT OWNER answers one. What it reaches today differs by door: task_create and task_create_batch file the question, while MOVING a task that already exists is refused PROJECT_SCOPE_MISMATCH declared or not, so a re-filing is the owner's own write)", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--run-at <ISO 8601 date-time> | --clear-run-at (runAt: set or move this task's one-time scheduled start, or cancel it; passing neither leaves it as it is)", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> | --clear-criterion-key (criterionKey: which of the PROJECT's stated acceptance criteria this task serves, as a key from project_get; re-sending the same key re-records that criterion's CURRENT revision, which is how work declared against wording that has since moved is brought up to date, and clearing takes the declaration back without touching the task)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_reopen", Argv: []string{"orbit", "task", "reopen"}, Usage: "orbit task reopen [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Take a stopped task — DONE, CANCELLED or FAILED — back to OPEN in place, so this same task carries the next attempt instead of a new one being filed. History is kept (evidence, comments, dependencies, the project it is filed under, its criterion declaration); the run's progress is not, because reopening starts a new lifecycle epoch. A SUPERSEDED/ABANDONED retirement is cleared in the same write, which is what makes a replaced attempt runnable again — Run refuses one while that record stands. Refusals are the server's own and pass through unread: a verification task carrying a verdict is told to revoke it first.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},

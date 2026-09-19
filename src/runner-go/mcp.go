@@ -677,6 +677,18 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return s.createBatchWithApproval(bodies)
 
+	case "task_batch_pin":
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "taskIds", "projectId", "listId", "labels", "provider", "model")
+		raw, err := s.t.pinTasksBatch(s.agentID, s.sessionID, body)
+		if err != nil {
+			// Verbatim. The two refusals this door has of its own are the codes the server sends
+			// (PIN_BATCH_NO_SELECTOR, PIN_BATCH_NOTHING_TO_WRITE), and a model that is told only
+			// "request failed" retries the same write.
+			return toolResult("batch pin failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_update":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2559,6 +2571,33 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title and status), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
 				},
 			}, "tasks"),
+		},
+		{
+			"name":        "task_batch_pin",
+			"description": "Re-pin many tasks at once: set `provider` and/or `model` on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\" — task_update can only spell that as one call per task, which is a hundred thousand round trips and as many non-HOT rewrites of rows whose model did not change: the project this exists for re-pinned 109,875 tasks one PATCH at a time, 81,219 of them inside one pg_stat_statements window, at 91.4 shared buffers and 7.4 kB of WAL each. Measured on a throwaway fixture carrying this table's real 29 indexes, walking a hundred thousand rows that way takes 218.6 s against a single project-scoped UPDATE's 31.0 s, for the same rows written. A row already carrying the target value is not written at all, so its `updated_at` is not bumped: that column's one reader is the project list's lastActivityAt, and skipping no-ops makes it more accurate, not less. `taskIds` and the filter NARROW each other — a caller naming both gets the intersection — and at least one of `taskIds`, `projectId`, `listId` or `labels` is required: a request naming none is refused (PIN_BATCH_NO_SELECTOR) rather than read as \"every task this owner has\". `provider`/`model` are three-state exactly as on task_update — omitted leaves the current pin alone, null returns the task to inheriting its assignee workspace's, a string pins it — and naming neither is refused (PIN_BATCH_NOTHING_TO_WRITE). Tasks with a run in flight are re-pinned like any other: this writes the task row only, a run already holding the task keeps the model it started on, and the disagreement is reported when the NEXT run starts, as TASK_RUN_PIN_CONFLICT. Returns `{changed}`: how many rows were actually written.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskIds": map[string]interface{}{
+					"type":        "array",
+					"minItems":    1,
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "An explicit set of tasks to re-pin. Narrows the filter when both are given. Only tasks this owner has ever match: an id that is not theirs, or does not exist, matches nothing.",
+				},
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "Re-pin every task filed under this project. The id is the one in the web UI URL (/projects/<id>); a raw UUID works too. This is the selector the door exists for — a client cannot spell a 100,000-task project as an id list without reading the whole project first and posting megabytes of ids — and it is applied by the database, so the whole project is selected by one request.",
+				},
+				"listId": map[string]interface{}{
+					"type":        "string",
+					"description": "Re-pin every task filed in this list.",
+				},
+				"labels": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Re-pin every task carrying ALL of these labels. Matched exactly, case included; task_labels reports how each one is actually spelled.",
+				},
+				"provider": providerProp,
+				"model":    modelProp,
+			}),
 		},
 		{
 			"name":        "task_update",

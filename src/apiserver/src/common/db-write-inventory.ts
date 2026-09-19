@@ -928,6 +928,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
+    at: 'tasks/tasks.service.ts#pinMany',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10, I1 — a multi-row task write), then one UPDATE over at most TASK_BATCH_PIN_CHUNK task rows, in `id` order because the subquery it selects through is `ORDER BY "id" LIMIT` and every chunk after the first starts above the previous chunk. Taken per chunk, not around the loop, so the owner mutex is never held for the length of a whole-project re-pin.',
+    identity: 'The selector and the pin, computed above the closure; `after` is the greatest id the previous chunk returned, which strictly increases and is what makes the loop terminate.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-runs the same statement, and the statement is idempotent by construction: it writes only rows whose provider/model are `IS DISTINCT FROM` the target, so a re-run after a lost answer selects fewer rows and reports the same set.',
+    effects: 'The resync publish, after the loop and only when something was written.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
     at: 'tasks/tasks.service.ts#deleteAndStopRuns',
     shape: 'TX_RETRIED',
     locks: 'user FOR UPDATE (10), the attached sessions FOR UPDATE (30, the order’s one declared exception), the projects FOR NO KEY UPDATE (40), the task rows FOR UPDATE (50), then the DELETE and its cascades.',

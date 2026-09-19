@@ -93,6 +93,7 @@ import {
   type PlanTaskFacts,
 } from './task-plan-preflight';
 import {
+  BatchPinTasksDto,
   CreateTaskBatchItemDto,
   CreateTaskCommentDto,
   CreateTaskDto,
@@ -100,6 +101,7 @@ import {
   DAG_PREVIEW_TITLES,
   MAX_DAG_OPS,
   TASK_BATCH_CREATE_MAX,
+  TASK_BATCH_PIN_CHUNK,
   type TaskVerificationDto,
   UpdateTaskDto,
 } from './dto';
@@ -12718,6 +12720,135 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       else this.publishTaskResync(ownerId);
     }
     return { updated: res.count };
+  }
+
+  /**
+   * Re-pin many tasks at once: set `provider` and/or `model` on every task a selector matches,
+   * writing only the rows the pin actually changes.
+   *
+   * Why this door exists. `batchAssign` selects by id list, which is the wrong shape for the case
+   * that provoked this one: re-pinning one project's 109,875 tasks from `deepseek-v4-pro` to
+   * `deepseek-flash` arrived as one `PATCH /tasks/:id` per task — 81,219 of them inside a single
+   * `pg_stat_statements` window (start 2026-09-17 17:07:39Z), 91.4 shared buffers and 7.4 kB of WAL
+   * each, on a statement whose whole job is to change one text column. A client cannot spell "this
+   * project" as an id list without reading the project first and posting megabytes of ids, so the
+   * selection has to be one the database applies.
+   *
+   * What this removes, in order of size:
+   *
+   * * the round trips themselves. Measured on a throwaway fixture carrying this table's real 29
+   *   indexes: 100,000 single-row updates against one project-scoped `UPDATE` is 218.6 s vs 31.0 s,
+   *   the same rows written either way. Walking all 109,875 rows is 109,875 HTTP requests, 109,875
+   *   transactions and 109,875 owner-mutex acquisitions; through this door it is 220 statements.
+   * * rows that do not need writing. `IS DISTINCT FROM` means a row already carrying the target is
+   *   not written at all, so the write volume is the true difference rather than whatever the
+   *   caller's walk happens to cover. On the fixture, a selection half of which already carried the
+   *   pin writes 37,425 rows instead of 100,000 — WAL 409 MB → 239 MB, WAL records 2.52 M → 0.91 M,
+   *   dead tuples 100,000 → 37,425 — and those rows cost a heap tuple, 29 index entries and 7.4 kB
+   *   of WAL each for no change.
+   *
+   * The second is a GUARANTEE, not a measured saving on this workload: the client that provoked the
+   * door rewrites already-converted rows only in a trickle (the project's `deepseek-flash` count
+   * tracks its call count to within ~1.3%, and an 8-row before/after 19 s apart is the direct
+   * observation of it happening at all). Treat the fixture's ratio as what the mechanism does, not
+   * as what this client is wasting today.
+   *
+   * `updated_at` is the one meaning that changes for a row this write does not need, and it has
+   * exactly one reader: `readProjectListRollups` takes `max(task.updated_at)` per project as the
+   * project's `lastActivityAt` (projects/project-list-rollup.ts). Skipping unchanged rows makes that
+   * value more accurate, not less — it stops reporting activity for a write that changed nothing.
+   * Nothing else in the product reads a task's `updated_at`; the column enters an index
+   * (`task_project_rollup_covering_idx`) and no decision.
+   *
+   * Chunked, not one statement — TASK_BATCH_PIN_CHUNK. The rows this writes are still non-HOT (the
+   * `updated_at` bump lands in that same covering index), so the chunking does not make the write
+   * cheaper per row: what it bounds is lock footprint, and it takes the owner mutex once per chunk
+   * rather than holding a project's rows — or the owner's writes — for the length of the whole
+   * operation.
+   */
+  async pinMany(ownerId: string, dto: BatchPinTasksDto) {
+    const writesProvider = dto.provider !== undefined;
+    const writesModel = dto.model !== undefined;
+    if (!writesProvider && !writesModel) {
+      throw new BadRequestException({
+        code: 'PIN_BATCH_NOTHING_TO_WRITE',
+        message: 'name provider and/or model; a batch pin that changes neither writes nothing',
+      });
+    }
+    const selectors: Prisma.Sql[] = [Prisma.sql`"owner_id" = ${ownerId}::uuid`];
+    if (dto.taskIds?.length) selectors.push(Prisma.sql`"id" = ANY(${dto.taskIds}::uuid[])`);
+    if (dto.projectId) selectors.push(Prisma.sql`"project_id" = ${dto.projectId}::uuid`);
+    if (dto.listId) selectors.push(Prisma.sql`"list_id" = ${dto.listId}::uuid`);
+    if (dto.labels?.length) selectors.push(Prisma.sql`"labels" @> ${dto.labels}::text[]`);
+    if (selectors.length === 1) {
+      // Refused rather than read as "everything this owner has". A selector is the whole of the
+      // caller's intent here, and an omission is the one spelling of it that is unrecoverable.
+      throw new BadRequestException({
+        code: 'PIN_BATCH_NO_SELECTOR',
+        message:
+          'name at least one of taskIds, projectId, listId or labels — a batch pin with no ' +
+          'selector would mean every task this owner has',
+      });
+    }
+    const assignments: Prisma.Sql[] = [];
+    const differs: Prisma.Sql[] = [];
+    if (writesProvider) {
+      assignments.push(Prisma.sql`"provider" = ${dto.provider}`);
+      differs.push(Prisma.sql`"provider" IS DISTINCT FROM ${dto.provider}`);
+    }
+    if (writesModel) {
+      assignments.push(Prisma.sql`"model" = ${dto.model}`);
+      differs.push(Prisma.sql`"model" IS DISTINCT FROM ${dto.model}`);
+    }
+    // OR, not AND: a row whose provider differs still needs writing when its model does not.
+    const difference = Prisma.join(differs, ' OR ');
+    const selector = Prisma.join(selectors, ' AND ');
+    // Keyset pagination, and it is not a detail. `ORDER BY "id" LIMIT n` with no lower bound reads
+    // from the first id every time, so chunk k re-reads everything the previous chunks already
+    // wrote and skipped — measured on the fixture, walking one project in 500-row chunks that way
+    // costs 71 s against this form's 29 s and one whole statement's 31 s (`Index Scan using
+    // task_pkey`, `Rows Removed by Filter: 100000` on a chunk that finds nothing, versus an
+    // `Index Cond: (id > …)` that starts where the last chunk stopped). It also makes termination
+    // structural rather than a consequence of the predicate: `after` strictly increases every
+    // chunk, so the loop cannot revisit a row even if something re-pins one behind it.
+    const chunk = (after: string | null) => Prisma.sql`
+      UPDATE "public"."task"
+         SET ${Prisma.join(assignments, ', ')}, "updated_at" = now()
+       WHERE "id" IN (
+               SELECT "id" FROM "public"."task"
+                WHERE ${selector}
+                  ${after ? Prisma.sql`AND "id" > ${after}::uuid` : Prisma.empty}
+                  AND (${difference})
+                ORDER BY "id"
+                LIMIT ${TASK_BATCH_PIN_CHUNK}
+             )
+      RETURNING "id"`;
+    let changed = 0;
+    let after: string | null = null;
+    for (;;) {
+      // The owner mutex, for `batchAssign`'s reason: one multi-row UPDATE takes its row locks in
+      // whatever order the plan produced them, and two overlapping selections could take them in
+      // opposite orders. Per chunk rather than around the loop, so a re-pin of a hundred thousand
+      // rows never holds the owner's writes behind it for the length of the whole operation.
+      const written = await withTransactionRetry(this.prisma, async (tx) => {
+        await this.lockDependencyGraph(tx, ownerId);
+        return tx.$queryRaw<Array<{ id: string }>>(chunk(after));
+      }, this.transientWriteRetry('tasks.pinMany'));
+      changed += written.length;
+      // A short chunk is the last one: the subquery returns fewer than its own LIMIT only when the
+      // scan ran out of rows, which is why the return value is the SUBQUERY's population and not a
+      // count of what the write changed. Restating `(difference)` on the UPDATE as well would put a
+      // concurrent writer in charge of that answer — a row it had already pinned would drop out of
+      // the RETURNING set and end the loop with work left.
+      if (written.length < TASK_BATCH_PIN_CHUNK) break;
+      // The canonical uuid spelling compares in the same order as the type does, so the greatest
+      // id of the chunk is the greatest string.
+      for (const row of written) if (after === null || row.id > after) after = row.id;
+    }
+    // Resync rather than `publishKnownTaskRows`: the changed set is whatever the filter matched,
+    // which is not a list this side ever held.
+    if (changed > 0) this.publishTaskResync(ownerId);
+    return { changed };
   }
 
   async removeComment(ownerId: string, id: string, commentId: string) {

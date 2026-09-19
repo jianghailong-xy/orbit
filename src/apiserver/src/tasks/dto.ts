@@ -796,6 +796,43 @@ export class BatchAssignDto {
 }
 
 /**
+ * How many rows one batch-pin statement writes before the next statement runs.
+ *
+ * A cap on how long one statement holds row locks, and nothing else — the write is one statement
+ * per chunk, each in its own transaction under the owner mutex, so the whole selection is written
+ * while never holding more than this many task rows at once. A single statement over a whole
+ * project was measured in the same shape as the incident this door exists to avoid: a fanout
+ * `UPDATE task ... WHERE project_id = …` held 109,874 rows for 648 s (2026-09-19 01:36).
+ */
+export const TASK_BATCH_PIN_CHUNK = 500;
+
+/**
+ * Re-pin many tasks at once. The gate for "change the provider/model of every task in this
+ * project", which until now could only be spelled as one `PATCH /tasks/:id` per row — 109,875
+ * round trips and as many non-HOT heap tuples for one project.
+ *
+ * `taskIds` and the filter narrow each other rather than excluding each other: a caller that names
+ * both gets the intersection. At least one of them is required, and the service refuses a request
+ * that names none of them rather than reading it as "every task this owner has".
+ *
+ * `provider`/`model` are three-state exactly as on `UpdateTaskDto`: omitted leaves the current pin
+ * alone, null returns the task to inheriting its assignee workspace's, a string pins it. Naming
+ * neither is refused — the request would write nothing.
+ */
+export class BatchPinTasksDto {
+  @IsOptional() @IsArray() @ArrayMinSize(1) @IsPublicId({ each: true }) taskIds?: string[];
+  @IsOptional() @IsPublicId() projectId?: string;
+  @IsOptional() @IsPublicId() listId?: string;
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(TASK_LABEL_MAX_LENGTH, { each: true })
+  labels?: string[];
+  @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) model?: string | null;
+}
+
+/**
  * A structured progress report (`TaskProgressService.report`): each field named replaces that field and
  * `null` clears it. Only the shapes are held here; the ranges, and what the fields add up to, are the
  * service's to refuse, so a caller that is not an HTTP request meets the same rules.

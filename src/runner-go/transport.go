@@ -1331,6 +1331,17 @@ func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}
 	return out, err
 }
 
+// pinTasksBatch re-pins many tasks in one request — the door for "change the model of every task
+// in this project", which one PATCH per task can only spell as a hundred thousand round trips, each
+// one a non-HOT rewrite of a row whose model did not change. The server applies the selection, so
+// the caller never has to hold the id list.
+func (t *Transport) pinTasksBatch(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/batch-pin", body, &out, taskOpTimeout,
+		taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
 // updateTask carries the acting session, which the server reads for decisions that turn on WHO is
 // writing, including independent verification. Direct DONE is refused for every actor; retaining
 // the header keeps the refusal attributable and preserves the separate verdict-independence rule.

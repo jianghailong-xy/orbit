@@ -17,6 +17,7 @@ import { CreateTaskListDto, UpdateTaskListDto } from '../task-lists/dto';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import {
   AddDependencyDto,
+  BatchPinTasksDto,
   CreateTaskCommentDto,
   CreateTaskDto,
   CreateTasksBatchDto,
@@ -185,6 +186,18 @@ export class RunnerTasksController {
       // pure waste — and a caller walking every page never reads them.
       counts: 'none',
     });
+  }
+
+  /**
+   * Re-pin many tasks in one request. The door `orbit task batch-pin` calls, and the one that
+   * replaces "one `PATCH /tasks/:id` per task" for the case that produced the N-call workload: a
+   * whole project re-pinned to another model. See `TasksService.pinMany` for what stays the same
+   * and what does not — in particular that a row already carrying the target value is skipped, so
+   * its `updated_at` (the project list's `lastActivityAt`) is not bumped for a no-op.
+   */
+  @Post('tasks/batch-pin')
+  pinTasks(@CurrentRunner() runner: Runner, @Body() dto: BatchPinTasksDto) {
+    return this.tasks.pinMany(runner.ownerId, dto);
   }
 
   /**
