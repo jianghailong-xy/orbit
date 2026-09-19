@@ -1206,6 +1206,13 @@ export class RunnerApiController {
         // its own failures — a candidate not made now is made by the next landing.
         await this.promotions?.considerCandidate(after.considerPromotionProjectId);
       }
+      // §7.6 V12 / criterion 13: the merge approval this result may have opened is one of the four
+      // things only the account owner can answer, so their devices are told. Handed the item id
+      // rather than a decision: which items reach a phone is `notifyOwnerItem`'s to decide, and the
+      // exception items opened above — still the coordinator's — answer null there and send nothing.
+      if (applied.answer.openItemId) {
+        void this.push.notifyOwnerItem(applied.answer.openItemId);
+      }
     }
     return applied.answer;
   }
