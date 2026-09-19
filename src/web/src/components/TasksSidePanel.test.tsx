@@ -404,9 +404,10 @@ describe('TasksSidePanel workspace rows', () => {
     expect(trailing).toContain('aria-label="1 background job running"');
     expect(trailing).not.toContain('anticon-spin');
 
-    // Muted, and the only animated mark in this rail — the brand dot beside it stays still.
+    // Same brand blue as the dot above — work in flight is activity too — and the only animated
+    // mark in this rail: the dot beside it stays still.
     const jobsRule = styles.match(/\.tp-workspace-icon-jobs\s*\{([\s\S]*?)\}/)?.[1] ?? '';
-    expect(jobsRule).toMatch(/background:\s*var\(--text-3\)/);
+    expect(jobsRule).toMatch(/background:\s*var\(--brand\)/);
     expect(jobsRule).toContain('animation: status-glyph-breathe');
     expect(styles).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.tp-workspace-icon-jobs\s*\{\s*animation:\s*none;/,
@@ -416,7 +417,7 @@ describe('TasksSidePanel workspace rows', () => {
     );
 
     // The collapsed rail keeps the language it already has for the spinner: the mark sits at the
-    // avatar's corner and becomes a quiet dot there, muted instead of brand.
+    // avatar's corner and becomes the same brand dot there, breathing instead of still.
     const collapsed = renderToStaticMarkup(
       <WorkspaceStateMark compact offline={false} running={false} jobs={1} needsYou={0} />,
     );
@@ -428,7 +429,7 @@ describe('TasksSidePanel workspace rows', () => {
     );
     expect(
       desktopBlock.match(/\.app-shell \.app-nav\.collapsed \.tp-rail-jobs::after\s*\{([\s\S]*?)\}/)?.[1] ?? '',
-    ).toMatch(/background:\s*var\(--text-3\);[\s\S]*animation:\s*status-glyph-breathe/);
+    ).toMatch(/background:\s*var\(--brand\);[\s\S]*animation:\s*status-glyph-breathe/);
   });
 
   it('keeps needs-you and offline states ahead of the quiet running dot', () => {

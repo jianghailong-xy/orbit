@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Workspace 活跃点 — 后台任务也算活跃</title>
+<style>
+  /* Tokens copied from src/web/src/index.css so the mockup measures like the app. */
+  .light {
+    --bg-raised: #ffffff;
+    --bg-hover: #f5f6f7;
+    --text-1: #1f2329;
+    --text-3: #8f959e;
+    --brand: #3370ff;
+    --brand-tint: #eaf1ff;
+  }
+  .dark {
+    --bg-raised: #2b2b2e;
+    --bg-hover: #343437;
+    --text-1: #c9ced5;
+    --text-3: #8b9099;
+    --brand: #5b8cff;
+    --brand-tint: rgba(91, 140, 255, 0.16);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 34px 32px 56px;
+    background: #ececef;
+    color: #16161a;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { margin: 0 0 6px; font-size: 20px; font-weight: 650; }
+  .lede { margin: 0 0 24px; max-width: 980px; color: #4b4f57; }
+  .lede code { background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px; font-size: 12.5px; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-bottom: 26px; }
+  .col > h2 {
+    margin: 0 0 8px; font-size: 13px; font-weight: 600; letter-spacing: .02em;
+    color: #4b4f57; text-transform: none;
+  }
+  .panel {
+    border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(0,0,0,.10);
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .nav {
+    background: var(--bg-raised); padding: 10px 8px; width: 300px;
+  }
+  .caption {
+    margin: 8px 0 0; font-size: 12.5px; color: #6b7078;
+  }
+
+  /* --- the app's own row geometry (.tp-item / .tp-label / .tp-count) --- */
+  .tp-item {
+    display: flex; align-items: center; gap: 10px;
+    height: 36px; padding: 0 8px; border-radius: 6px;
+    color: var(--text-1); font-size: 14px;
+  }
+  .tp-item.hover { background: var(--bg-hover); }
+  .tp-item.active { background: var(--brand-tint); color: var(--brand); }
+  .tp-ico { display: flex; font-size: 16px; color: var(--text-2, var(--text-1)); flex: none; }
+  .tp-item.active .tp-ico { color: var(--brand); }
+  .tp-label { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .tp-workspace-name { flex: none; }
+  .tp-workspace-separator { flex: none; color: var(--text-3); }
+  .tp-workspace-runner { flex: 1; color: var(--text-3); }
+  .tp-count {
+    flex: none; font-family: inherit; font-size: 12px; font-weight: 400;
+    line-height: 1; color: var(--text-3);
+  }
+  .tp-workspace-icon { position: relative; }
+  .tp-workspace-icon svg { width: 16px; height: 16px; fill: currentColor; display: block; }
+
+  /* --- the mark under discussion: 6px dot at the folder's corner --- */
+  .dot {
+    position: absolute; right: -3px; bottom: -2px; z-index: 2;
+    width: 6px; height: 6px; border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--bg-raised);
+  }
+  .dot.running { background: var(--brand); }
+  .dot.jobs-before { background: var(--text-3); animation: breathe 2.4s ease-in-out infinite; }
+  .dot.jobs-after  { background: var(--brand);   animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .42; } }
+  .trough { animation: none; opacity: .42; }
+
+  /* offline badge, so the mockup shows the dot never fights it */
+  .badge {
+    position: absolute; right: -6px; bottom: -5px; z-index: 1;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--bg-raised); box-shadow: 0 0 0 1px var(--bg-raised);
+    color: var(--text-3); display: flex; align-items: center; justify-content: center;
+  }
+  .badge svg { width: 9px; height: 9px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
+  .changed { outline: 1.5px dashed #d4380d; outline-offset: 1px; }
+  .flag {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+    background: #fff1e8; color: #d4380d; font-size: 11px; font-weight: 600; vertical-align: 1px;
+  }
+
+  /* swatch strip: what the two blue dots differ by, at a glance */
+  .swatches { display: flex; gap: 30px; margin-top: 26px; flex-wrap: wrap; }
+  .swatch { display: flex; align-items: center; gap: 10px; }
+  .swatch .chip {
+    position: relative; width: 34px; height: 34px; border-radius: 8px;
+    background: #fff; border: 1px solid rgba(0,0,0,.10);
+    display: flex; align-items: center; justify-content: center;
+    color: #646a73;
+  }
+  .swatch .chip.dk { background: #2b2b2e; border-color: rgba(255,255,255,.12); color: #a7adb6; }
+  .swatch .chip .tp-workspace-icon { color: inherit; }
+  .swatch small { display: block; color: #6b7078; font-size: 12px; line-height: 1.4; }
+  .swatch b { font-size: 13px; font-weight: 600; display: block; }
+</style>
+
+<body>
+  <h1>Workspace 活跃点：后台任务在跑，也算这个 Workspace 活跃</h1>
+  <p class="lede">
+    只改一处：文件夹右下角那颗「有后台作业在飞、但没人在生成」的点，颜色从 <code>--text-3</code> 灰
+    改成 <code>--brand</code> 蓝。形状、位置、6px 尺寸、呼吸动画（2.4s，低谷 0.42 透明度）、
+    以及与 <code>needs-you</code> / 掉线徽标 / 生成中蓝点的优先级，全部不动。
+  </p>
+
+  <div class="pair">
+    <div class="col light">
+      <h2>现状 · 浅色（后台作业 = 灰点）</h2>
+      <div class="panel"><div class="nav">
+        <div class="tp-item hover">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot running"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span>
+          <kbd class="tp-count">⌘1</kbd>
+        </div>
+        <div class="tp-item active changed">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot jobs-before"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span>
+          <kbd class="tp-count">⌘8</kbd>
+        </div>
+        <div class="tp-item">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">wikova-prod</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span>
+          <kbd class="tp-count">⌘3</kbd>
+        </div>
+        <div class="tp-item">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="badge"><svg viewBox="0 0 12 12"><path d="M2 10L10 2"/><path d="M3 3l6 6"/></svg></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">wikova-data</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span>
+          <kbd class="tp-count">⌘4</kbd>
+        </div>
+      </div></div>
+      <p class="caption">「rocm」有 2 个后台作业在飞 → 灰点（呼吸）。悬停/读屏文案是 “2 background jobs running”。</p>
+    </div>
+
+    <div class="col light">
+      <h2>改后 · 浅色（后台作业 = 蓝点，仍呼吸）</h2>
+      <div class="panel"><div class="nav">
+        <div class="tp-item hover">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot running"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span>
+          <kbd class="tp-count">⌘1</kbd>
+        </div>
+        <div class="tp-item active changed">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot jobs-after"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span>
+          <kbd class="tp-count">⌘8</kbd>
+        </div>
+        <div class="tp-item">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">wikova-prod</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span>
+          <kbd class="tp-count">⌘3</kbd>
+        </div>
+        <div class="tp-item">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="badge"><svg viewBox="0 0 12 12"><path d="M2 10L10 2"/><path d="M3 3l6 6"/></svg></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">wikova-data</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation</span></span>
+          <kbd class="tp-count">⌘4</kbd>
+        </div>
+      </div></div>
+      <p class="caption">同样的「rocm」→ 蓝点。和上面那颗生成中的蓝点只差一次呼吸：静止 = 有人在生成，呼吸 = 只有后台作业在跑。</p>
+    </div>
+  </div>
+
+  <div class="pair">
+    <div class="col dark">
+      <h2>现状 · 深色</h2>
+      <div class="panel" style="border-color: rgba(255,255,255,.10)"><div class="nav">
+        <div class="tp-item hover">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot running"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span>
+          <kbd class="tp-count">⌘1</kbd>
+        </div>
+        <div class="tp-item active changed">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot jobs-before"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span>
+          <kbd class="tp-count">⌘8</kbd>
+        </div>
+      </div></div>
+    </div>
+    <div class="col dark">
+      <h2>改后 · 深色（<code>--brand</code> = #5b8cff）</h2>
+      <div class="panel" style="border-color: rgba(255,255,255,.10)"><div class="nav">
+        <div class="tp-item hover">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot running"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">orbit</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">wikova</span></span>
+          <kbd class="tp-count">⌘1</kbd>
+        </div>
+        <div class="tp-item active changed">
+          <span class="tp-ico tp-workspace-icon">
+            <svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>
+            <span class="dot jobs-after"></span>
+          </span>
+          <span class="tp-label"><span class="tp-workspace-name">rocm</span><span class="tp-workspace-separator">·</span><span class="tp-workspace-runner">workstation-gpu</span></span>
+          <kbd class="tp-count">⌘8</kbd>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="swatches light">
+    <div class="swatch">
+      <span class="chip"><span class="tp-workspace-icon"><span class="dot running" style="position:static;display:block"></span></span></span>
+      <span><b>静止蓝点</b><small>有人在生成（running）</small></span>
+    </div>
+    <div class="swatch">
+      <span class="chip"><span class="tp-workspace-icon"><span class="dot jobs-after" style="position:static;display:block;animation:none"></span></span></span>
+      <span><b>蓝点 · 呼吸峰</b><small>仅后台作业（jobs）</small></span>
+    </div>
+    <div class="swatch">
+      <span class="chip"><span class="tp-workspace-icon"><span class="dot jobs-after trough" style="position:static;display:block"></span></span></span>
+      <span><b>蓝点 · 呼吸谷</b><small>同上，2.4s 循环里的 0.42 透明度</small></span>
+    </div>
+    <div class="swatch">
+      <span class="chip dk"><span class="tp-workspace-icon"><span class="dot jobs-after" style="position:static;display:block;animation:none"></span></span></span>
+      <span><b>深色下的同一颗</b><small>--brand 在深色是 #5b8cff</small></span>
+    </div>
+  </div>
+</body>
+</html>

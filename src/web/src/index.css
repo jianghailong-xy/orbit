@@ -767,12 +767,12 @@ body {
      --brand-tint is translucent and would visually merge the dot back into the folder. */
   box-shadow: 0 0 0 1.5px var(--bg-raised);
 }
-/* The second, quieter activity mark: this workspace has a background JOB in flight (a bg_run that
-   will end), not a process it merely left up. Same slot and same dot, muted instead of brand blue —
-   the blue one above still means the agent is generating — and breathing rather than rotating,
-   which is the whole vocabulary here (see the session row's terminal glyph, which breathes for the
-   same reason). Motion is what separates it from the still dot at a glance; without it the two
-   would be the same shape in two greys. */
+/* The second activity mark: this workspace has a background JOB in flight (a bg_run that will
+   end), not a process it merely left up. Same slot, same dot, same brand blue — a workspace with
+   work in it reads as active whether or not somebody is generating — and breathing rather than
+   still, which is the whole vocabulary here (see the session row's terminal glyph, which breathes
+   for the same reason). Motion is what separates it from the dot above at a glance; without it the
+   two would be the same shape in the same blue. */
 @keyframes status-glyph-breathe {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.42; }
@@ -789,7 +789,7 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-3);
+  background: var(--brand);
   box-shadow: 0 0 0 1.5px var(--bg-raised);
   animation: status-glyph-breathe 2.4s ease-in-out infinite;
 }
@@ -1140,8 +1140,8 @@ body {
   .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-running {
     display: block;
   }
-  /* Same reveal, same slot, one grey quieter — a rule of its own so the existing one keeps
-     reading as the single statement about the working dot. */
+  /* Same reveal, same slot, same dot — a rule of its own so the existing one keeps reading as the
+     single statement about the working dot. */
   .app-shell .app-nav:not(.collapsed) .tp-workspace-icon-jobs {
     display: block;
   }
@@ -1158,8 +1158,9 @@ body {
     background: transparent;
     animation: none !important;
   }
-  /* Both activity kinds speak the same shape in the collapsed rail — a quiet dot — and differ by
-     colour: brand for the agent generating, muted and breathing for background work. */
+  /* Both activity kinds speak the same shape in the collapsed rail — a brand-blue dot on the
+     avatar's corner — and differ by motion: still for the agent generating, breathing for
+     background work. */
   .app-shell .app-nav.collapsed .tp-rail-jobs {
     background: transparent;
     animation: none !important;
@@ -1176,7 +1177,7 @@ body {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--text-3);
+    background: var(--brand);
     box-shadow: 0 0 0 1.5px var(--bg-raised);
     transform: translate(-50%, -50%);
     animation: status-glyph-breathe 2.4s ease-in-out infinite;

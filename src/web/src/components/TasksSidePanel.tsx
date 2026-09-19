@@ -435,9 +435,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   );
   // Neither of the two above: sessions with a background JOB in flight. The rail was silent about
   // these — a workspace running a build or a stress test, with nobody generating in it, looked
-  // exactly like one that had left a dev server up. Drawn as its own muted mark (the session row's
-  // terminal glyph, breathing) rather than as the brand-blue dot, which keeps meaning "the agent
-  // is generating right now".
+  // exactly like one that had left a dev server up. Work in flight is activity, so the workspace
+  // dot lights up brand blue here too; what still separates it from the generating dot is motion
+  // (breathing, not still), never colour.
   const workspaceJobs = useMemo(
     () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.jobs ?? 0])),
     [sessionCounts.data],
@@ -886,8 +886,8 @@ export function WorkspaceRow({
   // Attention and disconnection remain higher priority than background activity. CSS reveals this
   // quiet mark on the expanded desktop sidebar; the mobile drawer keeps its trailing spinner.
   const showRunningDot = running && !offline && needsYou === 0;
-  // One slot, two greys: the blue dot means somebody is generating, this one means a job is in
-  // flight here (and generation, when it happens, is the louder of the two).
+  // One slot, one blue: this dot means a job is in flight here with nobody generating, which the
+  // still dot above outranks when generation happens. The two differ by breathing only.
   const showJobsDot = jobs > 0 && !running && !offline && needsYou === 0;
   return (
     <div
