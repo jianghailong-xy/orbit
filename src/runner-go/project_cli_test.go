@@ -1135,16 +1135,6 @@ func TestProjectWriteHelpNamesOnlyTheStructuredAuthoringShape(t *testing.T) {
 
 // ── `orbit project status` (contract AC10, unit 20) ───────────────────────────────────────────
 
-// The control loop's own state, served as the server composed it. Two things are being asserted:
-// the route (the runner bridge, not the JWT-guarded user one), and that the body reaches stdout
-// verbatim — a CLI that reformatted it would be a second, disagreeing account of what the
-// coordinator is doing, and this command exists precisely because there was no single account.
-const projectStatusJSON = `{"projectId":"proj-1","project":{"status":"OPEN"},` +
-	`"coordination":{"agentId":null,"agentIdAbsentReason":"NO_COORDINATOR_AGENT"},` +
-	`"policy":{"coordinatorEnabled":false,"automationPolicy":"MANUAL","configRevision":"3"},` +
-	`"runtime":{"runState":"PLANNING","lease":null,"leaseAbsentReason":"NOT_LEASED"},` +
-	`"nextWake":{"at":null,"absentReason":"NO_WAKE_SCHEDULED"}}`
-
 // No id, no request. The task commands default to ORBIT_TASK_ID; there is no ORBIT_PROJECT_ID and
 // guessing one would read a different project than the caller meant.
 func TestProjectStatusRequiresAnID(t *testing.T) {
