@@ -2966,6 +2966,13 @@ export class RunnerApiController {
           orderBy: { seq: 'desc' },
           select: { id: true },
         });
+    // The other reader a card can have, and the one the turn is NOT a proxy for: an ask made from a
+    // runner-hosted job is consumed by that process, which outlives the turn — so the turn above is
+    // recorded beside it and not instead of it. Sent by the asker because only the asker knows what
+    // it is: the runner exports the job id to the job's own environment and the CLI hands it back,
+    // and an in-turn MCP call has none (`sessions/abandoned-approvals.ts` reads it back against the
+    // jobs the runner says are still up).
+    const backgroundJobId = stripNul(dto.backgroundJobId ?? '').trim();
     const approval =
       existing ??
       (await this.prisma.approval.create({
@@ -2979,6 +2986,7 @@ export class RunnerApiController {
           input: stripNul(dto.input ?? {}) as Prisma.InputJsonValue,
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
+          backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
           ...(autoAllowed
             ? { status: 'ALLOWED', decidedAt: new Date(), message: AUTO_ALLOWED_MESSAGE }
             : {}),

@@ -324,3 +324,43 @@ func TestMCPCreateBatchDryRunAsksNobody(t *testing.T) {
 		t.Fatalf("hits = %v, want the preview call alone", *hits)
 	}
 }
+
+// A card asked for from inside a runner-hosted job names that job, and one asked for in the turn
+// does not.
+//
+// The job id is what the reaper checks a card against before collecting it: a card that names a job
+// still in the session's running set is left PENDING when the turn ends, because the CLI that filed
+// it is still polling for the answer (apiserver sessions/abandoned-approvals.ts). Both halves are
+// asserted, because a card that names a job it does not belong to would keep a question alive that
+// nobody is reading.
+func TestCardsNameTheBackgroundJobThatAskedForThem(t *testing.T) {
+	ask := func(t *testing.T, jobID string) map[string]interface{} {
+		t.Helper()
+		if jobID == "" {
+			t.Setenv(envBgJobID, "")
+		} else {
+			t.Setenv(envBgJobID, jobID)
+		}
+		srv, _, filed := createApprovalServer(t, `{"status":"ALLOWED"}`, `{"id":"t1"}`)
+		mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+		if res := mcp.callTool("task_create", map[string]interface{}{
+			"title": "a", "completionCriterion": "EVIDENCE_JUDGMENT",
+		}); res["isError"] == true {
+			t.Fatalf("task_create returned an error: %#v", res["content"])
+		}
+		return filed
+	}
+
+	filed := ask(t, "bgj_0123456789ab")
+	if filed["backgroundJobId"] != "bgj_0123456789ab" {
+		t.Fatalf("card backgroundJobId = %#v, want the job the CLI runs in", filed["backgroundJobId"])
+	}
+	if filed["toolName"] != taskCreateApprovalToolName {
+		t.Fatalf("filed as %v", filed["toolName"])
+	}
+
+	inTurn := ask(t, "")
+	if _, named := inTurn["backgroundJobId"]; named {
+		t.Fatalf("an in-turn ask named a job: %#v", inTurn["backgroundJobId"])
+	}
+}

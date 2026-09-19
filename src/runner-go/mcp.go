@@ -1173,10 +1173,19 @@ func askBeforeCreate(t *Transport, sessionID, toolName string, input interface{}
 	if sessionID == "" {
 		return "", nil
 	}
-	id, err := t.createApproval(context.Background(), sessionID, map[string]interface{}{
+	body := map[string]interface{}{
 		"toolName": toolName,
 		"input":    input,
-	})
+	}
+	// Who is asking, when it is a runner-hosted job rather than the turn: this loop is a process
+	// that goes on polling after the turn ends, so the server must not collect the card when the
+	// turn does (apiserver sessions/abandoned-approvals.ts). The runner exported the id to this
+	// process's environment; an in-turn MCP call has none, and its card is collected with the turn
+	// exactly as it always was.
+	if jobID := strings.TrimSpace(os.Getenv(envBgJobID)); jobID != "" {
+		body["backgroundJobId"] = jobID
+	}
+	id, err := t.createApproval(context.Background(), sessionID, body)
 	if err != nil {
 		return "", fmt.Errorf("could not register approval: %w", err)
 	}

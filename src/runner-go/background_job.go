@@ -353,6 +353,13 @@ func (b *bgTailer) startJob(spec bgJobSpec) (bgJobStatus, error) {
 		// raw UUID is not the spelling anything else here speaks.
 		cmd.Env = append(cmd.Env, "ORBIT_SESSION_ID="+publicID(spec.SessionID))
 	}
+	// And which job it is, for the same reason and from the same place: the runner minted this id,
+	// `envWithAgent` has just stripped any the caller tried to pass, and without it a gated write
+	// from inside this job files a card that the turn-ended reaper collects the moment the turn
+	// ends — while the CLI that would have consumed the answer is still polling (`askBeforeCreate`).
+	// No `publicID` here: that encoding is for UUIDs, and this is already the opaque token the
+	// runner hands out (`newBgJobID`), the spelling `bg_list`/`bg_output` take.
+	cmd.Env = append(cmd.Env, envBgJobID+"="+jobID)
 	cmd.Stdout = f
 	cmd.Stderr = f
 	if err := cmd.Start(); err != nil {

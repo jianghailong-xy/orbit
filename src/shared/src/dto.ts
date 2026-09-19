@@ -1188,6 +1188,11 @@ export interface ApprovalCreateRequest {
   toolName: string;
   input: unknown;
   toolUseId?: string;
+  /** The runner-hosted job that is reading this card, when the ask came from one rather than from
+   *  the turn it names. The runner exports it to every job it starts (ORBIT_BG_JOB_ID) and the CLI
+   *  hands it back here; `sessions/abandoned-approvals.ts` refuses to collect a card whose job is
+   *  still up, because that process outlives the turn. Absent on every in-turn ask. */
+  backgroundJobId?: string;
 }
 
 /** A human's answers to an AskUserQuestion, keyed by question text → the selected

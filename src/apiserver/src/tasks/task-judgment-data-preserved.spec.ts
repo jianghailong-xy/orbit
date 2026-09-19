@@ -992,7 +992,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0287_task_list_done_count',
       '0288_session_running_bg_jobs',
       '0289_session_running_bg_job_activity',
-      '0290_retire_dispatch_authority_fanout'],
+      '0290_retire_dispatch_authority_fanout',
+      // `approval.background_job_id`: one nullable column, no function, no trigger, and nothing it
+      // touches is one of the six preserved objects — the row it lives on was never in the
+      // judgment tables this file guards.
+      '0291_approval_background_job'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

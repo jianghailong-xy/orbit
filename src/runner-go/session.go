@@ -1354,10 +1354,15 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 // envWithAgent returns the runner's own environment with the agent's custom env vars
 // layered on top. Shared by the claude process and `!`-shells so a command run either
 // way sees the same configured environment.
+//
+// The keys stripped here are the ones that say what a process IS — which session, which agent,
+// which task, and (for a runner-hosted job) which job — because the runner states those itself
+// where they apply and a caller's claim about them is a claim it has no business making. Every
+// one of them is put back by the spawn site that knows, not by the caller.
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
 		return true
 	default:
 		return false

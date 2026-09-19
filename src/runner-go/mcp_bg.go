@@ -15,6 +15,13 @@ import (
 const (
 	envBgSocket = "ORBIT_BG_SOCKET"
 	envBgToken  = "ORBIT_BG_TOKEN"
+	// The job a process IS, as opposed to the two above, which are how the engine's MCP child
+	// reaches the service that starts jobs. Only a job's own environment carries this one, and the
+	// launcher puts it there from the id it minted itself (background_job.go) — an agent may not
+	// CLAIM a job any more than it may claim a session. A gated write reads it back and names it on
+	// the confirmation card, which is what keeps that card off the turn-ended reaper: the process
+	// polling for the answer outlives the turn (apiserver sessions/abandoned-approvals.ts).
+	envBgJobID = "ORBIT_BG_JOB_ID"
 )
 
 // bgToolNames is the set callTool routes here, and the set the CLI parity census

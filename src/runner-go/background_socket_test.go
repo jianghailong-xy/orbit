@@ -183,6 +183,69 @@ func TestBgJobCarriesTheSessionTheRunnerKnowsSoGatedWritesStillAsk(t *testing.T)
 	}
 }
 
+// A job also carries WHICH job it is, so a card it asks for is not collected with the turn.
+//
+// The session id alone made the gated writes ask; it did not keep the card alive to be answered. A
+// runner-hosted job outlives the turn — that is what hosting it on the runner is for — and the CLI
+// inside it goes on polling after the turn ends, so the turn-ended reaper collected the card and the
+// owner's later Allow reached nobody (apiserver sessions/abandoned-approvals.ts). The card now names
+// the job, off the environment the launcher writes here. It is the runner's own id in both senses
+// that matter: the value `bg_list` and `bg_output` answer to, and one the caller's own `env` cannot
+// claim any more than it can claim a session.
+func TestBgJobCarriesItsOwnIdSoItsCardsOutliveTheTurn(t *testing.T) {
+	svc, _, stop := newTestBgJobService(t)
+	defer stop()
+	svc.sessionID = "01a0b054-0e51-730d-8025-958b250fcf35"
+	socket := filepath.Join(t.TempDir(), "bg.sock")
+	token := filepath.Join(t.TempDir(), "bg.token")
+	stopService, err := startBgJobService(context.Background(), svc, socket, token)
+	if err != nil {
+		t.Fatalf("service did not start: %v", err)
+	}
+	defer stopService()
+
+	raw, err := bgSocketCall(socket, "test-token", "run", map[string]interface{}{
+		"command": `printf 'JOB=[%s]\n' "$ORBIT_BG_JOB_ID"`,
+		"kind":    bgKindJob,
+		// The claim, which must lose: a job that can name another job can keep another job's card
+		// alive, and the reaper would read that as "somebody is still reading this".
+		"env": map[string]interface{}{"ORBIT_BG_JOB_ID": "bgj_claimedsomeoneelses"},
+	})
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	var started bgJobStatus
+	if err := json.Unmarshal(raw, &started); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(started.JobID, "bgj_") || started.JobID == "bgj_claimedsomeoneelses" {
+		t.Fatalf("job id = %q, want the runner's own token", started.JobID)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	var out bgJobOutput
+	for time.Now().Before(deadline) {
+		raw, err = bgSocketCall(socket, "test-token", "output", map[string]interface{}{"jobId": started.JobID})
+		if err != nil {
+			t.Fatalf("output failed: %v", err)
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Status != bgStatusRunning {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if out.Status != bgStatusCompleted {
+		t.Fatalf("job status = %q, want it to have finished", out.Status)
+	}
+	if !strings.Contains(out.Output, "JOB=["+started.JobID+"]") {
+		t.Fatalf("job environment = %q, want JOB=[%s]: the id the job files its cards under, and "+
+			"what the reaper checks them against", strings.TrimSpace(out.Output), started.JobID)
+	}
+}
+
 // kind is required and has no default. Guessing it is how a six-hour build gets
 // treated as a restartable dev server, so the door refuses rather than assumes.
 func TestBgJobSocketRefusesAJobWithoutAKind(t *testing.T) {

@@ -55,6 +55,10 @@ function makeController(current: LockedSnapshot) {
         order.push('read');
         return current;
       },
+      // The reaper's other fact: which runner-hosted jobs are still up, so a card one of them is
+      // reading is not collected with the turn (`sessions/abandoned-approvals.ts`). None here —
+      // the lock ordering this file pins is about turns, and a job would only add a second reader.
+      findUnique: async () => ({ runningBgShells: [] }),
       updateMany: async ({ data }: { data: { status: RunStatus } }) => {
         order.push('update');
         statusWrites.push(data.status);

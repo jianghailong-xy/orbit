@@ -50,6 +50,10 @@ function makeController({
         numTurns: 6,
         commitStatus,
       }),
+      // What the reaper reads to decide whether a card raised by a runner-hosted job is still a
+      // live question (see `sessions/abandoned-approvals.ts`). No job is up here, so every card in
+      // this fixture is the turn's and goes with it.
+      findUnique: async () => ({ runningBgShells: [] }),
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
         updates.push(data);
         return { count: 1 };

@@ -1522,6 +1522,13 @@ model Approval {
   /// ANSWERED, the poll loop that would consume the answer is gone, so the call can never be
   /// answered. See prisma/migrations/0252_approval_opening_turn and sessions/abandoned-approvals.ts.
   turnId       String?   @map("turn_id") @db.Uuid
+  /// The runner-hosted job whose process is reading this card, when the ask came from one instead
+  /// of from the turn (`runner-go` exports ORBIT_BG_JOB_ID to every job it starts). A job outlives
+  /// the turn — that is the whole point of hosting it on the runner — so this is the second way a
+  /// card can still have a reader, and `sessions/abandoned-approvals.ts` refuses to collect a row
+  /// whose job is still up (Session.runningBgShells). No FK, like `turnId`: the job id is a token
+  /// the runner mints for a process, not a row anything can reference.
+  backgroundJobId String? @map("background_job_id")
   // PENDING -> ALLOWED | DENIED, or ABANDONED when the turn that raised it ended unanswered
   status       String    @default("PENDING")
   message      String? // optional deny reason / note from the human

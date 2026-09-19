@@ -40,6 +40,10 @@ function makeController(
         retryAt: current.retryAt ?? null,
         numTurns: current.numTurns,
       }),
+      // Read by the reaper, which needs to know which runner-hosted jobs are still up before it
+      // decides whether a card raised by one can still be answered (`approval.background_job_id`).
+      // This session has none: every card here is the turn's, and collected with it.
+      findUnique: async () => ({ runningBgShells: [] }),
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
         updates.push(data);
         return { count: 1 };

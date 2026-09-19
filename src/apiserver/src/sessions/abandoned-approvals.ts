@@ -29,6 +29,33 @@ import { Prisma } from '@prisma/client';
  * runs INSIDE that turn, so once the turn is ANSWERED there is nothing left that could receive one.
  * The row is not "probably stale"; it is unanswerable.
  *
+ * THE ONE CONSUMER THAT OUTLIVES ITS TURN
+ * ---------------------------------------
+ * A runner-hosted job. That is what hosting the process on the runner is FOR — it goes on running,
+ * and polling, after the turn that started it has ended — so for a card raised from one the premise
+ * above is simply false, and collecting it drops an answer the owner is about to give. 2026-09-19:
+ * `orbit project resolve-blocker` run inside a background job filed a card, its turn ended, the row
+ * was collected while the CLI was still polling, and the owner's Allow reached nobody; the same
+ * card raised in-turn beside it was answered and written.
+ *
+ * Such a card names its job (`approval.background_job_id`, migration 0291) and is left alone for as
+ * long as that job is up. That is `Session.running_bg_shells` — the runner reports a job's `running`
+ * and its end, and the column means "a process is still up" (schema.prisma), which is exactly the
+ * question. Deliberately NOT `runningBgJobs` (whose narrower "is work in flight" excludes a
+ * `service`) and deliberately not the freshness rule built over its activity: a job blocked on this
+ * card writes nothing BY DEFINITION, so a long silence is what an answerable card looks like rather
+ * than evidence against one. When the job does go, its poll loop goes with it — the CLI is a
+ * descendant of the job's process tree — and the next reap collects the row with a sentence saying
+ * which reader was lost.
+ *
+ * This says nothing about the OTHER reaper below (`reapApprovalsOfReplacedSupervisor`), and cannot:
+ * its fact is that this session's supervising process was replaced, it collects every pending row
+ * on that fact, and the set read here is emptied by the very takeover it runs in. A runner-hosted
+ * job may also be handed on to the next image rather than dying with the predecessor, so a card it
+ * is still reading can be collected there — the same loss, at a boundary this file cannot decide
+ * from current rows. Narrowing that one needs a fact about the handoff, not a stricter read of the
+ * ones here.
+ *
  * A row whose opener is unknown (null `turn_id`: raised outside a turn, or filed before 0252) is
  * never collected. The predicate has to be a fact, and "we do not know who raised it" is not one.
  * The rows filed before 0252 were settled once instead, by migration 0258, on the two facts
@@ -51,7 +78,18 @@ export const APPROVAL_ABANDONED_MESSAGE =
   'the turn that asked this ended before it was answered, so nothing is left to receive an answer';
 
 /**
- * Collect this session's approvals whose opening turn has ended. Returns how many were collected.
+ * The trace for a card whose reader was a runner-hosted job that is no longer up.
+ *
+ * Its own sentence rather than the one above, for the reason `APPROVAL_ORPHANED_MESSAGE` has one:
+ * the outcome is the same and the reason is not. Writing "the turn that asked this ended" onto a
+ * card a job asked re-states the very premise this module exists to correct — the turn had nothing
+ * to do with reading it, and it is the job that went away.
+ */
+export const APPROVAL_ABANDONED_JOB_MESSAGE =
+  'the background job that asked this ended before it was answered, so nothing is left to receive an answer';
+
+/**
+ * Collect this session's approvals whose reader is gone. Returns how many were collected.
  *
  * Called from the boundaries that END turns — the turn-complete acknowledgement and the drains that
  * settle every outstanding turn when a session finalizes — because that is where the fact this
@@ -61,7 +99,16 @@ export const APPROVAL_ABANDONED_MESSAGE =
  *
  * The live turns are read first and the collection excludes them, which is what keeps a concurrent
  * second ask safe: an engine that re-asked inside a turn that is still running has both rows
- * pointing at that turn, and neither is touched.
+ * pointing at that turn, and neither is touched. The live jobs are read the same way and for the
+ * same reason.
+ *
+ * The two readers are asked about separately, because each card has exactly one of them and the
+ * facts are therefore not interchangeable. A card that names a job is read by that process, so its
+ * job's liveness settles it and the turn is not consulted at all — a job may file while no turn is
+ * in flight (`turn_id` null), which is the ordinary shape of a watch that decides an hour later,
+ * and such a row is collected when its job goes rather than left for the turn rule that could
+ * never reach it. Everything else is read by the turn it names, and is collected on that turn
+ * ending; a card at the turn boundary in flight when a job filed one is the job's, not the turn's.
  */
 export async function reapApprovalsOfEndedTurns(
   tx: Prisma.TransactionClient,
@@ -71,18 +118,41 @@ export async function reapApprovalsOfEndedTurns(
     where: { sessionId, status: { not: 'ANSWERED' } },
     select: { id: true },
   });
-  const collected = await tx.approval.updateMany({
+  // Deliberately the whole set rather than the fresh subset of it: `runningBgJobs` narrowed by
+  // output freshness answers "is work in flight", and a job waiting for an answer is silent.
+  const liveJobs =
+    (
+      await tx.session.findUnique({
+        where: { id: sessionId },
+        select: { runningBgShells: true },
+      })
+    )?.runningBgShells ?? [];
+  // `not: null` beside `notIn` is load-bearing, here and below: `notIn: []` is a tautology in SQL,
+  // so without it a session whose jobs (or turns) have all ended would collect every row,
+  // including the ones whose reader is unknown — precisely the guess this refuses to make.
+  const lostItsJob = await tx.approval.updateMany({
     where: {
       sessionId,
       status: 'PENDING',
-      // Both clauses are load-bearing. `notIn: []` is a tautology in SQL, so without the explicit
-      // "is not null" a session with no live turns would collect every approval including the ones
-      // whose opener is unknown — precisely the guess this refuses to make.
-      AND: [{ turnId: { not: null } }, { turnId: { notIn: live.map((turn) => turn.id) } }],
+      backgroundJobId: { not: null, notIn: liveJobs },
+    },
+    data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_JOB_MESSAGE },
+  });
+  const lostItsTurn = await tx.approval.updateMany({
+    where: {
+      sessionId,
+      status: 'PENDING',
+      AND: [
+        { turnId: { not: null } },
+        { turnId: { notIn: live.map((turn) => turn.id) } },
+        // The complement of the pass above, and the reason a card a live job is still reading is
+        // in neither: it names its reader, so it is not this rule's to collect.
+        { backgroundJobId: null },
+      ],
     },
     data: { status: APPROVAL_ABANDONED_STATUS, message: APPROVAL_ABANDONED_MESSAGE },
   });
-  return collected.count;
+  return lostItsJob.count + lostItsTurn.count;
 }
 
 /** The trace, in the row itself, of why a card whose reader was replaced will never be answered. */

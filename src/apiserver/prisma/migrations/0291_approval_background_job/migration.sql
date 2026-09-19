@@ -1,0 +1,42 @@
+-- 0291 — a card can be read by a process, not only by the turn that raised it
+--
+-- WHAT IT ADDS
+-- ============
+--   * `approval.background_job_id`: the runner-hosted job that is reading this card, when the ask
+--     came from one instead of from the turn's own poll loop.
+--
+-- WHY
+-- ===
+-- `turn_id` (0252) makes "abandoned" a fact: the poll loop that would consume the answer runs
+-- inside the turn the card names, so once that turn is ANSWERED nothing is left to receive one. A
+-- runner-hosted job breaks the premise rather than the rule — the process that asked outlives the
+-- turn (that is what hosting it on the runner is FOR), and it goes on polling for the answer until
+-- it exits. Without this column such a card was collected the moment the turn ended, the CLI's poll
+-- was told the turn had died, and the owner's later Allow reached nobody. 2026-09-19: approval
+-- 01a0b85c-7627-715e-b9e5-fa71ae8bbdf0 (`orbit project resolve-blocker`, filed from a background
+-- job) went PENDING -> ABANDONED with the job still polling, while the same card raised inside the
+-- turn beside it was answered and written.
+--
+-- WHERE IT COMES FROM
+-- ===================
+-- Only the runner knows which process a job is: it mints the id (`bgj_` + 12 hex, runner-go
+-- background_job.go) and exports it to the job as ORBIT_BG_JOB_ID, put back after `envWithAgent`
+-- strips session context from the caller's own env — an agent may not CLAIM a job it is not. The
+-- CLI reads it back off its own environment and names it on the approval-create request, and the
+-- card carries it from then on.
+--
+-- HOW IT IS READ
+-- ==============
+-- `sessions/abandoned-approvals.ts` skips a row whose job is still in `session.running_bg_shells`
+-- (the column that answers "is a process still up", maintained by the job's own `running` report
+-- and its terminal one). Deliberately the raw set and not `runningBgJobs` narrowed by activity:
+-- a job waiting on this card writes nothing by definition, so a long silence is what an
+-- answerable card looks like rather than evidence against one.
+--
+-- BACKWARD COMPATIBLE
+-- ===================
+-- Nullable, no default, no backfill: every existing row was filed before there was a job to name,
+-- and null reads as "the turn is the only consumer this row ever had" — exactly what the reaper
+-- already assumed for all of them.
+ALTER TABLE "approval"
+  ADD COLUMN "background_job_id" text;

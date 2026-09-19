@@ -35,7 +35,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -48,6 +48,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import {
+  APPROVAL_ABANDONED_JOB_MESSAGE,
   APPROVAL_ABANDONED_MESSAGE,
   APPROVAL_ABANDONED_STATUS,
   APPROVAL_ORPHANED_MESSAGE,
@@ -234,6 +235,21 @@ test('an approval whose turn ended stops counting, and says so in the row', {
     });
     assert.equal(await pendingApprovals(), 2, 'two asks are outstanding inside one live turn');
 
+    // The workspace's reply, up the door the runner posts its transcript to. A turn is ANSWERED
+    // because something answered it and not because the engine stopped, so a completion over a
+    // turn with none of ANSWERS_USER_TURN under it hands that turn back to PENDING instead of
+    // ending it — and the session, with a turn queued again, would stay RUNNING. This is the
+    // ordinary turn that WAS answered, so its answer goes in first.
+    await stack.api.events({ id: f.runnerId }, f.sessionId, {
+      events: [{
+        seq: 1,
+        type: RunEventType.ASSISTANT,
+        ts: new Date().toISOString(),
+        turnId: f.turnId,
+        payload: { text: 'both of them are the same question' },
+      }],
+    });
+
     // The real boundary. Nothing in this spec writes the turn's status by hand: the fact the
     // predicate reads is committed by the same handler the runner calls when a turn ends.
     const done = await stack.api.turnComplete({ id: f.runnerId }, f.sessionId, {
@@ -290,6 +306,203 @@ test('an approval whose turn ended stops counting, and says so in the row', {
     const row = await approval(unknownOpener.id);
     assert.equal(row.status, 'PENDING', 'an unknown opener is not a dead one');
     assert.equal(row.message, null, 'and nothing was written about it');
+  });
+});
+
+/**
+ * A CARD CAN BE READ BY A PROCESS, AND A PROCESS OUTLIVES THE TURN.
+ *
+ * 2026-09-19. `orbit project resolve-blocker` run inside a runner-hosted background job raised a
+ * card at 06:31:02. The CLI polling for that answer is a child of the job, and a job keeps running
+ * after the turn that started it ends — that is what hosting it on the runner is FOR. The turn
+ * ended, the reaper collected the row with `the turn that asked this ended`, the CLI was handed
+ * exactly that sentence and exited — while the account owner's later Allow, pressed on a card
+ * raised the same way INSIDE a turn (01a0b85d-2716-74fc-a36b-b820a4365fb4), was written normally.
+ * The one that went through the job (01a0b85c-7627-715e-b9e5-fa71ae8bbdf0) reached nobody.
+ *
+ * The premise the reaper rests on — "the poll loop that would consume the answer runs INSIDE that
+ * turn" — is the one thing a runner-hosted job makes false. So such a card names its job
+ * (`approval.background_job_id`, migration 0291) and is collected only once that job is gone from
+ * the session's `running_bg_shells`. The cases:
+ *
+ *   (1) The job's card is raised through the real endpoint, naming a job the runner reports as
+ *       running; the in-turn card beside it names none. Both are live questions while the turn is,
+ *       and the badge counts both.
+ *   (2) The turn ends — through the real boundary, with nothing written by hand. The in-turn card
+ *       is collected with the turn's sentence. The job's card is still PENDING, because the process
+ *       that would consume the answer is still polling, and a second reap changes nothing.
+ *   (3) The job goes — the runner's terminal report is what empties the set. NOW the card is
+ *       collected, and the trace names the reader that was lost instead of blaming the turn.
+ *   (4) A job that asks with no turn in flight at all — the shape a watch has an hour in, when the
+ *       session is parked: `turn_id` null, the job named. The turn rule could never reach this row
+ *       (an unknown opener is deliberately left alone), so it is the JOB's liveness that collects
+ *       it, and it is collected rather than left PENDING forever the way an unreadable row is.
+ *
+ * (2)'s in-turn card is the negative control, and (3)+(4) are what keep the exception from being
+ * indistinguishable from a card nothing will ever collect: together they pin the decision to the
+ * job's liveness, and to nothing else — not the turn, not age, not who is looking.
+ */
+test('a card a runner-hosted job is still reading outlives the turn that raised it', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'job-card');
+
+  // The job the runner has reported as running for this session: an id it minted (`newBgJobID`),
+  // which is the same token `bg_list` answers with and the one the job's own environment carries.
+  const jobId = `bgj_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  await db.session.update({
+    where: { id: f.sessionId },
+    data: { runningBgShells: [jobId] },
+  });
+
+  function approval(id: string) {
+    return db.approval.findUniqueOrThrow({
+      where: { id },
+      select: {
+        status: true, message: true, decidedAt: true, decidedById: true, turnId: true,
+        backgroundJobId: true,
+      },
+    });
+  }
+
+  async function pendingApprovals(): Promise<number> {
+    const rows = await stack.sessions.list(f.ownerId, {});
+    const row = rows.find((s: { id: string }) => s.id === f.sessionId) as
+      | { pendingApprovals: number }
+      | undefined;
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    return row.pendingApprovals;
+  }
+
+  // The card the CLI inside that job raises: through the real endpoint, declaring the job its
+  // environment carries — which is what makes the turn in flight incidental to who reads it.
+  const fromJob = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+    toolName: 'orbit_blocker_resolve',
+    input: { projectId: 'p1', blockerId: 'b1', reason: 'the migration landed' },
+    backgroundJobId: jobId,
+  });
+  // The card the same session raises INSIDE the turn, with no job behind it: the control.
+  const inTurn = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+    toolName: 'AskUserQuestion',
+    input: { questions: [{ question: 'which way?', header: 'Way', options: [] }] },
+    toolUseId: `toolu_${randomUUID()}`,
+  });
+
+  await t.test('(1) while the turn runs, both are live questions and the badge counts both', async () => {
+    for (const [name, id] of [['the job’s card', fromJob.id], ['the in-turn card', inTurn.id]]) {
+      const row = await approval(id!);
+      assert.equal(row.turnId, f.turnId, `${name} names the turn that was in flight when it was raised`);
+      assert.equal(row.status, 'PENDING', `${name} is a pending question`);
+    }
+    assert.equal((await approval(fromJob.id)).backgroundJobId, jobId,
+      'and the job’s card says which process is reading it — the fact the collection below turns on');
+    assert.equal((await approval(inTurn.id)).backgroundJobId, null,
+      'while one raised in the turn names no job, whatever else is running in the session');
+    assert.equal(await pendingApprovals(), 2, 'both are questions the badge is right to light');
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
+      'and nothing is collected while the turn that raised them is still running');
+  });
+
+  await t.test('(2) the turn ends: the in-turn card is collected, the job’s card is not', async () => {
+    // The workspace's reply first, for the reason the first test's case (2) has one: a turn nothing
+    // answered goes back to the queue instead of ending, and this case needs the turn to END.
+    await stack.api.events({ id: f.runnerId }, f.sessionId, {
+      events: [{
+        seq: 1,
+        type: RunEventType.ASSISTANT,
+        ts: new Date().toISOString(),
+        turnId: f.turnId,
+        payload: { text: 'both of them are the same question' },
+      }],
+    });
+    const done = await stack.api.turnComplete({ id: f.runnerId }, f.sessionId, {
+      turnId: f.turnId,
+      status: SharedRunStatus.SUCCEEDED,
+    });
+    assert.deepEqual(done, { ok: true, status: RunStatus.AWAITING_INPUT },
+      'the turn completed the ordinary way');
+    assert.equal(await db.conversationTurn.count({
+      where: { sessionId: f.sessionId, status: { not: 'ANSWERED' } },
+    }), 0, 'every turn of this session is over — the state the collection below happens in');
+
+    const control = await approval(inTurn.id);
+    assert.equal(control.status, APPROVAL_ABANDONED_STATUS,
+      'the card raised inside the turn is collected: its poll loop went with the turn');
+    assert.equal(control.message, APPROVAL_ABANDONED_MESSAGE, 'and says so in the row');
+
+    const survived = await approval(fromJob.id);
+    assert.equal(survived.status, 'PENDING',
+      'the job’s card is untouched: the process polling for that answer is still running, and the ' +
+      'turn ending says nothing about it');
+    assert.equal(survived.message, null, 'nothing was written about it');
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
+      'and a second reap over the same ended turn collects nothing here either');
+    assert.equal((await approval(fromJob.id)).status, 'PENDING', 'it is still a live question');
+  });
+
+  await t.test('(3) the job goes: collected, and the trace names the reader that was lost', async () => {
+    // What the runner's terminal report does to this column when a job exits or is killed — and the
+    // CLI that was polling is a descendant of that job's process tree, so it went with it.
+    await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [] } });
+
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 1,
+      'the card is collected now, and only now');
+    const row = await approval(fromJob.id);
+    assert.equal(row.status, APPROVAL_ABANDONED_STATUS, 'the row is collected');
+    assert.equal(row.message, APPROVAL_ABANDONED_JOB_MESSAGE,
+      'with the sentence for the reader it actually lost — the turn had nothing to do with it');
+    assert.equal(row.decidedAt, null, 'nobody decided anything, here too');
+    assert.equal(row.decidedById, null, 'so it names no decider');
+    assert.equal(row.backgroundJobId, jobId, 'the row still names the job that asked');
+    assert.equal(row.turnId, f.turnId, 'and the turn it was raised under');
+    assert.equal(await db.approval.count({ where: { sessionId: f.sessionId } }), 2,
+      'both questions stay in the record');
+  });
+
+  await t.test('(4) a job that asks with no turn in flight is collected when IT goes', async () => {
+    // The shape a watch has an hour in: the session is parked, so there is no turn in flight to
+    // name and `turn_id` is null. The turn rule can never reach such a row — by design, since an
+    // unknown opener is not evidence of anything. This one's reader IS known, though: its job. So
+    // the job's liveness is what settles it, in both directions.
+    assert.equal(await db.conversationTurn.count({
+      where: { sessionId: f.sessionId, status: { not: 'ANSWERED' } },
+    }), 0, 'no turn of this session is in flight — what makes this card’s opener unknown');
+
+    const watchJob = `bgj_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [watchJob] } });
+    const fromParkedJob = await stack.api.createApproval({ id: f.runnerId }, f.sessionId, {
+      toolName: 'orbit_task_create',
+      input: { title: 'CI is green: open the follow-up' },
+      backgroundJobId: watchJob,
+    });
+    assert.equal((await approval(fromParkedJob.id)).turnId, null,
+      'the row names no turn, because there was none to name');
+    assert.equal((await approval(fromParkedJob.id)).backgroundJobId, watchJob,
+      'and names the process that is asking — which is the reader the collection below turns on');
+
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 0,
+      'while that job is up the card is a live question, whatever the turn rule would say about it');
+
+    // The job ends, the way the runner reports one: the set empties.
+    await db.session.update({ where: { id: f.sessionId }, data: { runningBgShells: [] } });
+    assert.equal(await reapApprovalsOfEndedTurns(db as never, f.sessionId), 1,
+      'and then it is collected — not left PENDING for a turn rule that could never reach it');
+    const row = await approval(fromParkedJob.id);
+    assert.equal(row.status, APPROVAL_ABANDONED_STATUS, 'the row is collected');
+    assert.equal(row.message, APPROVAL_ABANDONED_JOB_MESSAGE, 'with the sentence for the reader it lost');
+    assert.equal(row.turnId, null, 'still naming no turn: there never was one');
+    assert.equal(row.decidedAt, null, 'and nobody decided anything');
   });
 });
 
