@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>发消息跟到任务当前那一轮 — mockup</title>
+<style>
+  :root {
+    --bg-base:#fff; --bg-raised:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7;
+    --fill-muted:#f1f1f4; --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+    --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 40px 64px; background:#eceef1; color:var(--text-1);
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+              "Noto Sans CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.01em; margin:0 0 6px; }
+  .lede { color:var(--text-2); max-width:1180px; margin:0 0 6px; }
+  .lede b { color:var(--text-1); }
+  .legend { margin:14px 0 0; font-size:12.5px; color:var(--text-2); display:flex; gap:20px;
+            align-items:center; flex-wrap:wrap; }
+  .legend .swatch { display:inline-block; width:34px; height:14px; border-radius:4px;
+                    border:1.6px dashed var(--brand); vertical-align:-2px; margin-right:7px; }
+  section { margin-top:38px; }
+  .sechead { font-size:17px; font-weight:650; margin:0 0 3px; }
+  .secsub { font-size:13px; color:var(--text-2); margin:0 0 15px; max-width:1180px; }
+  .secsub code { font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; background:#e3e6eb;
+                 padding:1px 5px; border-radius:4px; }
+  .pair { display:flex; gap:26px; align-items:flex-start; }
+  figure { margin:0; width:570px; }
+  figcaption { margin-top:11px; font-size:12.5px; line-height:1.55; color:var(--text-2); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.05em;
+         padding:2px 8px; border-radius:5px; margin-bottom:9px; text-transform:uppercase; }
+  .tag.now { background:#e3e6eb; color:#646a73; }
+  .tag.new { background:var(--brand-tint); color:var(--brand-strong); }
+  .frame { background:var(--bg-base); border:1px solid var(--border); border-radius:12px;
+           padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.05), 0 8px 22px rgba(0,0,0,.07); }
+  .changed { outline:1.6px dashed var(--brand); outline-offset:5px; border-radius:10px; }
+
+  /* ── console chrome ───────────────────────────────────────────── */
+  .hdr { display:flex; align-items:center; gap:9px; padding-bottom:11px; margin-bottom:12px;
+         border-bottom:1px solid var(--border-subtle); }
+  .hdr .t { font-weight:600; font-size:13.5px; }
+  .hdr .s { font-size:12px; color:var(--text-3); }
+  .pill { font-size:11.5px; border:1px solid var(--border); border-radius:20px; padding:1px 9px;
+          color:var(--text-2); background:var(--bg-subtle); }
+  .pill.dead { color:var(--error); border-color:var(--error-border); background:var(--error-bg); }
+  .bubble { background:var(--brand-tint); border:1px solid var(--brand-border); border-radius:10px;
+            padding:9px 12px; font-size:13px; max-width:78%; margin-left:auto; }
+  .composer { margin-top:12px; border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+              background:var(--bg-subtle); }
+  .composer .txt { color:var(--text-3); font-size:13px; }
+  .bar { display:flex; gap:7px; align-items:center; margin-top:10px; }
+  .chip { font-size:11.5px; border:1px solid var(--border); border-radius:6px; padding:2px 9px;
+          background:var(--bg-base); color:var(--text-2); }
+  .chip.on { border-color:var(--brand-border); background:var(--brand-tint); color:var(--brand-strong);
+             font-weight:600; }
+  .send { margin-left:auto; background:var(--brand); color:#fff; border-radius:7px; padding:4px 14px;
+          font-size:12.5px; font-weight:600; }
+
+  /* ── toast / notices ──────────────────────────────────────────── */
+  .toast { border-radius:9px; padding:10px 12px; font-size:12.5px; display:flex; gap:9px;
+           align-items:flex-start; }
+  .toast.err { background:var(--error-bg); border:1px solid var(--error-border); color:#8c1f1a; }
+  .toast .ico { flex:none; font-size:13px; line-height:1.35; }
+  .raw { font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-word; }
+
+  .card { border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+          background:var(--bg-raised); }
+  .card.info { border-color:var(--brand-border); background:#f5f9ff; }
+  .card.warn { border-color:var(--warning-border); background:var(--warning-bg); }
+  .card.good { border-color:var(--success-border); background:var(--success-bg); }
+  .card .ch { display:flex; align-items:center; gap:8px; }
+  .card .ct { font-weight:600; font-size:13px; color:var(--text-1); }
+  .card .cb { margin-top:5px; font-size:12.5px; color:var(--text-2); }
+  .acts { display:flex; gap:9px; margin-top:11px; align-items:center; flex-wrap:wrap; }
+  .btn { font-size:12.5px; border-radius:7px; padding:4px 12px; border:1px solid var(--border);
+         background:var(--bg-base); color:var(--text-1); }
+  .btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:600; }
+  .btn.ghost { border-color:transparent; background:transparent; color:var(--text-2); }
+  .btn.danger { background:#d4380d; border-color:#d4380d; color:#fff; font-weight:600; }
+  .link { color:var(--brand-strong); font-weight:600; font-size:12.5px; }
+  .ico.b { color:var(--brand); } .ico.w { color:var(--warning); } .ico.g { color:var(--success); }
+  .ico.r { color:var(--error); }
+  .note { margin-top:8px; font-size:12px; color:var(--text-2); display:flex; gap:7px;
+          align-items:flex-start; }
+  .fade4 { font-size:11px; color:var(--text-3); font-style:italic; }
+
+  /* ── task rows ────────────────────────────────────────────────── */
+  .trow { display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:8px;
+          border:1px solid var(--border-subtle); background:var(--bg-base); font-size:13px; }
+  .trow + .trow { margin-top:7px; }
+  .st { font-size:11px; font-weight:600; border-radius:5px; padding:1px 8px; }
+  .st.failed { background:var(--error-bg); color:var(--error); }
+  .st.open { background:var(--fill-muted); color:var(--text-2); }
+  .tt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rbtn { font-size:12px; border:1px solid var(--border); border-radius:6px; padding:2px 10px;
+          background:var(--bg-base); color:var(--text-2); white-space:nowrap; }
+  .rbtn.go { border-color:var(--brand-border); background:var(--brand-tint);
+             color:var(--brand-strong); font-weight:600; }
+  .dim { color:var(--text-3); font-size:12px; }
+</style>
+
+<h1>发消息跟到任务当前那一轮 · web</h1>
+<p class="lede">
+  一个任务同时只有一轮在跑。旧的那轮失败后平台会在几秒内重派，用户手里的会话就<b>不再是任务当前那一轮</b> ——
+  他再发消息，撞到的是一句写给程序看的英文，而消息一个字都没投出去。
+  下面每组左边是<b>现状</b>，右边是<b>改后</b>；虚线框是改动处。
+</p>
+<p class="legend"><span><span class="swatch"></span>虚线框 = 本单改动的地方</span></p>
+
+<!-- 1 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">1 · 在已被接手的旧 run 里发消息</div>
+  <p class="secsub">
+    服务端已经把消息投给当前那一轮并回一个 <code>routedToSessionId</code>（契约 2.1）。
+    web 要做两件事：别在原会话里乐观画出这条气泡，以及<b>把用户带过去</b>。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="hdr"><span class="t">修 login 跳转</span><span class="s">· run #4</span>
+          <span class="pill dead">Failed</span></div>
+        <div class="bubble">继续干活</div>
+        <div class="composer"><div class="txt">继续干活</div>
+          <div class="bar"><span class="chip on">DeepSeek</span><span class="chip">Auto</span>
+            <span class="send">Send</span></div></div>
+        <div style="margin-top:12px" class="changed">
+          <div class="toast err"><span class="ico">✕</span><span class="raw">task 5Tkrnx1kbOyLZdlRiVN4Og
+            could not be started: session 6vVUlXGyjjJEQtxymaTkCM (RUNNING) holds its execution claim.
+            Let that run reach a terminal status of its own, then start the task again</span></div>
+        </div>
+      </div>
+      <figcaption>红条弹出服务端英文原句，里面两个 id、一个索引概念。消息没发出去，
+        而用户<b>唯一想做的事</b>（继续干活）在这句话里找不到出路。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="hdr"><span class="t">修 login 跳转</span><span class="s">· run #4</span>
+          <span class="pill dead">Failed</span></div>
+        <div class="composer"><div class="txt" style="color:var(--text-3)">发条消息…</div>
+          <div class="bar"><span class="chip on">DeepSeek</span><span class="chip">Auto</span>
+            <span class="send">Send</span></div></div>
+        <div style="margin-top:12px" class="changed">
+          <div class="card good">
+            <div class="ch"><span class="ico g">✓</span>
+              <span class="ct">Sent to the run working on this task</span></div>
+            <div class="cb">This session was replaced by a newer run, so your message went there.</div>
+            <div class="acts"><span class="btn primary">Open the run</span>
+              <span class="dim">run #5 · deepseek · 正在处理</span></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>消息已经投到当前那一轮 —— 这是<b>成功</b>，不是错误，所以用绿而不是红。
+        气泡不画在这儿（它不在这儿），按钮直接跳 <code>/sessions/&lt;当前那轮&gt;</code>。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 2 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">2 · 投不过去的两种情况，各自说各自的话</div>
+  <p class="secsub">
+    带附件的消息不路由（附件按会话锚定，契约 2.4），落回 <code>TASK_ALREADY_RUNNING</code>；
+    而那一轮正在收尾时（<code>conflictingSessionEnding</code>）等一下就通了。
+    今天这两种、外加 <code>TASK_RUN_PIN_CONFLICT</code>，弹的是同一种红条。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="changed">
+          <div class="toast err"><span class="ico">✕</span><span class="raw">task 5Tkrnx1kbOyLZdlRiVN4Og
+            could not be started: session 6vVUlXGyjjJEQtxymaTkCM and is ending holds its execution
+            claim. Let that run reach a terminal status of its own, then start the task again</span></div>
+          <div style="height:10px"></div>
+          <div class="toast err"><span class="ico">✕</span><span class="raw">task 5Tkrnx1kbOyLZdlRiVN4Og
+            is pinned to deepseek, but session 6vVUlXGyjjJEQtxymaTkCM holds its execution claim on
+            claude. A running session's provider is not switched under it; let it reach a terminal
+            status of its own, and the next attempt starts on the pinned one</span></div>
+        </div>
+      </div>
+      <figcaption>两句都是英文原句。第一句其实<b>一秒后就好了</b>，第二句有<b>第二条出路</b>（清掉 pin），
+        而红条把两者说成同一件「等着吧」。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="changed">
+          <div class="card info">
+            <div class="ch"><span class="ico b">◷</span><span class="ct">That run is stopping</span></div>
+            <div class="cb">The run working on this task is on its way out. Nothing is lost —
+              this goes through as soon as it lets go.</div>
+            <div class="acts"><span class="dim">↻ 2 秒后自动重发（同一个 clientTurnId）</span></div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="card warn">
+            <div class="ch"><span class="ico w">▲</span>
+              <span class="ct">This task is pinned to a different provider</span></div>
+            <div class="cb">This task is pinned to deepseek, and the run working on it is on claude.
+              A run keeps its provider for its whole life, so deepseek starts with the next one.</div>
+            <div class="acts"><span class="btn">Open the run</span>
+              <span class="btn">Clear the task's pin</span></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>「在收尾」自己解决自己 —— 消息还在手里，不用麻烦用户。
+        pin 冲突两条出路都摆出来。<b>未知 code / 老服务端仍然显示原文</b>（兜底不动）。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 3 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">3 · 失败卡上的 Retry</div>
+  <p class="secsub">
+    配额/接口失败卡的 Retry 也走同一条发送路径。撞上 409 时今天只弹一个红条，卡片本身毫无变化 ——
+    看上去像「按了没反应」。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="card warn" style="border-color:var(--warning-border)">
+          <div class="ch"><span class="ico w">▲</span><span class="ct">Provider unavailable</span></div>
+          <div class="cb">The anthropic-2 API could not answer — nothing about your message caused it.
+            Auto-retry is off.</div>
+          <div class="acts changed"><span class="btn primary">Retry now</span></div>
+        </div>
+        <div style="height:10px"></div>
+        <div class="toast err"><span class="ico">✕</span><span class="raw">task 5Tkrnx1kbOyLZdlRiVN4Og
+          could not be started: session 6vVU… (RUNNING) holds its execution claim…</span></div>
+      </div>
+      <figcaption>卡片还挂着一个「Retry now」，按一次红一次 —— 而真相是这活<b>早就有人在干了</b>。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="card warn" style="border-color:var(--warning-border)">
+          <div class="ch"><span class="ico w">▲</span><span class="ct">Provider unavailable</span></div>
+          <div class="cb">The anthropic-2 API could not answer — nothing about your message caused it.
+            Auto-retry is off.</div>
+          <div class="changed" style="margin-top:12px">
+            <div class="card info" style="background:#f0f6ff">
+              <div class="ch"><span class="ico b">→</span>
+                <span class="ct">A newer run has this task</span></div>
+              <div class="cb">Another run is working on this task, so this one cannot take it.
+                Open the run that has it and carry on there.</div>
+              <div class="acts"><span class="btn primary">Open the run</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>卡片<b>自己进入「被接手」态</b>：Retry 收起来，换成指向当前那一轮的入口。
+        不是弹一条就消失的 toast —— 状态留在它该在的地方。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 4 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">4 · composer 换 provider：说清什么时候生效，要停的时候明着问</div>
+  <p class="secsub">
+    一个 run 的 provider 在它生命周期内固定。所以换 provider 只能是<b>停掉这一轮 + 用新 provider 起新一轮</b>，
+    而停掉一个在跑的 run 是破坏性的，必须用户明着点头。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="composer"><div class="txt">继续干活</div>
+          <div class="bar"><span class="chip on">DeepSeek</span><span class="chip">Auto</span>
+            <span class="send">Send</span></div>
+          <div class="changed" style="margin-top:9px">
+            <div class="note"><span>Model → DeepSeek</span>
+              <span class="fade4">（4 秒后消失）</span></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>只说了「改成了什么」，没说<b>什么时候生效</b>。4 秒后连这句也没了。
+        用户按下 Send，要么静默落在别的 provider 上，要么撞 409。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="composer"><div class="txt">继续干活</div>
+          <div class="bar"><span class="chip on">DeepSeek</span><span class="chip">Auto</span>
+            <span class="send">Send</span></div>
+          <div class="changed" style="margin-top:9px">
+            <div class="note"><span class="ico b">ⓘ</span>
+              <span>The turn in flight finishes on <b>claude</b>.
+                Your next one runs on <b>deepseek</b>.</span></div>
+          </div>
+        </div>
+        <div style="height:14px"></div>
+        <div class="changed">
+          <div class="card warn">
+            <div class="ch"><span class="ico w">▲</span><span class="ct">Stop the run that is going?</span></div>
+            <div class="cb">This task is being worked on claude. A run keeps its provider for its
+              whole life, so continuing on deepseek means stopping that one first — its branch and
+              worktree are kept.</div>
+            <div class="acts"><span class="btn danger">Stop it and continue</span>
+              <span class="btn ghost">Keep it running</span></div>
+          </div>
+        </div>
+      </div>
+      <figcaption>上：说明<b>生效时机</b>，并且只要这个选择还在就一直在（不是 4 秒）。<br>
+        下：真要停那一轮时<b>明着问一次</b>。不点「Stop it and continue」，请求里就<b>不带</b>
+        <code>stopSessionId</code> —— 没有任何一轮会被停掉。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 5 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">5 · 任务行 / 任务详情的入口</div>
+  <p class="secsub">
+    <code>status</code> 是会话维护的标签、会滞后；<code>running</code>/<code>queued</code> 每次读都从
+    session 行算出来。出事的正是这个缝：任务失败了，平台 2 秒后重派，行里还写着 FAILED。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="trow"><span class="st failed">FAILED</span>
+          <span class="tt">修 login 跳转后的重定向</span>
+          <span class="dim">orbit</span>
+          <span class="rbtn changed">↻ Retry</span></div>
+        <div class="trow"><span class="st open">OPEN</span>
+          <span class="tt">给 provider 列表加分组</span>
+          <span class="dim">orbit</span><span class="rbtn">▷ Run</span></div>
+        <div style="margin-top:14px" class="toast err"><span class="ico">✕</span>
+          <span class="raw">task 5Tkr… could not be started: session 6vVU… (RUNNING) holds its
+            execution claim…</span></div>
+      </div>
+      <figcaption>行上还写着 FAILED，于是给了一个 Retry —— 而服务端那边新一轮已经在跑。
+        这个按钮<b>按下去必然失败</b>。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="trow"><span class="st failed">FAILED</span>
+          <span class="tt">修 login 跳转后的重定向</span>
+          <span class="dim">orbit</span>
+          <span class="rbtn go changed">→ Open the run</span></div>
+        <div class="trow"><span class="st open">OPEN</span>
+          <span class="tt">给 provider 列表加分组</span>
+          <span class="dim">orbit</span><span class="rbtn">▷ Run</span></div>
+        <div style="height:16px"></div>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:7px">任务详情页头部</div>
+        <div style="display:flex;gap:9px;align-items:center">
+          <span class="dim" style="flex:1">修 login 跳转后的重定向 · FAILED</span>
+          <span class="btn primary changed">→ Open the run</span>
+        </div>
+      </div>
+      <figcaption>有活 run 时入口<b>指向正在跑的那一轮</b>（详情页知道是哪一轮，直接链过去）。
+        没有活 run 时，FAILED 还是 Retry、OPEN 还是 Run —— 原行为不动。<br>
+        本地缓存滞后、行上看不出来时，那个 409 的 <code>conflictingSessionId</code> 兜底给出同样的入口。</figcaption>
+    </figure>
+  </div>
+</section>
+</html>

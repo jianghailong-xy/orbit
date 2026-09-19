@@ -55,6 +55,8 @@ import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { SameOriginLink } from './SameOriginLink';
+import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -1206,6 +1208,16 @@ export interface AutoRetryHelp {
   onCancelAuto?: () => void;
   /** Put it back, at the instant the card re-derived from the failing reply. */
   onArmAuto?: (at: Date) => void;
+  /**
+   * The answer a Retry got when the task had already moved on to another run.
+   *
+   * The card is the reason this is a field rather than a toast. Retry is the card's own control,
+   * and a refusal that only flashed past left the card exactly as it was — still offering the
+   * button, still reading as though nothing had happened, which is indistinguishable from a press
+   * that did nothing. The situation belongs to the card because it is the card's claim ("this
+   * failed and can be re-sent") that has stopped being true: somebody else is already doing it.
+   */
+  takenOver?: TaskRunConflict | null;
 }
 export const AutoRetryCtx = createContext<AutoRetryHelp | null>(null);
 
@@ -1279,6 +1291,8 @@ function AutoRetryCard({
 }) {
   const help = useContext(AutoRetryCtx);
   const live = !stale && !!help;
+  // Only a card with context can be taken over: a stale one and the share page's are history.
+  const takenOver = live ? (help?.takenOver ?? null) : null;
   const retryAt = live && help?.retryAt ? new Date(help.retryAt) : null;
   // Re-render on a timer only while there is a countdown to move.
   const [now, setNow] = useState(() => Date.now());
@@ -1391,12 +1405,17 @@ function AutoRetryCard({
           )}
         </div>
       )}
-      {firing && (
+      {firing && !takenOver && (
         <div className="chat-quota-run">
           <span className="spin" /> Retrying — re-sending your message…
         </div>
       )}
-      {live && !firing && help?.onRetry && help.retryText && (
+      {/* Once the task has moved on, the card stops offering to re-send and says what happened
+          instead. Placed where the Retry button was, so the answer arrives where the press did. */}
+      {takenOver ? (
+        <TaskRunHandoffNotice className="chat-quota-handoff" conflict={takenOver} />
+      ) : null}
+      {!takenOver && live && !firing && help?.onRetry && help.retryText && (
         <>
           {/* Quoted for the same reason as the sign-in card's: by now it has scrolled away,
               and on a first-turn limit it was never in the transcript at all. When the bubble

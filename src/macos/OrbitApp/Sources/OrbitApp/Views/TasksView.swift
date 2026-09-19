@@ -22,6 +22,7 @@ struct TasksListView: View {
                 if tasks.overview.total > 0 { TaskProgressSummary(overview: tasks.overview) }
                 #endif
                 if let error = tasks.errorText { errorBanner(error, tasks: tasks) }
+                if let conflict = tasks.runConflict { runConflictBanner(conflict, tasks: tasks) }
                 #if !os(iOS)
                 toolbar(tasks)
                 Divider()
@@ -301,7 +302,12 @@ struct TasksListView: View {
 
     @ViewBuilder
     private func rowMenu(_ tasks: TasksModel, _ task: TaskItem) -> some View {
-        if TaskListLogic.canStart(task) { runButton(tasks, task) }
+        // A task that is already going offers the run instead of a press that can only be refused
+        // — and that entry is offered whether or not the task would otherwise be startable, since
+        // "something of this is running" is precisely why `canStart` says no.
+        let entry = TaskRunHandoff.entry(for: task)
+        if entry.kind == .openRun { openRunButton(entry, task) }
+        else if TaskListLogic.canStart(task) { runButton(tasks, task) }
         Button(role: .destructive) { taskToDelete = task } label: {
             Label("Delete", systemImage: "trash")
         }
@@ -309,13 +315,27 @@ struct TasksListView: View {
     }
 
     private func runButton(_ tasks: TasksModel, _ task: TaskItem) -> some View {
-        Button {
+        let entry = TaskRunHandoff.entry(for: task)
+        return Button {
             Task { _ = await tasks.execute(task.id) }
         } label: {
-            Label(task.status == .failed ? "Retry" : "Run",
-                  systemImage: task.status == .failed ? "arrow.clockwise" : "play.fill")
+            Label(entry.label,
+                  systemImage: entry.kind == .retry ? "arrow.clockwise" : "play.fill")
         }
         .disabled(tasks.isMutating(task.id))
+    }
+
+    /// Where a row sends a reader when the task is already going. A list row carries the live flags
+    /// but no session ids, so there is nothing here to route to — it opens the task, where the run
+    /// is named. Guessing at a run from a row that has none is the mistake this whole change is
+    /// about, in the other direction.
+    private func openRunButton(_ entry: TaskRunHandoff.Entry, _ task: TaskItem) -> some View {
+        Button {
+            if let id = entry.sessionID { model.route(to: .session(id)) }
+            else { model.route(to: .task(task.id)) }
+        } label: {
+            Label(entry.label, systemImage: "arrow.right")
+        }
     }
 
     @ViewBuilder
@@ -352,6 +372,22 @@ struct TasksListView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.orange.opacity(0.12))
+    }
+
+    /// The same card the console shows, over the list — where a Run press is made and so where its
+    /// answer belongs. A list row names no run, so `Open the run` appears only when the refusal
+    /// itself named one, which it does.
+    private func runConflictBanner(_ conflict: TaskRunHandoff.Conflict,
+                                   tasks: TasksModel) -> some View {
+        let clearPin: (() -> Void)? = conflict.taskID.map { id in
+            { Task { await tasks.setProvider(id, nil) } }
+        }
+        return TaskRunHandoffCard(conflict: conflict,
+                                  onOpenRun: { model.route(to: .session($0)) },
+                                  onClearPin: clearPin,
+                                  onDismiss: { tasks.clearRunConflict() })
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
     }
 
     private func listRefreshLoop(_ tasks: TasksModel) async {
@@ -733,6 +769,17 @@ private struct TaskDetailContent: View {
                             detailErrorBanner(error, canRetry: true)
                         }
                         if let error = tasks.errorText { detailErrorBanner(error) }
+                        if let conflict = tasks.runConflict {
+                            // Offered only when the refusal named the task — clearing a pin edits
+                            // the TASK, so without one there is nothing for the button to act on.
+                            let clearPin: (() -> Void)? = conflict.taskID.map { id in
+                                { Task { await tasks.setProvider(id, nil) } }
+                            }
+                            TaskRunHandoffCard(conflict: conflict,
+                                               onOpenRun: { model.route(to: .session($0)) },
+                                               onClearPin: clearPin,
+                                               onDismiss: { tasks.clearRunConflict() })
+                        }
                         if TaskListLogic.isBlocked(task) { blockedNotice(task) }
                         actions(task)
                         // A row settled by a check always gets the card — with the check, or with
@@ -897,17 +944,28 @@ private struct TaskDetailContent: View {
         // A gate row's button says what it cannot do rather than naming the press it will not take:
         // "Run" on a row where no run exists is the instruction this client is being fixed for.
         let gate = TaskJudgment.isGateRow(task)
+        // The detail carries the task's sessions, so when a run has it this knows WHICH one and
+        // links straight there. The live run wins over `status`, which lags: the reported failure
+        // is a task that failed, was re-dispatched two seconds later, and still read FAILED here.
+        let entry = TaskRunHandoff.entry(for: task)
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 10) {
                 ownerConfirmation(task)
-                if task.status != .done {
+                if task.status != .done, !gate, entry.kind == .openRun {
+                    Button {
+                        if let id = entry.sessionID { model.route(to: .session(id)) }
+                    } label: {
+                        Label(entry.label, systemImage: "arrow.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(entry.sessionID == nil)
+                } else if task.status != .done {
                     Button {
                         Task { _ = await tasks.execute(task.id) }
                     } label: {
-                        Label(gate ? TaskJudgmentCopy.gateActionLabel
-                                   : (task.status == .failed ? "Retry" : "Run"),
+                        Label(gate ? TaskJudgmentCopy.gateActionLabel : entry.label,
                               systemImage: gate ? "checkmark.shield"
-                                                : (task.status == .failed ? "arrow.clockwise" : "play.fill"))
+                                                : (entry.kind == .retry ? "arrow.clockwise" : "play.fill"))
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canStart || busy)
@@ -922,7 +980,9 @@ private struct TaskDetailContent: View {
                     .disabled(busy)
                 }
             }
-            if task.status != .done, !canStart, let hint = runDisabledHint(task) {
+            if task.status != .done, !gate, entry.kind == .openRun {
+                Text(entry.hint).font(.orbitMeta).foregroundStyle(.secondary)
+            } else if task.status != .done, !canStart, let hint = runDisabledHint(task) {
                 Text(hint).font(.orbitMeta).foregroundStyle(.secondary)
             }
         }

@@ -91,6 +91,59 @@ describe('sendTurn intent protocol', () => {
     });
   });
 
+  /**
+   * The request half of `docs/session-message-routing-contract.md`: one optional field out, two
+   * new answers back, and no new endpoint. Asserted on the wire because the field it adds
+   * AUTHORISES STOPPING a run that is doing work — "we never sent it unless asked" is a claim
+   * about the bytes, not about a variable somewhere above them.
+   */
+  it('sends no stopSessionId at all unless one was given', async () => {
+    const fetchMock = vi.fn(async () => okJson({
+      turnId: 'turn-resume', seq: 4, kind: 'message', placement: 'accepted',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resumeSession('session-1', 'carry on', { provider: 'deepseek' }, [], undefined, 'k1');
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    // Absent, not null and not false: the server reads presence, and a key that is always there
+    // is a standing authorisation to end somebody's run.
+    expect('stopSessionId' in body).toBe(false);
+    expect(body.provider).toBe('deepseek');
+  });
+
+  it('carries the confirmation, naming the run it is about, once one is given', async () => {
+    const fetchMock = vi.fn(async () => okJson({
+      turnId: 'turn-resume', seq: 5, kind: 'message', placement: 'accepted',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resumeSession(
+      'session-1', 'carry on', { provider: 'deepseek' }, [], undefined, 'k1', 'run-in-the-way',
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      // Same key as the refused attempt: answering the question is not a second send.
+      clientTurnId: 'k1',
+      provider: 'deepseek',
+      stopSessionId: 'run-in-the-way',
+    });
+  });
+
+  it('reads back where the message actually landed', async () => {
+    const fetchMock = vi.fn(async () => okJson({
+      turnId: 'turn-resume', seq: 6, kind: 'message', placement: 'queued',
+      routedToSessionId: 'the-run-that-has-the-task',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const answer = await resumeSession('session-1', 'carry on');
+
+    expect(answer.routedToSessionId).toBe('the-run-that-has-the-task');
+  });
+
   it('uses the caller logical-send key for resume retries too', async () => {
     const fetchMock = vi.fn(async () => okJson({
       turnId: 'turn-resume', seq: 4, kind: 'message', placement: 'accepted',

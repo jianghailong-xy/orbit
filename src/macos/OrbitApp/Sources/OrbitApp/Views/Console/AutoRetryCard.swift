@@ -10,6 +10,7 @@ import OrbitKit
 /// Every decision (wording, which controls, escalate or stay neutral) is `AutoRetryLogic`, unit
 /// tested on Linux; this only renders it. Web parity: `AutoRetryCard` in Transcript.tsx.
 struct AutoRetryCardView: View {
+    @Environment(AppModel.self) private var app
     let console: ConsoleModel
     let notice: AutoRetryNotice
 
@@ -54,7 +55,8 @@ struct AutoRetryCardView: View {
                                      provider: console.provider,
                                      runnerName: console.runnerName,
                                      hasRetryText: !retryText.isEmpty,
-                                     now: now)
+                                     now: now,
+                                     takenOver: console.autoRetryTakenOver)
         VStack(alignment: .leading, spacing: 8) {
             Label(s.title, systemImage: s.needsYou ? "exclamationmark.triangle.fill" : "clock.fill")
                 .foregroundStyle(s.needsYou ? Color.orange : Color.secondary)
@@ -71,6 +73,13 @@ struct AutoRetryCardView: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
             if let title = s.retryNowTitle { retryRow(s, title: title, retryText: retryText) }
+            // Where the Retry button was, so the answer arrives where the press did. The card has
+            // stopped offering to re-send and says what happened instead.
+            if let takenOver = s.takenOver {
+                TaskRunHandoffCard(conflict: takenOver,
+                                   onOpenRun: { app.route(to: .session($0)) },
+                                   onDismiss: { console.dismissRunConflict() })
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

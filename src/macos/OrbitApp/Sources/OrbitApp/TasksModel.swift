@@ -42,6 +42,9 @@ final class TasksModel {
     private(set) var dependencyCandidatesLoading = false
     private(set) var mutatingTaskIDs: Set<String> = []
     var errorText: String?
+    /// The refusal a Run met when the task was already somebody else's, as structure rather than as
+    /// the server's sentence. Every other failure still reads its own words out of `errorText`.
+    private(set) var runConflict: TaskRunHandoff.Conflict?
 
     private let api: APIClient
     private var listGeneration = 0
@@ -743,16 +746,24 @@ final class TasksModel {
         guard !mutatingTaskIDs.contains(id) else { return false }
         mutatingTaskIDs.insert(id)
         errorText = nil
+        runConflict = nil
         defer { mutatingTaskIDs.remove(id) }
         do {
             try await operation()
             await refreshChangedTasks([id])
             return true
         } catch {
-            errorText = friendly(error)
+            // The one place a press on a task stops being told its answer in the server's words.
+            // A Run over a task another run already holds is the reported failure, and the refusal
+            // names that run — so it is kept whole and read as a way out. Anything this build has
+            // no words for still falls through to the sentence the server wrote.
+            if let conflict = TaskRunHandoff.readConflict(error) { runConflict = conflict }
+            else { errorText = friendly(error) }
             return false
         }
     }
+
+    func clearRunConflict() { runConflict = nil }
 
     private func friendly(_ error: Error) -> String {
         if case APIError.unauthorized = error { return "Session expired — sign in again." }

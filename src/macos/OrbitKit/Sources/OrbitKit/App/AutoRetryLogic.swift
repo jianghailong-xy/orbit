@@ -58,6 +58,15 @@ public enum AutoRetryLogic {
         public var retryNowNote: String?
         /// Quote what would be re-sent. Suppressed when that bubble is the line directly above.
         public var quotesRetryText: Bool
+        /// The answer a Retry got when the task had already moved on to another run.
+        ///
+        /// The card is the reason this is a field rather than a status line. Retry is the card's
+        /// own control, and a refusal that only flashed past somewhere else left the card exactly
+        /// as it was — still offering the button, still reading as though nothing had happened,
+        /// which is indistinguishable from a press that did nothing. The situation belongs to the
+        /// card because it is the card's own claim ("this failed and can be re-sent") that has
+        /// stopped being true: somebody else is already doing it.
+        public var takenOver: TaskRunHandoff.Conflict?
     }
 
     /// - Parameters:
@@ -75,12 +84,18 @@ public enum AutoRetryLogic {
                              runnerName: String?,
                              hasRetryText: Bool,
                              now: Date,
+                             takenOver: TaskRunHandoff.Conflict? = nil,
                              rand: () -> Double = { .random(in: 0..<1) }) -> State {
         let quota = notice.variant == .quota
+        // Only a card with a session behind it can be taken over: a stale card is history (the
+        // session went on) and the share page's has no console to have pressed anything.
+        let takenOver = live ? takenOver : nil
         let at = live ? retryAt : nil
         let secondsLeft = at.map { $0.timeIntervalSince(now) } ?? 0
         let armed = at != nil && secondsLeft > 0
-        let firing = at != nil && secondsLeft <= 0
+        // "Re-sending your message…" is a promise, and it is false once another run has the task.
+        // Both at once would have the card claiming to be doing the thing it just declined to do.
+        let firing = at != nil && secondsLeft <= 0 && takenOver == nil
         let gaveUp = live && at == nil && attempts >= maxAttempts(notice.variant)
         let needsYou = live && !armed && !firing
         let window = quotaWindow(notice.message)
@@ -129,12 +144,17 @@ public enum AutoRetryLogic {
                 ? "Runs on the server — you don't have to stay here."
                 : "Off — nothing will re-send until you do.",
             rearmAt: rearmAt,
-            retryNowTitle: (live && !firing && hasRetryText) ? (armed ? "Retry now anyway" : "Retry now") : nil,
-            retryNowNote: (live && !firing && hasRetryText && armed)
+            // …and the press itself is withdrawn: with the task in another run's hands, the only
+            // answer this button can get is the refusal that is now standing in its place.
+            retryNowTitle: (live && !firing && hasRetryText && takenOver == nil)
+                ? (armed ? "Retry now anyway" : "Retry now") : nil,
+            retryNowNote: (live && !firing && hasRetryText && armed && takenOver == nil)
                 ? (quota ? "The quota hasn’t reset yet — this will likely fail again."
                          : "The API may still be failing — this could fail again.")
                 : nil,
-            quotesRetryText: live && !firing && hasRetryText && !notice.afterUserMsg)
+            quotesRetryText: live && !firing && hasRetryText && !notice.afterUserMsg
+                && takenOver == nil,
+            takenOver: takenOver)
     }
 
     /// The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime

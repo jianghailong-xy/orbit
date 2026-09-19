@@ -553,12 +553,21 @@ export const resumeSession = (
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
   clientTurnId: string = uuid(),
+  /** The run this send AUTHORISES STOPPING, named by its public id — never sent unprompted.
+   *  Only `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` asks for one, and only the person
+   *  answering that question supplies it (see `lib/taskRunHandoff.ts#stopSessionIdFor`). */
+  stopSessionId?: string,
 ) =>
   api<{
     turnId: string;
     seq: number;
     kind: ConversationTurnKind;
     placement: SessionTurnPlacement;
+    /** Present when the message did NOT land in `sessionId`: this task had moved on to another
+     *  run, and the server delivered it there instead of refusing it. Its absence is the
+     *  ordinary resume, so an older server reads exactly as it always did. See
+     *  `docs/session-message-routing-contract.md` §2.1. */
+    routedToSessionId?: string;
   }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
     body: {
@@ -567,6 +576,7 @@ export const resumeSession = (
       ...config,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
+      ...(stopSessionId ? { stopSessionId } : {}),
     },
   });
 

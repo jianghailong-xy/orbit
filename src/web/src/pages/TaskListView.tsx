@@ -1,4 +1,5 @@
 import {
+  ArrowRightOutlined,
   CaretDownOutlined,
   CaretUpOutlined,
   DeleteOutlined,
@@ -34,6 +35,8 @@ import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-route
 import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
+import { reportTaskRunConflict } from '../components/TaskRunHandoffNotice';
+import { taskRunEntry } from '../lib/taskRunHandoff';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
@@ -129,7 +132,7 @@ const tallyReasons = (skipped: { reason: string }[]): string => {
 };
 
 /** The toast calls the two Run actions make — narrow, so a test can hand over three spies. */
-type RunToast = Pick<ReturnType<typeof useToast>, 'success' | 'warning' | 'error'>;
+type RunToast = Pick<ReturnType<typeof useToast>, 'success' | 'warning' | 'error' | 'sessionNotice'>;
 
 /** What `POST /tasks/batch-execute` answers: a count of what it started, never a list of it. */
 interface BatchRunResult {
@@ -180,7 +183,10 @@ export function runRowMutationOptions(qc: QueryClient, message: RunToast) {
       // actually refetched, rather than re-enabling the button over the row it just spent.
       return refreshTaskScheduleViews(qc, id, projectId);
     },
-    onError: (e: Error) => message.error(e.message),
+    // A press over a stale row — this copy still says FAILED, the platform re-dispatched the task
+    // seconds ago — is the one the reported failure came through. The refusal names the run that
+    // has it, so the answer is where to go rather than a sentence about execution claims.
+    onError: (e: Error) => reportTaskRunConflict(message, e),
   };
 }
 
@@ -927,7 +933,13 @@ export function TaskListView() {
     // Row-level run/retry: offered only for an actionable, runnable task that isn't busy,
     // blocked, or already done. FAILED reframes the same action as "Retry".
     const canRunRow = canStartTask(r);
-    const isRetry = r.status === 'FAILED';
+    // …and a row whose task is ALREADY going offers the run instead of a press that can only be
+    // refused. Read off the live flags rather than `status`, which lags: the reported failure is a
+    // task that failed, was re-dispatched two seconds later, and still reads FAILED here. The row
+    // carries no session id, so it opens the task, where the run is named — and if this copy is
+    // stale enough to draw Retry anyway, the refusal it meets carries the run and points at it.
+    const entry = taskRunEntry(r);
+    const isRetry = entry.kind === 'RETRY';
     // When the server will start this task by itself, read on the viewer's own wall clock. Null
     // for the ordinary unscheduled row and for an unreadable value alike, so neither renders a
     // marker — and neither renders the words "Invalid Date". `scheduledStart` owns that rule;
@@ -1030,20 +1042,36 @@ export function TaskListView() {
           </div>
         )}
         <div className="row-actions">
-          {canRunRow && (
-            <Tooltip title={isRetry ? 'Retry' : 'Run'}>
+          {entry.kind === 'OPEN_RUN' ? (
+            <Tooltip title={entry.hint}>
               <Button
                 size="small"
                 type="text"
-                icon={isRetry ? <ReloadOutlined /> : <PlayCircleOutlined />}
+                aria-label={entry.label}
+                icon={<ArrowRightOutlined />}
                 onClick={(e) => {
                   e.stopPropagation();
-                  // The gesture: this click draws the name its request carries, and the next
-                  // click draws another — including a click over an error this one leaves behind.
-                  runOne.mutate({ id: r.id, projectId: r.projectId, triggerId: newRunRequestToken() });
+                  setSelectedTaskId(r.id);
                 }}
               />
             </Tooltip>
+          ) : (
+            canRunRow && (
+              <Tooltip title={entry.hint}>
+                <Button
+                  size="small"
+                  type="text"
+                  aria-label={entry.label}
+                  icon={isRetry ? <ReloadOutlined /> : <PlayCircleOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // The gesture: this click draws the name its request carries, and the next
+                    // click draws another — including a click over an error this one leaves behind.
+                    runOne.mutate({ id: r.id, projectId: r.projectId, triggerId: newRunRequestToken() });
+                  }}
+                />
+              </Tooltip>
+            )
           )}
           <Popconfirm
             title="Delete this task?"

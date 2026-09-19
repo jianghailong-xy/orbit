@@ -4388,6 +4388,98 @@ html[data-theme='dark'] .session-tag-chip {
   padding-top: 12px;
   margin-top: 8px;
 }
+/* Where this task's current run is — the composer's answer to "you are not the run that has
+   this task any more", and the transcript card's. One rule set for both, because a reader meeting
+   the situation in two places is meeting one situation. Tinted by what is being asked of them:
+   nothing (the message landed), wait (it is letting go), or a decision. */
+.run-handoff {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.run-handoff-sent {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.run-handoff-held,
+.run-handoff-ending {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+}
+.run-handoff-pin,
+.run-handoff-confirm_switch {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.run-handoff-title {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.run-handoff-body {
+  margin-top: 3px;
+  color: var(--text-2);
+}
+.run-handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+}
+.run-handoff-actions:empty {
+  display: none;
+}
+.run-handoff-open,
+.run-handoff-btn,
+.run-handoff-stop {
+  padding: 3px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.run-handoff-open {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.run-handoff-open:hover {
+  background: var(--brand-strong);
+  color: #fff;
+}
+/* Solid and red because it ENDS a run that is doing work: destructive, and never the resting
+   state of anything — it exists only inside a confirmation the reader opened by picking another
+   provider. Its sibling ("Keep it running") is the quiet one on purpose. */
+.run-handoff-stop {
+  border-color: var(--error-solid);
+  background: var(--error-solid);
+  color: #fff;
+  font-weight: 600;
+}
+.run-handoff-btn:hover {
+  background: var(--bg-hover);
+}
+/* Inside an auto-retry card the block is the card's last row, not a strip above something. */
+.chat-quota .chat-quota-handoff {
+  margin: 9px 0 0;
+}
+/* When a provider pick takes effect. Quiet: it reports, it does not ask. */
+.composer-provider-note {
+  margin-bottom: 8px;
+  padding: 0 2px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .composer-project-intent {
   display: flex;
   align-items: center;
