@@ -98,15 +98,20 @@ export const LOCK_ORDER = [
     relation: 'project',
     modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, project_event outbox)',
     why:
-      'Above `task` because that is the order the Project authorization adapter already declares ' +
-      '(project FOR NO KEY UPDATE, then task FOR SHARE), and below `session` because ' +
-      'session_project_capacity_serialize is a BEFORE trigger on a Session write that is already ' +
-      'holding its Session row.',
+      'Above `task` because that is the order every live taker of these two rows takes them in: ' +
+      'session_admission_lock_order (0130) reaches the project row FOR NO KEY UPDATE from the same ' +
+      'Session write whose task it then takes FOR SHARE, and this row\'s holders go on to reach for ' +
+      'Task rows (SessionsService.resume takes the project and only then confirms its scope with ' +
+      'FOR SHARE OF t NOWAIT; ProjectHandoffService.declare takes both project rows and then the ' +
+      'tasks the declaration names). Below `session` because session_project_capacity_serialize is ' +
+      'a BEFORE trigger on a Session write that is already holding its Session row. The pre-lock ' +
+      'that first declared this order was ProjectAuthorizationService\'s, deleted with the ' +
+      'coordinator loop in `6418a1e5` (2026-08-23).',
   },
   {
     rank: 50,
     relation: 'task',
-    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (session dispatch guard, authorization) · FOR KEY SHARE (edge + session.task_id FK)',
+    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (the admission and authority re-read: SessionsService.resume, taskWorkRefusalFor, ProjectHandoffService.declare, TasksService.assertPlanAuthorityUnchanged) · FOR KEY SHARE (edge + session.task_id FK)',
     why: 'Multi-row selections are always taken sorted by id (orderedIds).',
   },
   {
