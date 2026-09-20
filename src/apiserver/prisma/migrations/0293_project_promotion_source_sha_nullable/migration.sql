@@ -1,0 +1,41 @@
+-- 0293 — a candidate's source commit, for the one line the platform cannot read for itself
+--
+-- WHAT IT CHANGES
+-- ===============
+--   * `project_promotion.source_sha` loses its NOT NULL. Nothing else about the column moves: same
+--     type, same table, no default, no backfill, no other constraint on it.
+--
+-- WHY
+-- ===
+-- 0286 declared the column NOT NULL, which is true for every candidate M-F1 makes: a project branch
+-- is offered off a committed landing, and the landing row already carries `landed_sha`, so the
+-- source is a sha the control plane is holding. M-F2 is the case that is not: a MAIN-line project
+-- offers the TASK BRANCH itself, and the tip of a task's branch is a fact the control plane does not
+-- have. Nothing in the database records where a session's branch currently points — `session.base_sha`
+-- is the fork point it started from, and `merged_source_sha` is only ever written by a merge that
+-- already happened — so at the moment the task's DONE commits, the commit that DONE is about is a
+-- fact only the repository has.
+--
+-- The platform's way of reading the repository is an integration job, so that is where the sha comes
+-- from: the `CHECK_PROMOTION` job's row is created with `source_sha` NULL next to the candidate
+-- (0281's column is already nullable, precisely because a job's tips are resolved by the runner),
+-- the runner resolves the source ref, and the result it reports carries the commit it resolved. The
+-- promotion takes it there, which is why §3.3 M-T2 can go on requiring `source_sha` for everything
+-- that follows a check: READY, CONFIRMED and MERGED all have one.
+--
+-- WHAT NULL MEANS
+-- ===============
+-- "The platform has not looked at the repository yet." A candidate in `CHECKING` may carry it. A
+-- candidate in any state a check produced may not, and the code that writes those states writes the
+-- sha in the same statement — so a reader that sees READY with no source sha is looking at a bug,
+-- not at an ordinary state.
+--
+-- BACKWARD COMPATIBLE
+-- ===================
+-- Dropping NOT NULL widens what the table accepts. Every row ever written has a value, PROJECT_BRANCH
+-- candidates always will, and no reader anywhere asks the column for a non-null when it may be null.
+-- No DML, no rewrite, no new object; the one function and trigger 0286 installed are untouched, so
+-- `project_promotion_terminal_guard` still refuses a rewrite of a candidate that reached a terminal
+-- state.
+ALTER TABLE "project_promotion"
+  ALTER COLUMN "source_sha" DROP NOT NULL;

@@ -522,6 +522,196 @@ case_project_done_flips_on_merge() {
                AND result IN ('MERGED','ALREADY_MERGED')" | tr -d '[:space:]')"
 }
 
+# ── case 10: a MAIN-line project promotes the task branch itself (§3.4 M-F2, M6, M9) ───────────
+#
+# A project whose integration line IS main has nowhere to accumulate: the thing that goes onto the
+# upstream is the task's own branch, and the platform cannot land it — every merge into main is the
+# owner's to confirm. So the DONE makes a CANDIDATE rather than a landing, the candidate is checked
+# (the task's acceptance command and the project's merge check, both on the combined tree), and the
+# owner is asked. What lands when they say yes is not a merge commit of that branch: the branch is
+# rebased onto the upstream tip and the upstream fast-forwards to it, which is the one place M6
+# treats the two kinds of source differently.
+
+case_main_line_task_branch_promotion() {
+  local work origin ws project
+  work="$(new_repo mainline)"
+  origin="$(repo_origin_of mainline)"
+  ws="$(new_workspace 'mainline' "$work" "$origin")"
+  # The merge check sleeps, so the candidate can be read in CHECKING rather than raced for: the
+  # queue picks a job up on a heartbeat, and a check that finished in milliseconds would turn the
+  # assertion below into a coin toss. The task's own acceptance command is the other half of M-S3,
+  # and it passes on the tree this promotion produces.
+  project="$(new_main_line_project mainline "$ws" "$origin" 'sleep 8; test -f README.md')"
+  local base; base="$(git -C "$work" rev-parse main)"
+
+  local task_sha; task_sha="$(new_task_branch "$work" task/mainline a.txt 'from a')"
+  # main moves AFTER the branch forked, so the promotion's rebase has something to replay instead of
+  # being the no-op git makes of a branch already sitting on the upstream tip.
+  local moved_main; moved_main="$(advance_upstream "$work" upstream.txt 'main moved')"
+  assert_eq 'the task branch is behind main' 'no' "$(is_ancestor_in "$work" "$moved_main" "$task_sha")"
+
+  local task
+  task="$(new_code_task "$project" 'mainline task' "$ws" task/mainline "$base" 'test -f a.txt')"
+
+  confirm_task_done "$task"
+
+  # M-F2, read while the check is still standing. The DONE queued no landing — there is nowhere on
+  # this line to land one — and what it made instead is a candidate for the task's branch, already
+  # being checked.
+  assert_eq 'the DONE made a candidate' 'TASK_BRANCH' "$(promotion_column_of "$project" source_kind)"
+  assert_eq 'and it is being checked' 'CHECKING' "$(promotion_column_of "$project" state)"
+  assert_eq 'it offers the task branch' 'refs/heads/task/mainline' \
+    "$(promotion_column_of "$project" source_ref)"
+  assert_eq 'it would merge into main' 'refs/heads/main' "$(promotion_column_of "$project" upstream_ref)"
+  assert_eq 'it names the task it came from' "$task" "$(promotion_column_of "$project" task_id)"
+  assert_eq 'a CHECK_PROMOTION job is queued beside it' 1 \
+    "$(sql "SELECT count(*) FROM project_integration_job j, project_promotion p
+             WHERE j.project_id = '$project' AND j.kind = 'CHECK_PROMOTION'
+               AND p.check_job_id = j.id AND j.promotion_id = p.id" | tr -d '[:space:]')"
+  # `::text` on a boolean, not psql's `t`: this is the cast's spelling, and the case is asserting a
+  # value that came through one.
+  assert_eq 'the job names no task of its own' 'true' \
+    "$(sql "SELECT (j.task_id IS NULL)::text FROM project_integration_job j, project_promotion p
+             WHERE j.project_id = '$project' AND p.check_job_id = j.id" | tr -d '[:space:]')"
+  # Nobody has read the repository yet, so nobody has claimed to: the source SHA is resolved by the
+  # check that fetches the ref, and a candidate is not allowed to guess it (0293).
+  assert_eq 'the candidate names no source commit before it has looked' '' \
+    "$(promotion_column_of "$project" source_sha)"
+  assert_eq 'and no landing job was queued' 0 \
+    "$(sql "SELECT count(*) FROM project_integration_job
+             WHERE project_id = '$project' AND kind IN ('LAND_TASK', 'LAND_PROMOTION')" | tr -d '[:space:]')"
+  assert_eq 'nothing has reached main' "$moved_main" "$(origin_tip "$origin" refs/heads/main)"
+
+  wait_for_promotion_state "$project" READY 240
+
+  # M-S3: the checks the promotion ran. BOTH of them — a task branch is one task's work arriving on
+  # the upstream, so the task's own acceptance command is as much a part of the question as the
+  # project's merge check.
+  assert_eq 'both checks ran, on the tree it would land' 'MERGE_CHECK:0,TASK_ACCEPTANCE:0' \
+    "$(sql "SELECT string_agg(c->>'name' || ':' || COALESCE(c->>'exitCode', 'null'), ','
+                              ORDER BY c->>'name')
+             FROM project_integration_job j, jsonb_array_elements(j.checks) c
+            WHERE j.project_id = '$project' AND j.kind = 'CHECK_PROMOTION'" | tr -d '[:space:]')"
+  assert_eq 'the check recorded the upstream it passed against' "$moved_main" \
+    "$(promotion_column_of "$project" upstream_sha_checked)"
+  # 0293: the check resolved the branch tip and the candidate now names it.
+  assert_eq 'the candidate now names the task branch tip' "$task_sha" \
+    "$(promotion_column_of "$project" source_sha)"
+
+  # M-T2: the owner is asked, and only the owner. Nothing has moved while they decide (M7).
+  assert_eq 'one PROMOTION_APPROVAL item is open for the owner' 1 \
+    "$(sql "SELECT count(*) FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'PROMOTION_APPROVAL'
+               AND state = 'OPEN' AND assignee = 'OWNER'" | tr -d '[:space:]')"
+  assert_eq 'main did not move while it waited' "$moved_main" "$(origin_tip "$origin" refs/heads/main)"
+  assert_eq 'no receipt claims the work is on main' 0 \
+    "$(sql "SELECT count(*) FROM session_merge_receipt
+             WHERE project_id = '$project' AND target_branch = 'main'" | tr -d '[:space:]')"
+
+  local promotion; promotion="$(promotion_of "$project")"
+  confirm_promotion "$project" "$promotion"
+  wait_for_promotion_state "$project" MERGED 300
+
+  fetch_all "$work"
+  local tip; tip="$(origin_tip "$origin" refs/heads/main)"
+  local landed; landed="$(promotion_job_column_of "$project" LAND_PROMOTION tested_sha)"
+  assert_eq 'main is where the promotion says it landed' "$tip" "$(promotion_column_of "$project" merged_sha)"
+  # M6 for a task branch: the commit main holds is the one the landing checked — no merge commit
+  # carries it, so there is nothing for the tip to be but exactly that commit.
+  assert_eq 'main is exactly the commit the landing tested' "$tip" "$landed"
+  assert_eq 'the tip is not a merge commit' 1 \
+    "$(git -C "$work" rev-list --parents -n 1 "$tip" | wc -w | awk '{print $1 - 1}')"
+  assert_eq 'it sits directly on the upstream tip the task was rebased onto' "$moved_main" \
+    "$(git -C "$work" rev-parse "$tip^")"
+  # The rebase is the point: main gained the task's WORK, not the task's commit. A merge --no-ff
+  # would have kept the original as an ancestor, and this measures the difference.
+  assert_eq "the task's own commit is not in main — the branch was replayed, not merged" 'no' \
+    "$(is_ancestor_in "$work" "$task_sha" "$tip")"
+  assert_eq 'and main carries its work' 'from a' "$(git -C "$work" show "$tip:a.txt" | tr -d '\n')"
+
+  # M9: one receipt for the task, against main. Its source is the commit the landing tested, which
+  # is what a reader looking for "where did this task's work arrive" has to be able to find.
+  assert_eq 'one MERGED receipt for the task, on main' 1 \
+    "$(sql "SELECT count(*) FROM session_merge_receipt
+             WHERE task_id = '$task' AND result = 'MERGED' AND target_branch = 'main'" | tr -d '[:space:]')"
+  assert_eq 'the receipt names the commit that arrived' "$landed" \
+    "$(sql "SELECT source_sha FROM session_merge_receipt
+             WHERE task_id = '$task' AND target_branch = 'main'" | tr -d '[:space:]')"
+  assert_eq 'and where main ended up' "$tip" \
+    "$(sql "SELECT target_sha_after FROM session_merge_receipt
+             WHERE task_id = '$task' AND target_branch = 'main'" | tr -d '[:space:]')"
+  assert_eq 'the approval card was resolved as approved' 'APPROVED' \
+    "$(sql "SELECT resolution FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'PROMOTION_APPROVAL'" | tr -d '[:space:]')"
+}
+
+# ── case 11: an unresolved absorb of upstream holds the queue (M2's second half) ────────────────
+#
+# A conflict on the absorb is not one task's problem: it is the branch's relationship with main, and
+# every later landing would meet exactly the same paths. So the item the first one opened is the
+# queue's stop, and it is also the retry mechanism — closing it is what lets the line move again
+# (J5: the platform never retries by itself). Without that, a project with ten queued tasks gets ten
+# identical cards about one problem, and the coordinator answers the same conflict ten times.
+
+case_main_sync_conflict_holds_the_queue() {
+  local work origin ws project
+  work="$(new_repo holdqueue)"
+  origin="$(repo_origin_of holdqueue)"
+  ws="$(new_workspace 'holdqueue' "$work" "$origin")"
+  project="$(new_project holdqueue "$ws" "$origin")"
+  local base; base="$(git -C "$work" rev-parse main)"
+
+  # A project branch with its own version of a file, and main with another: the absorb conflicts, and
+  # it conflicts for EVERY task, because it is the branch that cannot take main's copy.
+  git -C "$work" checkout --quiet -b project/holdqueue main
+  printf 'line\n' > "$work/contested.txt"
+  git -C "$work" add contested.txt
+  git -C "$work" commit --quiet -m 'project branch: contested'
+  git -C "$work" push --quiet origin project/holdqueue
+  git -C "$work" checkout --quiet main
+
+  new_task_branch "$work" task/hold-a a.txt 'from a' >/dev/null
+  new_task_branch "$work" task/hold-b b.txt 'from b' >/dev/null
+  local task_a task_b
+  task_a="$(new_code_task "$project" 'hold A' "$ws" task/hold-a "$base")"
+  task_b="$(new_code_task "$project" 'hold B' "$ws" task/hold-b "$base")"
+  # main moves after the project branch forked, which is what makes the next landing absorb it.
+  printf 'upstream\n' > "$work/contested.txt"
+  git -C "$work" add contested.txt
+  git -C "$work" commit --quiet -m 'main: contested'
+  git -C "$work" push --quiet origin main
+
+  confirm_task_done "$task_a"
+  wait_for_job_state "$task_a" CONFLICT 240
+  assert_eq 'the absorb is what conflicted' 'MAIN_SYNC' "$(job_column_of "$task_a" phase)"
+  assert_eq 'an INTEGRATION_CONFLICT item is open' 1 \
+    "$(sql "SELECT count(*) FROM project_open_item
+             WHERE project_id = '$project' AND kind = 'INTEGRATION_CONFLICT' AND state = 'OPEN'
+               AND COALESCE(payload->>'phase', '') = 'MAIN_SYNC'" | tr -d '[:space:]')"
+
+  confirm_task_done "$task_b"
+  wait_for_job_row "$task_b"
+  # It is queued and it stays queued: a heartbeat is thirty seconds, so a queue that would take it
+  # takes it well inside this window. Nothing here is timing-sensitive in the other direction — a
+  # claim that did not happen cannot be hurried.
+  sleep 70
+  assert_eq 'the later landing is not claimed while the absorb is unresolved' 'QUEUED' \
+    "$(job_state_of "$task_b")"
+  assert_eq 'nothing has been pushed onto the project branch' \
+    "$(git -C "$work" rev-parse project/holdqueue)" "$(origin_tip "$origin" refs/heads/project/holdqueue)"
+
+  # Closing the item is the retry (J5), and the line moves on its own from there.
+  sql "UPDATE project_open_item
+          SET state = 'RESOLVED', resolution = 'HANDLED', resolved_by = 'COORDINATOR',
+              resolved_at = now(), updated_at = now()
+        WHERE project_id = '$project' AND kind = 'INTEGRATION_CONFLICT' AND state = 'OPEN'" >/dev/null
+  wait_for_job_state "$task_b" CONFLICT 180
+  assert_eq 'and it meets the same conflict, as it always would have' 'MAIN_SYNC' \
+    "$(job_column_of "$task_b" phase)"
+  assert_eq 'the project branch is still exactly where it was' \
+    "$(git -C "$work" rev-parse project/holdqueue)" "$(origin_tip "$origin" refs/heads/project/holdqueue)"
+}
+
 # ── the register ───────────────────────────────────────────────────────────────────────────────
 # One function per case, listed here. Later tasks append their own (§9.2) and do not edit these.
 CASES=(
@@ -534,6 +724,8 @@ CASES=(
   case_confirm_after_main_moved_rechecks_then_lands
   case_lands_no_ff_task_commits_are_ancestors
   case_project_done_flips_on_merge
+  case_main_line_task_branch_promotion
+  case_main_sync_conflict_holds_the_queue
 )
 
 main() {

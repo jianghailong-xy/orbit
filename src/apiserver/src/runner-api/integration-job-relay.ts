@@ -135,6 +135,7 @@ interface ClaimedRow {
   /** A promotion job's frozen source, and the two facts M-S3 compares before it lands. */
   jobSourceSha: string | null;
   promotionId: string | null;
+  promotionSourceKind: string | null;
   upstreamShaChecked: string | null;
   mergeTreeSha: string | null;
 }
@@ -181,6 +182,9 @@ export async function dispatchIntegrationJobs(
       if (after && after.openItemIds.length > 0) {
         await openItems?.deliverForItems(after.openItemIds);
       }
+      if (after && after.openItemIds.length > 0) {
+        await openItems?.deliverForItems(after.openItemIds);
+      }
       continue;
     }
     commands.push({
@@ -196,8 +200,12 @@ export async function dispatchIntegrationJobs(
       sourceRef: row.sourceRef,
       ...(row.sessionBaseSha ? { sessionBaseSha: row.sessionBaseSha } : {}),
       // A promotion names the exact commit the owner is being asked about, so the runner works from
-      // that rather than from wherever the branch has got to since (§3.4 M-S1).
+      // that rather than from wherever the branch has got to since (§3.4 M-S1). A TASK_BRANCH
+      // candidate's first check has none to name and resolves the ref itself (0293).
       ...(row.jobSourceSha ? { sourceSha: row.jobSourceSha } : {}),
+      ...(row.promotionSourceKind
+        ? { promotionSourceKind: row.promotionSourceKind as 'PROJECT_BRANCH' | 'TASK_BRANCH' }
+        : {}),
       ...(row.upstreamShaChecked ? { upstreamShaChecked: row.upstreamShaChecked } : {}),
       ...(row.mergeTreeSha ? { mergeTreeSha: row.mergeTreeSha } : {}),
       checks: checksFor(row),
@@ -217,12 +225,15 @@ export async function dispatchIntegrationJobs(
  */
 function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
   const checks: IntegrationCheckSpec[] = [];
-  // A PROJECT_BRANCH promotion runs the project's merge check and nothing else (§3.4 M-S3): every
-  // task it carries already passed its own acceptance on the line, and the session the job names
-  // belongs to one of those tasks only so the queue can find a checkout to work in — the job itself
-  // names no task, which is why `row.acceptanceCommand` here is that session's task's and not the
-  // promotion's.
-  const taskAcceptanceApplies = row.kind === 'LAND_TASK';
+  // Which checks a job runs is decided by WHAT IT IS PUTTING WHERE (§3.4 M-S3). A landing on the
+  // project branch runs the task's own acceptance on the combined tree, and so does a `TASK_BRANCH`
+  // promotion — it is one task's work arriving on the upstream, and the task's acceptance command is
+  // the criterion the whole thing was judged by. A `PROJECT_BRANCH` promotion runs the project's
+  // merge check and nothing else: every task it carries already passed its own acceptance on the
+  // line, and the session the job names belongs to one of those tasks only so the queue can find a
+  // checkout to work in — the job itself names no task, which is why `row.acceptanceCommand` here is
+  // that session's task's and not the promotion's.
+  const taskAcceptanceApplies = row.kind === 'LAND_TASK' || row.promotionSourceKind === 'TASK_BRANCH';
   if (taskAcceptanceApplies && row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
     checks.push({
       name: 'TASK_ACCEPTANCE',
@@ -267,6 +278,19 @@ async function claimOne(
        WHERE w."runner_id" = ${runnerId}::uuid
          AND c."cancel_requested_at" IS NULL
          AND NOT (c."serial_key" = ANY(${alreadyTaken}::text[]))
+         -- M2: while the item about an unresolved absorb of the upstream is still open, no later
+         -- landing on that same repository-and-ref is claimed. The conflict is not one task's — it
+         -- is the branch's relationship with the upstream, so the NEXT landing would hit exactly the
+         -- same paths and open exactly the same card, once per queued task. The item is the retry
+         -- mechanism (J5): when the coordinator has dealt with it and the item closes, the queue
+         -- moves again on its own.
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_open_item" i
+             JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+            WHERE f."serial_key" = c."serial_key"
+              AND f."phase" = 'MAIN_SYNC'
+              AND i."kind" = 'INTEGRATION_CONFLICT'
+              AND i."state" = 'OPEN')
          AND (
            -- A queued job whose repository and target ref nobody holds.
            (c."state" = 'QUEUED' AND NOT EXISTS (
@@ -321,6 +345,8 @@ async function claimOne(
       -- column of the table being updated -- 42P01, invalid reference to FROM-clause entry for
       -- table j -- and a claim that raises is a claim this relay swallows as a warning, which reads
       -- as a queue nobody ever picks up rather than as an error.
+      (SELECT p."source_kind" FROM "project_promotion" p
+        WHERE p."id" = j."promotion_id") AS "promotionSourceKind",
       (SELECT p."upstream_sha_checked" FROM "project_promotion" p
         WHERE p."id" = j."promotion_id") AS "upstreamShaChecked",
       (SELECT p."merge_tree_sha" FROM "project_promotion" p
@@ -521,6 +547,10 @@ export async function applyIntegrationJobResult(
         jobKind: job.kind,
         state,
         upstreamSha: body.upstreamSha ?? null,
+        // M-S1: what the job worked from. For a task-branch candidate the runner resolved it off the
+        // source ref because nobody had resolved it yet (0293), and this is where the promotion
+        // learns the commit the owner is being offered.
+        sourceSha: body.sourceSha ?? null,
         testedSha: body.testedSha ?? null,
         testedTreeSha: body.testedTreeSha ?? null,
         landedSha: body.landedSha ?? null,

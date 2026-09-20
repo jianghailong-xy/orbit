@@ -323,8 +323,13 @@ type IntegrationJobCommand struct {
 	// The anchor a rebase replays from, when the source session recorded one.
 	SessionBaseSha string `json:"sessionBaseSha,omitempty"`
 	// A promotion's frozen source: the exact commit the owner is being asked about (§3.4 M-S1).
-	// Empty for a LAND_TASK, which takes whatever its task branch holds now.
+	// Empty for a LAND_TASK, which takes whatever its task branch holds now, and empty for a
+	// TASK_BRANCH candidate's first check, which resolves the source ref and reports what it found.
 	SourceSha string `json:"sourceSha,omitempty"`
+	// Which kind of source a promotion is, because the two land differently (M6): PROJECT_BRANCH
+	// merges the branch onto the upstream as a merge commit, TASK_BRANCH rebases the task onto it
+	// and the upstream fast-forwards to the result (appendix A-Q7).
+	PromotionSourceKind string `json:"promotionSourceKind,omitempty"`
 	// LAND_PROMOTION: the upstream tip the last passing check ran against, and the tree it made.
 	// M-S2 and M-S3 compare both — an unmoved upstream must reproduce the same tree, and a moved one
 	// must be checked again before anything lands.

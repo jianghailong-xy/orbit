@@ -364,3 +364,91 @@ func TestIntegrationLeavesNoWorktreeBehind(t *testing.T) {
 		t.Fatalf("a scratch worktree survived the job:\n%s", listed)
 	}
 }
+
+// promotionCommand is a promotion job as the control plane sends it (§3.4): the upstream is both the
+// ref being written and the ref being merged into, and the branch under offer is the source.
+func (r *integrationRepo) promotionCommand(kind, sourceBranch, sourceKind string) IntegrationJobCommand {
+	return IntegrationJobCommand{
+		JobID:               strings.ReplaceAll(r.t.Name(), "/", "-"),
+		Kind:                kind,
+		WorkDir:             r.work,
+		RemoteName:          "origin",
+		RefAuthority:        "REMOTE",
+		TargetRef:           "refs/heads/main",
+		UpstreamRef:         "refs/heads/main",
+		SourceRef:           "refs/heads/" + sourceBranch,
+		PromotionSourceKind: sourceKind,
+	}
+}
+
+// TestPromotionOfATaskBranchRebasesAndFastForwards is M6's other half (appendix A-Q7): a MAIN-line
+// project has no branch of its own, so what reaches the upstream is the TASK's work replayed onto
+// the upstream tip and fast-forwarded to — not a merge commit carrying the task's original.
+//
+// The upstream moves after the branch forked, which is what makes the rebase a replay rather than
+// the no-op git makes of a branch already sitting on the tip. The check and the landing are two
+// separate jobs, as they are in the queue, and the landing is held to the tree the check passed.
+func TestPromotionOfATaskBranchRebasesAndFastForwards(t *testing.T) {
+	r := newIntegrationRepo(t)
+	r.checkoutNew("task/only", "main")
+	r.write("a.txt", "from a\n")
+	taskSha := r.commit("task a")
+	r.push("task/only")
+	r.checkout("main")
+	fork := r.rev("main")
+
+	r.write("upstream.txt", "moved on\n")
+	mainTip := r.commit("main moved")
+	r.push("main")
+
+	check := r.promotionCommand("CHECK_PROMOTION", "task/only", "TASK_BRANCH")
+	check.SessionBaseSha = fork
+	check.Checks = []IntegrationCheckSpec{
+		{Name: "TASK_ACCEPTANCE", Command: "test -f a.txt", ExpectedExitCode: 0, TimeoutSeconds: 60},
+		{Name: "MERGE_CHECK", Command: "test -f README.md", ExpectedExitCode: 0, TimeoutSeconds: 60},
+	}
+	checked := runIntegrationJob(check, silent)
+	if checked.State != "READY" {
+		t.Fatalf("check state = %s (%s %s), want READY", checked.State, checked.ErrorCode, checked.Phase)
+	}
+	if len(checked.Checks) != 2 {
+		t.Fatalf("the promotion ran %d checks, want the task's own and the project's", len(checked.Checks))
+	}
+	if checked.TestedSha == "" || checked.TestedSha == taskSha {
+		t.Fatalf("tested commit %q: the task branch was not replayed", checked.TestedSha)
+	}
+	if got := r.originRev("refs/heads/main"); got != mainTip {
+		t.Fatalf("a check pushed: main is %s, want %s", got, mainTip)
+	}
+
+	land := r.promotionCommand("LAND_PROMOTION", "task/only", "TASK_BRANCH")
+	land.SessionBaseSha = fork
+	land.SourceSha = taskSha
+	land.UpstreamShaChecked = mainTip
+	land.MergeTreeSha = checked.TestedTreeSha
+	landed := runIntegrationJob(land, silent)
+	if landed.State != "LANDED" {
+		t.Fatalf("landing state = %s (%s %s), want LANDED", landed.State, landed.ErrorCode, landed.Phase)
+	}
+	if landed.LandedTreeSha != landed.TestedTreeSha {
+		t.Fatalf("landed tree %q != tested tree %q", landed.LandedTreeSha, landed.TestedTreeSha)
+	}
+	if got := r.originRev("refs/heads/main"); got != landed.LandedSha {
+		t.Fatalf("origin main is %s, the result claims %s", got, landed.LandedSha)
+	}
+	// A fast-forward onto the upstream tip, and nothing else: one parent, which is where main was.
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^"); parent != mainTip {
+		t.Fatalf("the landed commit's parent is %s, want the upstream tip %s", parent, mainTip)
+	}
+	if out, _ := git(r.work, "rev-list", "--parents", "-n", "1", landed.LandedSha); len(strings.Fields(out)) != 2 {
+		t.Fatalf("the landed commit is not a plain commit: %q", out)
+	}
+	// The task's own commit is NOT an ancestor: main gained the work, not the commit. This is the
+	// measure that separates a rebase from a merge --no-ff, which would have kept it.
+	if isAncestor(r.work, taskSha, landed.LandedSha) {
+		t.Fatal("the task's original commit is an ancestor — that is a merge, not a rebase")
+	}
+	if body, _ := git(r.work, "show", landed.LandedSha+":a.txt"); body != "from a" {
+		t.Fatalf("the landed commit does not carry the task's file: %q", body)
+	}
+}

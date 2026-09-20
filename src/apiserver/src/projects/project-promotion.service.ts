@@ -12,9 +12,8 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
-  IntegrationJobKind,
-  integrationIdempotencyKey,
   integrationSerialKey,
+  queuePromotionJob,
   shortBranchName,
 } from './project-integration-job';
 import {
@@ -485,80 +484,6 @@ async function resolveApprovalItem(
   });
 }
 
-/** What a promotion job needs to exist, whichever of the two it is. */
-interface PromotionJobSubject {
-  id: string;
-  projectId: string;
-  ownerId: string;
-  codebaseId: string;
-  sourceRef: string;
-  sourceSha: string;
-  upstreamRef: string;
-  sessionId: string | null;
-}
-
-/**
- * Queue one `CHECK_PROMOTION` or `LAND_PROMOTION` (§3.4).
- *
- * The job carries a session even though a promotion is not one task's: the session is how the queue
- * finds a checkout on a runner to work in (`claimOne` joins it), and a promotion's git work happens
- * in a throwaway worktree beside that checkout like every other job's. The task it names is the last
- * one that landed, so a failure opens an item somebody is already watching rather than one with
- * nobody's name on it.
- */
-export async function queuePromotionJob(
-  tx: Prisma.TransactionClient,
-  input: {
-    kind: Extract<IntegrationJobKind, 'CHECK_PROMOTION' | 'LAND_PROMOTION'>;
-    promotion: PromotionJobSubject;
-    canonicalRepoUrl: string;
-  },
-): Promise<string> {
-  const previous = await tx.projectIntegrationJob.aggregate({
-    where: { promotionId: input.promotion.id, kind: input.kind },
-    _max: { generation: true },
-  });
-  const generation = (previous._max.generation ?? 0) + 1;
-  const jobId = randomUUID();
-  const [created] = await tx.projectIntegrationJob.createManyAndReturn({
-    data: [{
-      id: jobId,
-      projectId: input.promotion.projectId,
-      ownerId: input.promotion.ownerId,
-      codebaseId: input.promotion.codebaseId,
-      kind: input.kind,
-      generation,
-      // No task id, deliberately. A promotion is not one task's landing, and a job row that named
-      // one would make "the job of task X" ambiguous for every reader that addresses a job by its
-      // task — the acceptance script included. The session is still named, because that is how the
-      // queue finds a checkout on a runner to work in.
-      taskId: null,
-      sessionId: input.promotion.sessionId,
-      promotionId: input.promotion.id,
-      serialKey: integrationSerialKey({
-        kind: input.kind,
-        canonicalRepoUrl: input.canonicalRepoUrl,
-        targetRef: input.promotion.upstreamRef,
-        projectId: input.promotion.projectId,
-      }),
-      // A promotion is merged INTO the upstream, so that is the ref it writes and the one it
-      // serialises on; the project branch is its source.
-      targetRef: input.promotion.upstreamRef,
-      upstreamRef: input.promotion.upstreamRef,
-      sourceRef: input.promotion.sourceRef,
-      sourceSha: input.promotion.sourceSha,
-      idempotencyKey: integrationIdempotencyKey({
-        kind: input.kind,
-        subjectId: input.promotion.id,
-        generation,
-      }),
-    }],
-    skipDuplicates: true,
-    select: { id: true },
-  });
-  return created?.id ?? jobId;
-}
-
 /** What one finished promotion job did to the promotion it belongs to. */
 export interface PromotionJobOutcome {
   promotionId: string;
@@ -586,6 +511,9 @@ export async function applyPromotionJobResult(
     jobKind: string;
     state: string;
     upstreamSha: string | null;
+    /** The commit this job worked from. For a `TASK_BRANCH` candidate it is the one the runner
+     *  resolved off the source ref, and this is the first place the platform ever knows it (0293). */
+    sourceSha: string | null;
     testedSha: string | null;
     testedTreeSha: string | null;
     landedSha: string | null;
@@ -614,6 +542,10 @@ export async function applyPromotionJobResult(
         where: { id: promotion.id },
         data: {
           state: 'READY' satisfies PromotionState,
+          // The commit the owner is being asked about, for the candidates whose source the platform
+          // could not resolve for itself (0293). An echo for every other job: the runner works from
+          // the sha it was handed and reports the same one back.
+          ...(input.sourceSha ? { sourceSha: input.sourceSha } : {}),
           upstreamShaChecked: input.upstreamSha,
           mergeTreeSha: input.testedTreeSha,
           commitsAhead: input.aheadOfUpstream,
@@ -632,7 +564,7 @@ export async function applyPromotionJobResult(
         },
       };
     }
-    return blockPromotion(tx, promotion.id, checks, input.conflicts, now);
+    return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
   }
 
   // LAND_PROMOTION.
@@ -645,6 +577,7 @@ export async function applyPromotionJobResult(
       state: input.state,
       mergedSha,
       targetShaBefore: input.targetShaBefore,
+      testedSha: input.testedSha,
       testedTreeSha: input.testedTreeSha,
     });
     await tx.projectPromotion.update({
@@ -664,7 +597,7 @@ export async function applyPromotionJobResult(
     });
     return { promotionId: promotion.id, state: 'MERGED', receiptIds, openApproval: null };
   }
-  return blockPromotion(tx, promotion.id, checks, input.conflicts, now);
+  return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
 }
 
 /** M-T3 / M-T9: the candidate stops and somebody has to look at it. */
@@ -674,11 +607,15 @@ async function blockPromotion(
   checks: Prisma.InputJsonValue,
   conflicts: string[],
   now: Date,
+  sourceSha: string | null,
 ): Promise<PromotionJobOutcome> {
   await tx.projectPromotion.update({
     where: { id: promotionId },
     data: {
       state: 'BLOCKED' satisfies PromotionState,
+      // The candidate a check refused still names the commit it refused, for the same reason the
+      // one it accepted does: the coordinator has to be able to go and look at it.
+      ...(sourceSha ? { sourceSha } : {}),
       checks,
       conflicts: conflicts.slice(0, 200),
       decidedAt: now,
@@ -692,22 +629,33 @@ async function blockPromotion(
  *
  * Per task rather than one for the promotion, because a receipt is what
  * `project-criterion-landing.ts` reads to answer "is this task's work on the upstream", and that is
- * a question about a task. The source SHA is where that task's work landed on the integration line —
- * read off its own landing job, so the receipt points at the commit a reader can go and look at
- * rather than at the merge commit that carried twelve of them.
+ * a question about a task. The source SHA is where that task's work reached the branch this receipt
+ * is about, so the receipt points at a commit a reader can go and look at rather than at the merge
+ * commit that carried twelve of them.
+ *
+ * WHERE THAT COMMIT COMES FROM IS THE ONE THING THE TWO KINDS DISAGREE ON. A `PROJECT_BRANCH`
+ * candidate carries tasks that each landed on the project branch earlier, so each receipt names its
+ * own landing job's `landed_sha` — the commit a reader finds on the branch. A `TASK_BRANCH`
+ * candidate IS one task's branch on a MAIN-line project, which has no integration line under it:
+ * there is no earlier landing to point at, and the commit that arrived on the upstream is the one
+ * the landing job tested (M9). Both are the same session's own work, which is why one helper writes
+ * both.
  */
 async function writeUpstreamReceipts(
   tx: Prisma.TransactionClient,
   input: {
-    promotion: { id: string; ownerId: string; projectId: string; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string };
+    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null };
     jobId: string;
     state: 'LANDED' | 'ALREADY_LANDED';
     mergedSha: string;
     targetShaBefore: string | null;
+    /** What the landing job put on the upstream, and the commit it ran its checks on. */
+    testedSha: string | null;
     testedTreeSha: string | null;
   },
 ): Promise<string[]> {
-  const landings = await tx.projectIntegrationJob.findMany({
+  const onItsOwnBranch = input.promotion.sourceKind === 'TASK_BRANCH';
+  const landings = onItsOwnBranch ? [] : await tx.projectIntegrationJob.findMany({
     where: {
       projectId: input.promotion.projectId,
       kind: 'LAND_TASK',
@@ -721,17 +669,24 @@ async function writeUpstreamReceipts(
   const receiptIds: string[] = [];
   for (const taskId of input.promotion.includedTaskIds) {
     const landing = byTask.get(taskId);
-    if (!landing?.sessionId || !landing.landedSha) continue;
+    const sessionId = landing?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
+    // The job's tested commit, or — when there is none because the landing answered ALREADY_LANDED
+    // — the candidate's own source, which is the commit that turned out to be on the upstream
+    // already. Without the second half that answer would leave the task with no receipt and the
+    // criterion reading unlanded while its work sits on main.
+    const sourceSha = landing?.landedSha
+      ?? (onItsOwnBranch ? input.testedSha ?? input.promotion.sourceSha : null);
+    if (!sessionId || !sourceSha) continue;
     const written = await MergeReceiptService.fromIntegrationJob(tx, {
       ownerId: input.promotion.ownerId,
-      sessionId: landing.sessionId,
+      sessionId,
       taskId,
       projectId: input.promotion.projectId,
       jobId: input.jobId,
       state: input.state,
       sourceBranch: shortBranchName(input.promotion.sourceRef),
       targetBranch: shortBranchName(input.promotion.upstreamRef),
-      sourceSha: landing.landedSha,
+      sourceSha,
       targetShaBefore: input.targetShaBefore,
       landedSha: input.mergedSha,
       rebaseBaseSha: input.targetShaBefore,

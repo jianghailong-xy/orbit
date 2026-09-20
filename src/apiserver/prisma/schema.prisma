@@ -2193,8 +2193,12 @@ model ProjectPromotion {
   taskId     String? @map("task_id") @db.Uuid
   sessionId  String? @map("session_id") @db.Uuid
 
-  sourceRef   String @map("source_ref")
-  sourceSha   String @map("source_sha") @db.Char(40)
+  sourceRef String @map("source_ref")
+  /// The commit this candidate offers. Null only between the moment a `TASK_BRANCH` candidate is
+  /// made and the moment its check reports: a MAIN-line project promotes a task branch, and where
+  /// that branch points is a fact only the repository has (0293). A check resolves it and writes it
+  /// here, so everything a check produced — READY, CONFIRMED, MERGED — carries one.
+  sourceSha String? @map("source_sha") @db.Char(40)
   /// Frozen from the codebase row when the candidate was made: what "main" meant then.
   upstreamRef String @map("upstream_ref")
 
