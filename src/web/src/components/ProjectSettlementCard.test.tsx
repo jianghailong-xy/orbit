@@ -1,304 +1,350 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
-import { act, type ComponentProps } from 'react';
+import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import {
   ProjectSettlementCard,
   SETTLEMENT_CHAT_HINT,
   SETTLEMENT_CONFIRM_ACTION,
-  SETTLEMENT_CONFIRMED,
-  SETTLEMENT_CONFIRMED_NOTE,
-  SETTLEMENT_EXPLAINS,
   SETTLEMENT_HEADING,
-  SETTLEMENT_NOT_RECORDED,
   SETTLEMENT_PREVIEW,
-  SETTLEMENT_SHOW_LESS,
-  SETTLEMENT_STALE,
+  SETTLEMENT_RULE,
+  SETTLEMENT_SETTLED_BODY,
+  SETTLEMENT_SETTLED_PROVENANCE,
+  SETTLEMENT_SETTLED_TITLE,
   SessionProjectSettlementCard,
   projectSettlementContext,
+  settlementBlockExplanation,
+  settlementBlockTitle,
   settlementCriterionFacts,
+  settlementExplains,
   settlementHeldOnProject,
   settlementMeta,
-  settlementReadLabel,
   settlementTally,
-  type SettlementCriterion,
+  type SettlementClause,
+  type SettlementCriterionAnswer,
   type SettlementProjectDocument,
 } from './ProjectSettlementCard';
-import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
+import { acceptanceConfirmationKey } from '../lib/acceptanceConfirmation';
 
 /**
- * The project settlement card: the closing question, in the coordinator conversation, at the moment
- * the work filed under a project has met every criterion it states.
+ * The card that explains why a project the server has NOT recorded done is not done.
  *
- * What is asserted is the condition and the two things the card may never do with it. The condition
- * is deliberately strict — an OPEN project, criteria stated, EVERY one of them met, and no task
- * IN_PROGRESS — because the failure mode is a card that sits under every project forever asking
- * "is this done?", so every "no card" here is asserted on a fixture that then draws one once the
- * single fact under test changes. And a criterion with no merge receipt never disables the primary
- * action: the count is something the reader is told, not something that takes the decision off
- * them.
- *
- * The press is asserted at the wire, not at a callback: `PATCH /projects/:id` with
- * `{status: 'DONE'}` and nothing naming a session, which is the one shape the status door accepts
- * from a conversation (`PROJECT_STATUS_NOT_SESSION_WRITABLE` for every other).
+ * What is asserted is the derivation's own answer rendered, and the two things this file must
+ * never do with it: restate a predicate the server already decided (which criteria trip which
+ * clause travels on `withheld`), and offer a press that cannot change anything. The condition is
+ * asserted on both sides — every "no card" case is a fixture that then draws one once the fact
+ * under test changes, so an empty pane is never mistaken for a card that was never going to draw.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
 
-const PROJECT = '34LWcmLItBx6ytdO26XXF';
-const TITLE = 'move the confirmation to the start';
-const PATH = `/projects/${PROJECT}`;
+const TITLE = 'Orbit 原生 Watch';
+const PROJECT = '34DGqqkpCEVavXwRLFWKU';
 
-/** Criteria in stated order, each met (`true`), unmet (`false`) or not answered for (`undefined`). */
-function criteriaOf(...met: Array<boolean | undefined>): SettlementCriterion[] {
-  return met.map((satisfied, index) => ({
-    id: `c${index + 1}`,
-    ordinal: index + 1,
-    text: `condition ${index + 1} holds`,
-    landing: 'LANDED',
-    ...(satisfied === undefined ? {} : { satisfied }),
-  }));
-}
-
-/** A project whose every criterion is met and nothing is running: the card's own condition. */
-function projectOf(over: Partial<SettlementProjectDocument> = {}): SettlementProjectDocument {
+function criterion(
+  over: Partial<SettlementCriterionAnswer> & { definitionId: string },
+): SettlementCriterionAnswer {
   return {
-    title: TITLE,
-    status: 'OPEN',
-    acceptanceCriteriaItems: criteriaOf(true, true, true),
-    tasksByStatus: {},
+    satisfied: true,
+    landing: 'LANDED',
+    independence: 'INDEPENDENT',
+    conflicts: [],
+    remedy: null,
+    withheld: [],
     ...over,
   };
 }
 
+/** A project whose criteria are all met and landed, and whose set nobody has confirmed: one
+ *  clause withheld, and it is the clause that has a door. */
+function projectOf(over: Partial<SettlementProjectDocument> = {}): SettlementProjectDocument {
+  const criteria = [
+    criterion({ definitionId: 'c1' }),
+    criterion({ definitionId: 'c2' }),
+    criterion({ definitionId: 'c3', withheld: ['STANDARD_SET_UNCONFIRMED'] }),
+  ];
+  return {
+    title: TITLE,
+    status: 'OPEN',
+    acceptanceCriteriaItems: [
+      { id: 'c1', ordinal: 1, text: 'condition one holds' },
+      { id: 'c2', ordinal: 2, text: 'condition two holds' },
+      { id: 'c3', ordinal: 3, text: 'condition three holds' },
+    ],
+    tasksByStatus: { DONE: 4 },
+    derivedDone: {
+      status: 'OPEN',
+      done: false,
+      withheld: ['STANDARD_SET_UNCONFIRMED'],
+      // The confirmation clause is not about any one criterion; the row list for it is empty by
+      // construction, and the projection says so by leaving every criterion counting.
+      criteria: criteria.map((row) => ({ ...row, withheld: [] })),
+      confirmation: 'UNCONFIRMED',
+    },
+    ...over,
+  };
+}
+
+/** A project held by the criterion-side clauses, three and five criteria long. */
+function unlanded(over: Partial<SettlementProjectDocument> = {}): SettlementProjectDocument {
+  const criteria = [1, 2, 3, 4, 5].map((n) => criterion({
+    definitionId: `u${n}`,
+    landing: 'UNKNOWN',
+    withheld: ['CRITERION_UNLANDED'],
+  }));
+  return {
+    title: TITLE,
+    status: 'OPEN',
+    acceptanceCriteriaItems: criteria.map((row, index) => ({
+      id: row.definitionId,
+      ordinal: index + 1,
+      text: `condition ${index + 1} holds`,
+    })),
+    tasksByStatus: { DONE: 9 },
+    derivedDone: {
+      status: 'OPEN',
+      done: false,
+      withheld: ['CRITERION_UNLANDED'],
+      criteria,
+      confirmation: 'CONFIRMED',
+    },
+    ...over,
+  };
+}
+
+const card = (
+  project: SettlementProjectDocument,
+  over: Partial<Parameters<typeof ProjectSettlementCard>[0]> = {},
+): string => renderToStaticMarkup(
+  <ProjectSettlementCard
+    project={project}
+    standing={null}
+    settled={false}
+    onConfirm={() => {}}
+    onChatAbout={() => {}}
+    {...over}
+  />,
+);
+
 describe('the copy', () => {
   /** The card's sentences are a spec rather than a draft, so they are pinned as literals: a test
    *  that asserted each constant against itself would go green on any rewording at all. */
-  it('asks the question, and names its two actions, in exactly these words', () => {
-    expect(SETTLEMENT_HEADING).toBe('Is this project done?');
-    expect(SETTLEMENT_CONFIRM_ACTION).toBe('Confirm the project is done');
+  it('asks the question the projection answers, and names its one press', () => {
+    expect(SETTLEMENT_HEADING).toBe('Why is this project not done?');
+    expect(SETTLEMENT_CONFIRM_ACTION).toBe('Confirm the criteria');
     expect(OWNER_SEND_BACK_ACTION).toBe('Chat about this');
-    expect(SETTLEMENT_CHAT_HINT).toBe(
-      '“Chat about this” hands the card’s own facts to the composer below, so you can say what is '
-      + 'still missing instead of confirming.',
+    expect(SETTLEMENT_RULE).toBe(
+      'Orbit records a project done by itself — no press, no agent — when every stated criterion '
+      + 'is met by work that has landed and counts, under a criteria set you have confirmed.',
     );
-    expect(SETTLEMENT_EXPLAINS).toBe(
-      'Nothing decides this for you. Confirming it is a claim you are making about the goal, not a '
-      + 'conclusion Orbit reached — so here is everything Orbit can put beside it. Confirming the '
-      + 'project done neither closes nor stops the work still filed under it.',
-    );
-    expect(SETTLEMENT_STALE).toBe(
-      'This project was recorded as done at another end. Nothing here was pressed.',
-    );
-    expect(SETTLEMENT_CONFIRMED).toBe('Confirmed done · by you, from this conversation.');
-    expect(SETTLEMENT_CONFIRMED_NOTE).toBe(
-      'The project is recorded DONE; the work filed under it is untouched.',
-    );
-    expect(SETTLEMENT_SHOW_LESS).toBe('Show less');
-    expect(settlementReadLabel(5)).toBe('Show all 5 criteria');
+    expect(SETTLEMENT_SETTLED_TITLE).toBe('Orbit recorded this project done.');
+    expect(SETTLEMENT_CHAT_HINT).toContain('hands the card’s own facts to the composer below');
   });
 
-  /** The card and the reply it arms may only state what the project document carries, and this
-   *  document carries no running count but the status tally. Both said "nothing is running under
-   *  it" until 2026-09-19, off a `buckets.running` that `GET /projects/:id` never serves — so the
-   *  claim was unbackable in every render, and false over live work. */
-  it('claims nothing about what is running, which this read cannot see', () => {
-    const project = projectOf({ tasksByStatus: { IN_PROGRESS: 2, OPEN: 1 } });
-    expect(settlementMeta(project)).not.toMatch(/running/i);
-    expect(projectSettlementContext(project)).not.toMatch(/running/i);
+  it('says how many of those conditions do not hold, in the singular and the plural', () => {
+    expect(settlementExplains(['CRITERION_UNLANDED']))
+      .toBe(`${SETTLEMENT_RULE} One of those does not hold here.`);
+    expect(settlementExplains(['CRITERION_UNLANDED', 'STANDARD_SET_UNCONFIRMED']))
+      .toBe(`${SETTLEMENT_RULE} 2 of those do not hold here.`);
   });
 
-  it('says what the project is and what was counted, as one sentence each', () => {
+  it('names what the project is, and that Orbit has not recorded it done', () => {
     expect(settlementMeta(projectOf())).toBe(
-      `${TITLE} · every stated criterion has been met by the work filed under it`,
+      `${TITLE} · every stated criterion has been met by the work filed under it, and Orbit has `
+      + 'not recorded it done',
     );
-    expect(settlementTally(projectOf())).toBe(
-      '3 stated criteria · 3 settled by the work filed under them · 0 with no merge receipt',
-    );
-  });
-});
-
-describe('whether a project is held on the settlement question', () => {
-  it('holds an OPEN project whose every stated criterion is met with nothing running', () => {
-    expect(settlementHeldOnProject(projectOf())).toBe(true);
-  });
-
-  it.each<[string, SettlementProjectDocument]>([
-    ['a criterion nobody has answered for', projectOf({ acceptanceCriteriaItems: criteriaOf(true, undefined, true) })],
-    ['a criterion the derivation says does not hold', projectOf({ acceptanceCriteriaItems: criteriaOf(true, false, true) })],
-    ['a task IN_PROGRESS under it', projectOf({ tasksByStatus: { IN_PROGRESS: 1 } })],
-    ['the project recorded done', projectOf({ status: 'DONE' })],
-    ['the project recorded cancelled', projectOf({ status: 'CANCELLED' })],
-    ['a read that does not say where it stands', projectOf({ status: undefined })],
-    ['no criteria stated', projectOf({ acceptanceCriteriaItems: [] })],
-    ['no criteria in the read at all', projectOf({ acceptanceCriteriaItems: undefined })],
-  ])('holds nothing while the project has %s', (_, project) => {
-    expect(settlementHeldOnProject(project)).toBe(false);
-  });
-
-  it('holds nothing for a project that could not be read', () => {
-    expect(settlementHeldOnProject(null)).toBe(false);
-    expect(settlementHeldOnProject(undefined)).toBe(false);
-  });
-});
-
-/** The facts column and the tally, which are the two things a reader is deciding on. */
-describe('what the card says about each criterion', () => {
-  it.each<[SettlementCriterion['landing'], boolean | undefined, string]>([
-    ['LANDED', true, 'Settled · Landed'],
-    ['UNKNOWN', true, 'Settled · No receipt'],
-    ['UNKNOWN', false, 'Not settled · No receipt'],
-    ['LANDED', undefined, 'No settlement answer · Landed'],
-  ])('says a %s criterion met=%s as "%s"', (landing, satisfied, expected) => {
-    const [criterion] = criteriaOf(satisfied);
-    expect(settlementCriterionFacts({ ...criterion!, landing })).toBe(expected);
   });
 
   it('counts the set, and what is still open under it only when there is something to count', () => {
-    // All three met, one of them with no receipt: the tally says both numbers.
-    const one = projectOf({
-      acceptanceCriteriaItems: [
-        { ...criteriaOf(true, true, true)[0]!, landing: 'UNKNOWN' },
-        ...criteriaOf(true, true, true).slice(1),
-      ],
-      tasksByStatus: { DONE: 4, CANCELLED: 1 },
-    });
-    expect(settlementTally(one)).toBe(
-      '3 stated criteria · 3 settled by the work filed under them · 1 with no merge receipt',
+    expect(settlementTally(unlanded())).toBe(
+      '5 stated criteria · 5 settled by the work filed under them · 5 with no merge receipt',
     );
+    expect(settlementTally(unlanded({ tasksByStatus: { DONE: 9, FAILED: 2, OPEN: 1 } })))
+      .toContain('· 3 task still unsettled, 2 ended FAILED');
+  });
 
-    // Unfinished work rides along, and FAILED is counted in both halves of that sentence: it is a
-    // run's own report that it stopped short, so the work under it is still outstanding.
-    expect(settlementTally({ ...one, tasksByStatus: { DONE: 4, FAILED: 2, IN_PROGRESS: 1 } })).toBe(
-      '3 stated criteria · 3 settled by the work filed under them · 1 with no merge receipt'
-      + ' · 3 task still unsettled, 2 ended FAILED',
-    );
+  it('reads the two facts off the criterion, and never calls a missing receipt a landing', () => {
+    expect(settlementCriterionFacts(criterion({ definitionId: 'c', landing: 'LANDED' })))
+      .toBe('Settled · Landed');
+    expect(settlementCriterionFacts(criterion({ definitionId: 'c', landing: 'UNKNOWN' })))
+      .toBe('Settled · No receipt');
+    expect(settlementCriterionFacts(criterion({ definitionId: 'c', landing: 'ON_INTEGRATION_LINE' })))
+      .toBe('Settled · On the integration line');
+    expect(settlementCriterionFacts(criterion({ definitionId: 'c', satisfied: false })))
+      .toBe('Not settled · Landed');
+  });
 
-    // Nothing outstanding under it, and no tally at all: both are ways of having nothing to say,
-    // and neither may come out as "0 task still unsettled, 0 ended FAILED".
-    expect(settlementTally(one)).not.toContain('still unsettled');
-    expect(settlementTally({ ...one, tasksByStatus: undefined })).not.toContain('still unsettled');
+  it('counts the criteria that trip a clause, and marks the two clauses that are about the project', () => {
+    expect(settlementBlockTitle('CRITERION_UNLANDED', 1)).toBe('1 criterion has no merge receipt proving it landed');
+    expect(settlementBlockTitle('CRITERION_UNLANDED', 5)).toBe('5 criteria have no merge receipt proving they landed');
+    expect(settlementBlockTitle('STANDARD_SET_UNCONFIRMED', 0))
+      .toBe('the criteria on record have not been confirmed in their current wording');
+  });
+
+  /** Every clause the server can name has words here: a clause this file cannot say is a card that
+   *  either goes silent about what is withholding settlement or invents a reading of its own. */
+  it('has a title and an explanation for every clause the projection can report', () => {
+    const clauses: SettlementClause[] = [
+      'NO_CRITERIA_STATED', 'CRITERION_UNSATISFIED', 'CRITERION_UNLANDED',
+      'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE', 'STANDARD_SET_UNCONFIRMED',
+    ];
+    for (const clause of clauses) {
+      expect(settlementBlockTitle(clause, 3)).not.toBe('');
+      expect(settlementBlockExplanation(clause)).not.toBe('');
+    }
   });
 });
 
-describe('what the card draws', () => {
-  const card = (
-    project: SettlementProjectDocument,
-    over: Partial<ComponentProps<typeof ProjectSettlementCard>> = {},
-  ): string =>
-    renderToStaticMarkup(
-      <ProjectSettlementCard
-        project={project}
-        onConfirm={() => {}}
-        onChatAbout={() => {}}
-        {...over}
-      />,
-    );
+describe('whether a project is held on the question', () => {
+  it('holds a project that looks finished and whose projection withholds settlement', () => {
+    expect(settlementHeldOnProject(unlanded())).toBe(true);
+  });
 
-  it('heads the question, says what it is about, and carries the facts column', () => {
-    const markup = card(projectOf({
-      acceptanceCriteriaItems: [
-        { ...criteriaOf(true, true, true)[0]!, landing: 'UNKNOWN' },
-        ...criteriaOf(true, true, true).slice(1),
-      ],
-    }));
+  it.each<[string, SettlementProjectDocument]>([
+    ['a server that serves no projection', projectOf({ derivedDone: undefined })],
+    ['a project recorded done', projectOf({ status: 'DONE' })],
+    ['a projection that withholds nothing', projectOf({
+      derivedDone: { status: 'DONE', done: true, withheld: [], criteria: [], confirmation: 'CONFIRMED' },
+    })],
+    ['a criterion the work has not met', projectOf({
+      derivedDone: {
+        status: 'OPEN',
+        done: false,
+        withheld: ['CRITERION_UNSATISFIED'],
+        criteria: [criterion({ definitionId: 'c1', satisfied: false, withheld: ['CRITERION_UNSATISFIED'] })],
+        confirmation: 'CONFIRMED',
+      },
+    })],
+    ['a task running under it', projectOf({ tasksByStatus: { DONE: 4, IN_PROGRESS: 1 } })],
+    ['no criteria at all', projectOf({
+      derivedDone: { status: 'OPEN', done: false, withheld: ['NO_CRITERIA_STATED'], criteria: [], confirmation: 'CONFIRMED' },
+    })],
+  ])('holds nothing for %s', (_, document) => {
+    expect(settlementHeldOnProject(document)).toBe(false);
+  });
+
+  it('holds nothing for a read that did not answer', () => {
+    expect(settlementHeldOnProject(null)).toBe(false);
+    expect(settlementHeldOnProject(undefined)).toBe(false);
+    expect(settlementHeldOnProject({ title: TITLE })).toBe(false);
+  });
+});
+
+describe('the card', () => {
+  it('leads with the rule and the count, over the clause that does not hold', () => {
+    const markup = card(unlanded());
     expect(markup).toContain(SETTLEMENT_HEADING);
     expect(markup).toContain(PROVENANCE_LABEL);
-    expect(markup).toContain(
-      `${TITLE} · every stated criterion has been met by the work filed under it`,
-    );
-    expect(markup).toContain('Settled · Landed');
+    expect(markup).toContain(`${SETTLEMENT_RULE} One of those does not hold here.`);
+    expect(markup).toContain('5 criteria have no merge receipt proving they landed');
     expect(markup).toContain('Settled · No receipt');
-    expect(markup).toContain(SETTLEMENT_EXPLAINS);
   });
 
-  it('offers the claim in exactly these words, with the hint under the row they sit in', () => {
-    expect(SETTLEMENT_CONFIRM_ACTION).toBe('Confirm the project is done');
-    const markup = card(projectOf());
-    expect(markup).toContain(`>${SETTLEMENT_CONFIRM_ACTION}</button>`);
-    expect(markup).toContain(`>${OWNER_SEND_BACK_ACTION}</button>`);
-    expect(markup).toContain(SETTLEMENT_CHAT_HINT);
+  /** The grouping is the SERVER's: each criterion carries the clauses it trips, and a client that
+   *  decided membership itself would be a second statement of the projection's rule. */
+  it('groups the criteria the way the projection grouped them, not by re-reading the facts', () => {
+    const project = unlanded();
+    // A criterion whose landing is UNKNOWN — every fact says it trips CRITERION_UNLANDED — but
+    // which the projection did NOT put in that clause. The card must follow the projection.
+    project.derivedDone!.criteria = [
+      criterion({ definitionId: 'u1', landing: 'UNKNOWN', withheld: [] }),
+      criterion({ definitionId: 'u2', landing: 'LANDED', withheld: ['CRITERION_UNLANDED'] }),
+    ];
+    project.acceptanceCriteriaItems = [
+      { id: 'u1', ordinal: 1, text: 'condition one holds' },
+      { id: 'u2', ordinal: 2, text: 'condition two holds' },
+    ];
+    const markup = card(project);
+    expect(markup).toContain('condition two holds');
+    expect(markup).not.toContain('condition one holds');
   });
 
-  /** Three rows and the rest behind one press: what the reader is checking is the fact column
-   *  beside each line, so three of them make the point and the fourth is not a fifth row. */
-  it('folds everything past the third criterion, and says how many there are', () => {
-    const criteria = criteriaOf(true, true, true, true, true);
-    const markup = card(projectOf({ acceptanceCriteriaItems: criteria }));
-    const rows = markup.match(/class="project-settlement-text"/g) ?? [];
-    expect(rows).toHaveLength(SETTLEMENT_PREVIEW);
-    expect(settlementReadLabel(criteria.length)).toBe('Show all 5 criteria');
-    expect(markup).toContain('Show all 5 criteria');
-    // A set that fits has nothing to toggle, and no control appears offering to show it.
-    expect(card(projectOf())).not.toContain('Show all 3 criteria');
+  it('folds the criteria past the third behind a reading control', () => {
+    const folded = card(unlanded());
+    expect(folded).toContain(`>Show all 5<`);
+    expect((folded.match(/Settled · No receipt/g) ?? []).length).toBe(SETTLEMENT_PREVIEW);
+
+    const opened = card(unlanded(), {});
+    expect(opened).not.toContain('condition five holds');
   });
 
-  /** Nothing decides this for the reader, and the press is a claim rather than a conclusion: a
-   *  criterion with no receipt does not disable the action, however many of them there are. */
-  it('leaves the claim pressable while every criterion is short of a merge receipt', () => {
-    const markup = card(projectOf({
-      acceptanceCriteriaItems: criteriaOf(true, true, true)
-        .map((c) => ({ ...c, landing: 'UNKNOWN' as const })),
-      tasksByStatus: { OPEN: 2, FAILED: 1 },
-    }));
-    const actions = markup.match(/<button[^>]*class="card-action[^"]*"[^>]*>/g) ?? [];
-    expect(actions).toHaveLength(2);
-    for (const tag of actions) expect(tag).not.toContain('disabled');
-    expect(markup).toContain('3 with no merge receipt');
-    expect(markup).toContain('3 task still unsettled, 1 ended FAILED');
+  it('says what would clear the clause, and quotes the server for the one whose repair it names', () => {
+    const project = unlanded();
+    expect(card(project)).toContain('land the branch, or record the merge with merge_receipt');
+
+    const authored = projectOf({
+      derivedDone: {
+        status: 'OPEN',
+        done: false,
+        withheld: ['CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE'],
+        criteria: [criterion({
+          definitionId: 'c3',
+          independence: 'AUTHORED_BY_ITS_OWN_EVIDENCE',
+          conflicts: [{ sessionId: 's1', taskId: 't1', taskTitle: '补自更新 E2E 配方' }],
+          remedy: { requiredAction: 'ASSIGN_AN_INDEPENDENT_VERIFICATION_TASK', instruction: 'file a VERIFICATION task against this criterion’s work' },
+          withheld: ['CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE'],
+        })],
+        confirmation: 'CONFIRMED',
+      },
+    });
+    const markup = card(authored);
+    expect(markup).toContain('file a VERIFICATION task against this criterion’s work');
+    expect(markup).toContain('补自更新 E2E 配方');
   });
 
-  it('records done at another end: both actions dead, the card and its facts still there', () => {
-    const markup = card(projectOf({ status: 'DONE' }));
-    expect(markup).toContain(SETTLEMENT_STALE);
-    expect(markup).toContain('Settled · Landed');
-    const actions = markup.match(/<button[^>]*class="card-action[^"]*"[^>]*>/g) ?? [];
-    expect(actions).toHaveLength(2);
-    for (const tag of actions) expect(tag).toContain('disabled');
+  /** One door, and it is not "done": the press is the derivation's second input, and it is offered
+   *  only when that is the clause withholding settlement. */
+  it('offers the confirmation press only for the clause it clears', () => {
+    expect(card(projectOf())).toContain(SETTLEMENT_CONFIRM_ACTION);
+    expect(card(unlanded())).not.toContain(SETTLEMENT_CONFIRM_ACTION);
+    expect(card(unlanded())).toContain(OWNER_SEND_BACK_ACTION);
   });
 
-  it('leaves the receipt where a press made here was answered, and no actions under it', () => {
-    const markup = card(projectOf(), { confirmed: true });
-    expect(markup).toContain(SETTLEMENT_CONFIRMED);
-    expect(markup).toContain(SETTLEMENT_CONFIRMED_NOTE);
-    expect(markup).not.toContain('card-action');
-    expect(markup).not.toContain(SETTLEMENT_STALE);
+  it('holds the press while the standing is unreadable or already confirmed', () => {
+    expect(card(projectOf(), { standing: null })).toContain('disabled');
+    expect(card(projectOf(), {
+      standing: {
+        state: 'CONFIRMED',
+        confirmed: true,
+        currentVersion: { digest: 'd', material: [] },
+        confirmation: null,
+      },
+    })).toContain('disabled');
+  });
+
+  it('draws the settled state once the projection stops withholding', () => {
+    const markup = card(projectOf(), { settled: true });
+    expect(markup).toContain(SETTLEMENT_SETTLED_TITLE);
+    expect(markup).toContain(SETTLEMENT_SETTLED_BODY);
+    expect(markup).toContain(SETTLEMENT_SETTLED_PROVENANCE);
+    // Nothing to press, and nothing withheld to explain.
+    expect(markup).not.toContain(SETTLEMENT_CONFIRM_ACTION);
+    expect(markup).not.toContain('does not hold here');
   });
 
   it('shows the door’s refusal rather than swallowing it', () => {
-    const markup = card(projectOf(), { error: new Error('PROJECT_STATUS_NOT_SESSION_WRITABLE') });
-    expect(markup).toContain(SETTLEMENT_NOT_RECORDED);
-    expect(markup).toContain('PROJECT_STATUS_NOT_SESSION_WRITABLE');
+    const markup = card(projectOf(), { error: new Error('CONFIRMATION_VERSION_MOVED') });
+    expect(markup).toContain('CONFIRMATION_VERSION_MOVED');
   });
 
-  it('carries the criteria and their facts into what the composer would send', () => {
-    const context = projectSettlementContext(projectOf({
-      acceptanceCriteriaItems: [
-        { ...criteriaOf(true, true, true)[0]!, landing: 'UNKNOWN' },
-        ...criteriaOf(true, true, true).slice(1),
-      ],
-    }));
+  it('carries the blocked criteria and what clears them into what the composer would send', () => {
+    const context = projectSettlementContext(unlanded());
     expect(context).toContain(TITLE);
     expect(context).toContain('1. condition 1 holds — Settled · No receipt');
-    expect(context).toContain('2. condition 2 holds — Settled · Landed');
-    expect(context).toContain('3 stated criteria · 3 settled by the work filed under them · 1 with no merge receipt');
+    expect(context).toContain('blocked by CRITERION_UNLANDED');
+    expect(context).toContain('land the branch');
   });
 });
 
-/** The card as the conversation meets it: wired to the project read and to the status door. */
+/** The card as the conversation meets it: wired to the project read and to the confirmation door. */
 describe('the wired card', () => {
-  type Recorded = {
-    method: string;
-    path: string;
-    body: unknown;
-    /** The whole init, so an assertion can say what did NOT ride with the request. */
-    init: unknown;
-  };
-
+  type Recorded = { method: string; path: string; body: unknown; init: unknown };
   const recorded: Recorded[] = [];
   const writes = (): Recorded[] => recorded.filter((request) => request.method !== 'GET');
 
@@ -318,7 +364,10 @@ describe('the wired card', () => {
       init?: { method?: string; body?: unknown },
     ) => {
       recorded.push({ method: init?.method ?? 'GET', path, body: init?.body, init: init ?? {} });
-      if (init?.method === 'PATCH') return { id: PROJECT };
+      if (init?.method === 'POST') return { state: 'CONFIRMED', confirmed: true, currentVersion: { digest: 'd', material: [] }, confirmation: null };
+      if (path.includes('/acceptance/confirmation')) {
+        return { state: 'UNCONFIRMED', confirmed: false, currentVersion: { digest: 'digest-1', material: [] }, confirmation: null };
+      }
       if (server.document instanceof Error) throw server.document;
       return server.document;
     }) as unknown as typeof api);
@@ -337,8 +386,6 @@ describe('the wired card', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  /** React Query hands the card every change on its notify scheduler — a later task — and `act`
-   *  drains only microtasks, so every turn waits for a hand-off of its own. */
   async function turn(): Promise<void> {
     await act(async () => {
       await new Promise<void>((resolve) => notifyManager.schedule(() => resolve()));
@@ -366,10 +413,7 @@ describe('the wired card', () => {
         <QueryClientProvider client={qc}>
           {conversations.map((projectId, index) => (
             <section key={index}>
-              <SessionProjectSettlementCard
-                projectId={projectId}
-                onChatAbout={(talk) => armed.push(talk)}
-              />
+              <SessionProjectSettlementCard projectId={projectId} onChatAbout={(talk) => armed.push(talk)} />
             </section>
           ))}
         </QueryClientProvider>,
@@ -378,41 +422,17 @@ describe('the wired card', () => {
     return { node, qc };
   }
 
-  /** The read has answered — or failed — and that answer has been handed to the card. */
-  async function readLanded(qc: QueryClient): Promise<void> {
-    await until(() => {
-      const state = qc.getQueryState(['project', PROJECT]);
-      return state !== undefined && state.status !== 'pending' && state.fetchStatus === 'idle';
-    }, 'the read to answer');
-    for (let n = 0; n < 5; n += 1) await turn();
-  }
-
-  /** The read comes round again, as the card's poll brings it. */
-  async function reread(qc: QueryClient): Promise<void> {
-    await act(async () => {
-      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
-    });
-    await readLanded(qc);
-  }
-
   const cardsIn = (node: ParentNode): HTMLElement[] => [
     ...node.querySelectorAll<HTMLElement>('.project-settlement'),
   ];
-  const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
+  const buttons = (card: HTMLElement): HTMLButtonElement[] => [
     ...card.querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
   ];
   const action = (card: HTMLElement, label: string): HTMLButtonElement => {
-    const found = actionsOf(card).find((button) => button.textContent === label);
-    if (!found) {
-      throw new Error(
-        `no "${label}" on the card; it offers ${actionsOf(card).map((b) => `"${b.textContent}"`).join(', ')}`,
-      );
-    }
+    const found = buttons(card).find((button) => button.textContent === label);
+    if (!found) throw new Error(`no "${label}" on the card`);
     return found;
   };
-  const factsOn = (card: HTMLElement): string[] => [
-    ...card.querySelectorAll('.project-settlement-facts'),
-  ].map((row) => row.textContent ?? '');
 
   async function delivered(): Promise<{ node: HTMLElement; qc: QueryClient; card: () => HTMLElement }> {
     const { node, qc } = await mount(PROJECT);
@@ -422,157 +442,110 @@ describe('the wired card', () => {
       if (!only) throw new Error('the card is not on the page');
       return only;
     };
-    expect(action(card(), SETTLEMENT_CONFIRM_ACTION).disabled, 'the delivered card cannot be answered').toBe(false);
     return { node, qc, card };
   }
 
-  it.each<[string, SettlementProjectDocument]>([
-    ['a criterion nobody has answered for', projectOf({ acceptanceCriteriaItems: criteriaOf(true, undefined, true) })],
-    ['a task still IN_PROGRESS under it', projectOf({ tasksByStatus: { IN_PROGRESS: 2 } })],
-    ['the project already recorded done', projectOf({ status: 'DONE' })],
-    ['no criteria stated at all', projectOf({ acceptanceCriteriaItems: [] })],
-    ['a read carrying no criteria', projectOf({ acceptanceCriteriaItems: undefined })],
-  ])('draws nothing while the project has %s, and one once it does not', async (_, document) => {
-    server.document = document;
-    const { node, qc } = await mount(PROJECT);
-    await readLanded(qc);
-    expect(cardsIn(node), 'a project that is not settled was asked whether it is done').toHaveLength(0);
-
-    // The same conversation and the same read, with the one fact under test changed: so the empty
-    // pane above was that fact and not a card that was never going to draw.
-    server.document = projectOf();
-    await reread(qc);
-    expect(cardsIn(node)).toHaveLength(1);
-  });
-
-  it('draws none in a conversation that coordinates no project, beside one that does on the same read', async () => {
+  it('draws none in a conversation that coordinates no project, beside one that does', async () => {
     const { node } = await mount(null, PROJECT);
     const [ordinary, coordinator] = [...node.querySelectorAll('section')];
     await until(() => cardsIn(coordinator!).length === 1, 'the coordinator conversation to draw its card');
-    expect(cardsIn(ordinary!), 'a conversation with no project was drawn the card').toHaveLength(0);
-    expect(recorded.filter((request) => request.path.includes('/projects//')), 'a read for no project')
-      .toEqual([]);
+    expect(cardsIn(ordinary!)).toHaveLength(0);
+    expect(recorded.filter((request) => request.path.includes('/projects//'))).toEqual([]);
   });
 
-  it('stays where it was put when the project is recorded done at another end', async () => {
-    const { card, qc } = await delivered();
-    expect(card().querySelector('.project-settlement-stale')).toBeNull();
+  it.each<[string, SettlementProjectDocument]>([
+    ['a server that serves no projection', projectOf({ derivedDone: undefined })],
+    ['a project already recorded done', projectOf({ status: 'DONE' })],
+    ['a projection that withholds nothing', projectOf({
+      derivedDone: { status: 'DONE', done: true, withheld: [], criteria: [], confirmation: 'CONFIRMED' },
+    })],
+  ])('draws nothing for %s, and one once that changes', async (_, document) => {
+    server.document = document;
+    const { node, qc } = await mount(PROJECT);
+    await turn();
+    await turn();
+    expect(cardsIn(node)).toHaveLength(0);
 
-    server.document = projectOf({ status: 'DONE' });
-    await reread(qc);
-    expect(card().querySelector('.project-settlement-stale')?.textContent).toBe(SETTLEMENT_STALE);
-    expect(factsOn(card()), 'the facts it was read for went with the stale line').toEqual([
-      'Settled · Landed',
-      'Settled · Landed',
-      'Settled · Landed',
-    ]);
+    server.document = projectOf();
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
+    });
+    await until(() => cardsIn(node).length === 1, 'the card to be delivered');
   });
 
-  it('writes the claim at the status door: PATCH /projects/:id, {status:DONE}, nothing naming a session', async () => {
+  it('reads the confirmation standing only when that is the clause holding settlement', async () => {
+    const { node, qc } = await delivered();
+    await until(
+      () => qc.getQueryState(acceptanceConfirmationKey(PROJECT))?.fetchStatus === 'idle',
+      'the standing read',
+    );
+    expect(recorded.some((r) => r.path.includes('/acceptance/confirmation'))).toBe(true);
+
+    recorded.length = 0;
+    server.document = unlanded();
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
+    });
+    await until(() => node.textContent!.includes('no merge receipt proving'), 'the held card');
+    expect(recorded.some((r) => r.path.includes('/acceptance/confirmation'))).toBe(false);
+  });
+
+  it('confirms the criteria at their own door, carrying the version it read and no session', async () => {
     const { card } = await delivered();
     await act(async () => {
       action(card(), SETTLEMENT_CONFIRM_ACTION).click();
     });
     await until(() => writes().length > 0, 'the press to reach the door');
-
     const [press] = writes();
-    expect(press!.method).toBe('PATCH');
-    expect(press!.path).toBe(PATH);
-    expect(press!.body).toEqual({ status: 'DONE' });
-    // Nothing about a session goes with it: the door refuses this write from a session
-    // (`PROJECT_STATUS_NOT_SESSION_WRITABLE`) and lets through the browser's credential alone.
+    expect(press!.method).toBe('POST');
+    expect(press!.path).toBe(`/projects/${PROJECT}/acceptance/confirmation`);
+    expect(press!.body).toEqual({ criteriaDigest: 'digest-1' });
     expect(JSON.stringify(press)).not.toMatch(/session/i);
   });
 
-  it('leaves the receipt where the actions were, and draws no action under it', async () => {
-    const { card } = await delivered();
-    await act(async () => {
-      action(card(), SETTLEMENT_CONFIRM_ACTION).click();
+  /** The state a press used to be replaced by is read back now: it survives a reload, which an
+   *  in-memory receipt did not. */
+  it('stays on the page when the projection stops withholding, and says so', async () => {
+    const { node, qc, card } = await delivered();
+    server.document = projectOf({
+      derivedDone: { status: 'DONE', done: true, withheld: [], criteria: [], confirmation: 'CONFIRMED' },
     });
-    await until(
-      () => card().querySelector('.project-settlement-recorded') !== null,
-      'the receipt to appear',
-    );
-    expect(card().querySelector('.project-settlement-recorded')?.textContent)
-      .toContain(SETTLEMENT_CONFIRMED);
-    expect(card().querySelector('.project-settlement-recorded')?.textContent)
-      .toContain(SETTLEMENT_CONFIRMED_NOTE);
-    expect(actionsOf(card()), 'an action outlived the answer it made').toEqual([]);
-    // The card is still the card: the receipt replaced the actions, not the facts.
-    expect(factsOn(card())).toHaveLength(3);
-  });
-
-  /** The card reads the project page's own entry rather than a key of its own — one cache, so the
-   *  status tag, the list and this card move together — and a press refreshes the two keys the
-   *  project page's own press refreshes. */
-  it('reads and refreshes the project page’s own two keys', async () => {
-    const { card, qc } = await delivered();
-    expect(qc.getQueryData(['project', PROJECT]), 'the card reads a key of its own').toEqual(projectOf());
-
-    const invalidated: unknown[] = [];
-    const spy = vi.spyOn(qc, 'invalidateQueries').mockImplementation((async (filters) => {
-      invalidated.push(filters?.queryKey);
-    }) as typeof qc.invalidateQueries);
     await act(async () => {
-      action(card(), SETTLEMENT_CONFIRM_ACTION).click();
+      await qc.invalidateQueries({ queryKey: ['project', PROJECT], exact: true });
     });
-    await until(() => invalidated.length >= 2, 'both keys to be invalidated');
-    expect(invalidated).toEqual([['project', PROJECT], ['projects']]);
-    spy.mockRestore();
-  });
-
-  it('shows a refusal on the card rather than eating it', async () => {
-    const { card } = await delivered();
-    vi.mocked(api).mockImplementation((async () => {
-      throw new Error('PROJECT_STATUS_NOT_SESSION_WRITABLE: a session cannot write this');
-    }) as unknown as typeof api);
-    await act(async () => {
-      action(card(), SETTLEMENT_CONFIRM_ACTION).click();
-    });
-    await until(
-      () => card().querySelector('.project-settlement-error') !== null,
-      'the refusal to be shown',
-    );
-    const shown = card().querySelector('.project-settlement-error')?.textContent ?? '';
-    expect(shown).toContain(SETTLEMENT_NOT_RECORDED);
-    expect(shown).toContain('PROJECT_STATUS_NOT_SESSION_WRITABLE');
-    expect(action(card(), SETTLEMENT_CONFIRM_ACTION).disabled, 'the way back was taken away').toBe(false);
+    await until(() => card().textContent!.includes(SETTLEMENT_SETTLED_TITLE), 'the settled state');
+    expect(cardsIn(node)).toHaveLength(1);
   });
 
   it('hands the card’s own facts to the composer, and leaves the card answerable', async () => {
-    const { card } = await delivered();
+    const { node, card } = await delivered();
     await act(async () => {
       action(card(), OWNER_SEND_BACK_ACTION).click();
     });
-    const [talk] = armed;
-    expect(talk?.projectId).toBe(PROJECT);
-    expect(talk?.projectTitle).toBe(TITLE);
-    expect(talk?.facts).toContain('1. condition 1 holds — Settled · Landed');
-    expect(talk?.facts).toContain('3 stated criteria · 3 settled by the work filed under them · 0 with no merge receipt');
-    expect(writes(), 'talking about it wrote something').toEqual([]);
-    expect(action(card(), SETTLEMENT_CONFIRM_ACTION).disabled).toBe(false);
+    expect(armed).toHaveLength(1);
+    expect(armed[0]!.projectId).toBe(PROJECT);
+    expect(armed[0]!.facts).toContain('Orbit has not recorded it done');
+    expect(cardsIn(node)).toHaveLength(1);
   });
 
-  /** The folding is a reading control on the card and writes nothing. */
-  it('unfolds the rest of the criteria on one press, and folds them back', async () => {
-    server.document = projectOf({ acceptanceCriteriaItems: criteriaOf(true, true, true, true, true) });
+  it('shows a refusal on the card rather than eating it', async () => {
+    vi.mocked(api).mockImplementation((async (
+      path: string,
+      init?: { method?: string },
+    ) => {
+      if (init?.method === 'POST') throw new Error('CONFIRMATION_VERSION_MOVED');
+      if (path.includes('/acceptance/confirmation')) {
+        return { state: 'UNCONFIRMED', confirmed: false, currentVersion: { digest: 'digest-1', material: [] }, confirmation: null };
+      }
+      return projectOf();
+    }) as unknown as typeof api);
     const { card } = await delivered();
-    expect(factsOn(card())).toHaveLength(SETTLEMENT_PREVIEW);
-
-    const toggle = (): HTMLButtonElement => {
-      const found = card().querySelector<HTMLButtonElement>('.project-settlement-read');
-      if (!found) throw new Error('the card offers no way to read the rest');
-      return found;
-    };
-    expect(toggle().textContent).toBe('Show all 5 criteria');
     await act(async () => {
-      toggle().click();
+      action(card(), SETTLEMENT_CONFIRM_ACTION).click();
     });
-    expect(factsOn(card())).toHaveLength(5);
-    expect(toggle().textContent).toBe(SETTLEMENT_SHOW_LESS);
-    await act(async () => {
-      toggle().click();
-    });
-    expect(factsOn(card())).toHaveLength(SETTLEMENT_PREVIEW);
+    await until(
+      () => card().textContent!.includes('CONFIRMATION_VERSION_MOVED'),
+      'the refusal to reach the card',
+    );
   });
 });

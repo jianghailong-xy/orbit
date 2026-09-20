@@ -7611,13 +7611,12 @@ button.composer-usage:focus-visible {
   color: var(--text-3);
 }
 
-/* ── The project settlement card ─────────────────────────────────────────────────────────
-   `ProjectSettlementCard.tsx`: the closing question, asked in the coordinator conversation when
-   every stated criterion has been met by its work and no task under it is IN_PROGRESS. The same approval tone
-   as the start card it is the other end of — brand tint, no green and no tick — because a
-   criterion's work having settled is not a verdict anybody reached (migration 0229 deleted the
-   project acceptance judgment). The rows are a grid so the fact column lines up down the card,
-   which is the column the reader is checking. */
+/* ── Why is this project not done ────────────────────────────────────────────────────────
+   `ProjectSettlementCard.tsx`: the projection, rendered in the coordinator conversation. Not a
+   question and not a verdict — the same approval tone as the card it is the other end of (brand
+   tint, no green, no tick), because `project.status` is derived by the server and this only says
+   what it is waiting on. One block per clause that does not hold, and the criteria that trip it
+   are a grid so the fact column lines up down the block, which is the column being checked. */
 .project-settlement .approval-head {
   display: flex;
   align-items: center;
@@ -7635,55 +7634,88 @@ button.composer-usage:focus-visible {
   line-height: 1.6;
   color: var(--text-3);
 }
-.project-settlement-stale {
+/* The rule, then the count of clauses that do not hold: the whole card is one sentence held up
+   against one project, so the sentence is stated before the blocks rather than assumed. */
+.project-settlement-rule {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.6;
   color: var(--text-2);
 }
-.project-settlement-criteria {
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
+.project-settlement-block {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--brand-border);
+}
+.project-settlement-block-title {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
   font-size: 13px;
-  line-height: 1.6;
+  font-weight: 600;
   color: var(--text-1);
 }
-.project-settlement-criteria li {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 8px;
-}
-.project-settlement-criteria li + li {
-  margin-top: 4px;
-}
-.project-settlement-no {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--brand-tint);
-  border: 1px solid var(--brand-border);
+/* The count is the clause's own number: how many criteria trip it, or a mark for the two clauses
+   that are about the project rather than about any criterion. */
+.project-settlement-block-count {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 20px;
+  background: var(--text-1);
+  color: var(--bg-raised);
   font-size: 11px;
-  color: var(--text-2);
+  font-weight: 700;
+  text-align: center;
 }
-/* One line, cut with an ellipsis: the row is a fact column with a label beside it, and a criterion
-   running to a paragraph would push its own facts off the row it belongs to. */
+.project-settlement-rows {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.project-settlement-rows li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+.project-settlement-rows li:first-child {
+  border-top: none;
+}
+/* One mark per row and it is the ordinal, as on the criteria card: the reader names a criterion by
+   its number, and a tick or a cross here would be the verdict badge 0229 deleted. */
+.project-settlement-no {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--text-1);
+  color: var(--bg-raised);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+}
 .project-settlement-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  color: var(--text-1);
 }
+/* The fact column: `Settled · No receipt` and its two siblings. Never red — UNKNOWN is the absence
+   of evidence, not a finding that the work is absent. */
 .project-settlement-facts {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-2);
   white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-3);
 }
-/* A reading control, not an action: it sits with the rows it unfolds rather than in the action row,
-   which is why it is not a `.card-action`. */
 .project-settlement-read {
   margin-top: 6px;
   padding: 0;
@@ -7696,35 +7728,52 @@ button.composer-usage:focus-visible {
 .project-settlement-read:hover {
   text-decoration: underline;
 }
+.project-settlement-conflicts {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.project-settlement-why {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.project-settlement-clears {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
 .project-settlement-tally {
-  margin-top: 8px;
+  margin: 12px 0 0;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-3);
 }
-.project-settlement-explains {
+/* The settled state, which is read back from the projection rather than remembered: it says the
+   derivation stopped withholding, and it does not become a green card because of it. */
+.project-settlement-settled {
   margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.project-settlement-settled-provenance {
+  margin: 8px 0 0;
   font-size: 12.5px;
   line-height: 1.6;
-  color: var(--text-2);
+  color: var(--text-3);
 }
 .project-settlement-error {
   margin-top: 10px;
 }
-.project-settlement-recorded {
-  margin-top: 10px;
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-.project-settlement-recorded-note {
-  margin-top: 2px;
-  color: var(--text-3);
-}
-/* The small print under the action row, inside the card's own bottom edge. */
 .project-settlement-hint {
-  margin: 0;
-  padding: 8px 14px 10px;
-  font-size: 12px;
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-3);
 }
