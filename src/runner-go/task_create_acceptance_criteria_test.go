@@ -303,6 +303,65 @@ func TestMCPTaskCreateDescriptionDefersProofOfDoneToAcceptanceCriteria(t *testin
 	}
 }
 
+// The field was documented and tasks were still filed without one, because the copy said what
+// acceptanceCriteria IS and never that the caller has to go and settle it first. These two doors are
+// where a task is born, so the asking belongs on them as an instruction, with the consequence named
+// next to it: a task with no acceptance basis and no verifier ends at
+// ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH and a person judges it by hand — which is exactly what the
+// caller is being asked to make unnecessary.
+//
+// Both layers per door, and each asserted separately: a description that asks for criteria and never
+// mentions the command-decidable case leaves every test-shaped task in the manual pile, and one that
+// only explains acceptanceCommand never gets a caller to the conversation where the criteria are
+// agreed.
+func TestMCPTaskCreateDescriptionsAskWhatSettlesTheTask(t *testing.T) {
+	tools := toolDescriptors(false, false)
+
+	for _, name := range []string{"task_create", "task_create_batch"} {
+		var text string
+		for _, tool := range tools {
+			if tool["name"] == name {
+				text, _ = tool["description"].(string)
+			}
+		}
+		if text == "" {
+			t.Fatalf("%s has no description", name)
+		}
+
+		// Layer one: ask, and ask before the write. The word matters more than the phrasing — the
+		// caller has to be sent to the question rather than handed a field it may fill in later.
+		if !strings.Contains(text, "acceptanceCriteria") {
+			t.Fatalf("%s description does not name acceptanceCriteria: %q", name, text)
+		}
+		if !containsWord(text, "ask") || !containsWord(text, "before") {
+			t.Fatalf("%s description does not tell the caller to ask before writing the task: %q", name, text)
+		}
+		// Layer two: where one command decides it, the command IS the judgement. Naming the field is
+		// not enough — the exit code has to be named as what settles the task, or the reader has no
+		// reason to believe the run ends without a human.
+		if !strings.Contains(text, "acceptanceCommand") || !strings.Contains(text, "exit code") {
+			t.Fatalf("%s description does not hand the command-decidable case to acceptanceCommand: %q", name, text)
+		}
+		// And the why: the state a task without either field ends in.
+		if !strings.Contains(text, "ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH") {
+			t.Fatalf("%s description does not name the unjudged end state: %q", name, text)
+		}
+	}
+}
+
+// containsWord reports whether text carries word as a whole word. A substring test cannot stand in
+// for this one: "ask" is inside "task", which both descriptions say over and over.
+func containsWord(text, word string) bool {
+	for _, field := range strings.FieldsFunc(text, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z')
+	}) {
+		if strings.EqualFold(field, word) {
+			return true
+		}
+	}
+	return false
+}
+
 // The field is declared once and shared, so it has to appear on both doors: a schema carrying it on
 // task_create alone leaves the tool that files a whole plan unable to say what settles any of it.
 func TestMCPTaskCreateTakesAcceptanceCriteriaOnSingleAndBatchItems(t *testing.T) {
