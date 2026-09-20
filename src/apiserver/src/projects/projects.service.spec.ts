@@ -537,6 +537,10 @@ test('the detail item is the authored declaration, with no derived verdict besid
     independence: 'INDEPENDENT',
     conflicts: [],
     remedy: null,
+    // Which of the three clauses THIS criterion trips, carried with it so a reader groups the
+    // criteria by clause without restating the predicates — and two rather than three, which is
+    // the difference between this criterion and the project's own list above.
+    withheld: ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
   }]);
 });
 

@@ -135,9 +135,42 @@ export interface DerivedProjectDone {
   status: Extract<ProjectStatus, 'OPEN' | 'DONE'>;
   done: boolean;
   withheld: DerivedDoneWithheld[];
-  criteria: DerivedDoneCriterion[];
+  criteria: DerivedDoneCriterionAnswer[];
   confirmation: StandardSetConfirmationState;
 }
+
+/**
+ * One criterion's answer, with the clauses IT trips.
+ *
+ * The membership travels with the criterion rather than being re-decided by whoever renders it:
+ * a reader that wants to group the criteria by clause — a card saying "these five have no merge
+ * receipt" — would otherwise restate three predicates, and a second statement of a rule is a
+ * second thing to keep in step with it. Empty exactly when this criterion counts.
+ */
+export interface DerivedDoneCriterionAnswer extends DerivedDoneCriterion {
+  withheld: DerivedDoneWithheld[];
+}
+
+/** The three clauses ONE criterion can trip, in the order the projection reports them. */
+export function criterionWithheldClauses(
+  criterion: DerivedDoneCriterion,
+): DerivedDoneWithheld[] {
+  const clauses: DerivedDoneWithheld[] = [];
+  if (!criterion.satisfied) clauses.push('CRITERION_UNSATISFIED');
+  if (criterion.landing !== 'LANDED') clauses.push('CRITERION_UNLANDED');
+  if (criterion.independence !== 'INDEPENDENT') {
+    clauses.push('CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE');
+  }
+  return clauses;
+}
+
+/** The criterion-side clauses, in the order they are reported. The other two are not about any
+ *  one criterion: a project that states none, and a set nobody has confirmed. */
+const CRITERION_CLAUSES = [
+  'CRITERION_UNSATISFIED',
+  'CRITERION_UNLANDED',
+  'CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE',
+] as const satisfies readonly DerivedDoneWithheld[];
 
 /**
  * The whole rule, over facts a caller has already read.
@@ -149,15 +182,20 @@ export function deriveProjectDone(
   criteria: readonly DerivedDoneCriterion[],
   confirmation: StandardSetConfirmationState,
 ): DerivedProjectDone {
-  const withheld: DerivedDoneWithheld[] = [];
-  if (criteria.length === 0) withheld.push('NO_CRITERIA_STATED');
-  if (criteria.some((criterion) => !criterion.satisfied)) withheld.push('CRITERION_UNSATISFIED');
-  if (criteria.some((criterion) => criterion.landing !== 'LANDED')) withheld.push('CRITERION_UNLANDED');
+  // Each criterion is asked once which clauses it trips, and the project's own list is the union
+  // of those: the conjunction and the reasons it fails are the same three predicates, read once.
   // Withheld, and not filtered out: a criterion that does not count still IS one of the criteria
   // this project's owner confirmed, so dropping it from the conjunction would settle the project
   // against a shorter standard set than the one on record — and would say so nowhere.
-  if (criteria.some((criterion) => criterion.independence !== 'INDEPENDENT')) {
-    withheld.push('CRITERION_AUTHORED_BY_ITS_OWN_EVIDENCE');
+  const answers: DerivedDoneCriterionAnswer[] = criteria.map((criterion) => ({
+    ...criterion,
+    withheld: criterionWithheldClauses(criterion),
+  }));
+
+  const withheld: DerivedDoneWithheld[] = [];
+  if (criteria.length === 0) withheld.push('NO_CRITERIA_STATED');
+  for (const clause of CRITERION_CLAUSES) {
+    if (answers.some((answer) => answer.withheld.includes(clause))) withheld.push(clause);
   }
   if (confirmation !== 'CONFIRMED') withheld.push('STANDARD_SET_UNCONFIRMED');
   const done = withheld.length === 0;
@@ -165,7 +203,7 @@ export function deriveProjectDone(
     status: done ? ProjectStatus.DONE : ProjectStatus.OPEN,
     done,
     withheld,
-    criteria: [...criteria],
+    criteria: answers,
     confirmation,
   };
 }
