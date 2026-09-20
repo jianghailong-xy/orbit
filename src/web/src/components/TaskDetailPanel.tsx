@@ -47,6 +47,7 @@ import { MD } from './Transcript';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
+import { TaskAcceptance } from '../pages/TaskDetailPage';
 import { TaskFollowedBy } from './WatchRelations';
 import {
   OWNER_CONFIRM_ACTION,
@@ -1386,6 +1387,16 @@ export function TaskDetailPanel({
               </div>
             </section>
           )}
+
+          {/* What "done" means for this task, and who decides it: the criteria the completion
+              judgement reads, and the L0 command/exit-code pair that settles it with nobody in the
+              loop. Under the description, because it is the work's other statement about itself —
+              the description says what to do, this says what finishing it looks like — and above
+              the runs, because a reader about to start one is deciding against this. */}
+          <section className="tdp-section">
+            <div className="tdp-section-title">Acceptance</div>
+            <TaskAcceptance taskId={taskId} task={q.data} projectId={q.data?.projectId} />
+          </section>
 
           {/* The files the WORK needs, directly under the description that refers to them. Above
               the runs for the same reason the attribution card is: an input is a property of the

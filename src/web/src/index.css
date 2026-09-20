@@ -8852,6 +8852,63 @@ button.composer-usage:focus-visible {
 .tdp-prose .md {
   font-size: 13px;
 }
+/* The acceptance block: a sub-label per field with its value under it, rather than the
+   76px label gutter the one-line Details rows use — acceptance criteria is prose, and
+   an acceptance command is a whole command line. */
+.tdp-acceptance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tdp-acceptance-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.tdp-acceptance-criteria-input,
+.tdp-acceptance-command-input {
+  font-size: 13px;
+}
+.tdp-acceptance-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.tdp-acceptance-pair-label {
+  color: var(--text-3);
+}
+.tdp-acceptance-command {
+  /* A command is one long line and the panel is narrow: break it rather than let it
+     scroll the section sideways. */
+  word-break: break-all;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.tdp-acceptance-exit-input {
+  width: 64px;
+}
+.tdp-acceptance-empty,
+.tdp-acceptance-hint,
+.tdp-acceptance-error {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.tdp-acceptance-error {
+  color: var(--error);
+}
+.tdp-acceptance-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
 .tdp-muted {
   color: var(--text-3);
   font-size: 13px;
