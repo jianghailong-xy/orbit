@@ -148,24 +148,33 @@ describe('answering it', () => {
     });
   }
 
-  /** A read or a mutation settles a tick after the press that started it; this is that tick. */
-  async function settle() {
-    await act(async () => {
-      await Promise.resolve();
-    });
-  }
+  /**
+   * How long a wait is given before it gives up, in wall clock. The budget a file's waits have is
+   * the 30s test timeout (vite.config.ts); this sits inside it, so a wait that is never satisfied
+   * still fails, and fails naming what never appeared.
+   */
+  const UNTIL_MS = 10_000;
 
   /**
-   * Wait for what the render is supposed to show rather than for a fixed number of ticks: how many
-   * a read takes is a property of the machine, and a test that pins it passes alone and fails in a
-   * full suite.
+   * Wait for what the render is supposed to show, by the clock rather than by a count of ticks. A
+   * tick is one turn of the event loop and costs whatever the machine charges for it, and 50 of them
+   * cost no time at all exactly when the wait has nothing to flush — measured on the CI that reds
+   * this file: 50 ticks in 0ms, with a `setTimeout(0)` armed before the first of them still unfired
+   * when the last ran out. What a read needs is time, so every turn here hands the event loop a
+   * macrotask — which is where a read lands: react-query notifies its subscribers through
+   * `setTimeout`, and a real door answers on a macrotask too.
    */
   async function until(held: () => boolean, what: string) {
-    for (let i = 0; i < 50; i += 1) {
+    const deadline = Date.now() + UNTIL_MS;
+    for (;;) {
       if (held()) return;
-      await settle();
+      if (Date.now() >= deadline) {
+        throw new Error(`never became true within ${UNTIL_MS}ms: ${what}`);
+      }
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
     }
-    throw new Error(`never became true: ${what}`);
   }
 
   function press(label: string) {
@@ -226,5 +235,20 @@ describe('answering it', () => {
     expect(apiMock).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/open-items`);
     expect(host.textContent).toContain(QUESTION);
     expect(host.textContent).toContain(FROM_COORDINATOR);
+  });
+
+  it('waits for a door that answers on a macrotask, not within a count of ticks', async () => {
+    // The same read one macrotask later, which is when a real door answers: this one is a fetch.
+    // `mockResolvedValue` answers on a microtask, and that is the whole reason a wait counted in
+    // ticks ever reached a read here — the ticks it spent on one still in flight cost no time at all
+    // (measured on the CI that reds this file: 50 ticks in 0ms), so the budget ran out before the
+    // answer was even due.
+    apiMock.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { needsYou: [row()], withCoordinator: [] };
+    });
+    await draw(<CoordinatorQuestions projectId={PROJECT_ID} now={NOW} />);
+    await until(() => host.textContent!.includes(QUESTION), 'the question on screen');
+    expect(host.textContent).toContain(QUESTION);
   });
 });
