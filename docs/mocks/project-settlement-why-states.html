@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>项目未结算卡 — 触发条件、三个子句块、结算后、左侧行</title>
+<style>
+  :root { --bg-raised:#fff; --bg-subtle:#fafbfc; --border:#dee0e3; --border-subtle:#eceef1;
+          --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+          --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+          --success:#1a7f37; --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+          --mark:#e8590c; }
+  * { box-sizing:border-box; }
+  body { margin:0; width:1860px; padding:38px 40px 40px; background:#ececef; color:#16161a;
+         font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",Roboto,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.02em; margin:0 0 9px; }
+  .lede { color:#55555e; max-width:1440px; margin:0; }
+  .lede b { color:#16161a; }
+  .lede code, figcaption code, .panel code { background:#e3e3e8; padding:1px 4px; border-radius:3px; font-size:11.5px; color:#3a3a42; }
+  .grid { display:grid; grid-template-columns:repeat(3, 566px); gap:38px; margin-top:26px; }
+  figure { margin:0; width:566px; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em;
+         padding:2px 8px; border-radius:6px; margin-bottom:9px; }
+  .tag.a { background:#d8ecff; color:#0a5ca8; }
+  .tag.b { background:#e3e3e8; color:#55555e; }
+  figcaption { margin-top:12px; font-size:12.5px; line-height:1.62; color:#55555e; }
+  figcaption b { color:#16161a; }
+  .stage { border-radius:12px; padding:14px; background:#f4f4f6; border:1px solid #e0e0e4; }
+  .panel { border-radius:10px; background:var(--bg-raised); border:1px solid var(--border);
+           padding:14px 16px; font-size:12.5px; line-height:1.7; color:var(--text-2); }
+  .panel h3 { margin:0 0 8px; font-size:13px; color:var(--text-1); }
+  .panel ul { margin:0; padding-left:18px; }
+  .panel li { margin-top:5px; }
+  .panel b { color:var(--text-1); }
+  .cond { list-style:none; margin:0; padding:0; }
+  .cond li { display:flex; gap:8px; margin-top:6px; }
+  .cond .k { flex:none; width:15px; color:var(--text-3); }
+  .yes { color:var(--success); font-weight:600; }
+  .noq { color:var(--mark); font-weight:600; }
+
+  .card { border:1px solid var(--brand); border-radius:10px; background:var(--brand-tint); overflow:hidden; }
+  .card.settled { border-color:var(--border); background:var(--bg-subtle); }
+  .head { padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-1);
+          border-bottom:1px solid var(--brand-border); display:flex; align-items:center; gap:10px; }
+  .card.settled .head { border-bottom-color:var(--border); color:var(--text-2); }
+  .prov { flex:none; margin-left:auto; padding:2px 7px; border:1px solid var(--warning-border);
+          border-radius:4px; background:var(--bg-raised); color:var(--warning);
+          font-size:11px; font-weight:600; letter-spacing:.04em; }
+  .card.settled .prov { border-color:var(--border); color:var(--text-3); }
+  .body { padding:10px 14px; font-size:13px; color:var(--text-1); }
+  .meta { font-size:12px; line-height:1.6; color:var(--text-3); }
+  .rule { margin:10px 0 0; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  .block { margin:11px 0 0; padding:10px 12px; border-radius:8px; background:var(--bg-raised);
+           border:1px solid var(--brand-border); }
+  .btitle { font-size:13px; font-weight:600; color:var(--text-1); display:flex; gap:8px; align-items:baseline; }
+  .bcount { flex:none; font-size:11px; font-weight:700; color:#fff; background:var(--text-1);
+            border-radius:20px; padding:1px 7px; }
+  .bwhy { margin:6px 0 0; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  .rows { margin:8px 0 0; padding:0; list-style:none; }
+  .rows li { display:flex; gap:8px; align-items:baseline; padding:4px 0;
+             border-top:1px solid var(--border-subtle); font-size:12.5px; }
+  .rows li:first-child { border-top:none; }
+  .no { flex:none; width:17px; height:17px; border-radius:50%; background:var(--text-1); color:#fff;
+        font-size:10px; font-weight:600; line-height:17px; text-align:center; }
+  .ctext { flex:1; color:var(--text-1); }
+  .facts { flex:none; font-size:11px; color:var(--text-2); white-space:nowrap; }
+  .facts .nr { color:var(--warning); }
+  .sub { margin:4px 0 0 25px; font-size:11.5px; color:var(--text-3); }
+  .clears { margin:9px 0 0; font-size:12.5px; line-height:1.6; color:var(--text-1); }
+  .clears b { font-weight:600; }
+  .actions { padding:10px 14px; border-top:1px solid var(--brand-border);
+             display:flex; flex-wrap:wrap; align-items:center; gap:9px; }
+  .btn { padding:6px 15px; border-radius:6px; font-size:12.5px; border:1px solid transparent; }
+  .btn.primary { background:var(--brand); color:#fff; }
+  .btn.secondary { background:var(--bg-raised); color:var(--text-2); border-color:var(--border); }
+  .afoot { flex-basis:100%; margin:2px 0 0; font-size:11.5px; line-height:1.55; color:var(--text-3); }
+
+  /* 左侧会话行 */
+  .sidebar { border-radius:10px; background:var(--bg-raised); border:1px solid var(--border); overflow:hidden; }
+  .sbhead { padding:9px 12px; font-size:11.5px; font-weight:600; color:var(--text-3);
+            border-bottom:1px solid var(--border-subtle); background:var(--bg-subtle); }
+  .srow { padding:9px 12px; border-top:1px solid var(--border-subtle); display:flex; gap:9px; }
+  .srow:first-child { border-top:none; }
+  .sdot { flex:none; width:8px; height:8px; border-radius:50%; margin-top:6px; background:var(--warning-solid,#fa8c16); }
+  .sdot.blue { background:var(--brand); }
+  .sdot.grey { background:#c0c4cc; }
+  .stitle { font-size:12.5px; font-weight:600; color:var(--text-1); }
+  .sline { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+  .sline.wait { color:var(--warning); font-weight:600; }
+  .tagv { font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; background:#eceef1;
+          color:var(--text-2); margin-left:6px; }
+</style>
+<body>
+  <h1>未结算卡：触发条件、它能说的三个子句、结算之后、以及左侧那一行</h1>
+  <p class="lede">卡里的每一句话都来自 <code>readDerivedProjectDone()</code>——不自造条件、不重算派生。
+     派生把<b>所有不成立的子句都报出来</b>而不是报第一条，卡片照此逐块列出；子句的解法文字直接引用服务端
+     <code>instruction</code> 原文，不另写一份措辞。</p>
+
+  <div class="grid">
+    <figure>
+      <span class="tag b">① 触发条件</span>
+      <div class="stage">
+        <div class="panel">
+          <h3>出现：看起来做完了，却没结算</h3>
+          <ul class="cond">
+            <li><span class="k">1</span><span>项目 <b>status = OPEN</b> <span class="yes">✓</span></span></li>
+            <li><span class="k">2</span><span>声明了判据，且<b>每一条都 satisfied</b> <span class="yes">✓</span></span></li>
+            <li><span class="k">3</span><span>此刻<b>没有任务在跑</b> <span class="yes">✓</span></span></li>
+            <li><span class="k">4</span><span>派生 <code>withheld ≠ []</code> <span class="yes">✓</span></span></li>
+          </ul>
+          <div style="margin-top:10px"><b>不出现：</b></div>
+          <ul class="cond">
+            <li><span class="k">·</span><span>派生 <code>done = true</code> <span class="noq">✗ 项目已 DONE，没有可问的</span></span></li>
+            <li><span class="k">·</span><span>判据没全绿 <span class="noq">✗ 还在干活，不是「看着做完了」</span></span></li>
+          </ul>
+          <p style="margin:10px 0 0">条件 2 就是那句「看起来做完了」，所以卡<b>不会在每个未完成的项目下常驻</b>——
+            这一点与线上那张相同，变的是卡说出来的是什么。</p>
+        </div>
+      </div>
+      <figcaption>
+        <b>四条件里只有第 4 条是新的</b>，而且它来自服务端。<code>status</code>、判据与任务分布都在同一个详情读里；
+        缺的只是派生结果本身——<code>readDerivedProjectDone()</code> 已经写好但没有任何控制器或客户端读它。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag a">② 子句块：无合并回执（本例 5 条）</span>
+      <div class="stage">
+        <div class="card">
+          <div class="head"><span>Why is this project not done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion has been met by the work filed under it, and Orbit has not recorded it done</div>
+            <div class="rule">Orbit records a project done by itself — no press, no agent — when every stated criterion is met by work that has landed, under a criteria set you have confirmed. <b>Two of those do not hold here.</b></div>
+            <div class="block">
+              <div class="btitle"><span class="bcount">5</span><span>criteria have no merge receipt proving they landed</span></div>
+              <ul class="rows">
+                <li><span class="no">2</span><span class="ctext">Watch 在客户端关闭、协调 Session 不运行、runner 重启后仍然存在…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+                <li><span class="no">6</span><span class="ctext">Web 与 macOS/iOS 将 Watch 显示为独立的 Following/Watching 关系…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+                <li><span class="no">8</span><span class="ctext">现有 session_create(wait) 与 CLI 等待路径迁移到服务端持久 Watch…</span><span class="facts">Settled · <span class="nr">No receipt</span></span></li>
+              </ul>
+              <p class="bwhy">Settling is decided inside each task’s own worktree, so it says nothing about the default branch. Orbit holds no receipt for these — a merge it never saw leaves none behind, so this is the absence of evidence, not a finding about where the work is.</p>
+              <p class="clears"><b>What clears it:</b> land the branch, or record the merge with <code>merge_receipt</code> where it happened outside Orbit.</p>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn secondary">Chat about this</button>
+            <span class="afoot">没有按钮的块就把「怎么清掉」写在块里；有门的块（标准集未确认）走底部那排。</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        <b>行是可数的、事实列是两值的。</b>判据多时前 3 条 + <code>Show all N</code>；事实列沿用
+        <code>Settled · Landed</code> / <code>Settled · No receipt</code>，免责句照抄项目页那份，
+        不把缺证画成红也不画成绿。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag a">③ 子句块：独立性冲突（一个块一个解法）</span>
+      <div class="stage">
+        <div class="card">
+          <div class="head"><span>Why is this project not done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion has been met by the work filed under it, and Orbit has not recorded it done</div>
+            <div class="rule">Orbit records a project done by itself — no press, no agent — when every stated criterion is met by work that has landed, under a criteria set you have confirmed. <b>One of those does not hold here.</b></div>
+            <div class="block">
+              <div class="btitle"><span class="bcount">1</span><span>criterion does not count: the conversation that wrote its wording also produced its evidence</span></div>
+              <ul class="rows">
+                <li><span class="no">7</span><span class="ctext">权限复核、TTL、配额、幂等、重试/死信、self-watch 保护均有自动化测试与运行手册。</span><span class="facts">Settled · Landed</span></li>
+              </ul>
+              <div class="sub">written by “Watch P2 安全/成本/可观测性” · evidence from “补自更新 E2E 配方”</div>
+              <p class="bwhy">Orbit cannot settle against a set shorter than the one you confirmed, so a criterion that does not count is withheld and named rather than dropped from the total.</p>
+              <p class="clears"><b>What clears it:</b> file a VERIFICATION task against this criterion’s work and let a session that did not write the criterion conclude it; its PASS is evidence this criterion’s author did not produce. Rewriting the criterion instead would move the ruler after the evidence, which is what the standard-set seal already refuses.</p>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn secondary">Chat about this</button>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        「怎么清掉」那句话<b>逐字引用服务端的 <code>criterionIndependenceRemedy().instruction</code></b>——
+        服务端自己的注释就是为这个写的：「a rule that withholds something must say what satisfies it,
+        or the reader is left to guess」。卡片不另写一套。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag a">④ 子句块：标准集未确认（唯一有门的块）</span>
+      <div class="stage">
+        <div class="card">
+          <div class="head"><span>Why is this project not done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion has been met by the work filed under it, and Orbit has not recorded it done</div>
+            <div class="rule">Orbit records a project done by itself — no press, no agent — when every stated criterion is met by work that has landed, under a criteria set you have confirmed. <b>One of those does not hold here.</b></div>
+            <div class="block">
+              <div class="btitle"><span class="bcount">1</span><span>the criteria on record have not been confirmed in their current wording</span></div>
+              <p class="bwhy">Orbit settles against the set you confirmed. Editing any criterion moves its digest, so a confirmation of the older wording stops counting — with no flag anybody has to clear. Nothing else on this card asks you for anything; this one does.</p>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary">Confirm the criteria</button>
+            <button class="btn secondary">Chat about this</button>
+            <span class="afoot">按的是 <code>POST /projects/:id/acceptance/confirmation</code>，带当前 digest、浏览器凭证、无 acting session——开工卡按下的同一扇门。</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        <b>这是整张卡上唯一的人门，也是派生第二个输入的入口。</b>它出现当且仅当 <code>STANDARD_SET_UNCONFIRMED</code>
+        在 withheld 集合里；其余三个子句都没有按钮——那些是活，不是决定，交给「Chat about this」带回对话。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag b">⑤ 读着读着项目结算了（派生出来，刷新也在）</span>
+      <div class="stage">
+        <div class="card settled">
+          <div class="head"><span>Why is this project not done?</span><span class="prov">FROM ORBIT</span></div>
+          <div class="body">
+            <div class="meta">Orbit 原生 Watch · every stated criterion is met by work that has landed, under the set you confirmed</div>
+            <p class="rule" style="margin-top:10px"><b>Orbit recorded this project done.</b> Every stated criterion is met by work that has landed, under a criteria set you confirmed — so nothing here was left to ask.</p>
+            <p class="rule" style="margin-top:8px; color:var(--text-3)">Recorded by the derivation, not by a press. Nothing on this card was pressed, and there is nothing here to press.</p>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        与线上那张最大的区别：<b>这个状态是派生出来的，刷新、换设备、换会话都还在</b>。线上那张的「回执」只是组件内存
+        （<code>delivered</code> 是 <code>useState</code>），离开再回来就没了——这正是你看到「点完就不见了」的机制。
+        仍然<b>不绿、不对勾</b>：0229 删掉的是判定机器，这里说的也只是「派生没有扣住任何一条」。
+      </figcaption>
+    </figure>
+
+    <figure>
+      <span class="tag a">⑥ 左侧那一行（服务端说话）</span>
+      <div class="stage">
+        <div class="sidebar">
+          <div class="sbhead">SESSIONS</div>
+          <div class="srow"><span class="sdot"></span><span>
+            <span class="stitle">Orbit 原生 Watch：跨 Session / Task 持久监控</span><span class="tagv">协调</span>
+            <div class="sline wait">Waiting for you · 2 things hold the project back</div></span></div>
+          <div class="srow"><span class="sdot"></span><span>
+            <span class="stitle">执行任务：合并并录入主干证据</span><span class="tagv">task</span>
+            <div class="sline wait">Waiting for your confirmation</div></span></div>
+          <div class="srow"><span class="sdot blue"></span><span>
+            <span class="stitle">Watch P3 进度/continuous 分支</span>
+            <div class="sline">Editing web/src/components/WatchCard.tsx</div></span></div>
+          <div class="srow"><span class="sdot grey"></span><span>
+            <span class="stitle">清掉 runner-go 的死常量</span>
+            <div class="sline">Waiting for your reply</div></span></div>
+        </div>
+      </div>
+      <figcaption>
+        <b>这一行必须由服务端说。</b>行文案来自 <code>sessionWaitingKind(approvals, decisions)</code>——
+        它只数 approval 与<b>挂在该会话上的待裁决定</b>；客户端画的卡进不了这个集合，所以线上那张永远等不到这一行。
+        做法与既有的 <code>OWNER_CONFIRMATION</code> 同类：给「派生扣住 DONE」开一个会话级待决 kinds，
+        行文案按该 kinds 的措辞出（现有那条约 <code>Waiting for your confirmation</code> 就是这么来的）。
+        <b>注意一处规则要改：</b>现在的判定要求「全部 kinds 都是 OWNER_CONFIRMATION」才返回，两种 kinds 并存时要定优先级。
+      </figcaption>
+    </figure>
+  </div>
+</body>
+</html>
