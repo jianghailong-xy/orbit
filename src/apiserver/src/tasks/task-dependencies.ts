@@ -130,9 +130,34 @@ export function dependencyStateFromCounts(counts: {
    * not DONE already makes this BLOCKED through `done`.
    */
   unlanded?: number;
+  /**
+   * Of those, how many are held by §13.3 DEP's epoch — the tally of `verificationGate != null`,
+   * which is a prerequisite whose check has not opened a current PASS.
+   *
+   * Additive on the same terms as `unlanded`, and it has to be here for the same reason: the
+   * project graph answers from counts, and a count that knew only about statuses drew READY on a
+   * task whose prerequisite's check had concluded FAIL — while every door that starts it said
+   * `BLOCKED_FAILED` or `BLOCKED`. A wait, not a refusal: the check runs, or somebody re-runs it.
+   */
+  unverified?: number;
+  /**
+   * Of those, how many are held by an epoch NOTHING will open without a person
+   * (`VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN`, and the stalls `verificationLiveness` finds).
+   *
+   * A second tier rather than a second count of the same thing: `BLOCKED_FAILED` is what a person
+   * is told to go and fix, and only these earn it.
+   *
+   * Not derivable from `unverified` — a FAIL and a check still running are both "not verified" and
+   * are not the same answer — so the two are counted apart and both are optional.
+   */
+  stalled?: number;
 }): DependencyState {
   if (counts.prerequisites === 0) return 'NONE';
   if (counts.terminal > 0) return 'BLOCKED_FAILED';
+  // §13.3 DEP, in the order `computeDependencyState` asks it: the gates a person has to clear
+  // first, then the ones that are only a wait.
+  if ((counts.stalled ?? 0) > 0) return 'BLOCKED_FAILED';
+  if ((counts.unverified ?? 0) > 0) return 'BLOCKED';
   // A wait and not a refusal, for the reason `computeDependencyState` gives one clause over: the
   // platform lands the prerequisite and the landing receipt releases this task (J10), so there is
   // nothing for a person to go and fix.

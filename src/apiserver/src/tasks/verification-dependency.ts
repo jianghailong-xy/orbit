@@ -322,6 +322,67 @@ export function verificationCheckSameScopeSql(check: string, subject: string): s
 }
 
 /**
+ * The same epoch, asked the half of the question `verificationEpochOpenSql` cannot answer: not
+ * "is it shut" but "will anything open it without a person".
+ *
+ * A shut epoch is two different answers downstream, and the reduction that reads it has said so
+ * since `[K5]`: a check that concluded NO, and a subject whose every check was cancelled, are
+ * terminal in the way a CANCELLED prerequisite is — `BLOCKED_FAILED`, the word that sends somebody
+ * to go and fix it — while a check still running, or work that was reopened, is an ordinary wait.
+ * `verificationLiveness` is that split in TypeScript; this is its SQL spelling, and it exists
+ * because the project graph counts prerequisites in SQL rather than hydrating one row per edge.
+ * A tally that knew only "shut" would have to report one of the two tiers wrong on every node.
+ *
+ * TRUE exactly when the epoch is SHUT and `verificationLiveness` would answer STALLED — which is
+ * `VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN` plus the residue `verification-liveness.ts` names
+ * (`VERDICT_ABSENT`, `VERDICT_UNREVISIONED`, `RUN_NOT_SETTLED` with nothing running). Written as
+ * the complement of "the epoch is open, or something in motion will open it", because that is the
+ * shape the pure function has: the gate order decides which clause answers first, and every clause
+ * it can reach that is NOT a terminal conclusion is a wait.
+ *
+ * `verificationEpochOpenSql` is embedded rather than restated, so "shut" has one spelling: this
+ * fragment is FALSE wherever that one is TRUE — including the ordinary case of a prerequisite
+ * nobody checks, and the retired subject DEP deliberately steps aside from.
+ *
+ * The one in-motion case that is NOT "a run is coming" is `SUBJECT_NOT_DONE`: the newest check
+ * passed, and the work it verified is not DONE any more, so the wait ends when that work is
+ * finished again. `verificationCheckPassedSql` is what recognises it — the same canonical clause
+ * the open test reads, without the subject-status half `verificationEpochOpenSql` owns.
+ */
+export function verificationEpochNeedsHumanSql(alias = 't', dependent?: string): string {
+  const subject = `COALESCE(${alias}."verifies_task_id", ${alias}."id")`;
+  const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
+  return `(NOT ${verificationEpochOpenSql(alias, dependent)}
+    AND NOT EXISTS (
+      -- "Something in motion will open this." No live check at all is NOT that: every check of the
+      -- subject was cancelled or replaced, so the row is in the first disjunct of the open test
+      -- and nothing here matches it — which is the NO_LIVE_VERIFICATION stall.
+      SELECT 1 FROM "task" needs_human_check
+        JOIN "task" needs_human_subject ON needs_human_subject."id" = ${subject}
+       WHERE needs_human_check."id" = (
+               ${latestLiveVerificationCheckIdSql('needs_human_subject')}
+             )
+         AND (
+           -- Not concluded yet: VERIFICATION_IN_FLIGHT, and the one arm that is a wait whatever
+           -- the verdict column happens to say, because the run can still revise it.
+           needs_human_check."status" <> 'DONE'
+           -- Concluded a usable PASS: the wait is on the RUN settling, or on the subject being
+           -- finished again. A verdict the revision column cannot apply (VERDICT_UNREVISIONED)
+           -- is deliberately outside this, matching the order verificationEpochGate asks in.
+           OR (needs_human_check."verdict" = 'PASS'
+               AND needs_human_check."verdict_revision" > 0
+               AND (${verificationCheckPassedSql('needs_human_check', 'needs_human_subject')}
+                    OR EXISTS (
+                      SELECT 1 FROM "session" needs_human_run
+                       WHERE needs_human_run."task_id" = needs_human_check."id"
+                         AND needs_human_run."deleted_at" IS NULL
+                         AND needs_human_run."status"::text IN (${occupying})
+                    )))
+         )
+    ))`;
+}
+
+/**
  * The canonical newest live verifier selector, shared by dependency release and work-overview.
  *
  * Keep the scope and retirement filters before ordering. An invalid newer row must not hide the

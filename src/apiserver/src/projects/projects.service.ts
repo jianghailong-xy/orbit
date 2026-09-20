@@ -41,6 +41,12 @@ import {
   decodeTaskPageCursor,
   encodeTaskPageCursor,
 } from '../tasks/tasks.service';
+import {
+  // §13.3 DEP's epoch, the same fragments the run gate and the sweeps read: the graph counts them
+  // rather than judging a prerequisite a second time in a spelling of its own.
+  verificationEpochNeedsHumanSql,
+  verificationEpochOpenSql,
+} from '../tasks/verification-dependency';
 import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
 import {
   CRITERIA_DECISIONS,
@@ -297,6 +303,10 @@ interface ProjectTaskDependencyRow extends Omit<ProjectTaskDependencyFields, 'de
   doneCount: number;
   /** How many of them are finished code work that is not on the project's line yet (§2.5 J9). */
   unlandedCount: number;
+  /** Of those, the ones §13.3 DEP's epoch holds: no current PASS behind them. */
+  unverifiedCount: number;
+  /** Of those, the ones NOTHING will release without somebody acting — the `BLOCKED_FAILED` tier. */
+  stalledCount: number;
   /** Of those, the ones whose work is FINISHED: the prerequisites this task is waiting to LAND,
    *  as opposed to waiting for somebody to do. */
   landingWaitCount: number;
@@ -2688,7 +2698,7 @@ export class ProjectsService {
     const rows = await this.prisma.$queryRaw<Array<ProjectTaskDependencyRow>>(Prisma.sql`
       WITH RECURSIVE
       "page" AS (
-        SELECT t."id"
+        SELECT t."id", t."verifies_task_id"
           FROM "task" t
          WHERE t."owner_id" = ${ownerId}::uuid AND t."project_id" = ${projectId}::uuid
            AND t."id" IN (${Prisma.join(taskIds)})
@@ -2710,7 +2720,13 @@ export class ProjectsService {
                -- §2.5 J9, the same predicate the dispatch gate reads. Without it this tally says
                -- READY about a task every door that starts it calls BLOCKED, which is one screen
                -- telling a person to wonder why nothing is starting.
-               ${Prisma.raw(prerequisiteLandedSql('p'))} AS "landed"
+               ${Prisma.raw(prerequisiteLandedSql('p'))} AS "landed",
+               -- §13.3 DEP, the same epoch the dispatch gate reads, on the same row: the tail the
+               -- edge resolves to. s is the WAITING task, which is what exempts a check from
+               -- waiting for the subject it checks — the same self-exemption dependenciesSatisfied
+               -- passes to the runtime gate.
+               ${Prisma.raw(verificationEpochOpenSql('p', 's'))} AS "epochOpen",
+               ${Prisma.raw(verificationEpochNeedsHumanSql('p', 's'))} AS "needsHuman"
           FROM "task_dependency" d
           JOIN "page" s ON s."id" = d."task_id"
           LEFT JOIN "task" p
@@ -2724,7 +2740,9 @@ export class ProjectsService {
                COUNT(*) FILTER (WHERE "status" IN ('CANCELLED', 'FAILED'))::int AS "terminalCount",
                COUNT(*) FILTER (WHERE "status" = 'DONE')::int AS "doneCount",
                COUNT(*) FILTER (WHERE NOT "landed")::int AS "unlandedCount",
-               COUNT(*) FILTER (WHERE "status" = 'DONE' AND NOT "landed")::int AS "landingWaitCount"
+               COUNT(*) FILTER (WHERE "status" = 'DONE' AND NOT "landed")::int AS "landingWaitCount",
+               COUNT(*) FILTER (WHERE NOT "epochOpen")::int AS "unverifiedCount",
+               COUNT(*) FILTER (WHERE "needsHuman")::int AS "stalledCount"
           FROM "inbound"
          GROUP BY "id"
       ),
@@ -2764,7 +2782,9 @@ export class ProjectsService {
              COALESCE(t."terminalCount", 0) AS "terminalCount",
              COALESCE(t."doneCount", 0) AS "doneCount",
              COALESCE(t."unlandedCount", 0) AS "unlandedCount",
-             COALESCE(t."landingWaitCount", 0) AS "landingWaitCount"
+             COALESCE(t."landingWaitCount", 0) AS "landingWaitCount",
+             COALESCE(t."unverifiedCount", 0) AS "unverifiedCount",
+             COALESCE(t."stalledCount", 0) AS "stalledCount"
         FROM "page" s
         LEFT JOIN "tally" t ON t."id" = s."id"
         LEFT JOIN "outbound" o ON o."id" = s."id"
@@ -2783,6 +2803,8 @@ export class ProjectsService {
             terminal: row.terminalCount,
             done: row.doneCount,
             unlanded: row.unlandedCount,
+            unverified: row.unverifiedCount,
+            stalled: row.stalledCount,
           }),
         },
       ]),
