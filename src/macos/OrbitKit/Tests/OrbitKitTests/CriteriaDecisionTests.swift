@@ -670,6 +670,36 @@ final class CriteriaDecisionTests: XCTestCase {
         XCTAssertTrue(AcceptanceConfirmations.answerable(standing))
     }
 
+    /// The fourth fact the confirmation card's condition turns on comes off the same document as
+    /// the other three: `_count.tasks`, which is what gives "Start the project" an object.
+    ///
+    /// A document that does not carry it reads as NO tasks, and that is the opposite of what
+    /// `coordinatorEnabled` beside it does — deliberately. That one LABELS the project on a line
+    /// with a third word for "not read"; this one GATES a button, and a gate nobody can establish
+    /// stays shut, the same rule `answerable` keeps for a standing it does not have.
+    func testTheProjectDocumentSaysHowManyTasksItHoldsOrTheCardWaits() throws {
+        let json = """
+        {"id":"p1","title":"Aurora","status":"OPEN","coordinatorEnabled":false,
+         "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"alpha"}],
+         "_count":{"tasks":3}}
+        """
+        let stated = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: Data(json.utf8))
+        XCTAssertEqual(stated.taskCount, 3)
+        XCTAssertEqual(stated.status, "OPEN")
+        XCTAssertFalse(stated.coordinatorEnabled ?? true)
+
+        let silent = """
+        {"id":"p1","title":"Aurora","status":"OPEN","coordinatorEnabled":false,
+         "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"alpha"}]}
+        """
+        let unread = try JSONDecoder().decode(ProjectCriteriaDocument.self,
+                                              from: Data(silent.utf8))
+        XCTAssertEqual(unread.taskCount, 0,
+                       "a read that did not say how many tasks reads as none")
+        XCTAssertEqual(unread.acceptanceCriteriaItems?.count, 1,
+                       "and the criteria it did say do not change that")
+    }
+
     // MARK: the confirmation card
 
     private func confirmation(_ state: StandardSetConfirmationStanding.State,

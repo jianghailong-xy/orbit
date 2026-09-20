@@ -2108,6 +2108,12 @@ final class ConsoleModel {
     /// card's meta line says "started" off, and nil while no read has answered — which the line
     /// says rather than guessing "not started" at a project that is dispatching work.
     private(set) var projectStarted: Bool?
+    /// How many tasks the same read says the project holds, and the fourth fact the card's
+    /// condition turns on: a plan with nothing filed under it yet is one nobody can start. None
+    /// until a document answers, which cannot hold the card up — a project whose status nobody has
+    /// read is not OPEN either — and `ProjectCriteriaDocument.taskCount` is where a document that
+    /// did not say the count is read as none.
+    private var projectTaskCount = 0
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -2230,6 +2236,7 @@ final class ConsoleModel {
             projectDocumentTitle = document.title
             projectStatus = document.status
             projectStarted = document.coordinatorEnabled
+            projectTaskCount = document.taskCount
         }
         // The project's two owner cards. Same rule as the four above: each is independent, a read
         // that fails leaves the last answer standing, and neither may close a card.
@@ -2261,16 +2268,25 @@ final class ConsoleModel {
 
     /// Whether this project is waiting to be started on a plan nobody has confirmed.
     ///
-    /// Three facts and no fourth: the project is OPEN, it states criteria, and the set standing now
-    /// has not been confirmed. `satisfied` is deliberately absent — waiting for every criterion to
-    /// be met by its work put the question at the moment it could only be agreed with, because
-    /// answering "no" then annuls work already done; asked here the answer is cheap, the plan is
-    /// written and nothing has run. Web reads the same three off the same two documents
-    /// (`settlementHeldOnConfirmation` in `AcceptanceConfirmationCard.tsx`).
+    /// Four facts and no fifth: the project is OPEN, it states criteria, it holds at least one
+    /// task, and the set standing now has not been confirmed. `satisfied` is deliberately absent —
+    /// waiting for every criterion to be met by its work put the question at the moment it could
+    /// only be agreed with, because answering "no" then annuls work already done; asked here the
+    /// answer is cheap, the plan is written and nothing has run. Web reads the same four off the
+    /// same two documents (`settlementHeldOnConfirmation` in `AcceptanceConfirmationCard.tsx`).
+    ///
+    /// THE TASK COUNT IS THE FOURTH BECAUSE "START" IS A VERB THAT NEEDS AN OBJECT. `project_create`
+    /// returns before the coordinator has filed anything, and this condition used to hold from that
+    /// moment: the plan is written and there is nothing to hand out, so the card offered to start a
+    /// project whose every press would have started nothing. `projectTaskCount` is read off the same
+    /// document (`_count.tasks`), and a document that did not say it is read as none for the same
+    /// reason `AcceptanceConfirmations.answerable` refuses a standing it does not have: a gate that
+    /// cannot establish its fact stays shut.
     private var settlementHeldOnConfirmation: Bool {
         guard AcceptanceConfirmations.answerable(acceptanceConfirmation) else { return false }
         guard projectStatus == "OPEN" else { return false }
-        return !projectCriteria.isEmpty
+        guard !projectCriteria.isEmpty else { return false }
+        return projectTaskCount > 0
     }
 
     /// Put a question into this conversation once, anchored where OrbitKit's rule puts it: where it

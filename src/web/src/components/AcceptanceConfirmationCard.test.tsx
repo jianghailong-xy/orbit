@@ -33,12 +33,13 @@ import { shortSeal } from './CriteriaDecisionCard';
  * conversation meets it in.
  *
  * What is asserted is what the native console does (`ConsoleModel.settlementHeldOnConfirmation`,
- * OrbitKit `AcceptanceConfirmations`): a card exactly when an OPEN project states criteria nobody
- * has confirmed — whether or not any of them is met by its work, which is the move this card was
- * rewritten for — and none otherwise; a delivered card stays, and goes stale in place; a press sends
- * the version standing now, and a refusal re-reads before the button comes back. Every "none" is
- * asserted on a fixture that goes on to draw the card once the one fact under test changes, so an
- * empty pane is never a card that was not going to draw anyway.
+ * OrbitKit `AcceptanceConfirmations`): a card exactly when an OPEN project states criteria, holds at
+ * least one task and has nobody's confirmation on that set — whether or not any criterion is met by
+ * its work, which is the move this card was rewritten for — and none otherwise; a delivered card
+ * stays, and goes stale in place; a press sends the version standing now, and a refusal re-reads
+ * before the button comes back. Every "none" is asserted on a fixture that goes on to draw the card
+ * once the one fact under test changes, so an empty pane is never a card that was not going to draw
+ * anyway.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -86,15 +87,25 @@ const NONE_MET = criteriaOf(false, false, false);
 const TITLE = 'move the confirmation to the start';
 
 /** The project document, as much of it as the card reads. `coordinatorEnabled` is left out by
- *  default because that is how a new project reads: off. */
+ *  default because that is how a new project reads: off. The task count is not left out: a project
+ *  whose plan is written holds work, and the empty count is the shape the card was taught to wait
+ *  through — so it is a case of its own below rather than what every fixture here happens to be. */
 function documentOf(criteria: ConfirmationCriterion[] | undefined, status = 'OPEN'): ProjectDocument {
-  return { title: TITLE, status, coordinatorEnabled: false, acceptanceCriteriaItems: criteria };
+  return {
+    title: TITLE,
+    status,
+    coordinatorEnabled: false,
+    _count: { tasks: 1 },
+    acceptanceCriteriaItems: criteria,
+  };
 }
 
 type ProjectDocument = {
   title?: string;
   status?: string;
   coordinatorEnabled?: boolean;
+  /** How many tasks the project holds — `_count.tasks`, as `/projects/:id` serves it. */
+  _count?: { tasks?: number };
   acceptanceCriteriaItems?: ConfirmationCriterion[];
 };
 
@@ -307,6 +318,36 @@ describe('whether a coordinator conversation is drawn the card', () => {
     await until(() => cardsIn(node).length === 1, 'the card to be drawn before any work has run');
     // The set is not empty and it is all five: what a press would bind is what is on the card.
     expect(criteriaOn(cardsIn(node)[0]!)).toEqual(criteria.map((item) => item.text));
+  });
+
+  /**
+   * THE PRESS NEEDS SOMETHING TO START, AND THE PLAN ALONE IS NOT IT.
+   *
+   * `project_create` returns before the coordinator has filed anything: the criteria are stated,
+   * the project is OPEN, nobody has confirmed — and the card arrived at exactly that moment, into
+   * the middle of the sentence that was still deciding how to split the work, offering to start a
+   * project whose every press would have started nothing. The task count is the fourth fact, and it
+   * is the one that gives the verb an object. `_count.tasks` counts everything filed under the
+   * project, settled work included: whether any of it MAY run is the dispatcher's question.
+   */
+  it.each<[string, ProjectDocument]>([
+    ['holds no task at all', { ...documentOf(NONE_MET), _count: { tasks: 0 } }],
+    ['holds no task the read counted', { ...documentOf(NONE_MET), _count: {} }],
+    // A read that did not say is read as none, unlike `coordinatorEnabled` beside it: this one
+    // GATES an action rather than labelling the project, and a gate nobody can establish stays shut.
+    ['does not say how many tasks it holds',
+      { title: TITLE, status: 'OPEN', coordinatorEnabled: false, acceptanceCriteriaItems: NONE_MET }],
+  ])('draws none while the project %s, and one once a task is filed', async (_, document) => {
+    server.standing = standingOf('UNCONFIRMED');
+    server.document = document;
+    const { node, qc } = await mount(PROJECT);
+    await readsLanded(qc);
+    expect(cardsIn(node), 'a project with nothing filed under it was offered a start').toHaveLength(0);
+
+    // The same project with one task filed: this fact and not a card that was never going to draw.
+    server.document = documentOf(NONE_MET);
+    await reread(qc);
+    expect(cardsIn(node)).toHaveLength(1);
   });
 
   /** The other half of the same condition, on the same five unmet criteria: confirmed is started,

@@ -509,15 +509,42 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// Optional — a read that did not say is not a "no", which is the one thing it must never be
     /// read as.
     public let coordinatorEnabled: Bool?
+    /// The endpoint's own `_count`, decoded under the name the other payloads give it.
+    public let counts: ProjectTaskCounts?
+    /// How many tasks the project holds — what the confirmation card's condition asks before it
+    /// offers to start anything, because "Start the project" is a verb and this is its object.
+    /// `_count.tasks` is everything filed under the project, settled work included: whether any of
+    /// it MAY run is the dispatcher's question, and the card's is whether there is any at all.
+    ///
+    /// A read that did not say is read as NONE, which is where this parts company with
+    /// `coordinatorEnabled` above: that one LABELS the project and has a third word for a read that
+    /// did not answer, while this one GATES an action — and a gate nobody can establish stays shut,
+    /// the same rule `AcceptanceConfirmations.answerable` keeps for a standing it does not have.
+    public var taskCount: Int { counts?.tasks ?? 0 }
 
     public init(id: String, acceptanceCriteriaItems: [Item]? = nil,
                 title: String? = nil, status: String? = nil,
-                coordinatorEnabled: Bool? = nil) {
+                coordinatorEnabled: Bool? = nil, counts: ProjectTaskCounts? = nil) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
         self.status = status
         self.coordinatorEnabled = coordinatorEnabled
+        self.counts = counts
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, acceptanceCriteriaItems, title, status, coordinatorEnabled
+        case counts = "_count"
+    }
+}
+
+/// `_count` on the project document, decoded the way `TaskListSummary` decodes its own.
+public struct ProjectTaskCounts: Codable, Equatable, Sendable {
+    public let tasks: Int?
+
+    public init(tasks: Int? = nil) {
+        self.tasks = tasks
     }
 }
 

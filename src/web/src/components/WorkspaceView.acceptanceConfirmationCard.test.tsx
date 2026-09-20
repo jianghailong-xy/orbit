@@ -198,7 +198,9 @@ beforeEach(() => {
       return reply(STANDING);
     }
     if (path === `/projects/${PROJECT_PUBLIC}`) {
-      return reply({ id: PROJECT_PUBLIC, title: 'the criteria seal', status: 'OPEN', coordinatorEnabled: false, acceptanceCriteriaItems: CRITERIA });
+      // `_count` is the fourth fact the card's condition turns on — a project with nothing filed
+      // under it is not one anybody can start, which is the state `project_create` returns in.
+      return reply({ id: PROJECT_PUBLIC, title: 'the criteria seal', status: 'OPEN', coordinatorEnabled: false, _count: { tasks: 1 }, acceptanceCriteriaItems: CRITERIA });
     }
     // The open items the coordinator question card reads (§5.2). Empty: no question is open in any
     // of these cases, and the card draws nothing — what is asserted here is the strip and the cards

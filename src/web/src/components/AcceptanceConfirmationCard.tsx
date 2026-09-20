@@ -38,8 +38,9 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
  * card could only ever be agreed with, and 20 of the 28 projects that reached DONE had gone round
  * it entirely. It is asked now at the one moment the answer is cheap — the plan is written and
  * nothing has run — so `satisfied` no longer enters the condition at all: an OPEN project, a set
- * that is not empty, and a standing nobody has confirmed. The criteria are on the card unfolded,
- * because a digest can prove WHICH version was signed and never that it was read.
+ * that is not empty, at least one task filed under it, and a standing nobody has confirmed. The
+ * criteria are on the card unfolded, because a digest can prove WHICH version was signed and never
+ * that it was read.
  *
  * The sentences are OrbitKit's `AcceptanceConfirmations`, copied by hand, and
  * `AcceptanceConfirmationCopyParityTests.swift` reads them back out of this file: the two clients
@@ -151,6 +152,12 @@ export interface ConfirmationProjectDocument {
    *  costs this card no request of its own. Absent from a read that did not say, which is not a
    *  "no": it is the one thing this field must never be read as. */
   coordinatorEnabled?: boolean;
+  /** How many tasks this project holds, off the same read's own `_count.tasks` — the total the
+   *  project list shows, not a second count of this card's. Absent is read as none, which is where
+   *  this field parts company with the one above: `coordinatorEnabled` LABELS the project and has a
+   *  third word for a read that did not answer, while this one GATES an action, and a gate nobody
+   *  can establish stays shut (`acceptanceConfirmationAnswerable` above, for the same reason). */
+  _count?: { tasks?: number };
   acceptanceCriteriaItems?: ConfirmationCriterion[];
 }
 
@@ -258,12 +265,21 @@ export function acceptanceConfirmedLine(standing: StandardSetConfirmationStandin
  * Whether this project is waiting to be started on a plan nobody has confirmed, read off the
  * confirmation standing and the project document — null for either one that could not be read.
  *
- * Three facts and no fourth: the project is OPEN, it states criteria, and the set standing now has
- * not been confirmed. `satisfied` is deliberately absent — waiting for every criterion to be met
- * put the question at the moment it could only be agreed with, which is what this card was moved
- * for. No quiet period is needed either side of a write: `project_update(acceptanceCriteriaItems)`
- * replaces the whole set in one statement (`criteria-pending-decisions.ts`), so a read never
- * catches a plan half-written.
+ * Four facts and no fifth: the project is OPEN, it states criteria, it holds at least one task, and
+ * the set standing now has not been confirmed. `satisfied` is deliberately absent — waiting for
+ * every criterion to be met put the question at the moment it could only be agreed with, which is
+ * what this card was moved for. No quiet period is needed either side of a write:
+ * `project_update(acceptanceCriteriaItems)` replaces the whole set in one statement
+ * (`criteria-pending-decisions.ts`), so a read never catches a plan half-written.
+ *
+ * THE TASK COUNT IS THE FOURTH BECAUSE "START" IS A VERB THAT NEEDS AN OBJECT. `project_create`
+ * returns before the coordinator has filed a single task, and the plan is written at that moment
+ * and there is nothing yet to hand out — so the first version of this condition, which asked for
+ * OPEN and criteria and nothing else, put a `Start the project` button in front of the agent while
+ * it was still deciding how to split the work, and a press on it would have started nothing. The
+ * count is `_count.tasks`: everything filed under the project, settled work included, because the
+ * question here is whether there is any work at all and which of it may run is the dispatcher's,
+ * not this card's.
  */
 export function settlementHeldOnConfirmation(
   standing: StandardSetConfirmationStanding | null,
@@ -271,7 +287,8 @@ export function settlementHeldOnConfirmation(
 ): boolean {
   if (!acceptanceConfirmationAnswerable(standing)) return false;
   if (project === null || project.status !== 'OPEN') return false;
-  return (project.acceptanceCriteriaItems ?? []).length > 0;
+  if ((project.acceptanceCriteriaItems ?? []).length === 0) return false;
+  return (project._count?.tasks ?? 0) > 0;
 }
 
 /**

@@ -273,6 +273,9 @@ beforeEach(() => {
         id: PROJECT_PUBLIC,
         title: 'the settlement pointer',
         status: 'OPEN',
+        // A project with work filed under it: the card's condition asks for one, so a fixture
+        // without it would be a project nobody could start and the card would never draw.
+        _count: { tasks: 1 },
         acceptanceCriteriaItems: server.criteria,
       });
     }
