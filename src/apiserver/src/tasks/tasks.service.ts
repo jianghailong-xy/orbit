@@ -783,6 +783,43 @@ const AUTO_RUN_MOMENT_DISPATCHED_SQL = (epoch: Prisma.Sql) => Prisma.sql`
 const CORRELATED_DISPATCH_MOMENT_SQL = Prisma.sql`(SELECT moment.epoch FROM task_dispatch_epoch moment WHERE moment.task_id = t.id)`;
 
 /**
+ * The task a `dep:` receipt names, read back OUT of its token — the entry point that lets the
+ * planner drive the retry read's receipt join from the receipt side instead of from the task table.
+ *
+ * `AUTO_RUN_MOMENT_DISPATCHED_SQL` compares a token to one COMPUTED FROM `t`, so as a join clause
+ * it is useless to the planner: it cannot hash a value it does not have until it has already read
+ * every task. `endedAutoRunMoments` scans the whole deployment, so that is a `Seq Scan on task` of
+ * 254 MB — `shared_buffers` is 128 MB, so over half of it is physical reads on every sweep — to
+ * find the ~5 rows the retry policy is about, while the receipt side that selects them holds ~1.2k
+ * rows. Measured 2026-09-20 on the deployment, alternating the two statements on one host:
+ * 825 ms and 29,576 block reads, against 253 ms and zero reads once the join can start there.
+ *
+ * This clause is the one thing a join needs and the token cannot give it: an EQUALITY between
+ * `t.id` and an expression over `receipt`, which is what a nested loop probes `task_pkey` with.
+ *
+ * It is a NECESSARY condition, not a narrowing — provable from the equality beside it, so it
+ * selects the same rows. `'dep:' || t.id::text || ':' || <epoch>` is a canonical UUID's text form
+ * (always 8-4-4-4-12, always lowercase, never a colon), so that token always matches this anchored
+ * pattern and the capture is exactly `t.id`. Where it does not match it yields NULL and drops the
+ * row; the equality beside it drops it too, for the same reason.
+ *
+ * Anchored and matched rather than `split_part(request_token, ':', 2)::uuid`, which is the same
+ * value for these rows and a 22P02 for any other: this table also carries the manual doors' tokens
+ * (a caller's bare `triggerId`), and a sweep that raises is a retry policy that stops running every
+ * minute. The pattern can only ever capture a UUID's text form, so the cast cannot fail.
+ *
+ * The one thing this clause can drift from is `TASK_RUN_TRIGGER.dependency` — the token is spelled
+ * twice here now, once as the writer builds it and once as the reader takes it apart, and a prefix
+ * or a format change on either side silently empties the retry policy's candidate set rather than
+ * raising. `task-auto-run-retry-after-run-ended.pg.spec.ts` is what holds the two together: it
+ * drives the real sweep over a real PostgreSQL with tokens from that builder, so a drift stops the
+ * re-arm it asserts. Nothing else in this file reads a token's parts — the other two candidate
+ * predicates and the dispatched-moment check all compare whole tokens.
+ */
+const DEPENDENCY_TOKEN_TASK_SQL = Prisma.sql`
+  substring(receipt.request_token from '^dep:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):')::uuid`;
+
+/**
  * The auto-run sweep's candidate predicate (see reconcileReadyTasks), correlated to an outer
  * `task t`. Deliberately NOT the same predicate as RUNNABLE_TASK_SQL, and the two must not be
  * merged: this one is deployment-wide (no owner scope), requires status exactly OPEN rather
@@ -9730,6 +9767,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         JOIN workspace a ON a.id = t.assignee_id
         JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
         JOIN task_run_request receipt ON ${AUTO_RUN_MOMENT_DISPATCHED_SQL(Prisma.sql`current_moment.epoch`)}
+          -- The receipt names its task in its own token, so the planner is handed that name as an
+          -- equality over the receipt and can enter this join from the receipt side
+          -- (DEPENDENCY_TOKEN_TASK_SQL). Without it the only way to reach a receipt is through a
+          -- task the statement has already read — and this scope is the deployment.
+          AND t.id = ${DEPENDENCY_TOKEN_TASK_SQL}
         LEFT JOIN session run ON run.id = (receipt.result->>'sessionId')::uuid
        WHERE ${AUTO_RUN_RETRY_CANDIDATE_SQL}
          AND ${scope}`);
