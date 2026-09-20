@@ -20,6 +20,7 @@ import {
   RunStatus as SharedRunStatus,
   TaskStatus as DeclaredTaskStatus,
 } from '@orbit/shared';
+import { ConflictException } from '@nestjs/common';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,6 +47,7 @@ import {
   INTEGRATION_JOB_STATES,
   openItemKindForJobState,
 } from './project-integration-job';
+import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -104,6 +106,8 @@ interface Stack {
   /** What a landing makes of the project branch (§3.4 M-F1): the one job that names no task. */
   promotions: ProjectPromotionService;
   convergence: CoordinatorConvergenceService;
+  /** The item door the owner's card presses (§4.7). */
+  openItems: ProjectOpenItemService;
 }
 
 /** The production wiring over one client, with the real completion-input router behind task writes. */
@@ -162,7 +166,7 @@ async function connect(): Promise<Stack> {
   // A component that records a failure and never gets to deliver it: what the coordinator's own turn
   // ending has to compensate for.
   const silentReaper = new ReaperService(prisma, realtime);
-  return { db, sessions, tasks, api, reaper, silentReaper, jobs, promotions, convergence };
+  return { db, sessions, tasks, api, reaper, silentReaper, jobs, promotions, convergence, openItems };
 }
 
 type CoordinatorShape = 'PARKED' | 'RUNNING' | 'COMPLETED' | 'NONE';
@@ -396,6 +400,7 @@ interface ItemRow {
   waitingSince: Date;
   assignedAt: Date;
   escalateAt: Date | null;
+  escalatedAt: Date | null;
   resolution: string | null;
   resolvedBy: string | null;
 }
@@ -415,7 +420,8 @@ async function items(db: PrismaClient, projectId: string): Promise<ItemRow[]> {
            "task_id" AS "taskId", "session_id" AS "sessionId", "dedupe_key" AS "dedupeKey",
            "integration_job_id" AS "integrationJobId",
            "title", "payload", "waiting_since" AS "waitingSince", "assigned_at" AS "assignedAt",
-           "escalate_at" AS "escalateAt", "resolution", "resolved_by" AS "resolvedBy"
+           "escalate_at" AS "escalateAt", "escalated_at" AS "escalatedAt",
+           "resolution", "resolved_by" AS "resolvedBy"
       FROM "project_open_item"
      WHERE "project_id" = ${projectId}::uuid
      ORDER BY "created_at", "id"`);
@@ -1580,6 +1586,186 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
     await stack.db.$disconnect();
   }
 });
+
+/**
+ * §4.7's one owner door onto an item: sending an escalated one back.
+ *
+ * The item is produced the way it really becomes the owner's — a failure opens it with the
+ * coordinator, and the project's own clock hands it over — rather than by writing `assignee` here,
+ * so what the door is measured against is the state a reader of the card would be looking at.
+ */
+/** The project's own escalation clock, run by hand: one tick, after the window is spent. */
+async function escalate(stack: Stack, w: World, a: Attempt): Promise<ItemRow> {
+  const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+  assert.equal(opened.assignee, 'COORDINATOR');
+  assert.ok(opened.escalateAt, 'a coordinator item is opened with the project\'s window on it');
+  await stack.db.$executeRaw(
+    Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
+                WHERE "id" = ${opened.id}::uuid`,
+  );
+  const swept = await new ProjectOpenItemEscalationService(
+    stack.db as unknown as PrismaService,
+  ).sweep();
+  assert.deepEqual(swept.map((row) => row.itemId), [opened.id]);
+  const item = (await items(stack.db, w.projectId)).find((row) => row.id === opened.id)!;
+  assert.equal(item.assignee, 'OWNER');
+  assert.equal(item.assigneeReason, 'ESCALATED');
+  assert.ok(item.escalatedAt, 'the clock is what put it here');
+  return item;
+}
+
+async function refusalOf(run: () => Promise<unknown>): Promise<string | undefined> {
+  try {
+    await run();
+  } catch (error) {
+    if (error instanceof ConflictException) {
+      return (error.getResponse() as { code?: string }).code;
+    }
+    throw error;
+  }
+  return undefined;
+}
+
+test('hands it back with the window restarted, and queues it on the coordinator afresh',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'return-back', 'PARKED');
+      const a = await attempt(stack, w, 'return-back', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const before = await escalate(stack, w, a);
+      const project = await stack.db.project.findUniqueOrThrow({
+        where: { id: w.projectId },
+        select: { exceptionEscalationSeconds: true },
+      });
+
+      const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, before.id);
+      assert.equal(returned.assignee, 'COORDINATOR');
+
+      const after = (await items(stack.db, w.projectId)).find((row) => row.id === before.id)!;
+      assert.equal(after.state, 'OPEN', 'nothing about it ended — the coordinator has it again');
+      assert.equal(after.assignee, 'COORDINATOR');
+      assert.equal(after.assigneeReason, 'DEFAULT', 'it is not anybody\'s exception now');
+      assert.equal(after.escalatedAt, null);
+      assert.ok(after.waitingSince.getTime() >= before.waitingSince.getTime());
+      assert.ok(
+        after.assignedAt.getTime() > before.assignedAt.getTime(),
+        'the assignment moved, which is what makes the delivery a new turn',
+      );
+      // The clock the project set, restarted rather than kept: the two hours it already spent
+      // are the ones that ran out (§4.6 X-E2).
+      assert.equal(
+        after.escalateAt!.getTime() - after.waitingSince.getTime(),
+        project.exceptionEscalationSeconds * 1_000,
+      );
+
+      const turns = await itemTurns(stack.db, w.coordinatorSessionId!);
+      const fresh = turns.filter(
+        (turn) => turn.clientTurnId === `open-item:v1:${before.id}:${after.assignedAt.getTime()}`,
+      );
+      assert.equal(fresh.length, 1, 'the item was not queued on the coordinator again');
+      assert.equal(fresh[0]!.status, 'PENDING');
+      assert.match(fresh[0]!.content ?? '', new RegExp(`Task failed: ${a.title}`));
+      const sent = (await deliveries(stack.db, w.projectId)).filter((row) => row.itemId === before.id);
+      assert.equal(sent.length, 1, 'one item, one delivery row — re-armed, not duplicated');
+      assert.equal(sent[0]!.clientTurnId, fresh[0]!.clientTurnId);
+      assert.equal(sent[0]!.returnedAt, null);
+      assert.equal(
+        (await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId! } })).status,
+        RunStatus.PENDING,
+        'a parked coordinator is woken for it',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('refuses a second press: the item is the coordinator\'s again',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'return-twice', 'PARKED');
+      const a = await attempt(stack, w, 'return-twice', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const item = await escalate(stack, w, a);
+
+      await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+      // What the hand-back itself left, before anything is pressed twice.
+      const returned = (await items(stack.db, w.projectId)).find((row) => row.id === item.id)!;
+      // Told afresh, under the assignment the hand-back just made (X-D2) — so the conversation
+      // holds the delivery the item was opened with and this one. That count is what the refusal
+      // below is measured against.
+      const queued = await itemTurns(stack.db, w.coordinatorSessionId!);
+      assert.equal(queued.length, 2);
+
+      assert.equal(
+        await refusalOf(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id)),
+        'OPEN_ITEM_ALREADY_COORDINATORS',
+      );
+
+      const after = (await items(stack.db, w.projectId)).find((row) => row.id === item.id)!;
+      assert.equal(after.assignee, 'COORDINATOR');
+      assert.equal(
+        after.assignedAt.getTime(),
+        returned.assignedAt.getTime(),
+        'the refusal moved nothing',
+      );
+      // The refusal answered a state that had already moved, and queued nothing behind it.
+      assert.equal((await itemTurns(stack.db, w.coordinatorSessionId!)).length, queued.length);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('refuses when there is no coordinator conversation to hand it to',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // X-D6: a project with nobody coordinating it opens the item on the owner in the first
+      // place, which is exactly the item this press would be offering to hand back.
+      const w = await world(stack, 'return-none', 'NONE');
+      const a = await attempt(stack, w, 'return-none', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      assert.equal(item.assignee, 'OWNER');
+      assert.equal(item.assigneeReason, 'NO_COORDINATOR');
+
+      assert.equal(
+        await refusalOf(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id)),
+        'OPEN_ITEM_NO_COORDINATOR',
+      );
+
+      const after = (await items(stack.db, w.projectId)).find((row) => row.id === item.id)!;
+      assert.equal(after.assignee, 'OWNER', 'nothing moved, so nothing was promised');
+      assert.equal(after.waitingSince.getTime(), item.waitingSince.getTime());
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('refuses when the coordinator conversation has ended',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'return-ended', 'COMPLETED');
+      const a = await attempt(stack, w, 'return-ended', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      assert.equal(item.assignee, 'OWNER');
+      assert.equal(item.assigneeReason, 'COORDINATOR_ENDED');
+
+      assert.equal(
+        await refusalOf(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id)),
+        'OPEN_ITEM_NO_COORDINATOR',
+      );
+      assert.equal(
+        (await items(stack.db, w.projectId)).find((row) => row.id === item.id)!.assignee,
+        'OWNER',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 test('the open-item PostgreSQL target is explicitly disposable', { skip }, () => {
   assertCoordinatorPgUrlIsIsolated(URL);

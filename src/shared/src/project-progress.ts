@@ -197,6 +197,7 @@ export type OpenItemAction =
   | 'OPEN_TASK_SESSION'
   | 'RETRY'
   | 'CANCEL_TASK'
+  | 'ASK_COORDINATOR_AGAIN'
   | 'RESUME'
   | 'ANSWER';
 

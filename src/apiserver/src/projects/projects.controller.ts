@@ -487,6 +487,23 @@ export class ProjectsController {
     return this.openItems.answerOpenItem(user.userId, id, itemId, dto);
   }
 
+  /**
+   * The owner sending an escalated item back to the project's coordinator (contract §4.7).
+   *
+   * The same door as the answer above, on the same credential: an item reached the owner because
+   * nobody acted on it, so "ask again" is the owner deciding that the coordinator gets another
+   * window — which is not a decision an agent's own tool could make on their behalf. Nothing ends
+   * here; the item goes back with its clock restarted, and what happens to it is the coordinator's.
+   */
+  @Post(':id/open-items/:itemId/return-to-coordinator')
+  returnOpenItemToCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+  ) {
+    return this.openItems.returnToCoordinator(user.userId, id, itemId);
+  }
+
   @Post(':id/blockers/:blockerId/resolve')
   resolveBlocker(
     @CurrentUser() user: AuthUser,

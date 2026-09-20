@@ -39,6 +39,11 @@ import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 export const ASK_OWNER_COORDINATOR_ONLY = 'ASK_OWNER_COORDINATOR_ONLY';
 /** A question that has been answered, withdrawn or superseded is not answered again (§4.7). */
 export const OPEN_ITEM_NOT_OPEN = 'OPEN_ITEM_NOT_OPEN';
+/** An item the coordinator is already carrying is not handed back to it (§4.7). */
+export const OPEN_ITEM_ALREADY_COORDINATORS = 'OPEN_ITEM_ALREADY_COORDINATORS';
+/** A project with no coordinator conversation — or one that has ended — has nobody to ask again
+ *  (§4.7). */
+export const OPEN_ITEM_NO_COORDINATOR = 'OPEN_ITEM_NO_COORDINATOR';
 
 /**
  * How many already-answered questions one binding reconsiders (§5.2 R11).
@@ -75,7 +80,16 @@ export interface OpenItemRow {
     at: Date | null;
   };
   /** Doors that exist today. An action nobody can perform is not offered. */
-  actions: Array<'REVIEW' | 'OPEN_COORDINATOR' | 'OPEN_TASK_SESSION' | 'RETRY' | 'CANCEL_TASK' | 'RESUME' | 'ANSWER'>;
+  actions: Array<
+    | 'REVIEW'
+    | 'OPEN_COORDINATOR'
+    | 'OPEN_TASK_SESSION'
+    | 'RETRY'
+    | 'CANCEL_TASK'
+    | 'ASK_COORDINATOR_AGAIN'
+    | 'RESUME'
+    | 'ANSWER'
+  >;
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
 }
@@ -93,6 +107,15 @@ export interface OpenItemAnswered {
   resolution: 'ANSWERED';
   /** Null when no conversation is coordinating the project: the answer waits for the next one. */
   delivery: { sessionId: string; turnId: string } | null;
+}
+
+/** An item the owner sent back to its project's coordinator (§4.7). */
+export interface OpenItemReturned {
+  itemId: string;
+  assignee: 'COORDINATOR';
+  /** The wait starts over, which is the whole of what "ask again" gives the coordinator. */
+  waitingSince: Date;
+  escalateAt: Date;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -474,6 +497,101 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * The owner hands an escalated item back to the project's coordinator (§4.7).
+   *
+   * An item became the owner's because nobody acted on it — that is the whole of what an escalation
+   * says — so this is the owner saying "try again", and it deliberately ends nothing: the item goes
+   * back to the coordinator with the clock the project set for it RESTARTED. Keeping the deadline it
+   * already had would hand it back already due to return, which is the same as not handing it back
+   * at all, and `waiting_since` moves with it because the wait a reader is shown is the one running
+   * now (§4.6 X-E2). `assigned_at` moves for the same kind of reason on the other side: a delivery's
+   * turn key names the assignment it was made under, so the coordinator is told in a fresh turn
+   * rather than under the key of the one it never answered (X-D2).
+   *
+   * The three refusals in front of the write are what keep the press honest. An item that is no
+   * longer open has nothing left to hand over; an item the coordinator is already carrying is not
+   * the owner's to send; and a project with no coordinator conversation — or one that has ended —
+   * has nobody to ask again, so handing it back would only start a clock that runs out into this
+   * same item.
+   */
+  async returnToCoordinator(
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+  ): Promise<OpenItemReturned> {
+    const item = await this.prisma.projectOpenItem.findFirst({
+      where: { id: itemId, projectId, ownerId },
+      select: {
+        id: true,
+        state: true,
+        assignee: true,
+        project: {
+          select: {
+            coordinatorEnabled: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: SESSION_ENDING_SELECT },
+            exceptionEscalationSeconds: true,
+          },
+        },
+      },
+    });
+    if (!item) throw new NotFoundException('item not found');
+    if (item.state !== 'OPEN') {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_OPEN,
+        message:
+          'this item is no longer open: it ended when the work it was about moved on, so there is '
+          + 'nothing left to hand back.',
+      });
+    }
+    if (item.assignee !== 'OWNER') {
+      throw new ConflictException({
+        code: OPEN_ITEM_ALREADY_COORDINATORS,
+        message:
+          'this item is already the coordinator’s. Sending it back is for an item that came to the '
+          + 'owner because nobody acted on it.',
+      });
+    }
+    const session = item.project.coordinatorEnabled ? item.project.coordinatorSession : null;
+    if (item.project.coordinatorSessionId == null || session == null || sessionHasEnded(session)) {
+      throw new ConflictException({
+        code: OPEN_ITEM_NO_COORDINATOR,
+        message:
+          'this project has no coordinator conversation to ask again — the item is yours because '
+          + 'there was nobody to hand it to.',
+      });
+    }
+    const now = new Date();
+    const escalateAt = new Date(now.getTime() + item.project.exceptionEscalationSeconds * 1_000);
+    const returned = await this.prisma.projectOpenItem.updateMany({
+      where: { id: itemId, state: 'OPEN', assignee: 'OWNER' },
+      data: {
+        assignee: 'COORDINATOR',
+        // Back where it started: nothing about it is anybody's exception now.
+        assigneeReason: 'DEFAULT',
+        assignedAt: now,
+        waitingSince: now,
+        escalateAt,
+        escalatedAt: null,
+      },
+    });
+    if (returned.count === 0) {
+      // The same item somebody else moved between the read and the write — the press answered a
+      // state that had already changed, so it is told to read again rather than reporting a
+      // hand-back it did not make.
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_OPEN,
+        message: 'this item changed while the press was being made — read the project again.',
+      });
+    }
+    // §4.4 X-D4 (1), after the commit, and guarded: the item is the coordinator's from here whether
+    // or not this process manages to tell it, and a delivery that fails is re-derived from the
+    // committed row at the next drain point rather than costing the owner a 500.
+    await this.guarded('returnToCoordinator', () => this.deliver(itemId));
+    return { itemId, assignee: 'COORDINATOR', waitingSince: now, escalateAt };
+  }
+
+  /**
    * Tell the project's current coordinator what the owner answered (§5.2 R10, R11).
    *
    * Keyed by the question AND the conversation, which is what makes a rotation safe: every
@@ -680,9 +798,23 @@ export class ProjectOpenItemService {
   async list(ownerId: string, projectId: string): Promise<ProjectOpenItems> {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
-      select: { id: true },
+      // Read here rather than per row: whether this project has a conversation to hand an item
+      // BACK to decides one press on every item it owns, and it is one project either way.
+      select: {
+        id: true,
+        coordinatorEnabled: true,
+        coordinatorSessionId: true,
+        coordinatorSession: { select: SESSION_ENDING_SELECT },
+      },
     });
     if (!project) throw new NotFoundException('project not found');
+    // The same two facts `deliver` refuses on, asked at read time: a project with no coordinator
+    // conversation — or one that has ended — has nobody to ask again, and a press offering to do
+    // it would be a button whose only answer is a refusal (§4.7).
+    const askable = project.coordinatorEnabled
+      && project.coordinatorSessionId != null
+      && project.coordinatorSession != null
+      && !sessionHasEnded(project.coordinatorSession);
     const rows = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -761,8 +893,18 @@ export class ProjectOpenItemService {
           ? ['REVIEW']
           : row.taskId
             ? row.assignee === 'COORDINATOR'
+              // The coordinator's own: it can be looked at, run again, or stopped.
               ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
-              : ['OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
+              // An escalated item's route back is through the coordinator that should have had it
+              // (§4.7) — the owner's press is to ask again, not to retry work the coordinator
+              // owns — and to stop the task outright. The asking press is listed only while there
+              // is a conversation to ask (see `askable` above); the card leaves it undrawn then,
+              // and the wait that ran into this escalation is the one thing left to say.
+              : [
+                  ...(askable ? ['ASK_COORDINATOR_AGAIN' as const] : []),
+                  'OPEN_TASK_SESSION',
+                  'CANCEL_TASK',
+                ]
             : [],
       };
     });

@@ -113,7 +113,10 @@ const ESCALATED = item({
   escalateAt: at(6 * MINUTE),
   escalatedAt: at(6 * MINUTE),
   delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
-  actions: ['OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // What the server lists for an escalated task item (§4.7): the way back to the coordinator that
+  // should have had it, the run, and stopping the task — and no `RETRY`, because the work is the
+  // coordinator's to run again, not the owner's.
+  actions: ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
 });
 
 const PAUSED = item({
@@ -209,7 +212,9 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
     expect(html.match(/>You</g) ?? []).toHaveLength(3);
     expect(html.match(/>Coordinator</g) ?? []).toHaveLength(2);
 
-    // The press each row offers, from the server's own `actions` — never one with no door.
+    // The one press each row offers, from the server's own `actions` — never one with no door.
+    // A row is a way in (§7.2 V5): the presses that WRITE are the card's, and a row leaves them
+    // out, which is why these two appear on the cards below and nowhere here.
     expect(html).toContain('Answer');
     expect(html).toContain('Open coordinator');
     expect(html).not.toContain('Retry');
@@ -322,6 +327,45 @@ describe('ProjectExceptionCards — the same items in the coordinator’s conver
       { needsYou: [], withCoordinator: [] },
       () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
     )).toBe('');
+  });
+});
+
+describe('the exception cards’ presses', () => {
+  function card(row: ProjectOpenItemRow): string {
+    return paint(
+      row.assignee === 'OWNER'
+        ? { needsYou: [row], withCoordinator: [] }
+        : { needsYou: [], withCoordinator: [row] },
+      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+  }
+
+  it('offers a failed task’s three presses: retry it, open the run, or stop it', () => {
+    const html = card(item());
+
+    expect(html).toContain('Retry');
+    expect(html).toContain('Open task session');
+    expect(html).toContain('Cancel task');
+  });
+
+  it('sends an escalated item back to its coordinator rather than retrying its work', () => {
+    const html = card(ESCALATED);
+
+    expect(html).toContain('Ask the coordinator again');
+    expect(html).toContain('Open task session');
+    expect(html).toContain('Cancel task');
+    // The work is the coordinator's to run again (§4.7) — the owner's press is to ask, which is
+    // why the server lists no RETRY on an item it escalated.
+    expect(html).not.toContain('Retry');
+  });
+
+  it('leaves out a press this row carries no target for', () => {
+    // An item whose task is gone — no `taskId` to run or stop. It is still readable, and the two
+    // presses that need a task are not drawn rather than drawn dead.
+    const orphan = item({ taskId: null, sessionId: null });
+
+    expect(card(orphan)).not.toContain('Retry');
+    expect(card(orphan)).not.toContain('Cancel task');
   });
 });
 
@@ -448,6 +492,25 @@ function button(label: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined;
 }
 
+/** The `atLeast`-th button wearing this label, once there are that many — what a dialog needs when
+ *  its own button repeats the label of the press that opened it. Bounded, and it waits for the
+ *  document rather than for a fixed number of turns, which is what an animation frame or two of
+ *  portal mounting costs on a machine that is busy. */
+async function buttonAppears(label: string, atLeast: number): Promise<HTMLButtonElement | undefined> {
+  const found = (): HTMLButtonElement[] =>
+    Array.from(document.querySelectorAll('button')).filter(
+      (candidate) => candidate.textContent?.trim() === label,
+    ) as HTMLButtonElement[];
+  for (let turn = 0; turn < 50; turn += 1) {
+    const buttons = found();
+    if (buttons.length >= atLeast) return buttons.at(-1);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  return undefined;
+}
+
 describe('FusePauseCard — resuming', () => {
   it('resumes through the project’s own fuse door and re-reads the items', async () => {
     // Routed by path: a blanket mock answers the items read with the resume receipt, and the card
@@ -473,6 +536,73 @@ describe('FusePauseCard — resuming', () => {
 
     expect(apiMock).toHaveBeenCalledWith(
       `/projects/${PROJECT_ID}/fuse/${PAUSED.fuseEpisodeId}/resume`,
+      { method: 'POST', body: {} },
+    );
+  });
+});
+
+describe('the exception cards’ presses, through their doors', () => {
+  /** A card, mounted, with one of its presses already made — the write each press reaches is what
+   *  these are about, so the read that draws the card is stubbed and nothing else is. */
+  async function press(
+    items: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[] },
+    label: string,
+  ): Promise<void> {
+    apiMock.mockImplementation(async (path: string) =>
+      String(path).endsWith('/open-items') ? items : {});
+    const qc = client(items);
+    await mount(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await settle();
+
+    const trigger = button(label);
+    expect(trigger).toBeTruthy();
+    await act(async () => trigger!.click());
+    await settle();
+  }
+
+  it('retries the task through the run door every other Run press uses', async () => {
+    await press({ needsYou: [], withCoordinator: [item()] }, 'Retry');
+
+    // One press, one `triggerId`, drawn where the press happened — the same request the task list
+    // and the detail panel send, so a resend of it is one run rather than a second.
+    expect(apiMock).toHaveBeenCalledWith(
+      `/tasks/${item().taskId}/execute`,
+      { method: 'POST', body: { triggerId: expect.any(String) } },
+    );
+  });
+
+  it('asks before it cancels a task, and answers with the status write', async () => {
+    await press({ needsYou: [], withCoordinator: [item()] }, 'Cancel task');
+
+    // The press alone asks. Nothing has been written while the question stands.
+    expect(apiMock.mock.calls.filter(([, options]) => options?.method === 'PATCH')).toEqual([]);
+
+    // The confirm is the last 'Cancel task' in the document: the card's press, then the modal's
+    // own button, which the portal puts after it. Waited for rather than counted in turns — a
+    // dialog mounts into its portal a tick or two after the press, and how many is not something
+    // this test should be pinning on a loaded box.
+    const confirm = await buttonAppears('Cancel task', 2);
+    expect(confirm).toBeTruthy();
+    await act(async () => confirm!.click());
+    await settle();
+
+    expect(apiMock).toHaveBeenCalledWith(
+      `/tasks/${item().taskId}`,
+      { method: 'PATCH', body: { status: 'CANCELLED' } },
+    );
+  });
+
+  it('hands an escalated item back through the project’s own door', async () => {
+    await press({ needsYou: [ESCALATED], withCoordinator: [] }, 'Ask the coordinator again');
+
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/open-items/${ESCALATED.itemId}/return-to-coordinator`,
       { method: 'POST', body: {} },
     );
   });

@@ -1,7 +1,7 @@
-import type { JSX, ReactNode } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button } from 'antd';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { Alert, Button, Modal } from 'antd';
 import type {
   CoordinatorFuseUsage,
   CoordinatorWakeups,
@@ -12,7 +12,11 @@ import type {
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import { projectOpenItemsQuery } from '../lib/queries';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
+import { refreshTaskScheduleViews } from '../lib/taskSchedule';
+import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { ago, formatSpan } from '../lib/watches';
+import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 
 /**
  * What a project still owes somebody, and what its coordinator has left to spend
@@ -117,16 +121,37 @@ export function ownerLine(row: ProjectOpenItemRow, now: number): string {
     : `Owner: coordinator · ${waited}`;
 }
 
-/** The label each door wears. Only the four with a door behind them are ever drawn (see the module
- *  note): the server lists `RETRY` and `CANCEL_TASK` for a task item, and neither has an entry
- *  point in this client, so pressing one could do nothing but fail. */
+/** The label each door wears. A row draws the ways in; a card draws those AND the three that write.
+ *  An action this map has no label for is not drawn at all, which is what stops a name the server
+ *  has not listed from becoming a press nobody can answer. */
 const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   REVIEW: 'Review',
   ANSWER: 'Answer',
   RESUME: 'Resume',
   OPEN_COORDINATOR: 'Open coordinator',
   OPEN_TASK_SESSION: 'Open task session',
+  RETRY: 'Retry',
+  CANCEL_TASK: 'Cancel task',
+  ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
 };
+
+/** The presses that WRITE, and the only ones. Everything else an item lists is a way in.
+ *
+ *  One set, because three things turn on the same answer: which presses a card draws, that a press
+ *  is drawn as a button rather than a link, and that a ROW leaves them out — a row is a way in
+ *  (§7.2 V5), and the one press it offers is a reading door. */
+const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
+  'RETRY',
+  'CANCEL_TASK',
+  'ASK_COORDINATOR_AGAIN',
+]);
+
+/** Whether this row carries what a writing press would need, in the same shape `actionHref` answers
+ *  for the links: the two task presses act on the task the item is about, and the third is about
+ *  the item itself, which every row carries. */
+function writeTarget(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
+  return action === 'ASK_COORDINATOR_AGAIN' ? row.itemId : row.taskId;
+}
 
 /** Where a press goes, or null when this row does not carry the address it would need. */
 function actionHref(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
@@ -154,10 +179,26 @@ function actionHref(row: ProjectOpenItemRow, action: OpenItemAction): string | n
   }
 }
 
-/** The presses this row offers here, in the server's own order and never more than it listed. */
+/** The presses a ROW offers: the server's own list, minus the ones that write, in its order. */
 function drawableActions(row: ProjectOpenItemRow): OpenItemAction[] {
   return row.actions.filter(
-    (action) => ACTION_LABEL[action] != null && (action === 'RESUME' || actionHref(row, action) != null),
+    (action) =>
+      ACTION_LABEL[action] != null
+      && !WRITE_ACTIONS.has(action)
+      && (action === 'RESUME' || actionHref(row, action) != null),
+  );
+}
+
+/** The presses a CARD offers: the same list, with the writing presses drawn as the buttons they
+ *  are — each one only where this row carries what it would need. Never more than the server
+ *  listed, so a card cannot come to offer something no door answers. */
+function cardActions(row: ProjectOpenItemRow): OpenItemAction[] {
+  return row.actions.filter(
+    (action) =>
+      ACTION_LABEL[action] != null
+      && (WRITE_ACTIONS.has(action)
+        ? writeTarget(row, action) != null
+        : action === 'RESUME' || actionHref(row, action) != null),
   );
 }
 
@@ -248,6 +289,257 @@ export function FusePauseCard({
 }
 
 /**
+ * What a write made from a card makes stale.
+ *
+ * The item list it was drawn from, always — that is the card's own read. And for the two presses
+ * that act on a task, every view of that task through the boundary every other Run press uses
+ * (`refreshTaskScheduleViews`), which an accepted run makes stale whether or not this card is the
+ * thing that started it: a run consumes the task's one-shot `runAt` and moves its status.
+ */
+function refreshItemWriteViews(qc: QueryClient, projectId: string, taskId?: string): Promise<void> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: projectOpenItemsQuery(projectId).queryKey }),
+    qc.invalidateQueries({ queryKey: ['project', projectId] }),
+    ...(taskId ? [refreshTaskScheduleViews(qc, taskId, projectId)] : []),
+  ]).then(() => undefined);
+}
+
+/**
+ * Retry: start the failed task again, through the same door every other Run press in this app
+ * sends (`POST /tasks/:id/execute`, with the press's own `triggerId` so a resend of it is one run
+ * rather than a second).
+ *
+ * Nothing here writes the ITEM: the server clears the task's FAILED as the run is dispatched and
+ * answers the failure on the same fact, so the card closes because the task moved (§4.2). A
+ * refusal — a run already working on this task, a replaced attempt — is drawn where the press was
+ * made, in the notice the rest of the app uses for it, which is also the way into that run.
+ */
+export function retryTaskMutationOptions(qc: QueryClient, projectId: string, taskId: string) {
+  return {
+    // A press whose ANSWER was lost is resent under the same name; a new press draws a new one.
+    ...runRequestResend,
+    mutationFn: ({ triggerId }: { triggerId: string }) =>
+      api(`/tasks/${encodeURIComponent(taskId)}/execute`, { method: 'POST', body: { triggerId } }),
+    onSuccess: () => refreshItemWriteViews(qc, projectId, taskId),
+  };
+}
+
+/**
+ * Cancel task: the attempt stops here and the exceptions it opened close with it (§4.2:
+ * `TASK_CLOSED`). No run is stopped by it — a task with a live run is a task that is not FAILED —
+ * so the press is about the record, and its confirm says exactly that.
+ */
+export function cancelTaskMutationOptions(qc: QueryClient, projectId: string, taskId: string) {
+  return {
+    mutationFn: () =>
+      api(`/tasks/${encodeURIComponent(taskId)}`, {
+        method: 'PATCH',
+        body: { status: 'CANCELLED' },
+      }),
+    onSuccess: () => refreshItemWriteViews(qc, projectId, taskId),
+  };
+}
+
+/**
+ * Ask the coordinator again: an escalated item goes back to the conversation that coordinates the
+ * project, with the clock the project set for it restarted (§4.7).
+ *
+ * Nothing is retried and nothing ends here — what the coordinator does about it is the
+ * coordinator's, which is the whole reason the press exists rather than a second Retry. The server
+ * refuses it when there is no live coordinator conversation to hand it to.
+ */
+export function askCoordinatorAgainMutationOptions(
+  qc: QueryClient,
+  projectId: string,
+  itemId: string,
+) {
+  return {
+    mutationFn: () =>
+      api(
+        `/projects/${encodeURIComponent(projectId)}/open-items/${encodeURIComponent(itemId)}`
+        + '/return-to-coordinator',
+        { method: 'POST', body: {} },
+      ),
+    onSuccess: () => refreshItemWriteViews(qc, projectId),
+  };
+}
+
+export const CANCEL_TASK_MODAL_TITLE = 'Cancel this task?';
+export const CANCEL_TASK_MODAL_OK = 'Cancel task';
+/** What the confirm says, in the two facts a reader weighing it needs: what it stops, and what it
+ *  does not touch. A cancelled task is a record, not a deletion — its branch, its history and its
+ *  page stay, and reopening it later is the same press that reopens any other stopped attempt. */
+export const CANCEL_TASK_MODAL_BODY =
+  'It is recorded as cancelled: no further run starts on it, and the failed-attempt notices it '
+  + 'opened close with it. Its branch and history stay where they are.';
+
+/** One press, one button. `primary` is the first one a card offers — the mock's own emphasis, and
+ *  the reason a reader can tell the expected press from the other ways out. */
+function PressButton({
+  label,
+  primary,
+  danger,
+  pending,
+  onClick,
+}: {
+  label: string;
+  primary?: boolean;
+  danger?: boolean;
+  pending?: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <Button
+      size="small"
+      type={primary ? 'primary' : 'default'}
+      danger={danger}
+      loading={pending}
+      onClick={onClick}
+    >
+      {label}
+    </Button>
+  );
+}
+
+/** The card's one sentence about a press that was refused, in the shape the pause card uses. */
+function PressError({ headline, error }: { headline: string; error: Error }): JSX.Element {
+  return (
+    <Alert
+      type="error"
+      showIcon
+      className="project-open-item-error"
+      message={headline}
+      description={error.message}
+    />
+  );
+}
+
+function RetryPress({
+  row,
+  projectId,
+  primary,
+}: {
+  row: ProjectOpenItemRow;
+  projectId: string;
+  primary?: boolean;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const retry = useMutation(retryTaskMutationOptions(qc, projectId, row.taskId ?? ''));
+  const error = retry.error instanceof Error ? retry.error : null;
+  const conflict = error ? readTaskRunConflict(error) : null;
+  return (
+    <>
+      <PressButton
+        label={ACTION_LABEL.RETRY!}
+        primary={primary}
+        pending={retry.isPending}
+        onClick={() => retry.mutate({ triggerId: newRunRequestToken() })}
+      />
+      {conflict?.sessionId ? (
+        <TaskRunHandoffNotice conflict={conflict} className="project-open-item-error" />
+      ) : error ? (
+        <PressError headline="The task was not started" error={error} />
+      ) : null}
+    </>
+  );
+}
+
+function CancelTaskPress({
+  row,
+  projectId,
+  primary,
+}: {
+  row: ProjectOpenItemRow;
+  projectId: string;
+  primary?: boolean;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const cancel = useMutation(cancelTaskMutationOptions(qc, projectId, row.taskId ?? ''));
+  return (
+    <>
+      <PressButton
+        label={ACTION_LABEL.CANCEL_TASK!}
+        primary={primary}
+        danger
+        pending={cancel.isPending}
+        onClick={() => setConfirming(true)}
+      />
+      <Modal
+        open={confirming}
+        title={CANCEL_TASK_MODAL_TITLE}
+        okText={CANCEL_TASK_MODAL_OK}
+        okButtonProps={{ danger: true, loading: cancel.isPending }}
+        cancelText="Back"
+        onOk={() => cancel.mutate(undefined, { onSuccess: () => setConfirming(false) })}
+        // A refusal leaves the modal open over the row it was about: the reader gets to read what
+        // the server said and decide again, rather than losing the question with the answer.
+        onCancel={() => {
+          cancel.reset();
+          setConfirming(false);
+        }}
+      >
+        <p>{CANCEL_TASK_MODAL_BODY}</p>
+        {cancel.isError ? (
+          <PressError headline="The task was not cancelled" error={cancel.error as Error} />
+        ) : null}
+      </Modal>
+    </>
+  );
+}
+
+function AskCoordinatorAgainPress({
+  row,
+  projectId,
+  primary,
+}: {
+  row: ProjectOpenItemRow;
+  projectId: string;
+  primary?: boolean;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const ask = useMutation(askCoordinatorAgainMutationOptions(qc, projectId, row.itemId));
+  return (
+    <>
+      <PressButton
+        label={ACTION_LABEL.ASK_COORDINATOR_AGAIN!}
+        primary={primary}
+        pending={ask.isPending}
+        onClick={() => ask.mutate()}
+      />
+      {ask.isError ? (
+        <PressError headline="The item was not handed back" error={ask.error as Error} />
+      ) : null}
+    </>
+  );
+}
+
+/** One press of a card, by the action the server named. An action that writes and has no press
+ *  here is one this build cannot make — and `cardActions` has already left it undrawn. */
+function ItemPress({
+  row,
+  action,
+  projectId,
+  primary,
+}: {
+  row: ProjectOpenItemRow;
+  action: OpenItemAction;
+  projectId: string;
+  primary?: boolean;
+}): JSX.Element | null {
+  switch (action) {
+    case 'RETRY':
+      return <RetryPress row={row} projectId={projectId} primary={primary} />;
+    case 'CANCEL_TASK':
+      return <CancelTaskPress row={row} projectId={projectId} primary={primary} />;
+    case 'ASK_COORDINATOR_AGAIN':
+      return <AskCoordinatorAgainPress row={row} projectId={projectId} primary={primary} />;
+    default:
+      return null;
+  }
+}
+
+/**
  * An exception the coordinator is handling: a conflict, a failed combined-tree check, an
  * integration error, or a task that failed (mock 5, left column).
  *
@@ -256,18 +548,50 @@ export function FusePauseCard({
  * server's title and its one sentence, and those arrive already written.
  */
 export function OpenItemCard({
+  projectId,
   row,
   now,
 }: {
+  projectId: string;
   row: ProjectOpenItemRow;
   now: number;
 }): JSX.Element {
   return (
     <ItemCard row={row} heading={row.title} tone="coordinator" now={now}>
-      {drawableActions(row).map((action) => (
-        <ItemLink key={action} row={row} action={action} />
-      ))}
+      <CardActions projectId={projectId} row={row} />
     </ItemCard>
+  );
+}
+
+/** A card's presses, in the server's own order: a link where the press is a way in, a button where
+ *  it writes. The first of the WRITING ones is drawn as the primary press — the mock's own emphasis
+ *  on both cards (Retry where the coordinator owns the work, "Ask the coordinator again" where the
+ *  owner does), and one rule rather than a list of exceptions. */
+function CardActions({
+  projectId,
+  row,
+}: {
+  projectId: string;
+  row: ProjectOpenItemRow;
+}): JSX.Element {
+  const actions = cardActions(row);
+  const primary = actions.find((action) => WRITE_ACTIONS.has(action));
+  return (
+    <>
+      {actions.map((action) =>
+        WRITE_ACTIONS.has(action) ? (
+          <ItemPress
+            key={action}
+            row={row}
+            action={action}
+            projectId={projectId}
+            primary={action === primary}
+          />
+        ) : (
+          <ItemLink key={action} row={row} action={action} />
+        ),
+      )}
+    </>
   );
 }
 
@@ -277,9 +601,11 @@ export function OpenItemCard({
  * conversation ending, by a chain running out or by a hand-over each ask for something different.
  */
 export function EscalatedItemCard({
+  projectId,
   row,
   now,
 }: {
+  projectId: string;
   row: ProjectOpenItemRow;
   now: number;
 }): JSX.Element {
@@ -294,9 +620,7 @@ export function EscalatedItemCard({
       // says what "it" is, which the heading no longer has room for.
       subject={row.title}
     >
-      {drawableActions(row).map((action) => (
-        <ItemLink key={action} row={row} action={action} />
-      ))}
+      <CardActions projectId={projectId} row={row} />
     </ItemCard>
   );
 }
@@ -368,9 +692,9 @@ function ItemAsCard({
   // land and what the checks came to actually live.
   if (row.kind === 'COORDINATOR_QUESTION' || row.kind === 'PROMOTION_APPROVAL') return null;
   return escalationHeading(row, now) != null ? (
-    <EscalatedItemCard row={row} now={now} />
+    <EscalatedItemCard projectId={projectId} row={row} now={now} />
   ) : (
-    <OpenItemCard row={row} now={now} />
+    <OpenItemCard projectId={projectId} row={row} now={now} />
   );
 }
 
