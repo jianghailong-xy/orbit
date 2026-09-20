@@ -1063,7 +1063,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0293_project_promotion_source_sha_nullable',
       // `project_promotion.upstream_moved_by`: one nullable column, no function, no trigger, and
       // `project_promotion` was never in the judgment tables this file guards — 0286 created it.
-      '0294_project_promotion_upstream_moved_by'],
+      '0294_project_promotion_upstream_moved_by',
+      // `task_owner_confirmation_claim`, one new table, plus one nullable column on
+      // `task_owner_confirmation_request` (`claim_id`) with its composite foreign key and its
+      // unique index, three indexes and two `COMMENT ON`s. Read against every claim above: it is
+      // pure ADDITION and purely catalog-shaped — `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF
+      // NOT EXISTS`, one `DO` block that adds a constraint through an `EXCEPTION WHEN
+      // duplicate_object` guard, four `CREATE … INDEX IF NOT EXISTS` — and it carries no
+      // `CREATE OR REPLACE FUNCTION` at all, so it is not another writer of the DONE fence. It
+      // names none of the six preserved triggers/functions, neither 0177 relation and no
+      // `project_acceptance_*` object, and it adds, drops or retypes no column of `task`: the only
+      // place `task` appears is the composite foreign key from the new table's own columns, which
+      // references rows rather than changing them. It has no INSERT, UPDATE or DELETE, so no
+      // preserved row is read, locked or backfilled — the new table is empty and nothing in it is
+      // derived from what this file guards. `task_owner_confirmation_request`, the table it
+      // ALTERs, was created by 0267 and is not one of the preserved relations.
+      '0295_task_owner_confirmation_claim'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
