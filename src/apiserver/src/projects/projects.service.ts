@@ -147,7 +147,11 @@ import {
   readCriterionIndependence,
   type CriterionIndependenceAnswer,
 } from './project-criterion-independence';
-import { storeDerivedProjectStatus } from './project-done-derived';
+import {
+  derivedDoneFromLanes,
+  readStandardSetConfirmationState,
+  storeDerivedProjectStatus,
+} from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -2308,7 +2312,15 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
-    const [byStatus, satisfaction, landingFacts, codebase, independence, blockers] = await Promise.all([
+    const [
+      byStatus,
+      satisfaction,
+      landingFacts,
+      codebase,
+      independence,
+      blockers,
+      standardSetConfirmation,
+    ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
       // This was `task.groupBy({ by: ['status'], where: { projectId: id } })`, and its filter is
@@ -2352,10 +2364,15 @@ export class ProjectsService {
       // What is standing in this project's way and who has to act: every open blocker with its
       // kind, what it asks for and its detail, and the latest resolved. One statement.
       readProjectBlockers(this.prisma, ownerId, id),
+      // And the confirmation half of the DONE projection, from the definitions the project query
+      // above already brought in — one more statement, and the only input `derivedDone` needs
+      // that none of the lanes beside it reads. Served on this document so a client renders WHY
+      // the column says what it says instead of re-deriving the rule for itself.
+      readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
     ]);
+    const landingAnswers = criterionLanding(landingFacts, landingBranchesFor(codebase));
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
-    const landed = new Map(criterionLanding(landingFacts, landingBranchesFor(codebase))
-      .map((row) => [row.definitionId, row.landing]));
+    const landed = new Map(landingAnswers.map((row) => [row.definitionId, row.landing]));
     const independent = new Map(independence.map((row) => [row.definitionId, row]));
     const stated = withAcceptanceDefinitions({
       ...withCoordination(project),
@@ -2398,6 +2415,16 @@ export class ProjectsService {
       })),
       blockers,
       integration: projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+      // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
+      // not the first — and `criteria` carries each one's three lane answers. One fold
+      // (`derivedDoneFromLanes`) is shared with the write at the bottom of this file, so what a
+      // reader is shown and what the column says cannot drift apart.
+      derivedDone: derivedDoneFromLanes(
+        satisfaction,
+        landingAnswers,
+        independence,
+        standardSetConfirmation,
+      ),
     };
   }
 

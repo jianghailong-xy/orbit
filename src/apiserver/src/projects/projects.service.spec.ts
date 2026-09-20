@@ -376,6 +376,11 @@ test('the detail read reports progress without loading the project’s tasks', a
     // The independence lane's second statement: who wrote each criterion, which cannot be a
     // nested select because 0251 puts no foreign key on `definition_id`.
     projectCriteriaAuthorship: { findMany: async () => [] },
+    // The projection's second input, and the one statement `derivedDone` added to this read: the
+    // newest standard-set confirmation. None on record, so the projection withholds
+    // `STANDARD_SET_UNCONFIRMED` — which is what a project whose criteria nobody has confirmed
+    // gets, and not a refusal to answer.
+    projectStandardSetConfirmation: { findFirst: async () => null },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
   });
@@ -421,6 +426,11 @@ test('the detail read serves the authored criteria and no second representation 
     },
     projectCodebase: { findFirst: async () => null },
     projectCriteriaAuthorship: { findMany: async () => [] },
+    // The projection's second input, and the one statement `derivedDone` added to this read: the
+    // newest standard-set confirmation. None on record, so the projection withholds
+    // `STANDARD_SET_UNCONFIRMED` — which is what a project whose criteria nobody has confirmed
+    // gets, and not a refusal to answer.
+    projectStandardSetConfirmation: { findFirst: async () => null },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
   });
@@ -465,6 +475,11 @@ test('the detail item is the authored declaration, with no derived verdict besid
     // Nobody recorded who wrote this criterion, which is the case the independence lane reports
     // as INDEPENDENT rather than as a fourth kind of doubt — see the assertion below.
     projectCriteriaAuthorship: { findMany: async () => [] },
+    // The projection's second input, and the one statement `derivedDone` added to this read: the
+    // newest standard-set confirmation. None on record, so the projection withholds
+    // `STANDARD_SET_UNCONFIRMED` — which is what a project whose criteria nobody has confirmed
+    // gets, and not a refusal to answer.
+    projectStandardSetConfirmation: { findFirst: async () => null },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
   });
@@ -498,6 +513,31 @@ test('the detail item is the authored declaration, with no derived verdict besid
     remedy: null,
   });
   assert.equal(project.acceptanceCriteriaItems[0].key, uuidToBase62(CRITERION_A_ID));
+
+  // And the projection the column is written from, served whole so a client renders WHY rather
+  // than re-deriving the rule. The two halves of this assertion are the derivation's own:
+  // EVERY clause that does not hold is reported rather than the first, and each criterion carries
+  // the same three lane answers the rows above were folded from — one fold, so the document and
+  // `project.status` cannot disagree.
+  assert.equal(project.derivedDone.done, false);
+  assert.equal(project.derivedDone.status, 'OPEN');
+  assert.equal(project.derivedDone.confirmation, 'UNCONFIRMED');
+  assert.deepEqual(project.derivedDone.withheld, [
+    // No work serves it, so nothing has met it.
+    'CRITERION_UNSATISFIED',
+    // And nothing proves it landed — a different question about the same absence.
+    'CRITERION_UNLANDED',
+    // And the set nobody has confirmed. Three clauses, not the first one.
+    'STANDARD_SET_UNCONFIRMED',
+  ]);
+  assert.deepEqual(project.derivedDone.criteria, [{
+    definitionId: CRITERION_A_ID,
+    satisfied: false,
+    landing: 'UNKNOWN',
+    independence: 'INDEPENDENT',
+    conflicts: [],
+    remedy: null,
+  }]);
 });
 
 test('someone else’s project is a 404, not an empty project', async () => {

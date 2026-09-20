@@ -5,6 +5,7 @@ import {
   criteriaFromDefinitions,
   standardSetConfirmationStanding,
   standardSetVersion,
+  type AcceptanceCriterionDefinitionLike,
   type RecordedStandardSetConfirmation,
   type StandardSetConfirmationState,
 } from './project-acceptance';
@@ -12,10 +13,18 @@ import {
   readCriterionIndependence,
   type CriterionAuthorshipConflict,
   type CriterionIndependence,
+  type CriterionIndependenceAnswer,
   type CriterionIndependenceRemedy,
 } from './project-criterion-independence';
-import { readCriterionLanding, type CriterionLanding } from './project-criterion-landing';
-import { readCriterionSatisfaction } from './project-criterion-satisfaction';
+import {
+  readCriterionLanding,
+  type CriterionLanding,
+  type CriterionLandingAnswer,
+} from './project-criterion-landing';
+import {
+  readCriterionSatisfaction,
+  type CriterionSatisfaction,
+} from './project-criterion-satisfaction';
 
 /**
  * `project.status = 'DONE'` as a PROJECTION of two committed facts, rather than a column somebody
@@ -204,6 +213,36 @@ export async function readDerivedProjectDone(
     latestConfirmation(prisma, projectId),
   ]);
 
+  return derivedDoneFromLanes(
+    satisfaction,
+    landing,
+    independence,
+    standardSetConfirmationStanding(
+      standardSetVersion(criteriaFromDefinitions(definitions)),
+      confirmation,
+    ).state,
+  );
+}
+
+/**
+ * The three work-side lanes and the confirmation state, folded into the projection.
+ *
+ * Split out of `readDerivedProjectDone` so a caller holding the lanes ALREADY can project without
+ * reading them a second time: `ProjectsService.get` reads all three for the criteria it serves
+ * (`readCriterionSatisfaction`, `readCriterionLanding`, `readCriterionIndependence`) and needs one
+ * query more — the confirmation — to answer this. There is one fold, here, so a project's detail
+ * document and the column written from it cannot disagree.
+ *
+ * `satisfaction` is the spine because it is the lane that is one row per criterion by
+ * construction; the other two are looked up by `definitionId` and default to the same values
+ * their own readers use for a criterion they never saw.
+ */
+export function derivedDoneFromLanes(
+  satisfaction: readonly CriterionSatisfaction[],
+  landing: readonly CriterionLandingAnswer[],
+  independence: readonly CriterionIndependenceAnswer[],
+  confirmation: StandardSetConfirmationState,
+): DerivedProjectDone {
   const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
   const independent = new Map(independence.map((row) => [row.definitionId, row]));
   const criteria = satisfaction.map((row) => ({
@@ -220,13 +259,27 @@ export async function readDerivedProjectDone(
     remedy: independent.get(row.definitionId)?.remedy ?? null,
   }));
 
-  return deriveProjectDone(
-    criteria,
-    standardSetConfirmationStanding(
-      standardSetVersion(criteriaFromDefinitions(definitions)),
-      confirmation,
-    ).state,
-  );
+  return deriveProjectDone(criteria, confirmation);
+}
+
+/**
+ * The confirmation half, from definitions a caller has already read.
+ *
+ * One query, and the comparison is `standardSetConfirmationStanding`'s rather than a second copy
+ * of it: a confirmation counts while, and only while, it names the version that stands.
+ */
+export async function readStandardSetConfirmationState(
+  prisma: Pick<PrismaService, 'projectStandardSetConfirmation'>,
+  /** The definitions the caller already read. Absent reads as none: a project whose relation was
+   *  not loaded states no criteria, which is the same answer the derivation gives a project that
+   *  states none — and it is not this helper's job to tell a caller its read was narrow. */
+  definitions: readonly AcceptanceCriterionDefinitionLike[] | null | undefined,
+  projectId: string,
+): Promise<StandardSetConfirmationState> {
+  return standardSetConfirmationStanding(
+    standardSetVersion(criteriaFromDefinitions([...(definitions ?? [])])),
+    await latestConfirmation(prisma, projectId),
+  ).state;
 }
 
 /**

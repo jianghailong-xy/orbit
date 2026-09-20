@@ -123,6 +123,11 @@ function fakePrisma() {
     },
     // The detail read asks a project for its binding, which says which branches count as landed.
     // This probe binds no repository, so every project here is read the way one without a binding is.
+    // The projection's second input, read by `ProjectsService.get` for the `derivedDone` it now
+    // serves beside the criteria. Nothing has confirmed this project's set — the door that does
+    // (`POST /projects/:id/acceptance/confirmation`) is a different route from the authoring this
+    // probe drives — so the standing is UNCONFIRMED and the projection says so.
+    projectStandardSetConfirmation: { findFirst: async () => null },
     projectCodebase: { findFirst: async () => null },
     projectAcceptanceCriterionDefinition: {
       findMany: async ({ where }: { where: { projectId: string } }) => state.criteria
