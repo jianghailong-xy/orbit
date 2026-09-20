@@ -242,15 +242,19 @@ test('the project index buckets every project in one pass and agrees with the pr
         rawQueries = 0;
         const rows = await projects.list(ownerId);
         assert.equal(rows.length, 3);
-        // Two: eight before 0220, six after it took the completion-ACK overlay away, four after
+        // Three: eight before 0220, six after it took the completion-ACK overlay away, four after
         // 0224 took the control-plane obligation overlay, and two after this removal took the
-        // failure-coordination overlay. Two apiece, not one — the counter is a Proxy over
-        // `$queryRaw` property GETS, and a reader that probes for the delegate before using it
-        // spends one on the probe. The property under test is that the count is page-wide rather
-        // than per project, so the number moves when a whole reader does; it is read off a run
-        // rather than reasoned out.
-        assert.equal(rawQueries, 2,
-          'canonical task lanes and blockers stay page-wide');
+        // failure-coordination overlay. The third is back with `2d76676df`, which made this read
+        // answer "what must the owner do" and not only "how many blockers": the OPEN exception
+        // items behind them are aggregated per project and kind, alongside the task rollup and
+        // the blockers. Three page-wide readers, one `$queryRaw` get each — `projects.service.spec`
+        // pins the same three on a stubbed client. The integration bindings that commit added too
+        // are read with `projectCodebase.findMany`, which is not a `$queryRaw` get and so is not
+        // in this number. The property under test is that the count is page-wide rather than per
+        // project, so the number moves when a whole reader does; it is read off a run rather than
+        // reasoned out.
+        assert.equal(rawQueries, 3,
+          'canonical task lanes, blockers and the items behind them stay page-wide');
       });
 
       await t.test('lastActivityAt is the latest task write, and Project.updatedAt is not',

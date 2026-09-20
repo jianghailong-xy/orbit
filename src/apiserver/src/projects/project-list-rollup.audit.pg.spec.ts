@@ -419,11 +419,15 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       rawQueries = 0;
       const rows = await svc.list(owner);
       assert.equal(rows.length, 2);
-      // Two. Eight originally; 0220 took the completion-ACK overlay's two, 0224 the control-plane
-      // obligation overlay's two, and this removal the failure-coordination overlay's two. Two
-      // apiece rather than one because the counter is a Proxy over `$queryRaw` property GETS and
-      // each reader probes for the delegate before spending one on the read.
-      assert.equal(rawQueries, 2,
+      // Three. Eight originally; 0220 took the completion-ACK overlay's two, 0224 the control-plane
+      // obligation overlay's two, and this removal the failure-coordination overlay's two. The
+      // third is back with `2d76676df`, which added the reader that answers "what must the owner
+      // do": the OPEN exception items behind the blockers, aggregated per project and kind, next
+      // to the task rollup and the blockers. Three page-wide readers, one `$queryRaw` get each —
+      // `projects.service.spec` pins the same three on a stubbed client. The integration bindings
+      // added alongside are a `projectCodebase.findMany`, not a `$queryRaw` get, and are outside
+      // this count.
+      assert.equal(rawQueries, 3,
         'one bounded set of page-wide canonical aggregates');
     });
   } finally {
