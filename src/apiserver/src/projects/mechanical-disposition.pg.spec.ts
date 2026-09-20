@@ -15,7 +15,7 @@ import {
 } from '@prisma/client';
 import { Client } from 'pg';
 
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -431,8 +431,26 @@ async function queueRound(stack: Stack, f: Fixture, taskId: string, label: strin
       kind: 'message',
       content: 'execute the task',
       status: 'IN_FLIGHT',
+      // The claim and the delivery are one UPDATE in `dequeueTurn`, and `turnComplete`'s
+      // idempotency ack matches on `delivered_at IS NOT NULL`: a turn put back in the queue is
+      // no longer out on a delivery, so a retried completion for it matches nothing. Without
+      // this the completion is discarded and the reserved acceptance round below is never
+      // minted — the fixture would be asserting about a turn the runner door never produced.
+      deliveredAt: new Date(),
     },
   });
+  // The engine's reply, which is what makes this turn ANSWERED rather than requeued: the
+  // completion boundary asks the transcript for an assistant/result event under the turn, and a
+  // message turn with none is put back in the queue instead (see
+  // `turn-complete-unanswered.pg.spec.ts`). A replied-to turn that then completed is the
+  // ordinary shape these fixtures simulate.
+  await stack.db.runEvent.create({
+    data: {
+      sessionId, seq: 1000, type: RunEventType.ASSISTANT,
+      payload: { text: 'the work is done' }, turnId: messageTurnId,
+    },
+  });
+
   const opened = await stack.api.turnComplete({ id: f.runnerId }, sessionId, {
     turnId: messageTurnId,
     status: SharedRunStatus.SUCCEEDED,

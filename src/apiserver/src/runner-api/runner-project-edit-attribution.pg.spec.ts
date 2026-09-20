@@ -86,6 +86,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectHandoffService } from '../projects/project-handoff.service';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { ProjectsService } from '../projects/projects.service';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -240,6 +241,12 @@ test('a criteria edit through the runner door is attributed to the session that 
       { provide: ProjectAcceptanceService, useValue: acceptance },
       { provide: ProjectHandoffService, useValue: { listForProject: refuse('handoffs') } },
       { provide: RunnerOrchestrationAuthorizer, useValue: { assert: refuse('orchestration') } },
+      // `RunnerProjectsController` gained this as its fifth constructor parameter when a
+      // coordinator gained the owner-question door. The controller defaults it to `undefined`
+      // so a hand-built controller never has to supply a service it does not reach, but Nest
+      // resolves by the parameter's declared type, so a module that lists this controller has
+      // to provide it. Nothing below reaches it, hence the empty double.
+      { provide: ProjectOpenItemService, useValue: {} },
       RunnerAuthGuard,
       { provide: PrismaService, useValue: prisma },
     ],

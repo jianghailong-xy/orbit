@@ -168,15 +168,21 @@ function doorsFor(prisma: PrismaClient, runner: string): Doors {
   };
   return {
     api,
-    complete: (observer, turnId, status) =>
-      api.turnComplete({ id: runner }, observer, {
+    // The engine's reply lands, and THEN the completion arrives — `turnComplete` asks the
+    // transcript for an `assistant`/`result` event under the turn and puts a message turn with
+    // none back in the queue, so a fixture that only calls `turnComplete` is completing a turn
+    // nothing answered.
+    complete: async (observer, turnId, status) => {
+      await say(turnId, observer, 'the turn ran');
+      return api.turnComplete({ id: runner }, observer, {
         turnId,
         status,
         subtype: status === 'FAILED' ? 'error_during_execution' : 'completed',
         ...(status === 'FAILED' ? { result: 'API Error: 529 overloaded' } : {}),
         numTurns: 2,
         costUsd: 0,
-      } as never),
+      } as never);
+    },
     take: async (observer) => (await inbox.dequeueTurn(observer, runner, null, false, []))?.turnId ?? null,
   };
 }
@@ -229,8 +235,25 @@ async function insertRunningTurn(sessionId: string): Promise<string> {
              'the turn the session is running','IN_FLIGHT',now(),now() + interval '2 hours')`,
     [id, sessionId, `current-${id}`],
   );
+  await say(id, sessionId, 'the turn ran');
+
   return id;
 }
+/**
+ * A reply under a turn, as the engine writes one — the event that makes a completed turn
+ * ANSWERED rather than one handed back to the queue. Without it `turnComplete` puts the turn
+ * back in the queue, the session never parks, and a `SESSION_TURN_SETTLED` target never
+ * settles.
+ */
+async function say(turnId: string, sessionId: string, text: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"),0)+1 FROM "run_event" WHERE "session_id" = $2),
+             'assistant',$3::jsonb,$4)`,
+    [randomUUID(), sessionId, JSON.stringify({ text }), turnId],
+  );
+}
+
 
 function watchOn(task: string, observerSessionId: string): CreateWatchDto {
   return {

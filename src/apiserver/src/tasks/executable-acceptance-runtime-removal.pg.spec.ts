@@ -11,7 +11,7 @@ import {
   TaskStatus,
   TaskVerdict,
 } from '@prisma/client';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -238,8 +238,24 @@ async function runAcceptance(
     data: {
       id: messageTurnId, sessionId, seq: 1, clientTurnId: `message:${messageTurnId}`,
       kind: 'message', content: 'do the work', status: 'IN_FLIGHT',
+      // Delivered, not merely claimed: `dequeueTurn` writes the status and `delivered_at` in
+      // one UPDATE, and `turnComplete`'s ack matches on both. Without it the completion is
+      // discarded and no acceptance shell turn is minted for the round below to run.
+      deliveredAt: new Date(),
     },
   });
+  // The engine's reply, which is what makes this turn ANSWERED rather than requeued: the
+  // completion boundary asks the transcript for an assistant/result event under the turn, and a
+  // message turn with none is put back in the queue instead (see
+  // `turn-complete-unanswered.pg.spec.ts`). A replied-to turn that then completed is the
+  // ordinary shape these fixtures simulate.
+  await db.runEvent.create({
+    data: {
+      sessionId, seq: 1000, type: RunEventType.ASSISTANT,
+      payload: { text: 'the work is done' }, turnId: messageTurnId,
+    },
+  });
+
   // Finishing the agent's own turn is what mints the one reserved acceptance shell turn.
   await api.turnComplete({ id: w.runnerId } as never, sessionId, {
     turnId: messageTurnId, status: SharedRunStatus.SUCCEEDED,
@@ -703,8 +719,11 @@ suite('(q) the core tables keep every trigger that predates this project', async
        JOIN pg_class c ON c.oid = t.tgrelid
       WHERE NOT t.tgisinternal AND c.relname IN ('task', 'session', 'run_event')
       GROUP BY 1 ORDER BY 1`)).rows.map((row) => [row.table, row.n]));
-  // task: 25 since 0271 added `task_progress_epoch_advance`, which writes only `task_progress`.
-  assert.deepEqual(counts, { run_event: 1, session: 11, task: 25 });
+  // task: 25 since 0271 added `task_progress_epoch_advance`, which writes only `task_progress`,
+  // and 31 since 0280 added `task_list_task_count_insert`/`_delete`/`_relist` and 0282 added
+  // `project_task_status_count_insert`/`_delete`/`_move`. Six additions by two later projects:
+  // same reasoning as `session` above — the number moves, the claim does not.
+  assert.deepEqual(counts, { run_event: 1, session: 11, task: 31 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

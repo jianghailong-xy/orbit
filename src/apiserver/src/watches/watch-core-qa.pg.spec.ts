@@ -411,8 +411,40 @@ async function insertRunningTurn(sessionId: string, seq: number): Promise<string
      VALUES ($1,$2,$3,$4,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
     [id, sessionId, seq, `running-${id}`],
   );
+  await say(id, sessionId, 'the turn ran');
+
   return id;
 }
+/**
+ * A reply under a turn, as the engine writes one — the event that makes a completed turn
+ * ANSWERED rather than one handed back to the queue. Without it `turnComplete` puts the turn
+ * back in the queue, the session never parks, and a `SESSION_TURN_SETTLED` target never
+ * settles.
+ */
+async function say(turnId: string, sessionId: string, text: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"),0)+1 FROM "run_event" WHERE "session_id" = $2),
+             'assistant',$3::jsonb,$4)`,
+    [randomUUID(), sessionId, JSON.stringify({ text }), turnId],
+  );
+}
+
+/**
+ * Finish a message turn the way a real run does: the engine's reply lands under the turn, and
+ * THEN the completion arrives. `turnComplete` asks the transcript for an `assistant`/`result`
+ * event under the turn and puts a message turn with none back in the queue — that is the whole
+ * point of the completion boundary — so a fixture that only calls `turnComplete` is completing a
+ * turn nothing answered.
+ */
+async function answer(
+  api: RunnerApiController, runner: string, sessionId: string, turnId: string,
+  dto: Record<string, unknown>,
+): Promise<void> {
+  await say(turnId, sessionId, 'the turn ran');
+  await api.turnComplete({ id: runner }, sessionId, { turnId, ...dto } as never);
+}
+
 
 // ── reads ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -604,13 +636,9 @@ qa('QA-02', 'normal path, RESUME_SESSION: a settled target wakes a parked observ
 
   // The watched session's turn completes through the runner door, as a runner reports it.
   const completedAt = Date.now();
-  await door.api.turnComplete({ id: runner }, target, {
-    turnId: targetTurn,
-    status: 'SUCCEEDED',
-    subtype: 'completed',
-    numTurns: 2,
-    costUsd: 0,
-  } as never);
+  await answer(door.api, runner, target, targetTurn, {
+    status: 'SUCCEEDED', subtype: 'completed', numTurns: 2, costUsd: 0,
+  });
   assert.equal(await statusOf(target), 'AWAITING_INPUT');
   const [match] = await eventually('the Match', () => matchesOf(watch.id), (rows) => rows.length === 1, 60_000);
   note('QA-02', {
@@ -657,14 +685,11 @@ qa('QA-02', 'normal path, RESUME_SESSION: a settled target wakes a parked observ
   const redelivered = await door.inbox.dequeueTurn(observer, runner, g2, false, []);
   assert.equal(redelivered?.turnId, wake.id, 'the replacement process was not handed the wake');
   assert.equal(await door.inbox.dequeueTurn(observer, runner, g2, false, []), null, 'a second turn was handed out');
-  await door.api.turnComplete({ id: runner }, observer, {
-    turnId: wake.id,
-    status: 'SUCCEEDED',
-    subtype: 'completed',
-    numTurns: 2,
-    costUsd: 0,
-    leaseOwner: p2,
-  } as never);
+  // The observer answers the wake, as a real run does: without a reply under the turn the
+  // completion puts it back in the queue and the observer never parks.
+  await answer(door.api, runner, observer, wake.id, {
+    status: 'SUCCEEDED', subtype: 'completed', numTurns: 2, costUsd: 0, leaseOwner: p2,
+  });
   assert.equal(await statusOf(observer), 'AWAITING_INPUT');
 
   // One generation: one Match, one delivery, one turn — however many passes follow.
@@ -1153,26 +1178,18 @@ qa('QA-08', 'a RUNNING observer: two wakes and a person\'s message queue behind 
 
   let completing = current;
   for (const expected of queued) {
-    await door.api.turnComplete({ id: runner }, observer, {
-      turnId: completing,
-      status: 'SUCCEEDED',
-      subtype: 'completed',
-      numTurns: 2,
-      costUsd: 0,
-    } as never);
+    await answer(door.api, runner, observer, completing, {
+      status: 'SUCCEEDED', subtype: 'completed', numTurns: 2, costUsd: 0,
+    });
     assert.equal(await statusOf(observer), 'RUNNING', 'a queued turn keeps the slot');
     const next = await door.inbox.dequeueTurn(observer, runner, null, false, []);
     assert.equal(next?.turnId, expected.id, 'handed out of order');
     assert.equal(await door.inbox.dequeueTurn(observer, runner, null, false, []), null, 'a second turn was handed out while one runs');
     completing = expected.id;
   }
-  await door.api.turnComplete({ id: runner }, observer, {
-    turnId: completing,
-    status: 'SUCCEEDED',
-    subtype: 'completed',
-    numTurns: 2,
-    costUsd: 0,
-  } as never);
+  await answer(door.api, runner, observer, completing, {
+    status: 'SUCCEEDED', subtype: 'completed', numTurns: 2, costUsd: 0,
+  });
   assert.equal(await statusOf(observer), 'AWAITING_INPUT');
   assert.deepEqual(await oneRun.finish(), []);
   assert.deepEqual([...new Set((await turnsOn(observer)).map((turn) => turn.status))], ['ANSWERED']);

@@ -209,14 +209,19 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 37,
+  assert.equal(installed.rowCount, 43,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
     + 'removed the two `task_judgment_verifier_*` guards and '
     + '`task_open_verification_request_carrier_guard` with the judgment machinery, 36 once '
-    + '0231 added `session_source_freeze_guard` to `session` with the SOURCE snapshot, and 37 once '
-    + '0271 added `task_progress_epoch_advance` to `task` with the lifecycle epoch');
+    + '0231 added `session_source_freeze_guard` to `session` with the SOURCE snapshot, 37 once '
+    + '0271 added `task_progress_epoch_advance` to `task` with the lifecycle epoch. Back to the '
+    + 'same 43 the first number names, but not the same 43 — nothing has been subtracted since, and '
+    + 'two later projects put three triggers each on '
+    + '`task`: 0280 added `task_list_task_count_insert`/`_delete`/`_relist` with the list\'s task '
+    + 'count, and 0282 added `project_task_status_count_insert`/`_delete`/`_move` with the '
+    + 'project\'s status count');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }

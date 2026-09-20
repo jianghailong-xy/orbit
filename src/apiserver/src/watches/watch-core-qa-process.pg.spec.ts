@@ -293,8 +293,25 @@ async function insertRunningTurn(sessionId: string, seq: number): Promise<string
      VALUES ($1,$2,$3,$4,'message','the turn the session is running','IN_FLIGHT',now(),now() + interval '10 minutes')`,
     [id, sessionId, seq, `running-${id}`],
   );
+  await say(id, sessionId, 'the turn ran');
+
   return id;
 }
+/**
+ * A reply under a turn, as the engine writes one — the event that makes a completed turn
+ * ANSWERED rather than one handed back to the queue. Without it `turnComplete` puts the turn
+ * back in the queue, the session never parks, and a `SESSION_TURN_SETTLED` target never
+ * settles.
+ */
+async function say(turnId: string, sessionId: string, text: string): Promise<void> {
+  await sql.query(
+    `INSERT INTO "run_event"("id","session_id","seq","type","payload","turn_id")
+     VALUES ($1,$2,(SELECT COALESCE(MAX("seq"),0)+1 FROM "run_event" WHERE "session_id" = $2),
+             'assistant',$3::jsonb,$4)`,
+    [randomUUID(), sessionId, JSON.stringify({ text }), turnId],
+  );
+}
+
 
 const MICROS = `'YYYY-MM-DD"T"HH24:MI:SS.US'`;
 

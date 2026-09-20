@@ -44,6 +44,7 @@ import { PushService } from '../push/push.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
+import { AutoRetryService } from '../sessions/auto-retry.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
@@ -170,6 +171,10 @@ test('the message of a commit result is read back from the session it settled', 
       { provide: TasksService, useValue: {} },
       { provide: MergeReceiptService, useValue: {} },
       { provide: SessionTagsService, useValue: {} },
+      // `SessionsController` grew this sixth parameter when a retried turn gained the ladder that
+      // re-offers the words the loaded window never held. Nest resolves by declared type, so the
+      // module has to provide it even though no route this spec drives reaches it.
+      { provide: AutoRetryService, useValue: {} },
       // The owner, the way `JwtAuthGuard` would have read them off a real token.
       { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: ownerId }) } },
       Reflector,

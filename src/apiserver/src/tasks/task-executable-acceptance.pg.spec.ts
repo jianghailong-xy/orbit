@@ -36,7 +36,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -173,8 +173,27 @@ async function fixture(
       kind: 'message',
       content: 'execute the task',
       status: 'IN_FLIGHT',
+      // What `dequeueTurn` writes when it hands this turn to a runner: the claim and the
+      // delivery are one UPDATE. `turnComplete`'s idempotency ack is keyed on `delivered_at`
+      // IS NOT NULL — a turn put back in the queue is no longer out on a delivery, so a
+      // retried completion for it matches nothing. A fixture that claimed the status without
+      // the delivery was never in the state the real one is in, and the completion was
+      // discarded before any of this file's subject ran.
+      deliveredAt: new Date(),
     },
   });
+  // The engine's reply, which is what makes this turn ANSWERED rather than requeued: the
+  // completion boundary asks the transcript for an assistant/result event under the turn, and a
+  // message turn with none is put back in the queue instead (see
+  // `turn-complete-unanswered.pg.spec.ts`). A replied-to turn that then completed is the
+  // ordinary shape these fixtures simulate.
+  await db.runEvent.create({
+    data: {
+      sessionId, seq: 1000, type: RunEventType.ASSISTANT,
+      payload: { text: 'the work is done' }, turnId: messageTurnId,
+    },
+  });
+
   return { ownerId, runnerId, workspaceId, taskId, sessionId, messageTurnId };
 }
 
@@ -315,6 +334,14 @@ suite('a matching exit code derives DONE, and records nothing', async (t) => {
   // catalog rather than against a list somebody has to remember to extend: every table in the
   // database is counted before and after, and NONE of them may gain a row. A list of table names
   // would go stale the first time a well-meaning repair added a seventh place to write to.
+  //
+  // One table is not the judgment's, and is named rather than excused by a filter:
+  // `project_task_status_count` is the denormalized per-project count 0282 maintains with a
+  // trigger on `task`. This case's task is filed under a project (the declaration has to be, see
+  // `fixture`), so the DONE above fires that trigger and the project's DONE counter is born —
+  // the platform's own bookkeeping, on the same write. It is pinned to exactly the one row it
+  // should be rather than dropped from the census, so a judgment that wrote a second row here —
+  // or anything else about the counter moving — still fails this case.
   const census = async (): Promise<Map<string, number>> => {
     const tables = (await sql.query<{ name: string }>(`
       SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -331,8 +358,19 @@ suite('a matching exit code derives DONE, and records nothing', async (t) => {
   const rowsAfter = await census();
   const grew = [...rowsAfter].filter(([name, n]) => n > (rowsBefore.get(name) ?? 0))
     .map(([name, n]) => `${name}: ${rowsBefore.get(name)} -> ${n}`);
-  assert.deepEqual(grew, [],
+  // Exactly one table moved, and it is the one named above. Asserted as a pair rather than as
+  // "everything grew by nothing": a filter that simply dropped this table from the census would
+  // stop seeing a judgment that wrote a SECOND row into it, or into any other table that appeared
+  // later, which is the whole failure this case exists to catch.
+  const grewTables = grew.map((entry) => entry.split(':')[0]);
+  assert.deepEqual(grewTables, ['project_task_status_count'],
     'the judgment recorded a row somewhere; the exit code is a comparison input, not data');
+  const counterDelta = (rowsAfter.get('project_task_status_count') ?? 0)
+    - (rowsBefore.get('project_task_status_count') ?? 0);
+  assert.equal(counterDelta, 1,
+    'the project\'s counter must move by exactly the one task this derivation settled — one more '
+    + 'would be a second write the judgment made, none at all would mean the DONE never reached '
+    + 'the task row 0282\'s trigger watches');
   assert.deepEqual([...rowsBefore.keys()], [...rowsAfter.keys()],
     'the judgment created a table');
   // The session parks rather than failing: the comparison agreed, so nothing about this run went

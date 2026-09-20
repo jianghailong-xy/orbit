@@ -206,10 +206,21 @@ suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took t
     // Measured on the merged base (origin/main a6c02b35, ledger through 0227): 27 triggers on
     // `task`, of which this change removes exactly the three below. 25 since 0271 added
     // `task_progress_epoch_advance`, which writes only `task_progress` — named below, so the one
-    // trigger added since is accounted for rather than absorbed by the count.
-    assert.equal(taskTriggers.length, 25,
+    // trigger added since is accounted for rather than absorbed by the count. 31 since two later
+    // projects added three each, all six named below for the same reason: 0280's
+    // `task_list_task_count_insert`/`_delete`/`_relist` with the list's task count, and 0282's
+    // `project_task_status_count_insert`/`_delete`/`_move` with the project's status count. This
+    // suite is about what THIS removal subtracted, so additions move the number and not the claim
+    // — the set equality that carries that claim is `verification-subject-guard-removal.pg.spec`'s
+    // (g), which binds this inventory to a replay of every migration.
+    assert.equal(taskTriggers.length, 31,
       `task carries ${taskTriggers.length} triggers: ${taskTriggers.join(', ')}`);
-    assert.ok(taskTriggers.includes('task_progress_epoch_advance'), 'the count no longer includes the one 0271 added');
+    for (const added of ['task_progress_epoch_advance', 'task_list_task_count_insert',
+      'task_list_task_count_delete', 'task_list_task_count_relist',
+      'project_task_status_count_insert', 'project_task_status_count_delete',
+      'project_task_status_count_move']) {
+      assert.ok(taskTriggers.includes(added), `the count no longer includes ${added}`);
+    }
     for (const removed of DROPPED_CORE_TASK_TRIGGERS) {
       assert.ok(!taskTriggers.includes(removed));
     }

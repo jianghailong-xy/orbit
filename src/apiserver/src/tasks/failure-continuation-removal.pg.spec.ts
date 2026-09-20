@@ -9,7 +9,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { TRIGGER_WRITE_SOURCES } from '../common/db-write-inventory';
@@ -442,8 +442,25 @@ suite('(i) an EXECUTABLE task still runs command -> verdict, failure included',
       data: {
         id: messageTurnId, sessionId, seq: 1, clientTurnId: `message:${messageTurnId}`,
         kind: 'message', content: 'do the work', status: 'IN_FLIGHT',
+        // `dequeueTurn` marks the turn delivered in the same UPDATE that claims it, and
+        // `turnComplete`'s idempotency ack matches on `delivered_at IS NOT NULL` — a claimed
+        // turn that was never delivered is not a state the runner door produces, and its
+        // completion would be discarded whole before the acceptance round below is minted.
+        deliveredAt: new Date(),
       },
     });
+    // The engine's reply, which is what makes this turn ANSWERED rather than requeued: the
+    // completion boundary asks the transcript for an assistant/result event under the turn, and a
+    // message turn with none is put back in the queue instead (see
+    // `turn-complete-unanswered.pg.spec.ts`). A replied-to turn that then completed is the
+    // ordinary shape these fixtures simulate.
+    await db.runEvent.create({
+      data: {
+        sessionId, seq: 1000, type: RunEventType.ASSISTANT,
+        payload: { text: 'the work is done' }, turnId: messageTurnId,
+      },
+    });
+
 
     const finished = await api.turnComplete({ id: runnerId } as never, sessionId, {
       turnId: messageTurnId, status: SharedRunStatus.SUCCEEDED,

@@ -9,7 +9,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -144,8 +144,24 @@ async function fixture(
     data: {
       id: messageTurnId, sessionId, seq: 1, clientTurnId: `message:${messageTurnId}`,
       kind: 'message', content: 'do the work', status: 'IN_FLIGHT',
+      // `dequeueTurn` writes the claim and the delivery together, and `turnComplete`'s
+      // idempotency ack matches on `delivered_at IS NOT NULL`. A claimed-but-never-delivered
+      // turn is not a state the runner door produces, and its completion is discarded whole.
+      deliveredAt: new Date(),
     },
   });
+  // The engine's reply, which is what makes this turn ANSWERED rather than requeued: the
+  // completion boundary asks the transcript for an assistant/result event under the turn, and a
+  // message turn with none is put back in the queue instead (see
+  // `turn-complete-unanswered.pg.spec.ts`). A replied-to turn that then completed is the
+  // ordinary shape these fixtures simulate.
+  await db.runEvent.create({
+    data: {
+      sessionId, seq: 1000, type: RunEventType.ASSISTANT,
+      payload: { text: 'the work is done' }, turnId: messageTurnId,
+    },
+  });
+
   return {
     ownerId, runnerId, workspaceId, projectId, taskId: declared.id, sessionId, messageTurnId,
   };

@@ -286,6 +286,11 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
         kind: 'message',
         content: 'fail once so the coordinator judges the committed attempt',
         status: 'IN_FLIGHT',
+        // The claim and the delivery are one UPDATE in `dequeueTurn`, and `turnComplete`'s
+        // idempotency ack matches on `delivered_at IS NOT NULL`. Claimed without it is a state
+        // the runner door never leaves behind, so the completion below is discarded and the
+        // session stays RUNNING instead of settling the attempt this case is about.
+        deliveredAt: new Date(),
       },
     });
     const failed = await stack.runnerApi.turnComplete({ id: runnerId }, firstRun.id, {

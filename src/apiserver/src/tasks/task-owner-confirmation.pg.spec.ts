@@ -41,7 +41,7 @@ import {
   TaskStatus,
 } from '@prisma/client';
 import { Client } from 'pg';
-import { RunStatus as SharedRunStatus } from '@orbit/shared';
+import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -423,8 +423,13 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
           kind: 'message',
           content: 'file the September invoices',
           status: 'IN_FLIGHT',
+          // `dequeueTurn` marks the turn delivered in the same UPDATE that claims it, and
+          // `turnComplete`'s idempotency ack matches on `delivered_at IS NOT NULL`: a claimed
+          // turn that was never delivered is not a state the runner door produces, and its
+          // completion is discarded whole — the run would never be asked about.
+          deliveredAt: new Date(),
         },
-        update: { status: 'IN_FLIGHT' },
+        update: { status: 'IN_FLIGHT', deliveredAt: new Date() },
       });
       await db.session.update({ where: { id: runSessionId }, data: { status: RunStatus.RUNNING } });
       await db.runEvent.create({
@@ -494,6 +499,21 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         data: {
           id: failedTurnId, sessionId: failedSessionId, seq: 1, clientTurnId: `message:${failedTurnId}`,
           kind: 'message', content: 'fail', status: 'IN_FLIGHT',
+          // Delivered, as `dequeueTurn` leaves it: the ack matches on `delivered_at IS NOT
+          // NULL`, so without this the failing completion below is discarded instead of
+          // being settled.
+          deliveredAt: new Date(),
+        },
+      });
+      // The engine's reply, which is what makes this turn ANSWERED rather than requeued: the
+      // completion boundary asks the transcript for an assistant/result event under the turn, and a
+      // message turn with none is put back in the queue instead (see
+      // `turn-complete-unanswered.pg.spec.ts`). A replied-to turn that then completed is the
+      // ordinary shape these fixtures simulate.
+      await db.runEvent.create({
+        data: {
+          sessionId: failedSessionId, seq: 1000, type: RunEventType.ASSISTANT,
+          payload: { text: FIRST_REPORT }, turnId: failedTurnId,
         },
       });
       await runnerApi.turnComplete({ id: runnerId }, failedSessionId, {
