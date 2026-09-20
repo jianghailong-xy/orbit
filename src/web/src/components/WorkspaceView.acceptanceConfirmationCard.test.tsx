@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
 import { MemoryRouter, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -180,6 +180,17 @@ beforeEach(() => {
   confirmationReads = 0;
   criteriaReads = 0;
   navigateTo = null;
+  // What a case measures is a WALL-CLOCK window: it presses a control, then waits for the page to
+  // draw what the press did. The page keeps two interval polls armed while no push stream is up
+  // (jsdom connects none): the session list's 4s — `sessionsQ`'s, gated on the control-plane stream
+  // — and the open conversation's 5s. Under load a window outlasting one of those is ordinary, and
+  // the re-read then lands inside it: a request nobody pressed for, failing an assertion about the
+  // press. React Query skips an interval's fetch while the tab is not focused, so the tab is
+  // declared unfocused — the state of any tab nobody is looking at, and what these polls are
+  // already written to stand down in. The reads this file is about are driven by `reread()` and by
+  // the stream, so nothing it asserts is weakened: what the press asked for is still all its
+  // window can hold.
+  focusManager.setFocused(false);
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
   apiMock.mockReset();
@@ -270,6 +281,8 @@ afterEach(async () => {
     node?.remove();
     delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    // Back to the environment's own focus detection, which is what the next suite should get.
+    focusManager.setFocused(undefined);
     vi.unstubAllGlobals();
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   }
