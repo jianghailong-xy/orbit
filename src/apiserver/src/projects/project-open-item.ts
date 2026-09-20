@@ -327,9 +327,22 @@ export interface TaskFailure {
 export interface RecordedOpenItem {
   itemId: string;
   projectId: string;
-  taskId: string;
+  /**
+   * The task it is about, when it is about one. A promotion job names no task (§3.4 writes
+   * `task_id` NULL deliberately), so an item it opens has none — and the caller has to deliver that
+   * one by the item id it is holding, because no read can find it by a task it does not have.
+   */
+  taskId: string | null;
   assignee: OpenItemAssignee;
 }
+
+/** The item kinds an integration job's failure opens (§4.2). One family, because they share every
+ *  terminal fact: the task landing, the task going away, or somebody deciding they are handled. */
+export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
+  'INTEGRATION_CONFLICT',
+  'INTEGRATION_CHECK_FAILED',
+  'INTEGRATION_ERROR',
+];
 
 interface ChainReading {
   rootTaskId: string;
@@ -515,13 +528,40 @@ export async function recordIntegrationFailure(
     skipDuplicates: true,
     select: { id: true },
   });
-  if (!created || !failure.taskId) return null;
+  if (!created) return null;
   return {
     itemId: created.id,
     projectId: failure.projectId,
     taskId: failure.taskId,
     assignee,
   };
+}
+
+/**
+ * §2.2 J-T5: the task's landing answers what was open about landing it.
+ *
+ * Called in the transaction that wrote the job's `LANDED` / `ALREADY_LANDED`, beside the receipt —
+ * the item exists because this task's work is not on the integration line, and the receipt is the
+ * fact that says it now is. Keyed by TASK rather than by the job that landed: the item still open
+ * is the one an earlier generation left (§4.2 gives a conflict exactly one answer per fact, and the
+ * one it gets here is the landing, whenever it comes).
+ *
+ * The three kinds are the ones a job's failure opens. `TASK_FAILED` is deliberately not among them:
+ * a landing does not change the task's own status, and what answers that item is the status.
+ */
+export async function resolveIntegrationItemsOnLanding(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<void> {
+  await tx.projectOpenItem.updateMany({
+    where: { taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+    data: {
+      state: 'RESOLVED' satisfies OpenItemState,
+      resolution: 'LANDED' satisfies OpenItemResolution,
+      resolvedAt: new Date(),
+      resolvedBy: 'PLATFORM' satisfies OpenItemResolvedBy,
+    },
+  });
 }
 
 /**
@@ -654,6 +694,63 @@ export interface OpenItemMessageSource {
   payload: unknown;
 }
 
+/** The payload fields an integration item carries (§4.2's payload column), all of them optional
+ *  because the message is also built for items an older build opened. */
+interface IntegrationItemPayload {
+  jobKind?: string;
+  phase?: string;
+  targetRef?: string;
+  targetSha?: string;
+  files?: string[];
+  nothingLanded?: boolean;
+  branchUnchanged?: boolean;
+  check?: {
+    name?: string;
+    command?: string;
+    exitCode?: number;
+    expectedExitCode?: number;
+    outputTail?: string;
+  } | null;
+  errorCode?: string;
+  errorDetail?: unknown;
+}
+
+/** Longest tail of a check's output a turn carries. The payload holds 16 KiB; a turn is not a log. */
+const MAX_CHECK_TAIL_IN_MESSAGE = 1_200;
+
+/**
+ * What the payload knows, in the words a reader acts on (§4.4 X-D2): which files conflicted, which
+ * check disagreed and what it returned, which error code came back. Every value here is a column of
+ * the item's own payload, which is why it is safe for the byte-for-byte replay `createTurn` does.
+ */
+function integrationItemFacts(kind: string, payload: IntegrationItemPayload): string[] {
+  if (kind === 'INTEGRATION_CONFLICT') {
+    const files = payload.files ?? [];
+    return [
+      `合并冲突（${payload.phase ?? '未记录阶段'}），目标分支 ${payload.targetRef ?? '未记录'} 没有动。`,
+      files.length > 0
+        ? `冲突的文件（${files.length} 个）：\n${files.map((file) => `- ${file}`).join('\n')}`
+        : '这次冲突没有报出文件名。',
+    ];
+  }
+  if (kind === 'INTEGRATION_CHECK_FAILED') {
+    const check = payload.check;
+    if (!check?.name) return ['合并后的树上有一条检查没过，这条待办没有记下是哪一条。'];
+    const tail = typeof check.outputTail === 'string' ? check.outputTail : '';
+    return [
+      `检查 ${check.name} 的退出码是 ${check.exitCode}（声明要求 ${check.expectedExitCode}），`
+        + '目标分支没有动。',
+      ...(check.command ? [`它跑的是：${check.command}`] : []),
+      ...(tail ? [`它的输出末尾：\n${clip(tail.slice(-MAX_CHECK_TAIL_IN_MESSAGE))}`] : []),
+    ];
+  }
+  const detail = payload.errorDetail == null ? null : JSON.stringify(payload.errorDetail);
+  return [
+    `集成作业以一个错误结束：${payload.errorCode ?? '未记录错误码'}。`,
+    ...(detail ? [`错误详情：${clip(detail)}`] : []),
+  ];
+}
+
 /**
  * What the coordinator is told (§0.3 G6). Derived only from columns that do not change, because a
  * replay of the same key compares the content byte for byte.
@@ -662,6 +759,11 @@ export interface OpenItemMessageSource {
  * its own — a failed task is retried, replaced or cancelled by somebody who looked at it. It does
  * not offer a verb that does not exist: closing an item by hand is the door §4.7 adds, and until
  * that lands an item ends when its task does.
+ *
+ * An integration item says what the payload knows — the files it conflicted on, the check that
+ * disagreed and what it returned, the error code — because the reader's first question is which of
+ * the two branches moved, and the answer is a column of this row. A promotion's failure names no
+ * task, so it does not pretend to.
  */
 export function openItemMessage(item: OpenItemMessageSource): string {
   const projectId = uuidToBase62(item.projectId);
@@ -671,7 +773,25 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     expectedExitCode?: number;
     error?: string;
     chain?: { failuresInChain?: number; limit?: number };
-  };
+  } & IntegrationItemPayload;
+  const notice = `待办编号 ${uuidToBase62(item.id)}。这是一条通知，不是打断：你正在跑的那一轮不会被它中断，`
+    + '你是在那一轮结束之后才读到它的，所以以你自己刚读到的库里状态为准。';
+  if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
+    const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
+    return `【例外待办】${item.title}\n\n`
+      + `项目 ${projectId} 的一次集成没有把工作放进集成线：\n`
+      + `${integrationItemFacts(item.kind, payload).join('\n')}\n\n`
+      + '这条待办的负责人是你。平台不会自己重试一次没有落地的集成，所以不会有第二次作业自己出现；'
+      + '要判断的是下一步。\n'
+      + (taskId
+        ? `先读这条任务（task_get，taskId 传 ${taskId}，评论与它的会话都在上面），再决定是重新跑`
+          + '（task_start）、另起一个取代它的任务（task_create 带 supersedesTaskId），还是取消'
+          + '（task_update 置 CANCELLED）。任务落地、被取消或被取代之后，这条待办由平台自己关闭，'
+          + '你不用回报。\n'
+        : '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
+          + '任务做事，今天也没有一条属于协调会话的重试门——需要重跑时找账号所有者说明，不要自己造一条作业。\n')
+      + `\n${notice}`;
+  }
   if (item.kind !== 'TASK_FAILED' || !item.taskId) {
     return `【例外待办】${item.title}\n\n`
       + `项目 ${projectId} 有一条需要你处理的例外。待办编号 ${uuidToBase62(item.id)}。\n\n`
@@ -695,8 +815,7 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     + `（task_create 带 supersedesTaskId）、还是取消（task_update 置 CANCELLED）。`
     + `失败原因先用 task_get（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
     + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。\n\n`
-    + `待办编号 ${uuidToBase62(item.id)}。这是一条通知，不是打断：你正在跑的那一轮不会被它中断，`
-    + `你是在那一轮结束之后才读到它的，所以以你自己刚读到的库里状态为准。`;
+    + notice;
 }
 
 function howInChinese(how: string | undefined): string {
