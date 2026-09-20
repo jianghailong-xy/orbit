@@ -42,7 +42,9 @@
  * project lands on the column's false and the coordinator may do nothing until a person has said
  * what would settle it — which makes this door the one authorization to work on a project, and its
  * HUMAN_ONLY refusal the thing that stops an agent from authorising its own. `(5)` asserts both
- * halves on the row itself.
+ * halves on the row itself, and `(6)` the other door into that column: `ProjectsService.update`
+ * takes the switch on its own, with no second field to name — which it did not until 0292, when
+ * `assertLevelNamedWhenTurningOn` still answered a one-field request with a 400.
  *
  * WHY THIS IS A `.pg.spec`
  * ------------------------
@@ -199,6 +201,18 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       [projectId],
     );
     return rows;
+  }
+
+  /** The two columns that say whether a project is started, off the ROW rather than off a
+   * projection that could agree with itself — as the rest of this file reads everything. */
+  async function authorization(id: string): Promise<{ enabled: boolean; revision: string }> {
+    const { rows } = await sql.query<{ coordinator_enabled: boolean; config_revision: string }>(
+      `SELECT "coordinator_enabled", "config_revision"::text AS "config_revision"
+         FROM "project" WHERE "id" = $1::uuid`,
+      [id],
+    );
+    assert.equal(rows.length, 1, 'the project this assertion is about is not there');
+    return { enabled: rows[0].coordinator_enabled, revision: rows[0].config_revision };
   }
 
   /** An acting session of a given dispatch origin, as `sessions.create` would have written it. */
@@ -391,20 +405,9 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       acceptanceCriteriaItems: [{ text: FIRST, verificationMethod: METHOD }],
     } as never) as { id: string };
 
-    /** The two columns off the row, never off a projection that could agree with itself. */
-    async function authorization(): Promise<{ enabled: boolean; revision: string }> {
-      const { rows } = await sql.query<{ coordinator_enabled: boolean; config_revision: string }>(
-        `SELECT "coordinator_enabled", "config_revision"::text AS "config_revision"
-           FROM "project" WHERE "id" = $1::uuid`,
-        [created.id],
-      );
-      assert.equal(rows.length, 1, 'the project this subtest created is not there');
-      return { enabled: rows[0].coordinator_enabled, revision: rows[0].config_revision };
-    }
-
     // A project nobody has answered "what would settle this" for coordinates nothing: `create`
     // writes the column no more, so it lands on the database's own false.
-    assert.deepEqual(await authorization(), { enabled: false, revision: '0' },
+    assert.deepEqual(await authorization(created.id), { enabled: false, revision: '0' },
       'a new project must not dispatch agents before a person has said what done means');
 
     // The gate is exactly as strong as it was. An acting session cannot confirm — and since
@@ -420,7 +423,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     assert.equal(status, 403);
     assert.equal(body.code, 'PROJECT_CRITERIA_CONFIRMATION_OWNER_CHANNEL_ONLY');
     assert.equal(body.tier, 'HUMAN_ONLY');
-    assert.deepEqual(await authorization(), { enabled: false, revision: '0' },
+    assert.deepEqual(await authorization(created.id), { enabled: false, revision: '0' },
       'a refused confirmation started the project anyway');
 
     // The owner's confirmation, through the same method: it records the version AND starts the
@@ -430,7 +433,7 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       ownerId, created.id, { criteriaDigest: standing.currentVersion.digest },
     );
     assert.equal(after.state, 'CONFIRMED');
-    assert.deepEqual(await authorization(), { enabled: true, revision: '1' },
+    assert.deepEqual(await authorization(created.id), { enabled: true, revision: '1' },
       'confirming the standard set is what authorises work on the project');
 
     // And it is idempotent. Re-issuing the confirmation appends a second row naming the same
@@ -442,7 +445,47 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     await acceptance.confirmStandardSet(
       ownerId, created.id, { criteriaDigest: standing.currentVersion.digest },
     );
-    assert.deepEqual(await authorization(), { enabled: true, revision: '1' },
+    assert.deepEqual(await authorization(created.id), { enabled: true, revision: '1' },
       'a second confirmation of the same version moved the authorization set');
+  });
+
+  // ═══ (6) the OTHER door into that column, and the request shape 0292 reopened ══════════════════
+
+  await t.test('(6) an update naming nothing but the switch turns the coordinator on', async () => {
+    // The column has two writers and they are two different acts: (5)'s confirmation writes it as
+    // the side effect of answering what would settle the project, and `ProjectsService.update`
+    // writes it because somebody moved the switch. Until 0292 the second door was the narrower one,
+    // and on purpose — `assertLevelNamedWhenTurningOn` stood in `update` twice, once before the
+    // transaction and once under the project lock, and answered a request like the one below with a
+    // 400: an off project plus `{ coordinatorEnabled: true }` and nothing else, on the grounds that
+    // saying nothing about the automation level picked one on the owner's behalf. The rule went
+    // with the column it named, so one field is now the whole write, and this is what says so.
+    //
+    // The two conditions the deleted guard tested are stated here rather than assumed: the request
+    // carries EXACTLY one key, and the project is off going in. A guard of that shape restored
+    // later — whatever the second field ends up being called — fails on the line below instead of
+    // shipping.
+    //
+    // Created through the product's own door, as in (5), so the off state this starts from is the
+    // one `ProjectsService.create` actually produces.
+    const switched = await projects.create(ownerId, {
+      title: 'The project whose switch a person moves by hand',
+      acceptanceCriteriaItems: [{ text: SECOND, verificationMethod: METHOD }],
+    } as never) as { id: string };
+    assert.deepEqual(await authorization(switched.id), { enabled: false, revision: '0' },
+      'this project starts off, which is the state the deleted guard refused to turn on');
+
+    const onlyTheSwitch = { coordinatorEnabled: true };
+    assert.deepEqual(Object.keys(onlyTheSwitch), ['coordinatorEnabled'],
+      'this assertion is about the field the request does NOT carry');
+
+    const written = await projects.update(ownerId, switched.id, onlyTheSwitch as never) as {
+      coordinatorEnabled?: boolean;
+    };
+    assert.equal(written.coordinatorEnabled, true, 'the update door answered with the switch on');
+    // Off the row again: the answer that wrote it and the column are two claims, and this file
+    // reads the second one everywhere.
+    assert.deepEqual(await authorization(switched.id), { enabled: true, revision: '1' },
+      'a request naming nothing but the switch turned the coordinator on');
   });
 });
