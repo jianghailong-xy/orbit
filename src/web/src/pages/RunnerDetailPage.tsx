@@ -58,6 +58,9 @@ interface Workspace {
   lastProvider?: string;
   provider?: string;
   workDir?: string | null;
+  /** The git remote this workspace's checkout came from, as declared here. Recorded only — it is
+   *  what a project's integration line is bound from, so nothing else may invent it. */
+  repoUrl?: string | null;
   env?: Record<string, string> | null;
   runnerId?: string | null;
   enabled?: boolean;
@@ -166,6 +169,7 @@ export function RunnerDetailPage() {
   const [fName, setFName] = useState('');
   const [fAppend, setFAppend] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
+  const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
@@ -191,6 +195,7 @@ export function RunnerDetailPage() {
         name: fName.trim(),
         appendSystemPrompt: fAppend.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
+        repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
         enableOrchestration: fEnableOrchestration,
         env: Object.fromEntries(
@@ -253,6 +258,9 @@ export function RunnerDetailPage() {
           name: `${a.name} copy`,
           appendSystemPrompt: a.appendSystemPrompt ?? undefined,
           workDir: a.workDir ?? undefined,
+          // Same directory on the same machine, so the remote is the copy's too: a duplicate that
+          // silently dropped it would put the project binding back where it was before this field.
+          repoUrl: a.repoUrl ?? undefined,
           enableWorktree: a.enableWorktree ?? false,
           enableOrchestration: a.enableOrchestration ?? false,
           effort: a.effort ?? null,
@@ -364,6 +372,7 @@ export function RunnerDetailPage() {
     setFName(a?.name ?? '');
     setFAppend(a?.appendSystemPrompt ?? '');
     setFWorkDir(a?.workDir ?? '');
+    setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
     setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
@@ -495,6 +504,25 @@ export function RunnerDetailPage() {
               {pathHint.text}
             </div>
           )}
+        </div>
+      </div>
+      {/* Recorded, never cloned, and never guessed from the checkout on the machine: this is the
+          remote a project's integration line is bound from, and a guess would be indistinguishable
+          from a declaration at every later read. Full width below the grid — a URL is the longest
+          thing this form asks for. */}
+      <div className="rd-form-field">
+        <div className="rd-form-label">Repository URL</div>
+        <Input
+          value={fRepoUrl}
+          onChange={(e) => {
+            setFRepoUrl(e.target.value);
+            setDirty(true);
+          }}
+          placeholder="https://github.com/owner/repo (optional)"
+        />
+        <div className="rd-path-hint rd-path-muted">
+          Where this checkout came from. A project's integration line is bound from it — with none
+          recorded, a project whose coordination workspace is this one cannot start one.
         </div>
       </div>
       {/* Shown only when this directory has something to offer — an empty path, a directory nobody

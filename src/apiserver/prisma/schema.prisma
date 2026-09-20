@@ -667,13 +667,13 @@ model Workspace {
   runner              Runner?   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   // The project directory the runtime runs in for this workspace, and its coding-tool key.
   workDir             String?   @map("work_dir")
-  // The git remote this workspace's `workDir` holds. NOTHING WRITES THIS ANY MORE: the only path
-  // that ever set it was "create a workspace from a repo URL", withdrawn in migration 0273, and no
-  // row has ever carried a value. It is kept because it is still READ — `projects/
-  // project-integration-line.ts` bootstraps a project's ProjectCodebase binding from the remote its
-  // coordination workspace names, and has no other source for it. That read therefore always finds
-  // NULL today and refuses with INTEGRATION_REPOSITORY_UNKNOWN; giving the column a writer again is
-  // a product decision, not a cleanup. Deliberately NOT backfilled from any checkout's own
+  // The git remote this workspace's `workDir` holds, as a person states it (the workspace form's
+  // "Repository URL"), recorded and never cloned. Its one reader is `projects/
+  // project-integration-line.ts`, which bootstraps a project's ProjectCodebase binding from the
+  // remote its coordination workspace (or the integrated task's session) names — a remote nobody
+  // stated is one it refuses to invent (INTEGRATION_REPOSITORY_UNKNOWN). The "create a workspace
+  // from a repo URL" path that also wrote it was withdrawn in migration 0273; the column outlives
+  // that path because this reader remains. Deliberately NOT backfilled from any checkout's own
   // `origin`: at every later read a guessed remote is indistinguishable from a recorded one.
   repoUrl             String?   @map("repo_url")
   // Custom environment variables injected into this workspace's runtime process (string map).

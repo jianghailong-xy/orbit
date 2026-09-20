@@ -82,6 +82,9 @@ export class WorkspacesService {
         targetLabels: dto.targetLabels ?? [],
         runnerId: dto.runnerId,
         workDir: dto.workDir,
+        // Stored exactly as stated. The one reader — `project-integration-line.ts` — normalizes it
+        // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
+        repoUrl: dto.repoUrl,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
@@ -270,6 +273,10 @@ export class WorkspacesService {
       systemPrompt: dto.systemPrompt,
       effort: dto.effort,
       workDir: dto.workDir,
+      // `undefined` (a patch that says nothing about the remote) leaves the column as it stands:
+      // every other PATCH of this workspace must not quietly drop the one value the integration
+      // line is bootstrapped from.
+      repoUrl: dto.repoUrl,
       targetRunnerId: dto.targetRunnerId,
       enabled: dto.enabled,
       autoInitGit: dto.autoInitGit,

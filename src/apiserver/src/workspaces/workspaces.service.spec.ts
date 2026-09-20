@@ -200,6 +200,40 @@ test('an agent no project coordinates with is deleted as before', async () => {
   assert.ok(deleted[0].deletedAt instanceof Date);
 });
 
+/**
+ * The remote is RECORDED, never derived — it is the only source `project-integration-line.ts` has
+ * for the repository a project's codebase binding is built from, and the column's comment in
+ * schema.prisma says why a runner-reported `origin` must not stand in for it. It is stored exactly
+ * as the person typed it: the one reader normalizes it itself (`canonicalRepoUrl`).
+ */
+test('a repository URL stated on the workspace is stored as stated', async () => {
+  const writes: Record<string, unknown>[] = [];
+  const service = new WorkspacesService(prismaStub(writes));
+
+  await service.create('owner-1', { name: 'checkout', repoUrl: 'https://GitHub.com/Example/Repo.git' });
+  await service.update('owner-1', 'workspace-1', { repoUrl: 'https://github.com/example/other' });
+
+  assert.equal(writes[0].repoUrl, 'https://GitHub.com/Example/Repo.git');
+  assert.equal(writes[1].repoUrl, 'https://github.com/example/other');
+});
+
+// Prisma reads an absent field as "leave the column alone" and an explicit null as "clear it", so
+// the difference between the two is the whole of "a PATCH that edits the name does not silently
+// unbind every project coordinated from this workspace". The web editor PATCHes its whole body on
+// every save, and most of those bodies say nothing about the remote.
+test('a workspace patch that names no repository URL does not touch the column', async () => {
+  const writes: Record<string, unknown>[] = [];
+  const service = new WorkspacesService(prismaStub(writes));
+
+  await service.update('owner-1', 'workspace-1', { name: 'renamed' });
+  await service.update('owner-1', 'workspace-1', { workDir: '/srv/other' });
+
+  for (const write of writes) {
+    assert.equal(write.repoUrl, undefined,
+      'a patch that named no remote wrote the column — undefined leaves it, null clears it');
+  }
+});
+
 test('deleting an agent that is already deleted is a no-op, not a second stamp', async () => {
   // The lock found no live row: another request got here first, and the caller asked for a state
   // this row is already in.

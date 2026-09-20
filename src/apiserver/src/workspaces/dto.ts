@@ -47,6 +47,11 @@ export class CreateWorkspaceDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  // The git remote this workspace's checkout came from, as the user states it — recorded, never
+  // cloned and never guessed. `projects/project-integration-line.ts` bootstraps a project's
+  // codebase binding from it, and a remote nobody stated is one it must not invent (the column's
+  // comment in schema.prisma says why a runner-reported `origin` is not an acceptable source).
+  @IsOptional() @IsString() repoUrl?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
@@ -79,6 +84,8 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsArray() @IsString({ each: true }) targetLabels?: string[];
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  /** See CreateWorkspaceDto.repoUrl — the same recorded remote, restated or corrected here. */
+  @IsOptional() @IsString() repoUrl?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;

@@ -35,6 +35,8 @@ import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
+import { WorkspacesController } from '../workspaces/workspaces.controller';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 
@@ -103,6 +105,7 @@ interface Stack {
   sessions: SessionsService;
   tasks: TasksService;
   projects: ProjectsService;
+  workspaces: WorkspacesService;
   receipts: MergeReceiptService;
 }
 
@@ -125,6 +128,7 @@ async function connect(): Promise<Stack> {
     // No completion-input router: nothing here is about the facts a task write or a receipt moves.
     tasks: new TasksService(prisma, sessions, realtime),
     projects: new ProjectsService(prisma, new ProjectAcceptanceService(prisma)),
+    workspaces: new WorkspacesService(prisma),
     receipts: new MergeReceiptService(prisma),
   };
 }
@@ -137,9 +141,13 @@ async function disconnect(stack: Stack): Promise<void> {
 /** The owner's HTTP surface for projects, with a guard that takes the bearer token as the caller. */
 async function openDoor(stack: Stack): Promise<{ base: string; close: () => Promise<void> }> {
   @Module({
-    controllers: [ProjectsController],
+    // The workspace door rides along: the remote a project's binding is bootstrapped from is stated
+    // on the workspace, so the case that declares one has to go through this path (and its
+    // whitelisting ValidationPipe — a field the DTO does not carry never reaches the service).
+    controllers: [ProjectsController, WorkspacesController],
     providers: [
       { provide: ProjectsService, useValue: stack.projects },
+      { provide: WorkspacesService, useValue: stack.workspaces },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: ProjectHandoffService, useValue: {} },
       { provide: SessionAttemptService, useValue: {} },
@@ -167,7 +175,7 @@ async function openDoor(stack: Stack): Promise<{ base: string; close: () => Prom
 async function call(
   base: string,
   caller: string,
-  method: 'GET' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH',
   path: string,
   body?: unknown,
 ): Promise<{ status: number; body: string; json: Record<string, unknown> }> {
@@ -201,8 +209,12 @@ interface Fixture {
 /**
  * One owner, one runner, and one project coordinated from a workspace that names its remote.
  * The workspace's merge default is `main`, which is what case 6 watches for movement.
+ *
+ * `repoUrl` is a parameter because the binding has two inputs: a workspace that already states one
+ * (every case above), and one that states none until its owner declares it through the form's own
+ * door (the declaration case below).
  */
-async function project(stack: Stack, label: string): Promise<Fixture> {
+async function project(stack: Stack, label: string, repoUrl: string | null = REPO_URL): Promise<Fixture> {
   const db = stack.db;
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -235,7 +247,7 @@ async function project(stack: Stack, label: string): Promise<Fixture> {
       runnerId,
       name: `${label}-workspace`,
       enabled: true,
-      repoUrl: REPO_URL,
+      repoUrl,
       defaultMergeTarget: 'main',
     },
   });
@@ -391,8 +403,12 @@ interface IntegrationLineModule {
   ): Promise<unknown>;
 }
 
-/** Integrate one code task for the first time, the way the integration queue's transaction will. */
-async function integrate(stack: Stack, f: Fixture, taskId: string): Promise<void> {
+/**
+ * Integrate one code task for the first time, the way the integration queue's transaction will.
+ * Answers what that transaction answered — `{ started: false, refusal }` is how the platform
+ * refuses a repository nobody named, and the caller is the one that reads it.
+ */
+async function integrate(stack: Stack, f: Fixture, taskId: string): Promise<unknown> {
   let line: IntegrationLineModule | null = null;
   try {
     line = require('./project-integration-line') as IntegrationLineModule;
@@ -402,7 +418,7 @@ async function integrate(stack: Stack, f: Fixture, taskId: string): Promise<void
   assert.ok(line?.startOnFirstIntegration,
     'nothing records a project’s integration line at its first integration: '
       + '`project-integration-line.ts#startOnFirstIntegration` does not exist');
-  await stack.db.$transaction((tx) => line.startOnFirstIntegration(tx, {
+  return stack.db.$transaction((tx) => line.startOnFirstIntegration(tx, {
     ownerId: f.ownerId,
     projectId: f.projectId,
     taskId,
@@ -512,6 +528,90 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       'the repository is the one the integrated task’s session worked in');
     assert.ok(row?.integration_started_at instanceof Date, 'the line records when it started');
   });
+
+  // Where the repository comes from, for a workspace that never named one: the person declares it
+  // on the workspace itself (the form's "Repository URL"), and that — not a guess read off the
+  // machine's checkout — is what the binding is built from. Both inputs are reached over HTTP,
+  // because that is the only door either of them is stated through.
+  await t.test('a remote the owner declares on the workspace is what the binding is bootstrapped '
+    + 'from', async () => {
+    const f = await project(stack, 'declared', null);
+    const prerequisite = await codeTask(stack, f, 'declared: the prerequisite');
+    await codeTask(stack, f, 'declared: the work that waits for it',
+      { dependsOnTaskIds: [prerequisite] });
+    await workSession(stack, f, prerequisite, `declared-${f.publicId}`);
+
+    // A workspace that names no remote: the platform refuses the integration rather than binding
+    // the project to a repository nobody stated.
+    assert.deepEqual(await integrate(stack, f, prerequisite),
+      { started: false, refusal: 'INTEGRATION_REPOSITORY_UNKNOWN' },
+      'an integration started with no repository is not refused INTEGRATION_REPOSITORY_UNKNOWN');
+    assert.deepEqual(await codebaseRow(stack, f), [], 'nothing may be bound to an unnamed remote');
+
+    // Declared where a person declares it: the workspace the coordination sessions run in. Created
+    // from the form it carries the remote from its first row; an existing one takes a patch.
+    const created = await call(door.base, f.ownerId, 'POST', '/api/workspaces', {
+      name: `declared-created-${f.publicId}`,
+      runnerId: f.runnerId,
+      repoUrl: 'https://GitHub.com/Example/Declared.git',
+    });
+    assert.equal(created.status, 201,
+      `a workspace created with a repository URL was refused (${created.status}): ${created.body}`);
+    const createdRow = await stack.sql.query(
+      `SELECT "repo_url" FROM "workspace" WHERE "owner_id" = $1::uuid AND "name" = $2`,
+      [f.ownerId, `declared-created-${f.publicId}`],
+    );
+    assert.deepEqual(createdRow.rows.map((row) => row.repo_url),
+      ['https://GitHub.com/Example/Declared.git'],
+      'the repository URL a workspace was created with never reached the row');
+
+    const declared = await call(door.base, f.ownerId, 'PATCH',
+      `/api/workspaces/${uuidToBase62(f.workspaceId)}`, { repoUrl: REPO_URL });
+    assert.equal(declared.status, 200,
+      `the workspace’s repository URL was refused (${declared.status}): ${declared.body}`);
+
+    // The same call the queue makes, now that there is a repository to bind: the default rule
+    // decides the line, and the binding names the remote the workspace states.
+    const started = (await integrate(stack, f, prerequisite)) as { started: boolean };
+    assert.equal(started.started, true,
+      'the integration was still refused after the workspace declared its remote');
+    assert.deepEqual(lineOf(await integrationOf(door, f)), {
+      line: 'PROJECT_BRANCH',
+      ref: `project/${f.publicId}`,
+      upstreamRef: 'main',
+      source: 'DEFAULT_RULE',
+      locked: true,
+    }, 'two code tasks with a dependency between them go through a project branch');
+    const [row] = await codebaseRow(stack, f);
+    assert.equal(row?.canonical_repo_url, CANONICAL_REPO_URL,
+      'the binding is built from the remote the workspace declares, canonically');
+  });
+
+  await t.test('an owner who chooses the line is let through once the workspace declares its remote',
+    async () => {
+      const f = await project(stack, 'declared-explicit', null);
+
+      const refused = await call(door.base, f.ownerId, 'PATCH',
+        `/api/projects/${f.publicId}/integration`, { line: 'MAIN' });
+      assert.equal(refused.status, 409,
+        `integrating a project with no repository answered ${refused.status}: ${refused.body}`);
+      assert.equal(refused.json.code, 'INTEGRATION_REPOSITORY_UNKNOWN');
+
+      const declared = await call(door.base, f.ownerId, 'PATCH',
+        `/api/workspaces/${uuidToBase62(f.workspaceId)}`, { repoUrl: REPO_URL });
+      assert.equal(declared.status, 200, declared.body);
+
+      const chosen = await call(door.base, f.ownerId, 'PATCH',
+        `/api/projects/${f.publicId}/integration`, { line: 'MAIN' });
+      assert.equal(chosen.status, 200,
+        `the owner’s own choice of line was not accepted (${chosen.status}): ${chosen.body}`);
+      assert.deepEqual(lineOf(await integrationOf(door, f)),
+        { line: 'MAIN', ref: 'main', upstreamRef: 'main', source: 'EXPLICIT', locked: false });
+
+      const [row] = await codebaseRow(stack, f);
+      assert.equal(row?.canonical_repo_url, CANONICAL_REPO_URL);
+      assert.equal(row?.integration_ref_source, 'EXPLICIT');
+    });
 
   await t.test('with no explicit choice, a single code task records main at the first integration',
     async () => {
