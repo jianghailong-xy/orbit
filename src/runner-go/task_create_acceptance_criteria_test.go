@@ -336,6 +336,14 @@ func TestMCPTaskCreateDescriptionsAskWhatSettlesTheTask(t *testing.T) {
 		if !containsWord(text, "ask") || !containsWord(text, "before") {
 			t.Fatalf("%s description does not tell the caller to ask before writing the task: %q", name, text)
 		}
+		// Asked OF somebody, too. An iteration of this copy said "ask what would settle it" and a
+		// session answered its own question — it filed a batch whose criteria it had invented, and
+		// read the confirmation card as the place they would be agreed. So the addressee and the
+		// ownership are asserted, not just the verb: the card is a yes/no on work whose criteria
+		// should already have been agreed before it was raised.
+		if !strings.Contains(text, "the person") || !strings.Contains(text, "theirs to state") {
+			t.Fatalf("%s description does not say who settles the criteria or whose they are: %q", name, text)
+		}
 		// Layer two: where one command decides it, the command IS the judgement. Naming the field is
 		// not enough — the exit code has to be named as what settles the task, or the reader has no
 		// reason to believe the run ends without a human.
