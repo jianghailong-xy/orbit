@@ -505,10 +505,32 @@ describe('the presses', () => {
   }
 
   async function until(held: () => boolean, what: string) {
+    const t0 = Date.now();
+    let turns = 0;
+    let armed = true;
+    const tick = () => {
+      turns += 1;
+      if (armed) setImmediate(tick);
+    };
+    setImmediate(tick);
+    let timerFired = false;
+    setTimeout(() => {
+      timerFired = true;
+    }, 0);
     for (let i = 0; i < 50; i += 1) {
-      if (held()) return;
+      if (held()) {
+        armed = false;
+        process.stdout.write(
+          `PROBE OK what=${what} ticks=${i} ms=${Date.now() - t0} turns=${turns} timerFired=${timerFired}\n`,
+        );
+        return;
+      }
       await settle();
     }
+    armed = false;
+    process.stdout.write(
+      `PROBE EXHAUSTED what=${what} ms=${Date.now() - t0} turns=${turns} timerFired=${timerFired} calls=${apiMock.mock.calls.length} text=${JSON.stringify(host.textContent?.slice(0, 160))}\n`,
+    );
     throw new Error(`never became true: ${what}`);
   }
 
