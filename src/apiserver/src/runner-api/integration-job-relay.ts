@@ -182,9 +182,6 @@ export async function dispatchIntegrationJobs(
       if (after && after.openItemIds.length > 0) {
         await openItems?.deliverForItems(after.openItemIds);
       }
-      if (after && after.openItemIds.length > 0) {
-        await openItems?.deliverForItems(after.openItemIds);
-      }
       continue;
     }
     commands.push({
