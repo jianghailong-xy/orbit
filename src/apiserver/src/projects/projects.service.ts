@@ -136,6 +136,7 @@ import {
   readProjectIntegrationView,
   type ProjectIntegrationView,
   readProjectCodebase,
+  readProjectIntegrationLines,
 } from './project-integration-line';
 import {
   readProjectBlockers,
@@ -2244,10 +2245,12 @@ export class ProjectsService {
     });
     if (projects.length === 0) return [];
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
-    // apiece, both joined by their own primary/unique key.
-    const [rollups, attention] = await Promise.all([
+    // apiece, both joined by their own primary/unique key; the integration bindings by
+    // `(project_id, slot)`; the exception items grouped in the database.
+    const [rollups, attention, integration] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
+      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map((project) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
@@ -2263,6 +2266,10 @@ export class ProjectsService {
         // The same total shape for a project with no open blockers: clients never have to infer
         // whether an absent field means "none" or "this server did not compute attention".
         attention: attention.get(project.id) ?? emptyProjectListAttention(),
+        // Where this project's finished work lands (§7.1 V1). Null rather than absent for the
+        // common case — a project nobody has decided a line for — so a client draws its row from
+        // one shape, and never has to tell "no line yet" from "this server does not report lines".
+        integration: integration.get(project.id) ?? null,
       };
     });
   }

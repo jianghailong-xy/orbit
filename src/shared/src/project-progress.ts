@@ -136,6 +136,28 @@ export type OpenItemKind =
   | 'COORDINATOR_QUESTION'
   | 'FUSE_PAUSED';
 
+/**
+ * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the three
+ * that are the owner's from birth.
+ *
+ * A merge approval, a question to the owner and a pause are asked OF the owner and never worked BY
+ * the coordinator, so an item whose assignee is the coordinator is one of these four — which is
+ * what lets the list row's blue chip be a `Record` over this type rather than a switch with a
+ * branch for a state that cannot happen. A kind that later becomes returnable to the coordinator
+ * (the one §4.7 lists and has no door for yet) adds itself here, and every reader fails to compile
+ * until it has a phrase.
+ *
+ * The array is the runtime half: the server builds its read's `IN` list from it, so the phrase a
+ * client prints and the rows a server counts cannot be about different sets.
+ */
+export const COORDINATOR_LEAD_KINDS = [
+  'INTEGRATION_CONFLICT',
+  'INTEGRATION_CHECK_FAILED',
+  'INTEGRATION_ERROR',
+  'TASK_FAILED',
+] as const;
+export type CoordinatorLeadKind = (typeof COORDINATOR_LEAD_KINDS)[number];
+
 /** Who is expected to act on an item: the project's coordinator, or its owner in person (§4.1). */
 export type OpenItemAssignee = 'COORDINATOR' | 'OWNER';
 
@@ -370,6 +392,70 @@ export const OWNER_ITEM_PUSH_KINDS: Record<OwnerItemKind, OwnerItemPushKind> = {
   ESCALATED: 'escalated-to-you',
   FUSE_PAUSED: 'fuse-paused',
 };
+
+/**
+ * One of the four things a project is waiting on its owner for, as the projects index aggregates it
+ * (§7.1 V1): how many items of this kind are open, and how long the oldest has been waiting.
+ *
+ * The count and the instant, not the items: the list row names ONE action, and which item is behind
+ * it belongs to the project page's Open items card.
+ */
+export interface ProjectListOwnerItem<Instant = string> {
+  kind: OwnerItemKind;
+  count: number;
+  /** The oldest `waiting_since` among this kind's open items — how long the owner has been asked. */
+  oldestWaitingSince: Instant;
+}
+
+/**
+ * What the project's coordinator is holding, as the projects index aggregates it (§7.1 V1).
+ *
+ * `leadKind` is the kind of the item that has waited longest, which is the one the row's chip names:
+ * a row that listed every kind would be a second Open items card, and the list is read to find the
+ * project that is stuck, not to read its inbox. `nextEscalationAt` is when the first of them stops
+ * being the coordinator's — the instant the project page's own Open items row counts down to, and
+ * carried here so both readings answer from one row.
+ */
+export interface ProjectListCoordinatorItems<Instant = string> {
+  count: number;
+  leadKind: CoordinatorLeadKind;
+  oldestWaitingSince: Instant;
+  nextEscalationAt: Instant;
+}
+
+/**
+ * Where a project's finished work lands, as one list row states it (§7.1 V1).
+ *
+ * Absent when nobody has decided a line and nothing has integrated yet: a project with no line has
+ * no line to draw, and printing the default rule's guess there would state a decision nobody made.
+ */
+export interface ProjectListIntegration {
+  line: IntegrationLine;
+  /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
+  ref: string;
+}
+
+/**
+ * What `GET /projects` says about who must act on a project, and how long they have had to — the
+ * blockers the list has always aggregated plus the items behind them (§7.1 V1).
+ *
+ * The two item fields are optional for the reason `attention` itself is: a web bundle can outlive
+ * the apiserver that served it through a rolling deploy, and a server that predates this read sends
+ * neither, in which case the row draws exactly the chips it drew before.
+ */
+export interface ProjectListAttention<Instant = string> {
+  userBlockers: number;
+  coordinatorBlockers: number;
+  systemBlockers: number;
+  /** Loudest still-open USER-owned blocker; other actors never inflate human priority. */
+  maxSeverity: 'INFO' | 'WARNING' | 'CRITICAL' | null;
+  /** Oldest instant a still-open blocker became USER-owned, or null when none needs a person. */
+  attentionSinceAt: Instant | null;
+  /** Earliest active durable check; escalated blockers no longer tick. */
+  nextCheckAt: Instant | null;
+  ownerItems?: Array<ProjectListOwnerItem<Instant>>;
+  coordinatorItems?: ProjectListCoordinatorItems<Instant> | null;
+}
 
 /**
  * One owner item on a conversation's summary (§7.6 V13).

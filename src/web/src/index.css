@@ -12556,6 +12556,33 @@ button.composer-usage:focus-visible {
   color: var(--brand-strong);
 }
 
+/* Where this project's finished work lands, beside the chip that says what to do about the project
+   (contract §7.1 V1/V2, mock 1 ④): `⎇ project/bg-jobs` for a project branch, `main` for a project
+   that merges straight into it.
+
+   Neutral on purpose. The chip to its left is the signal — an amber row wants somebody — and this
+   one is a fact about the project that never changes and never asks. Drawn in the mock's own
+   tokens so it follows the palette into dark mode, and sized to the chip beside it so the two read
+   as one line of metadata rather than two competing badges. */
+.project-row-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+/* The branch mark is the glyph's shape, not its colour: it says "branch" and the name says which. */
+.project-row-line svg {
+  color: var(--text-3);
+}
+
 /* ---- Projects list on a phone ----
    The row above is `text | 196px meter | 78px dates`, and none of it wraps. On a 393px phone the
    row is 341px wide, so those two fixed columns and their 16px gaps take 306px — and the title,

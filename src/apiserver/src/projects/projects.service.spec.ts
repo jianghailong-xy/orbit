@@ -231,8 +231,17 @@ test('the index buckets every project in one aggregate, not one query per projec
     runtime: { coordinatorGeneration: 0n },
   }));
   let rawQueries = 0;
+  let bindingReads = 0;
   const service = serviceWith({
     project: { findMany: async () => listed },
+    projectCodebase: {
+      findMany: async () => {
+        bindingReads += 1;
+        return [{ projectId: 'a1', upstreamRef: 'main', integrationRef: 'refs/heads/project/bg',
+          integrationRefSource: 'EXPLICIT', integrationStartedAt: new Date('2026-07-30T00:00:00.000Z'),
+          mergeCheckCommand: null, mergeCheckTimeoutSeconds: null }];
+      },
+    },
     $queryRaw: async (...args: unknown[]) => {
       rawQueries += 1;
       if (rawQueries === 2) {
@@ -244,6 +253,12 @@ test('the index buckets every project in one aggregate, not one query per projec
           maxSeverity: 'CRITICAL',
           attentionSinceAt: new Date('2026-07-31T00:00:00.000Z'),
           nextCheckAt: new Date('2026-08-01T01:00:00.000Z'),
+        }];
+      }
+      if (rawQueries === 3) {
+        return [{
+          projectId: 'a1', kind: 'PROMOTION_APPROVAL', assignee: 'OWNER', assigneeReason: 'DEFAULT',
+          count: 1, oldestWaitingSince: new Date('2026-07-31T12:00:00.000Z'), nextEscalationAt: null,
         }];
       }
       // Two of the three projects grouped; `c3` has no tasks and so has no row here at all.
@@ -260,9 +275,14 @@ test('the index buckets every project in one aggregate, not one query per projec
 
   const rows: any[] = await service.list(OWNER_ID);
 
-  // Two page-wide overlays: the task rollup and open blockers. Neither grows with the number of
-  // projects.
-  assert.equal(rawQueries, 2);
+  // Page-wide overlays, none of which grows with the number of projects: the task rollup, open
+  // blockers, the exception items behind them (§7.1 V1) and the integration bindings.
+  assert.equal(rawQueries, 3);
+  assert.equal(bindingReads, 1);
+  // The line each project lands on, read through the one definition of "which line is this" and
+  // stated as a branch name: null for the two bindings nobody decided a line for.
+  assert.deepEqual(rows[0].integration, { line: 'PROJECT_BRANCH', ref: 'project/bg' });
+  assert.equal(rows[1].integration, null);
   assert.deepEqual(rows[0].buckets, {
     running: 1, ready: 2, blocked: 3, awaitingVerification: 0, done: 4, failed: 0, cancelled: 5,
   });
@@ -280,6 +300,14 @@ test('the index buckets every project in one aggregate, not one query per projec
     maxSeverity: 'CRITICAL',
     attentionSinceAt: new Date('2026-07-31T00:00:00.000Z'),
     nextCheckAt: new Date('2026-08-01T01:00:00.000Z'),
+    // The item behind the count (§7.1 V1): what the owner is being asked to do, by the same
+    // classifier the push and the Needs-you count use.
+    ownerItems: [{
+      kind: 'PROMOTION_APPROVAL',
+      count: 1,
+      oldestWaitingSince: new Date('2026-07-31T12:00:00.000Z'),
+    }],
+    coordinatorItems: null,
   });
   assert.deepEqual(rows[2].attention, {
     userBlockers: 0,
@@ -288,6 +316,8 @@ test('the index buckets every project in one aggregate, not one query per projec
     maxSeverity: null,
     attentionSinceAt: null,
     nextCheckAt: null,
+    ownerItems: [],
+    coordinatorItems: null,
   });
   // The established tally shape is kept, now sourced from the same aggregate. The missing group
   // for c3 means it has no tasks, so its explicit total is zero.
@@ -305,6 +335,7 @@ test('concurrent identical project indexes share one aggregate without caching i
         return found.promise;
       },
     },
+    projectCodebase: { findMany: async () => [] },
     $queryRaw: async () => {
       aggregateReads += 1;
       return [];
@@ -320,13 +351,13 @@ test('concurrent identical project indexes share one aggregate without caching i
   await Promise.all([first, second]);
   assert.equal(
     aggregateReads,
-    2,
-    'one task rollup and one blocker rollup for both callers',
+    3,
+    'the task rollup, the blockers and the items for both callers',
   );
 
   await service.list(OWNER_ID, ProjectStatus.OPEN as never);
   assert.equal(projectReads, 2, 'settlement removes the promise; the next request reads fresh state');
-  assert.equal(aggregateReads, 4);
+  assert.equal(aggregateReads, 6);
 });
 
 test('the detail read reports progress without loading the project’s tasks', async () => {

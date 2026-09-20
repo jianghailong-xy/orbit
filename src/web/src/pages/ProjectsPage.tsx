@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
+  type ProjectListIntegration,
   type TaskIntegrationView,
   type TaskStatus,
 } from '@orbit/shared';
@@ -40,7 +41,7 @@ import {
   type CoordinatorCardLayout,
   type CoordinatorIntegration,
 } from '../components/ProjectCoordinatorCard';
-import { ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
+import { BranchMark, ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
 import { ProjectOpenItems } from '../components/ProjectProgressStatus';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
@@ -71,6 +72,7 @@ import { ago } from '../lib/runnerEngines';
 import { formatSpan } from '../lib/watches';
 import {
   attentionChipOf,
+  integrationChipOf,
   projectAttentionSections,
   type ProjectAttentionSummary,
 } from '../lib/projectAttention';
@@ -108,6 +110,9 @@ interface Project {
   lastActivityAt: string | null;
   /** Open blocker ownership: the durable signal for whether a person must act next. */
   attention: ProjectAttentionSummary;
+  /** Where this project's finished work lands, when anybody has decided (§7.1 V1). Absent on a
+   *  server that predates the field, null on a project that has not decided and not integrated. */
+  integration?: ProjectListIntegration | null;
 }
 
 /** One stated criterion, plus the two facts the server offers about the work filed under it.
@@ -129,7 +134,7 @@ interface ProjectCriterionStanding extends AcceptanceCriterionItem {
  *  means "no tasks", not "counts unavailable" —
  *  the FIELD being absent is what means that, which is why the cancel question below states a
  *  number only when it is present. */
-interface ProjectDetail extends Project {
+interface ProjectDetail extends Omit<Project, 'integration'> {
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
   /** The off switch: whether this project dispatches its own ready tasks AND wakes a judgment
@@ -150,7 +155,14 @@ interface ProjectDetail extends Project {
   /** The settings half of this project's integration line, which the document already carries
    *  (§1.4's one exception to keeping the new reads out of it). What the QUEUE is doing is the
    *  separate `GET /projects/:id/integration`; this is only how the page knows which branch a
-   *  criterion landed on, and whether there is a branch at all. */
+   *  criterion landed on, and whether there is a branch at all.
+   *
+   *  Same key as the row's `integration`, and deliberately not the same shape: the list states
+   *  which line a project lands on in one object a page of sixty rows can carry (§7.1 V1), while
+   *  this document states the whole setting — the check command, the lock, the escalation window.
+   *  `Omit` above rather than an override, because two reads that answer different questions under
+   *  one name is what the two endpoints do, and a type that picked one of them would be describing
+   *  the other endpoint's payload. */
   integration?: ProjectIntegrationSettings;
 }
 
@@ -539,6 +551,9 @@ export function ProjectsPage() {
             // quiet, or that it is finished and still open. Null on most rows, which is the point
             // (see attentionChipOf).
             const chip = attentionChipOf(p, now);
+            // And where its finished work lands, when anybody has decided (see integrationChipOf).
+            // A fact rather than a signal, so it sits after the reason and before the status.
+            const line = integrationChipOf(p);
             return (
               <List.Item
                 className="project-row"
@@ -559,6 +574,12 @@ export function ProjectsPage() {
                       {chip ? (
                         <span className={`project-row-chip project-row-chip-${chip.tone}`}>
                           {chip.text}
+                        </span>
+                      ) : null}
+                      {line ? (
+                        <span className="project-row-line">
+                          {line.branch ? <BranchMark /> : null}
+                          {line.text}
                         </span>
                       ) : null}
                       {/* The selected terminal filter already says Completed or Cancelled, and an

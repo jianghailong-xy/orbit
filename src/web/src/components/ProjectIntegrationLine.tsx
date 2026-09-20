@@ -59,8 +59,11 @@ const TIP_STATE: Record<ProjectIntegrationView['mergeCheckOnTip'], { text: strin
 };
 
 /** The branch mark from the mock, drawn rather than typed: `⎇` renders as a box in several of the
- *  fonts this app falls back to, and a box in front of a branch name reads as a broken glyph. */
-function BranchMark() {
+ *  fonts this app falls back to, and a box in front of a branch name reads as a broken glyph.
+ *
+ *  Exported because the projects index draws the same mark on a list row (§7.1 V1) — one glyph
+ *  that means "branch" in both places, rather than two drawings that agree until one is nudged. */
+export function BranchMark() {
   return (
     <svg
       width="12"

@@ -4,6 +4,7 @@ import {
   uuidToBase62,
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
+  type ProjectListIntegration,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -117,6 +118,36 @@ export function readProjectCodebase(
     where: { projectId, slot: 'primary' },
     select: LINE_COLUMNS,
   });
+}
+
+/**
+ * The line every one of these projects lands on, for the list rows (§7.1 V1). One statement,
+ * bounded by the page: a binding is joined by `(project_id, slot)`, the unique key that gives each
+ * project at most one primary row.
+ *
+ * Read through `decidedLine` rather than as a SQL predicate, because "which line is this project
+ * on" has exactly one definition and it already lives here — a second one written in SQL would be
+ * a second answer to a question the settings card and the merge check both ask.
+ *
+ * A project whose binding states no line is absent from the map, not present with a null: a row
+ * that has not decided is not one that decided main (§7.1 V1).
+ */
+export async function readProjectIntegrationLines(
+  prisma: Pick<PrismaService, 'projectCodebase'>,
+  projectIds: readonly string[],
+): Promise<Map<string, ProjectListIntegration>> {
+  if (projectIds.length === 0) return new Map();
+  const rows = await prisma.projectCodebase.findMany({
+    where: { projectId: { in: [...projectIds] }, slot: 'primary' },
+    select: { ...LINE_COLUMNS, projectId: true },
+  });
+  const lines = new Map<string, ProjectListIntegration>();
+  for (const row of rows) {
+    const line = decidedLine(row);
+    if (!line) continue;
+    lines.set(row.projectId, { line, ref: branchName(row.integrationRef) });
+  }
+  return lines;
 }
 
 /** How long this project's exception items wait on its coordinator before they are the owner's. */

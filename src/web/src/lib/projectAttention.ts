@@ -1,3 +1,11 @@
+import {
+  OWNER_ITEM_PUSH_KINDS,
+  type CoordinatorLeadKind,
+  type OwnerItemKind,
+  type OwnerItemPushKind,
+  type ProjectListAttention,
+  type ProjectListIntegration,
+} from '@orbit/shared';
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
 
@@ -29,16 +37,17 @@ export interface AttentionProject {
   lastActivityAt: string | null;
   /** Durable open-blocker ownership aggregated by GET /projects. Optional for older servers. */
   attention?: ProjectAttentionSummary;
+  /** Where this project's finished work lands (§7.1 V1). Absent on a server that sends none, and
+   *  null on a project that has not decided a line and has not integrated anything yet. */
+  integration?: ProjectListIntegration | null;
 }
 
-export interface ProjectAttentionSummary {
-  userBlockers: number;
-  coordinatorBlockers: number;
-  systemBlockers: number;
-  maxSeverity: 'INFO' | 'WARNING' | 'CRITICAL' | null;
-  attentionSinceAt: string | null;
-  nextCheckAt: string | null;
-}
+/**
+ * The blocker summary, declared once for the server that writes it and the client that draws it:
+ * `@orbit/shared`'s `ProjectListAttention` (§7.0). The name is this module's — the rows here are
+ * what the page reads it through — and the declaration is not.
+ */
+export type ProjectAttentionSummary = ProjectListAttention;
 
 export type AttentionSectionKey =
   | 'attention'
@@ -49,6 +58,13 @@ export type AttentionSectionKey =
   | 'completed';
 
 export type AttentionReason =
+  // The four things a project can be waiting on its OWNER for, each one an item somebody has to
+  // act on rather than a count of blockers (§7.1 V2). They are named after the item's own kind, in
+  // the same words the phone's banner uses.
+  | OwnerItemPushKind
+  // What the project's COORDINATOR is holding, on its way to being handled: it says the project is
+  // moving, so it never lands in Needs attention (§7.1 V2).
+  | 'coordinator-handling'
   | 'needs-user'
   | 'auto-remediation'
   | 'no-activity-running'
@@ -134,6 +150,44 @@ function autoRemediationBlockerCount(project: AttentionProject): number {
   );
 }
 
+/** The four owner items in the order a tie between them is settled — the contract's own order. */
+const OWNER_ITEM_KINDS: readonly OwnerItemKind[] = [
+  'PROMOTION_APPROVAL',
+  'COORDINATOR_QUESTION',
+  'ESCALATED',
+  'FUSE_PAUSED',
+];
+
+/** The four reasons, derived from the one table that maps an item kind to its chip — so a fifth
+ *  owner-facing kind reaches this list without anybody remembering to add it here. */
+const OWNER_ITEM_REASONS: readonly string[] = Object.values(OWNER_ITEM_PUSH_KINDS);
+
+/** Whether this reason is one of the four items waiting on the owner (§7.1 V2). */
+function isOwnerItemReason(reason: AttentionReason | null): reason is OwnerItemPushKind {
+  return reason !== null && OWNER_ITEM_REASONS.includes(reason);
+}
+
+type ProjectOwnerItem = NonNullable<ProjectAttentionSummary['ownerItems']>[number];
+
+/**
+ * The owner item the row leads with: the one that has waited longest, with a fixed kind order
+ * settling a tie.
+ *
+ * Iterated in that order rather than in whatever order the array arrived, because two items that
+ * have waited equally long must produce the same chip on every read — a row whose label flickered
+ * between two true statements would make the reader look twice at a fact that had not changed.
+ */
+function leadOwnerItem(project: AttentionProject): ProjectOwnerItem | null {
+  const items = project.attention?.ownerItems ?? [];
+  let lead: ProjectOwnerItem | null = null;
+  for (const kind of OWNER_ITEM_KINDS) {
+    const item = items.find((candidate) => candidate.kind === kind);
+    if (!item) continue;
+    if (!lead || byInstantAsc(item.oldestWaitingSince, lead.oldestWaitingSince) < 0) lead = item;
+  }
+  return lead;
+}
+
 /**
  * Current servers report FAILED explicitly. The remainder is retained only as rolling-deploy
  * compatibility with an older server, and still keeps failed work in the denominator.
@@ -164,6 +218,14 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
  */
 export function attentionReasonOf(project: AttentionProject, now: number): AttentionReason | null {
   if (project.status !== 'OPEN') return null;
+
+  // An item sitting on the OWNER outranks everything else the row could say: it is the one fact
+  // that names a piece of work a person has to go and do, and the four of them are what mock 1's
+  // chips print. Not `attention?.userBlockers` — a blocker is a tag somebody applied, and this is
+  // an exception the platform routed to them and is waiting for.
+  const lead = leadOwnerItem(project);
+  if (lead) return OWNER_ITEM_PUSH_KINDS[lead.kind];
+
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
 
@@ -179,6 +241,11 @@ export function attentionReasonOf(project: AttentionProject, now: number): Atten
     running + ready + blocked + awaitingVerification + failedTaskCount(project) === 0
     && done + cancelled > 0
   ) return 'ready-to-close';
+
+  // Last, and only when nothing else is wrong: an exception the coordinator is working is the
+  // project moving, so it explains a chip and never moves a row (§7.1 V2). Every reason above is
+  // something the reader has to act on, and a coordinator's exception is not.
+  if (project.attention?.coordinatorItems) return 'coordinator-handling';
   return null;
 }
 
@@ -195,11 +262,18 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
   // unrelated fresh activity in the same project.
   if (reason === 'auto-remediation') return 'attention';
 
+  // Nor is an item waiting on a person passive metadata, and it is stronger still: mock 1 keeps a
+  // project with four tasks in flight in Needs attention while its branch waits to be merged.
+  // Fresh activity is ordinary by comparison — somebody is asking the reader for something.
+  if (isOwnerItemReason(reason)) return 'attention';
+
   const quietRunning = project.buckets.running > 0
     && quietDays(project.lastActivityAt, now) !== null;
   if (project.buckets.running > 0 && !quietRunning) return 'running';
 
-  if (reason) return 'attention';
+  // A coordinator working an exception is the project moving; it earns the lane its activity
+  // earns, which is where mock 1 draws it — brand chip, Running section (§7.1 V2).
+  if (reason && reason !== 'coordinator-handling') return 'attention';
   if (project._count.tasks === 0) return 'definition';
   if (project.buckets.ready > 0) return 'ready';
   if (project.buckets.blocked > 0 || (project.buckets.awaitingVerification ?? 0) > 0) {
@@ -215,11 +289,22 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
 }
 
 const ATTENTION_REASON_RANK: Record<AttentionReason, number> = {
-  'needs-user': 1,
-  'auto-remediation': 2,
-  'no-activity-running': 3,
-  'no-activity-ready': 4,
-  'ready-to-close': 5,
+  // One tier, not four: which of the four an owner is asked about is a fact about the project, and
+  // the reader's queue is that they are asked at all. Inside the tier the longest wait goes first,
+  // which is what the chip beside it prints.
+  'approve-merge-to-main': 1,
+  'coordinator-question': 1,
+  'escalated-to-you': 1,
+  'fuse-paused': 1,
+  'needs-user': 2,
+  'auto-remediation': 3,
+  'no-activity-running': 4,
+  'no-activity-ready': 5,
+  'ready-to-close': 6,
+  // Never drawn in this lane — a coordinator's exception does not move a row — so this number
+  // orders nothing. It is here because the `Record` is what makes a new reason a compile error
+  // rather than a row that sorts as if it had no reason at all.
+  'coordinator-handling': 7,
 };
 
 const ATTENTION_SEVERITY_RANK: Record<NonNullable<ProjectAttentionSummary['maxSeverity']>, number> = {
@@ -242,6 +327,51 @@ function elapsedDayLabel(at: string | null | undefined, now: number): string | n
   return days === 0 ? '<1d' : `${days}d`;
 }
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/**
+ * How long an item has been waiting, for the chips that name one: `20m`, `2h`, `3d`.
+ *
+ * Finer than `elapsedDayLabel` because of what it is attached to. A day is the right resolution for
+ * "this project has gone quiet" — nothing about it changed at 4pm — while a merge approval or a
+ * question is an errand, and the owner reads a half-hour wait and an eighteen-hour one differently.
+ * Past a day the two agree, and both say `<n>d`.
+ */
+function elapsedLabel(at: string | null | undefined, now: number): string | null {
+  const rank = instantRank(at);
+  if (rank === Number.NEGATIVE_INFINITY || rank > now) return null;
+  const waited = now - rank;
+  if (waited < MINUTE_MS) return '<1m';
+  if (waited < HOUR_MS) return `${Math.floor(waited / MINUTE_MS)}m`;
+  if (waited < DAY_MS) return `${Math.floor(waited / HOUR_MS)}h`;
+  return `${Math.floor(waited / DAY_MS)}d`;
+}
+
+/** What the coordinator is doing with the item it holds, by the item's kind (§7.1 V2). */
+const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
+  INTEGRATION_CONFLICT: 'resolving a merge conflict',
+  INTEGRATION_CHECK_FAILED: 'checks failed',
+  INTEGRATION_ERROR: 'handling an integration error',
+  TASK_FAILED: 'handling a failed task',
+};
+
+/**
+ * What the row says the owner must do, by the item's kind — the words the waiting time is appended
+ * to (§7.1 V2).
+ *
+ * A `Record` over a closed set, like `ATTENTION_REASON_RANK`: a fifth owner-facing kind is a
+ * sentence somebody has to write, and it should say so at the compiler rather than draw an empty
+ * chip nobody looks at twice.
+ */
+const OWNER_ITEM_SAYS: Record<OwnerItemKind, (item: ProjectOwnerItem) => string> = {
+  PROMOTION_APPROVAL: () => 'Needs you · Approve merge to main',
+  COORDINATOR_QUESTION: (item) =>
+    `Needs you · ${item.count} question${item.count === 1 ? '' : 's'} from coordinator`,
+  ESCALATED: (item) => `Needs you · ${item.count} escalated to you`,
+  FUSE_PAUSED: () => 'Paused · coordinator stopped itself',
+};
+
 /** Returns a new array; the React Query cache's array is never sorted in place. */
 export function orderWithinSection<T extends AttentionProject>(
   key: AttentionSectionKey,
@@ -255,6 +385,13 @@ export function orderWithinSection<T extends AttentionProject>(
       const byReason = (left ? ATTENTION_REASON_RANK[left] : Number.MAX_SAFE_INTEGER)
         - (right ? ATTENTION_REASON_RANK[right] : Number.MAX_SAFE_INTEGER);
       if (byReason) return byReason;
+      if (isOwnerItemReason(left) && isOwnerItemReason(right)) {
+        const byWait = byInstantAsc(
+          leadOwnerItem(a)?.oldestWaitingSince,
+          leadOwnerItem(b)?.oldestWaitingSince,
+        );
+        if (byWait) return byWait;
+      }
       if (
         (left === 'needs-user' && right === 'needs-user') ||
         (left === 'auto-remediation' && right === 'auto-remediation')
@@ -309,6 +446,27 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
   const reason = attentionReasonOf(project, now);
   if (!reason) return null;
 
+  // What the owner has to go and do, and how long it has been waiting for them. The four are one
+  // sentence with the kind's own words in it, so the chip and the phone's banner and the card that
+  // opens behind the tap all name the same thing (§7.6 V12).
+  if (isOwnerItemReason(reason)) {
+    const item = leadOwnerItem(project);
+    if (!item) return null;
+    const age = elapsedLabel(item.oldestWaitingSince, now);
+    const says = OWNER_ITEM_SAYS[item.kind](item);
+    return { tone: 'warning', text: [says, age].filter(Boolean).join(' · ') };
+  }
+
+  if (reason === 'coordinator-handling') {
+    const held = project.attention?.coordinatorItems;
+    if (!held) return null;
+    const age = elapsedLabel(held.oldestWaitingSince, now);
+    return {
+      tone: 'brand',
+      text: ['Coordinator', COORDINATOR_LEAD_COPY[held.leadKind], age].filter(Boolean).join(' · '),
+    };
+  }
+
   if (reason === 'needs-user') {
     const blockers = project.attention?.userBlockers ?? 0;
     const severity = project.attention?.maxSeverity;
@@ -359,4 +517,28 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
     return { tone: 'warning', text: `Running · no activity ${days}d` };
   }
   return { tone: 'warning', text: `Ready · no activity ${days}d` };
+}
+
+/** Where a project's finished work lands, as the row states it beside the title. */
+export interface IntegrationChip {
+  /** The branch's name. On a `MAIN` line it is the upstream the project merges into. */
+  text: string;
+  /** Whether to draw the branch mark: a project branch is a branch, `main` is where everything
+   *  ends up, and the mock marks only the first. */
+  branch: boolean;
+}
+
+/**
+ * The line a row lands on (§7.1 V1/V2): `project/bg-jobs` for a project branch, `main` for a project
+ * that merges straight into it.
+ *
+ * Stated in the branch's own name rather than as the word "main" always: a project whose upstream
+ * is called `master` or `develop` would otherwise be told a branch it does not merge into. Nothing
+ * at all when no line has been decided and nothing has integrated — a project that has not chosen
+ * is not one that chose main.
+ */
+export function integrationChipOf(project: AttentionProject): IntegrationChip | null {
+  const integration = project.integration;
+  if (!integration) return null;
+  return { text: integration.ref, branch: integration.line === 'PROJECT_BRANCH' };
 }

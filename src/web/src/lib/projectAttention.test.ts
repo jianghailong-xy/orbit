@@ -1,19 +1,54 @@
 import { describe, expect, it } from 'vitest';
+import type { CoordinatorLeadKind, OwnerItemKind } from '@orbit/shared';
 import {
   QUIET_MS,
   attentionChipOf,
   attentionReasonOf,
   attentionSectionOf,
   failedTaskCount,
+  integrationChipOf,
   orderWithinSection,
   projectAttentionSections,
   type AttentionProject,
   type AttentionSectionKey,
+  type ProjectAttentionSummary,
 } from './projectAttention';
 
 const NOW = Date.parse('2026-08-23T18:55:05.000Z');
 const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
 const at = (msBeforeNow: number) => new Date(NOW - msBeforeNow).toISOString();
+
+/** One of the four items a project can be waiting on its OWNER for, as the list payload states it
+ *  (§7.1 V1). */
+const ownerItem = (kind: OwnerItemKind, count: number, waitedMs: number) => ({
+  kind,
+  count,
+  oldestWaitingSince: at(waitedMs),
+});
+
+/** The exception the project's coordinator is handling, as the list payload states it (§7.1 V1). */
+const coordinatorItems = (leadKind: CoordinatorLeadKind, waitedMs: number, count = 1) => ({
+  leadKind,
+  count,
+  oldestWaitingSince: at(waitedMs),
+  nextEscalationAt: at(-90 * MINUTE),
+});
+
+/** The blocker summary with the two item fields, so a fixture states only what it is about. */
+function attention(over: Partial<ProjectAttentionSummary> = {}): ProjectAttentionSummary {
+  return {
+    userBlockers: 0,
+    coordinatorBlockers: 0,
+    systemBlockers: 0,
+    maxSeverity: null,
+    attentionSinceAt: null,
+    nextCheckAt: null,
+    ownerItems: [],
+    coordinatorItems: null,
+    ...over,
+  };
+}
 
 let nextId = 0;
 
@@ -414,5 +449,230 @@ describe('attentionChipOf', () => {
       project({ status: 'DONE', buckets: { done: 1 }, lastActivityAt: at(20 * QUIET_MS) }),
     ];
     for (const row of rows) expect(attentionChipOf(row, NOW)).toBeNull();
+  });
+});
+
+/**
+ * The five reasons §7.1 V2 adds, each one an item the project is actually waiting on rather than a
+ * tally of blockers: what the row says is what the reader has to go and do, and how long it has
+ * been waiting for them.
+ */
+describe('attention by reason', () => {
+  it('names the merge waiting on the owner, and takes a busy project out of Running', () => {
+    // Mock 1's first row: four tasks in flight AND a branch waiting to be merged. Fresh activity
+    // does not keep the row in Running — an item sitting on a person outranks ordinary work.
+    const row = project({
+      buckets: { running: 4, ready: 2, done: 27 },
+      lastActivityAt: at(12 * MINUTE),
+      attention: attention({ ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, 2 * HOUR)] }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('approve-merge-to-main');
+    expect(attentionSectionOf(row, NOW)).toBe('attention');
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Needs you · Approve merge to main · 2h',
+    });
+  });
+
+  it('counts the questions the coordinator is waiting on an answer to', () => {
+    const one = project({
+      buckets: { running: 2, blocked: 3 },
+      attention: attention({ ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, 35 * MINUTE)] }),
+    });
+    const two = project({
+      buckets: { running: 2 },
+      attention: attention({ ownerItems: [ownerItem('COORDINATOR_QUESTION', 2, 35 * MINUTE)] }),
+    });
+    for (const row of [one, two]) {
+      expect(attentionReasonOf(row, NOW)).toBe('coordinator-question');
+      expect(attentionSectionOf(row, NOW)).toBe('attention');
+    }
+    expect(attentionChipOf(one, NOW)?.text).toBe('Needs you · 1 question from coordinator · 35m');
+    expect(attentionChipOf(two, NOW)?.text).toBe('Needs you · 2 questions from coordinator · 35m');
+  });
+
+  it('counts the exceptions that escalated to the owner', () => {
+    const row = project({
+      buckets: { blocked: 4 },
+      attention: attention({ ownerItems: [ownerItem('ESCALATED', 3, 4 * HOUR)] }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('escalated-to-you');
+    expect(attentionSectionOf(row, NOW)).toBe('attention');
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Needs you · 3 escalated to you · 4h',
+    });
+  });
+
+  it('states a pause as a pause, not as one more thing the owner must approve', () => {
+    const row = project({
+      buckets: { running: 1, done: 9 },
+      lastActivityAt: at(MINUTE),
+      attention: attention({ ownerItems: [ownerItem('FUSE_PAUSED', 1, 20 * MINUTE)] }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('fuse-paused');
+    expect(attentionSectionOf(row, NOW)).toBe('attention');
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Paused · coordinator stopped itself · 20m',
+    });
+  });
+
+  it('leads with the item that has waited longest, whatever else is also waiting', () => {
+    const row = project({
+      attention: attention({
+        ownerItems: [
+          ownerItem('COORDINATOR_QUESTION', 2, 35 * MINUTE),
+          ownerItem('PROMOTION_APPROVAL', 1, 2 * HOUR),
+          ownerItem('FUSE_PAUSED', 1, 20 * MINUTE),
+        ],
+      }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('approve-merge-to-main');
+    expect(attentionChipOf(row, NOW)?.text).toBe('Needs you · Approve merge to main · 2h');
+  });
+
+  it('settles two items that have waited equally long on one kind, so the chip does not flicker', () => {
+    const row = project({
+      attention: attention({
+        ownerItems: [
+          ownerItem('FUSE_PAUSED', 1, HOUR),
+          ownerItem('COORDINATOR_QUESTION', 1, HOUR),
+        ],
+      }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('coordinator-question');
+  });
+
+  it('makes no age claim from a wait it cannot read', () => {
+    const row = project({
+      attention: attention({
+        ownerItems: [
+          {
+            kind: 'PROMOTION_APPROVAL',
+            count: 1,
+            oldestWaitingSince: new Date(NOW + HOUR).toISOString(),
+          },
+        ],
+      }),
+    });
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'warning',
+      text: 'Needs you · Approve merge to main',
+    });
+  });
+
+  it('names the coordinator’s own exception in brand, in the lane the project earned', () => {
+    // Mock 1's fourth row: work is running, the coordinator is resolving the conflict itself, and
+    // the row stays in Running.
+    const row = project({
+      buckets: { running: 3, ready: 2, done: 5 },
+      lastActivityAt: at(MINUTE),
+      attention: attention({ coordinatorItems: coordinatorItems('INTEGRATION_CONFLICT', 18 * MINUTE) }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('coordinator-handling');
+    expect(attentionSectionOf(row, NOW)).toBe('running');
+    expect(attentionChipOf(row, NOW)).toEqual({
+      tone: 'brand',
+      text: 'Coordinator · resolving a merge conflict · 18m',
+    });
+  });
+
+  it.each([
+    ['INTEGRATION_CHECK_FAILED', 'Coordinator · checks failed · 3h'],
+    ['INTEGRATION_ERROR', 'Coordinator · handling an integration error · 3h'],
+    ['TASK_FAILED', 'Coordinator · handling a failed task · 3h'],
+  ] as const)('names what the coordinator is doing with a %s', (leadKind, text) => {
+    const row = project({
+      buckets: { running: 1 },
+      lastActivityAt: at(MINUTE),
+      attention: attention({ coordinatorItems: coordinatorItems(leadKind, 3 * HOUR) }),
+    });
+    expect(attentionChipOf(row, NOW)).toEqual({ tone: 'brand', text });
+  });
+
+  it('never lands a coordinator-handled exception in Needs attention', () => {
+    for (const buckets of [
+      { running: 1 },
+      { ready: 2 },
+      { blocked: 3 },
+      { running: 1, ready: 1, blocked: 1 },
+    ]) {
+      const row = project({
+        buckets,
+        lastActivityAt: at(HOUR),
+        attention: attention({ coordinatorItems: coordinatorItems('INTEGRATION_CONFLICT', 9 * HOUR) }),
+      });
+      expect(attentionSectionOf(row, NOW)).not.toBe('attention');
+    }
+    // …and the same row is findable from the lane its activity earned.
+    const running = project({
+      buckets: { running: 1 },
+      lastActivityAt: at(HOUR),
+      attention: attention({ coordinatorItems: coordinatorItems('INTEGRATION_CONFLICT', 9 * HOUR) }),
+    });
+    expect(projectAttentionSections([running], NOW).find((s) => s.key === 'running')?.projects)
+      .toEqual([running]);
+  });
+
+  it('draws exactly what it drew before when a server reports neither field', () => {
+    // The negative control: this row is green on both sides of the change, which is what says the
+    // new chips are the change and not the harness.
+    const fresh = project({ buckets: { running: 1 }, lastActivityAt: at(HOUR) });
+    const quiet = project({ buckets: { ready: 1 }, lastActivityAt: at(2 * QUIET_MS) });
+    expect(attentionReasonOf(fresh, NOW)).toBeNull();
+    expect(attentionChipOf(fresh, NOW)).toBeNull();
+    expect(attentionSectionOf(fresh, NOW)).toBe('running');
+    expect(attentionChipOf(quiet, NOW)).toEqual({ tone: 'warning', text: 'Ready · no activity 2d' });
+  });
+});
+
+describe('owner reasons inside Needs attention', () => {
+  it('puts all four above a user blocker, oldest wait first', () => {
+    const blocker = project({
+      title: 'Blocker',
+      attention: attention({
+        userBlockers: 1,
+        maxSeverity: 'CRITICAL',
+        attentionSinceAt: at(9 * QUIET_MS),
+      }),
+    });
+    const merge = project({
+      title: 'Merge',
+      attention: attention({ ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, 2 * HOUR)] }),
+    });
+    const question = project({
+      title: 'Question',
+      attention: attention({ ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, 35 * MINUTE)] }),
+    });
+    const paused = project({
+      title: 'Paused',
+      attention: attention({ ownerItems: [ownerItem('FUSE_PAUSED', 1, 20 * MINUTE)] }),
+    });
+    const escalated = project({
+      title: 'Escalated',
+      attention: attention({ ownerItems: [ownerItem('ESCALATED', 2, 5 * HOUR)] }),
+    });
+
+    expect(
+      orderWithinSection('attention', [blocker, question, merge, paused, escalated], NOW)
+        .map((row) => row.title),
+    ).toEqual(['Escalated', 'Merge', 'Question', 'Paused', 'Blocker']);
+  });
+});
+
+describe('integrationChipOf', () => {
+  it('marks a project branch, and states the line a project lands on directly', () => {
+    const branch = project({ integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' } });
+    const main = project({ integration: { line: 'MAIN', ref: 'main' } });
+    expect(integrationChipOf(branch)).toEqual({ branch: true, text: 'project/bg-jobs' });
+    // Not printed as the word "main": a project whose upstream is called something else would be
+    // told a branch name it does not merge into.
+    expect(integrationChipOf(main)).toEqual({ branch: false, text: 'main' });
+  });
+
+  it('draws no line for a project that has not decided one, or a server that sends none', () => {
+    expect(integrationChipOf(project())).toBeNull();
+    expect(integrationChipOf(project({ integration: null }))).toBeNull();
   });
 });
