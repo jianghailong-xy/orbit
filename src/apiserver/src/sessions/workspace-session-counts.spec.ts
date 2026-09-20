@@ -112,6 +112,15 @@ test('workspace counts separate queued activity from Session-list spinner work',
     // This proposal has neither, so it is still a question — which is why `w-decision` needs you.
     projectRatifiedActionCommit: { findMany: async () => [] },
     projectCriteriaDecision: { findMany: async () => [] },
+    // The fourth source the signal counts, read inside the same `readProjectDecisionSignals` as the
+    // proposal above because it lands the same way — a project decision waiting on the coordinator's
+    // conversation (`standard-set-awaiting-confirmation.ts`, the confirmation card's own four facts).
+    // Its three reads answer with nothing here, which is what the card not being drawn looks like:
+    // `p-1` states no criteria and holds no task, and either fact alone closes the question. So
+    // every `needsYou` below is still a statement about the held proposal.
+    projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    projectStandardSetConfirmation: { findMany: async () => [] },
+    projectTaskStatusCount: { findMany: async () => [] },
     // The other kind of owner decision, evidence waiting on the coordinator's card: none here.
     task: { findMany: async () => [] },
     // And the third, an OWNER_CONFIRMED task's run waiting on its owner in the task's own session:
