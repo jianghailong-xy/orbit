@@ -344,6 +344,13 @@ func TestMCPTaskCreateDescriptionsAskWhatSettlesTheTask(t *testing.T) {
 		if !strings.Contains(text, "the person") || !strings.Contains(text, "theirs to state") {
 			t.Fatalf("%s description does not say who settles the criteria or whose they are: %q", name, text)
 		}
+		// Naming the addressee was still not enough: sessions that read that copy composed the
+		// criteria themselves and treated the confirmation card as the review. So the copy has to
+		// say what to do INSTEAD of calling — ask, and stop there. Without this the field reads as
+		// one to fill in before the call, which is how a batch of invented criteria gets filed.
+		if !strings.Contains(text, "end your turn") {
+			t.Fatalf("%s description does not tell the caller to stop and ask instead of writing: %q", name, text)
+		}
 		// Layer two: where one command decides it, the command IS the judgement. Naming the field is
 		// not enough — the exit code has to be named as what settles the task, or the reader has no
 		// reason to believe the run ends without a human.
