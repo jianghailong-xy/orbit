@@ -754,13 +754,33 @@ const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
  * token is `TASK_RUN_TRIGGER.dependency` spelled in SQL — a UUID's text form is the lowercase one
  * Prisma returns, a BIGINT's is its digits — and `receipt`/`moment` rather than `r`/`e`, because the
  * sweep's own scan joins `runner r` and `task_dispatch_epoch e` around it.
+ *
+ * The epoch is an argument rather than a correlated subquery, so a caller whose own statement
+ * already joins the moment can name that join instead of reading the row a second time. That is
+ * not a micro-optimisation: a correlated subquery here is evaluated once per candidate row, and
+ * `endedAutoRunMoments` scans the DEPLOYMENT, so on 2026-09-20 it evaluated 109,792 index scans
+ * (440k buffer touches) to re-read a row the plan had already joined into the same statement —
+ * 930ms of a 1.8s statement, and half the deployment's plan cost. `task_dispatch_epoch.task_id` is
+ * UNIQUE and that join is an inner one, so the two readings cannot differ.
+ *
+ * The two candidate predicates pass the correlated form because they do not reach this subquery
+ * with the deployment's rows: their anchors narrow the set first, and the sweep measures it 4
+ * times rather than 109,792 — nothing worth a second change to a live measurement, which is not
+ * the same as it being free.
  */
-const AUTO_RUN_MOMENT_DISPATCHED_SQL = Prisma.sql`
+const AUTO_RUN_MOMENT_DISPATCHED_SQL = (epoch: Prisma.Sql) => Prisma.sql`
   receipt.owner_id = t.owner_id
   AND receipt.action_kind = ${TASK_RUN_ACTION.execute}
   AND receipt.request_token = 'dep:' || t.id::text || ':'
-    || (SELECT moment.epoch FROM task_dispatch_epoch moment WHERE moment.task_id = t.id)::text
+    || ${epoch}::text
   AND receipt.status = 'COMPLETED'`;
+
+/**
+ * The moment read through a correlated subquery — the form the two candidate predicates below
+ * pass, kept spelled exactly as it was: their statements are mid measurement, and a change here
+ * is a new queryid for both of them.
+ */
+const CORRELATED_DISPATCH_MOMENT_SQL = Prisma.sql`(SELECT moment.epoch FROM task_dispatch_epoch moment WHERE moment.task_id = t.id)`;
 
 /**
  * The auto-run sweep's candidate predicate (see reconcileReadyTasks), correlated to an outer
@@ -876,7 +896,9 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- again is answered from that moment's receipt with the run it already started, and starts
   -- nothing (AUTO_RUN_MOMENT_DISPATCHED_SQL). A run that ended and may be retried comes back at a
   -- new moment instead (rearmEndedAutoRuns).
-  AND NOT EXISTS (SELECT 1 FROM task_run_request receipt WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL})`;
+  AND NOT EXISTS (
+    SELECT 1 FROM task_run_request receipt
+    WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL(CORRELATED_DISPATCH_MOMENT_SQL)})`;
 
 /**
  * The candidate predicate for a Project's tasks that depend on NOTHING (see
@@ -919,7 +941,9 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
         ', ',
       )})
   )
-  AND NOT EXISTS (SELECT 1 FROM task_run_request receipt WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL})`;
+  AND NOT EXISTS (
+    SELECT 1 FROM task_run_request receipt
+    WHERE ${AUTO_RUN_MOMENT_DISPATCHED_SQL(CORRELATED_DISPATCH_MOMENT_SQL)})`;
 
 /**
  * An auto-run task the retry policy may re-arm (see rearmEndedAutoRuns), correlated to an outer
@@ -9705,7 +9729,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         FROM task t
         JOIN workspace a ON a.id = t.assignee_id
         JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
-        JOIN task_run_request receipt ON ${AUTO_RUN_MOMENT_DISPATCHED_SQL}
+        JOIN task_run_request receipt ON ${AUTO_RUN_MOMENT_DISPATCHED_SQL(Prisma.sql`current_moment.epoch`)}
         LEFT JOIN session run ON run.id = (receipt.result->>'sessionId')::uuid
        WHERE ${AUTO_RUN_RETRY_CANDIDATE_SQL}
          AND ${scope}`);
