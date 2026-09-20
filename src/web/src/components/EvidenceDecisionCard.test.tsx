@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pendingDecisionsQuery } from '../lib/queries';
 import { CARD_ACTION_CLASS } from './CardAction';
+import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import {
   decisionRowKey,
@@ -238,9 +239,31 @@ async function settle(): Promise<void> {
   }
 }
 
+/** The words ON a button. The key hint the card draws inside it (`CardHotkey.ts`) is a span of its
+ *  own and is not part of the action's label — a label is what the button does, not what presses it. */
+function labelOf(button: HTMLButtonElement): string {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+}
+
+/** What a control draws INSIDE itself to say which key presses it, or nothing. */
+const hintOn = (button: HTMLElement): string | null =>
+  button.querySelector('.approval-kbd')?.textContent ?? null;
+
+/** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
+async function key(init: KeyboardEventInit = {}): Promise<void> {
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+    );
+  });
+  await settle();
+}
+
 function action(scope: HTMLElement, label: string): HTMLButtonElement | undefined {
   return [...scope.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => (button.textContent ?? '').replace(/[▾▴]/gu, '') === label,
+    (button) => labelOf(button).replace(/[▾▴]/gu, '') === label,
   );
 }
 
@@ -709,6 +732,80 @@ describe('a press, end to end inside the browser', () => {
     expect(apiMock).not.toHaveBeenCalled();
     expect(rendered.querySelectorAll('[data-decision-row]')).toHaveLength(1);
     expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
+  });
+
+  it('takes the keyboard: the bare key confirms and the chord is the same handoff the button makes', async () => {
+    const live = row();
+    const onSendBack = vi.fn();
+    const qc = newClient();
+    qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([live]));
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST' ? receipt() : queue([])) as never);
+
+    const rendered = await mount(
+      <QueryClientProvider client={qc}>
+        <SessionEvidenceDecisionCard
+          sessionId={SESSION_ID}
+          projectId={PROJECT_ID}
+          onSendBack={onSendBack}
+        />
+      </QueryClientProvider>,
+    );
+
+    // One card asking, so it holds the keys — and each control says which key presses it, on the
+    // control itself: a shortcut nobody can see is a shortcut nobody has.
+    expect(hintOn(press(rendered, DECISION_CONFIRM_ACTION))).toBe(ENTER_HINT);
+    expect(hintOn(press(rendered, OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+
+    // The chord first, because it leaves the card standing: it hands the row over and reaches no
+    // door, which is exactly what its button does.
+    await key({ metaKey: true });
+    expect(onSendBack.mock.calls).toEqual([[live]]);
+    expect(apiMock, 'the chord reached the door').not.toHaveBeenCalled();
+    expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
+
+    // And the bare key is the press itself: the same request the button sends, about the version
+    // the card was drawn for.
+    await key();
+    const posts = apiMock.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === 'POST',
+    );
+    expect(posts).toEqual([
+      [
+        `/tasks/${TASK_ID}/evidence/decision`,
+        {
+          method: 'POST',
+          body: { decidingSessionId: SESSION_ID, evidenceRevision: '2', decision: 'CONFIRM' },
+        },
+      ],
+    ]);
+  });
+
+  it('stands down while two versions of one task are asking at once', async () => {
+    // This is the one card of the four that can be on screen more than once — one per version of
+    // the evidence — and the keys are held by the ONLY card asking or by none: with two questions
+    // up, one press would have to choose between them (`CardHotkey.ts`).
+    const first = row();
+    const second = row({ evidenceRevision: '3', claim: 'A newer version of the same evidence.' });
+    const qc = newClient();
+    qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([first, second]));
+
+    const rendered = await mount(
+      <QueryClientProvider client={qc}>
+        <SessionEvidenceDecisionCard
+          sessionId={SESSION_ID}
+          projectId={PROJECT_ID}
+          onSendBack={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    expect(rendered.querySelectorAll('[data-decision-row]'), 'both versions were asking').toHaveLength(2);
+    for (const button of rendered.querySelectorAll<HTMLElement>('button.card-action')) {
+      expect(hintOn(button), 'a card showed a key it cannot honour').toBeNull();
+    }
+
+    await key();
+    expect(apiMock, 'one press decided two versions').not.toHaveBeenCalled();
   });
 });
 

@@ -8,6 +8,7 @@ import {
   readAcceptanceConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
+import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, PROVENANCE_TITLE } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
@@ -356,6 +357,7 @@ export function ProjectSettlementCard({
   settled,
   busy = false,
   error = null,
+  keys = false,
   onConfirm,
   onChatAbout,
 }: {
@@ -367,6 +369,8 @@ export function ProjectSettlementCard({
   settled: boolean;
   busy?: boolean;
   error?: Error | null;
+  /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
+  keys?: boolean;
   onConfirm: () => void;
   onChatAbout: () => void;
 }): JSX.Element {
@@ -490,10 +494,15 @@ export function ProjectSettlementCard({
               onClick={onConfirm}
             >
               {SETTLEMENT_CONFIRM_ACTION}
+              {/* Each key follows the button it presses rather than the card: this press may be
+                  dark — one in flight, or a set nobody has stood behind — while the other answer is
+                  still the way out. */}
+              {keys && !busy && confirmable && <span className="approval-kbd">{ENTER_HINT}</span>}
             </button>
           ) : null}
           <button type="button" className="card-action card-action--secondary" onClick={onChatAbout}>
             {OWNER_SEND_BACK_ACTION}
+            {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
           </button>
           <span className="project-settlement-hint">{SETTLEMENT_CHAT_HINT}</span>
         </div>
@@ -560,27 +569,46 @@ export function SessionProjectSettlementCard({
     },
   });
 
+  // The two presses, named once so that the buttons and the keys make the same one — the same
+  // guards, whether the press came from a finger or the keyboard. Each key follows its own
+  // button's liveness, and the two are not dead together: the confirmation is offered only while
+  // the set is one nobody has stood behind, and talking about it never depends on that
+  // (`CardHotkey.ts`).
+  const standing = standingRead.data ?? null;
+  const confirmSet = (): void => {
+    if (!standing || standing.confirmed || confirm.isPending) return;
+    confirm.mutate(standing.currentVersion.digest);
+  };
+  const chatAbout = (): void => {
+    if (document === null) return;
+    onChatAbout?.({
+      projectId: project,
+      projectTitle: document.title || project,
+      facts: projectSettlementContext(document),
+    });
+  };
+  const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
+  const confirmable = standing != null && standing.state !== 'CONFIRMED';
+  const asking = shown && document !== null && !settled;
+  const keys = useDecisionCardKeys({
+    confirmEnabled: asking && offersConfirmation && confirmable && !confirm.isPending,
+    chatEnabled: asking,
+    onConfirm: confirmSet,
+    onChatAbout: chatAbout,
+  });
+
   if (!shown || document === null) return null;
   const title = document.title || project;
   return (
     <ProjectSettlementCard
       project={document}
-      standing={standingRead.data ?? null}
+      standing={standing}
       settled={settled}
       busy={confirm.isPending}
       error={confirm.isError ? confirm.error : null}
-      onConfirm={() => {
-        const standing = standingRead.data;
-        if (!standing || standing.confirmed || confirm.isPending) return;
-        confirm.mutate(standing.currentVersion.digest);
-      }}
-      onChatAbout={() =>
-        onChatAbout?.({
-          projectId: project,
-          projectTitle: title,
-          facts: projectSettlementContext(document),
-        })
-      }
+      keys={keys}
+      onConfirm={confirmSet}
+      onChatAbout={chatAbout}
     />
   );
 }

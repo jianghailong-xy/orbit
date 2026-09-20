@@ -30,6 +30,7 @@ import {
   type ConfirmationCriterion,
 } from './AcceptanceConfirmationCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
+import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { shortSeal } from './CriteriaDecisionCard';
 
 /**
@@ -239,7 +240,15 @@ const receiptStampOf = (receipt: HTMLElement): string =>
 const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
   ...card.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
 ];
-const labelsOf = (card: HTMLElement): Array<string | null> => actionsOf(card).map((b) => b.textContent);
+/** The words ON a button. The key hint the card draws inside it (`CardHotkey.ts`) is a span of its
+ *  own and is not part of the action's label — a label is what the button does, not what presses it. */
+function labelOf(button: HTMLButtonElement): string {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+}
+
+const labelsOf = (card: HTMLElement): string[] => actionsOf(card).map(labelOf);
 /** The criteria as they are on screen right now — no toggle pressed. */
 const criteriaOn = (card: HTMLElement): string[] => [
   ...card.querySelectorAll('.settlement-card-criteria li'),
@@ -252,6 +261,20 @@ const metaOf = (card: HTMLElement): string =>
  *  each field is compared as the whole field it is. */
 const metaFieldsOf = (card: HTMLElement): string[] => metaOf(card).split(' · ');
 
+/** What a control draws INSIDE itself to say which key presses it, or nothing. */
+const hintOn = (button: HTMLElement): string | null =>
+  button.querySelector('.approval-kbd')?.textContent ?? null;
+
+/** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
+async function key(init: KeyboardEventInit = {}): Promise<void> {
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+    );
+  });
+  await turn();
+}
+
 /** The reading control. Deliberately not looked up among the actions: it is not one. */
 const readToggle = (card: HTMLElement): HTMLButtonElement => {
   const found = card.querySelector<HTMLButtonElement>('.settlement-card-read');
@@ -260,9 +283,9 @@ const readToggle = (card: HTMLElement): HTMLButtonElement => {
 };
 
 function action(card: HTMLElement, label: string): HTMLButtonElement {
-  const found = actionsOf(card).find((button) => button.textContent === label);
+  const found = actionsOf(card).find((button) => labelOf(button) === label);
   if (!found) {
-    throw new Error(`no "${label}" on the card; it offers ${actionsOf(card).map((b) => `"${b.textContent}"`).join(', ')}`);
+    throw new Error(`no "${label}" on the card; it offers ${actionsOf(card).map((b) => `"${labelOf(b)}"`).join(', ')}`);
   }
   return found;
 }
@@ -624,7 +647,12 @@ describe('the two actions, reading the set, and starting the project', () => {
     // records, and both buttons ask `CardAction` for their size rather than naming one.
     for (const button of actionsOf(card())) {
       expect(button.className).toContain('card-action');
-      expect(button.querySelectorAll('*'), 'an action grew a second line').toHaveLength(0);
+      // The key hint is the one element an action may hold, and it is not a line of its own: what
+      // this refuses is a subtitle beside the label (`ApprovalCards.swift`).
+      expect(
+        [...button.querySelectorAll('*')].filter((el) => !el.classList.contains('approval-kbd')),
+        'an action grew a second line',
+      ).toHaveLength(0);
     }
   });
 
@@ -697,6 +725,35 @@ describe('the two actions, reading the set, and starting the project', () => {
 
     expect(presses()).toEqual([`POST ${STANDING_PATH} ${CURRENT}`]);
     expect(qc.getQueryData(acceptanceConfirmationKey(PROJECT))).toEqual(standingOf('CONFIRMED'));
+  });
+
+  it('takes the keyboard: the bare key starts the project and the chord is the button that talks', async () => {
+    const { node, card } = await delivered();
+
+    // One card asking, so it holds the keys — and each control says which key presses it, on the
+    // control itself: a shortcut nobody can see is a shortcut nobody has.
+    expect(hintOn(action(card(), ACCEPTANCE_START_LABEL))).toBe(ENTER_HINT);
+    expect(hintOn(action(card(), OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+
+    // The chord first, because it leaves the card standing: it hands the plan over and reaches no
+    // door, exactly as the button does.
+    await key({ metaKey: true });
+    expect(armed, 'the composer was not armed, or armed more than once').toHaveLength(1);
+    expect(armed[0]).toEqual({
+      projectId: PROJECT,
+      criteriaDigest: CURRENT,
+      projectTitle: TITLE,
+      criteria: NONE_MET.map((item) => item.text),
+    });
+    expect(presses(), 'the chord reached the door').toEqual([]);
+    expect(cardsIn(node), 'the card went away when the chord talked').toHaveLength(1);
+
+    // And the bare key is the press itself, sending the same version the button sends — and, like
+    // the button, leaving this page with the question answered. The record of it is the
+    // conversation's now, drawn by `WorkspaceView` off the standing the door writes back.
+    await key();
+    await until(() => cardsIn(node).length === 0, 'the answered card to go');
+    expect(presses()).toEqual([`POST ${STANDING_PATH} ${CURRENT}`]);
   });
 });
 

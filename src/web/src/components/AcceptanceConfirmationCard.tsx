@@ -10,6 +10,7 @@ import {
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import { CardActionButton, CardActions } from './CardAction';
+import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
 // The words this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module again
@@ -377,6 +378,7 @@ export function AcceptanceConfirmationCard({
   started,
   busy = false,
   error = null,
+  keys = false,
   onStart,
   onChatAbout,
 }: {
@@ -393,6 +395,8 @@ export function AcceptanceConfirmationCard({
   busy?: boolean;
   /** The door's refusal of the last press, when it refused. */
   error?: Error | null;
+  /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
+  keys?: boolean;
   onStart: () => void;
   /** Hands the reply to the bottom composer. The card stays and `onStart` stays live. */
   onChatAbout: () => void;
@@ -463,12 +467,17 @@ export function AcceptanceConfirmationCard({
             already handing work out and is being re-confirmed (`acceptanceActionLabel`). */}
         <CardActionButton tone="primary" disabled={busy || !answerable} onClick={onStart}>
           {acceptanceActionLabel(started)}
+          {/* The key and the button it presses are one fact, so the hint follows THIS button's own
+              `disabled` and not the card's: a plan that moved at another end keeps the chord live
+              while the primary is dark. */}
+          {keys && !(busy || !answerable) && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {/* The same control, and the same word for it, as the other three cards that hand a
             reply to the composer. Dead only where there is no version to talk about: a standing
             that could not be read names none. */}
         <CardActionButton tone="secondary" disabled={standing === null} onClick={onChatAbout}>
           {OWNER_SEND_BACK_ACTION}
+          {keys && standing !== null && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
     </div>
@@ -613,8 +622,39 @@ export function SessionAcceptanceConfirmationCard({
   // A press made HERE gives the card up: the question is answered. A confirmation made at ANOTHER
   // end does not — that card stays where it is, going stale in place, because a reader halfway
   // through it must not watch it vanish while somebody else answers (`shown`).
-  if (!shown || confirm.isSuccess) return null;
   const title = document?.title || project;
+
+  // The two presses, named once so that the buttons and the keys make the same one. What each needs
+  // is what its own `disabled` says: the primary needs a standing that can be answered and no press
+  // in flight, the second needs only a version to talk about — a card whose plan moved at another
+  // end keeps that one live, so the chord follows the button rather than the card (`CardHotkey.ts`).
+  const start = (): void => {
+    if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
+    confirm.mutate(standing.currentVersion.digest);
+  };
+  const talkAbout = (): void => {
+    if (standing === null) return;
+    onChatAbout?.({
+      projectId: project,
+      criteriaDigest: standing.currentVersion.digest,
+      projectTitle: title,
+      criteria: [...(criteria ?? [])]
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((item) => item.text),
+    });
+  };
+  // A press in flight, or one the door has taken, is not a card that can be answered: the two
+  // answers are dead together, and the second one leaves by the composer rather than by a press
+  // here, which changes where the reason is typed and not whether this card can be answered.
+  const asking = shown && !confirm.isSuccess;
+  const keys = useDecisionCardKeys({
+    confirmEnabled: asking && !confirm.isPending && acceptanceConfirmationAnswerable(standing),
+    chatEnabled: asking && standing !== null,
+    onConfirm: start,
+    onChatAbout: talkAbout,
+  });
+
+  if (!shown || confirm.isSuccess) return null;
   return (
     <AcceptanceConfirmationCard
       standing={standing}
@@ -625,21 +665,9 @@ export function SessionAcceptanceConfirmationCard({
       started={document?.coordinatorEnabled ?? null}
       busy={confirm.isPending}
       error={confirm.isError ? confirm.error : null}
-      onStart={() => {
-        if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
-        confirm.mutate(standing.currentVersion.digest);
-      }}
-      onChatAbout={() => {
-        if (standing === null) return;
-        onChatAbout?.({
-          projectId: project,
-          criteriaDigest: standing.currentVersion.digest,
-          projectTitle: title,
-          criteria: [...(criteria ?? [])]
-            .sort((a, b) => a.ordinal - b.ordinal)
-            .map((item) => item.text),
-        });
-      }}
+      keys={keys}
+      onStart={start}
+      onChatAbout={talkAbout}
     />
   );
 }

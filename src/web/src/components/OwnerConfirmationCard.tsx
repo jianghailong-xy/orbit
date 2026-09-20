@@ -6,6 +6,7 @@ import { api } from '../api';
 import { markdownToPlainText } from '../lib/markdownText';
 import { ownerConfirmationQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
+import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import { revealOwnerConfirmationCard } from './DecisionRail';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
@@ -290,11 +291,15 @@ function OwnerConfirmationBoxes({
  */
 export function OwnerConfirmationActions({
   disabled,
+  keys = false,
   onConfirm,
   onSendBack,
 }: {
   /** Whether no answer from here could succeed right now. Every control below follows it. */
   disabled: boolean;
+  /** Whether this card holds the keyboard, and so shows the two keys on its buttons. Both buttons
+   *  are one `disabled` here, so both keys come and go with it. */
+  keys?: boolean;
   onConfirm: () => void;
   /** Hand the reply to the composer; the reason is whatever is sent next. */
   onSendBack: () => void;
@@ -304,9 +309,11 @@ export function OwnerConfirmationActions({
       <CardActions className="decision-ask-actions">
         <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
           {OWNER_CONFIRM_ACTION}
+          {keys && !disabled && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         <CardActionButton tone="secondary" disabled={disabled} onClick={onSendBack}>
           {OWNER_SEND_BACK_ACTION}
+          {keys && !disabled && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
       {/* Under the buttons and not inside the second one's tooltip: a touch screen has no hover,
@@ -322,6 +329,7 @@ export function OwnerConfirmationCard({
   waiting,
   busy = false,
   error = null,
+  keys = false,
   onDecide,
   onSendBack,
 }: {
@@ -331,6 +339,8 @@ export function OwnerConfirmationCard({
   busy?: boolean;
   /** The door's refusal of the last press, when it refused. */
   error?: Error | null;
+  /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
+  keys?: boolean;
   onDecide: (decision: OwnerDecision, note?: string) => void;
   /** Hand the send-back to the composer. The door is pressed by the send that follows, not here. */
   onSendBack: () => void;
@@ -365,7 +375,12 @@ export function OwnerConfirmationCard({
               description={error.message}
             />
           ) : null}
-          <OwnerConfirmationActions disabled={busy} onConfirm={() => onDecide('CONFIRM')} onSendBack={onSendBack} />
+          <OwnerConfirmationActions
+            disabled={busy}
+            keys={keys}
+            onConfirm={() => onDecide('CONFIRM')}
+            onSendBack={onSendBack}
+          />
         </section>
       </div>
     </div>
@@ -414,6 +429,25 @@ export function SessionOwnerConfirmationCard({
     if (reveal && shownRequest) revealOwnerConfirmationCard();
   }, [reveal, shownRequest]);
 
+  // One write and one handoff, called by the buttons and by the keys alike: the same press, whether
+  // it came from a finger or the keyboard. A card that is not asking holds no keys, and the hook is
+  // told so rather than left to guess (`CardHotkey.ts`).
+  const decide = (decision: OwnerDecision): void => {
+    if (!waiting) return;
+    answer.mutate({ requestId: waiting.requestId, decision });
+  };
+  const chatAbout = (): void => {
+    if (!read.data || !waiting) return;
+    onSendBack(waiting, read.data.title);
+  };
+  const asking = waiting !== null && read.data !== undefined && !answer.isPending;
+  const keys = useDecisionCardKeys({
+    confirmEnabled: asking,
+    chatEnabled: asking,
+    onConfirm: () => decide('CONFIRM'),
+    onChatAbout: chatAbout,
+  });
+
   if (!taskId || !read.data || !waiting) return null;
   return (
     <OwnerConfirmationCard
@@ -422,9 +456,9 @@ export function SessionOwnerConfirmationCard({
       waiting={waiting}
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}
-      onDecide={(decision, note) =>
-        answer.mutate({ requestId: waiting.requestId, decision, note })}
-      onSendBack={() => onSendBack(waiting, read.data.title)}
+      keys={keys}
+      onDecide={decide}
+      onSendBack={chatAbout}
     />
   );
 }

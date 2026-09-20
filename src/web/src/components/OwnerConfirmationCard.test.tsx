@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ownerConfirmationQuery } from '../lib/queries';
+import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { DecisionStrip, ownerConfirmationPointer, type PendingDecisionQueue } from './DecisionRail';
 import {
   OWNER_CONFIRMATION_HEADING,
@@ -188,10 +189,33 @@ async function mount(ui: JSX.Element): Promise<HTMLElement> {
   return node;
 }
 
+/** The words ON a button. The key hint the card draws inside it (`CardHotkey.ts`) is a span of its
+ *  own and is not part of the action's label — a label is what the button does, not what presses it. */
+function labelOf(button: HTMLButtonElement): string {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+}
+
+/** What a control draws INSIDE itself to say which key presses it, or nothing. */
+const hintOn = (button: HTMLElement): string | null =>
+  button.querySelector('.approval-kbd')?.textContent ?? null;
+
 function buttonIn(scope: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...scope.querySelectorAll('button')].filter((button) => button.textContent === label);
+  const found = [...scope.querySelectorAll('button')].filter((button) => labelOf(button) === label);
   expect(found.length, `buttons labelled ${label}`).toBe(1);
   return found[0] as HTMLButtonElement;
+}
+
+
+/** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
+async function key(init: KeyboardEventInit = {}): Promise<void> {
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+    );
+  });
+  await act(async () => new Promise((done) => setTimeout(done, 0)));
 }
 
 async function press(button: HTMLElement): Promise<void> {
@@ -373,6 +397,46 @@ describe('what a press sends', () => {
     // ...and the read the card is drawn from is asked again once the door has answered.
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['task', TASK_ID] });
     expect(apiMock.mock.calls.slice(1).map(([path]) => path)).toContain(`/tasks/${TASK_ID}/owner-confirmation`);
+  });
+
+  it('takes the keyboard: the bare key is Confirm done and the chord is the same handoff the button makes', async () => {
+    const qc = newClient();
+    qc.setQueryData(ownerConfirmationQuery(TASK_ID).queryKey, view());
+    apiMock.mockResolvedValue({ id: 'decision-1', decision: 'CONFIRM', completed: true });
+    const armed: Array<[string, string]> = [];
+    const scope = await mount(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <SessionOwnerConfirmationCard
+            sessionId={SESSION_ID}
+            taskId={TASK_ID}
+            onSendBack={(w, title) => armed.push([w.requestId, title])}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // One card asking, so it holds the keys — and says which key presses which control, on the
+    // controls themselves, because a shortcut nobody can see is a shortcut nobody has.
+    expect(hintOn(buttonIn(scope, OWNER_CONFIRM_ACTION))).toBe(ENTER_HINT);
+    expect(hintOn(buttonIn(scope, OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+
+    // The chord is the second answer, and it is the same one the button makes: it writes nothing,
+    // and the card is still there to confirm afterwards.
+    await key({ metaKey: true });
+    expect(armed).toEqual([[REQUEST_ID, TITLE]]);
+    expect(apiMock).not.toHaveBeenCalled();
+    expect(buttonIn(scope, OWNER_CONFIRM_ACTION).disabled).toBe(false);
+
+    // And the bare key is the first: the same POST one press makes, and none of its own.
+    await key();
+    const posts = apiMock.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === 'POST',
+    );
+    expect(posts).toEqual([[`/tasks/${TASK_ID}/owner-confirmation`, {
+      method: 'POST',
+      body: { decision: 'CONFIRM', requestId: REQUEST_ID },
+    }]]);
   });
 });
 

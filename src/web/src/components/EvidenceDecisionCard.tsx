@@ -5,6 +5,7 @@ import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
+import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 // The word this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module for
@@ -309,11 +310,15 @@ export function EvidenceDecisionFacts({ row }: { row: PendingDecisionRow }): JSX
  */
 export function EvidenceDecisionActions({
   disabled,
+  keys = false,
   onConfirm,
   onChatAbout,
 }: {
   /** Whether no answer from here could succeed right now. Every control below follows it. */
   disabled: boolean;
+  /** Whether this card holds the keyboard, and so shows the two keys on its buttons. Both buttons
+   *  are one `disabled` here, so both keys come and go with it. */
+  keys?: boolean;
   onConfirm: () => void;
   /** Hand the reply to the composer; the reason is whatever is sent next. */
   onChatAbout: () => void;
@@ -323,9 +328,11 @@ export function EvidenceDecisionActions({
       <CardActions className="decision-ask-actions">
         <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
           {DECISION_CONFIRM_ACTION}
+          {keys && !disabled && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         <CardActionButton tone="secondary" disabled={disabled} onClick={onChatAbout}>
           {OWNER_SEND_BACK_ACTION}
+          {keys && !disabled && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
       {/* Under the buttons and not inside the second one's tooltip, for the reason the
@@ -511,6 +518,7 @@ export function EvidenceDecisionCard({
   busy = false,
   error = null,
   recorded = null,
+  keys = false,
   onConfirm,
   onChatAbout,
 }: {
@@ -521,6 +529,8 @@ export function EvidenceDecisionCard({
   error?: Error | null;
   /** The door's receipt for an answer given from this card, once there is one. */
   recorded?: EvidenceDecisionResult | null;
+  /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
+  keys?: boolean;
   /** `Confirm done` presses the door from here. The other answer does not: it arms the composer,
    *  and the door is pressed by the send that follows. */
   onConfirm: () => void;
@@ -573,6 +583,7 @@ export function EvidenceDecisionCard({
           ) : (
             <EvidenceDecisionActions
               disabled={busy || row === null}
+              keys={keys}
               onConfirm={onConfirm}
               onChatAbout={onChatAbout}
             />
@@ -635,6 +646,11 @@ export function sendEvidenceDecision(
  * The press it makes is `Confirm done` only. A send-back is pressed at the composer, one level up,
  * so its busy, its refusal and its receipt belong to that press — this card is armed and left
  * standing, and its own confirm stays live.
+ *
+ * It is also where this card's keys are claimed, and the claim is per SLOT because this is the one
+ * card of the four that can be on screen more than once — one per version of evidence — and two
+ * asking versions must not both answer one press (`CardHotkey.ts`). The address this slot was drawn
+ * for is the one the keys answer: a newer version's own slot answers its own.
  */
 function EvidenceDecisionSlot({
   sessionId,
@@ -655,20 +671,33 @@ function EvidenceDecisionSlot({
     onSettled: () =>
       qc.invalidateQueries({ queryKey: pendingDecisionsQuery(sessionId).queryKey }),
   });
+  const confirm = (): void => {
+    if (standing.state !== 'DECIDABLE') return;
+    answer.mutate(standing.row);
+  };
+  const chat = (): void => {
+    if (standing.state !== 'DECIDABLE') return;
+    onSendBack(standing.row);
+  };
+  // What the two buttons carry, and so what the two keys carry: one question with two ways out,
+  // and its answers are dead together — the second one leaves by the composer rather than by a
+  // press here, which changes where the reason is typed and not whether this card can be answered.
+  const live = standing.state === 'DECIDABLE' && !answer.isPending && !answer.isSuccess;
+  const keys = useDecisionCardKeys({
+    confirmEnabled: live,
+    chatEnabled: live,
+    onConfirm: confirm,
+    onChatAbout: chat,
+  });
   return (
     <EvidenceDecisionCard
       standing={standing}
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}
       recorded={answer.isSuccess ? answer.data : null}
-      onConfirm={() => {
-        if (standing.state !== 'DECIDABLE') return;
-        answer.mutate(standing.row);
-      }}
-      onChatAbout={() => {
-        if (standing.state !== 'DECIDABLE') return;
-        onSendBack(standing.row);
-      }}
+      keys={keys}
+      onConfirm={confirm}
+      onChatAbout={chat}
     />
   );
 }
