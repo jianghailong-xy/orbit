@@ -155,7 +155,17 @@ fixture_boot() {
   wait_for "PostgreSQL to answer a query" 120 sql 'SELECT 1'
 
   say "prisma migrate deploy (empty database)"
-  ( cd "$API_DIR" && DATABASE_URL="$FIX_PG_URL" node_modules/.bin/prisma migrate deploy \
+  # WHERE THE CLI IS DEPENDS ON HOW THE CHECKOUT WAS INSTALLED, and asking for one path is how this
+  # step dies with `node_modules/.bin/prisma: No such file or directory` and a container already up.
+  # npm leaves the CLI under the apiserver while something pins prisma there and hoists it to the
+  # repository root when nothing does, which is what the 2026-09-09 bumps did for every tree on this
+  # host; `scripts/worktree-overlay.sh` resolves the same pair the same way, for the same reason. The
+  # two are the same package — the version is printed rather than assumed.
+  local prisma_cli="$REPO_ROOT/src/apiserver/node_modules/.bin/prisma"
+  [ -x "$prisma_cli" ] || prisma_cli="$REPO_ROOT/node_modules/.bin/prisma"
+  [ -x "$prisma_cli" ] || fail "no prisma CLI in this checkout — run npm install in the main checkout first"
+  say "prisma CLI $prisma_cli"
+  ( cd "$API_DIR" && DATABASE_URL="$FIX_PG_URL" "$prisma_cli" migrate deploy \
       --schema prisma/schema.prisma ) >"$FIX_LOG/migrate.log" 2>&1 \
     || { cat "$FIX_LOG/migrate.log"; fail "migrate deploy failed"; }
 
@@ -334,16 +344,53 @@ print(d.get("id") or d["publicId"])')"
   printf '%s\n' "$project_uuid"
 }
 
+# A project whose integration line IS its upstream: `integration_ref == upstream_ref`, which is what
+# makes it a MAIN line (§1.2). Nothing lands on a branch of its own — a finished task's branch is
+# offered to the owner directly (§3.4 M-F2) — so `new_project`'s project branch is deliberately
+# absent here, and a case that seeded one would be testing a different line.
+new_main_line_project() {
+  local title="$1" workspace_uuid="$2" origin="$3" merge_check="${4:-}"
+  local created project_uuid
+  created="$(api POST /projects "$(python3 -c '
+import json,sys
+print(json.dumps({"title": sys.argv[1], "goal": "integration line acceptance"}))' "$title")")"
+  project_uuid="$(sql1 "SELECT id FROM project WHERE title = '$title' ORDER BY created_at DESC LIMIT 1")"
+  [ -n "$project_uuid" ] || fail "project not created: $created"
+  local check_sql='NULL'
+  if [ -n "$merge_check" ]; then check_sql="'$merge_check'"; fi
+  sql "INSERT INTO project_codebase
+         (id, project_id, owner_id, slot, canonical_repo_url, upstream_ref, integration_ref,
+          integration_ref_source, ref_authority, remote_name, merge_check_command, created_at, updated_at)
+       VALUES (gen_random_uuid(), '$project_uuid', '$FIX_OWNER_UUID', 'primary', '$origin',
+               'refs/heads/main', 'refs/heads/main', 'EXPLICIT', 'REMOTE', 'origin',
+               $check_sql, now(), now())" >/dev/null
+  local bound
+  bound="$(sql1 "SELECT count(*) FROM project_codebase
+                  WHERE project_id = '$project_uuid' AND upstream_ref = integration_ref")"
+  [ "$bound" = "1" ] || fail "project $title is not on a MAIN line"
+  printf '%s\n' "$project_uuid"
+}
+
 # A task in `project`, with a work session that took a worktree on `branch` — the three columns
 # `isCodeTask` reads (§1.1). OWNER_CONFIRMED so that the DONE this script drives is a real HTTP
 # door of the product (`POST /api/tasks/:id/owner-confirmation`) and not a write into the database.
+#
+# `acceptance_command` is the pair §2.4 J-S5 re-runs on the combined tree, for the cases whose
+# subject is what the platform checks before it lands. It is a separate declaration from the
+# completion criterion on purpose: a task the owner settles still declares the command its work is
+# judged by, and the fence's OWNER_CONFIRMED lane — not this pair — is what makes its DONE canonical.
 new_code_task() {
   local project_uuid="$1" title="$2" workspace_uuid="$3" branch="$4" base_sha="$5"
+  local acceptance="${6:-}"
+  local acceptance_sql='NULL, NULL'
+  [ -n "$acceptance" ] && acceptance_sql="'$acceptance', 0"
   local task_uuid session_uuid
   task_uuid="$(sql1 "INSERT INTO task (id, owner_id, project_id, title, status, creator_type, creator_id,
-                      completion_criterion, codeless, created_at, updated_at)
+                      completion_criterion, codeless,
+                      acceptance_command, acceptance_expected_exit_code, created_at, updated_at)
                     VALUES (gen_random_uuid(), '$FIX_OWNER_UUID', '$project_uuid', '$title', 'OPEN',
-                            'USER', '$FIX_OWNER_UUID', 'OWNER_CONFIRMED', false, now(), now())
+                            'USER', '$FIX_OWNER_UUID', 'OWNER_CONFIRMED', false,
+                            $acceptance_sql, now(), now())
                     RETURNING id")"
   session_uuid="$(sql1 "INSERT INTO session (id, owner_id, creator_id, workspace_id, task_id, title, prompt,
                          status, starts_task_work, isolation_status, branch, base_sha, assigned_runner_id,

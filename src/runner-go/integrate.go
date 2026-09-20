@@ -328,6 +328,14 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 // where the check left it, the merge must reproduce the same TREE (the commit's own SHA cannot be
 // reproduced, and is not what was approved); with the upstream moved, the merge and the checks are
 // redone on the new tip and the move is reported so a reader can see it happened (M5, M-T7).
+//
+// HOW THE SOURCE REACHES THE UPSTREAM IS THE ONE THING A MAIN LINE DOES DIFFERENTLY (M6, A-Q7). A
+// project branch is merged, so the commits it accumulated stay ancestors of main as themselves. A
+// MAIN line has no such branch: what is offered is one task's branch, and it arrives by being
+// rebased onto the upstream tip and then fast-forwarded to — main gains a copy of the task's commit
+// rather than a merge that carries it, which is what "the same commits on main, no merge" means to a
+// person reading the log. Both are held to the same rule afterwards: what lands is the tree that
+// passed the checks, or nothing lands.
 func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
 	remote := cmd.RemoteName
 	if remote == "" {
@@ -388,24 +396,45 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 		return result
 	}
 
-	// ── M-S2 MERGE ────────────────────────────────────────────────────────────────────────────
+	// ── M-S2 MERGE, or REBASE for a task branch ───────────────────────────────────────────────
 	moved := landing && cmd.UpstreamShaChecked != "" && cmd.UpstreamShaChecked != upstreamSha
+	taskBranch := cmd.PromotionSourceKind == "TASK_BRANCH"
 	if moved {
 		report("MERGE", &IntegrationUpstreamMoved{From: cmd.UpstreamShaChecked, To: upstreamSha})
+	} else if taskBranch {
+		report("REBASE", nil)
 	} else {
 		report("MERGE", nil)
 	}
-	merged, conflicts, mergeErr := integrationMerge(scratch, sourceSha,
-		fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.UpstreamRef))
-	if mergeErr != nil {
-		result.State, result.Phase, result.Conflicts = "CONFLICT", "MERGE", conflicts
-		return result
+	var tested string
+	if taskBranch {
+		// The task's own branch replayed onto the upstream tip, anchored the way every other rebase
+		// in this file is: at the session's recorded base when that is still an ancestor of the
+		// source, and at the fork point otherwise (J-S4).
+		onto, _ := git(scratch, "merge-base", sourceSha, upstreamSha)
+		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) {
+			onto = cmd.SessionBaseSha
+		}
+		rebased, conflicts, rebaseErr := integrationRebase(scratch, upstreamSha, onto, sourceSha)
+		if rebaseErr != nil {
+			result.State, result.Phase, result.Conflicts = "CONFLICT", "REBASE", conflicts
+			return result
+		}
+		tested = rebased
+	} else {
+		merged, conflicts, mergeErr := integrationMerge(scratch, sourceSha,
+			fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.UpstreamRef))
+		if mergeErr != nil {
+			result.State, result.Phase, result.Conflicts = "CONFLICT", "MERGE", conflicts
+			return result
+		}
+		tested = merged
 	}
-	result.TestedSha = merged
-	treeSha, err := git(scratch, "rev-parse", merged+"^{tree}")
+	result.TestedSha = tested
+	treeSha, err := git(scratch, "rev-parse", tested+"^{tree}")
 	if err != nil || treeSha == "" {
 		result.State, result.Phase, result.ErrorCode = "ERROR", "MERGE", "CHECK_MUTATED_TREE"
-		result.ErrorDetail = map[string]any{"detail": "could not read the merged tree: " + errText(err)}
+		result.ErrorDetail = map[string]any{"detail": "could not read the combined tree: " + errText(err)}
 		return result
 	}
 	result.TestedTreeSha = treeSha
@@ -414,7 +443,7 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 			result.AheadOfUpstream = &n
 		}
 	}
-	if files, err := git(scratch, "diff", "--name-only", upstreamSha, merged); err == nil {
+	if files, err := git(scratch, "diff", "--name-only", upstreamSha, tested); err == nil {
 		n := len(strings.Fields(files))
 		result.FilesChanged = &n
 	}
@@ -454,17 +483,20 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// ── M-S4 the tree that is about to land, then the push ────────────────────────────────────
 	head, _ := git(scratch, "rev-parse", "HEAD")
 	dirty, _ := git(scratch, "status", "--porcelain", "--untracked-files=no")
-	if head != merged || strings.TrimSpace(dirty) != "" {
+	if head != tested || strings.TrimSpace(dirty) != "" {
 		result.State, result.Phase = "ERROR", "PUSH"
 		result.ErrorCode = "CHECK_MUTATED_TREE"
-		result.ErrorDetail = map[string]any{"head": head, "expected": merged, "dirty": clip(dirty, 2000)}
+		result.ErrorDetail = map[string]any{"head": head, "expected": tested, "dirty": clip(dirty, 2000)}
 		return result
 	}
 	report("PUSH", nil)
 	mergeLock.Lock()
-	pushErr := integrationPush(repoRoot, scratch, remote, cmd.UpstreamRef, merged, upstreamSha, local)
+	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased
+	// commit both carry the upstream tip as an ancestor. What differs is the commit being pushed, not
+	// the way it travels — and no force, so an upstream that moved underneath is refused (J-S6).
+	pushErr := integrationPush(repoRoot, scratch, remote, cmd.UpstreamRef, tested, upstreamSha, local)
 	if pushErr == nil {
-		advanceLocalRef(repoRoot, cmd.UpstreamRef, merged)
+		advanceLocalRef(repoRoot, cmd.UpstreamRef, tested)
 	}
 	mergeLock.Unlock()
 	if pushErr != nil {
@@ -489,10 +521,10 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	}
 	landed, _ := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
 	landedTree, _ := git(repoRoot, "rev-parse", landed+"^{tree}")
-	if landed != merged || landedTree != treeSha {
+	if landed != tested || landedTree != treeSha {
 		result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
 		result.ErrorDetail = map[string]any{
-			"expectedSha": merged, "actualSha": landed,
+			"expectedSha": tested, "actualSha": landed,
 			"expectedTree": treeSha, "actualTree": landedTree,
 		}
 		return result

@@ -363,8 +363,11 @@ interface IntegrationJobCommand {
   workDir: string; remoteName: string; refAuthority: 'REMOTE' | 'RUNNER_LOCAL';
   targetRef: string; upstreamRef: string; sourceRef: string;
   sessionBaseSha?: string;                                  // LAND_TASK：源会话的 baseSha，rebase 的锚点
-  promotion?: { sourceKind: 'PROJECT_BRANCH' | 'TASK_BRANCH'; sourceSha: string;
+  promotion?: { sourceKind: 'PROJECT_BRANCH' | 'TASK_BRANCH'; sourceSha?: string;
                 upstreamShaChecked?: string; mergeTreeSha?: string; candidateLandedShas: string[] };
+  // 实现按扁平形状发（sourceSha / promotionSourceKind / upstreamShaChecked / mergeTreeSha 各自
+  // 一个顶层字段），语义与上面这组相同：sourceSha 只在平台已经看过仓库时有值，否则由 runner 解析
+  // 源 ref 并在结果里回报它解析到的提交。
   checks: Array<{ name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; command: string;
                   expectedExitCode: number; timeoutSeconds: number }>;
   cancelRequested: boolean;
@@ -476,7 +479,7 @@ interface TaskIntegrationView {
 | `project_id` / `owner_id` / `codebase_id` | uuid | |
 | `source_kind` | text | CHECK ∈ {`PROJECT_BRANCH`, `TASK_BRANCH`}；后者只用于 `MAIN` 线项目 |
 | `task_id` / `session_id` | uuid NULL | `TASK_BRANCH` 必填 |
-| `source_ref` / `source_sha` | text / char(40) | 候选的源：项目分支 tip，或任务分支 tip |
+| `source_ref` / `source_sha` | text / char(40) NULL | 候选的源：项目分支 tip，或任务分支 tip。`TASK_BRANCH` 的 tip 只有仓库知道（会话记的是分支名和分叉点），所以候选先以 NULL 写下，由 `CHECK_PROMOTION` 解析后回写（迁移 0293）；凡检查产出的状态都带值 |
 | `upstream_ref` | text | 冻结自代码库行 |
 | `upstream_sha_checked` / `merge_tree_sha` | char(40) NULL | 最近一次通过的检查所基于的 upstream tip 与组合树 |
 | `included_task_ids` | uuid[] NOT NULL DEFAULT `'{}'` | 这次合入带进 main 的任务 |
@@ -546,7 +549,9 @@ interface TaskIntegrationView {
 
 **M10**：`project-done-derived.ts` 的输入与重算边沿都不改；§1.4 把 `LANDED` 收窄为 `ON_UPSTREAM`，所以 DONE 在合入前是 OPEN、合入后翻为 DONE。M9 的回执经 `MergeReceiptService.deliverProjectFactsAfterCommit` 触发重算，与今天的回执边沿是同一个入口。
 
-> 实现记（2026-09-18）：§3 的 `PROJECT_BRANCH` 线已落地（迁移 0285 `project_promotion`、`projects/project-promotion.ts` 与 `.service.ts`、`POST /projects/:id/promotions/:promotionId/{confirm|decline|cancel}`、runner 的 `promoteOnce`）。**M-F2 的 `TASK_BRANCH` 候选还没有**：`MAIN` 线项目的代码任务 DONE 仍然什么都不入队（`enqueueForDoneTask` 答 `PROMOTION_REQUIRED`），它有自己的工单。
+> 实现记（2026-09-18）：§3 的 `PROJECT_BRANCH` 线已落地（迁移 0286 `project_promotion`、`projects/project-promotion.ts` 与 `.service.ts`、`POST /projects/:id/promotions/:promotionId/{confirm|decline|cancel}`、runner 的 `promoteOnce`）。
+>
+> 实现记（2026-09-20）：**M-F2 与 `TASK_BRANCH` 的 runner 步骤已落地**。`enqueueForDoneTask` 的 `MAIN` 分支在同一事务里写候选与 `CHECK_PROMOTION`（`queueTaskBranchCandidate`，线开始时的补入队也按线分岔）；`promoteOnce` 按 `promotionSourceKind` 走 rebase 后 fast-forward（M6、A-Q7）；`checksFor` 按源种类决定是否跑任务验收命令（M-S3）；`writeUpstreamReceipts` 按源种类取 `tested_sha`（M9）。顺带的另一处口子也收掉：`claimOne` 在吸收冲突的待办还 OPEN 时不再领取同一 `serial_key` 上的 `LAND_TASK`（M2 后半句）。晋升作业的例外待办按 item id 投递（`IntegrationResultAftermath.openItemIds`、`ProjectOpenItemService.deliverForItems`）由同期的例外待办工单在 main 上落地，本行不再重复。
 
 **M11**：`docs/project-done-gate.md` 第一节补一句：「`landing = 'LANDED'` 指服务任务都在项目的 upstream 上；在项目分支上的读作 `ON_INTEGRATION_LINE`」。
 

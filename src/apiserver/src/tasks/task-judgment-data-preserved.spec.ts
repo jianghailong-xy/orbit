@@ -956,6 +956,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        lands only on it — the function takes `project FOR NO KEY UPDATE` and reads its columns,
   //        so a preserved `project` row is locked but not written. The three
   //        `project_acceptance_*` tables are out of its reach entirely.
+  //   0293 drops the NOT NULL from `project_promotion.source_sha`, so a candidate may be recorded
+  //        before the platform has read the repository it is about — a MAIN-line project offers a
+  //        task branch, and where that branch points is a fact only the runner that fetches it has
+  //        (contract §3.4 M-F2, 0286's column widened rather than replaced). Read against every
+  //        claim above: it is one `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL` on a table this
+  //        migration's own predecessor created, and it is the ONLY statement it carries. No column
+  //        is added, dropped, retyped or backfilled; `task`, `project` and
+  //        `project_acceptance_criterion_definition` are not named by any statement here, so the
+  //        0177 pair, `task_executable_acceptance_pair`, every `task_completion_criterion` label
+  //        and every stored row are out of its reach — nothing is read, locked or written. It
+  //        creates no type, function, trigger or index and drops none, so it is not another writer
+  //        of the DONE fence, it names none of the six preserved triggers/functions and none of the
+  //        `project_acceptance_*` objects, and it reverts no later body — 0286's
+  //        `project_promotion_terminal_guard` standing exactly as it was, still refusing a rewrite
+  //        of a candidate that reached a terminal state. Dropping NOT NULL widens what the table
+  //        accepts and cannot make an existing value disagree with the column's type.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -1026,7 +1042,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // anything, and it writes only `project_completion_contract`. `zz_project_completion_
       // contract_project` is rebuilt without the column in its `UPDATE OF` list, which it has to
       // be: PostgreSQL refuses the `DROP COLUMN` with 2BP01 while that list still names it.
-      '0292_drop_project_automation_policy'],
+      '0292_drop_project_automation_policy',
+      // `project_promotion.source_sha` loses NOT NULL and nothing else moves: no column is added,
+      // dropped or retyped, no relation this file preserves is named, there is no trigger and no
+      // function, and the migration carries no DML.
+      '0293_project_promotion_source_sha_nullable'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -1937,8 +1937,14 @@ export interface IntegrationJobCommand {
   /** LAND_TASK: the source session's baseSha, the anchor a rebase replays from. */
   sessionBaseSha?: string;
   /** CHECK_PROMOTION / LAND_PROMOTION: the exact commit the owner is being asked about (§3.4 M-S1).
-   *  The runner works from this rather than from wherever the source ref has got to since. */
+   *  The runner works from this rather than from wherever the source ref has got to since. Absent
+   *  for a TASK_BRANCH candidate whose check has not run yet: nobody here has read the repository,
+   *  so the runner resolves the source ref itself and reports what it resolved (0293). */
   sourceSha?: string;
+  /** CHECK_PROMOTION / LAND_PROMOTION: which kind of source this is, because the two land
+   *  differently (M6) — a project branch as a merge commit onto the upstream, a task branch as a
+   *  rebase the upstream then fast-forwards to (§3.4 M-S2, appendix A-Q7). */
+  promotionSourceKind?: 'PROJECT_BRANCH' | 'TASK_BRANCH';
   /** LAND_PROMOTION: the upstream tip the promotion's last passing check ran against, and the tree
    *  that check produced. M-S2 and M-S3 compare both — the same upstream must reproduce the same
    *  tree, and an upstream that moved must be checked again before anything lands. */

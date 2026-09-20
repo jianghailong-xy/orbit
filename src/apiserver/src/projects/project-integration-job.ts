@@ -1,6 +1,9 @@
 import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { startOnFirstIntegration } from './project-integration-line';
+// Type-only, so the two modules do not import each other at run time: this one needs the two closed
+// sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
+import type { PromotionSourceKind, PromotionState } from './project-promotion';
 
 /**
  * Integration jobs: the platform's own git work (`docs/project-integration-line-contract.md` §2).
@@ -292,19 +295,41 @@ export function integrationDedupeKey(state: string, jobId: string): string {
 
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
 
-/** What `enqueueForDoneTask` did, so the caller knows whether it owes an exception item. */
+/**
+ * What `enqueueForDoneTask` did, so the caller knows whether it owes an exception item.
+ *
+ * The two ways it can have done something are told apart by `kind`, because they put different
+ * things on the queue and name them differently: a `LAND_TASK` is a job to replay this task's branch
+ * onto the project's own line, and a `PROMOTION` is a candidate the owner will be asked to confirm,
+ * with a check job beside it. Both mean "this DONE is on its way somewhere"; neither is the same as
+ * `enqueued: false`, which is the ordinary answer for most DONE writes.
+ */
 export type EnqueueOutcome =
-  | { enqueued: true; jobId: string; projectId: string; alsoQueuedTaskIds: string[] }
+  | {
+      enqueued: true;
+      kind: 'LAND_TASK';
+      jobId: string;
+      projectId: string;
+      alsoQueuedTaskIds: string[];
+    }
+  | {
+      enqueued: true;
+      kind: 'PROMOTION';
+      /** The candidate (§3.4 M-F2), and the `CHECK_PROMOTION` job checking it. */
+      promotionId: string;
+      jobId: string;
+      projectId: string;
+      alsoQueuedTaskIds: string[];
+    }
   | {
       enqueued: false;
       /**
        * NOT_A_CODE_TASK — nothing to integrate, and the ordinary answer for most DONE writes.
-       * ALREADY_QUEUED — J3's index already holds a landing for this task.
-       * PROMOTION_REQUIRED — a MAIN-line project: the next step is an owner-confirmed promotion (§3),
-       *   not a job this module queues.
+       * ALREADY_QUEUED — J3's index already holds a landing for this task, or the candidate's own
+       *   index (§3.2) already holds a live promotion of this task's branch.
        * INTEGRATION_REPOSITORY_UNKNOWN — the caller opens an INTEGRATION_ERROR item (§4.2).
        */
-      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'PROMOTION_REQUIRED' | 'INTEGRATION_REPOSITORY_UNKNOWN';
+      reason: 'NOT_A_CODE_TASK' | 'ALREADY_QUEUED' | 'INTEGRATION_REPOSITORY_UNKNOWN';
       projectId: string | null;
     };
 
@@ -317,8 +342,14 @@ const WORK_SESSION_SELECT = {
 } as const;
 
 /**
- * Queue this task's branch onto its project's integration line, in the transaction that wrote DONE
- * (§2.3 J-T1a).
+ * Give this task's branch a route to its project's integration line, in the transaction that wrote
+ * DONE (§2.3 J-T1a).
+ *
+ * Which route depends on the line, and that is the whole of the difference: a `PROJECT_BRANCH`
+ * project queues a `LAND_TASK` and the platform replays the task onto its own branch (§2.3), while a
+ * `MAIN` project — whose integration ref IS its upstream — queues a candidate for a promotion the
+ * owner confirms (§3.4 M-F2). Neither is a message to anybody: both are rows, and the platform
+ * carries them from there.
  *
  * Does nothing for work that has no branch: a codeless task, a task in no project, a task whose
  * latest work session never took a worktree. Those are the majority of DONE writes, and the check is
@@ -357,11 +388,6 @@ export async function enqueueForDoneTask(
   if (!first.started) {
     return { enqueued: false, reason: first.refusal, projectId };
   }
-  // A MAIN-line project does not land a task on a branch of its own: what comes next is a promotion
-  // the owner confirms (§3.4 M-F2, owner decision 2), which is not this module's queue.
-  if (first.line === 'MAIN') {
-    return { enqueued: false, reason: 'PROMOTION_REQUIRED', projectId };
-  }
 
   const codebase = await tx.projectCodebase.findFirst({
     where: { projectId, slot: 'primary' },
@@ -369,20 +395,38 @@ export async function enqueueForDoneTask(
   });
   if (!codebase) return { enqueued: false, reason: 'INTEGRATION_REPOSITORY_UNKNOWN', projectId };
 
-  const jobId = await queueLandTask(tx, {
-    ownerId,
-    projectId,
-    taskId,
-    codebase,
-    session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
-  });
+  const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
+  // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself.
+  const onTheStartingBeat = first.startedAt.getTime() >= Date.now() - 1_000;
+
+  // A MAIN-line project has no branch of its own to land a task on, so nothing lands here: what
+  // this DONE makes is a candidate — this task's branch, checked by the platform and then offered
+  // to the owner, because every merge into the upstream is their decision (§3.4 M-F2, M7).
+  if (first.line === 'MAIN') {
+    const candidate = await queueTaskBranchCandidate(tx, {
+      ownerId, projectId, taskId, codebase, session,
+    });
+    if (!candidate) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
+    const alsoQueuedTaskIds = onTheStartingBeat
+      ? await backfillFinishedCodeTasks(tx, { ownerId, projectId, codebase, exceptTaskId: taskId, line: 'MAIN' })
+      : [];
+    return {
+      enqueued: true,
+      kind: 'PROMOTION',
+      promotionId: candidate.promotionId,
+      jobId: candidate.jobId,
+      projectId,
+      alsoQueuedTaskIds,
+    };
+  }
+
+  const jobId = await queueLandTask(tx, { ownerId, projectId, taskId, codebase, session });
   if (!jobId) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
 
-  // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself.
-  const alsoQueuedTaskIds = first.startedAt.getTime() >= Date.now() - 1_000
-    ? await backfillFinishedCodeTasks(tx, { ownerId, projectId, codebase, exceptTaskId: taskId })
+  const alsoQueuedTaskIds = onTheStartingBeat
+    ? await backfillFinishedCodeTasks(tx, { ownerId, projectId, codebase, exceptTaskId: taskId, line: 'PROJECT_BRANCH' })
     : [];
-  return { enqueued: true, jobId, projectId, alsoQueuedTaskIds };
+  return { enqueued: true, kind: 'LAND_TASK', jobId, projectId, alsoQueuedTaskIds };
 }
 
 interface CodebaseForJob {
@@ -453,15 +497,24 @@ async function queueLandTask(
 }
 
 /**
- * The project's other finished code tasks, queued onto the line the moment it starts (L3 step 4).
+ * The project's other finished code tasks, given a route at the moment the line starts (L3 step 4).
  *
- * "Finished" is DONE and not yet landed anywhere on this line. A task whose work already sits on the
- * target is not re-queued — the runner would answer ALREADY_LANDED, which is a correct answer and a
- * wasted claim on a repository's serial slot.
+ * "Finished" is DONE and not yet on this line's target. A task whose work already sits there is not
+ * offered again — the runner would answer ALREADY_LANDED, which is a correct answer and a wasted
+ * claim on a repository's serial slot, and the owner would be shown a card for a merge that has
+ * nothing in it.
+ *
+ * Which route is the same one the triggering task took, from the same line: a project branch
+ * back-fills `LAND_TASK` rows, and a MAIN line back-fills candidates. Without the second half a
+ * project whose first integration happened after its code tasks finished would offer the owner
+ * exactly one of them and quietly leave the rest on their branches.
  */
 async function backfillFinishedCodeTasks(
   tx: Prisma.TransactionClient,
-  input: { ownerId: string; projectId: string; codebase: CodebaseForJob; exceptTaskId: string },
+  input: {
+    ownerId: string; projectId: string; codebase: CodebaseForJob; exceptTaskId: string;
+    line: 'MAIN' | 'PROJECT_BRANCH';
+  },
 ): Promise<string[]> {
   const targetBranch = shortBranchName(input.codebase.integrationRef);
   const candidates = await tx.task.findMany({
@@ -492,14 +545,176 @@ async function backfillFinishedCodeTasks(
     const work = candidate.sessions[0];
     if (work?.isolationStatus !== 'worktree' || !work.branch) continue;
     if (candidate.mergeReceipts.length > 0) continue;
+    const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
+    if (input.line === 'MAIN') {
+      const made = await queueTaskBranchCandidate(tx, {
+        ownerId: input.ownerId,
+        projectId: input.projectId,
+        taskId: candidate.id,
+        codebase: input.codebase,
+        session,
+      });
+      if (made) queued.push(candidate.id);
+      continue;
+    }
     const jobId = await queueLandTask(tx, {
       ownerId: input.ownerId,
       projectId: input.projectId,
       taskId: candidate.id,
       codebase: input.codebase,
-      session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
+      session,
     });
     if (jobId) queued.push(candidate.id);
   }
   return queued;
+}
+
+// ── promotions queued off a DONE (§3.4 M-F2) ─────────────────────────────────────────────────────
+
+/**
+ * Offer this task's branch to the owner, in the transaction that wrote DONE (§3.4 M-F2).
+ *
+ * A MAIN-line project has no branch of its own, so the thing that would go onto the upstream is the
+ * task branch itself — which is why the source kind is `TASK_BRANCH` and why the candidate names the
+ * task and its session rather than a ref the project owns. The row is `CHECKING` and a
+ * `CHECK_PROMOTION` job is queued beside it: nothing here decides whether the merge is any good, and
+ * the owner is not asked until a check has said it is.
+ *
+ * `source_sha` is left NULL on purpose. Where the task's branch points is not a fact any table here
+ * holds — the session records the branch and the fork point it came from, not where it has got to —
+ * so it is resolved by the runner that fetches the ref, reported on the check's result, and written
+ * onto this row then (0293). Everything the owner is shown comes after that.
+ *
+ * Answers null when the partial unique index already holds a live candidate for this ref: one branch
+ * is one question, and the one already standing is the one being asked.
+ */
+async function queueTaskBranchCandidate(
+  tx: Prisma.TransactionClient,
+  input: {
+    ownerId: string;
+    projectId: string;
+    taskId: string;
+    codebase: CodebaseForJob;
+    session: { id: string; branch: string; runnerId: string | null };
+  },
+): Promise<{ promotionId: string; jobId: string } | null> {
+  const promotionId = randomUUID();
+  const sourceRef = `refs/heads/${input.session.branch}`;
+  const [created] = await tx.projectPromotion.createManyAndReturn({
+    data: [{
+      id: promotionId,
+      projectId: input.projectId,
+      ownerId: input.ownerId,
+      codebaseId: input.codebase.id,
+      sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+      taskId: input.taskId,
+      sessionId: input.session.id,
+      sourceRef,
+      sourceSha: null,
+      upstreamRef: input.codebase.upstreamRef,
+      // The one task this merge would carry. On a MAIN line a candidate is one task's branch, so
+      // there is no set to derive the way M-F1 derives one off the receipts.
+      includedTaskIds: [input.taskId],
+      state: 'CHECKING' satisfies PromotionState,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created) return null;
+
+  const jobId = await queuePromotionJob(tx, {
+    kind: 'CHECK_PROMOTION',
+    promotion: {
+      id: promotionId,
+      projectId: input.projectId,
+      ownerId: input.ownerId,
+      codebaseId: input.codebase.id,
+      sourceRef,
+      sourceSha: null,
+      upstreamRef: input.codebase.upstreamRef,
+      sessionId: input.session.id,
+    },
+    canonicalRepoUrl: input.codebase.canonicalRepoUrl,
+  });
+  await tx.projectPromotion.update({ where: { id: promotionId }, data: { checkJobId: jobId } });
+  return { promotionId, jobId };
+}
+
+/** What a promotion job needs to exist, whichever of the two it is. */
+export interface PromotionJobSubject {
+  id: string;
+  projectId: string;
+  ownerId: string;
+  codebaseId: string;
+  sourceRef: string;
+  /** Null only for a `TASK_BRANCH` candidate whose check has not run yet (0293). */
+  sourceSha: string | null;
+  upstreamRef: string;
+  sessionId: string | null;
+}
+
+/**
+ * Queue one `CHECK_PROMOTION` or `LAND_PROMOTION` (§3.4).
+ *
+ * The job carries a session even though a promotion is not one task's: the session is how the queue
+ * finds a checkout on a runner to work in (`claimOne` joins it), and a promotion's git work happens
+ * in a throwaway worktree beside that checkout like every other job's. For a candidate a DONE made,
+ * that session is the finishing task's own work session, which is also where the runner reads the
+ * task's acceptance command from (M-S3).
+ *
+ * A job whose `source_sha` is null leaves the runner to resolve the source ref itself and report the
+ * commit it resolved — the only way a `TASK_BRANCH` candidate's source is knowable (0293).
+ */
+export async function queuePromotionJob(
+  tx: Prisma.TransactionClient,
+  input: {
+    kind: Extract<IntegrationJobKind, 'CHECK_PROMOTION' | 'LAND_PROMOTION'>;
+    promotion: PromotionJobSubject;
+    canonicalRepoUrl: string;
+  },
+): Promise<string> {
+  const previous = await tx.projectIntegrationJob.aggregate({
+    where: { promotionId: input.promotion.id, kind: input.kind },
+    _max: { generation: true },
+  });
+  const generation = (previous._max.generation ?? 0) + 1;
+  const jobId = randomUUID();
+  const [created] = await tx.projectIntegrationJob.createManyAndReturn({
+    data: [{
+      id: jobId,
+      projectId: input.promotion.projectId,
+      ownerId: input.promotion.ownerId,
+      codebaseId: input.promotion.codebaseId,
+      kind: input.kind,
+      generation,
+      // No task id, deliberately. A promotion is not one task's landing, and a job row that named
+      // one would make "the job of task X" ambiguous for every reader that addresses a job by its
+      // task — the acceptance script included. The session is still named, because that is how the
+      // queue finds a checkout on a runner to work in and where the task's acceptance command comes
+      // from.
+      taskId: null,
+      sessionId: input.promotion.sessionId,
+      promotionId: input.promotion.id,
+      serialKey: integrationSerialKey({
+        kind: input.kind,
+        canonicalRepoUrl: input.canonicalRepoUrl,
+        targetRef: input.promotion.upstreamRef,
+        projectId: input.promotion.projectId,
+      }),
+      // A promotion is merged INTO the upstream, so that is the ref it writes and the one it
+      // serialises on; the project branch — or the task branch — is its source.
+      targetRef: input.promotion.upstreamRef,
+      upstreamRef: input.promotion.upstreamRef,
+      sourceRef: input.promotion.sourceRef,
+      sourceSha: input.promotion.sourceSha,
+      idempotencyKey: integrationIdempotencyKey({
+        kind: input.kind,
+        subjectId: input.promotion.id,
+        generation,
+      }),
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  return created?.id ?? jobId;
 }

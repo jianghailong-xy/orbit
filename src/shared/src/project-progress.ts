@@ -286,8 +286,14 @@ export interface ProjectPromotionView<Instant = string> {
   sourceKind: PromotionSourceKind;
   sourceRef: string;
   /** The tip being offered. Travels back with the confirmation, so a card drawn from a candidate
-   *  the branch has since moved past is refused rather than merging something else (M-F3). */
-  sourceSha: string;
+   *  the branch has since moved past is refused rather than merging something else (M-F3).
+   *
+   *  Null only while a `TASK_BRANCH` candidate is still `CHECKING`: a MAIN-line project offers a
+   *  task's branch, and where that branch points is a fact only the repository has — the runner
+   *  that fetches the ref is what resolves it, and the check that reports it writes it here
+   *  (migration 0293). Every state a check produced carries one, and those are the states the card
+   *  is drawn from, so a card never renders a null. */
+  sourceSha: string | null;
   upstreamRef: string;
   commitsAhead: number | null;
   filesChanged: number | null;
