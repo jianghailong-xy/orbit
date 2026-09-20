@@ -101,6 +101,10 @@ struct CompactShell: View {
                     .background {
                         Color(uiColor: .systemBackground).ignoresSafeArea()
                     }
+                    // Put the navigation bar's own leading margin back while the card is away from
+                    // the window's leading edge — see `NavBarLeadingMargin` for why it is missing.
+                    // Only while the drawer is open: at the origin the bar already has it.
+                    .background { if drawerOpen { NavBarLeadingMargin() } }
                     .overlay {
                         if x > 0 {
                             Color.clear
@@ -392,6 +396,51 @@ private struct CornerCutout: Shape {
         var path = Path(rect)
         path.addPath(Path(roundedRect: rect, cornerRadius: radius, style: .continuous))
         return path
+    }
+}
+
+/// Gives a navigation bar that is not at the window's leading edge its leading margin back.
+///
+/// iOS 26 treats such a bar as a *trailing pane's* — the split-view rule — and zeroes
+/// `layoutMargins.leading` on it. The large title and the `.navigationBarDrawer` search field ride
+/// that margin down with it (16pt → 0 and 16pt → 8pt), while the toolbar buttons do not move at
+/// all: their platters are placed at a fixed 16 and `width - 60`. The drawer is exactly that case,
+/// since the card it slides right carries the section's bar off the leading edge with it — which is
+/// why an open drawer shows the session title flush against the card's edge (measured on an iOS
+/// 26.5 simulator, and pixel-for-pixel the same on the device that reported it).
+///
+/// SwiftUI has no handle on a bar's own margins, so this reaches the bar in the view tree instead.
+/// Guarded twice on purpose: only while the drawer is open, and only for a bar whose leading margin
+/// has actually collapsed *and* which really is off the leading edge. A later iOS that stops
+/// collapsing the margin therefore leaves this a no-op rather than over-correcting it to 32pt.
+private struct NavBarLeadingMargin: UIViewRepresentable {
+    /// What the margin is at the window's leading edge, and what the collapsed state is restored
+    /// to. iOS 26.5: `layoutMargins.leading` 16 → 0, `UISearchBarTextField` x 16 → 8.
+    private static let leading: CGFloat = 16
+
+    func makeUIView(context: Context) -> UIView { UIView(frame: .zero) }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        // After the slide has settled — until then the card is still at the window's origin, where
+        // there is nothing to put back. Re-armed on every update, so a later bar layout that
+        // re-collapses the margin is fixed again on the next render.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak view] in
+            guard let window = view?.window else { return }
+            for bar in window.orbitNavigationBars {
+                let offLeadingEdge = bar.convert(bar.bounds, to: window).minX != 0
+                guard offLeadingEdge, bar.directionalLayoutMargins.leading == 0 else { continue }
+                bar.directionalLayoutMargins.leading = Self.leading
+                bar.setNeedsLayout()
+                bar.layoutIfNeeded()
+            }
+        }
+    }
+}
+
+private extension UIView {
+    /// Every navigation bar in this subtree, depth first.
+    var orbitNavigationBars: [UINavigationBar] {
+        (self as? UINavigationBar).map { [$0] } ?? subviews.flatMap { $0.orbitNavigationBars }
     }
 }
 
