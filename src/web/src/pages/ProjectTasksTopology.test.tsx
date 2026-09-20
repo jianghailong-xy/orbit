@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
@@ -39,6 +40,10 @@ const TASKS_KEY = ['project', PROJECT, 'tasks', 'root'];
  *  V10). Shared with the line row on the project page — same key, one request — so mounting the
  *  section alone is the only place it shows up as an entry of its own. */
 const INTEGRATION_KEY = ['project', PROJECT, 'integration'];
+/** The section's third entry, read by the New task door and by nothing else here: whether a press
+ *  would RESOLVE this project's coordinator or REPLACE one whose conversation went to Trash. Under
+ *  the `['project', id]` prefix the project page already holds, so it costs no second request. */
+const COORDINATOR_STATUS_KEY = ['project', PROJECT, 'coordinator', 'status'];
 const childKey = (parentTaskId: string) => ['project', PROJECT, 'tasks', 'children', parentTaskId];
 const prereqKey = (taskId: string) => ['task', taskId, 'prerequisites'];
 
@@ -79,7 +84,12 @@ function withPage(
   seed?.(qc);
   const out = renderToStaticMarkup(
     <QueryClientProvider client={qc}>
-      <ProjectTasks projectId={PROJECT} />
+      {/* The section's New task door opens this project's coordinator — a navigation — so the
+          section is mounted inside a router, which is where the project page has always drawn it
+          (`ProjectsPage.test.tsx`'s own renders wrap for the same reason). */}
+      <MemoryRouter>
+        <ProjectTasks projectId={PROJECT} />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return { qc, out };
@@ -223,6 +233,7 @@ describe('ProjectTasks — waits and blocks badges', () => {
     ]);
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       TASKS_KEY,
+      COORDINATOR_STATUS_KEY,
       INTEGRATION_KEY,
       prereqKey(T3),
     ]);

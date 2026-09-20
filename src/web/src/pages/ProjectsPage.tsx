@@ -1228,6 +1228,27 @@ export const coordinatorSessionPath = (sessionId: string): string =>
   `/sessions/${encodeURIComponent(encodeId(sessionId))}`;
 
 /**
+ * Why a reader is arriving, when a door opened a coordinator ON THEIR BEHALF — the one piece of
+ * transient framing this page hands a conversation it resolves.
+ *
+ * In the URL rather than in component state or a prop, which is the shape the Projects list
+ * already gives a new-session compose (`/workspaces/:id/new?intent=project`): the conversation the
+ * reader lands in can read it, a refresh or a Back keeps the same reading, and dismissing it is a
+ * navigation that returns to the ordinary conversation byte for byte instead of a second screen.
+ *
+ * `new-task` rather than the bare noun: a session route already means "the session RUNNING task X"
+ * when one is bound to a task, so `?intent=task` would read as a statement about the conversation
+ * rather than about what the reader came to do.
+ */
+export const NEW_TASK_INTENT = 'new-task';
+
+/** Where a press that means "add work to this project" lands: this project's coordinator, carrying
+ *  the intent above. Composed here rather than at the door so the spelling the conversation reads
+ *  has one author. */
+export const coordinatorIntentPath = (sessionId: string, intent: string): string =>
+  `${coordinatorSessionPath(sessionId)}?intent=${encodeURIComponent(intent)}`;
+
+/**
  * Resolve-or-create this project's one coordinator session.
  *
  * A POST every time, including from a project whose status read already names a coordinator. The
@@ -1248,6 +1269,52 @@ export function openProjectCoordinator(
   workspaceId?: string,
 ): Promise<CoordinatorResult> {
   return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} });
+}
+
+/**
+ * The press that opens this project's coordinator, from whichever door was pressed.
+ *
+ * One hook rather than one mutation per door, because the three things it does are three things no
+ * door may get wrong on its own: it asks the SERVER (a pointer already on screen can be stale, and
+ * the conversation behind it may since have gone to Trash), it follows the id the SERVER answered
+ * with rather than the pointer the status read was drawn from, and it says so when what it opened
+ * is a REPLACEMENT for a conversation that was there.
+ *
+ * `created` alone cannot tell a project's FIRST coordinator from a replacement for a trashed one,
+ * and only the second costs the reader a conversation — so the status read is taken BEFORE the
+ * press and the pair (`bound` from that read, `created` from the answer) is what tells them apart.
+ *
+ * `intent` is what the door means beyond "open the coordinator", and it rides in the URL of the
+ * conversation and in nothing else: the request is the one every other link sends.
+ */
+function useOpenProjectCoordinator(projectId: string, intent?: string) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const status = useQuery(projectCoordinatorStatusQuery(projectId));
+
+  const open = useMutation({
+    mutationKey: ['project', projectId, 'coordinator'],
+    mutationFn: async (workspaceId: string | undefined) => {
+      const bound = status.data?.coordination.sessionId != null;
+      return { ...(await openProjectCoordinator(projectId, workspaceId)), bound };
+    },
+    onSuccess: (result) => {
+      navigate(
+        intent
+          ? coordinatorIntentPath(result.sessionId, intent)
+          : coordinatorSessionPath(result.sessionId),
+      );
+      if (result.bound && result.created) {
+        // The one case where following a door lands somewhere other than where the reader was
+        // going. Said on the way in rather than left to be discovered from an empty transcript.
+        toast.warning(
+          'This is a NEW coordinator conversation — the previous one was gone, and its history did not come with it.',
+        );
+      }
+    },
+  });
+
+  return { open, status };
 }
 
 /**
@@ -1327,7 +1394,6 @@ export function ProjectCoordinatorSection({
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const toast = useToast();
   const { modal } = AntApp.useApp();
   const [rebinding, setRebinding] = useState(false);
   const [choosingLanding, setChoosingLanding] = useState(false);
@@ -1335,30 +1401,9 @@ export function ProjectCoordinatorSection({
   // and forgotten, because every later press has to carry the same choice — a Retry that fell back
   // to the borrow would ask for the refusal the reader just answered.
   const [landing, setLanding] = useState<string | undefined>(undefined);
-  const status = useQuery(projectCoordinatorStatusQuery(projectId));
-
-  const open = useMutation({
-    mutationKey: ['project', projectId, 'coordinator'],
-    mutationFn: async (workspaceId: string | undefined) => {
-      // Read BEFORE the press, because afterwards it is gone: `created` alone cannot tell a FIRST
-      // coordinator from a REPLACEMENT for one that went to Trash, and only the second costs the
-      // reader a conversation. The pair does tell them apart.
-      const bound = status.data?.coordination.sessionId != null;
-      return { ...(await openProjectCoordinator(projectId, workspaceId)), bound };
-    },
-    onSuccess: (result) => {
-      // The id navigated to is the SERVER's, never the pointer the status read arrived with: on a
-      // trashed binding those are two different sessions and only the returned one is live.
-      navigate(coordinatorSessionPath(result.sessionId));
-      if (result.bound && result.created) {
-        // The one case where following the button lands somewhere other than where the reader was
-        // going. Said on the way in rather than left to be discovered from an empty transcript.
-        toast.warning(
-          'This is a NEW coordinator conversation — the previous one was gone, and its history did not come with it.',
-        );
-      }
-    },
-  });
+  // The card's own press carries no intent: opening a coordinator to read it and opening one to
+  // add work to the project are two different arrivals, and only the second says so in the URL.
+  const { open, status } = useOpenProjectCoordinator(projectId);
 
   const replace = useMutation({
     mutationKey: ['project', projectId, 'coordinator', 'replace'],
@@ -2165,6 +2210,11 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
  * of it deciding whether the section renders at all.
  */
 export function ProjectTasks({ projectId }: { projectId: string }) {
+  // Adding work to this project is a press that opens its coordinator, not a form: filing tasks is
+  // what that conversation is for, it has already read this project's goal, criteria, instructions
+  // and existing tasks, and the server files new work only into the project a session coordinates —
+  // so a form here would be a screen whose submit ends in a 403.
+  const { open } = useOpenProjectCoordinator(projectId, NEW_TASK_INTENT);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
     queryFn: () =>
@@ -2184,7 +2234,28 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <Typography.Title level={4}>Tasks</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography.Title level={4}>Tasks</Typography.Title>
+        {/* Beside the heading rather than inside the list: it is still offered on a project whose
+            page of tasks is empty, still loading, or failed to load — none of which says anything
+            about whether more work can be added. */}
+        <Button type="primary" onClick={() => open.mutate(undefined)}>
+          New task
+        </Button>
+      </div>
+
+      {/* A press that was refused, in the server's own words. The 400 a project with nowhere to
+          open a coordinator answers with is the one this exists for: it says what to do about it
+          ("Assign a task, or pass workspaceId"), and a door that swallowed it would be a button
+          that does nothing. */}
+      {open.error ? (
+        <Alert
+          type="error"
+          showIcon
+          message="New task could not be started"
+          description={open.error.message}
+        />
+      ) : null}
 
       {tasks.isLoading ? (
         <div style={{ padding: 24, textAlign: 'center' }}>
