@@ -213,9 +213,12 @@ fixture_boot() {
 
   say "orbit register"
   mkdir -p "$FIX_SCRATCH/runner-home" "$FIX_SCRATCH/orbit-home" "$FIX_SCRATCH/work"
-  fixture_runner_env "$FIX_SCRATCH/orbit" register \
-    --server "$FIX_API_ORIGIN" --token "$token" --name integration-line-e2e \
-    --workdir "$FIX_SCRATCH/work" --no-service --no-auto-install-engines \
+  # The `( )` is for `fixture_runner_env`'s `exec`: without it this foreground call would replace the
+  # fixture's own shell with `orbit register` and the script would end there. The status, the log and
+  # the `fail` below are unchanged — the subshell exits with the same status the caller saw before.
+  ( fixture_runner_env "$FIX_SCRATCH/orbit" register \
+      --server "$FIX_API_ORIGIN" --token "$token" --name integration-line-e2e \
+      --workdir "$FIX_SCRATCH/work" --no-service --no-auto-install-engines ) \
     >"$FIX_LOG/register.log" 2>&1 || { cat "$FIX_LOG/register.log"; fail "orbit register failed"; }
   FIX_RUNNER_UUID="$(sql1 "SELECT id FROM runner WHERE name = 'integration-line-e2e'")"
   [ -n "$FIX_RUNNER_UUID" ] || fail "orbit register created no runner row"
@@ -229,8 +232,17 @@ fixture_boot() {
 
 # The runner's environment, built from nothing rather than inherited: no ORBIT_* of whoever runs
 # this script, and a HOME of its own so it cannot touch the real credentials file.
+#
+# `exec`, and only for the background `orbit run` below. bash forks a SUBSHELL for a background
+# FUNCTION call, so `$!` names that subshell and not the command the function runs; `FIX_RUNNER_PID`
+# was therefore a wrapper, teardown's `kill` killed the wrapper, and the runner was orphaned onto PID
+# 1 — where it went on retrying an apiserver whose container and scratch tree had been removed, one
+# more per run, forever. `exec` replaces that subshell with the runner, so `$!` is the runner.
+#
+# It replaces whatever shell calls it, so the one caller that has to keep running — `orbit register`
+# below — calls it in a `( )` of its own.
 fixture_runner_env() {
-  env -i \
+  exec env -i \
     PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     HOME="$FIX_SCRATCH/runner-home" \
     ORBIT_HOME="$FIX_SCRATCH/orbit-home" \
