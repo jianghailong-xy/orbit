@@ -24,7 +24,11 @@ import {
   openItemKindForJobState,
   shortBranchName,
 } from '../projects/project-integration-job';
-import { recordIntegrationFailure, recordPromotionApproval } from '../projects/project-open-item';
+import {
+  recordIntegrationFailure,
+  recordPromotionApproval,
+  resolveIntegrationItemsOnLanding,
+} from '../projects/project-open-item';
 import { promotionDedupeKey } from '../projects/project-promotion';
 import {
   applyPromotionJobResult,
@@ -152,7 +156,7 @@ export async function dispatchIntegrationJobs(
   prisma: PrismaService,
   heartbeat: IntegrationDispatchHeartbeat,
   log: Logger = logger,
-  openItems?: Pick<ProjectOpenItemService, 'deliverForTasks'>,
+  openItems?: Pick<ProjectOpenItemService, 'deliverForItems'>,
 ): Promise<IntegrationJobCommand[]> {
   if (!heartbeat.leaseOwner || heartbeat.draining) return [];
   if (!heartbeat.capabilities?.includes(INTEGRATION_JOB_CLAIM)) return [];
@@ -174,8 +178,8 @@ export async function dispatchIntegrationJobs(
       // being redelivered every 30 seconds to a runner that cannot act on it — and the item is
       // handed on from here too, because this beat is the only door that knows it was opened.
       const after = await finishUnworkable(prisma, row.id, heartbeat.leaseOwner, row.claimGeneration);
-      if (after && after.openItemTaskIds.length > 0) {
-        await openItems?.deliverForTasks(after.openItemTaskIds);
+      if (after && after.openItemIds.length > 0) {
+        await openItems?.deliverForItems(after.openItemIds);
       }
       continue;
     }
@@ -414,7 +418,12 @@ export async function receiveIntegrationJobProgress(
 export interface IntegrationResultAftermath {
   projectId: string;
   landedTaskId: string | null;
-  openItemTaskIds: string[];
+  /**
+   * The exception items this result opened, by id, for the door that delivered the result to hand
+   * over. By item rather than by task because a promotion job names no task (§3.4): the caller is
+   * the only thing holding that row's id, and no read finds it by a task it does not have.
+   */
+  openItemIds: string[];
   /**
    * The project whose next promotion candidate is now worth looking for (§3.4 M-F1, M-F4), or null.
    *
@@ -605,6 +614,13 @@ export async function applyIntegrationJobResult(
       });
       openItemId = opened?.itemId ?? openItemId;
     }
+    // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
+    // transaction — beside the receipt that says the work is there, which is the fact the item was
+    // waiting for. Read by TASK rather than by this job: what is still open is an older
+    // generation's item, and this landing is what closes it.
+    if (jobLanded(state) && job.taskId) {
+      await resolveIntegrationItemsOnLanding(tx, job.taskId);
+    }
 
     return {
       answer: {
@@ -616,7 +632,7 @@ export async function applyIntegrationJobResult(
       after: {
         projectId: job.projectId,
         landedTaskId: jobLanded(state) && !job.promotionId ? job.taskId : null,
-        openItemTaskIds: openItemId && job.taskId && itemKind ? [job.taskId] : [],
+        openItemIds: openItemId ? [openItemId] : [],
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:
           job.kind === 'LAND_TASK' || job.kind === 'LAND_PROMOTION' ? job.projectId : null,

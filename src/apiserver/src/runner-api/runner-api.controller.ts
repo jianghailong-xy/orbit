@@ -1200,8 +1200,8 @@ export class RunnerApiController {
       await this.mergeReceipts
         ?.deliverProjectFactsAfterCommit(after.projectId, after.landedTaskId)
         .catch((error) => this.logger.warn(`integration landing facts not delivered: ${(error as Error)?.message}`));
-      if (after.openItemTaskIds.length > 0) {
-        await this.openItems?.deliverForTasks(after.openItemTaskIds)
+      if (after.openItemIds.length > 0) {
+        await this.openItems?.deliverForItems(after.openItemIds)
           .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
       }
       if (after.considerPromotionProjectId) {

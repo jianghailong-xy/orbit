@@ -17,6 +17,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import {
   AskedQuestion,
   CoordinatorQuestion,
+  INTEGRATION_ITEM_KINDS,
   OpenItemAssignee,
   OpenItemAssigneeReason,
   OpenItemKind,
@@ -161,6 +162,27 @@ export class ProjectOpenItemService {
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
       for (const item of mine) void this.push?.notifyOwnerItem(item.id);
+    });
+  }
+
+  /**
+   * §4.4 X-D4 (1), for items whose caller is holding them by id.
+   *
+   * A promotion job names no task (§3.4 writes `task_id` NULL on purpose), so the item such a job
+   * opens cannot be found by one — the caller that opened it is the only thing in the system that
+   * knows it exists, and this is how it hands it over. Everything else is `deliverForTasks`: the
+   * same re-derivation from committed rows, and the same delivery.
+   */
+  async deliverForItems(itemIds: ReadonlyArray<string | null | undefined>): Promise<void> {
+    const ids = unique(itemIds);
+    if (ids.length === 0) return;
+    await this.guarded('deliverForItems', async () => {
+      const owed = await this.prisma.projectOpenItem.findMany({
+        where: { id: { in: ids }, state: 'OPEN', assignee: 'COORDINATOR' },
+        select: { id: true },
+        orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
+      });
+      for (const item of owed) await this.deliver(item.id);
     });
   }
 
@@ -597,6 +619,14 @@ export class ProjectOpenItemService {
    * A failure is answered by what happens to the task, not by anybody reporting back: it is done, it
    * was cancelled, a successor took over, or it is being attempted again. Idempotent and safe to call
    * from any edge after a task write — an item nothing has answered is left exactly as it is.
+   *
+   * The integration items (§4.2's three `INTEGRATION_*` rows) are answered on this same axis but by
+   * a narrower set of facts, and the second statement is that difference. DONE does not answer one:
+   * a task is DONE to be integrated, and what a conflict is waiting for is the landing (J-T5). Being
+   * attempted again does not answer one either: the task being carried to a new commit is not the
+   * new generation §4.2 names, and an item that closed on every retry would close on the way to the
+   * landing that is supposed to answer it. Cancelled and replaced are the two that do — nobody is
+   * going to land a task that is gone.
    */
   async resolveByFact(taskIds: ReadonlyArray<string | null | undefined>): Promise<void> {
     const ids = unique(taskIds);
@@ -626,6 +656,19 @@ export class ProjectOpenItemService {
                      AND s."starts_task_work"
                      AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
                      AND s."id" IS DISTINCT FROM i."session_id"))`);
+      await this.prisma.$executeRaw(Prisma.sql`
+        UPDATE "project_open_item" i
+           SET "state" = 'RESOLVED',
+               "resolution" = 'TASK_CLOSED',
+               "resolved_at" = now(),
+               "resolved_by" = 'PLATFORM',
+               "updated_at" = now()
+          FROM "task" t
+         WHERE i."task_id" = t."id"
+           AND i."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS.map((kind) => Prisma.sql`${kind}`))})
+           AND i."state" = 'OPEN'
+           AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+           AND (t."status" = 'CANCELLED' OR t."superseded_by_task_id" IS NOT NULL)`);
     });
   }
 

@@ -48,6 +48,7 @@ import {
 } from './project-integration-job';
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
@@ -100,6 +101,8 @@ interface Stack {
   silentReaper: ReaperService;
   /** The heartbeat's half of the integration queue: what a runner claims and reports on. */
   jobs: IntegrationJobRelay;
+  /** What a landing makes of the project branch (§3.4 M-F1): the one job that names no task. */
+  promotions: ProjectPromotionService;
   convergence: CoordinatorConvergenceService;
 }
 
@@ -132,11 +135,17 @@ async function connect(): Promise<Stack> {
   const openItems = new ProjectOpenItemService(prisma, sessions);
   const tasks = new TasksService(prisma, sessions, realtime, undefined, router, undefined, openItems);
   const jobs = new IntegrationJobRelay(prisma, openItems);
+  // Whoever an integration result has to tell reaches a device, and reaches it from here: the
+  // controller announces the item its result opened (`notifyOwnerItem`, §7.6 V12) with no `await`
+  // and nothing to return. Answering every method with a resolved promise is what makes the
+  // fixture indifferent to WHICH door announces — this file asserts what the item and its turn say,
+  // never what a phone showed.
+  const push = new Proxy({}, { get: () => async () => undefined }) as never;
   const api = new RunnerApiController(
     prisma,
     queue,
     realtime,
-    {} as never,
+    push,
     {} as never,
     { expand: async (_ownerId: string, content?: string) => content } as never,
     { appendFor: async (_tx: unknown, _sessionId: string, content?: string) => content } as never,
@@ -148,11 +157,12 @@ async function connect(): Promise<Stack> {
     openItems,
     jobs,
   );
+  const promotions = new ProjectPromotionService(prisma);
   const reaper = new ReaperService(prisma, realtime, openItems);
   // A component that records a failure and never gets to deliver it: what the coordinator's own turn
   // ending has to compensate for.
   const silentReaper = new ReaperService(prisma, realtime);
-  return { db, sessions, tasks, api, reaper, silentReaper, jobs, convergence };
+  return { db, sessions, tasks, api, reaper, silentReaper, jobs, promotions, convergence };
 }
 
 type CoordinatorShape = 'PARKED' | 'RUNNING' | 'COMPLETED' | 'NONE';
@@ -1054,6 +1064,299 @@ test('an integration failure with no coordinator to hand it to is the owner\'s',
     assert.equal(item.assigneeReason, 'NO_COORDINATOR');
     assert.equal(item.escalateAt, null, 'an item already with the owner has nobody to escalate to');
     assert.deepEqual(await deliveries(stack.db, w.projectId), [], 'an owner\'s item is not queued on a conversation');
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+/**
+ * The runner's claim, for a conversation whose queued turn has to be DELIVERED.
+ *
+ * `createTurn` on a conversation between turns files it PENDING, and the inbox hands a turn out
+ * only to a session that is RUNNING — the claim is what makes the difference, and there is no
+ * runner long-polling in this process to take it. Written here for the same reason `attempt` writes
+ * the session row it starts from: the fixture stands in for the runner, not for the product.
+ */
+async function claimed(stack: Stack, sessionId: string): Promise<void> {
+  await stack.db.session.updateMany({
+    where: { id: sessionId, status: RunStatus.PENDING },
+    data: { status: RunStatus.RUNNING },
+  });
+}
+
+/**
+ * The task goes back to work and passes its own acceptance a second time (§2.3 J-T1a).
+ *
+ * The doors are the two `claimedLanding` walked the first time — a message turn of the run that ends
+ * SUCCEEDED is what queues the reserved shell turn, and the shell's exit code is what derives DONE —
+ * over a task that has been DONE once already. That DONE transaction is what queues the task's next
+ * landing generation: a task whose landing stopped is integrated again by being completed again.
+ */
+async function rework(stack: Stack, w: World, a: Attempt, label: string): Promise<void> {
+  const asked = await stack.sessions.createTurn(w.ownerId, a.sessionId, {
+    clientTurnId: randomUUID(),
+    content: `${label}: the conflict is resolved on the branch`,
+    intent: 'NEXT_TURN',
+  });
+  // The claim, then the poll: a queued turn is delivered to a RUNNING session, and a turn nobody
+  // took is a turn nobody answered — completing one that was never handed out puts it back on the
+  // queue rather than ending it.
+  await claimed(stack, a.sessionId);
+  const delivered = await dequeue(stack, a.sessionId, w.runnerId);
+  assert.equal(delivered?.turnId, asked.turnId, 'the rework turn was handed to the runner');
+  await answerTurn(stack, w.runnerId, a.sessionId, asked.turnId, 'the fix is pushed');
+  await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
+    turnId: asked.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+  });
+  const acceptance = await dequeue(stack, a.sessionId, w.runnerId);
+  assert.equal(acceptance?.taskAcceptance, true, 'the reworked task runs its acceptance command again');
+  await stack.api.turnComplete({ id: w.runnerId }, a.sessionId, {
+    turnId: acceptance!.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+    subtype: 'shell',
+    shellExitCode: 0,
+    shellOutput: '',
+  });
+  assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.DONE, 'the second acceptance held too');
+}
+
+/** What a runner reports for a job that landed: one tree tested and landed, as J2 demands. */
+function reportLanding(stack: Stack, w: World, job: IntegrationJobCommand) {
+  return reportFailure(stack, w, job, {
+    state: 'LANDED',
+    phase: 'PUSH',
+    sourceSha: 'a'.repeat(40),
+    targetShaBefore: 'c'.repeat(40),
+    testedSha: 'd'.repeat(40),
+    testedTreeSha: 'e'.repeat(40),
+    landedSha: 'd'.repeat(40),
+    landedTreeSha: 'e'.repeat(40),
+    aheadOfUpstream: 1,
+  });
+}
+
+test('a landing answers the conflict item an earlier generation of the same task left open',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await integratingWorld(stack, 'landed-after-conflict', 'PARKED');
+      const { task, job } = await claimedLanding(stack, w, 'landed-after-conflict');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'REBASE',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/projects/project-open-item.ts'],
+      });
+      const item = await onlyItemFor(stack.db, w, task.taskId, 'the first landing conflicted');
+      assert.equal(item.state, 'OPEN');
+
+      // The task is put back to work and passes its acceptance again, so its next generation is
+      // queued by that DONE (J-T1a) — and this one lands.
+      await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
+      await rework(stack, w, task, 'landed-after-conflict');
+      const [claimed] = await stack.jobs.dispatch({
+        runnerId: w.runnerId,
+        leaseOwner: 'lease-landed-after-conflict',
+        draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      });
+      assert.ok(claimed, `the second DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
+      const answer = await reportLanding(stack, w, claimed!);
+      assert.equal(answer.accepted, true);
+
+      // §2.2 J-T5: the landing answers what was open about landing this task.
+      const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
+      assert.equal(after?.state, 'RESOLVED', 'a landed task leaves no open integration item behind');
+      assert.equal(after?.resolution, 'LANDED', 'the fact that answered it is the landing, not a retry');
+      assert.equal(after?.resolvedBy, 'PLATFORM');
+      assert.equal((await jobRow(stack.db, claimed!.jobId)).state, 'LANDED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('cancelling the task closes the integration item its conflict left open',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await integratingWorld(stack, 'cancelled-after-conflict', 'PARKED');
+      const { task, job } = await claimedLanding(stack, w, 'cancelled-after-conflict');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'REBASE',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/shared/src/dto.ts'],
+      });
+      const item = await onlyItemFor(stack.db, w, task.taskId, 'the landing conflicted');
+      assert.equal(item.state, 'OPEN');
+
+      await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.CANCELLED });
+
+      const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
+      assert.equal(after?.state, 'RESOLVED', 'a task nobody is going to land any more leaves no item');
+      assert.equal(after?.resolution, 'TASK_CLOSED');
+      assert.equal(after?.resolvedBy, 'PLATFORM');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('the message an integration item is delivered as carries what its payload knows',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // A conflict: the file names are the one thing a reader acts on, and they live in the payload.
+      const conflicted = await integratingWorld(stack, 'message-conflict', 'PARKED');
+      const first = await claimedLanding(stack, conflicted, 'message-conflict');
+      await reportFailure(stack, conflicted, first.job, {
+        state: 'CONFLICT',
+        phase: 'REBASE',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/shared/src/dto.ts', 'src/apiserver/src/projects/project-open-item.ts'],
+      });
+      const item = await onlyItemFor(stack.db, conflicted, first.task.taskId, 'the landing conflicted');
+      const [sent] = await itemTurns(stack.db, conflicted.coordinatorSessionId!);
+      assert.ok(sent, 'the item was not queued on the coordinator');
+      assert.ok(sent.content?.includes(item.title), 'the message does not even say what the exception is');
+      for (const file of ['src/shared/src/dto.ts', 'src/apiserver/src/projects/project-open-item.ts']) {
+        assert.ok(
+          sent.content?.includes(file),
+          `the message does not name the file the merge conflicted on: ${file} — ${sent.content}`,
+        );
+      }
+
+      // A red check: which check disagreed, and what it returned.
+      const checked = await integratingWorld(stack, 'message-check', 'PARKED');
+      const second = await claimedLanding(stack, checked, 'message-check');
+      await reportFailure(stack, checked, second.job, {
+        state: 'CHECK_FAILED',
+        phase: 'CHECK',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        testedSha: 'd'.repeat(40),
+        testedTreeSha: 'e'.repeat(40),
+        checks: [{
+          name: 'MERGE_CHECK',
+          command: 'npm test',
+          expectedExitCode: 0,
+          exitCode: 2,
+          timedOut: false,
+          durationMs: 10,
+          outputTail: 'not ok 3 - the dto changed under it',
+        }],
+      });
+      const [reported] = await itemTurns(stack.db, checked.coordinatorSessionId!);
+      assert.ok(reported, 'the item was not queued on the coordinator');
+      assert.ok(
+        reported.content?.includes('MERGE_CHECK 的退出码是 2'),
+        `the message does not say which check failed and what it returned — ${reported.content}`,
+      );
+      assert.ok(
+        reported.content?.includes('not ok 3 - the dto changed under it'),
+        'the check\'s own output is in the payload and not in the message',
+      );
+
+      // And an error: the code is all the payload has to say.
+      const errored = await integratingWorld(stack, 'message-error', 'PARKED');
+      const third = await claimedLanding(stack, errored, 'message-error');
+      await reportFailure(stack, errored, third.job, {
+        state: 'ERROR',
+        phase: 'PUSH',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        errorCode: 'PUSH_REJECTED',
+        errorDetail: { reason: 'the remote refused a non-fast-forward push' },
+      });
+      const [failed] = await itemTurns(stack.db, errored.coordinatorSessionId!);
+      assert.ok(failed, 'the item was not queued on the coordinator');
+      assert.ok(
+        failed.content?.includes('PUSH_REJECTED'),
+        `the message does not say what the error was — ${failed.content}`,
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an integration item survives a task write that is not one of its terminal facts',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // The control, green before and after the change on purpose: it is what says the harness runs
+      // at all, and it holds the new branch to the X table — an item about a landing nobody has
+      // called off is answered by the landing, and by nothing less than it.
+      const w = await integratingWorld(stack, 'kept-open', 'PARKED');
+      const { task, job } = await claimedLanding(stack, w, 'kept-open');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MAIN_SYNC',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['README.md'],
+      });
+      const item = await onlyItemFor(stack.db, w, task.taskId, 'the landing conflicted');
+      assert.equal(item.state, 'OPEN');
+
+      // An ordinary edit is a task write, and every task write re-derives the project's items.
+      await stack.tasks.update(w.ownerId, task.taskId, { title: `${task.title} (edited)` });
+
+      const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
+      assert.equal(after?.state, 'OPEN', 'a task that is still to be landed keeps its open item');
+      assert.equal(after?.resolution, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an item a job with no task opened still reaches the coordinator', { skip, timeout: 180_000 }, async () => {
+  const stack = await connect();
+  try {
+    // The one job that names no task is a promotion's (§3.4): `queuePromotionJob` writes `task_id`
+    // NULL deliberately, because a promotion is not any single task's landing. So the item such a
+    // job's failure opens names no task either — and `deliverForTasks`, which finds items by task,
+    // is a read that can never find it.
+    const w = await integratingWorld(stack, 'orphan-job', 'PARKED');
+    const { job } = await claimedLanding(stack, w, 'orphan-job');
+    const landed = await reportLanding(stack, w, job);
+    assert.equal(landed.accepted, true, 'the landing that leaves something to promote');
+
+    const candidate = await stack.promotions.considerCandidate(w.projectId);
+    assert.ok(
+      candidate,
+      `the landing left no candidate, so no job without a task was queued — ${await jobsOf(stack.db, w.projectId)}`,
+    );
+    const claimed = await stack.jobs.dispatch({
+      runnerId: w.runnerId,
+      leaseOwner: 'lease-orphan-job',
+      draining: false,
+      capabilities: [INTEGRATION_JOB_CLAIM],
+    });
+    assert.equal(claimed.length, 1, `the promotion check was not handed out — ${await jobsOf(stack.db, w.projectId)}`);
+    assert.equal(claimed[0]!.kind, 'CHECK_PROMOTION', 'the job that names no task is the promotion\'s');
+
+    const answer = await reportFailure(stack, w, claimed[0]!, {
+      state: 'ERROR',
+      phase: 'CHECK',
+      sourceSha: 'a'.repeat(40),
+      targetShaBefore: 'c'.repeat(40),
+      errorCode: 'REBASE_FAILED',
+      errorDetail: { reason: 'the project branch would not rebase onto the upstream tip' },
+    });
+    assert.equal(answer.accepted, true);
+
+    const [item] = (await items(stack.db, w.projectId)).filter((row) => row.kind === 'INTEGRATION_ERROR');
+    assert.ok(item, `the job opened no item — ${await jobsOf(stack.db, w.projectId)}`);
+    assert.equal(item.taskId, null, 'the job it is about names no task at all');
+    assert.equal(answer.openItemId, item.id, 'the result names the item it opened');
+    assert.deepEqual(
+      (await itemTurns(stack.db, w.coordinatorSessionId!)).map((t) => t.clientTurnId),
+      [turnKey(item)],
+      'an item no task can be found by is owed the same delivery as any other',
+    );
   } finally {
     await stack.db.$disconnect();
   }
