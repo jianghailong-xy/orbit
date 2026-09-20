@@ -1546,6 +1546,24 @@ func (t *Transport) commentTask(id, agentID, bodyText string) (json.RawMessage, 
 	return out, err
 }
 
+// The declaration that this run's task is finished — the one thing that asks the account owner to
+// confirm an OWNER_CONFIRMED task. Both attribution headers ride along: the session is the
+// declaration's SUBJECT (the control plane takes it only from the task's own execution session,
+// while that session is in a turn), so it is an authenticated header rather than a body field, for
+// the same reason the evidence doors send one.
+func (t *Transport) claimOwnerConfirmation(id, agentID, sessionID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required to declare a task finished")
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/owner-confirmation/claim",
+		nil, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
 func (t *Transport) listTaskLists() (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/task-lists", nil, &out, taskOpTimeout)

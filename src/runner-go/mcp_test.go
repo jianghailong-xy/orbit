@@ -93,6 +93,52 @@ func TestSessionSendDescriptionDoesNotPromiseACurrentWorkOnlyRefusal(t *testing.
 	}
 }
 
+func TestMCPTaskRequestConfirmationPostsTheClaimWithBothAttributionHeaders(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "task_request_confirmation") {
+		t.Fatalf("task_request_confirmation missing from the base task tools")
+	}
+
+	var gotMethod, gotPath, gotAgent, gotSession string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAgent, gotSession = r.Header.Get("X-Orbit-Agent-Id"), r.Header.Get("X-Orbit-Session-Id")
+		w.Write([]byte(`{"id":"c1","alreadyDeclared":false}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "s1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_request_confirmation", map[string]interface{}{})
+	if res["isError"] == true {
+		t.Fatalf("task_request_confirmation returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/tasks/t1/owner-confirmation/claim" {
+		t.Fatalf("task_request_confirmation hit %s %s", gotMethod, gotPath)
+	}
+	// Both headers: the session is the declaration's subject, so it is authenticated rather than
+	// typed into the body — the control plane takes it only from the task's own run.
+	if gotAgent != "a1" || gotSession != "s1" {
+		t.Fatalf("attribution headers = agent %q, session %q", gotAgent, gotSession)
+	}
+}
+
+func TestMCPTaskRequestConfirmationRefusesOutsideASession(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{"id":"c1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_request_confirmation", map[string]interface{}{})
+	if res["isError"] != true {
+		t.Fatalf("a declaration with no session was accepted: %#v", res)
+	}
+	if called {
+		t.Fatal("the door was reached without a session to declare from")
+	}
+}
+
 func TestMCPTaskStartIsPartOfTaskTools(t *testing.T) {
 	if !hasMCPTool(toolDescriptors(false, false), "task_start") {
 		t.Fatalf("task_start missing from the base task tools")

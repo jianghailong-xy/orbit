@@ -13,11 +13,17 @@
  *   (5) a direct DONE is still refused, and names who settles this task;
  *   (6) the owner confirms a task that never ran — a record — and DONE is derived, in a project or
  *       in none; this is (4)'s call without the session, which is what makes (4) mean anything;
- *   (7) a run that ends its turn successfully — the real /turn-complete — asks the owner, and the
- *       session is counted as waiting for confirmation; a turn that failed asks nobody;
+ *   (7) a run that DECLARES its work finished — `task_request_confirmation`, the only thing that
+ *       asks — and ends its turn asks the owner, and the session is counted as waiting for
+ *       confirmation; a turn that failed asks nobody;
+ *  (7b) the question follows the declaration and the run: an undeclared pause asks nobody, a
+ *       declared run with a follow-up queued or a job of its own in flight is asked about nobody
+ *       until it stops, one declaration buys one question, and a fresh one buys the next;
+ *  (7c) a declaration is taken only from the task's own run, only inside a turn, and only for a task
+ *       that declares this criterion and has not settled;
  *   (8) a send-back needs a reason, files it as the next message of that session, and leaves the
  *       task open and no longer waiting;
- *   (9) the next successful turn asks again, and an answer to the report it replaced is refused;
+ *   (9) the next turn that declares asks again, and an answer to the report it replaced is refused;
  *  (10) the owner confirms the new report: DONE, the session goes dark, and both decisions stay.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable guarded database with
@@ -68,6 +74,8 @@ const suite = URL ? test : test.skip;
 
 const FIRST_REPORT = 'Done. 38 invoices are renamed and filed under finance/2026-09/.';
 const SECOND_REPORT = 'Filled in the Aliyun amount from the bank statement and re-totalled summary.csv.';
+const THIRD_REPORT = 'The suite is still running; I will pick it up when it reports back.';
+const LAST_REPORT = 'The suite passed and both missing days are backfilled — ready for your sign-off.';
 const REASON = 'The Aliyun invoice from 09-17 still needs its amount — take it from the bank statement.';
 
 interface RefusalBody {
@@ -440,12 +448,23 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
       (await countOwnerDecisionsBySession(db, ownerId, { sessionIds: [sessionId, coordinatorSessionId] }))
         .get(sessionId) ?? 0;
     let firstRequestId = '';
+    /** The session (7b) runs its own declared task in, which (7c) reaches from the outside. */
+    let busySessionId = '';
 
     // (7) -----------------------------------------------------------------------------------------
-    await t.test('a run that ends its turn successfully asks the owner, on its own session', async () => {
+    await t.test('a run that declares its work finished and ends its turn asks the owner, on its own session', async () => {
       await runTurn(firstTurnId, 1, FIRST_REPORT);
       assert.equal((await confirmations.read(ownerId, runTaskId)).waiting, null, 'nothing asked yet');
       assert.equal(await waitingOn(runSessionId), 0);
+
+      // The declaration, from the task's own run, in the turn that did the work — the only thing
+      // that makes the owner's card a statement by the run rather than an inference from silence.
+      const declared = await runnerDoor.claim(runner, runTaskId, runSessionId);
+      assert.equal(declared.alreadyDeclared, false, 'this call wrote the declaration');
+      assert.equal(declared.sessionId, runSessionId);
+      assert.equal(declared.turnId, firstTurnId, 'declared in the turn that is in flight');
+      assert.equal((await confirmations.read(ownerId, runTaskId)).waiting, null,
+        'declaring asks nothing by itself');
 
       await runnerApi.turnComplete({ id: runnerId }, runSessionId, {
         turnId: firstTurnId,
@@ -524,6 +543,212 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
       assert.equal(await waitingOn(failedSessionId), 0);
     });
 
+    // (7b) ----------------------------------------------------------------------------------------
+    await t.test('only the completion that ends a DECLARED run asks: an undeclared pause, a queued follow-up and a job in flight all ask nobody',
+      async () => {
+        const busyTaskId = randomUUID();
+        busySessionId = randomUUID();
+        const jobId = `bgj_${randomUUID().replace(/-/gu, '').slice(0, 12)}`;
+        await db.task.create({
+          data: {
+            id: busyTaskId, ownerId, title: 'a run with more to do', creatorType: CreatorType.USER,
+            creatorId: ownerId, assigneeId: workspaceId, status: TaskStatus.OPEN,
+            completionCriterion: 'OWNER_CONFIRMED', autoRunWhenReady: false,
+          },
+        });
+        await db.session.create({
+          data: {
+            id: busySessionId, ownerId, creatorId: ownerId, taskId: busyTaskId, workspaceId,
+            assignedRunnerId: runnerId, title: 'a run with more to do', prompt: 'do the work',
+            provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+            startsTaskWork: true, startedAt: new Date(),
+          },
+        });
+        const busySession = async () => db.session.findUniqueOrThrow({ where: { id: busySessionId } });
+        const asking = async () => (await confirmations.read(ownerId, busyTaskId)).waiting;
+        const questions = async () => (await db.taskOwnerConfirmationRequest.count({
+          where: { sessionId: busySessionId },
+        }));
+        let seq = 1;
+        /** A message the run has yet to be handed: how every follow-up arrives, wake turns included. */
+        const queueMessage = async (content: string) => {
+          const turnId = randomUUID();
+          await db.conversationTurn.create({
+            data: {
+              id: turnId, sessionId: busySessionId, seq: seq++, clientTurnId: `message:${turnId}`,
+              kind: 'message', content, status: 'PENDING',
+            },
+          });
+          return turnId;
+        };
+        /** The runner reports what one turn said, then completes it: the real boundary. */
+        const endTurn = async (turnId: string, report: string) => {
+          await db.conversationTurn.update({
+            where: { id: turnId }, data: { status: 'IN_FLIGHT', deliveredAt: new Date() },
+          });
+          await db.session.update({ where: { id: busySessionId }, data: { status: RunStatus.RUNNING } });
+          await db.runEvent.create({
+            data: {
+              sessionId: busySessionId, seq: 1000 + (seq++), type: RunEventType.ASSISTANT,
+              payload: { text: report }, turnId,
+            },
+          });
+          await runnerApi.turnComplete({ id: runnerId }, busySessionId, {
+            turnId, status: SharedRunStatus.SUCCEEDED,
+          } as never);
+        };
+        /** What the runner reports about a job of its own, up the door it reports everything. */
+        const reportJob = (status: string) => runnerApi.events({ id: runnerId }, busySessionId, {
+          events: [{
+            seq: seq++, type: RunEventType.BACKGROUND_TASK, ts: new Date().toISOString(),
+            turnId: undefined, payload: { toolUseId: jobId, kind: 'job', status },
+          }],
+        } as never);
+
+        // (a) The run says what it did, stops, and never declared: nobody is asked. This is the
+        // pause the card used to be drawn in — "it stopped, so it must be finished".
+        const firstTurnId = await queueMessage('start');
+        await endTurn(firstTurnId, FIRST_REPORT);
+        assert.equal((await busySession()).status, RunStatus.AWAITING_INPUT, 'the run parked');
+        assert.equal(await asking(), null, 'a run that never declared asks nobody');
+
+        // (b) The run declares while it still has work queued: the question waits for the run to
+        // stop, so the owner is not asked about a turn the run went straight past. The turn the
+        // declaration names is the one being worked in — a queued turn is not one yet.
+        const secondTurnId = await queueMessage('and then this');
+        const followUpTurnId = await queueMessage('and this too');
+        await db.conversationTurn.update({
+          where: { id: secondTurnId }, data: { status: 'IN_FLIGHT', deliveredAt: new Date() },
+        });
+        const declared = await runnerDoor.claim(runner, busyTaskId, busySessionId);
+        assert.equal(declared.turnId, secondTurnId, 'declared in the turn that is in flight');
+        await endTurn(secondTurnId, SECOND_REPORT);
+        assert.equal((await busySession()).status, RunStatus.RUNNING, 'the slot passes to the follow-up');
+        assert.equal(await asking(), null, 'a declared run that is still working has not finished');
+
+        // (c) The follow-up ends with a job of its own in flight: still nobody — that job's wake
+        // brings the run back.
+        await reportJob('running');
+        await endTurn(followUpTurnId, THIRD_REPORT);
+        assert.equal(await asking(), null, 'a job in flight is the run working on');
+
+        // (d) The job ends, and the next turn ends with nothing left anywhere: this is the
+        // question, about the turn that ended the run — and the declaration is spent by it.
+        await reportJob('completed');
+        const lastTurnId = await queueMessage('the last of it');
+        await endTurn(lastTurnId, LAST_REPORT);
+        const view = await confirmations.read(ownerId, busyTaskId);
+        assert.ok(view.waiting, 'the declared run has stopped working, so its owner is asked');
+        assert.equal(view.waiting.sessionId, busySessionId);
+        assert.equal(view.waiting.report?.text, LAST_REPORT, 'about the turn that ended it');
+        assert.equal(await questions(), 1, 'one declaration, one question');
+        assert.equal(await waitingOn(busySessionId), 1);
+        assert.equal(await statusOf(busyTaskId), 'OPEN', 'asking is still not concluding');
+        const spent = await db.taskOwnerConfirmationClaim.findMany({
+          where: { sessionId: busySessionId },
+          select: { id: true, requests: { select: { id: true } } },
+        });
+        assert.equal(spent.length, 1, 'one declaration on record');
+        assert.equal(spent[0].requests.length, 1, 'and the question it was asked from names it');
+        assert.equal(spent[0].requests[0].id, view.waiting.requestId);
+
+        // (e) One declaration buys one question: another turn ends with nothing in flight and asks
+        // nobody, because the run has not said anything since.
+        const quietTurnId = await queueMessage('nothing new');
+        await endTurn(quietTurnId, 'still nothing new.');
+        assert.equal(await questions(), 1, 'the spent declaration buys no second question');
+        assert.equal((await asking())?.requestId, view.waiting.requestId, 'the same question still waits');
+
+        // (f) Declaring twice in one turn is one declaration (the tool call the CLI may retry), and a
+        // declaration made after the last one was spent buys the next question.
+        const againTurnId = await queueMessage('one more pass');
+        await db.conversationTurn.update({
+          where: { id: againTurnId }, data: { status: 'IN_FLIGHT', deliveredAt: new Date() },
+        });
+        const first = await runnerDoor.claim(runner, busyTaskId, busySessionId);
+        const retried = await runnerDoor.claim(runner, busyTaskId, busySessionId);
+        assert.equal(first.alreadyDeclared, false);
+        assert.equal(retried.alreadyDeclared, true, 'a retried declaration is the same one');
+        assert.equal(retried.id, first.id);
+        assert.equal(await db.taskOwnerConfirmationClaim.count({
+          where: { sessionId: busySessionId },
+        }), 2, 'two turns declared in, two rows');
+        await endTurn(againTurnId, 'the second pass is done.');
+        assert.equal(await questions(), 2, 'a fresh declaration buys the next question');
+        assert.notEqual((await asking())?.requestId, view.waiting.requestId, 'and it is a new one');
+      });
+
+    // (7c) ----------------------------------------------------------------------------------------
+    await t.test('a declaration is taken only from the task\'s own run, and only inside a turn', async () => {
+      // What (7) legitimately declared, so the refusals below can be held to writing nothing.
+      const claimsBefore = await db.taskOwnerConfirmationClaim.count({ where: { taskId: runTaskId } });
+      // A session that runs no task — the shape a coordinator has — declares nothing about a task.
+      const noTask = await refusedWith(
+        runnerDoor.claim(runner, runTaskId, coordinatorSessionId),
+        ConflictException,
+      );
+      assert.equal(noTask.code, 'OWNER_CONFIRMATION_CLAIM_NOT_THE_RUN');
+      // A session running another task declares nothing about this one.
+      const otherTask = await refusedWith(
+        runnerDoor.claim(runner, runTaskId, busySessionId),
+        ConflictException,
+      );
+      assert.equal(otherTask.code, 'OWNER_CONFIRMATION_CLAIM_NOT_THE_RUN');
+      // A run between turns has no turn to declare in.
+      const betweenTurns = await refusedWith(
+        runnerDoor.claim(runner, runTaskId, runSessionId),
+        ConflictException,
+      );
+      assert.equal(betweenTurns.code, 'OWNER_CONFIRMATION_CLAIM_OUTSIDE_TURN');
+
+      // A task that declares another criterion has nothing for a run to declare finished — its
+      // run is in a turn, and its own session, and it is still refused.
+      const executableTaskId = randomUUID();
+      const executableSessionId = randomUUID();
+      await db.task.create({
+        data: {
+          id: executableTaskId, ownerId, title: 'a task that compares an exit code',
+          creatorType: CreatorType.USER, creatorId: ownerId, assigneeId: workspaceId,
+          status: TaskStatus.OPEN, completionCriterion: 'EXECUTABLE',
+          acceptanceCommand: 'true', acceptanceExpectedExitCode: 0, autoRunWhenReady: false,
+        },
+      });
+      await db.session.create({
+        data: {
+          id: executableSessionId, ownerId, creatorId: ownerId, taskId: executableTaskId, workspaceId,
+          assignedRunnerId: runnerId, title: 'a task that compares an exit code', prompt: 'run it',
+          provider: 'claude', status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: true, startedAt: new Date(),
+        },
+      });
+      await db.conversationTurn.create({
+        data: {
+          id: randomUUID(), sessionId: executableSessionId, seq: 1, clientTurnId: 'message:run-it',
+          kind: 'message', content: 'run it', status: 'IN_FLIGHT', deliveredAt: new Date(),
+        },
+      });
+      const wrongCriterion = await refusedWith(
+        runnerDoor.claim(runner, executableTaskId, executableSessionId),
+        ConflictException,
+      );
+      assert.equal(wrongCriterion.code, 'OWNER_CONFIRMATION_NOT_DECLARED');
+
+      // A settled task has nothing left for a run to declare: `recordTaskId` was confirmed in (6),
+      // and the criterion's own state is asked before whose run is declaring, so the session named
+      // here never even reaches the comparison.
+      const onSettled = await refusedWith(
+        runnerDoor.claim(runner, recordTaskId, coordinatorSessionId),
+        ConflictException,
+      );
+      assert.equal(onSettled.code, 'OWNER_CONFIRMATION_TASK_SETTLED');
+
+      // Nothing any of those refusals touched was written.
+      assert.equal(await db.taskOwnerConfirmationClaim.count({ where: { taskId: runTaskId } }), claimsBefore,
+        'the refusals wrote no declaration for the task whose run declared in (7)');
+      assert.equal(await db.taskOwnerConfirmationClaim.count({ where: { taskId: executableTaskId } }), 0);
+      assert.equal(await db.taskOwnerConfirmationClaim.count({ where: { taskId: recordTaskId } }), 0);
+    });
+
     // (8) -----------------------------------------------------------------------------------------
     let sendBackTurnId = '';
     await t.test('a send-back needs a reason, goes to the same session as the next message, and keeps the task open',
@@ -575,11 +800,24 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
 
     // (9) -----------------------------------------------------------------------------------------
     let secondRequestId = '';
-    await t.test('the next turn that ends successfully asks again, and the old report cannot be answered',
+    await t.test('the next turn that declares asks again, and the old report cannot be answered',
       async () => {
+        // The send-back resumed the same run. Its first turn ends without a declaration — the one
+        // that bought the card the owner just answered is spent — so nobody is asked.
         await runTurn(sendBackTurnId, 2, SECOND_REPORT);
         await runnerApi.turnComplete({ id: runnerId }, runSessionId, {
           turnId: sendBackTurnId,
+          status: SharedRunStatus.SUCCEEDED,
+        } as never);
+        assert.equal((await confirmations.read(ownerId, runTaskId)).waiting, null,
+          'the spent declaration buys no second question');
+
+        // The work moved on, so the run says so again: that declaration is the next question.
+        const againTurnId = randomUUID();
+        await runTurn(againTurnId, 3, SECOND_REPORT);
+        await runnerDoor.claim(runner, runTaskId, runSessionId);
+        await runnerApi.turnComplete({ id: runnerId }, runSessionId, {
+          turnId: againTurnId,
           status: SharedRunStatus.SUCCEEDED,
         } as never);
         const view = await confirmations.read(ownerId, runTaskId);

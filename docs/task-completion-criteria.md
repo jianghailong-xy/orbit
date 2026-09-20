@@ -15,10 +15,15 @@ priority order or an escalation chain:
 - `OWNER_CONFIRMED` is satisfied only by the account owner's own decision: their newest decision
   about the task, recorded from the app with no session header (`POST /tasks/:taskId/owner-confirmation`),
   is a `CONFIRM`. It takes `completionPolicy: MANUAL` and no command or verifier, and it is declarable
-  inside a project or outside one. When a run of the task ends a turn successfully, the owner is asked
-  on a card in that run's own session; `Send back` needs a reason, which is delivered to that session
-  as the owner's next message while the task stays open. A task no run is waiting on is confirmed
-  from its detail panel. No agent session can confirm or send back, a coordinator included: every
+  inside a project or outside one. The owner is asked on a card in that run's own session when a run
+  of the task DECLARES its work finished (`task_request_confirmation`, and only from the task's own
+  execution session, inside a turn) and then stops working — nothing executable queued behind the
+  turn, no background job or sub-workspace of its own in flight, no wake-up it asked for. A run that
+  declares nothing is never carded: the task stays OPEN and is confirmed from its detail panel, which
+  is also where a task no run is waiting on has always been confirmed. `Send back` needs a reason,
+  which is delivered to that session as the owner's next message while the task stays open; the next
+  question needs a fresh declaration, because one declaration buys one card. No agent session can
+  confirm or send back, a coordinator included: every
   such call is refused `OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER`.
 
 Runner CLI, MCP, and runner REST creates require `completionCriterion` explicitly on every task

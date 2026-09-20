@@ -816,6 +816,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 after retry exhaustion; invalid ownership/input is 400/404 and conflicting import identity is 409.',
   },
   {
+    at: 'tasks/task-owner-confirmation.service.ts#claim',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR UPDATE (rank 50), then one task_owner_confirmation_claim INSERT (rank 60, whose composite foreign key re-checks the task row this unit already holds). The declaring session and its in-flight turn are read WITHOUT a lock, inside the same closure: they are the statement\'s subject, not a row this unit writes, and the task lock is what orders a declaration against the owner\'s decision about the same task.',
+    identity: '(session, turn): a declaration is the run\'s statement about the turn it made it in, so a retried tool call finds the row it wrote and reports it as already declared rather than writing a second one, and task_owner_confirmation_claim_turn_key is the same fact in the database.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the task and re-reads its criterion, its status, the declaring session\'s task and that session\'s newest in-flight turn inside the closure, so a re-run declares against the same facts or is refused; a rolled-back attempt leaves no claim behind.',
+    effects: 'None outside the database: nothing is published, because a declaration changes no view — the question it leads to is recorded later, by the completion that ends the run.',
+    answer: 'Typed 503 after retry exhaustion. A task declaring another criterion, a settled task, a declaration from outside the task\'s own run and one made between turns are explicit 409s.',
+  },
+  {
     at: 'tasks/task-owner-confirmation.service.ts#confirm',
     shape: 'TX_RETRIED',
     locks: 'task FOR UPDATE (rank 50), then the task\'s newest task_owner_confirmation_request read and one task_owner_decision INSERT (rank 60, whose foreign keys re-check the task row this unit already holds and the request row it names), then the derived status back onto the same task row. The decision\'s time is read with clock_timestamp() after the task lock is held, so decisions about one task are ordered as they were made.',
@@ -1091,8 +1102,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // OWNER_CONFIRMED. The question is recorded in the transaction that acknowledges the successful
   // turn; a decision is recorded under the task's row lock, and a send-back's inside the transaction
   // that files its reason as the next message, after that transaction's Session lock.
-  { at: 'tasks/owner-confirmation-read.ts#recordOwnerConfirmationRequest', under: 'runnerApi.turnComplete — after the SUCCEEDED message turn is ACKed under the rank-30 Session lock; one task_owner_confirmation_request child row per turn (unique on session and turn), whose task foreign key takes FOR KEY SHARE on the rank-50 task and nothing else' },
+  { at: 'tasks/owner-confirmation-read.ts#recordOwnerConfirmationClaim', under: 'taskOwnerConfirmation.claim — one task_owner_confirmation_claim child row under the rank-50 task lock the door already holds, keyed by (session, turn) so a retried declaration is the same row' },
+  { at: 'tasks/owner-confirmation-read.ts#recordOwnerConfirmationRequest', under: 'runnerApi.turnComplete — after the SUCCEEDED message turn is ACKed under the rank-30 Session lock; one task_owner_confirmation_request child row per turn (unique on session and turn) and per declaration (unique on the claim it names), whose task foreign key takes FOR KEY SHARE on the rank-50 task and nothing else' },
   { at: 'tasks/task-owner-confirmation.service.ts#lockedStanding', under: "taskOwnerConfirmation.confirm, and sessions.createTurn's participateSendTransaction hook for a send-back — the rank-50 task lock a decision is ordered by, taken after createTurn's rank-30 Session lock on the send-back path" },
+  { at: 'tasks/task-owner-confirmation.service.ts#lockedClaimStanding', under: 'taskOwnerConfirmation.claim — the rank-50 task lock a declaration of completion is ordered by, which is the same lock the owner\'s decision about that task is ordered by; the declaring session and its in-flight turn are read beside it, unlocked' },
   { at: 'tasks/task-owner-confirmation.service.ts#writeDecision', under: "taskOwnerConfirmation.confirm, and sessions.createTurn's participateSendTransaction hook for a send-back — one task_owner_decision child row under the rank-50 task lock lockedStanding already took, so a send-back's decision commits with the turn that delivers its reason" },
   // Unit L3's effect-time fence. Rank 40 only — the project row its callers already take at that
   // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the

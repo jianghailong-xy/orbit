@@ -8,8 +8,9 @@ import {
  * The rules of the fourth completion criterion's door, kept pure so they can be stated as a table.
  *
  * OWNER_CONFIRMED is settled by the account owner and by nobody else. The owner presses Confirm
- * done on the card Orbit draws into the task's own session once a run of it has ended its turn, or
- * in the task's detail panel when no run is waiting; either press posts to
+ * done on the card Orbit draws into the task's own session once a run of it has DECLARED the work
+ * finished (`task_request_confirmation`) and stopped working, or in the task's detail panel when no
+ * run is waiting; either press posts to
  * `POST /tasks/:taskId/owner-confirmation`, and the recorded CONFIRM is the fact DONE is derived
  * from (`evaluateTaskCompletion`, and 0267's lane in the database's DONE fence). Send back… posts
  * the owner's reason to the same door, which delivers it to that session as their next message and
@@ -26,8 +27,10 @@ import {
  *
  * WHAT IS BEING ANSWERED
  * ----------------------
- * A card is drawn for one report: the request `runnerApi.turnComplete` recorded when a run's turn
- * succeeded. The same session can end another turn while the owner is reading, so a decision names
+ * A card is drawn for one report: the request `runnerApi.turnComplete` recorded when a run ended its
+ * last turn successfully — a turn with nothing queued behind it and nothing of the run's own left in
+ * flight (`runStoppedWorking`), because a run that is going to work again has not asked anything
+ * yet. The same session can end another turn while the owner is reading, so a decision names
  * the request it answers and the door compares it with the one waiting now, under the task's row
  * lock (`ownerDecisionRefusal`). A panel press on a task no run is waiting on answers `null`, and is
  * refused the moment a run starts waiting — that request has a card, and one question keeps one
@@ -58,6 +61,11 @@ export const NOTHING_TO_SEND_BACK_CODE = 'OWNER_CONFIRMATION_NOTHING_TO_SEND_BAC
 export const NOTHING_TO_SEND_BACK_ACTION = 'RUN_THE_TASK_OR_CONFIRM_IT';
 export const SEND_BACK_REASON_CODE = 'OWNER_CONFIRMATION_SEND_BACK_REQUIRES_REASON';
 export const SEND_BACK_REASON_ACTION = 'SAY_WHAT_IS_MISSING';
+/** A declaration of completion that did not come from the task's own run, or came from outside a turn. */
+export const CLAIM_NOT_THE_RUN_CODE = 'OWNER_CONFIRMATION_CLAIM_NOT_THE_RUN';
+export const CLAIM_NOT_THE_RUN_ACTION = 'DECLARE_FROM_THE_TASK_RUN';
+export const CLAIM_OUTSIDE_TURN_CODE = 'OWNER_CONFIRMATION_CLAIM_OUTSIDE_TURN';
+export const CLAIM_OUTSIDE_TURN_ACTION = 'DECLARE_FROM_THE_TURN_THAT_DID_THE_WORK';
 
 /** A refusal in the shape every door of this service answers with. */
 export interface OwnerConfirmationRefusal {
@@ -106,8 +114,9 @@ export function ownerConfirmationPrincipalRefusal(
     message:
       `${why}; nothing was written. An OWNER_CONFIRMED task is confirmed or sent back only by the `
       + 'account owner, from the Orbit app with their own sign-in — no agent session can do it, the '
-      + 'task\'s own run and a project coordinator included. Finish the work, say in the session what '
-      + 'was done, and end the turn: the owner is shown a confirmation card in the task\'s session.',
+      + 'task\'s own run and a project coordinator included. Finish the work, declare it with '
+      + 'task_request_confirmation (`orbit task request-confirmation`), say in the session what was '
+      + 'done, and end the turn: the owner is shown a confirmation card in the task\'s session.',
   };
 }
 
@@ -149,8 +158,7 @@ export interface OwnerConfirmationStanding {
   verifiesTaskId?: string | null;
   /**
    * The newest confirmation request a run of this task recorded, with whether a decision already
-   * answers it; null when no run of it has ever ended a turn successfully while it waited on its
-   * owner.
+   * answers it; null when no run of it has ever stopped working while it waited on its owner.
    */
   latestRequest: { id: string; sessionId: string; decided: boolean } | null;
 }
@@ -233,6 +241,78 @@ function staleReason(
   }
   return 'a later run of this task has reported since the card you answered was drawn, so the '
     + 'report you read is not the one waiting now';
+}
+
+/** The facts a declaration of completion is judged against, as its door reads them. */
+export interface OwnerClaimStanding {
+  completionCriterion: TaskCompletionCriterionValue;
+  status: string;
+  /** The task the declaring session runs, or null when that session runs no task at all. */
+  actingSessionTaskId: string | null;
+  /** The turn the declaring session is in now, or null when it is between turns. */
+  actingSessionTurnId: string | null;
+}
+
+/**
+ * Why this declaration is refused, or null when it is accepted.
+ *
+ * A declaration is the statement of the run that did the work — "this task's work is finished" —
+ * and the owner is asked on the strength of it. So it is taken from that run and only that run: a
+ * coordinator's session, a neighbouring conversation, or a session of another task declaring is not
+ * evidence about this task, and one made between turns (a runner-hosted job, a sleep, a scheduled
+ * wake-up) is not evidence about any turn. Read before anything is written, like the decision door's
+ * rules, so a caller is refused without a row.
+ */
+export function ownerClaimRefusal(
+  taskId: string,
+  standing: OwnerClaimStanding,
+): OwnerConfirmationRefusal | null {
+  if (standing.completionCriterion !== 'OWNER_CONFIRMED') {
+    const remedy = taskCompletionRequiredAction(standing.completionCriterion);
+    return {
+      code: NOT_DECLARED_CODE,
+      kind: 'REFUSAL',
+      requiredAction: remedy.requiredAction,
+      message:
+        `this task declares ${standing.completionCriterion}, so a run declaring its work finished `
+        + `settles nothing — nobody is asked and nothing was written. To settle it, ${remedy.instruction}.`,
+    };
+  }
+  if (!(OWNER_CONFIRMATION_UNSETTLED_STATUSES as readonly string[]).includes(standing.status)) {
+    return {
+      code: TASK_SETTLED_CODE,
+      kind: 'REFUSAL',
+      requiredAction: TASK_SETTLED_ACTION,
+      message:
+        `this task is ${standing.status}, so there is nothing left for a run to declare; nothing `
+        + 'was written. Reopen it first if more work is wanted.',
+    };
+  }
+  if (standing.actingSessionTaskId !== taskId) {
+    return {
+      code: CLAIM_NOT_THE_RUN_CODE,
+      kind: 'REFUSAL',
+      requiredAction: CLAIM_NOT_THE_RUN_ACTION,
+      message:
+        standing.actingSessionTaskId === null
+          ? 'this declaration came from a session that runs no task, so it says nothing about this '
+            + 'task\'s work; nothing was written. Declare it from the task\'s own run.'
+          : 'this declaration came from a session running a different task, so it says nothing '
+            + 'about this task\'s work; nothing was written. Declare it from the task\'s own run.',
+    };
+  }
+  if (standing.actingSessionTurnId === null) {
+    return {
+      code: CLAIM_OUTSIDE_TURN_CODE,
+      kind: 'REFUSAL',
+      requiredAction: CLAIM_OUTSIDE_TURN_ACTION,
+      message:
+        'the run is between turns, so there is no turn this declaration belongs to; nothing was '
+        + 'written. Declare from the turn that did the work, so the owner reads it about that '
+        + 'turn\'s report.',
+    };
+  }
+  return null;
 }
 
 /** Throw a refusal as the HTTP error its code means. */

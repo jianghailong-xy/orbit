@@ -8,7 +8,9 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
   latestOwnerConfirmationRequest,
+  ownerConfirmationClaimForTurn,
   readOwnerConfirmation,
+  recordOwnerConfirmationClaim,
   type OwnerConfirmationView,
 } from './owner-confirmation-read';
 import {
@@ -18,10 +20,12 @@ import {
 import {
   OWNER_DECISIONS,
   assertOwnerConfirmationPrincipal,
+  ownerClaimRefusal,
   ownerDecisionNote,
   ownerDecisionRefusal,
   ownerSendBackClientTurnId,
   throwOwnerConfirmationRefusal,
+  type OwnerClaimStanding,
   type OwnerConfirmationPrincipal,
   type OwnerConfirmationStanding,
   type OwnerDecisionValue,
@@ -53,6 +57,17 @@ export interface OwnerDecisionReceipt {
   completed: boolean;
   /** The message a send-back was delivered as. */
   turnId: string | null;
+}
+
+/** What the door returns once a run has declared its task's work finished. */
+export interface OwnerClaimReceipt {
+  id: string;
+  taskId: string;
+  sessionId: string;
+  turnId: string;
+  claimedAt: Date;
+  /** True when the declaration was already on record: a retried call, which writes nothing. */
+  alreadyDeclared: boolean;
 }
 
 interface WrittenDecision {
@@ -90,6 +105,75 @@ export class TaskOwnerConfirmationService {
     const view = await readOwnerConfirmation(this.prisma, ownerId, taskId);
     if (!view) throw new NotFoundException('task not found');
     return view;
+  }
+
+  /**
+   * A run declares that its task's work is finished — the statement the owner is asked on.
+   *
+   * The run's own session is the only one whose declaration means anything, and it has to be in a
+   * turn; `ownerClaimRefusal` states both rules. Nothing is ASKED here: the question is put at the
+   * end of the turn that leaves the run with nothing to do (`runnerApi.turnComplete`), which is
+   * where the report the owner reads has been said in full. Written under the task's row lock, so a
+   * declaration and the owner's decision about the same task cannot pass each other.
+   *
+   * A retried call finds the row it already wrote, under `(sessionId, turnId)`, and reports it: a
+   * tool call whose reply was lost is the same declaration, not a second one.
+   */
+  async claim(ownerId: string, taskId: string, actingSessionId: string | null): Promise<OwnerClaimReceipt> {
+    const sessionId = actingSessionId?.trim() ? actingSessionId.trim() : null;
+    try {
+      return await withTransactionRetry(this.prisma, async (tx) => {
+        const standing = await lockedClaimStanding(tx, ownerId, taskId, sessionId);
+        const refusal = ownerClaimRefusal(taskId, standing);
+        if (refusal) throwOwnerConfirmationRefusal(refusal);
+        const turnId = standing.actingSessionTurnId as string;
+        const already = await ownerConfirmationClaimForTurn(tx, sessionId as string, turnId);
+        if (already) {
+          return { ...already, taskId, sessionId: sessionId as string, turnId, alreadyDeclared: true };
+        }
+        const written = await recordOwnerConfirmationClaim(tx, {
+          taskId,
+          ownerId,
+          sessionId: sessionId as string,
+          turnId,
+        });
+        return { ...written, taskId, sessionId: sessionId as string, turnId, alreadyDeclared: false };
+      }, loggedRetry(this.logger, 'taskOwnerConfirmation.claim'));
+    } catch (error) {
+      const raced = await this.declarationLostTo(error, taskId, sessionId);
+      if (!raced) throw error;
+      return raced;
+    }
+  }
+
+  /**
+   * The declaration this call lost a race to, or null when the failure was about anything else.
+   *
+   * Two `orbit task request-confirmation` calls can run at once — two shell calls in one turn — and
+   * the second is the SAME statement, not a second one: the winner's row is read back here, in a
+   * transaction of its own, because the loser's was aborted by the violation and nothing more can be
+   * asked inside it. `(sessionId, turnId)` is what makes the row the right answer: there is one
+   * declaration per turn, so there is no second candidate.
+   */
+  private async declarationLostTo(
+    error: unknown,
+    taskId: string,
+    sessionId: string | null,
+  ): Promise<OwnerClaimReceipt | null> {
+    if (sessionId === null) return null;
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') return null;
+    const turn = await this.prisma.conversationTurn.findFirst({
+      where: { sessionId, status: 'IN_FLIGHT' },
+      orderBy: { seq: 'desc' },
+      select: { id: true },
+    });
+    if (!turn) return null;
+    const claim = await this.prisma.taskOwnerConfirmationClaim.findUnique({
+      where: { sessionId_turnId: { sessionId, turnId: turn.id } },
+      select: { id: true, claimedAt: true },
+    });
+    if (!claim) return null;
+    return { ...claim, taskId, sessionId, turnId: turn.id, alreadyDeclared: true };
   }
 
   async decide(
@@ -256,6 +340,53 @@ async function lockedStanding(
   `);
   if (!task) throw new NotFoundException('task not found');
   return { ...task, latestRequest: await latestRequestStanding(tx, taskId) };
+}
+
+/**
+ * The same task row under the same lock, with the run that is declaring: the task its session runs,
+ * and the turn that session is in.
+ *
+ * The turn is derived rather than sent — the runner's MCP server knows only its session, and the
+ * server already knows which turn it handed that session, which is the same resolution
+ * `createApproval` makes for the question it records. A session of another account is no session
+ * here, and is refused as a declaration from outside the run.
+ */
+async function lockedClaimStanding(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  taskId: string,
+  actingSessionId: string | null,
+): Promise<OwnerClaimStanding> {
+  const [task] = await tx.$queryRaw<Array<{
+    status: string;
+    completionCriterion: TaskCompletionCriterionValue;
+  }>>(Prisma.sql`
+    SELECT "status"::text AS "status",
+           "completion_criterion"::text AS "completionCriterion"
+      FROM "task"
+     WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+     FOR UPDATE
+  `);
+  if (!task) throw new NotFoundException('task not found');
+  const session = actingSessionId
+    ? await tx.session.findFirst({
+        where: { id: actingSessionId, ownerId },
+        select: { taskId: true },
+      })
+    : null;
+  const turn = session
+    ? await tx.conversationTurn.findFirst({
+        where: { sessionId: actingSessionId as string, status: 'IN_FLIGHT' },
+        orderBy: { seq: 'desc' },
+        select: { id: true },
+      })
+    : null;
+  return {
+    status: task.status,
+    completionCriterion: task.completionCriterion,
+    actingSessionTaskId: session?.taskId ?? null,
+    actingSessionTurnId: turn?.id ?? null,
+  };
 }
 
 /** The same facts without a lock: only good for deciding where a locked transaction has to start. */

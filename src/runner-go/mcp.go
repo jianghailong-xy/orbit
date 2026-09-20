@@ -772,6 +772,22 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_request_confirmation":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		// The declaration is the run's own statement, taken only from the task's own execution
+		// session while it is in a turn — so a call with no session has nothing to declare with.
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("task_request_confirmation requires an Orbit task Session", true)
+		}
+		raw, err := s.t.claimOwnerConfirmation(id, s.agentID, s.sessionID)
+		if err != nil {
+			return toolResult("declare the task finished failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_progress_report":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2706,6 +2722,20 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_comment",
 			"description": "Add a comment to a task (attributed to this agent).",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp, "body": str}, "body"),
+		},
+		{
+			"name": "task_request_confirmation",
+			"description": "Declare that this task's work is finished, so the account owner is asked to " +
+				"confirm it — the ONLY thing that asks them. An OWNER_CONFIRMED task with no declaration " +
+				"leaves the owner with no card: it stays OPEN and is confirmed only from its detail panel. " +
+				"Call it from the task's own run, inside the turn that did the work, once the work is done " +
+				"and before ending the turn. The question is put to the owner when this run has stopped " +
+				"working (nothing queued behind that turn, no background job or sub-workspace of its own in " +
+				"flight, no wake-up it asked for), over the report that turn ends on — declaring while more " +
+				"work is coming asks nothing yet. Calling it twice in one turn is one declaration. " +
+				"Confirming done, or sending back with a reason, is the account owner's own act in the app; " +
+				"no agent session can do it.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		// A task's structured progress, which the progress watches read (task_progress.go).
 		taskProgressDescriptor(obj, taskIDProp),

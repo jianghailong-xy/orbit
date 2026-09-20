@@ -205,6 +205,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // what the decision was made from. It carries no authority: independence is checked at the door
   // against the task's whole session history, never read back off this column.
   'decidingSessionId',
+  // Migration 0295's declaration: the row `task_request_confirmation` wrote, which the question in
+  // front of the owner was asked from. An address like every other id here — "which run declared
+  // this done, and in which turn" is a question a reader answers by looking the row up — and never a
+  // fence: nothing echoes it back for comparison.
+  'claimId',
   // N8's explicit legacy-import and bounded-backfill receipts. Each is an address returned by
   // the audit response (and pushTaskIds is the exact allowlist the operator supplied).
   'sourceCommentId',

@@ -286,17 +286,20 @@ test('an EXECUTABLE task delegates its terminal status to the one declared comma
   assert.equal(/task_update 将本任务状态（status）置为 DONE/.test(step3), false, step3);
 });
 
-test('an OWNER_CONFIRMED task reports in its session and ends the turn instead of submitting evidence', async () => {
-  // Only the account owner settles this criterion, by pressing Confirm done in the app. Handed the
-  // evidence envelope like every other task, runs of it did as told, each filing a
-  // `task_completion_evidence` row the criterion never reads — for tasks in no project, with no
-  // project_get criterion to copy.
+test('an OWNER_CONFIRMED task declares its work finished and reports in its session, instead of submitting evidence', async () => {
+  // Only the account owner settles this criterion, by pressing Confirm done in the app, and only
+  // after the run DECLARES the work finished — the declaration is what a card is made of, so the
+  // prompt names it first and says what not calling it costs. Handed the evidence envelope like
+  // every other task, runs of it did as told, each filing a `task_completion_evidence` row the
+  // criterion never reads — for tasks in no project, with no project_get criterion to copy.
   const text = await (await promptFor({
     description: 'x',
     completionCriterion: 'OWNER_CONFIRMED',
     list: null,
   }))();
   const step3 = text.split('\n').find((line) => line.startsWith('3. '))!;
+  assert.match(step3, /先用 task_request_confirmation/);
+  assert.match(step3, /只有这条声明才会让账户所有者收到确认卡/);
   assert.match(step3, /在本会话里用一两句话说明做了什么，然后结束本轮/);
   assert.match(step3, /由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…）/);
   assert.match(step3, /退回的理由会作为下一条消息进入本会话，收到后按理由继续/);

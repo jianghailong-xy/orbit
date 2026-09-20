@@ -440,10 +440,14 @@ export function buildTaskExecutionPrompt(task: {
         `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
         ` coordinator 审批这个机械结论。\n`
       : ownerConfirmed
-        ? `3. 完成后，在本会话里用一两句话说明做了什么，然后结束本轮。本任务的完成判据是 OWNER_CONFIRMED：`
+        ? `3. 完成后，先用 task_request_confirmation（MCP；CLI 是 \`orbit task request-confirmation\`）`
+          + `声明本次运行已经做完，再在本会话里用一两句话说明做了什么，然后结束本轮。`
+          + `只有这条声明才会让账户所有者收到确认卡；不声明就不会有任何卡片——任务会一直停在 OPEN，`
+          + `只能由所有者在任务面板里确认。卡片要等本次运行真的停下来（队列空、没有在飞的后台作业、`
+          + `没有自己排的唤醒）那一轮结束时才交给所有者。本任务的完成判据是 OWNER_CONFIRMED：`
           + `由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…），任何 agent 会话`
-          + `（包括 coordinator）都无法代为确认；退回的理由会作为下一条消息进入本会话，收到后按理由继续。`
-          + `不要调用 task_evidence_submit，也不要写 status。\n`
+          + `（包括 coordinator）都无法代为确认；退回的理由会作为下一条消息进入本会话，收到后按理由继续，`
+          + `再次做完时要重新声明一次。不要调用 task_evidence_submit，也不要写 status。\n`
         : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
           + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
           + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`

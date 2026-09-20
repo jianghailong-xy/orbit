@@ -199,7 +199,12 @@ import {
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { recordOwnerConfirmationRequest } from '../tasks/owner-confirmation-read';
+import {
+  recordOwnerConfirmationRequest,
+  runStoppedWorking,
+  unspentOwnerConfirmationClaim,
+  waitingScheduledWakeup,
+} from '../tasks/owner-confirmation-read';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import { withControlPlaneNote } from './control-plane-note';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
@@ -3232,6 +3237,11 @@ export class RunnerApiController {
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
+          // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
+          // work that will report back and wake this session again, which is what makes a turn the
+          // run ends not the end of the run (`runStoppedWorking`). Read with the row.
+          runningBgJobs: true,
+          runningSubagents: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -3671,65 +3681,55 @@ export class RunnerApiController {
       if (acceptanceTaskCompleted && current.taskId) {
         await enqueueForDoneTask(tx, current.ownerId, current.taskId);
       }
+      // The task a successful message turn is about, read once for the two questions the completion
+      // asks of it: whether an EXECUTABLE acceptance shell turn is owed now, and whether a run of an
+      // OWNER_CONFIRMED task declared its work finished and has now stopped. The second is decided
+      // below `pendingExecutable` — a follow-up queued while this turn ran counts only once the
+      // requeues above have run — which is why the read is hoisted out of the block that uses it
+      // first.
+      const completedMessageTurn =
+        completedTurn?.kind === 'message' && dto.status === RunStatus.SUCCEEDED ? completedTurn : null;
+      const completedTask =
+        completedMessageTurn && current.taskId
+          ? await tx.task.findUnique({
+              where: { id: current.taskId },
+              select: {
+                status: true,
+                acceptanceCommand: true,
+                acceptanceExpectedExitCode: true,
+                completionCriterion: true,
+              },
+            })
+          : null;
       // A successful model turn on a task with L0 acceptance queues exactly one existing shell
       // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
       // boundary: either both commit or neither does, so retrying /turn-complete cannot run the
       // command twice. Tasks without the pair do not enter this branch.
       if (
-        completedTurn?.kind === 'message'
-        && dto.status === RunStatus.SUCCEEDED
-        && current.taskId
+        completedMessageTurn != null
+        && completedTask != null
+        && awaitsExecutableAcceptance(completedTask.status)
+        && completedTask.completionCriterion === 'EXECUTABLE'
+        && completedTask.acceptanceCommand != null
+        && completedTask.acceptanceExpectedExitCode != null
       ) {
-        const executable = await tx.task.findUnique({
-          where: { id: current.taskId },
-          select: {
-            status: true,
-            acceptanceCommand: true,
-            acceptanceExpectedExitCode: true,
-            completionCriterion: true,
+        const last = await tx.conversationTurn.aggregate({
+          where: { sessionId },
+          _max: { seq: true },
+        });
+        await tx.conversationTurn.create({
+          data: {
+            sessionId,
+            seq: (last._max.seq ?? 0) + 1,
+            clientTurnId: taskAcceptanceClientTurnId(
+              completedMessageTurn.id,
+              completedTask.acceptanceExpectedExitCode,
+            ),
+            kind: 'shell',
+            content: completedTask.acceptanceCommand,
+            status: 'PENDING',
           },
         });
-        if (
-          executable != null
-          && awaitsExecutableAcceptance(executable.status)
-          && executable.completionCriterion === 'EXECUTABLE'
-          && executable.acceptanceCommand != null
-          && executable.acceptanceExpectedExitCode != null
-        ) {
-          const last = await tx.conversationTurn.aggregate({
-            where: { sessionId },
-            _max: { seq: true },
-          });
-          await tx.conversationTurn.create({
-            data: {
-              sessionId,
-              seq: (last._max.seq ?? 0) + 1,
-              clientTurnId: taskAcceptanceClientTurnId(
-                completedTurn.id,
-                executable.acceptanceExpectedExitCode,
-              ),
-              kind: 'shell',
-              content: executable.acceptanceCommand,
-              status: 'PENDING',
-            },
-          });
-        }
-        // OWNER_CONFIRMED: a run of the task ended a turn successfully, so its owner is asked. This
-        // is the only place that knows the turn succeeded — the runner's turn_end event carries no
-        // outcome — so the question is recorded here, in the same transaction as the acknowledgement
-        // that makes it happen once. Nothing is concluded: the owner's own decision is.
-        if (
-          executable != null
-          && executable.completionCriterion === 'OWNER_CONFIRMED'
-          && (OWNER_CONFIRMATION_UNSETTLED_STATUSES as readonly string[]).includes(executable.status)
-        ) {
-          await recordOwnerConfirmationRequest(tx, {
-            taskId: current.taskId,
-            ownerId: current.ownerId,
-            sessionId,
-            turnId: completedTurn.id,
-          });
-        }
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -3783,6 +3783,49 @@ export class RunnerApiController {
       const nextStatus = failSession
         ? RunStatus.FAILED
         : statusAfterTurnCompleted(pendingExecutable > 0);
+      // OWNER_CONFIRMED: a run that declared its work finished and has stopped working asks its
+      // owner. This is the only place that knows the turn succeeded — the runner's turn_end event
+      // carries no outcome — so the question is recorded here, in the same transaction as the
+      // acknowledgement that makes it happen once. Nothing is concluded: the owner's own decision
+      // is.
+      //
+      // Two facts decide it, and both are required. The DECLARATION (`task_request_confirmation`,
+      // read here as an unspent claim) is what makes the question the run's own statement; a run
+      // that never declared asks nothing, and is confirmed from the task's detail panel instead.
+      // `runStoppedWorking` says the turn that just ended is the place to put it: a turn that leaves
+      // a follow-up queued, a job the run started still in flight, or a wake-up it has already asked
+      // for is a run that goes on by itself, and the owner would be reading a report the run went on
+      // past. Asking on every successful turn instead — which is what this did before — drew cards
+      // over runs that were still working, seconds apart, and over turns whose last message was a
+      // question to the owner rather than a claim of completion.
+      //
+      // `pendingExecutable` is the count the park below is decided by, taken after the requeues
+      // above, so a follow-up that arrived while this turn ran counts here too. The wake-up's read
+      // and the claim's are the last two, so an ordinary completion pays for neither.
+      if (
+        completedMessageTurn != null
+        && completedTask != null
+        && completedTask.completionCriterion === 'OWNER_CONFIRMED'
+        && (OWNER_CONFIRMATION_UNSETTLED_STATUSES as readonly string[]).includes(completedTask.status)
+        && !failSession
+        && current.taskId
+        && runStoppedWorking(
+          current,
+          pendingExecutable,
+          await waitingScheduledWakeup(tx, sessionId),
+        )
+      ) {
+        const claim = await unspentOwnerConfirmationClaim(tx, sessionId);
+        if (claim != null) {
+          await recordOwnerConfirmationRequest(tx, {
+            taskId: current.taskId,
+            ownerId: current.ownerId,
+            sessionId,
+            turnId: completedMessageTurn.id,
+            claimId: claim.id,
+          });
+        }
+      }
       // Settle + bill only if this is still the active turn and is not being torn down,
       // so a late/retried completion cannot resurrect a finalized session or double-bill.
       const parked = await tx.session.updateMany({

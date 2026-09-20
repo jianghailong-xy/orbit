@@ -20,9 +20,12 @@ import {
  * WHAT "WAITING" IS
  * -----------------
  * A task that declares OWNER_CONFIRMED and has not settled, whose newest confirmation request no
- * decision answers yet. A request is recorded when a run of the task ends a turn successfully, so a
- * send-back — which answers the request it was sent about — takes the task out of waiting until the
- * next successful turn records the next one. Nothing here is a queue: every read recomputes it.
+ * decision answers yet. A request is recorded when a run of the task both DECLARED the work
+ * finished (`recordOwnerConfirmationClaim` below — the agent's own statement, and the only thing
+ * that asks at all) AND has stopped working (`runStoppedWorking` below), so a send-back — which
+ * answers the request it was sent about — takes the task out of waiting until the agent declares
+ * again after the next turn that carries the work forward. Nothing here is a queue: every read
+ * recomputes it.
  */
 
 const UNSETTLED: TaskStatus[] = OWNER_CONFIRMATION_UNSETTLED_STATUSES.map((status) => TaskStatus[status]);
@@ -73,16 +76,133 @@ export interface OwnerConfirmationView {
 }
 
 /**
- * Record that a run of this task ended a turn successfully and so asks its owner.
+ * Record that a run of this task declared its work finished — the statement `task_request_confirmation`
+ * is, and the only thing that ever asks the owner.
+ *
+ * Called by `TaskOwnerConfirmationService.claim` under the task's row lock, for a declaration made
+ * from the task's own execution session while one of its turns is in flight. One row per turn
+ * (`task_owner_confirmation_claim_turn_key`), so a retried tool call declares once. Nothing is
+ * concluded and nothing is asked yet: the question waits for the completion that leaves the run with
+ * nothing to do.
+ */
+export async function recordOwnerConfirmationClaim(
+  tx: PrismaTypes.TransactionClient,
+  claim: { taskId: string; ownerId: string; sessionId: string; turnId: string },
+): Promise<{ id: string; claimedAt: Date }> {
+  return tx.taskOwnerConfirmationClaim.create({
+    data: claim,
+    select: { id: true, claimedAt: true },
+  });
+}
+
+/** The claim this declaration already is, when a retried call arrives under the same turn. */
+export function ownerConfirmationClaimForTurn(
+  tx: PrismaTypes.TransactionClient,
+  sessionId: string,
+  turnId: string,
+) {
+  return tx.taskOwnerConfirmationClaim.findUnique({
+    where: { sessionId_turnId: { sessionId, turnId } },
+    select: { id: true, claimedAt: true },
+  });
+}
+
+/**
+ * The newest declaration by this session that no question has been asked from yet — "this run says
+ * it is done, and the owner has not been told" — or null.
+ *
+ * Spent is a fact rather than a state: a claim a `task_owner_confirmation_request` names has been
+ * asked, and one claim buys one question (`task_owner_confirmation_request_claim_key`). So an agent
+ * that declared, was asked, and was sent back with more work must declare again before the next
+ * question — which is the whole point of asking on a declaration instead of on a pause.
+ *
+ * Scoped to the declaring session, deliberately: the declaration is that run's statement, and the
+ * question is put where that run's report is. A run whose session ended before its claim was spent
+ * takes the claim with it; a later run of the same task declares for itself.
+ */
+export async function unspentOwnerConfirmationClaim(
+  tx: PrismaTypes.TransactionClient,
+  sessionId: string,
+): Promise<{ id: string; turnId: string } | null> {
+  const claim = await tx.taskOwnerConfirmationClaim.findFirst({
+    where: { sessionId, requests: { none: {} } },
+    orderBy: [{ claimedAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, turnId: true },
+  });
+  return claim ?? null;
+}
+
+/**
+ * Whether a run that completed a turn has stopped working — the completion a declaration is answered
+ * on.
+ *
+ * ASKED AT THE END OF THE RUN, NOT AT THE END OF EVERY TURN. A task's run ends many turns, and only
+ * the last one leaves the run with nothing to do: the queue hands it the next message, a `bg_run`
+ * job it started wakes it when the job ends or writes, a sub-workspace it launched reports back, and
+ * a wake-up it scheduled for itself comes due. A completion with any of those behind it is not the
+ * place to put the question — declaring says "the work is finished", and the owner should read that
+ * about the last word the run has, not about a turn it went on past.
+ *
+ * WHY `runningBgShells` IS NOT READ. It answers "is a process still up", which a dev server the
+ * workspace deliberately left running answers forever — the schema keeps the two sets apart for
+ * exactly this question, and `runningBgJobs` is the one that means work in flight. An engine's own
+ * `Bash run_in_background`/`Monitor` shell carries no kind, so nothing distinguishes it from a
+ * watcher, and guessing one way would silence the question for the life of a dev server.
+ *
+ * `pendingExecutableTurns` is the count the caller's own park decision uses — computed after the
+ * requeues a completion performs, so a follow-up that arrived while the turn was running counts.
+ * `wakeupWaiting` is `waitingScheduledWakeup` below; it is passed in because it is the one fact of
+ * the three that is not already on the session row, and the caller reads it only where the rest of
+ * the gate says the question could be asked at all.
+ */
+export function runStoppedWorking(
+  session: {
+    runningBgJobs: readonly string[];
+    runningSubagents: readonly string[];
+  },
+  pendingExecutableTurns: number,
+  wakeupWaiting: boolean,
+): boolean {
+  return (
+    pendingExecutableTurns === 0
+    && session.runningBgJobs.length === 0
+    && session.runningSubagents.length === 0
+    && !wakeupWaiting
+  );
+}
+
+/**
+ * Whether this session has a wake-up it asked for still waiting — the run coming back by itself,
+ * which is why it counts as work in flight. One can be waiting at most, so this is a lookup by the
+ * partial unique key, and PENDING is the only state a live wake-up is in.
+ */
+export async function waitingScheduledWakeup(
+  tx: PrismaTypes.TransactionClient,
+  sessionId: string,
+): Promise<boolean> {
+  const waiting = await tx.sessionScheduledWakeup.findFirst({
+    where: { sessionId, state: 'PENDING' },
+    select: { id: true },
+  });
+  return waiting != null;
+}
+
+/**
+ * Record that a run of this task declared the work finished and has now stopped working, so its
+ * owner is asked.
  *
  * Called by `runnerApi.turnComplete` in the transaction that acknowledges the turn, under that
- * session's row lock, only for a SUCCEEDED message turn of an unsettled OWNER_CONFIRMED task. One
- * row per turn (`task_owner_confirmation_request_turn_key`); the acknowledgement it rides on is
- * already idempotent, so a retried completion never reaches this twice.
+ * session's row lock, only for a SUCCEEDED message turn of an unsettled OWNER_CONFIRMED task whose
+ * run has stopped working (`runStoppedWorking`) and that has a declaration nobody has been asked
+ * about yet (`unspentOwnerConfirmationClaim`) — the claim is what makes the question a statement by
+ * the run rather than an inference from its silence. One row per turn
+ * (`task_owner_confirmation_request_turn_key`) and one row per claim
+ * (`task_owner_confirmation_request_claim_key`); the acknowledgement it rides on is already
+ * idempotent, so a retried completion never reaches this twice.
  */
 export async function recordOwnerConfirmationRequest(
   tx: PrismaTypes.TransactionClient,
-  request: { taskId: string; ownerId: string; sessionId: string; turnId: string },
+  request: { taskId: string; ownerId: string; sessionId: string; turnId: string; claimId: string },
 ): Promise<void> {
   await tx.taskOwnerConfirmationRequest.create({ data: request, select: { id: true } });
 }

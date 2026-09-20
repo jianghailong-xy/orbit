@@ -577,11 +577,12 @@ export function taskCompletionRequiredAction(
         requiredAction: 'HAVE_THE_ACCOUNT_OWNER_CONFIRM_IN_THE_APP',
         instruction:
           'only the account owner can settle this task, by pressing Confirm done in the Orbit app — ' +
-          'on the confirmation card in the task\'s own session once a run of it has ended its turn, ' +
-          'or in the task\'s detail panel when no run is waiting — and Orbit derives DONE from that ' +
-          'recorded decision. No agent session can record it, a coordinator included: finish the ' +
-          'work, say in the session what was done, and end the turn. A Send back from the owner ' +
-          'arrives in that same session as their next message and leaves the task open',
+          'on the confirmation card in the task\'s own session once a run of it has DECLARED the work ' +
+          'finished (task_request_confirmation) and stopped working, or in the task\'s detail panel ' +
+          'when no run is waiting — and Orbit derives DONE from that recorded decision. No agent ' +
+          'session can record it, a coordinator included: finish the work, declare it, say in the ' +
+          'session what was done, and end the turn. A Send back from the owner arrives in that same ' +
+          'session as their next message and leaves the task open',
       };
   }
 }

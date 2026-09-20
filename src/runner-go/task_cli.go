@@ -36,6 +36,7 @@ Usage:
   orbit task delete [task-id] [--json]
   orbit task start [task-id] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
+  orbit task request-confirmation [task-id] [--json]
   orbit task progress [task-id] [--phase TEXT] [--current N] [--total N] [--message TEXT] [--expected-revision N] [--json]
   orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]
   orbit task dependency-add [task-id] --depends-on ID [--json]
@@ -111,7 +112,6 @@ Usage:
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 `,
 	"evidence-list": `orbit task evidence-list — list explicit completion-evidence revisions
-
 Usage:
   orbit task evidence-list [task-id] [--json]
 
@@ -611,6 +611,20 @@ Usage:
 --body-file accepts only '-' (stdin), so the CLI itself never opens an arbitrary
 path. task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 `,
+	"request-confirmation": `orbit task request-confirmation — declare that this task's work is finished
+
+Usage:
+  orbit task request-confirmation [task-id] [--json]
+
+Declares, as this run, that the task's work is done. It is the ONLY thing that asks an
+OWNER_CONFIRMED task's owner: with no declaration there is no card, and the task can only be
+confirmed from its detail panel. The question is put to the owner when this run has stopped
+working — nothing queued behind the turn, no background job or sub-workspace of its own in
+flight, no wake-up it asked for — over the report that turn ends on, so declaring while more
+work is still coming asks nothing yet. Requires ORBIT_SESSION_ID and a turn in flight: the
+declaration is taken only from the task's own execution session. Calling it twice in one turn
+is one declaration. Confirming or sending back stays the owner's own act in the app.
+`,
 }
 
 var taskListActionHelp = map[string]string{
@@ -724,6 +738,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskStart(args[1:], out)
 	case "comment":
 		return cliTaskComment(args[1:], in, out)
+	case "request-confirmation":
+		return cliTaskRequestConfirmation(args[1:], out)
 	case "progress":
 		return cliTaskProgress(args[1:], out)
 	case "dependency-graph":
@@ -2304,6 +2320,35 @@ func cliTaskStart(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+func cliTaskRequestConfirmation(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task request-confirmation")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	// The acting session is the declaration's subject, and the control plane takes it only from the
+	// task's own execution session while that session is in a turn. A headless CLI run has no
+	// session, so it has nothing to declare with.
+	agentID, sessionID := cliTaskAttribution()
+	if sessionID == "" {
+		return fmt.Errorf("ORBIT_SESSION_ID is required: a declaration of completion comes from the run that did the work")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.claimOwnerConfirmation(id, agentID, sessionID)
+	if err != nil {
+		return fmt.Errorf("declare the task finished: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliTaskComment(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task comment")
@@ -2637,6 +2682,7 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
+	{Tool: "task_request_confirmation", Argv: []string{"orbit", "task", "request-confirmation"}, Usage: "orbit task request-confirmation [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Declare, as this run, that the task's work is finished — the one thing that asks an OWNER_CONFIRMED task's owner. With no declaration there is no card: the task stays OPEN and is confirmed only from its detail panel. Requires ORBIT_SESSION_ID and a turn in flight, and is accepted only from the task's own execution session. The question waits for the turn that ends the run (nothing queued, no background job or sub-workspace of its own in flight, no wake-up it asked for), so declaring while more work is coming asks nothing yet; declaring again in one turn is one declaration. Confirming or sending back is the account owner's own act in the app.", Mutates: true},
 	{Tool: "task_progress_report", Argv: []string{"orbit", "task", "progress"}, Usage: "orbit task progress [task-id] [--phase TEXT | --clear-phase] [--current N | --clear-current] [--total N | --clear-total] [--message TEXT | --clear-message] [--expected-revision N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--phase <text> | --clear-phase", "--current <n> | --clear-current", "--total <n> | --clear-total (needs a current it bounds)", "--message <text> | --clear-message (never progress on its own)", "--expected-revision <n> (expectedRevision: report only if the progress is still at this revision)", "--json"}, Mutates: true},
 	{Tool: "task_dependency_graph", Argv: []string{"orbit", "task", "dependency-graph"}, Usage: "orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--max-depth <n> (server default when unset)", "--max-nodes <n> (server default when unset)", "--json"}},
 	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Description: "Add one dependency edge: taskId waits for --depends-on. Point it at the SUBJECT rather than at that subject's verification task: once anything checks that task, the server holds the edge until its latest check has PASSED. An edge naming the check resolves to the same gate, so older plans keep working.", Mutates: true},

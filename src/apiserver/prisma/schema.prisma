@@ -3872,8 +3872,9 @@ model Task {
   completionEvidence TaskCompletionEvidence[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]
-  /// OWNER_CONFIRMED (0267): the times a run of this task ended a turn successfully and asked its
-  /// owner, and what the owner decided.
+  /// OWNER_CONFIRMED (0267): the times a run of this task asked its owner, and what the owner
+  /// decided; and (0295) the declarations that asking is now made of.
+  ownerConfirmationClaims TaskOwnerConfirmationClaim[]
   ownerConfirmationRequests TaskOwnerConfirmationRequest[]
   ownerDecisions TaskOwnerDecision[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
@@ -4095,9 +4096,43 @@ model TaskEvidenceDecision {
   @@map("task_evidence_decision")
 }
 
-/// One time a run of an OWNER_CONFIRMED task ended a turn successfully and so asked its owner
-/// (migration 0267). Written only by `runnerApi.turnComplete`, the one place that knows a turn
-/// succeeded; the task is waiting on its owner while its newest request has no decision.
+/// One time a run of an OWNER_CONFIRMED task declared that its work is finished — the agent's own
+/// statement, from the task's own execution session (migration 0295). Written only by
+/// `task_request_confirmation` (runner-go) through `TaskOwnerConfirmationService.claim`, and the
+/// only thing that asks the owner: a run that never declares is never asked, and is confirmed from
+/// the task's detail panel instead.
+///
+/// `(sessionId, turnId)` is unique, so a retried call writes one row, and the declaration names the
+/// turn it was made in. `sessionId` and `turnId` are provenance snapshots with no foreign key, like
+/// the request table's: which run declared, and in which turn, stays true after the session is gone.
+model TaskOwnerConfirmationClaim {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_owner_confirmation_claim_task_fkey")
+
+  sessionId String   @map("session_id") @db.Uuid
+  turnId    String   @map("turn_id") @db.Uuid
+  claimedAt DateTime @default(now()) @map("claimed_at")
+
+  requests TaskOwnerConfirmationRequest[]
+
+  @@unique([id, taskId], map: "task_owner_confirmation_claim_id_task_key")
+  /// One claim per turn: a retried tool call never declares twice.
+  @@unique([sessionId, turnId], map: "task_owner_confirmation_claim_turn_key")
+  @@index([taskId, claimedAt], map: "task_owner_confirmation_claim_task_idx")
+  @@map("task_owner_confirmation_claim")
+}
+
+/// One time a run of an OWNER_CONFIRMED task was asked about — the question the owner answers, and
+/// the report it was drawn for (migration 0267). Written only by `runnerApi.turnComplete`, the one
+/// place that knows a turn succeeded, and only for the completion that leaves the run with nothing
+/// to do — nothing executable queued behind it, no `bg_run` job or sub-workspace of its own in
+/// flight, no wake-up it asked for (`runStoppedWorking`); the task is waiting on its owner while its
+/// newest request has no decision.
+///
+/// `claimId` is the declaration this question was asked from (0295) — one claim, one question — and
+/// null only for a row recorded under 0267's rule, when ending a turn successfully was enough.
 ///
 /// `sessionId` and `turnId` are provenance snapshots with no foreign key, like
 /// `TaskEvidenceDecision.decidingSessionId`: which run asked, and in which turn, stays true after the
@@ -4112,11 +4147,16 @@ model TaskOwnerConfirmationRequest {
   turnId      String   @map("turn_id") @db.Uuid
   requestedAt DateTime @default(now()) @map("requested_at")
 
+  claimId String?                       @map("claim_id") @db.Uuid
+  claim   TaskOwnerConfirmationClaim?   @relation(fields: [claimId, taskId], references: [id, taskId], onDelete: Restrict, map: "task_owner_confirmation_request_claim_fkey")
+
   decisions TaskOwnerDecision[]
 
   @@unique([id, taskId], map: "task_owner_confirmation_request_id_task_key")
   /// One request per turn: a retried completion never asks twice.
   @@unique([sessionId, turnId], map: "task_owner_confirmation_request_turn_key")
+  /// One question per declaration: a claim that a request names is spent.
+  @@unique([claimId], map: "task_owner_confirmation_request_claim_key")
   @@index([taskId, requestedAt], map: "task_owner_confirmation_request_task_idx")
   @@map("task_owner_confirmation_request")
 }

@@ -15,13 +15,15 @@ import { decisionReceiptTime } from './EvidenceDecisionCard';
  *
  * ONE PLACE TO ANSWER
  * -------------------
- * When a run of the task ends its turn, Orbit draws this card at the end of that run's own session
- * — in whatever project the task is filed under, or none — from `GET /tasks/:id/owner-confirmation`,
- * and its two buttons post straight to the same door with the owner's own sign-in. Nothing else
- * answers it. The session list only lights the row ("Waiting for your confirmation") and the line
- * pinned under the header only points here (`DecisionRail.tsx`); neither carries a button, because a
- * second place to answer is a second answer racing the first. A task no run is waiting on has no
- * card, and is confirmed from its detail panel instead (`TaskDetailPanel.tsx`) — never both at once.
+ * When a run of the task declares its work finished and then stops working — nothing queued behind
+ * that turn, no job of its own in flight, no wake-up it asked for — Orbit draws this card at the end
+ * of that run's own session, in whatever project the task is filed under, or none, from
+ * `GET /tasks/:id/owner-confirmation`, and its two buttons post straight to the same door with the
+ * owner's own sign-in. Nothing else answers it. The session list only lights the row ("Waiting for
+ * your confirmation") and the line pinned under the header only points here (`DecisionRail.tsx`);
+ * neither carries a button, because a second place to answer is a second answer racing the first. A
+ * run that never declared is never carded, and a task no run is waiting on has no card either: both
+ * are confirmed from their detail panel instead (`TaskDetailPanel.tsx`) — never both at once.
  *
  * WHAT THE OWNER DECIDES FROM
  * ---------------------------

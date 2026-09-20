@@ -11,6 +11,8 @@ import test from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { taskCompletionRequiredAction } from './task-completion-criterion';
 import {
+  CLAIM_NOT_THE_RUN_CODE,
+  CLAIM_OUTSIDE_TURN_CODE,
   MAX_OWNER_DECISION_NOTE_CHARS,
   NOT_DECLARED_CODE,
   NOTHING_TO_SEND_BACK_CODE,
@@ -19,18 +21,23 @@ import {
   STALE_CODE,
   TASK_SETTLED_CODE,
   assertOwnerConfirmationPrincipal,
+  ownerClaimRefusal,
   ownerConfirmationPrincipalRefusal,
   ownerDecisionNote,
   ownerDecisionRefusal,
   ownerSendBackClientTurnId,
   throwOwnerConfirmationRefusal,
   waitingOwnerConfirmation,
+  type OwnerClaimStanding,
   type OwnerConfirmationStanding,
   type OwnerDecisionValue,
 } from './task-owner-confirmation';
 
 const OWNER = '01920000-0000-7000-8000-000000000001';
 const SOMEBODY_ELSE = '01920000-0000-7000-8000-000000000002';
+const TASK = '01920000-0000-7000-8000-0000000000d1';
+const OTHER_TASK = '01920000-0000-7000-8000-0000000000d2';
+const TURN = '01920000-0000-7000-8000-0000000000e1';
 const TASK_RUN_SESSION = '01920000-0000-7000-8000-0000000000a1';
 const COORDINATOR_SESSION = '01920000-0000-7000-8000-0000000000c1';
 const REPORT = '01920000-0000-7000-8000-0000000000f1';
@@ -168,8 +175,55 @@ test('a task that does not declare OWNER_CONFIRMED is refused with its own crite
   }
 });
 
-test('a settled task has nothing left to confirm or send back', () => {
-  for (const status of ['DONE', 'CANCELLED', 'FAILED']) {
+/**
+ * A declaration of completion, as a table: whose run may make one, and about what. Asked of plain
+ * values for the same reason every other rule here is — "may this caller declare this task
+ * finished" is one row, not a code path.
+ */
+test('a declaration of completion is taken only from the task\'s own run, inside a turn', () => {
+  const claim = (facts: Partial<OwnerClaimStanding> = {}): ReturnType<typeof ownerClaimRefusal> =>
+    ownerClaimRefusal(TASK, {
+      completionCriterion: 'OWNER_CONFIRMED',
+      status: 'OPEN',
+      actingSessionTaskId: TASK,
+      actingSessionTurnId: TURN,
+      ...facts,
+    });
+
+  // The one shape that is accepted: the task's own run, in the turn it is in — OPEN or IN_PROGRESS.
+  assert.equal(claim(), null);
+  assert.equal(claim({ status: 'IN_PROGRESS' }), null);
+
+  // A task another criterion settles has nothing for a run to declare.
+  const executable = claim({ completionCriterion: 'EXECUTABLE' });
+  assert.equal(executable?.code, NOT_DECLARED_CODE);
+  assert.equal(executable?.requiredAction, 'RUN_ACCEPTANCE_COMMAND');
+  assert.match(executable?.message ?? '', /settles nothing/u);
+
+  // A settled task has nothing left to declare either — and the subject is asked before the
+  // declarer, so it reads the same whoever would have declared it.
+  const settled = claim({ status: 'DONE' });
+  assert.equal(settled?.code, TASK_SETTLED_CODE);
+  assert.match(settled?.message ?? '', /nothing left for a run to declare/u);
+  assert.equal(claim({ status: 'DONE', actingSessionTaskId: null })?.code, TASK_SETTLED_CODE);
+
+  // A session that runs no task declares nothing about this one, and neither does a session
+  // running a different task.
+  const noTask = claim({ actingSessionTaskId: null });
+  assert.equal(noTask?.code, CLAIM_NOT_THE_RUN_CODE);
+  assert.match(noTask?.message ?? '', /runs no task/u);
+  const otherTask = claim({ actingSessionTaskId: OTHER_TASK });
+  assert.equal(otherTask?.code, CLAIM_NOT_THE_RUN_CODE);
+  assert.match(otherTask?.message ?? '', /running a different task/u);
+
+  // And a run between turns has no turn to declare in — the runner-hosted job, the sleep, the
+  // wake-up that comes due: none of them is where the work was done.
+  const betweenTurns = claim({ actingSessionTurnId: null });
+  assert.equal(betweenTurns?.code, CLAIM_OUTSIDE_TURN_CODE);
+  assert.match(betweenTurns?.message ?? '', /between turns/u);
+});
+
+test('a settled task has nothing left to confirm or send back', () => {  for (const status of ['DONE', 'CANCELLED', 'FAILED']) {
     for (const decision of ['CONFIRM', 'SEND_BACK'] as const) {
       const refusal = ownerDecisionRefusal(standing({ status, ...waitingOn(REPORT) }), decision, REPORT);
       assert.equal(refusal?.code, TASK_SETTLED_CODE, `${status} ${decision}`);
