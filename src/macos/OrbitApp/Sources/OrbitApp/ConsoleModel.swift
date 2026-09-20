@@ -2165,7 +2165,8 @@ final class ConsoleModel {
             case .criteriaDecision(let intentID):
                 return CriteriaDecisions.isOpen(criteriaStanding(intentID))
             // A record of an answer, not a question: nothing is waiting on the reader.
-            case .criteriaDecisionReceipt, .evidenceDecisionReceipt:
+            case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
+                 .acceptanceConfirmationReceipt:
                 return false
             case .acceptanceConfirmation:
                 return AcceptanceConfirmations.isOpen(acceptanceConfirmation)
@@ -2230,6 +2231,7 @@ final class ConsoleModel {
         }
         if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
             acceptanceConfirmation = standing
+            adoptAcceptanceReceipt()
         }
         if let document = try? await api.projectCriteria(projectID: projectID) {
             projectCriteria = document.acceptanceCriteriaItems ?? []
@@ -2360,6 +2362,25 @@ final class ConsoleModel {
                 kind: .evidenceDecisionReceipt(decided: receipt.decided),
                 afterItemID: receipt.afterItemID))
         }
+    }
+
+    /// The same, for the one confirmation a project has: the answer this read publishes is drawn as
+    /// a record where it was made — who signed it, and which seal — instead of as the line a press
+    /// used to leave, which lasted exactly as long as this console did.
+    ///
+    /// The question card is NOT dropped here, unlike the answered proposal's. The record says which
+    /// way ITS answer went, and for a confirmation made at another end that is the card's own
+    /// business to say: it goes stale in place, with the reason above its dead button, rather than
+    /// vanishing mid-read. A press made HERE has already closed the card, so nothing is left to
+    /// take away — this only adds.
+    private func adoptAcceptanceReceipt() {
+        guard let receipt = AcceptanceConfirmations.receipt(standing: acceptanceConfirmation,
+                                                            items: state.items) else { return }
+        guard !closedCards.contains(receipt.id),
+              !decisionCards.contains(where: { $0.id == receipt.id }) else { return }
+        decisionCards.append(DeliveredDecisionCard(
+            kind: .acceptanceConfirmationReceipt(confirmed: receipt.confirmation),
+            afterItemID: receipt.afterItemID))
     }
 
     /// Where one delivered proposal stands right now — the whole of what decides whether its
@@ -2499,6 +2520,11 @@ final class ConsoleModel {
 
     /// Confirm the standard set as it stands. The digest is what makes this a confirmation of the
     /// wording just read: an edit landing in between is refused rather than signed unread.
+    ///
+    /// What the press leaves in the conversation is the RECORD, drawn from the door's own reads by
+    /// the refresh below (`adoptAcceptanceReceipt`) and not written here: a line left by the window
+    /// that pressed is the one thing that does not survive the console being opened again, which is
+    /// what the criteria decision next door was fixed for on 2026-09-16.
     func confirmStandardSet() async {
         guard let projectID, let digest = acceptanceConfirmation?.currentVersion.digest else { return }
         do {
@@ -2506,11 +2532,10 @@ final class ConsoleModel {
                                                                    criteriaDigest: digest)
             acceptanceConfirmation = standing
             close(.acceptanceConfirmation)
-            appendDecisionLine(AcceptanceConfirmations.confirmedLine(standing))
         } catch {
             statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
-            await refreshRulerQuestions(force: true)
         }
+        await refreshRulerQuestions(force: true)
     }
 
     // MARK: the project's two owner cards — the merge to confirm, and the question it asked

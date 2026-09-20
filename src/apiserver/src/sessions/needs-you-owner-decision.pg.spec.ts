@@ -47,6 +47,13 @@
  *       coordinator whichever run submitted or answered, it is asked for once a write has
  *       committed and never for a refused one, and a send that throws takes nothing back.
  *
+ *   (7) Its own fixture: a project whose plan is written and whose confirmation nobody has given is
+ *       the FOURTH kind, and it is counted exactly while its card is drawn — the paired negative is
+ *       the same project before a single task is filed under it, which is the state `Start the
+ *       project` would have started nothing in. Confirming the set at the door puts the row back;
+ *       an edit that moves the digest asks again; and a press the door refuses leaves the count
+ *       standing, because a count is not a credential.
+ *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/needs-you-owner-decision.pg.spec.ts
  *
  * Not destructive: every id is freshly generated and every assertion is scoped to this owner.
@@ -199,6 +206,26 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   return { ownerId, workspaceId, projectId, coordinatorSessionId };
 }
 
+/** The owner's confirmation door, over the production wiring. */
+function acceptanceOf(stack: Stack): ProjectAcceptanceService {
+  return new ProjectAcceptanceService(stack.db as unknown as PrismaService);
+}
+
+/**
+ * The owner confirms the project's standard set as it stands.
+ *
+ * Called by the fixtures that are about SOME OTHER question, and never silently: a set nobody has
+ * confirmed is a question of its own and is counted as one (the last case in this file), so a
+ * fixture that left one open would be counting two things while asserting about one. Confirming it
+ * is also what a project's own owner would have done before any of this work began.
+ */
+async function confirmStandardSet(f: Fixture, stack: Stack) {
+  const acceptance = acceptanceOf(stack);
+  const standing = await acceptance.standardSetConfirmation(f.ownerId, f.projectId);
+  return acceptance.confirmStandardSet(f.ownerId, f.projectId,
+    { criteriaDigest: standing.currentVersion.digest });
+}
+
 /**
  * Every path through a returned value at which a field carries the given NAME.
  *
@@ -274,6 +301,9 @@ test('the badge counts an owner decision, points at it, and hands out no key', {
   const before = await db.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId: f.projectId }, orderBy: { ordinal: 'asc' }, select: { id: true },
   });
+  // The owner confirms this set first, so the only question waiting in this fixture is the one it
+  // is about: an unconfirmed set is a question of its own and is counted as one (the last case).
+  assert.equal((await confirmStandardSet(f, stack)).state, 'CONFIRMED');
 
   // ── the paired negative, first: the same reads over the same project, with nothing waiting ────
   const darkRow = await listedCoordinator();
@@ -448,6 +478,9 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     where: { projectId: f.projectId },
     select: { id: true, revision: true },
   });
+  // Confirmed before any of the work below is filed: this fixture is about the evidence question,
+  // and a plan nobody has confirmed would be counted here as a question of its own (last case).
+  assert.equal((await confirmStandardSet(f, stack)).state, 'CONFIRMED');
   const { runnerId } = await db.workspace.findUniqueOrThrow({
     where: { id: f.workspaceId },
     select: { runnerId: true },
@@ -699,5 +732,158 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
     } finally {
       sendThrows = false;
     }
+  });
+});
+
+/**
+ * The criterion the confirmation case drops, to make an edit a loosening, and the one it adds,
+ * to move the digest of a set nobody has decided anything about.
+ */
+const RULER = 'the badge is lit by a question the owner has not answered';
+const ADDED = 'and the plan says what the work has to leave behind';
+
+test('the badge counts the standard set waiting to be confirmed, and falls when it is', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'confirmation');
+  const acceptance = acceptanceOf(stack);
+
+  /** State the whole collection through the owner's path — the only writer of a definition. */
+  async function state(items: Array<{ id?: string; text: string }>): Promise<Held | null> {
+    const response = await stack.projects.update(f.ownerId, f.projectId, {
+      acceptanceCriteriaItems: items.map((item) => ({
+        ...(item.id ? { id: item.id } : {}),
+        text: item.text,
+        verificationMethod: METHOD,
+      })),
+    } as never) as unknown as { acceptanceCriteriaHold?: Held };
+    return response.acceptanceCriteriaHold ?? null;
+  }
+
+  /** One task filed under the project — the fourth fact the confirmation card turns on. */
+  function fileTask(label: string) {
+    return db.task.create({
+      data: {
+        ownerId: f.ownerId,
+        projectId: f.projectId,
+        title: `${label} 要干的活`,
+        creatorType: CreatorType.USER,
+        creatorId: f.ownerId,
+        assigneeId: f.workspaceId,
+        status: TaskStatus.OPEN,
+        // The narrowed work is not what this case is about: it is here so the project holds
+        // something a press on `Start the project` could hand out.
+        completionCriterion: 'OWNER_CONFIRMED',
+      },
+    });
+  }
+
+  /** The coordinator conversation's row as the session list serves it: what the row lights off. */
+  async function countOn(sessionId: string): Promise<number> {
+    const rows = await stack.sessions.list(f.ownerId, {}) as unknown as Array<{
+      id: string;
+      pendingApprovals: number;
+      status: string;
+    }>;
+    const row = rows.find((s) => s.id === sessionId);
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    return row.pendingApprovals;
+  }
+
+  /** The per-workspace tally for the workspace this project is coordinated in. */
+  async function needsYou(): Promise<number> {
+    const rows = await stack.sessions.workspaceSessionCounts(f.ownerId);
+    return rows.find((r) => r.workspaceId === f.workspaceId)?.needsYou ?? 0;
+  }
+
+  /** Confirm the set standing now, at the door — the one press that is also the start. */
+  async function confirm() {
+    const standing = await acceptance.standardSetConfirmation(f.ownerId, f.projectId);
+    return acceptance.confirmStandardSet(f.ownerId, f.projectId,
+      { criteriaDigest: standing.currentVersion.digest });
+  }
+
+  assert.equal(await state([{ text: RULER }]), null,
+    'stating a project’s first criteria is ADDITIVE and is never held');
+  const [first] = await db.projectAcceptanceCriterionDefinition.findMany({
+    where: { projectId: f.projectId }, orderBy: { ordinal: 'asc' }, select: { id: true },
+  });
+
+  // ── the paired negative, first, and it is the CARD's own fourth fact ───────────────────────────
+  // A plan with nothing filed under it is one nobody can start — `Start the project` would start
+  // nothing — so no card is drawn and the row is dark. The positive comes next on one more task.
+  assert.equal(await countOn(f.coordinatorSessionId), 0,
+    'a plan nothing is filed under is not a question anybody can answer, so nothing is waiting');
+  await fileTask('first');
+
+  await t.test('(7a) a written plan nobody has confirmed lights the coordinator’s row', async () => {
+    const row = (await stack.sessions.list(f.ownerId, {}) as unknown as Array<{
+      id: string; pendingApprovals: number; status: string;
+    }>).find((s) => s.id === f.coordinatorSessionId)!;
+    // The count is the whole of what the row lights off: a positive `pendingApprovals` is the amber
+    // "needs you" tone on the session list and the disc on a coordinator card
+    // (`ProjectCoordinatorCard.tsx`), and a zero is a row that reads as an ordinary idle reply.
+    assert.equal(row.pendingApprovals, 1,
+      'the PARKED coordinator row says somebody is waiting on it — the state this card left dark');
+    assert.equal(row.status, RunStatus.AWAITING_INPUT, 'and it is parked, not generating');
+    assert.equal(await needsYou(), 1, 'and the workspace tally lights with it');
+
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
+      sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION',
+    }], 'and it lands on the conversation the card is drawn in, as a project decision');
+  });
+
+  await t.test('(7b) confirming the set puts the count back', async () => {
+    const recorded = await confirm();
+    assert.equal(recorded.state, 'CONFIRMED', 'the door recorded the version that stood');
+    assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the question the row was lit for is answered');
+    assert.equal(await needsYou(), 0, 'and the workspace tally falls with it');
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
+  });
+
+  await t.test('(7c) an edit after it asks again — the same card, the same row', async () => {
+    // Adding a criterion is ADDITIVE, so it takes effect at once and moves the digest of the set
+    // the confirmation named. The confirmation stops counting by that alone: neither the row nor
+    // the card is told anything, and both re-derive it from the same two tables.
+    assert.equal(await state([{ id: first!.id, text: RULER }, { text: ADDED }]), null,
+      'adding a criterion is not a loosening, so it is applied rather than held');
+    assert.equal(await countOn(f.coordinatorSessionId), 1,
+      'the set moved under the confirmation, so the owner is asked again');
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
+      sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION',
+    }]);
+  });
+
+  await t.test('(7d) the count is not the door: a refused press leaves it standing', async () => {
+    // The badge points at the question and grants nothing. A request that carries an acting session
+    // is refused by the door itself, lit badge or not (`project-acceptance.service.ts`), and what
+    // is waiting is what the reads say afterwards.
+    const standing = await acceptance.standardSetConfirmation(f.ownerId, f.projectId);
+    await assert.rejects(
+      () => acceptance.confirmStandardSet(f.ownerId, f.projectId,
+        { criteriaDigest: standing.currentVersion.digest }, f.coordinatorSessionId),
+      (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number })?.getStatus?.(), 403,
+          'a session-authored confirmation is refused');
+        return true;
+      },
+    );
+    assert.equal(await countOn(f.coordinatorSessionId), 1,
+      'and the refused press changed nothing about what is waiting');
+
+    await confirm();
+    assert.equal(await countOn(f.coordinatorSessionId), 0,
+      'the owner’s own press is what answers it, and the row falls with the answer');
   });
 });

@@ -10,9 +10,11 @@ import {
 } from '../lib/acceptanceConfirmation';
 import {
   ACCEPTANCE_CHANGED_SINCE_CONFIRMED,
+  ACCEPTANCE_CONFIRM_LABEL,
   ACCEPTANCE_CONFIRMED,
   ACCEPTANCE_NOBODY_SAID_DONE,
   ACCEPTANCE_NOT_STARTED,
+  ACCEPTANCE_RECEIPT_HEADING,
   ACCEPTANCE_SHOW_LESS_LABEL,
   ACCEPTANCE_START_LABEL,
   ACCEPTANCE_START_NOT_READ,
@@ -208,6 +210,15 @@ async function mount(...conversations: Array<string | null>): Promise<{ node: HT
 const cardsIn = (node: ParentNode): HTMLElement[] => [
   ...node.querySelectorAll<HTMLElement>('.settlement-card'),
 ];
+/** The record a confirmation leaves. A class of its own rather than a card: nothing on it is
+ *  pressable, so nothing that asks a question may be counted as one of these. */
+const receiptsIn = (node: ParentNode): HTMLElement[] => [
+  ...node.querySelectorAll<HTMLElement>('.settlement-receipt'),
+];
+const receiptLineOf = (receipt: HTMLElement): string =>
+  receipt.querySelector('.settlement-receipt-line')?.textContent ?? '';
+const receiptStampOf = (receipt: HTMLElement): string =>
+  receipt.querySelector('.settlement-receipt-stamp')?.textContent ?? '';
 const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
   ...card.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
 ];
@@ -285,7 +296,9 @@ async function delivered(): Promise<{ node: HTMLElement; qc: QueryClient; card: 
     if (!only) throw new Error('the card is not on the page');
     return only;
   };
-  expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'the delivered card cannot be answered').toBe(false);
+  // The primary action, whichever word it carries for this project: `Start the project` for one
+  // that is not running, `Confirm the criteria` for one that is.
+  expect(actionsOf(card())[0]?.disabled, 'the delivered card cannot be answered').toBe(false);
   return { node, qc, card };
 }
 
@@ -656,19 +669,139 @@ describe('the two actions, reading the set, and starting the project', () => {
     expect(card().querySelectorAll('textarea, input')).toHaveLength(0);
   });
 
-  it('keeps a press made here as recorded here, on the key the card reads', async () => {
-    const { qc, card } = await delivered();
+  it('sends the version it is drawn from and reaches the door with nothing else on the way', async () => {
+    const { node, qc, card } = await delivered();
     await act(async () => {
       action(card(), ACCEPTANCE_START_LABEL).click();
     });
-    await until(() => card().querySelector('.settlement-card-recorded') !== null, 'the door’s answer on the card');
+    await until(() => receiptsIn(node).length === 1, 'the record the press left');
 
     expect(presses()).toEqual([`POST ${STANDING_PATH} ${CURRENT}`]);
-    expect(card().querySelector('.settlement-card-recorded')?.textContent)
-      .toBe(acceptanceConfirmedLine(standingOf('CONFIRMED')));
-    // Not "confirmed at another end": this is the end it was confirmed at.
-    expect(staleOf(card())).toBeNull();
-    expect(actionsOf(card())).toEqual([]);
     expect(qc.getQueryData(acceptanceConfirmationKey(PROJECT))).toEqual(standingOf('CONFIRMED'));
+  });
+});
+
+/**
+ * THE RECORD A CONFIRMATION LEAVES, AND WHERE IT COMES FROM.
+ *
+ * The answer used to be this window's own state: a line printed on the card by the mutation that
+ * pressed it. A reload took the decision out of the conversation it was made in — the same defect
+ * the three other receipts were fixed for (`decisionReceipt.ts`) — so what is asserted here is that
+ * the record is drawn from the READ: on screen with nothing pressed in this window, and again after
+ * the reads come round. Every fixture below goes on to show the empty case filling in once the read
+ * says something, so a missing record is never a pane that was not going to draw anyway.
+ */
+describe('the record a confirmation leaves', () => {
+  const confirmed = (): StandardSetConfirmationStanding => standingOf('CONFIRMED');
+  /** The seal the fixture's record names: the one a stale set was signed on, not the one standing. */
+  const signedSeal = shortSeal(PRIOR);
+
+  it('is drawn from the read: on screen with nothing pressed here, and again after a re-read', async () => {
+    // A set confirmed at ANOTHER end — or a moment ago, on another device: nothing here pressed it.
+    server.standing = confirmed();
+    const { node, qc } = await mount(PROJECT);
+    await readsLanded(qc);
+
+    expect(cardsIn(node), 'a confirmed set is not a question, so no card').toHaveLength(0);
+    const [receipt] = receiptsIn(node);
+    expect(receipt, 'the reload took the decision out of the conversation').toBeTruthy();
+    expect(receiptLineOf(receipt!)).toBe(acceptanceConfirmedLine(confirmed().confirmation!));
+    expect(receiptLineOf(receipt!)).toContain(shortSeal(CURRENT));
+    expect(receiptStampOf(receipt!)).toContain('by you at');
+    expect(receipt!.querySelectorAll('button'), 'a record is not a question').toHaveLength(0);
+    expect(presses(), 'a record was drawn without anybody pressing anything here').toEqual([]);
+
+    // And the read coming round again redraws the same record rather than losing it.
+    await reread(qc);
+    expect(receiptsIn(node)).toHaveLength(1);
+    expect(receiptLineOf(receiptsIn(node)[0]!)).toBe(acceptanceConfirmedLine(confirmed().confirmation!));
+  });
+
+  it('names the version that was SIGNED, where the card beside it names the one standing now', async () => {
+    server.standing = standingOf('STALE');
+    const { node, qc, card } = await delivered();
+    await reread(qc);
+
+    // Two rows, two facts: the record of what somebody agreed to, and the question about what
+    // nobody has agreed to yet.
+    expect(receiptsIn(node)).toHaveLength(1);
+    expect(cardsIn(node)).toHaveLength(1);
+    expect(receiptLineOf(receiptsIn(node)[0]!)).toContain(signedSeal);
+    expect(receiptLineOf(receiptsIn(node)[0]!)).not.toContain(shortSeal(CURRENT));
+    expect(metaOf(card())).toContain(ACCEPTANCE_CHANGED_SINCE_CONFIRMED);
+    expect(metaOf(card())).toContain(shortSeal(CURRENT));
+    expect(actionsOf(card()), 'the question is still pressable').toHaveLength(2);
+  });
+
+  it('gives way to the record when the press was made HERE, and keeps the card when it was not', async () => {
+    const { node, card } = await delivered();
+    await act(async () => {
+      action(card(), ACCEPTANCE_START_LABEL).click();
+    });
+    await until(() => receiptsIn(node).length === 1, 'the record of the press');
+
+    expect(cardsIn(node), 'the answered card is still on screen beside its record').toHaveLength(0);
+    expect(receiptLineOf(receiptsIn(node)[0]!))
+      .toBe(acceptanceConfirmedLine(standingOf('CONFIRMED').confirmation!));
+    expect(receiptStampOf(receiptsIn(node)[0]!)).toContain('by you at');
+  });
+
+  /** The heading is the family's, so the fourth record reads as the same kind of thing as the
+   *  three Orbit already draws into a conversation. */
+  it('is headed the way the other three receipts are', async () => {
+    server.standing = confirmed();
+    const { node, qc } = await mount(PROJECT);
+    await readsLanded(qc);
+    expect(receiptsIn(node)[0]?.querySelector('.settlement-card-heading')?.textContent)
+      .toBe(ACCEPTANCE_RECEIPT_HEADING);
+  });
+});
+
+/**
+ * A PROJECT THAT IS ALREADY RUNNING IS NOT A PROJECT THIS CARD CAN START.
+ *
+ * `Start the project` names an act that is not available to it and a state it is not in: it was
+ * handing work out before this card arrived, and what the press does is re-confirm the plan it is
+ * running on. The same fact decides the paragraph under it — "Once this starts" describes a
+ * beginning that happened some other day — and the meta line's third field, which is why all three
+ * move together or not at all. `coordinatorEnabled` is the whole of it, read off the project.
+ */
+describe('a project that is already handing work out', () => {
+  it('is asked to confirm rather than to start, and is never called unstarted', async () => {
+    server.standing = standingOf('STALE');
+    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
+    const { node, qc, card } = await delivered();
+
+    expect(labelsOf(card()), 'a running project was offered a start').toEqual([
+      ACCEPTANCE_CONFIRM_LABEL,
+      OWNER_SEND_BACK_ACTION,
+    ]);
+    expect(labelsOf(card())).not.toContain(ACCEPTANCE_START_LABEL);
+    // The meta line says where the PROJECT stands off `coordinatorEnabled`, and where the
+    // CONFIRMATION stands off the standing. Both are said, and neither is inferred from the other.
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_STARTED);
+    expect(metaOf(card())).not.toContain(ACCEPTANCE_NOT_STARTED);
+    expect(metaFieldsOf(card())[3]).toBe(ACCEPTANCE_CHANGED_SINCE_CONFIRMED);
+    // The paragraph, in the project's own tense: it is not starting.
+    const explains = card().querySelector('.settlement-card-explains')?.textContent ?? '';
+    expect(explains).not.toContain('Once this starts');
+    expect(explains).toContain('Once this is confirmed');
+
+    // And the same standing on a project that is NOT running still says start — the word follows
+    // the project and not the confirmation.
+    server.document = documentOf(NONE_MET);
+    await reread(qc);
+    expect(labelsOf(card())[0]).toBe(ACCEPTANCE_START_LABEL);
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_NOT_STARTED);
+  });
+
+  /** A read that did not answer is not a project known to be running, and not one known to be
+   *  stopped: the card keeps its own word rather than guessing a tense for a project nobody read. */
+  it('keeps the card’s own word for a project nobody could read', async () => {
+    const { qc, card } = await delivered();
+    server.document = new Error('503 on the document');
+    await reread(qc);
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_START_NOT_READ);
+    expect(labelsOf(card())[0]).toBe(ACCEPTANCE_START_LABEL);
   });
 });

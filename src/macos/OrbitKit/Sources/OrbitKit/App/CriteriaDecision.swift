@@ -1072,11 +1072,26 @@ public enum CriteriaDecisions {
 public enum AcceptanceConfirmations {
 
     public static let title = "When is this project done?"
-    /// The primary action. One press: it records the confirmation AND starts the project, because
-    /// saying what would settle a project is what authorises work on it.
+    /// The primary action for the project this card is normally asked about: one that is not
+    /// running yet. One press records the confirmation AND starts it, because saying what would
+    /// settle a project is what authorises work on it.
     public static let startLabel = "Start the project"
+    /// …and what the SAME control says when the project is already handing work out. Two different
+    /// facts are being answered, and the verb has to follow the fact: a project already running on
+    /// an older version of its plan is not being started by this press, it is being re-confirmed —
+    /// "start" would name an act that is not available and a state the project is not in. Web's
+    /// `ACCEPTANCE_CONFIRM_LABEL`, word for word.
+    public static let confirmLabel = "Confirm the criteria"
     /// The reading toggle once the criteria are shown whole.
     public static let showLessLabel = "Show less"
+
+    /// What the primary action says, for the project the card is actually about: `started`, read
+    /// off `coordinatorEnabled` and never inferred from the standing. A nil — a project document
+    /// that did not answer — keeps the card's own word rather than guessing a tense for a project
+    /// nobody has read, which is the rule the meta line's third field is under.
+    public static func actionLabel(started: Bool?) -> String {
+        started == true ? confirmLabel : startLabel
+    }
 
     /// The reading toggle's label. It carries the count because the count is the thing confirmed: a
     /// person is agreeing that THESE N conditions, together, express the goal.
@@ -1145,14 +1160,28 @@ public enum AcceptanceConfirmations {
     public static let editEndsIt =
         "Editing any criterion ends this confirmation and Orbit will ask again."
 
-    /// The one paragraph the card keeps: what starting binds the project to, and what ends it. It is
-    /// never dropped — it is the mechanism, and the reason this card is asked before the work rather
-    /// than after it. A stale standing says first why it is being asked a second time.
+    /// The one paragraph the card keeps: what a confirmation binds the project to, and what ends it.
+    /// It is never dropped — it is the mechanism, and the reason this card is asked before the work
+    /// rather than after it. A stale standing says first why it is being asked a second time.
+    ///
+    /// AND A PROJECT ALREADY RUNNING IS TOLD IT IN ITS OWN TENSE. "Once this starts" is the sentence
+    /// for the project this card was written for — the plan is written and nothing has run. Said to
+    /// one that is already handing work out it describes a beginning that happened some other day,
+    /// which is the same defect as offering it a `Start` button: the card would be narrating a state
+    /// the reader is not in. Which of the two it says is `started` — the same fact the meta line's
+    /// third field and the action's label are read off, so all three agree by construction. Web's
+    /// `acceptanceStartExplanation`, and `AcceptanceConfirmationCopyParityTests` reads both back out
+    /// of it.
     public static func startExplanation(count: Int,
-                                        standing: StandardSetConfirmationStanding?) -> String {
+                                        standing: StandardSetConfirmationStanding?,
+                                        started: Bool? = false) -> String {
         let again = standing?.state == .stale ? "\(changedSince) " : ""
-        return "\(again)Once this starts, Orbit derives done from these \(count) and from nothing "
-            + "else. " + editEndsIt
+        guard started == true else {
+            return "\(again)Once this starts, Orbit derives done from these \(count) and from "
+                + "nothing else. " + editEndsIt
+        }
+        return "\(again)Once this is confirmed, Orbit derives done from these \(count) and from "
+            + "nothing else. " + editEndsIt
     }
 
     /// Whether the confirm button may be pressed. Both un-confirmed states offer it and it always
@@ -1198,11 +1227,70 @@ public enum AcceptanceConfirmations {
         return out
     }
 
-    /// What a press on this card leaves where its actions were.
-    public static func confirmedLine(_ standing: StandardSetConfirmationStanding) -> String {
-        let count = standing.currentVersion.material.count
-        let seal = CriteriaDecisions.shortSeal(standing.currentVersion.digest)
+    /// What a confirmation records: the count it was given over, and the seal it locked.
+    ///
+    /// Read off the RECORD and never off the version standing now. Those are the same version
+    /// exactly while the confirmation counts, and the whole point of the record is what it says when
+    /// they are not: after an edit the standing names the new seal, and this line still has to name
+    /// the one somebody actually signed. Web's `acceptanceConfirmedLine`, word for word — one
+    /// sentence, whether it is drawn the second the door answers or a week later on another device.
+    public static func confirmedLine(_ confirmation: RecordedStandardSetConfirmation) -> String {
+        let count = confirmation.criteriaMaterial.count
+        let seal = CriteriaDecisions.shortSeal(confirmation.criteriaDigest)
         return "You started the project on \(count) criteria at seal \(seal)"
+    }
+
+    /// The record's heading: the two words the receipts Orbit already draws into a conversation use
+    /// (`CriteriaDecisions.recordedHeading`), because it is the same thing — an answer to a question
+    /// this conversation asked. Web's `ACCEPTANCE_RECEIPT_HEADING`.
+    public static let receiptHeading = "Decision recorded"
+
+    /// Who signed it, under the line above: the browser's own words for the same two facts
+    /// (`acceptanceReceiptStamp`). The time is passed in, for `OwnerConfirmations.receiptLine`'s
+    /// reason — formatting a clock is the platform's business and not a contract between the two
+    /// ends — and a moment this client cannot read is left off rather than rendered as a dangling
+    /// preposition.
+    public static func receiptStamp(_ time: String?) -> String {
+        guard let time else { return "by you" }
+        return "by you at \(time)"
+    }
+
+    /// One confirmation this console draws as a record, and the item it belongs after.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let confirmation: RecordedStandardSetConfirmation
+        /// The transcript item that was last at or before the confirmation. A card delivered live
+        /// anchors to the item that was last when it ARRIVED; a record has no arrival of its own on
+        /// a device that was not there, so it is anchored by the door's clock instead
+        /// (`ReceiptAnchor`).
+        public let afterItemID: String
+
+        public init(confirmation: RecordedStandardSetConfirmation, afterItemID: String) {
+            self.confirmation = confirmation
+            self.afterItemID = afterItemID
+        }
+
+        /// The row this record is drawn in — the card's own address rather than a second spelling of
+        /// it, so the id the console dedupes on and the id the transcript draws cannot drift.
+        public var id: String {
+            DeliveredDecisionCard(kind: .acceptanceConfirmationReceipt(confirmed: confirmation)).id
+        }
+    }
+
+    /// The record this conversation draws, or nothing: a confirmation on record — current or
+    /// superseded by an edit, both of which happened — that can be placed in the transcript this
+    /// device holds. A moment older than every loaded item is not drawn at all, for
+    /// `CriteriaDecisions.receipts`' reason: a decision above the window would be drawn below
+    /// things that happened first.
+    ///
+    /// Drawn from the READ and not from the window that pressed. A press kept as this window's own
+    /// state lasted exactly as long as the console did: the record of it was gone on the next open,
+    /// on the device that made it and on every device that did not.
+    public static func receipt(standing: StandardSetConfirmationStanding?,
+                               items: [TranscriptItem]) -> Receipt? {
+        guard let confirmation = standing?.confirmation,
+              let anchor = ReceiptAnchor.after(items: items, at: confirmation.confirmedAt)
+        else { return nil }
+        return Receipt(confirmation: confirmation, afterItemID: anchor)
     }
 
     // MARK: talking about the plan before starting it

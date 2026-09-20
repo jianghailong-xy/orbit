@@ -1197,6 +1197,8 @@ struct DeliveredDecisionCardView: View {
                 CriteriaDecisionReceiptCard(settled: settled)
             case .acceptanceConfirmation:
                 AcceptanceConfirmationCard(console: console)
+            case .acceptanceConfirmationReceipt(let confirmed):
+                AcceptanceConfirmationReceiptCard(confirmed: confirmed)
             case .evidenceDecision(let taskID, let evidenceRevision):
                 EvidenceDecisionCard(console: console, taskID: taskID,
                                      evidenceRevision: evidenceRevision)
@@ -1527,7 +1529,10 @@ private struct AcceptanceConfirmationCard: View {
                                 in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             }
             criteria
-            Text(AcceptanceConfirmations.startExplanation(count: items.count, standing: standing))
+            // Told in the project's own tense: a project already handing work out is being
+            // re-confirmed, not started (`AcceptanceConfirmations.startExplanation`).
+            Text(AcceptanceConfirmations.startExplanation(count: items.count, standing: standing,
+                                                          started: console.projectStarted))
                 .font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1580,7 +1585,9 @@ private struct AcceptanceConfirmationCard: View {
     }
 
     /// One press: it records the confirmation AND starts the project, because saying what would
-    /// settle a project is what authorises work on it.
+    /// settle a project is what authorises work on it. The word on it follows the project: a project
+    /// that is already handing work out is being re-confirmed, and `Start the project` would name an
+    /// act that is not available to it (`AcceptanceConfirmations.actionLabel`).
     private func startButton(_ standing: StandardSetConfirmationStanding?) -> some View {
         Button {
             guard AcceptanceConfirmations.answerable(standing), !confirming else { return }
@@ -1591,7 +1598,8 @@ private struct AcceptanceConfirmationCard: View {
                 confirming = false
             }
         } label: {
-            Text(AcceptanceConfirmations.startLabel).approvalActionLabel()
+            Text(AcceptanceConfirmations.actionLabel(started: console.projectStarted))
+                .approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
         .disabled(confirming || !AcceptanceConfirmations.answerable(standing))
@@ -1611,6 +1619,43 @@ private struct AcceptanceConfirmationCard: View {
         }
         .buttonStyle(.bordered)
         .disabled(standing == nil)
+    }
+}
+
+// MARK: - the record a confirmation leaves
+
+/// The record of a confirmation of a project's standard set, where it was made.
+///
+/// The fourth receipt, beside `CriteriaDecisionReceiptCard` and `EvidenceDecisionReceiptCard` above
+/// it and `OwnerDecisionReceiptView` below, and for their reason: a question leaves the conversation
+/// when it is answered, so a record kept by the window that pressed it is a record the next open
+/// takes away. Drawn from the door's own read (`AcceptanceConfirmations.receipt`), it names what was
+/// signed — the count, and the seal of the version standing when it was signed, which is not always
+/// the version standing now — by whom, and when.
+///
+/// Blue, like the card it replaces — the same question, answered — with a green tick and no actions,
+/// and the provenance mark the other receipts carry: a record of a decision the owner made is no
+/// more the agent's writing than the question was.
+private struct AcceptanceConfirmationReceiptCard: View {
+    let confirmed: RecordedStandardSetConfirmation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.circle.fill",
+                           title: AcceptanceConfirmations.receiptHeading,
+                           tone: .blue)
+            Text(AcceptanceConfirmations.confirmedLine(confirmed))
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(AcceptanceConfirmations.receiptStamp(
+                    OwnerConfirmations.receiptTime(confirmed.confirmedAt)))
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .approvalChrome(.blue)
     }
 }
 

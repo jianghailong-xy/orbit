@@ -6,6 +6,7 @@ import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read'
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
 import { ownerItemKind } from './project-open-item';
+import { projectsAwaitingStandardSetConfirmation } from './standard-set-awaiting-confirmation';
 
 /**
  * How many decisions only the ACCOUNT OWNER can take are waiting on each of their conversations,
@@ -50,12 +51,17 @@ import { ownerItemKind } from './project-open-item';
  * (`criteria-pending-decisions.ts`, `pending-evidence-judgments.ts`), still returned by its own
  * read, and this only decides where the badge points.
  *
- * Two kinds land there: a held criteria proposal, and a task's evidence revision waiting on a
- * CONFIRM or a SEND_BACK. The second counts exactly the rows the evidence card draws — decidable,
- * decidable FROM the coordinator, and in the coordinator's own project
- * (`countPendingEvidenceJudgments`) — because a revision the door would refuse from anyone is the
- * submitter's to refile and puts no card here. The shape is a list of counts per conversation rather
- * than one number so each kind adds a source here and changes nothing at either call site.
+ * Three kinds land there: a held criteria proposal, a task's evidence revision waiting on a CONFIRM
+ * or a SEND_BACK, and a project whose standard set nobody has confirmed. The second counts exactly
+ * the rows the evidence card draws — decidable, decidable FROM the coordinator, and in the
+ * coordinator's own project (`countPendingEvidenceJudgments`) — because a revision the door would
+ * refuse from anyone is the submitter's to refile and puts no card here. The third is the same rule
+ * once more (`projectsAwaitingStandardSetConfirmation`, which is the confirmation card's own four
+ * facts): the card is drawn in this conversation and nobody has answered it, so the row lights. It
+ * was the hole the criteria decision had before it was counted here — a plan written, a
+ * confirmation waiting, and a session list that read it as an idle reply. The shape is a list of
+ * counts per conversation rather than one number so each kind adds a source here and changes
+ * nothing at either call site.
  *
  * A third kind lands somewhere else, for the same reason: an OWNER_CONFIRMED task whose run is
  * waiting for its owner to confirm it done is counted on the task's OWN session, because that is
@@ -173,6 +179,16 @@ async function readProjectDecisionSignals(
   );
   for (const [projectId, count] of evidence) {
     byProject.set(projectId, (byProject.get(projectId) ?? 0) + count);
+  }
+  // And the confirmation card's own question, which is open for exactly one reason and closes for
+  // exactly one — the set standing now is the one somebody signed.
+  const awaitingConfirmation = await projectsAwaitingStandardSetConfirmation(
+    tx,
+    ownerId,
+    coordinated.map((project) => project.id),
+  );
+  for (const projectId of awaitingConfirmation) {
+    byProject.set(projectId, (byProject.get(projectId) ?? 0) + 1);
   }
 
   const signals: OwnerDecisionSignal[] = [];

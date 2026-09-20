@@ -7517,7 +7517,10 @@ button.composer-usage:focus-visible {
    The approval card's own tone rather than the warning one — it is a question about meaning, like
    the question and plan cards, not a ruler getting looser — with the provenance mark in its head
    like the other two cards Orbit draws into a conversation. */
-.settlement-card .approval-head {
+/* The receipt wears the same head as the card it replaces, so it takes the same row: the heading,
+   and the provenance mark pushed to the trailing edge by its own `margin-left: auto`. */
+.settlement-card .approval-head,
+.settlement-receipt .approval-head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -7588,10 +7591,24 @@ button.composer-usage:focus-visible {
 .settlement-card-error {
   margin-top: 10px;
 }
-.settlement-card-recorded {
-  margin-top: 10px;
-  font-size: 12.5px;
-  color: var(--text-2);
+/* The record of a confirmation (`AcceptanceConfirmationReceipt`): what was signed, by whom, and at
+   which version. Denser than the card it stands in for, because nothing on it is pressable — it is
+   the same brand tone and the same head, so a reader who watched the card give way to it reads one
+   object being written down rather than two. */
+.settlement-receipt-body {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.settlement-receipt-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.settlement-receipt-stamp {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 /* ── The project settlement card ─────────────────────────────────────────────────────────

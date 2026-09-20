@@ -6,10 +6,11 @@ import {
   acceptanceConfirmationKey,
   confirmAcceptanceCriteria,
   readAcceptanceConfirmation,
+  type RecordedStandardSetConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import { CardActionButton, CardActions } from './CardAction';
-import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
+import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
 // The words this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module again
 // through `DecisionRail`, and a top-level alias would be evaluated while that binding is still in
@@ -56,6 +57,15 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
  * nothing to start, which is OrbitKit's rule for a standing it does not have. Editing any criterion
  * ends the confirmation, and the card comes back for the new version on the same condition.
  *
+ * WHAT THE ANSWER LEAVES IS NOT THIS WINDOW'S TO KEEP
+ * ---------------------------------------------------
+ * A confirmed set leaves a RECEIPT in the conversation (`AcceptanceConfirmationReceipt`), drawn
+ * from the door's own read and not from the window that pressed: who signed it, and which seal —
+ * the version standing when it was signed, which is not always the version standing now. A press
+ * made here gives the card up to that receipt; a confirmation made at another end draws the same
+ * receipt and leaves the card beside it, for the rule above. A line this window remembered would
+ * have been the one thing the reload took away, which is what happened before this receipt existed.
+ *
  * WHAT THE PINNED STRIP IS TOLD
  * -----------------------------
  * Whether this card is on screen and its question is still unanswered (`onOpenQuestion`), which is
@@ -67,9 +77,17 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 /** The card's heading: what the card is about, not whether it has been answered
  *  (`AcceptanceConfirmations.title`). */
 export const ACCEPTANCE_CONFIRMATION_TITLE = 'When is this project done?';
-/** The primary action. One press: it records the confirmation AND starts the project, because
- *  saying what would settle a project is what authorises work on it. */
+/** The primary action for the project this card is normally asked about: one that is not running
+ *  yet. One press records the confirmation AND starts it, because saying what would settle a
+ *  project is what authorises work on it. */
 export const ACCEPTANCE_START_LABEL = 'Start the project';
+/** …and what the SAME control says when the project is already handing work out. Two different
+ *  facts are being answered here, and the verb has to follow the fact: a project already running on
+ *  an older version of its plan is not being started by this press, it is being re-confirmed —
+ *  saying "start" to it would name an act that is not available and imply a state it is not in
+ *  (2026-09-18: seven OPEN projects were handing work out, and the card offered to start every one
+ *  of them). Read off `coordinatorEnabled` like the meta line's own field, and off nothing else. */
+export const ACCEPTANCE_CONFIRM_LABEL = 'Confirm the criteria';
 /** The reading toggle once the criteria are shown whole. */
 export const ACCEPTANCE_SHOW_LESS_LABEL = 'Show less';
 /** The provenance as the meta line spells it: OrbitKit's `CriteriaDecisions.provenanceLabel`. */
@@ -108,6 +126,13 @@ export const CONFIRMATION_UNREAD_EXPLANATION =
   + 'a confirmation that names no version is not one. The criteria themselves are untouched by this.';
 /** What a press the door did not take says, over the door's own message. */
 export const CONFIRMATION_NOT_RECORDED = 'That confirmation was not recorded';
+/** What the record of a confirmation is headed: the two words the receipts Orbit already draws into
+ *  a conversation use (`CRITERIA_DECISION_RECORDED_HEADING` next door), because it is the same
+ *  thing — an answer to a question this conversation asked. */
+export const ACCEPTANCE_RECEIPT_HEADING = 'Decision recorded';
+/** The receipt's row id, in the spelling the native client gives the same record
+ *  (`DeliveredDecisionCard.id`), because both ends point at these by id from elsewhere. */
+export const ACCEPTANCE_RECEIPT_ID = 'acceptance-confirmation-receipt';
 
 /**
  * What the next send carries ahead of the typed message: the plan as it stands, named by its seal.
@@ -204,18 +229,40 @@ export function acceptanceConfirmationMeta(
   );
 }
 
-/** The one paragraph the card keeps: what starting binds the project to, and what ends it. It is
- *  never dropped — it is the mechanism, and the reason this card is asked before the work rather
- *  than after it. A stale standing says first why it is being asked a second time. */
+/** The one paragraph the card keeps: what a confirmation binds the project to, and what ends it. It
+ *  is never dropped — it is the mechanism, and the reason this card is asked before the work rather
+ *  than after it. A stale standing says first why it is being asked a second time.
+ *
+ *  AND A PROJECT ALREADY RUNNING IS TOLD IT IN ITS OWN TENSE. "Once this starts" is the sentence
+ *  for the project this card was written for — the plan is written and nothing has run. Said to one
+ *  that is already handing work out it describes a beginning that happened some other day, which is
+ *  the same defect as offering it a `Start` button: the card would be narrating a state the reader
+ *  is not in. Which of the two it says is `started` — the same fact the meta line's third field and
+ *  the action's label are read off, so all three agree by construction. */
 export function acceptanceStartExplanation(
   count: number,
   standing: StandardSetConfirmationStanding | null,
+  started: boolean | null = false,
 ): string {
   const again = standing?.state === 'STALE' ? `${CONFIRMATION_CHANGED_SINCE} ` : '';
+  if (started === true) {
+    return (
+      `${again}Once this is confirmed, Orbit derives done from these ${count} and from nothing else. `
+      + CONFIRMATION_EDIT_ENDS_IT
+    );
+  }
   return (
     `${again}Once this starts, Orbit derives done from these ${count} and from nothing else. `
     + CONFIRMATION_EDIT_ENDS_IT
   );
+}
+
+/** What the primary action says, for the project the card is actually about: `started`, read off
+ *  `coordinatorEnabled`, and never inferred from the standing. A `null` — a project document that
+ *  did not answer — keeps the card's own word rather than guessing a tense for a project nobody has
+ *  read, which is the rule the meta line's third field is under. */
+export function acceptanceActionLabel(started: boolean | null): string {
+  return started === true ? ACCEPTANCE_CONFIRM_LABEL : ACCEPTANCE_START_LABEL;
 }
 
 /** Whether the confirm button may be pressed. Both un-confirmed states offer it, and it always
@@ -254,11 +301,25 @@ export function acceptanceConfirmationStaleExplanation(
   );
 }
 
-/** What a press on this card leaves where its actions were. */
-export function acceptanceConfirmedLine(standing: StandardSetConfirmationStanding): string {
-  const count = standing.currentVersion.material.length;
-  const seal = shortSeal(standing.currentVersion.digest);
+/** What a confirmation records: the count it was given over, and the seal it locked.
+ *
+ *  Read off the RECORD and never off the version standing now. Those are the same version exactly
+ *  while the confirmation counts, and the whole point of the record is what it says when they are
+ *  not: after an edit the standing names the new seal, and this line still has to name the one
+ *  somebody actually signed. One sentence, whether it is drawn the second the door answers or a
+ *  week later on another device (`AcceptanceConfirmationCopyParityTests`). */
+export function acceptanceConfirmedLine(confirmation: RecordedStandardSetConfirmation): string {
+  const count = confirmation.criteriaMaterial.length;
+  const seal = shortSeal(confirmation.criteriaDigest);
   return `You started the project on ${count} criteria at seal ${seal}`;
+}
+
+/** Who made it and when, under that line — the stamp the other receipts carry (`by you at 09:15`),
+ *  from the same clock. The door this card is pressed at takes the browser's own credential and
+ *  refuses any request carrying an acting session, so "by you" is not a guess about who is reading:
+ *  an agent is never between the press and the record. */
+export function acceptanceReceiptStamp(confirmation: RecordedStandardSetConfirmation): string {
+  return `by you at ${receiptClock(confirmation.confirmedAt)}`;
 }
 
 /**
@@ -311,7 +372,6 @@ export function AcceptanceConfirmationCard({
   started,
   busy = false,
   error = null,
-  recorded = null,
   onStart,
   onChatAbout,
 }: {
@@ -328,8 +388,6 @@ export function AcceptanceConfirmationCard({
   busy?: boolean;
   /** The door's refusal of the last press, when it refused. */
   error?: Error | null;
-  /** The door's answer to a press made HERE, once there is one. */
-  recorded?: StandardSetConfirmationStanding | null;
   onStart: () => void;
   /** Hands the reply to the bottom composer. The card stays and `onStart` stays live. */
   onChatAbout: () => void;
@@ -337,9 +395,10 @@ export function AcceptanceConfirmationCard({
   const listId = useId();
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const answerable = acceptanceConfirmationAnswerable(standing);
-  // A press made here is not one made "at another end", which is the one reading of its own answer
-  // this card can be sure is wrong.
-  const stale = recorded ? null : acceptanceConfirmationStaleExplanation(standing);
+  // Why the button is dead, when it is. A press made HERE never meets this: the card gives way to
+  // its receipt the moment the door records the answer, so the one reading of its own answer this
+  // card can be sure is wrong — "confirmed at another end" — is not a state it can be drawn in.
+  const stale = acceptanceConfirmationStaleExplanation(standing);
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
   return (
     <div className="approval-card settlement-card">
@@ -382,7 +441,7 @@ export function AcceptanceConfirmationCard({
           </>
         ) : null}
         <p className="settlement-card-explains">
-          {acceptanceStartExplanation(items.length, standing)}
+          {acceptanceStartExplanation(items.length, standing, started)}
         </p>
         {error ? (
           <Alert
@@ -393,23 +452,59 @@ export function AcceptanceConfirmationCard({
             description={error.message}
           />
         ) : null}
-        {recorded ? (
-          <div className="settlement-card-recorded">{acceptanceConfirmedLine(recorded)}</div>
-        ) : null}
       </div>
-      {recorded ? null : (
-        <CardActions className="approval-actions settlement-card-actions">
-          <CardActionButton tone="primary" disabled={busy || !answerable} onClick={onStart}>
-            {ACCEPTANCE_START_LABEL}
-          </CardActionButton>
-          {/* The same control, and the same word for it, as the other three cards that hand a
-              reply to the composer. Dead only where there is no version to talk about: a standing
-              that could not be read names none. */}
-          <CardActionButton tone="secondary" disabled={standing === null} onClick={onChatAbout}>
-            {OWNER_SEND_BACK_ACTION}
-          </CardActionButton>
-        </CardActions>
-      )}
+      <CardActions className="approval-actions settlement-card-actions">
+        {/* The verb follows the project: a project this card is about to start, or one that is
+            already handing work out and is being re-confirmed (`acceptanceActionLabel`). */}
+        <CardActionButton tone="primary" disabled={busy || !answerable} onClick={onStart}>
+          {acceptanceActionLabel(started)}
+        </CardActionButton>
+        {/* The same control, and the same word for it, as the other three cards that hand a
+            reply to the composer. Dead only where there is no version to talk about: a standing
+            that could not be read names none. */}
+        <CardActionButton tone="secondary" disabled={standing === null} onClick={onChatAbout}>
+          {OWNER_SEND_BACK_ACTION}
+        </CardActionButton>
+      </CardActions>
+    </div>
+  );
+}
+
+/**
+ * The record of a confirmation, drawn in the conversation it was made in — the fourth receipt,
+ * beside the criteria decision's, the evidence decision's and the owner confirmation's, and for
+ * the same reason each of those exists: the question leaves the conversation the moment it is
+ * answered, and a window that kept the answer for as long as it remembered the press took the
+ * decision out of the conversation the moment the page was reloaded.
+ *
+ * DRAWN FROM THE READ, NOT FROM THE WINDOW THAT PRESSED. `confirmation` is the newest record
+ * `GET /projects/:id/acceptance/confirmation` publishes, so this is here on a device that never saw
+ * the card, after a reload, and with the door's clock and seal on it rather than the pressing
+ * page's. What it says is what was signed: the count, the seal it locked, who, and when. Nothing
+ * on it is pressable — it is a record, and the question it answers is not on it.
+ *
+ * A STALE SET DRAWS BOTH OF THEM: this, naming the version somebody signed, and the card below it
+ * asking about the version standing now. They are two different facts — what was agreed, and what
+ * nobody has agreed to yet — and only the second is a question.
+ */
+export function AcceptanceConfirmationReceipt({
+  confirmation,
+}: {
+  /** The newest confirmation on record, as the standing read publishes it. */
+  confirmation: RecordedStandardSetConfirmation;
+}): JSX.Element {
+  return (
+    <div className="approval-card settlement-receipt" id={ACCEPTANCE_RECEIPT_ID}>
+      <div className="approval-head settlement-card-head">
+        <span className="settlement-card-heading">{ACCEPTANCE_RECEIPT_HEADING}</span>
+        <span className="criteria-provenance" title={ACCEPTANCE_PROVENANCE_TITLE}>
+          {PROVENANCE_LABEL}
+        </span>
+      </div>
+      <div className="approval-body settlement-receipt-body">
+        <p className="settlement-receipt-line">{acceptanceConfirmedLine(confirmation)}</p>
+        <p className="settlement-receipt-stamp">{acceptanceReceiptStamp(confirmation)}</p>
+      </div>
     </div>
   );
 }
@@ -423,10 +518,12 @@ export function AcceptanceConfirmationCard({
  * from; the door refuses a version that moved in between, and the answer to that refusal is to read
  * the set again — so a refusal re-reads, and the card stays busy until that read has landed.
  *
- * Nothing puts the card down. A third action used to do that, while the question was asked at the
- * end of a project, where putting it down meant "let me answer once the work settles"; asked before
- * anything has run it would mean waiting for nothing, so the way past this card is to start the
- * project or to say what should change first.
+ * One thing puts the card down, and it is the answer: a press the door took gives way to the record
+ * of it (`AcceptanceConfirmationReceipt`), which the same read draws back on every later load. No
+ * action does. A third action used to, while the question was asked at the end of a project, where
+ * putting it down meant "let me answer once the work settles"; asked before anything has run it
+ * would mean waiting for nothing, so the way past this card is to start the project or to say what
+ * should change first.
  */
 export function SessionAcceptanceConfirmationCard({
   projectId,
@@ -494,34 +591,54 @@ export function SessionAcceptanceConfirmationCard({
     onError: () => qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),
   });
 
-  if (!shown) return null;
+  // The record of the newest confirmation, off the same read as everything else here. It is what
+  // outlives the press: this window's memory of pressing is worth nothing after a reload, while the
+  // door's own record is here on a device that never saw the card (`AcceptanceConfirmationReceipt`).
+  //
+  // The door's own response stands in for that read in the moment after a press made here, and only
+  // there: the next poll may be twenty seconds away and a poll that fails is not an answer, so
+  // without it a press followed by a failed re-read would empty the slot — the vanishing-mid-read
+  // this card is under orders not to do. It is the same record, off the same door, and it names the
+  // seal that was signed rather than the one standing now.
+  const record = standing?.confirmation
+    ?? (confirm.isSuccess ? confirm.data.confirmation : null);
+  // A press made HERE gives the card up: the question is answered, and what is left to read is the
+  // record of the answer. A confirmation made at ANOTHER end does not — that card stays where it
+  // is, going stale in place, because a reader halfway through it must not watch it vanish while
+  // somebody else answers (`shown`).
+  const answeredHere = confirm.isSuccess;
+  if (!shown && record === null) return null;
   const title = document?.title || project;
   return (
-    <AcceptanceConfirmationCard
-      standing={standing}
-      criteria={criteria}
-      projectTitle={title}
-      // Straight off the project read, absent-or-unread meaning neither yes nor no. A press here
-      // will turn it on, and a project that was already on when this card arrived says so.
-      started={document?.coordinatorEnabled ?? null}
-      busy={confirm.isPending}
-      error={confirm.isError ? confirm.error : null}
-      recorded={confirm.isSuccess ? confirm.data : null}
-      onStart={() => {
-        if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
-        confirm.mutate(standing.currentVersion.digest);
-      }}
-      onChatAbout={() => {
-        if (standing === null) return;
-        onChatAbout?.({
-          projectId: project,
-          criteriaDigest: standing.currentVersion.digest,
-          projectTitle: title,
-          criteria: [...(criteria ?? [])]
-            .sort((a, b) => a.ordinal - b.ordinal)
-            .map((item) => item.text),
-        });
-      }}
-    />
+    <>
+      {record ? <AcceptanceConfirmationReceipt confirmation={record} /> : null}
+      {shown && !answeredHere ? (
+        <AcceptanceConfirmationCard
+          standing={standing}
+          criteria={criteria}
+          projectTitle={title}
+          // Straight off the project read, absent-or-unread meaning neither yes nor no. A press
+          // here will turn it on, and a project that was already on when this card arrived says so.
+          started={document?.coordinatorEnabled ?? null}
+          busy={confirm.isPending}
+          error={confirm.isError ? confirm.error : null}
+          onStart={() => {
+            if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
+            confirm.mutate(standing.currentVersion.digest);
+          }}
+          onChatAbout={() => {
+            if (standing === null) return;
+            onChatAbout?.({
+              projectId: project,
+              criteriaDigest: standing.currentVersion.digest,
+              projectTitle: title,
+              criteria: [...(criteria ?? [])]
+                .sort((a, b) => a.ordinal - b.ordinal)
+                .map((item) => item.text),
+            });
+          }}
+        />
+      ) : null}
+    </>
   );
 }

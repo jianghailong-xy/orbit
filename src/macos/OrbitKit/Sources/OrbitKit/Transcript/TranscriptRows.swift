@@ -56,6 +56,15 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case criteriaDecisionReceipt(settled: SettledCriteriaDecision)
         /// The one confirmation question a project has. There is never more than one.
         case acceptanceConfirmation
+        /// One recorded confirmation of a project's standard set, drawn where it was made. Not a
+        /// question: nothing on it is pressable, and it stays for as long as the read publishes the
+        /// record — the version somebody signed, which is not always the version standing now.
+        ///
+        /// The row carries the record ITSELF and not its address, like `criteriaDecisionReceipt`
+        /// beside it and for the same reason: a question is re-derived from the read on every render
+        /// because what a reader may do with it depends on what the ruler says now, while an answer
+        /// is a committed fact that cannot change.
+        case acceptanceConfirmationReceipt(confirmed: RecordedStandardSetConfirmation)
         /// One revision of one task's completion evidence. The revision is part of the address
         /// because the door's compare-and-set is against it: a newer revision is its own card.
         case evidenceDecision(taskID: String, evidenceRevision: String)
@@ -103,6 +112,12 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .criteriaDecisionReceipt(let settled):
             return "criteria-decision-receipt-\(settled.intentId)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
+        // Beside the question's id rather than equal to it for `criteriaDecisionReceipt`'s reason:
+        // for one confirmation both rows can be on screen at once — the record of the version that
+        // was signed, and the card asking about the version standing now — and a duplicate id costs
+        // the List its diff. Web's `ACCEPTANCE_RECEIPT_ID`, in the same spelling.
+        case .acceptanceConfirmationReceipt:
+            return "acceptance-confirmation-receipt"
         // The web evidence card's `decisionRowKey` spelling, taskId@evidenceRevision.
         case .evidenceDecision(let taskID, let evidenceRevision):
             return "evidence-decision-\(taskID)@\(evidenceRevision)"
@@ -200,7 +215,13 @@ public enum DeliveryAnchor {
         // Exhaustive rather than defaulted: a card added later has to say which of the two it is.
         // The two owner cards anchor where they arrived, like every question the platform files:
         // what they are about happened before the read that found them.
+        //
+        // The confirmation's receipt is placed by the door's own clock rather than here
+        // (`AcceptanceConfirmations.receipt`), like the two receipts above it: a record has no
+        // arrival of its own on a device that was not there. It answers the same question this
+        // switch asks — where a row delivered RIGHT NOW would go — and it is not delivered that way.
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
+             .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .coordinatorQuestion:
             return items.last?.id

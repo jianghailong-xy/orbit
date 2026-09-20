@@ -125,6 +125,13 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
             confirmation: state == .unconfirmed ? nil : recorded)
     }
 
+    /// The confirmation the standing of that state has on record. Every recorded sentence is about
+    /// this row — the count and the seal somebody signed — so the fixture builds it once here.
+    private func recorded(_ state: StandardSetConfirmationStanding.State)
+        -> RecordedStandardSetConfirmation {
+        standing(state).confirmation!
+    }
+
     private var count: String { "\(Self.count)" }
     private var currentSeal: String { CriteriaDecisions.shortSeal(Self.current) }
     private var priorSeal: String { CriteriaDecisions.shortSeal(Self.prior) }
@@ -232,12 +239,74 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                        "why a card confirmed at another end offers nothing")
     }
 
+    /// The line a confirmation records: the count and the seal of the version that was SIGNED —
+    /// which is the point of reading it off the record and not off the standing, so it is asserted
+    /// on a confirmation whose set has since moved.
     func testTheLineAConfirmationLeavesMatchesTheWebCard() throws {
         let web = try flatWebCard()
 
-        assertTemplate(web, AcceptanceConfirmations.confirmedLine(standing(.confirmed)),
+        assertTemplate(web, AcceptanceConfirmations.confirmedLine(recorded(.confirmed)),
                        [(currentSeal, "${seal}"), (count, "${count}")],
                        "the line a confirmation leaves where it was pressed")
+        let superseded = AcceptanceConfirmations.confirmedLine(recorded(.stale))
+        XCTAssertTrue(superseded.contains(priorSeal), superseded)
+        XCTAssertFalse(superseded.contains(currentSeal),
+                       "the record must name the version somebody signed, not the one standing now")
+        assertTemplate(web, superseded, [(priorSeal, "${seal}"), (count, "${count}")],
+                       "the same line for a confirmation the criteria have since moved under")
+    }
+
+    /// The record itself: what it is headed, and the stamp under it saying who signed it and when.
+    func testTheReceiptAConfirmationLeavesMatchesTheWebCard() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_HEADING", AcceptanceConfirmations.receiptHeading,
+                       "what the record of a confirmation is headed")
+        // Both ends point at this row by id from elsewhere, so the id is one vocabulary: the row the
+        // native transcript draws carries exactly what the web element declares.
+        assertDeclares(web, "ACCEPTANCE_RECEIPT_ID",
+                       DeliveredDecisionCard(
+                           kind: .acceptanceConfirmationReceipt(confirmed: recorded(.confirmed))).id,
+                       "the id of the row a confirmation's record is drawn in")
+        // The time is passed in here and formatted there, for `OwnerConfirmations.receiptLine`'s
+        // reason: a clock is the platform's business and not a contract between the two ends.
+        assertTemplate(web, AcceptanceConfirmations.receiptStamp("08:00"),
+                       [("08:00", "${receiptClock(confirmation.confirmedAt)}")],
+                       "who signed it, and when")
+    }
+
+    /// A project that is already handing work out is not a project this card can start, and the two
+    /// sentences it says to one are the web card's: the action is a confirmation rather than a
+    /// start, and the paragraph is in that project's own tense.
+    func testTheWordsForAProjectAlreadyRunningMatchTheWebCard() throws {
+        let web = try flatWebCard()
+
+        assertDeclares(web, "ACCEPTANCE_CONFIRM_LABEL", AcceptanceConfirmations.confirmLabel,
+                       "the action that re-confirms a project already running")
+        XCTAssertEqual(AcceptanceConfirmations.actionLabel(started: true),
+                       AcceptanceConfirmations.confirmLabel,
+                       "a started project must not be offered a start")
+        XCTAssertEqual(AcceptanceConfirmations.actionLabel(started: false),
+                       AcceptanceConfirmations.startLabel,
+                       "and one that is not running is, exactly as before")
+        XCTAssertEqual(AcceptanceConfirmations.actionLabel(started: nil),
+                       AcceptanceConfirmations.startLabel,
+                       "a project nobody has read keeps the card's own word rather than a guess")
+
+        // The paragraph, in that project's tense — the same seam the not-started one is compared
+        // at, so what is compared is the sentence and not the way the line is wrapped.
+        let whole = AcceptanceConfirmations.startExplanation(count: Self.count,
+                                                            standing: standing(.stale),
+                                                            started: true)
+        XCTAssertTrue(whole.hasPrefix(AcceptanceConfirmations.changedSince + " "), whole)
+        XCTAssertTrue(whole.hasSuffix(AcceptanceConfirmations.editEndsIt), whole)
+        let again = AcceptanceConfirmations.changedSince + " "
+        let middle = String(String(whole.dropFirst(again.count))
+            .dropLast(AcceptanceConfirmations.editEndsIt.count))
+        XCTAssertFalse(middle.contains("Once this starts"),
+                       "a project already running was told when this starts")
+        assertTemplate(web, "AGAIN" + middle, [("AGAIN", "${again}"), (count, "${count}")],
+                       "what confirming binds a project already running to")
     }
 
     // MARK: the words the second action hands to the composer
