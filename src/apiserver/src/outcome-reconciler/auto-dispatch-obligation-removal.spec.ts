@@ -411,10 +411,17 @@ test('(g) the dependency mechanism and the dispatch fences are still installed',
         `the removal migration names ${table} in a statement: ${line.trim()}`);
     }
   }
-  // The candidate predicate still anchors on HAVING an edge and on those edges being satisfied.
+  // The candidate predicate still anchors on HAVING a prerequisite that the satisfaction clause
+  // can be satisfied BY, which is where it enters the dependency graph. Dropping the anchor puts
+  // the deployment's whole graph in front of the SU9 chain walk every minute; narrowing it back to
+  // "one of them is DONE" is the §13.6 SU9 bug below, where the tail of a replaced prerequisite is
+  // what satisfies the edge and the named row is CANCELLED.
   const tasks = read('src/apiserver/src/tasks/tasks.service.ts');
-  assert.match(tasks, /AND EXISTS \(SELECT 1 FROM task_dependency d WHERE d\.task_id = t\.id\)/,
-    'the auto-run sweep no longer anchors on the task having a prerequisite');
+  assert.match(
+    tasks,
+    /AND EXISTS \(\s*SELECT 1 FROM task_dependency d\s+JOIN task x ON x\.id = d\.depends_on_task_id\s+WHERE d\.task_id = t\.id\s+AND \(x\.status = 'DONE'::task_status OR NOT \$\{Prisma\.raw\(taskNotRetiredSql\('x'\)\)\}\)/,
+    'the auto-run sweep no longer anchors on the task having a prerequisite',
+  );
   assert.match(tasks, /AND t\.dispatch_hold = false/,
     'the auto-run sweep no longer honours dispatch_hold');
   assert.match(tasks, /AND t\.auto_run_when_ready = true/,

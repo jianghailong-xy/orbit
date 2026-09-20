@@ -118,6 +118,7 @@ import {
   isRetryableTaskFence,
   taskFenceConflictMessage,
   taskNotObsoleteSql,
+  taskNotRetiredSql,
   taskRetirement,
   taskWorkRefusal,
 } from './task-supersession';
@@ -830,7 +831,32 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- could be satisfied by nothing else. §13.6 SU9 makes a chain-tail satisfy one, so a task whose
   -- single prerequisite was replaced — chain tail DONE, the named row CANCELLED — passed the
   -- satisfaction clause and failed the anchor, and the sweep never selected it.
-  AND EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
+  --
+  -- So it anchors on what the satisfaction clause can actually be satisfied BY: an edge to a
+  -- prerequisite that is DONE itself, or one that was replaced and has a successor to answer for
+  -- it. A prerequisite is satisfied only by its chain tail, and the tail is the named row exactly
+  -- when that row still holds its own work (DONE, not retired) and the successor's when it does
+  -- not. That makes this a NECESSARY condition for the clause below — provable from it, not a
+  -- narrowing of the candidate set — so it selects the same rows while sparing the planner the
+  -- chain walk for every edge in the deployment.
+  --
+  -- That is the whole cost argument, and the reason it is stated HERE rather than left to the
+  -- satisfaction clause. The chain walk is a correlated PL/pgSQL call per edge
+  -- (task_dependency_tail_id), the sweep is deployment-wide, and "HAVING an edge" is 110,872
+  -- edges over 110,502 tasks on the deployment this was measured against — so the planner
+  -- evaluated the walk 109,732 times a sweep. That was 8.2s of a 10.4s sweep, and the hash of the
+  -- whole task table it built to drive it spilled 1374 blocks (11 MB) per sweep into work_mem.
+  -- Entering through the tasks that are DONE or retired instead walks the walk a few hundred
+  -- times: 117ms, no spill, same rows. task_dependency_depends_on_task_id_idx is the index that
+  -- carries this join; the eight indexes led by owner_id carry none of it, because there is no
+  -- owner_id in this predicate at all and 109,786 of 111,798 tasks pass the status/opt-in filter,
+  -- so a partial index on those columns would be an index over 98% of the table.
+  AND EXISTS (
+    SELECT 1 FROM task_dependency d
+      JOIN task x ON x.id = d.depends_on_task_id
+     WHERE d.task_id = t.id
+       AND (x.status = 'DONE'::task_status OR NOT ${Prisma.raw(taskNotRetiredSql('x'))})
+  )
   -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
   -- replaced attempt's work is held by its successor. Read as a plain DONE check this is a
   -- prerequisite nothing can ever complete, and everything downstream of it waits for good.

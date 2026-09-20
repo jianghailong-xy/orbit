@@ -431,7 +431,7 @@ test('a held task is filtered out of the candidate scan, without reading its lis
   assert.doesNotMatch(executable, /task_list/);
 });
 
-test('the sweep selects candidates on all five READY conditions, anchored on HAVING prerequisites', async () => {
+test('the sweep selects candidates on all five READY conditions, anchored on a prerequisite that can satisfy the edge', async () => {
   const raw = recordingQueryRaw();
   const prisma = {
     $queryRaw: raw.$queryRaw,
@@ -469,14 +469,22 @@ test('the sweep selects candidates on all five READY conditions, anchored on HAV
     sql,
     /AND EXISTS \(\s*SELECT 1 FROM "session" passed_run[\s\S]*passed_run\."status"::text = 'SUCCEEDED'[\s\S]*passed_run\."end_reason" = 'task_done'/,
   );
-  // Load-bearing despite being logically implied by the two clauses around it: it is the only
-  // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
-  // hash-joining every dependency edge in the deployment (32ms -> 264ms on a 55k-edge database).
-  // §13.6 SU9: the anchor is "this task HAS prerequisites", not "one of them is DONE". The second
-  // was the same claim only while a DONE row was the only way to satisfy an edge; a chain tail
-  // satisfies one now, and a task whose single prerequisite was replaced would pass the
-  // satisfaction clause and fail the anchor — never selected, with nothing saying why.
-  assert.match(sql, /EXISTS \(SELECT 1 FROM task_dependency d WHERE d\.task_id = t\.id\)/);
+  // Load-bearing, and the SHAPE is the whole of why: this is where the plan enters the
+  // deployment's dependency graph, or nowhere. "HAS an edge" is 110,872 edges over 110,502 tasks
+  // on the deployment this was measured against, and it made the planner evaluate the SU9 chain
+  // walk once per edge — 109,732 correlated task_dependency_tail_id calls, 8.2s of a 10.4s sweep,
+  // with the hash it built to drive them spilling 11 MB per sweep. Anchored on the prerequisites a
+  // satisfied edge can actually NAME it enters through ~1.5k tasks instead: 117ms, no spill.
+  // §13.6 SU9: the anchor is not "one of them is DONE" either. That was the same claim only while
+  // a DONE row was the only way to satisfy an edge; a task whose single prerequisite was replaced
+  // would pass the satisfaction clause and fail a DONE-only anchor — never selected, with nothing
+  // saying why. A retired prerequisite is in the anchor for exactly that case, and it is not a
+  // narrowing of the clause below: the tail is the named row precisely when that row is DONE and
+  // still holds its own work, and the successor's when it does not.
+  assert.match(
+    sql,
+    /AND EXISTS \(\s*SELECT 1 FROM task_dependency d\s+JOIN task x ON x\.id = d\.depends_on_task_id\s+WHERE d\.task_id = t\.id\s+AND \(x\.status = 'DONE'::task_status OR NOT \(x\."terminal_reason" IS NULL AND x\."superseded_by_task_id" IS NULL\)\)/,
+  );
   // The occupied-session set is the wider TASK_OCCUPYING (incl. idle-but-live AWAITING_INPUT /
   // INTERRUPTED), not the two states the Ready tab's own predicate uses.
   assert.equal((sql.match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);
