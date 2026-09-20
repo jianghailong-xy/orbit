@@ -394,6 +394,12 @@ case_confirm_after_main_moved_rechecks_then_lands() {
   checked="$(promotion_column_of "$project" upstream_sha_checked)"
   [ -n "$checked" ] || fail 'the check recorded no upstream'
 
+  # §3.6: what the card is drawn from names the tasks this merge would carry, by title — a count of
+  # them is not what the owner is deciding about.
+  local card; card="$(api GET "/projects/$project/promotions/current")"
+  assert_eq 'the card names the task this merge would carry' 'recheck task' \
+    "$(printf '%s' "$card" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tasks"][0]["title"])')"
+
   # Main moves between the check and the press — the case §3 exists for.
   local moved_main; moved_main="$(advance_upstream "$work" upstream.txt 'main moved after the check')"
   [ "$moved_main" != "$checked" ] || fail 'main did not actually move'
@@ -404,6 +410,11 @@ case_confirm_after_main_moved_rechecks_then_lands() {
   # M-T7: the upstream moving is a fact about this promotion, not a silent redo.
   local rechecked; rechecked="$(promotion_column_of "$project" rechecked_at)"
   [ -n "$rechecked" ] || fail 'the promotion was never marked as rechecked'
+  # §3.6's `recheck.upstreamMovedBy`, and the reason it is the runner's number rather than the
+  # control plane's: the commits are in the runner's repository and nowhere else, so the count
+  # arrives on the progress report that also moves the promotion to RECHECKING. One commit above.
+  assert_eq 'the promotion records how far main moved, counted on the runner' '1' \
+    "$(promotion_column_of "$project" upstream_moved_by)"
   assert_eq 'the landing merged onto the upstream that had moved' "$moved_main" \
     "$(promotion_job_column_of "$project" LAND_PROMOTION upstream_sha)"
   assert_eq 'the merge check ran again on the new combination' 1 \

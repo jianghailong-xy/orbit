@@ -271,6 +271,12 @@ export type PromotionState =
 /** What is being merged: the project's own branch, or one task's branch on a `MAIN` line (§3.2). */
 export type PromotionSourceKind = 'PROJECT_BRANCH' | 'TASK_BRANCH';
 
+/** One task a candidate would carry onto the upstream, as the card's Tasks row lists it (§3.6). */
+export interface PromotionTask {
+  taskId: string;
+  title: string;
+}
+
 /**
  * What the confirmation card is drawn from, as `GET /projects/:id/promotions/current` serves it
  * (§3.6).
@@ -297,8 +303,14 @@ export interface ProjectPromotionView<Instant = string> {
   upstreamRef: string;
   commitsAhead: number | null;
   filesChanged: number | null;
+  /** What this merge would carry, in `included_task_ids` order. The ids alone were not enough for
+   *  the card: the owner is deciding about tasks, and a count of them is not a name. */
+  tasks: PromotionTask[];
+  /** The same ids without their titles, kept because the native mirror in OrbitKit counts what it
+   *  would merge from this field; a wire shape does not change because a client is behind. */
   taskIds: string[];
   checks: IntegrationCheckResult[];
+  /** The paths the merge could not reconcile, empty unless the candidate is BLOCKED. */
   conflicts: string[];
   /** Null until a check has passed; after that, the upstream tip that check ran against. */
   upstreamShaChecked: string | null;
@@ -306,8 +318,22 @@ export interface ProjectPromotionView<Instant = string> {
   landsTreeSha: string | null;
   landsAs: 'MERGE_COMMIT' | 'FAST_FORWARD';
   askedAt: Instant | null;
+  /**
+   * The upstream side of this candidate: when the project branch last took main in (§3.1 M1), and
+   * whether anything conflicted. `syncedAt` is null for a branch that has never absorbed one — a
+   * project whose first landing is still on its own line — and the card says what it knows instead.
+   */
+  upstream: { syncedAt: Instant | null; conflicts: boolean };
   /** When the re-check after a moved upstream began (M5, state B); null while none has. */
   recheckedAt: Instant | null;
+  /**
+   * The re-check a landing is in the middle of (state B), or null when none is.
+   *
+   * The two numbers are nullable on purpose: `upstreamMovedBy` is what the runner counted main
+   * moving, and `typicalMs` is how long this project's checks usually take, and a reader must be
+   * able to say "2m so far" when the platform has neither rather than print a zero it made up.
+   */
+  recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
   merged: { sha: string; byUserId: string | null; at: Instant } | null;
 }
 

@@ -972,6 +972,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
   //        `project_promotion_terminal_guard` standing exactly as it was, still refusing a rewrite
   //        of a candidate that reached a terminal state. Dropping NOT NULL widens what the table
   //        accepts and cannot make an existing value disagree with the column's type.
+  //   0294 added `project_promotion.upstream_moved_by`, how far the upstream had moved when a
+  //        confirmed promotion's landing found it had, as the runner counted it (contract §3.3
+  //        M-T7, read back as §3.6's `recheck`). Read against every claim above: it ALTERs exactly
+  //        one table, `project_promotion`, which 0286 created for the merge-into-main state machine
+  //        and which is neither a preserved relation nor reachable from one, by exactly one
+  //        `ADD COLUMN` — nullable, with no default, so the ADD is catalog-only and no stored row
+  //        is rewritten. No column is dropped anywhere. The only other statement is a
+  //        `COMMENT ON COLUMN` on that same new column, which is catalog prose and touches no row.
+  //        It names no `task`, `project` or `project_acceptance_criterion_definition` object, so
+  //        the 0177 pair, `task_executable_acceptance_pair` and every stored task and criterion row
+  //        are out of its reach, and it creates no table, enum, type, function or trigger — the six
+  //        preserved objects and `project_promotion_terminal_guard`, already standing from 0286,
+  //        are untouched. It carries no INSERT, UPDATE or DELETE, so no preserved row is read,
+  //        locked or backfilled, and it is not another writer of the DONE fence.
   assert.deepEqual(dirs.slice(dirs.indexOf(REMOVAL_DIR)),
     [REMOVAL_DIR, '0229_project_acceptance_judgment_removal',
       '0230_executable_exit_code_judgment', '0231_project_codebase_session_source',
@@ -1046,7 +1060,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_promotion.source_sha` loses NOT NULL and nothing else moves: no column is added,
       // dropped or retyped, no relation this file preserves is named, there is no trigger and no
       // function, and the migration carries no DML.
-      '0293_project_promotion_source_sha_nullable'],
+      '0293_project_promotion_source_sha_nullable',
+      // `project_promotion.upstream_moved_by`: one nullable column, no function, no trigger, and
+      // `project_promotion` was never in the judgment tables this file guards — 0286 created it.
+      '0294_project_promotion_upstream_moved_by'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

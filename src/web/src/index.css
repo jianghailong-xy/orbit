@@ -13714,3 +13714,9 @@ button.composer-usage:focus-visible {
   margin: 2px 0 0;
   padding-left: 18px;
 }
+/* The tasks this merge would bring in, by name, under the count that says how many there are: what
+   the owner is actually deciding about, and the list the blockers row below it belongs to. */
+.project-promotion-tasks {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}

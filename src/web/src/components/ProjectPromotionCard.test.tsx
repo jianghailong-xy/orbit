@@ -45,6 +45,14 @@ function at(msAgo: number): string {
   return new Date(NOW - msAgo).toISOString();
 }
 
+/** The tasks mock 4's Tasks row lists, in the order the row carries them (§3.6). */
+const TASK_TITLES = [
+  '后台作业不再阻塞 merge/commit，merge/commit 前也不驱逐 engine',
+  'runner 发版重启杀掉 runner 托管作业：有的记成 drain_cap',
+  'runner 托管作业在 session 结束路径上被杀仍无终态事件',
+  'warmEngineTTL 改回 4 小时',
+];
+
 /** A candidate the checks passed on: state A, and the base every other state is a variation of. */
 function promotion(over: Partial<ProjectPromotionView> = {}): ProjectPromotionView {
   return {
@@ -62,6 +70,12 @@ function promotion(over: Partial<ProjectPromotionView> = {}): ProjectPromotionVi
       '34OEE9JPCk5honx7CQZSm',
       '34OEE9TjocXaJeuD11UVz',
     ],
+    tasks: [
+      { taskId: '34OEE9DwfWYjo3aRFuBgo', title: TASK_TITLES[0]! },
+      { taskId: '34OEE9Ftd7jJEDjbB347f', title: TASK_TITLES[1]! },
+      { taskId: '34OEE9JPCk5honx7CQZSm', title: TASK_TITLES[2]! },
+      { taskId: '34OEE9TjocXaJeuD11UVz', title: TASK_TITLES[3]! },
+    ],
     checks: [
       {
         name: 'MERGE_CHECK',
@@ -75,10 +89,13 @@ function promotion(over: Partial<ProjectPromotionView> = {}): ProjectPromotionVi
     ],
     conflicts: [],
     upstreamShaChecked: '9a1b2c3d4e5f60718293a4b5c6d7e8f901234567',
+    // Mock 4's `main` row: the branch absorbed main 12 minutes ago, with nothing conflicting.
+    upstream: { syncedAt: at(12 * MINUTE), conflicts: false },
     landsTreeSha: '58f3a4700000000000000000000000000000abcd',
     landsAs: 'MERGE_COMMIT',
     askedAt: at(2 * HOUR + 10 * MINUTE),
     recheckedAt: null,
+    recheck: null,
     merged: null,
     ...over,
   };
@@ -159,7 +176,31 @@ describe('state A — the checks passed and it is waiting on you', () => {
     expect(html).toContain(FROM_ORBIT);
     expect(html).toContain('project/bg-jobs');
     expect(html).toContain('7 commits ahead of main');
-    expect(html).toContain('4 tasks landed on the branch');
+  });
+
+  it('lists the tasks this merge would bring in, by title, in the row’s own order', () => {
+    const html = card(promotion());
+    expect(html).toContain('4 landed on the branch');
+    for (const title of TASK_TITLES) {
+      expect(html).toContain(title);
+    }
+    const positions = TASK_TITLES.map((title) => html.indexOf(title));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it('says when the branch last absorbed main, and that nothing conflicted', () => {
+    const html = card(promotion());
+    expect(html).toContain('synced 12m ago');
+    expect(html).toContain('no conflicts');
+    expect(html).not.toContain('checked against');
+  });
+
+  it('falls back to the commit the check ran against when it has never absorbed main', () => {
+    const html = card(promotion({ upstream: { syncedAt: null, conflicts: false } }));
+    expect(html).toContain('checked against');
+    expect(html).toContain('9a1b2c3');
+    expect(html).toContain('no conflicts');
+    expect(html).not.toContain('synced');
   });
 
   it('says the checks passed on the combined tree, with the command and what it took', () => {
@@ -271,14 +312,35 @@ describe('state B — you confirmed it and main moved since the check', () => {
   const rechecking = promotion({
     state: 'RECHECKING',
     recheckedAt: at(2 * MINUTE),
+    recheck: { upstreamMovedBy: 1, startedAt: at(2 * MINUTE), typicalMs: 6 * MINUTE + 12 * 1000 },
   });
 
-  it('says it is re-checking the combined tree, and how long that has run', () => {
+  it('says how far main moved, and how long a check like this one takes', () => {
     const html = card(rechecking);
     expect(html).toContain('Merging project/bg-jobs into main…');
-    expect(html).toContain('main moved since the check');
+    expect(html).toContain('main moved 1 commit since the check');
     expect(html).toContain('re-checking the combined tree');
-    expect(html).toContain('2m');
+    expect(html).toContain('(2m of ~6m)');
+  });
+
+  it('counts the commits main moved in the plural', () => {
+    const html = card(promotion({
+      state: 'RECHECKING',
+      recheckedAt: at(2 * MINUTE),
+      recheck: { upstreamMovedBy: 3, startedAt: at(2 * MINUTE), typicalMs: 6 * MINUTE },
+    }));
+    expect(html).toContain('main moved 3 commits since the check');
+  });
+
+  it('says less rather than inventing a count or a typical the runner never reported', () => {
+    const html = card(promotion({
+      state: 'RECHECKING',
+      recheckedAt: at(2 * MINUTE),
+      recheck: { upstreamMovedBy: null, startedAt: at(2 * MINUTE), typicalMs: null },
+    }));
+    expect(html).toContain('main moved since the check');
+    expect(html).toContain('(2m so far)');
+    expect(html).not.toContain('commit');
   });
 
   it('says there is nothing for you to do', () => {

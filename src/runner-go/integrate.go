@@ -400,7 +400,11 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	moved := landing && cmd.UpstreamShaChecked != "" && cmd.UpstreamShaChecked != upstreamSha
 	taskBranch := cmd.PromotionSourceKind == "TASK_BRANCH"
 	if moved {
-		report("MERGE", &IntegrationUpstreamMoved{From: cmd.UpstreamShaChecked, To: upstreamSha})
+		report("MERGE", &IntegrationUpstreamMoved{
+			From:    cmd.UpstreamShaChecked,
+			To:      upstreamSha,
+			Commits: countCommits(repoRoot, cmd.UpstreamShaChecked, upstreamSha),
+		})
 	} else if taskBranch {
 		report("REBASE", nil)
 	} else {
@@ -683,6 +687,24 @@ func isAncestor(dir, ancestor, descendant string) bool {
 	}
 	err := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", ancestor, descendant).Run()
 	return err == nil
+}
+
+// countCommits is how many commits the upstream gained between two tips: the number the owner reads
+// as "main moved 1 commit since the check" (M-T7). Zero when git cannot answer — an object this
+// machine does not have is not a claim that nothing moved, and the report leaves the count out.
+func countCommits(dir, from, to string) int {
+	if from == "" || to == "" {
+		return 0
+	}
+	out, err := git(dir, "rev-list", "--count", from+".."+to)
+	if err != nil {
+		return 0
+	}
+	n, convErr := strconv.Atoi(strings.TrimSpace(out))
+	if convErr != nil {
+		return 0
+	}
+	return n
 }
 
 func errorResult(phase, code string, detail map[string]any) integrationResult {

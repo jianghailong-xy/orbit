@@ -196,12 +196,16 @@ function openTasks(project: PromotionProjectView | null): number | null {
 function ReadyRows({
   promotion,
   project,
+  now,
 }: {
   promotion: ProjectPromotionView;
   project: PromotionProjectView | null;
+  now: number;
 }): JSX.Element {
   const upstream = shortRef(promotion.upstreamRef);
   const tally = criteriaTally(project);
+  // The blockers row reads the row's own ids rather than the titles beside them: it asks which of
+  // the tasks this merge would carry are still holding somebody up, and that is the recorded set.
   const blockers = humanBlockers(project, promotion.taskIds);
   const tree = shortSha(promotion.landsTreeSha);
   const checked = shortSha(promotion.upstreamShaChecked);
@@ -213,7 +217,14 @@ function ReadyRows({
           ? ` · ${plural(promotion.commitsAhead, 'commit')} ahead of ${upstream}`
           : null}
       </Row>
-      <Row k="Tasks">{`${plural(promotion.taskIds.length, 'task')} landed on the branch`}</Row>
+      <Row k="Tasks">
+        {`${promotion.tasks.length} landed on the branch`}
+        <ul className="project-promotion-tasks">
+          {promotion.tasks.map((task) => (
+            <li key={task.taskId}>{task.title}</li>
+          ))}
+        </ul>
+      </Row>
       <Row k="Checks">
         {promotion.checks.length === 0 ? (
           `No check is configured — nothing ran on the combined tree`
@@ -226,15 +237,26 @@ function ReadyRows({
           </>
         )}
       </Row>
+      {/* When the branch last took main in (M1), which is what the owner is being asked to move
+          forward — and, for a branch that has never absorbed it, the commit the check ran against
+          instead, because that is the branch's whole relationship with main so far. */}
       <Row k={upstream}>
-        {checked ? (
+        {promotion.upstream.syncedAt ? (
+          `synced ${ago(promotion.upstream.syncedAt, now)} · `
+        ) : checked ? (
           <>
             {'checked against '}
             <span className="promotion-mono">{checked}</span>
             {' · '}
           </>
         ) : null}
-        <span className="promotion-ok">no conflicts</span>
+        {promotion.upstream.conflicts ? (
+          <span className="promotion-bad">
+            {`${plural(promotion.conflicts.length, 'file')} conflict`}
+          </span>
+        ) : (
+          <span className="promotion-ok">no conflicts</span>
+        )}
       </Row>
       {tally ? (
         <Row k="Criteria">{`${tally.met} of ${tally.total} met on this branch — ${CRITERIA_TAIL}`}</Row>
@@ -271,13 +293,19 @@ function ReadyRows({
 function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now: number }): JSX.Element {
   const upstream = shortRef(promotion.upstreamRef);
   const rechecking = promotion.state === 'RECHECKING';
-  const since = promotion.recheckedAt ? formatSpan(now - Date.parse(promotion.recheckedAt)) : null;
+  // The re-check's own numbers when the server has them, and what the row already carried when it
+  // does not: a promotion re-checked before the platform counted anything still says how long it
+  // has been running rather than going silent.
+  const startedAt = promotion.recheck?.startedAt ?? promotion.recheckedAt;
+  const since = startedAt ? formatSpan(now - Date.parse(startedAt)) : null;
+  const movedBy = promotion.recheck?.upstreamMovedBy ?? null;
+  const typical = promotion.recheck?.typicalMs ?? null;
   return (
     <>
       <Row k="Status">
         <span className="promotion-spin" aria-hidden="true" />
         {rechecking
-          ? `${upstream} moved since the check — re-checking the combined tree${since ? ` (${since} so far)` : ''}`
+          ? `${upstream} moved${movedBy != null ? ` ${plural(movedBy, 'commit')}` : ''} since the check — re-checking the combined tree${since ? ` (${since}${typical != null ? ` of ~${formatSpan(typical)}` : ' so far'})` : ''}`
           : `confirmed — merging the tested tree into ${upstream}`}
       </Row>
       <Row k="You">{NOTHING_TO_DO}</Row>
@@ -471,7 +499,7 @@ export function ProjectPromotionCard({
         ) : blocked ? (
           <BlockedRows promotion={promotion} item={item} now={now} />
         ) : (
-          <ReadyRows promotion={promotion} project={project} />
+          <ReadyRows promotion={promotion} project={project} now={now} />
         )}
       </div>
       {decide.isError ? (

@@ -431,7 +431,9 @@ export async function receiveIntegrationJobProgress(
       select: { promotionId: true, kind: true },
     });
     if (job?.promotionId && job.kind === 'LAND_PROMOTION') {
-      await markPromotionRechecking(prisma, job.promotionId);
+      // How far it moved is the runner's count, because the commits are in the runner's repository.
+      // Absent when git could not count them, and then the card says less rather than zero.
+      await markPromotionRechecking(prisma, job.promotionId, body.upstreamMoved.commits ?? null);
     }
   }
   return { accepted: true };

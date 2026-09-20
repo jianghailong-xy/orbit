@@ -2225,6 +2225,11 @@ model ProjectPromotion {
   /// new tip (M-T7). Durable, because `RECHECKING` is passed through in seconds and a reader asking
   /// "was this rechecked" is asking about something that already happened.
   recheckedAt       DateTime? @map("rechecked_at") @db.Timestamptz(3)
+  /// How far the upstream had moved when that happened, as the runner counted it (§3.6's
+  /// `upstreamMovedBy`). Counted on the runner because the commits are in the runner's repository
+  /// and nowhere else; null when it could not answer, and then the card says the upstream moved
+  /// without putting a number on it.
+  upstreamMovedBy   Int?      @map("upstream_moved_by")
   decidedAt         DateTime? @map("decided_at") @db.Timestamptz(3)
 
   mergedSha  String?   @map("merged_sha") @db.Char(40)

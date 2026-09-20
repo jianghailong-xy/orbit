@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import type { ProjectPromotionView as SharedPromotionView } from '@orbit/shared';
+import type { ProjectPromotionView as SharedPromotionView, PromotionTask } from '@orbit/shared';
 import type { IntegrationCheckResult } from './project-integration-job';
 
 /**
@@ -143,6 +143,7 @@ export const PROMOTION_COLUMNS = {
   confirmedByUserId: true,
   confirmedAt: true,
   recheckedAt: true,
+  upstreamMovedBy: true,
   decidedAt: true,
   mergedSha: true,
   mergedAt: true,
@@ -173,7 +174,41 @@ export function promotionLandsAs(sourceKind: string): 'MERGE_COMMIT' | 'FAST_FOR
   return sourceKind === 'PROJECT_BRANCH' ? 'MERGE_COMMIT' : 'FAST_FORWARD';
 }
 
-export function promotionView(row: PromotionRow): ProjectPromotionView {
+/**
+ * The middle of a set of durations, in ms, or null for an empty one (§3.6's `typicalMs`).
+ *
+ * A median rather than a mean because what is being measured is a command on a machine somebody
+ * else also uses: one run that queued for forty minutes would move a mean by more than the reader
+ * gets out of it. Null rather than zero for no runs at all, because zero claims the work is
+ * instant, and "we have not measured one yet" is a different sentence.
+ */
+export function medianMs(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : Math.round((sorted[middle - 1]! + sorted[middle]!) / 2);
+}
+
+/**
+ * The parts of §3.6 that are not columns of the promotion row: what the merge would carry, when the
+ * branch last took main in, and the re-check a landing is in the middle of (§3.1 M1, M-T7).
+ *
+ * Read by the service rather than derived in `promotionView`, because each one is a question about
+ * another table — and passed in as one argument so that the two doors onto a candidate (reading the
+ * card, and answering it) cannot describe the same merge differently.
+ */
+export interface PromotionFacts {
+  /** What this merge would carry, in `includedTaskIds` order. */
+  tasks: PromotionTask[];
+  /** When the project branch last absorbed the upstream, or null when it never has. */
+  upstreamSyncedAt: Date | null;
+  /** The re-check in flight (state B), or null when none is. */
+  recheck: { upstreamMovedBy: number | null; startedAt: Date; typicalMs: number | null } | null;
+}
+
+export function promotionView(row: PromotionRow, facts: PromotionFacts): ProjectPromotionView {
   return {
     promotionId: row.id,
     state: row.state as PromotionState,
@@ -183,14 +218,19 @@ export function promotionView(row: PromotionRow): ProjectPromotionView {
     upstreamRef: row.upstreamRef,
     commitsAhead: row.commitsAhead,
     filesChanged: row.filesChanged,
+    tasks: facts.tasks,
     taskIds: row.includedTaskIds,
     checks: Array.isArray(row.checks) ? (row.checks as unknown as IntegrationCheckResult[]) : [],
     conflicts: row.conflicts,
+    // One source for both readings of "did anything conflict": the paths below are the files, this
+    // is the answer the card's `main` row gives, and they are derived from the same array.
+    upstream: { syncedAt: facts.upstreamSyncedAt, conflicts: row.conflicts.length > 0 },
     upstreamShaChecked: row.upstreamShaChecked,
     landsTreeSha: row.mergeTreeSha,
     landsAs: promotionLandsAs(row.sourceKind),
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,
+    recheck: facts.recheck,
     merged: row.mergedSha && row.mergedAt
       ? { sha: row.mergedSha, byUserId: row.confirmedByUserId, at: row.mergedAt }
       : null,

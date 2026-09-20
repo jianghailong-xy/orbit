@@ -373,6 +373,10 @@ type IntegrationJobProgressRequest struct {
 type IntegrationUpstreamMoved struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+	// Commits is how many commits the upstream gained between them. Counted here because the
+	// commits are in this machine's repository and nowhere else; omitted when git could not answer,
+	// which a reader shows as "it moved" rather than as a count of zero.
+	Commits int `json:"commits,omitempty"`
 }
 
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check

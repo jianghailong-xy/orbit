@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import type { PromotionTask } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -24,12 +25,16 @@ import {
   ProjectPromotionView,
   PromotionRow,
   PromotionState,
+  medianMs,
   promotionConfirmRefusal,
   promotionDedupeKey,
   promotionItemTitle,
   promotionPrincipalRefusal,
   promotionView,
 } from './project-promotion';
+
+/** How many finished checks the "typical" a re-check is measured against is taken from (§3.6). */
+const CHECK_TYPICAL_SAMPLE = 5;
 
 /**
  * Merging a project's finished work into its upstream (`docs/project-integration-line-contract.md`
@@ -331,7 +336,7 @@ export class ProjectPromotionService {
 
     const after = await readPromotion(this.prisma, projectId, promotionId);
     if (!after) throw new NotFoundException('promotion not found');
-    return promotionView(after);
+    return this.view(after);
   }
 
   /** The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6). */
@@ -341,7 +346,91 @@ export class ProjectPromotionService {
       orderBy: { createdAt: 'desc' },
       select: PROMOTION_COLUMNS,
     });
-    return row ? promotionView(row) : null;
+    return row ? this.view(row) : null;
+  }
+
+  /**
+   * The row as the card reads it (§3.6), with the three facts that are questions about other tables
+   * answered here rather than in the row itself.
+   *
+   * One builder for both doors — the card being read, and the answer to a press on it — because the
+   * answer IS what the client redraws from: two builders would be two chances to describe the same
+   * merge differently, and the card the owner pressed has to be the card they get back.
+   */
+  private async view(row: PromotionRow): Promise<ProjectPromotionView> {
+    const [tasks, upstreamSyncedAt] = await Promise.all([
+      this.tasksOf(row),
+      this.lastUpstreamSync(row.projectId),
+    ]);
+    // Only a re-check in flight is measured, which keeps the poll of a card nobody is acting on to
+    // the two reads above.
+    const recheck = row.state === 'RECHECKING' && row.recheckedAt
+      ? {
+        upstreamMovedBy: row.upstreamMovedBy,
+        startedAt: row.recheckedAt,
+        typicalMs: medianMs(await this.recentCheckDurations(row.projectId)),
+      }
+      : null;
+    return promotionView(row, { tasks, upstreamSyncedAt, recheck });
+  }
+
+  /** What this merge would carry, in the order the row lists it, with the titles the card shows. */
+  private async tasksOf(row: PromotionRow): Promise<PromotionTask[]> {
+    if (row.includedTaskIds.length === 0) return [];
+    const rows = await this.prisma.task.findMany({
+      where: { id: { in: row.includedTaskIds }, ownerId: row.ownerId },
+      select: { id: true, title: true },
+    });
+    const titles = new Map(rows.map((task) => [task.id, task.title]));
+    const tasks: PromotionTask[] = [];
+    for (const taskId of row.includedTaskIds) {
+      const title = titles.get(taskId);
+      // A task the row names and the table no longer holds is left out rather than titled with its
+      // own id: the card lists what it would merge, and an id is not one of them.
+      if (title !== undefined) tasks.push({ taskId, title });
+    }
+    return tasks;
+  }
+
+  /**
+   * When this project's branch last took the upstream in (§3.1 M1), or null when it never has.
+   *
+   * The row `project-integration-line.ts` reads for the project page's `synced with main <age>`: a
+   * LANDING that had to absorb the upstream, which is the only thing that moves that clock. Read
+   * here too because the two surfaces make the same claim about the same branch, and a second
+   * derivation is how they come to disagree.
+   */
+  private async lastUpstreamSync(projectId: string): Promise<Date | null> {
+    const synced = await this.prisma.projectIntegrationJob.findFirst({
+      where: { projectId, state: 'LANDED', mainSyncSha: { not: null } },
+      orderBy: { finishedAt: 'desc' },
+      select: { finishedAt: true },
+    });
+    return synced?.finishedAt ?? null;
+  }
+
+  /**
+   * How long this project's last few promotion checks took, newest first (§3.6's `typicalMs`).
+   *
+   * The whole CHECK_PROMOTION run and not only the commands it ran, because the run is what the
+   * reader is waiting for — it fetches, merges and then checks, and the checks alone would report
+   * less than the wait. Five of them: a project whose checks changed shape a month ago is described
+   * better by what it has been doing lately than by everything it has ever done.
+   */
+  private async recentCheckDurations(projectId: string): Promise<number[]> {
+    const runs = await this.prisma.projectIntegrationJob.findMany({
+      where: {
+        projectId,
+        kind: 'CHECK_PROMOTION',
+        startedAt: { not: null },
+        finishedAt: { not: null },
+      },
+      orderBy: { finishedAt: 'desc' },
+      take: CHECK_TYPICAL_SAMPLE,
+      select: { startedAt: true, finishedAt: true },
+    });
+    return runs.flatMap((run) =>
+      run.startedAt && run.finishedAt ? [run.finishedAt.getTime() - run.startedAt.getTime()] : []);
   }
 }
 
@@ -705,14 +794,21 @@ async function writeUpstreamReceipts(
  *
  * `recheckedAt` as well as the state, because the state is passed through in the seconds the checks
  * take and a reader asking "was this rechecked" — the acceptance script included — is asking about
- * something that already happened rather than something happening now.
+ * something that already happened rather than something happening now. `upstreamMovedBy` is how far
+ * the upstream moved, counted by the runner because only the runner has the commits to count; null
+ * when it could not, which the card says rather than printing a zero.
  */
 export async function markPromotionRechecking(
   prisma: Pick<PrismaService, 'projectPromotion'>,
   promotionId: string,
+  upstreamMovedBy: number | null,
 ): Promise<void> {
   await prisma.projectPromotion.updateMany({
     where: { id: promotionId, state: 'CONFIRMED' },
-    data: { state: 'RECHECKING' satisfies PromotionState, recheckedAt: new Date() },
+    data: {
+      state: 'RECHECKING' satisfies PromotionState,
+      recheckedAt: new Date(),
+      upstreamMovedBy,
+    },
   });
 }

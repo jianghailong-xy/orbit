@@ -1961,7 +1961,7 @@ export interface IntegrationJobProgressRequest {
   leaseOwner: string;
   phase: IntegrationJobPhase;
   /** Upstream moved under the job while it worked, for a reader of the timeline. */
-  upstreamMoved?: { from: string; to: string };
+  upstreamMoved?: { from: string; to: string; commits?: number };
 }
 
 /** Runner → control plane: what the job came to (POST /runner/integration-jobs/:jobId/result). */
