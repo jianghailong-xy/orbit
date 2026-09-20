@@ -59,8 +59,8 @@ type messageDelivery struct {
 	// the delivery rather than stored globally, because it answers for THIS message on THIS
 	// control plane; a runner that assumed it would lose a message to an older one.
 	requeueable bool
-	receipt *writeReceipt
-	state   deliveryState
+	receipt     *writeReceipt
+	state       deliveryState
 }
 
 // deliveryLedger correlates the messages a session hands to its CLI with the echoes the

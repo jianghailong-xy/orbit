@@ -925,12 +925,12 @@ type ReclaimSession struct {
 	// consuming an active-turn permit only for work that was actually RUNNING.
 	// Empty is retained for compatibility with older servers whose reclaim list
 	// contained RUNNING sessions only.
-	Status           string          `json:"status,omitempty"`
-	Provider         string          `json:"provider,omitempty"`
-	SessionUUID      string          `json:"sessionUuid"`
-	RuntimeSessionID string          `json:"runtimeSessionId,omitempty"`
-	LeaseOwner       string          `json:"leaseOwner,omitempty"`
-	MaxSeq           int             `json:"maxSeq"`
+	Status           string `json:"status,omitempty"`
+	Provider         string `json:"provider,omitempty"`
+	SessionUUID      string `json:"sessionUuid"`
+	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
+	LeaseOwner       string `json:"leaseOwner,omitempty"`
+	MaxSeq           int    `json:"maxSeq"`
 	// ImportSourceCwd, cf. ClaimedSession.ImportSourceCwd: non-nil only while a transcript
 	// import is unfinished, and it names the cwd the runner locates the transcript from.
 	ImportSourceCwd *string `json:"importSourceCwd,omitempty"`

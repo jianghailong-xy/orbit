@@ -313,7 +313,6 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	return result
 }
 
-
 // promoteOnce is one pass at merging a project's finished work into its upstream
 // (docs/project-integration-line-contract.md §3.4, steps M-S1 to M-S4).
 //

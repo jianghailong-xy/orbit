@@ -53,7 +53,7 @@ func TestMCPTaskCreateSendsTheVerificationThrough(t *testing.T) {
 		"completionCriterion": "VERIFICATION",
 		"completionPolicy":    "VERIFICATION_PASSED",
 		"verification": map[string]interface{}{
-			"title":    "[VERIFY] 完成门禁：X 通过独立 QA",
+			"title":      "[VERIFY] 完成门禁：X 通过独立 QA",
 			"assigneeId": "agent-2",
 		},
 	})
