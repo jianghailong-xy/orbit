@@ -29,14 +29,20 @@ public enum StickySummary {
     /// and the only wording on this bar that predates the wakes.
     public static let yourQuestion = "\(arrow)Your question"
 
-    /// What the bar says about one user turn, read off the same two fields the transcript reads a
-    /// wake out of: a watch's wake is in the turn's own `text`, while the control plane's is in the
-    /// `note` it recorded beside it. A turn that is neither is the person's, unchanged.
+    /// What the bar says about one user turn, read off the same fields the transcript reads a card
+    /// out of: a watch's wake is in the turn's own `text`, the control plane's wake in the `note` it
+    /// recorded beside it, and an exception item's delivery in the payload recorded beside it too
+    /// (`itemCard`). A turn that is none of them is the person's, unchanged.
     ///
-    /// The order is the transcript's (`TranscriptItemView`, web's `NodeView`): a watch's wake
-    /// first, then the control plane's, then the person's words — so the bar can never name a turn
-    /// something other than what the card under it is.
-    public static func of(text: String, note: String? = nil) -> (label: String, text: String) {
+    /// The order is the transcript's (`TranscriptItemView`, web's `NodeView`): the item card first,
+    /// then a watch's wake, then the control plane's, then the person's words — so the bar can never
+    /// name a turn something other than what the card under it is.
+    public static func of(text: String, note: String? = nil,
+                          itemCard: OpenItemDelivery? = nil) -> (label: String, text: String) {
+        if let card = itemCard {
+            let summary = OpenItemDeliveryCard.sticky(card)
+            return (arrow + summary.label, summary.text)
+        }
         if let wake = WatchWakeText.parse(text) {
             return (arrow + WatchWakeCard.title(wake.kind), WatchWakeCard.why(wake))
         }

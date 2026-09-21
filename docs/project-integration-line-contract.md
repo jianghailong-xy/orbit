@@ -694,7 +694,9 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 `projects/project-open-item.ts#readOpenItemDeliveryCard`）：种类、标题、冲突文件、检查与失败链、可选动作，
 以及平台已经知道的那条落地事实（该任务有没有合并回执、成果在不在上游，走
 `project-criterion-landing` 的三值折叠）。这份是给客户端画卡用的，**不是**给 agent 的输入；没有这份载荷的投递
-按原来的文本块渲染，不会被猜成卡。
+按原来的文本块渲染，不会被猜成卡。三个客户端都读它：web 的画在 `OpenItemDeliveryCard.tsx`，iOS/macOS 的画在
+`OrbitKit/Transcript/OpenItemDelivery.swift`（解码＋文案）与 `OrbitApp/Views/OpenItemDeliveryCardView.swift`（视图），
+两端文案由 `OpenItemDeliveryCopyParityTests` 逐句对住。
 
 **X-D3（忙不是拒绝）**：`NEXT_TURN` 轮次排在正在跑的轮次与未读消息之后，`turnComplete` 提交、`dequeueTurn` 交出下一条时送到 engine。这就是「在其轮次结束的提交事实上投递」，不需要另外的重试。现有 `CoordinatorDeliveryService` 对 `PENDING` 会话的拒绝走的是 `resume` 的复活分支；G6 不走 `resume`，没有这条拒绝。
 
