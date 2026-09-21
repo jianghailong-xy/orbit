@@ -69,23 +69,35 @@ echo "== run =="
 # the stub's request log are), and a pty in a redirected CI shell is one more way for the launch to
 # end in nothing. SIMCTL_CHILD_ is how simctl forwards an environment variable to the app.
 #
-# Once with every card (which is what says the delivery works as a whole), then once per card: three
-# cards do not fit one phone screen, and the reader of the evidence should not have to scroll.
-shoot() { # <name> <args…>
-  local name="$1"; shift
+# Each launch is watched and killed at a deadline, and every step is stamped: `simctl launch` can hang
+# on a wedged simulator, and a job that hangs takes the whole round with it while saying nothing.
+stamp() { date -u +%H:%M:%S; }
+
+shoot() { # <name> <deadline-seconds> <args…>
+  local name="$1" deadline="$2"; shift 2
+  echo "[$(stamp)] launch $name $*"
   SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --terminate-running-process "$UDID" \
-    io.orbitd.probe "$@" > "$OUT/launch-$name.log" 2>&1
-  echo "launch $name exit: $? — $(cat "$OUT/launch-$name.log")"
+    io.orbitd.probe "$@" > "$OUT/launch-$name.log" 2>&1 &
+  local pid=$! waited=0
+  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$deadline" ]; do sleep 1; waited=$((waited + 1)); done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "[$(stamp)] launch $name STILL RUNNING after ${deadline}s — killing it and shooting anyway"
+    kill -9 "$pid" 2>/dev/null
+  else
+    wait "$pid"; echo "[$(stamp)] launch $name exit: $? — $(cat "$OUT/launch-$name.log")"
+  fi
   # The console's context load + the ruler read are two round trips against a local stub.
   sleep 12
-  xcrun simctl io "$UDID" screenshot "$OUT/$name.png" || true
+  xcrun simctl io "$UDID" screenshot "$OUT/$name.png" && echo "[$(stamp)] shot $name"
 }
 
-shoot probe-all -shot all
-sleep 2
-shoot probe-0-pause -shot 0
-shoot probe-1-escalated -shot 1
-shoot probe-2-open -shot 2
+# Once with every card (which is what says the delivery works as a whole — the trace line names all
+# of them), then once per card: three cards do not fit one phone screen.
+shoot probe-all 60 -shot all
+shoot probe-0-pause 60 -shot 0
+shoot probe-1-escalated 60 -shot 1
+shoot probe-2-open 60 -shot 2
+echo "[$(stamp)] shots done"
 
 echo "== app diagnostics =="
 # If the app never drew anything, this is where the reason is: its own os_log lines, and any crash
