@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 会话列表 — 标题区换成 workspace 切换器（小构图）</title>
+<style>
+  :root {
+    --amber: #FF9500;
+    --amber-bg: rgba(255, 149, 0, .12);
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .20);
+    --surface: #fff;
+    --fill: rgba(0, 0, 0, .065);
+    --glass: rgba(255, 255, 255, .50);
+    --sheet: #f2f2f7;
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, "Liberation Sans", "Helvetica Neue", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 980px; margin: 0 0 26px; }
+  .lede code { font-size: 13px; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; gap: 34px; align-items: flex-start; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #e5e5ea; color: #3a3a3c; }
+
+  .phone { width: 393px; height: 372px; background: var(--surface); overflow: hidden;
+           border-radius: 26px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
+           color: var(--label); position: relative; }
+
+  .status { height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+
+  .nav { height: 44px; display: flex; align-items: center; justify-content: space-between;
+         padding: 0 16px; gap: 8px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 44px;
+             background: var(--glass); border-radius: 999px; flex: none;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 44px; }
+  .platter.capsule { padding: 0 3px; gap: 3px; }
+  .slot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.85;
+         stroke-linecap: round; stroke-linejoin: round; }
+  /* 标题槽：和 NewSessionView.agentSwitcher 同一形状 —— headline + caption2 的 chevron.down */
+  .titleSwitcher { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .titleSwitcher .name { font-size: 17px; font-weight: 600; letter-spacing: -.01em;
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .titleSwitcher .chev { width: 11px; height: 11px; stroke: var(--label-2); fill: none;
+                         stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .titleSwitcher.mk { outline: 1.5px dashed var(--mark); outline-offset: 4px; border-radius: 4px; }
+
+  .searchWrap { height: 56px; }
+  .search { margin: 0 16px; height: 44px; border-radius: 22px; background: var(--fill);
+            display: flex; align-items: center; gap: 7px; padding: 0 12px;
+            font-size: 17px; color: var(--label-2); }
+  .search .ico { width: 17px; height: 17px; stroke: var(--label-2); stroke-width: 2.2; }
+
+  .needs { height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 16px;
+           background: var(--amber-bg); border-bottom: .5px solid var(--sep); }
+  .needs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; }
+  .needs .txt { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden;
+                text-overflow: ellipsis; }
+  .needs .chev { width: 15px; height: 15px; stroke: var(--label-3); fill: none; stroke-width: 2.4;
+                 stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .grp { padding: 16px 16px 5px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+  .srow .col { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 16px; letter-spacing: -.01em; }
+  .srow .sub { font-size: 13px; color: var(--label-2); margin-top: 1px; }
+  .srow .rel { font-size: 13px; color: var(--label-2); flex: none; }
+
+  /* ── 下半屏的切换器（AgentSwitchSheet：medium detent） ───────── */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.28); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 292px; background: var(--sheet);
+           border-radius: 14px 14px 0 0; overflow: hidden; box-shadow: 0 -8px 30px rgba(0,0,0,.18); }
+  .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--label-3);
+          margin: 6px auto 2px; }
+  .shead { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 8px;
+           border-bottom: .5px solid var(--sep); background: #fbfbfd; }
+  .shead b { font-size: 17px; font-weight: 600; }
+  .shead span { font-size: 17px; color: #007aff; }
+  .slist { background: var(--surface); margin-top: 0; }
+  .wrow { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+          border-bottom: .5px solid var(--sep); }
+  .wrow:last-child { border-bottom: none; }
+  .wmark { width: 38px; height: 38px; border-radius: 50%; flex: none; display: flex;
+           align-items: center; justify-content: center; color: #fff; font-weight: 700;
+           font-size: 16px; }
+  .wcol { flex: 1; min-width: 0; }
+  .wname { display: block; font-size: 16px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden;
+           text-overflow: ellipsis; }
+  .wprov { display: block; font-size: 13px; color: var(--label-2); margin-top: 1px; }
+  .check { width: 18px; height: 18px; stroke: #007aff; fill: none; stroke-width: 2.6;
+           stroke-linecap: round; stroke-linejoin: round; flex: none; }
+</style>
+
+<h1>iOS 会话列表 — 标题槽换成 workspace 切换器</h1>
+<p class="lede">
+  和新会话页的标题区一致：<code>Text(agent.name).font(.headline)</code> + <code>chevron.down</code>（caption2）的按钮，
+  点开是同一个 <code>AgentSwitchSheet</code>。区别只有一处：列表页选中后调 <code>AppModel.openAgent</code>（切工作区、必要时把该 section 的栈弹回根），
+  新会话页调的是 <code>composeWithAgent</code>（开一份草稿）。<br>（琥珀条按上一条提案画：只占 36pt；那条还没落地，见 <code>ios-header-needs-you.html</code>。）
+</p>
+
+<div class="row">
+
+  <!-- A 列表标题槽 -->
+  <figure>
+    <span class="tag a">改后 · 列表标题</span>
+    <div class="phone">
+      <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher mk">
+          <span class="name">orbit</span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="searchWrap"><div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div></div>
+      <div class="needs"><span class="dot"></span><span class="txt">Wikids AI 游戏模拟器 · Escalated to you</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>列表页：标题就是切换器</b>
+      红框处＝新增。名字与箭头占原来标题的位置，工具栏左右两组按钮一个不动；大标题已经在上一条改掉了（inline），所以标题槽只有 44pt 高，切换器不额外占位。
+      名字过长时截断，箭头不被挤走（<code>lineLimit(1)</code> + 固定宽箭头）。
+    </figcaption>
+  </figure>
+
+  <!-- B 打开切换器 -->
+  <figure>
+    <span class="tag b">点开 · 同一个 AgentSwitchSheet</span>
+    <div class="phone">
+      <div class="status"><span>10:04</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">35</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="titleSwitcher"><span class="name">orbit</span><svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="searchWrap"><div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div></div>
+      <div class="needs"><span class="dot"></span><span class="txt">Wikids AI 游戏模拟器 · Escalated to you</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="shead"><b>Switch agent</b><span>Done</span></div>
+        <div class="slist">
+          <div class="wrow">
+            <span class="wmark" style="background:#d97757">C</span>
+            <span class="wcol"><span class="wname">orbit</span><span class="wprov">Claude</span></span>
+            <svg class="check" viewBox="0 0 24 24"><path d="M4 13l5 5L20 6"/></svg>
+          </div>
+          <div class="wrow">
+            <span class="wmark" style="background:#4b5158">X</span>
+            <span class="wcol"><span class="wname">Wikids AI 游戏模拟器</span><span class="wprov">Codex</span></span>
+          </div>
+          <div class="wrow">
+            <span class="wmark" style="background:#33b6b0">G</span>
+            <span class="wcol"><span class="wname">wikova-develop</span><span class="wprov">Kimi</span></span>
+          </div>
+          <div class="wrow">
+            <span class="wmark" style="background:#7a72ff">Q</span>
+            <span class="wcol"><span class="wname">wikids</span><span class="wprov">Qwen</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>点开：原样复用 <code>AgentSwitchSheet</code></b>
+      medium/large 两档 detent、品牌标 + 名字 + 默认 provider、当前项打勾——一个字都不改。
+      选另一项 = <code>openAgent(id)</code>：进 Agents 段、切 selectedAgentID，并且<em>只有切到不同工作区时</em>才把该段的栈弹回根（等于从抽屉里点那行的行为）。
+    </figcaption>
+  </figure>
+
+</div>
+
+<p class="lede" style="margin-top:32px">
+  <b>只 iOS、两个宽度都做</b>：新会话页的 <code>agentSwitcher</code> 挂在 <code>#if os(iOS)</code> 的 <code>ToolbarItem(placement: .principal)</code> 上、不分宽度，所以列表页照同一口径（macOS 的 Agents 列表在侧栏边、没有这一栏）。
+  抽屉里那份当前工作区的高亮仍然保留——切换器和它说的是同一个事实，但一个在拇指够得到的标题槽，一个在抽屉里。
+</p>
+</html>
