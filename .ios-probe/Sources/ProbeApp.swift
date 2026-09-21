@@ -25,14 +25,24 @@ struct ProbeRoot: View {
     @State private var cards: [DeliveredDecisionCard] = []
     @State private var trace = "waiting for the read…"
 
+    /// `-shot all` draws every delivered card (they do not all fit one phone screen), and `-shot N`
+    /// draws just the Nth — the way each card gets a screenshot of its own without the reader
+    /// having to scroll a simulator.
+    private var visible: [DeliveredDecisionCard] {
+        let args = ProcessInfo.processInfo.arguments
+        guard let at = args.firstIndex(of: "-shot"), args.indices.contains(at + 1),
+              let index = Int(args[at + 1]), cards.indices.contains(index) else { return cards }
+        return [cards[index]]
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(trace)
                     .font(.orbitMonoFine)
                     .foregroundStyle(.secondary)
-                if let console {
-                    ForEach(cards) { card in
+                ForEach(visible) { card in
+                    if let console {
                         DeliveredDecisionCardView(console: console, card: card)
                     }
                 }

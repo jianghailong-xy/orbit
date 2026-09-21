@@ -68,13 +68,24 @@ echo "== run =="
 # Plain launch, no `--console-pty`: the app's own output is not what this needs (the screenshot and
 # the stub's request log are), and a pty in a redirected CI shell is one more way for the launch to
 # end in nothing. SIMCTL_CHILD_ is how simctl forwards an environment variable to the app.
-SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --terminate-running-process "$UDID" io.orbitd.probe \
-  > "$OUT/launch.log" 2>&1
-echo "launch exit: $? — $(cat "$OUT/launch.log")"
-# The console's context load + the ruler read are two round trips against a local stub; the cards
-# are on screen well inside this.
-sleep 15
-xcrun simctl io "$UDID" screenshot "$OUT/probe.png" || true
+#
+# Once with every card (which is what says the delivery works as a whole), then once per card: three
+# cards do not fit one phone screen, and the reader of the evidence should not have to scroll.
+shoot() { # <name> <args…>
+  local name="$1"; shift
+  SIMCTL_CHILD_PROBE_PORT="$PORT" xcrun simctl launch --terminate-running-process "$UDID" \
+    io.orbitd.probe "$@" > "$OUT/launch-$name.log" 2>&1
+  echo "launch $name exit: $? — $(cat "$OUT/launch-$name.log")"
+  # The console's context load + the ruler read are two round trips against a local stub.
+  sleep 12
+  xcrun simctl io "$UDID" screenshot "$OUT/$name.png" || true
+}
+
+shoot probe-all -shot all
+sleep 2
+shoot probe-0-pause -shot 0
+shoot probe-1-escalated -shot 1
+shoot probe-2-open -shot 2
 
 echo "== app diagnostics =="
 # If the app never drew anything, this is where the reason is: its own os_log lines, and any crash
