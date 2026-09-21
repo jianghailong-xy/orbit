@@ -45,7 +45,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -99,9 +99,43 @@ const CLAIM_PATH = '/api/runner/sessions/claim';
 /** The opening question, in the words the incident's session was started with. */
 const OPENING = 'review this confirm card and tell me what a person would misread';
 
+/**
+ * How long the scripted engine waits for the message it is about to answer nothing with — the
+ * same number the waits below budget, and for a reason that is not symmetry:
+ *
+ * The engine is a real process on the other side of a real HTTP door, and the frame its
+ * `await user` is waiting for has to be fetched and written to it by the runner. The fake CLI's
+ * own default is ten seconds, which is right for a unit test whose peer is the test itself and
+ * wrong here: an engine that gives up on a slow delivery exits without ever emitting the
+ * `result` this file's second scenario waits for, and the completion that follows is then not
+ * late — it is never written at all (the runner settles the never-written message as owed, and
+ * fails the session). That is a spec that reports a product invariant missing when what went
+ * missing was its own fixture's patience, and no budget on the wait can wait it out.
+ *
+ * So the engine is given the harness's own budget: whatever a delivery takes, the engine is
+ * still there to receive it, and what the wait below measures is the product's settle rather
+ * than this file's clock.
+ */
+const ENGINE_AWAIT_MS = 90_000;
+
 /** A collaborator whose every method answers nothing: the broadcasts a claim fires. */
 const silent = (): unknown =>
   new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) });
+
+// ── what this run saw, on stderr, timestamps relative to the spec's own start ───────────────────
+//
+// The waits below are the only place this file can be wrong in a way its own assertions cannot
+// name: a wait that ran out says "it never happened", which is the same sentence for a fact that
+// was slow, a fact that was never going to exist, and a fact nobody wrote. On 2026-09-20 that
+// ambiguity cost a session a CI red it could not read (`not ok 2 … duration_ms 90289`, twice, and
+// clean on the re-run). So every wait reports how long the thing it waited for actually took —
+// and on the way out, what the row, the session, the events and the engine's own stderr held at
+// that moment. It is one line per observation, marked `CLAIMREC-TRACE`, and the harness reads
+// TAP counts rather than this, so nothing downstream depends on it.
+const TRACE_START = Date.now();
+function trace(label: string, extra = ''): void {
+  process.stderr.write(`CLAIMREC-TRACE ${Date.now() - TRACE_START}ms ${label}${extra ? ` ${extra}` : ''}\n`);
+}
 
 /** One `CLAIMREC {...}` answer from the runner process. */
 type Receipt = Record<string, unknown>;
@@ -117,6 +151,8 @@ interface Scenario {
   recDir: string;
   /** The argv of every process the runner spawned, oldest first. */
   spawns: () => Array<{ pid: number; argv: string[]; cwd: string }>;
+  /** Every line the runner wrote, both streams, timestamped in arrival order — see trace(). */
+  runnerLog: () => string[];
   receipt: Receipt;
 }
 
@@ -176,7 +212,10 @@ test('a lost claim is recovered without the session ever going silent', {
   let app: INestApplication | undefined;
   let proxy: Server | undefined;
   const children: ChildProcessWithoutNullStreams[] = [];
+  // One entry per scenario, holding everything its runner wrote.
+  const runnerLogs: string[][] = [];
   t.after(async () => {
+    for (const log of runnerLogs) for (const line of log) process.stderr.write(`CLAIMREC-RUNNER ${line}\n`);
     for (const child of children) child.kill('SIGKILL');
     await new Promise<void>((resolve) => (proxy ? proxy.close(() => resolve()) : resolve()));
     await app?.close().catch(() => undefined);
@@ -331,7 +370,7 @@ test('a lost claim is recovered without the session ever going silent', {
   }
 
   /** Start one runner process, with one scenario's scripted CLI in front on its PATH. */
-  async function startRunner(binDir: string, token: string, home: string): Promise<ChildProcessWithoutNullStreams> {
+  async function startRunner(binDir: string, token: string, home: string, log?: string[]): Promise<ChildProcessWithoutNullStreams> {
     const child = spawn(binary, ['-test.run', '^TestClaimRecoveryFaultProcess$', '-test.v', '-test.timeout', '800s'], {
       cwd: RUNNER_GO,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -342,17 +381,29 @@ test('a lost claim is recovered without the session ever going silent', {
         ORBIT_HOME: path.join(home, 'orbit-home'),
         ORBIT_CLAIMREC_URL: `http://127.0.0.1:${proxyPort}`,
         ORBIT_CLAIMREC_TOKEN: token,
+        // The scripted engine's patience with the delivery it is waiting for — see ENGINE_AWAIT_MS.
+        ORBIT_FAKE_CLAUDE_AWAIT_MS: String(ENGINE_AWAIT_MS),
         ORBIT_NO_SELFUPDATE: '1',
         NO_COLOR: '1',
         TMPDIR: tmpdir(),
       },
     });
     children.push(child);
+    // The runner's own account of the run, timestamped as it arrives.
+    if (log) {
+      let outBuffered = '';
+      child.stdout.on('data', (chunk: Buffer) => {
+        outBuffered += chunk.toString('utf8');
+        const lines = outBuffered.split('\n');
+        outBuffered = lines.pop() ?? '';
+        for (const line of lines) if (line.trim() !== '') log.push(`${Date.now() - TRACE_START}ms [out] ${line}`);
+      });
+    }
     return child;
   }
 
   /** The receipts the runner answered with, keyed by command id as they arrive. */
-  function receiptsOf(child: ChildProcessWithoutNullStreams): Map<number, Receipt> {
+  function receiptsOf(child: ChildProcessWithoutNullStreams, log?: string[]): Map<number, Receipt> {
     const answers = new Map<number, Receipt>();
     let buffered = '';
     child.stderr.on('data', (chunk: Buffer) => {
@@ -361,7 +412,11 @@ test('a lost claim is recovered without the session ever going silent', {
       buffered = lines.pop() ?? '';
       for (const line of lines) {
         const marker = line.indexOf('CLAIMREC ');
-        if (marker < 0) continue;
+        if (marker < 0) {
+          // The runner's own stderr — the scripted engine's complaints arrive on this stream too.
+          if (log && line.trim() !== '') log.push(`${Date.now() - TRACE_START}ms [err] ${line}`);
+          continue;
+        }
         try {
           const parsed = JSON.parse(line.slice(marker + 'CLAIMREC '.length)) as Receipt;
           if (typeof parsed.id === 'number') answers.set(parsed.id, parsed);
@@ -394,11 +449,16 @@ test('a lost claim is recovered without the session ever going silent', {
     });
     const { sessionId, turnId } = await queueSession(title, machineId);
     const binDir = scriptedClaude(steps, resumeSteps);
-    const child = await startRunner(binDir, token, mkdtempSync(path.join(tmpdir(), 'claimrec-home-')));
-    const answers = receiptsOf(child);
+    const log: string[] = [];
+    runnerLogs.push(log);
+    trace(`scenario ${JSON.stringify(title)} — runner starting`);
+    const child = await startRunner(binDir, token, mkdtempSync(path.join(tmpdir(), 'claimrec-home-')), log);
+    const answers = receiptsOf(child, log);
 
     claimsToDrop.add(sessionId);
+    const recoverSentAt = Date.now();
     const receipt = await command(child, answers, 1, { cmd: 'recover', execDir: mkdtempSync(path.join(tmpdir(), 'claimrec-run-')) });
+    trace(`scenario ${JSON.stringify(title)} — recover answered`, `${Date.now() - recoverSentAt}ms, claimDurationMs=${String(receipt.claimDurationMs)}`);
     const recDir = readFileSync(path.join(binDir, 'claude'), 'utf8').match(/ORBIT_FAKE_CLAUDE_DIR='([^']+)'/)![1];
     const recovered = receipt.recovered as Array<Record<string, unknown>>;
     assert.equal(recovered?.length, 1, `the reclaim recovered ${JSON.stringify(recovered)}`);
@@ -414,20 +474,31 @@ test('a lost claim is recovered without the session ever going silent', {
         return readFileSync(file, 'utf8').split('\n').filter(Boolean)
           .map((line) => JSON.parse(line) as { pid: number; argv: string[]; cwd: string });
       },
+      runnerLog: () => log,
       receipt,
     };
   }
 
-  /** Poll until the read settles, so a spec never depends on how long a spawn takes. */
+  /**
+   * Poll until the read settles, so a spec never depends on how long a spawn takes. It also says
+   * how long the fact it was waiting for actually took — whether it arrived or not, which is the
+   * number a budget has to be argued from rather than a green run's silence (see trace()).
+   */
   async function eventually<T>(what: string, read: () => Promise<T | undefined>, timeoutMs = 90_000): Promise<T> {
-    const deadline = Date.now() + timeoutMs;
+    const started = Date.now();
+    const deadline = started + timeoutMs;
     let last: T | undefined;
+    let polls = 0;
     while (Date.now() < deadline) {
       last = await read();
-      if (last !== undefined) return last;
+      polls += 1;
+      if (last !== undefined) {
+        trace(`eventually OK ${JSON.stringify(what)}`, `${Date.now() - started}ms (${polls} polls, budget ${timeoutMs}ms)`);
+        return last;
+      }
       await sleep(250);
     }
-    throw new Error(`timed out waiting for ${what}`);
+    throw new Error(`timed out waiting for ${what} (waited ${Date.now() - started}ms of a ${timeoutMs}ms budget, ${polls} polls, last read ${JSON.stringify(last)})`);
   }
 
   interface TurnRow {
@@ -452,6 +523,38 @@ test('a lost claim is recovered without the session ever going silent', {
       'SELECT status, num_turns, last_assistant_text, retry_at FROM "session" WHERE id = $1::uuid', [sessionId]);
     return rows[0];
   };
+
+  /**
+   * What the database held at the moment a wait gave up: the turn's own row, the session's, every
+   * run_event type filed under it, what the engine's stderr said, and what the engines were
+   * spawned with. Dumped rather than inferred, because a wait that ran out cannot tell "the fact
+   * never arrived" from "the fact arrived late" — and those are two different bugs.
+   */
+  async function dumpScenario(where: string, scenario: Scenario): Promise<void> {
+    const turn = await turnRow(scenario.turnId).catch((err: Error) => ({ err: err.message }));
+    const session = await sessionRow(scenario.sessionId).catch((err: Error) => ({ err: err.message }));
+    const events = await sql.query<{ type: string; n: string }>(
+      'SELECT type, count(*) AS n FROM "run_event" WHERE session_id = $1::uuid GROUP BY type ORDER BY type',
+      [scenario.sessionId]).catch(() => ({ rows: [] as Array<{ type: string; n: string }> }));
+    // What the engine's own stderr said, which is where a stand-in that gave up on the delivery
+    // names itself ("fake claude: timed out waiting for a frame") — the one line that tells a
+    // delivery that never arrived from a completion that never came.
+    const engineStderr = await sql.query<{ text: string }>(
+      `SELECT payload->>'stderr' AS text FROM "run_event"
+        WHERE session_id = $1::uuid AND type = 'system' AND payload ? 'stderr' ORDER BY seq`,
+      [scenario.sessionId]).catch(() => ({ rows: [] as Array<{ text: string }> }));
+    trace(`DUMP ${where} — turns`, JSON.stringify(turn));
+    trace(`DUMP ${where} — session`, JSON.stringify(session));
+    trace(`DUMP ${where} — run_event`, JSON.stringify(events.rows.map((r) => `${r.type}:${r.n}`)));
+    trace(`DUMP ${where} — engine stderr`, JSON.stringify(engineStderr.rows.map((r) => r.text.trim())));
+    // The flags, not the whole argv: the appended system prompt is thousands of characters and
+    // says nothing about this run. What matters is --session-id vs --resume, and how many spawns.
+    const spawns = scenario.spawns();
+    trace(`DUMP ${where} — spawns`, JSON.stringify(spawns.map((s) => s.argv.slice(0, 12).join(' '))));
+    const stdinFile = path.join(scenario.recDir, 'stdin.jsonl');
+    trace(`DUMP ${where} — frames the engine read off stdin`, existsSync(stdinFile) ? readFileSync(stdinFile, 'utf8') : '(no stdin.jsonl)');
+    for (const line of scenario.runnerLog()) process.stderr.write(`CLAIMREC-RUNNER ${line}\n`);
+  }
 
   /**
    * The invariant this whole project is about, stated once and asserted by both scenarios: a session
@@ -507,6 +610,7 @@ test('a lost claim is recovered without the session ever going silent', {
       const seen = scenario.spawns();
       return seen.length > 0 ? seen : undefined;
     });
+    trace('first spawn recorded', `${statSync(path.join(scenario.recDir, 'spawns.jsonl')).mtimeMs - TRACE_START}ms`);
     assert.equal(spawns.length, 1, `the engine was spawned ${spawns.length} times, not once`);
     assert.ok(spawns[0].argv.includes('--session-id'), `the engine was not asked to open the conversation: ${spawns[0].argv.join(' ')}`);
     assert.ok(!spawns[0].argv.includes('--resume'), `the engine was asked to resume a conversation this machine has never held: ${spawns[0].argv.join(' ')}`);
@@ -545,20 +649,47 @@ test('a lost claim is recovered without the session ever going silent', {
       const seen = scenario.spawns();
       return seen.length > 0 ? seen : undefined;
     });
+    // The engine-side half of the timeline, read off the fake's own recordings.
+    trace('first spawn recorded', `${statSync(path.join(scenario.recDir, 'spawns.jsonl')).mtimeMs - TRACE_START}ms`);
     assert.ok(spawns[0].argv.includes('--session-id'), `the engine was not asked to open the conversation: ${spawns[0].argv.join(' ')}`);
 
     // The engine ended the turn without answering. Its `turn_end` is written before the completion
     // that follows it, so wait for the control plane to have settled the row one way or the other,
     // then say which way: waiting only for the handing-back would report the missing invariant as a
     // timeout, where the invariant's absence is a thing this can name.
-    const turn = await eventually('the turn to be settled by the completion that followed it', async () => {
+    // Every change the two reads under this wait can see, timestamped — the question "did the fact
+    // arrive late, or never" answered by the run's own output instead of by a reader's guess.
+    let endedSeen = 0;
+    let statusSeen = '';
+    let stdinSeen = 0;
+    const settleWait = 'the turn to be settled by the completion that followed it';
+    const turn = await eventually(settleWait, async () => {
       const ended = await sql.query<{ n: string }>(
         `SELECT count(*) AS n FROM "run_event"
           WHERE session_id = $1::uuid AND turn_id = $2::uuid AND type = 'turn_end'`,
         [scenario.sessionId, scenario.turnId]);
-      if (Number(ended.rows[0].n) === 0) return undefined;
+      const endedCount = Number(ended.rows[0].n);
+      if (endedCount !== endedSeen) {
+        endedSeen = endedCount;
+        trace('turn_end events in run_event', String(endedCount));
+      }
+      const frames = existsSync(path.join(scenario.recDir, 'stdin.jsonl'))
+        ? readFileSync(path.join(scenario.recDir, 'stdin.jsonl'), 'utf8').split('\n').filter(Boolean).length
+        : 0;
+      if (frames !== stdinSeen) {
+        stdinSeen = frames;
+        trace('frames the engine read off stdin', String(frames));
+      }
+      if (endedCount === 0) return undefined;
       const row = await turnRow(scenario.turnId);
+      if (row.status !== statusSeen) {
+        statusSeen = row.status;
+        trace('turn row settled to', row.status);
+      }
       return row.status === 'PENDING' || row.status === 'ANSWERED' ? row : undefined;
+    }).catch(async (err: Error) => {
+      await dumpScenario(settleWait, scenario);
+      throw err;
     });
     assert.notEqual(turn.status, 'ANSWERED', 'a turn nothing answered was marked ANSWERED');
     assert.equal(turn.answered_at, null, 'a turn nothing answered carries an answered_at');

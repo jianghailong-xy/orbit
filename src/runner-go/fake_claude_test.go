@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,33 @@ const fakeClaudeDirEnv = "ORBIT_FAKE_CLAUDE_DIR"
 // frame or a recording, before giving up. Only ever hit when something is wedged: a
 // bounded failure beats a ten-minute test timeout with no output.
 const fakeClaudeTimeout = 10 * time.Second
+
+// How long the fake waits on an `await` step, when the test says. Ten seconds is the right
+// backstop for a unit test, where the peer waiting to be answered is that test and a wedge can
+// only be its own bug. It is the wrong number for a test that drives the fake through a real
+// spawn against a real control plane (the claim-recovery end-to-end harness,
+// src/apiserver/src/runner-api/claim-recovery-e2e.pg.spec.ts): there the frame an `await user`
+// is waiting for has to be delivered over HTTP by another process, and a delivery that loses a
+// race with this clock leaves the engine exiting silently — which the harness then reports as
+// ITS wait timing out, about a completion that stopped existing rather than one that was slow.
+// The real `claude` has no such clock: it reads stdin for as long as it takes. So a test that
+// owns the peer process names the budget itself, and the default stands for everything else.
+const fakeClaudeAwaitEnv = "ORBIT_FAKE_CLAUDE_AWAIT_MS"
+
+// awaitBudget is how long a scripted `await` step may wait: the harness's own budget when it
+// set one, and fakeClaudeTimeout otherwise. Read per call, because the whole point is that the
+// process that runs the script — not the test that spawned it — decides.
+func awaitBudget() time.Duration {
+	raw := os.Getenv(fakeClaudeAwaitEnv)
+	if raw == "" {
+		return fakeClaudeTimeout
+	}
+	ms, err := strconv.Atoi(raw)
+	if err != nil || ms <= 0 {
+		return fakeClaudeTimeout
+	}
+	return time.Duration(ms) * time.Millisecond
+}
 
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
@@ -257,7 +285,7 @@ func readFakeStdin(recordPath string, users, ctrlReqs, ctrlResps chan<- map[stri
 }
 
 func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match func(map[string]interface{}) bool) (map[string]interface{}, bool) {
-	deadline := time.After(fakeClaudeTimeout)
+	deadline := time.After(awaitBudget())
 	for {
 		select {
 		case msg := <-ch:
@@ -284,9 +312,9 @@ func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match 
 }
 
 // awaitRelease blocks until the test creates path (fakeClaude.Release), stdin closes, or
-// fakeClaudeTimeout passes.
+// awaitBudget passes.
 func awaitRelease(path string, closed <-chan struct{}) bool {
-	deadline := time.After(fakeClaudeTimeout)
+	deadline := time.After(awaitBudget())
 	for {
 		if _, err := os.Stat(path); err == nil {
 			return true
