@@ -248,6 +248,68 @@ export interface ProjectOpenItemsView<Instant = string> {
 }
 
 /**
+ * Where the work an item is about has landed, as merge receipts answer it — the three-valued fold
+ * of §2.7, spelled here for the wire. `NOT_KNOWN` rather than a denial, for the reason the fold
+ * itself gives: work lands by paths that leave no receipt, so no receipt is no EVIDENCE.
+ */
+export type OpenItemDeliveryLanding = 'ON_UPSTREAM' | 'ON_INTEGRATION_LINE' | 'NOT_KNOWN';
+
+/**
+ * What one exception item's DELIVERY to the coordinator carries beside its text (§4.4 X-D2).
+ *
+ * The turn the coordinator is handed is a paragraph of prose and, until this existed, the paragraph
+ * was all the record held: the fields the item was opened with — its kind, its title, the files a
+ * merge conflicted on, the doors that exist for it — were read once, rendered into the words, and
+ * dropped. A client drawing that turn therefore had nothing to draw it from but the words, and drew
+ * them as a message the reader had typed.
+ *
+ * This is the same reading, kept: recorded beside the runner's echo of that turn, out of the item's
+ * own columns at the moment the delivery reached the conversation. A SNAPSHOT, deliberately — what
+ * the platform knew when it handed the item over — and every field is either a column of the item's
+ * row or `landing`, read once from the merge receipts of the task it is about, because a
+ * coordinator that has to check the same receipt every time is spending a turn on what the platform
+ * already knew.
+ */
+export interface OpenItemDeliveryCard {
+  /** The item, in the uuid spelling every other read of one uses. */
+  itemId: string;
+  kind: OpenItemKind;
+  title: string;
+  /** The task the item is about and the attempt that opened it; null for a promotion's item. */
+  task: { id: string; title: string; sessionId: string | null } | null;
+  /** The files a conflicting merge reported. Empty for every other kind. */
+  files: string[];
+  /** The branch an integration was moving work into, when the item recorded one. */
+  targetRef: string | null;
+  /** The check that disagreed on the combined tree (INTEGRATION_CHECK_FAILED). */
+  check: { name: string; exitCode: number | null; expectedExitCode: number | null } | null;
+  /** The code an integration job ended with (INTEGRATION_ERROR). */
+  errorCode: string | null;
+  /** Why an attempt failed, and where its chain stands (TASK_FAILED). */
+  failure: {
+    how: string | null;
+    exitCode: number | null;
+    expectedExitCode: number | null;
+    attempt: number;
+    limit: number;
+  } | null;
+  /** The doors that exist for this item today, as the server decides them (§4.8). */
+  actions: OpenItemAction[];
+  /**
+   * What the platform knew about the landing when it handed the item over, or null when it is not
+   * answerable — an item about no task at all, which is what a promotion's is.
+   */
+  landing: {
+    /** Merge receipts the task has, of any result. Zero is "no evidence", never "not landed". */
+    receipts: number;
+    state: OpenItemDeliveryLanding;
+    /** The branch "on main" means for this project, and the line its tasks land on (§1.4). */
+    upstream: string;
+    integration: string;
+  } | null;
+}
+
+/**
  * Whether the platform's last word to this project's coordinator reached it (§7.2 V7, V9).
  *
  * The one thing the coordinator card could never say before: a conversation that looks idle because

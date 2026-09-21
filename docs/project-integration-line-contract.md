@@ -688,6 +688,14 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 
 **X-D2（怎么投）**：`ProjectOpenItemService.deliver(itemId, sessionId)` 调 G6 载体。钩子里同一事务：确认待办仍 OPEN 且负责人仍是 COORDINATOR；确认会话未结束（G6 的判定），否则抛错不写轮次；插入 `project_open_item_delivery(purpose = ITEM)`，唯一键冲突则什么也不做。`clientTurnId = open-item:v1:<itemId>:<assignedAtMs>`；`content` 由 `title`、`payload` 与可用的工具（`integration_retry`、`open_item_resolve`、`open_item_hand_over`）生成。
 
+**X-D2b（文本之外还记一份读数）**：轮次的 `content` 是写给 agent 的一段话，读完就只剩这句话了。回声落库时
+（`runner-api/runner-api.controller.ts#events`，与 `controlPlaneNote` 同一处、同一条规矩：只有控制面能写）
+另外记一份结构化读数 `openItemDelivery`（`OpenItemDeliveryCard`，组成在
+`projects/project-open-item.ts#readOpenItemDeliveryCard`）：种类、标题、冲突文件、检查与失败链、可选动作，
+以及平台已经知道的那条落地事实（该任务有没有合并回执、成果在不在上游，走
+`project-criterion-landing` 的三值折叠）。这份是给客户端画卡用的，**不是**给 agent 的输入；没有这份载荷的投递
+按原来的文本块渲染，不会被猜成卡。
+
 **X-D3（忙不是拒绝）**：`NEXT_TURN` 轮次排在正在跑的轮次与未读消息之后，`turnComplete` 提交、`dequeueTurn` 交出下一条时送到 engine。这就是「在其轮次结束的提交事实上投递」，不需要另外的重试。现有 `CoordinatorDeliveryService` 对 `PENDING` 会话的拒绝走的是 `resume` 的复活分支；G6 不走 `resume`，没有这条拒绝。
 
 **X-D4（在哪些事实上尝试投递）**：

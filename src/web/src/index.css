@@ -13489,6 +13489,162 @@ button.composer-usage:focus-visible {
   justify-content: flex-start;
   row-gap: 2px;
 }
+/* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
+   card shape as the wake above — right-aligned, control-plane-owned — with the item's own fields
+   drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
+   item is something nobody's work is waiting behind, and every one of them is somebody's to decide. */
+.oic-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+.oic {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 12px;
+  background: var(--warning-bg);
+  color: var(--text-1);
+}
+.oic-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warning);
+  font-weight: 600;
+}
+.oic-mark {
+  flex: none;
+}
+.oic-kind {
+  margin-left: auto;
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--warning-border);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.oic-title {
+  margin: 4px 0 2px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.oic-where {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.oic-where a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.oic-why {
+  margin-top: 8px;
+}
+.oic-files {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  list-style: none;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+.oic-files li {
+  overflow-wrap: anywhere;
+}
+.oic-more {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.oic-facts {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  font-size: 12px;
+}
+.oic-facts.is-landed {
+  color: var(--success);
+}
+.oic-facts.is-unknown {
+  color: var(--text-2);
+}
+.oic-facts-mark {
+  flex: none;
+}
+.oic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.oic-actions-label {
+  color: var(--text-2);
+}
+.oic-chip {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 12px;
+}
+.oic-links {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.oic-links a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.oic-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.oic-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.oic-raw {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.oic-raw summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+.oic-raw pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .watch-editor {
   display: flex;
   flex-direction: column;

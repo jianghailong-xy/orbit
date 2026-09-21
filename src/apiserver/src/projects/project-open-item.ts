@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import {
+  OpenItemAction,
+  OpenItemDeliveryCard,
   OwnerItemKind,
   SessionLifecycleState,
   SessionRunState,
@@ -7,6 +9,9 @@ import {
   deriveSessionRunState,
   uuidToBase62,
 } from '@orbit/shared';
+
+import { taskLanding, readLandingBranches } from './project-criterion-landing';
+import type { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Exception items: what a project owes somebody a decision about
@@ -117,6 +122,48 @@ export type OpenItemResolution = (typeof OPEN_ITEM_RESOLUTIONS)[number];
 export const OPEN_ITEM_RESOLVED_BY = ['USER', 'COORDINATOR', 'PLATFORM'] as const;
 export type OpenItemResolvedBy = (typeof OPEN_ITEM_RESOLVED_BY)[number];
 
+/** One item's doors, as a reader that has to draw them needs it: the columns the list and the
+ *  delivery card both fold into the same answer. */
+export interface OpenItemActionsSource {
+  kind: OpenItemKind | string;
+  assignee: OpenItemAssignee | string;
+  taskId: string | null;
+  promotionId: string | null;
+  fuseEpisodeId: string | null;
+  /** Whether this project has a coordinator conversation left to ask again (§4.8) — the one press
+   *  that turns on a fact outside the row. */
+  askable: boolean;
+}
+
+/**
+ * The doors that exist for one item today (§4.8): what its kind is decided by, and, for a task's
+ * item, who is carrying it. An action nobody can perform is not offered, so the list is derived
+ * from the row rather than from the kind alone.
+ *
+ * One function, because two readers draw it — the project's open-items list and the card recorded
+ * beside an item's delivery — and two derivations of one answer are two things free to disagree.
+ */
+export function openItemActions(source: OpenItemActionsSource): OpenItemAction[] {
+  if (source.fuseEpisodeId) return ['RESUME'];
+  if (source.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
+  // A merge into main is decided on its own card, which says what would land and what the checks
+  // came to (§7.5): the row is the way in.
+  if (source.promotionId) return ['REVIEW'];
+  if (!source.taskId) return [];
+  if (source.assignee === 'COORDINATOR') {
+    // The coordinator's own: it can be looked at, run again, or stopped.
+    return ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'];
+  }
+  // An escalated item's route back is through the coordinator that should have had it (§4.7) —
+  // the owner's press is to ask again, not to retry work the coordinator owns — and to stop the
+  // task outright.
+  return [
+    ...(source.askable ? ['ASK_COORDINATOR_AGAIN' as const] : []),
+    'OPEN_TASK_SESSION',
+    'CANCEL_TASK',
+  ];
+}
+
 /**
  * How a task came to fail (§4.3). Every door that writes `task.status = FAILED`, plus the two the
  * reaper takes a run back through without writing FAILED at all — an attempt that was lost is a
@@ -157,6 +204,23 @@ export const OPEN_ITEM_TURN_PREFIX = 'open-item:v1:';
  */
 export function openItemTurnId(itemId: string, assignedAt: Date): string {
   return `${OPEN_ITEM_TURN_PREFIX}${itemId}:${assignedAt.getTime()}`;
+}
+
+/**
+ * The item a delivery turn is about, read back off the turn's own key — or null for any other turn.
+ *
+ * The key is the item's id and the moment its assignee was last decided, which is exactly what a
+ * reader of the turn needs to find the row it was built from. Nothing is minted and nothing is
+ * looked up: the one write that makes a turn an item's delivery is the same one that names it here.
+ */
+export function openItemIdOfTurn(clientTurnId: string | null | undefined): string | null {
+  // Every reader that is not an item turn answers null here, and a caller reading a column is one
+  // of them: this runs on the event-ingest path, where a throw costs a batch of somebody's
+  // transcript, and "this turn is not one of ours" is not a fault.
+  if (typeof clientTurnId !== 'string' || !clientTurnId.startsWith(OPEN_ITEM_TURN_PREFIX)) return null;
+  const rest = clientTurnId.slice(OPEN_ITEM_TURN_PREFIX.length);
+  const cut = rest.lastIndexOf(':');
+  return cut > 0 ? rest.slice(0, cut) : null;
 }
 
 /** Every owner answer's client id starts here (§5.2 R10). */
@@ -832,6 +896,106 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。`
     + `${handClose}\n\n`
     + notice;
+}
+
+/**
+ * The same item as a CARD: the fields the message above turns into prose, kept as fields
+ * (`OpenItemDeliveryCard`, §4.4 X-D2).
+ *
+ * WHY IT IS READ HERE AND NOT WRITTEN AT DELIVERY TIME. What a client draws is a `user` event —
+ * the runner's echo of the turn — so the only place a structured reading can live is beside that
+ * echo, which is stored when the runner posts it and not when the turn was queued. Everything the
+ * card says is re-derived from committed rows at that moment: the item's own columns, and the
+ * landing, read live from the merge receipts of the task the item is about (the fold in
+ * `project-criterion-landing`, so the card cannot say a different thing about landing than the
+ * project read does).
+ *
+ * Nothing here decides anything: it is a reading, taken once, of a row that already exists. An item
+ * that has since been resolved or handed to the owner still reads — the card is about the delivery
+ * that was made, and a reader looking at it later is looking at what was handed over.
+ */
+export async function readOpenItemDeliveryCard(
+  prisma: Pick<PrismaService, 'projectOpenItem' | 'projectCodebase' | 'task'>,
+  itemId: string,
+): Promise<OpenItemDeliveryCard | null> {
+  const item = await prisma.projectOpenItem.findUnique({
+    where: { id: itemId },
+    select: {
+      id: true,
+      kind: true,
+      title: true,
+      payload: true,
+      taskId: true,
+      sessionId: true,
+      projectId: true,
+      assignee: true,
+      promotionId: true,
+      fuseEpisodeId: true,
+    },
+  });
+  if (!item) return null;
+  const payload = (item.payload ?? {}) as IntegrationItemPayload & {
+    how?: string;
+    exitCode?: number;
+    expectedExitCode?: number;
+    chain?: { failuresInChain?: number; limit?: number };
+  };
+  const task = item.taskId
+    ? await prisma.task.findUnique({
+        where: { id: item.taskId },
+        select: {
+          id: true,
+          title: true,
+          mergeReceipts: { select: { result: true, targetBranch: true } },
+        },
+      })
+    : null;
+  const branches = await readLandingBranches(prisma, item.projectId);
+  const receipts = task?.mergeReceipts ?? [];
+  return {
+    itemId: item.id,
+    kind: item.kind as OpenItemKind,
+    title: item.title,
+    task: task ? { id: task.id, title: task.title, sessionId: item.sessionId } : null,
+    files: item.kind === 'INTEGRATION_CONFLICT' ? payload.files ?? [] : [],
+    targetRef: payload.targetRef ?? null,
+    check: payload.check?.name
+      ? {
+          name: payload.check.name,
+          exitCode: payload.check.exitCode ?? null,
+          expectedExitCode: payload.check.expectedExitCode ?? null,
+        }
+      : null,
+    errorCode: item.kind === 'INTEGRATION_ERROR' ? payload.errorCode ?? null : null,
+    failure: item.kind === 'TASK_FAILED'
+      ? {
+          how: payload.how ?? null,
+          exitCode: payload.exitCode ?? null,
+          expectedExitCode: payload.expectedExitCode ?? null,
+          attempt: payload.chain?.failuresInChain ?? 1,
+          limit: payload.chain?.limit ?? TASK_FAILURE_CHAIN_LIMIT,
+        }
+      : null,
+    // The same derivation the project's list draws its presses from. `askable` is asked of a
+    // project this read does not load: the one press that turns on it is offered only to an item
+    // that has ALREADY been handed to its owner, and this card is recorded for a delivery to the
+    // coordinator — a row that moved after the delivery reads with one press too few rather than
+    // one nobody can make.
+    actions: openItemActions({
+      kind: item.kind,
+      assignee: item.assignee,
+      taskId: item.taskId,
+      promotionId: item.promotionId,
+      fuseEpisodeId: item.fuseEpisodeId,
+      askable: false,
+    }),
+    landing: {
+      receipts: receipts.length,
+      state: taskLanding(receipts, branches),
+      upstream: branches.upstream[0]!,
+      integration: branches.integration[0]!,
+    },
+  };
 }
 
 function howInChinese(how: string | undefined): string {

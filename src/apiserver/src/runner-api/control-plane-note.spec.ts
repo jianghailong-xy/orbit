@@ -102,9 +102,11 @@ async function ingest(
       updateMany: async () => ({ count: 0 }),
     },
     conversationTurn: {
+      // The columns ingest reads off the turn it is storing an echo for: the person's words, and the
+      // key that says whether this turn was one the control plane wrote for an exception item.
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         args.where.sessionId === SESSION && args.where.id.in.includes(TURN)
-          ? [{ id: TURN, content: authored }]
+          ? [{ id: TURN, content: authored, clientTurnId: TURN }]
           : [],
     },
     session: {
