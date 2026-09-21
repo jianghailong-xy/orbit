@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 标题区 — needs-you 条的三处调整（小构图）</title>
+<style>
+  :root {
+    --amber: #FF9500;
+    --amber-bg: rgba(255, 149, 0, .12);
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .20);
+    --surface: #fff;
+    --fill: rgba(0, 0, 0, .065);      /* systemFill：搜索框 / 次级填充 */
+    --glass: rgba(255, 255, 255, .50); /* iOS 26 玻璃托 */
+    --mark: rgba(255, 59, 48, .85);   /* 标注用的虚线 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, "Liberation Sans", "Helvetica Neue", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 900px; margin: 0 0 28px; }
+  .lede code { font-size: 13px; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; gap: 34px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+
+  /* ── 手机 ───────────────────────────────────────────────── */
+  .phone {
+    width: 393px; height: 372px; background: var(--surface); overflow: hidden;
+    border-radius: 26px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
+    color: var(--label);
+  }
+  .status { height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+
+  .nav { height: 44px; display: flex; align-items: center; justify-content: space-between;
+         padding: 0 16px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 44px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 44px; }
+  .platter.capsule { padding: 0 3px; gap: 3px; }
+  .slot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.85;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .scopeLabel { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 8px 0 12px;
+                font-size: 16px; font-weight: 500; }
+  .scopeLabel .ico { width: 15px; height: 15px; stroke: var(--label-2); stroke-width: 2.4; }
+
+  .title { padding: 4px 16px 0; font-size: 34px; font-weight: 700; letter-spacing: -.4px; }
+  .search { margin: 15px 16px 0; height: 44px; border-radius: 22px; background: var(--fill);
+            display: flex; align-items: center; gap: 7px; padding: 0 12px;
+            font-size: 17px; color: var(--label-2); }
+  .search .ico { width: 17px; height: 17px; stroke: var(--label-2); stroke-width: 2.2; }
+
+  .needs { height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 16px;
+           background: var(--amber-bg); border-bottom: .5px solid var(--sep); }
+  .needs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; }
+  .needs .txt { flex: 1; min-width: 0; font-size: 15px; letter-spacing: -.01em;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .needs .txt.capped { flex: none; max-width: 262px; }
+  .needs .gap { flex: none; width: 75px; }
+  .needs .chev { width: 15px; height: 15px; stroke: var(--label-3); fill: none; stroke-width: 2.4;
+                 stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .grp { padding: 16px 16px 5px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+  .srow .col { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 16px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; }
+  .srow .sub { font-size: 13px; color: var(--label-2); margin-top: 1px; }
+  .srow .rel { font-size: 13px; color: var(--label-2); flex: none; }
+  .srow .odot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; }
+
+  /* 现状：琥珀铺满整个标题区（状态栏 → 搜索框），条只是它最下面 36pt */
+  .flood { background: var(--amber-bg); }
+  /* 标注：改动处 / 问题处 */
+  .mark { position: relative; }
+  .mark::after { content: ""; position: absolute; inset: 0; border: 1.5px dashed var(--mark);
+                 border-radius: 6px; pointer-events: none; }
+  .mark.floodbox::after { inset: 0; border-radius: 6px 6px 0 0; }
+  .note { position: absolute; font-size: 11.5px; font-weight: 600; color: #8f1d13;
+          background: #fff; border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+</style>
+
+<h1>iOS 标题区 — needs-you 条的三处调整</h1>
+<p class="lede">
+  左：按你发的截图量出来的现状（393pt 宽 @3x，逐像素测的几何与颜色）。中/右：两处小改的构图。
+  红色虚线框是改动的落点。<code>orbit</code> 是当前工作区名，条里说的是<em>另一个</em>工作区在等你。
+</p>
+
+<div class="row">
+
+  <!-- ── 1 现状 ─────────────────────────────────────────── -->
+  <figure style="position:relative">
+    <span class="tag now">现状</span>
+    <span class="note" style="right:0; top:2px">↓ 0–257pt 全是琥珀</span>
+    <div class="phone">
+      <div class="mark floodbox" style="position:relative">
+        <div class="flood">
+          <div class="status">
+            <span>10:04</span>
+            <span class="r">
+              <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span>
+              <span>5G</span><span class="batt">35</span>
+            </span>
+          </div>
+          <div class="nav">
+            <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+            <span class="platter capsule">
+              <span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span>
+              <span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+            </span>
+          </div>
+          <div class="title">orbit</div>
+          <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+          <div style="height:12px"></div>
+          <div class="needs" style="border-bottom:none">
+            <span class="dot"></span>
+            <span class="txt capped mark">Escalated to you · Wikids AI 游戏模…</span>
+            <span class="gap mark" style="border:none"></span>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow">
+        <div class="col"><div class="ttl">Ship the 0.1.171 release</div>
+          <div class="sub">Running · tagging v0.1.171</div></div>
+        <span class="rel">2m</span>
+      </div>
+    </div>
+    <figcaption>
+      <b>现状（你发的截图）</b>
+      告警色把状态栏、导航按钮、大标题、搜索框全泡在里面；看起来是这条的底板被拉满了整个顶部安全区
+      （成因待真机那次对照）。条本身是 36pt（220.7–256.7pt，量得出来），上面那 220pt 不是它该占的。
+      文案在「游戏模…」处截断，截断点右侧还空着 75pt 没用。
+    </figcaption>
+  </figure>
+
+  <!-- ── 2 改后 ① ───────────────────────────────────────── -->
+  <figure>
+    <span class="tag after">改后 ①</span>
+    <div class="phone">
+      <div class="status">
+        <span>10:04</span>
+        <span class="r">
+          <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span>
+          <span>5G</span><span class="batt">35</span>
+        </span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="platter capsule">
+          <span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span>
+          <span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+        </span>
+      </div>
+      <div class="title">orbit</div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div style="height:12px"></div>
+      <div class="needs mark">
+        <span class="dot"></span>
+        <span class="txt">Wikids AI 游戏模拟器 · Escalated to you</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow">
+        <div class="col"><div class="ttl">Ship the 0.1.171 release</div>
+          <div class="sub">Running · tagging v0.1.171</div></div>
+        <span class="rel">2m</span>
+      </div>
+    </div>
+    <figcaption>
+      <b>① 告警只留在 36pt 的条里</b>
+      mock §3 本来就是这么写的：36pt、只有下边一条细线、上面由导航栏自己画。标题区回到系统底色，
+      「orbit」不再被读成「这个工作区有事等你」。
+      <br>同时把语序倒过来——<b>项目名在前</b>（会话那条文案本来就是「工作区名 needs you」），
+      并把剩下的宽度给文字：同一句话现在整句放得下，不再截在名字中间。
+      （名字按截图里被截断的前缀补全，示意用。）
+    </figcaption>
+  </figure>
+
+  <!-- ── 3 改后 ② ───────────────────────────────────────── -->
+  <figure>
+    <span class="tag after">改后 ②</span>
+    <div class="phone">
+      <div class="status">
+        <span>10:04</span>
+        <span class="r">
+          <span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span>
+          <span>5G</span><span class="batt">35</span>
+        </span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="platter capsule mark">
+          <span class="scopeLabel">Open
+            <svg class="ico" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+          <span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span>
+        </span>
+      </div>
+      <div class="title">orbit</div>
+      <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+      <div style="height:12px"></div>
+      <div class="needs">
+        <span class="dot"></span>
+        <span class="txt">Wikids AI 游戏模拟器 · Escalated to you</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow">
+        <div class="col"><div class="ttl">Ship the 0.1.171 release</div>
+          <div class="sub">Running · tagging v0.1.171</div></div>
+        <span class="rel">2m</span>
+      </div>
+    </div>
+    <figcaption>
+      <b>② 顺带：scope 看得见，也不再有第二个「三条杠」</b>
+      右上那颗现在只报「标签过滤有没有生效」，切 Open→Tasks 时它一动不动；scope 藏在同一个菜单里。
+      改成把 scope 写出来（<code>Open ⌄</code>），菜单内容一个字不动——scope、按标签过滤、按标签分组、
+      Settings 本来就在这一个菜单里。
+    </figcaption>
+  </figure>
+
+</div>
+
+<p class="lede" style="margin-top:34px">
+  <b>还没定的那一件（①的前提）：</b>琥珀为什么会铺满标题区，得先在真机上做一次对照——
+  等没有待办时再看同一屏：<b>标题区变白</b> ⇒ 颜色来自这条，收住它就行；
+  <b>仍是琥珀</b> ⇒ 另有来源，得另查。全仓只有 <code>NeedsYouBannerView</code> 的 <code>needsYouTint</code> 一处用这个色，
+  所以剩下的可能是：<code>safeAreaInset</code> 的底板被延伸进安全区，或 iOS 26 的玻璃栏吸了紧贴其下那条的色调。
+</p>
+</html>

@@ -218,9 +218,6 @@ struct AgentContentColumn: View {
     /// How this column's rows navigate. Defaults to the three-column shape, which is what the
     /// split shells want; the compact shell (whose stack knows its own pushes) passes `.push`.
     var rowNavigation: SessionRowNavigation = .selection
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    #endif
     /// The session-list search field's text — owned by the column because the field is declared on
     /// the column root (see `body`). macOS carries it too but never shows a field: its window
     /// searches from the ⌘K palette instead.
@@ -244,14 +241,12 @@ struct AgentContentColumn: View {
                     .id(a.id)
                     .navigationTitle(a.name)
                     #if os(iOS)
-                    // The iPhone list keeps its roomy large title. In the regular-width three-column
-                    // iPad shell, an inline title leaves the vertical room below it to the persistent
-                    // scope control and search field instead of spending a second row on the Workspace.
-                    .navigationBarTitleDisplayMode(
-                        SessionListPresentation.resolve(
-                            isCompactWidth: horizontalSizeClass == .compact
-                        ).showsPersistentScope ? .inline : .automatic
-                    )
+                    // Inline on the phone too, which used to keep its roomy large title. The title is
+                    // the workspace name, and the drawer already shows that as its selected row — so
+                    // the vertical room the large title spent repeating it came straight out of the
+                    // rows. The regular-width shell has read it this way since the persistent scope
+                    // control took that room; the two shells now agree.
+                    .navigationBarTitleDisplayMode(.inline)
                     #endif
             } else {
                 switch app.agents?.listPresentation {
