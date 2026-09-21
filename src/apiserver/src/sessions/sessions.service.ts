@@ -38,6 +38,7 @@ import {
   type RunnerModelCatalog,
   FilePatch,
   MAX_PROMPT_CHARS,
+  type OpenItemDeliveryCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -91,6 +92,7 @@ import {
   sessionWaitingKind,
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
+import { openItemIdOfTurn, readOpenItemDeliveryCard } from '../projects/project-open-item';
 import {
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
@@ -210,6 +212,10 @@ interface ListedActiveTurn extends ListedQueuedTurn {
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
+  /** An exception item's delivery carries the item's own fields beside its words (§4.4 X-D2): the
+   *  card the runner's echo will be drawn as, so the placeholder a client paints while this turn
+   *  waits is not a different rendering of a different reading. */
+  openItemDelivery?: OpenItemDeliveryCard;
 }
 
 const CURRENT_WORK_UNAVAILABLE = 'CURRENT_WORK_UNAVAILABLE';
@@ -4674,7 +4680,7 @@ export class SessionsService {
         return turnId && announcedTargetIds.includes(turnId) ? [turnId] : [];
       }),
     );
-    const activeTurns: ListedActiveTurn[] = classified
+    const activeRows = classified
       // A USER(enqueued/written) is only optimistic progress. Once the durable receipt says
       // FAILED it must remain visible and override that transcript state; no synthetic failed
       // run_event is written by the server, so suppressing it here would strand the UI forever.
@@ -4684,33 +4690,67 @@ export class SessionsService {
         if (turn.deliveryStatus === 'FAILED') return !failedDeliveryTurnIds.has(turn.id);
         if (turn.deliveryStatus === 'UNCONFIRMED') return true;
         return !announcedTurnIds.has(turn.id);
-      })
-      .map(({ turn, placement, content }) => ({
-        turnId: turn.id,
-        kind: turn.kind,
-        placement,
-        ...(turn.targetTurnId ? { targetTurnId: turn.targetTurnId } : {}),
-        ...(turn.deliveryStatus === 'FAILED' || turn.deliveryStatus === 'UNCONFIRMED'
-          ? {
-              delivery: (turn.deliveryStatus === 'FAILED' ? 'failed' : 'unconfirmed') as
-                'failed' | 'unconfirmed',
-              ...(turn.deliveryFailureCode ? { deliveryCode: turn.deliveryFailureCode } : {}),
-              ...(turn.deliveryFailureReason
-                ? { deliveryReason: turn.deliveryFailureReason }
-                : {}),
-            }
-          : {}),
-        content,
-        createdAt: turn.createdAt.toISOString(),
-        attachments: turn.attachments.map((attachment) => ({
-          id: attachment.id,
-          mimeType: attachment.mimeType,
-        })),
-      }));
+      });
+    // The card an exception item's delivery is, for the rows this snapshot actually returns.
+    const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
+    const activeTurns: ListedActiveTurn[] = activeRows
+      .map(({ turn, placement, content }) => {
+        const card = deliveryCards.get(turn.id);
+        return {
+          turnId: turn.id,
+          kind: turn.kind,
+          placement,
+          ...(turn.targetTurnId ? { targetTurnId: turn.targetTurnId } : {}),
+          ...(turn.deliveryStatus === 'FAILED' || turn.deliveryStatus === 'UNCONFIRMED'
+            ? {
+                delivery: (turn.deliveryStatus === 'FAILED' ? 'failed' : 'unconfirmed') as
+                  'failed' | 'unconfirmed',
+                ...(turn.deliveryFailureCode ? { deliveryCode: turn.deliveryFailureCode } : {}),
+                ...(turn.deliveryFailureReason
+                  ? { deliveryReason: turn.deliveryFailureReason }
+                  : {}),
+              }
+            : {}),
+          ...(card ? { openItemDelivery: card } : {}),
+          content,
+          createdAt: turn.createdAt.toISOString(),
+          attachments: turn.attachments.map((attachment) => ({
+            id: attachment.id,
+            mimeType: attachment.mimeType,
+          })),
+        };
+      });
     // ES sort is stable: equal timestamps preserve the turn query's seq order. Breaking a tie by
     // unrelated UUID would reorder the executable head behind its queued successor in a recovered
     // snapshot.
     return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /** The card each of these turns carries, by turn id — for the ones that ARE an exception item's
+   *  delivery, and nothing at all for a batch of ordinary messages.
+   *
+   *  The same two calls the ingest path makes for the runner's echo (`openItemIdOfTurn` and
+   *  `readOpenItemDeliveryCard`, runner-api.controller.ts), for the same reason `queuedWakeContent`
+   *  below calls the very functions delivery calls: a client that draws this turn while it waits
+   *  must draw what it is about to be replaced by. Two listeners asking the same function on the
+   *  same rows is what makes the replacement invisible — a second derivation of the same fields is
+   *  what would show it. The reading is re-taken at each of those moments by design (the card is a
+   *  snapshot of what the platform knows, and a row that MOVED between them is the one case where
+   *  the two differ, which is the row having changed rather than the reading drifting).
+   *
+   *  Read after the announced/terminal filter rather than before it, so a row already represented by
+   *  a durable event costs no query. */
+  private async openItemDeliveryCards(
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
+  ): Promise<Map<string, OpenItemDeliveryCard>> {
+    const cards = new Map<string, OpenItemDeliveryCard>();
+    for (const turn of turns) {
+      const itemId = openItemIdOfTurn(turn.clientTurnId);
+      if (!itemId) continue;
+      const card = await readOpenItemDeliveryCard(this.prisma, itemId);
+      if (card) cards.set(turn.id, card);
+    }
+    return cards;
   }
 
   /** What each of the session's still-queued wake turns has to say, by turn id.

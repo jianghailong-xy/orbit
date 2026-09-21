@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CheckCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import type { OpenItemAction, OpenItemDeliveryCard as Delivery, OpenItemKind } from '@orbit/shared';
@@ -135,13 +135,17 @@ export function OpenItemDeliveryCard({
   seq,
   ts,
   undelivered,
+  queued,
 }: {
   card: Delivery;
   /** The words the agent was handed, verbatim — the record this card is drawn from. */
   text: string;
-  seq: number;
+  /** Unset while the delivery is still queued: it is no event yet, so ⌘F has nothing to land on. */
+  seq?: number;
   ts?: string;
   undelivered?: boolean;
+  /** The queued tail's status line, while the delivery still waits behind the running turn. */
+  queued?: ReactNode;
 }) {
   const [allFiles, setAllFiles] = useState(false);
   const files = allFiles ? card.files : card.files.slice(0, FILES_SHOWN);
@@ -164,7 +168,7 @@ export function OpenItemDeliveryCard({
           scans for user bubbles and would otherwise skip a delivery that is nobody's message (naming
           an earlier question instead, and scrolling to it). */}
       <div
-        className="oic"
+        className={`oic${queued ? ' is-queued' : ''}`}
         data-seq={seq}
         data-sticky-label="Exception item"
         data-sticky-text={`${label}: ${card.title}`}
@@ -224,6 +228,7 @@ export function OpenItemDeliveryCard({
           <summary>What the coordinator was told</summary>
           <pre>{text}</pre>
         </details>
+        {queued && <div className="oic-queued">{queued}</div>}
       </div>
     </div>
   );

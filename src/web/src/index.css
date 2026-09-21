@@ -13645,6 +13645,25 @@ button.composer-usage:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* A delivery still waiting behind the running turn (WorkspaceView's queued tail): dashed like a
+   queued message, with the queue's status line at its foot, so taking the turn changes nothing
+   about how the delivery reads. Same shape the two wakes take while they wait. */
+.oic.is-queued {
+  border-style: dashed;
+}
+.oic-queued {
+  margin-top: 6px;
+}
+.oic-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.oic-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
 .watch-editor {
   display: flex;
   flex-direction: column;

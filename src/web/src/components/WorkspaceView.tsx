@@ -148,6 +148,7 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeCard } from './WatchWakeCard';
 import { BackgroundWakeCard } from './BackgroundWakeCard';
+import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { parseWatchWake, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import type { BgShell } from '../lib/backgroundShells';
@@ -245,7 +246,12 @@ import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
-import type { SessionTurnIntent, SessionTurnPlacement, WatchView } from '@orbit/shared';
+import type {
+  OpenItemDeliveryCard as OpenItemDelivery,
+  SessionTurnIntent,
+  SessionTurnPlacement,
+  WatchView,
+} from '@orbit/shared';
 import {
   AgentProvider,
   derivePermissionSemantics,
@@ -370,6 +376,12 @@ export interface QueuedTurn {
   // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
   // image-only follow-up turn — the local turnImages previews don't survive a reload.
   attachments?: { id: string; mimeType: string }[];
+  /** When the server queued it — the receipt's own timestamp, as an accepted turn's `acceptedAt`. */
+  createdAt?: string;
+  /** An exception item's delivery carries the item's own fields beside its words, exactly as the
+   *  accepted-turn placeholder does (`AcceptedUserTurn.openItemDelivery`): the queued tail draws the
+   *  card the transcript will, rather than a bubble it replaces when the runner takes the turn. */
+  openItemDelivery?: OpenItemDelivery;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -2819,6 +2831,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 id: attachment.id,
                 mime: attachment.mimeType || 'application/octet-stream',
               })),
+              // The card the snapshot carried for an exception item's delivery, so the placeholder
+              // this row paints is the card the runner's echo will replace it with.
+              ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -6713,6 +6728,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         onCancel={() => cancelQueued(q.turnId)}
+                      />
+                    }
+                  />
+                ) : q.openItemDelivery ? (
+                  // An exception item's delivery is nobody's message on the queue either, and for a
+                  // stronger reason than the two wakes above: nobody typed it at all. It gets the
+                  // card the transcript draws once a runner takes it, with the queue's line at its
+                  // foot — so taking the turn changes nothing about how the delivery reads. Read off
+                  // the payload the active snapshot carried, never out of the text's shape.
+                  <OpenItemDeliveryCard
+                    key={q.turnId}
+                    card={q.openItemDelivery}
+                    text={q.content}
+                    ts={q.createdAt}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
                       />
                     }
                   />

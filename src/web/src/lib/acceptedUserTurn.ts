@@ -1,3 +1,5 @@
+import type { OpenItemDeliveryCard } from '@orbit/shared';
+
 /** A user turn the API accepted but whose durable `user` event has not reached this tab yet. */
 export interface AcceptedUserTurn {
   key: string;
@@ -9,6 +11,12 @@ export interface AcceptedUserTurn {
   text: string;
   acceptedAt: string;
   attachments: { id: string; mime?: string; name?: string }[];
+  /** An exception item's delivery to the coordinator carries the item's own fields beside its words
+   *  (`openItemDelivery`, lib/openItemDelivery — read by the same function the runner's echo is read
+   *  by). Held here so the placeholder painted while that turn waits is drawn as the card the echo
+   *  will replace it with: the shape the reader sees does not change when the echo lands. Absent on
+   *  every turn a person typed, whichever `source` recovered it. */
+  openItemDelivery?: OpenItemDeliveryCard;
 }
 
 export interface UserTurnEvent {
@@ -104,6 +112,11 @@ export function acceptedUserTurnEvent(
     payload: {
       text: turn.text,
       ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
+      // Beside the text, as the control plane records it on the runner's echo (withOpenItemDelivery,
+      // control-plane-note.ts): the paragraph and the reading of it, one payload either way — so the
+      // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
+      // replaces. Whoever built the row (`source`) the render is the same.
+      ...(turn.openItemDelivery ? { openItemDelivery: turn.openItemDelivery } : {}),
     },
   };
 }
