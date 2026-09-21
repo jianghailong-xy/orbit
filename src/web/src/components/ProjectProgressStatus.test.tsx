@@ -444,6 +444,13 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
+  // The reason field the owner types into grows with its text, which antd measures with a
+  // ResizeObserver jsdom lacks — the same stub the blockers dialog's own suite carries.
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -605,5 +612,113 @@ describe('the exception cards’ presses, through their doors', () => {
       `/projects/${PROJECT_ID}/open-items/${ESCALATED.itemId}/return-to-coordinator`,
       { method: 'POST', body: {} },
     );
+  });
+});
+
+/**
+ * §4.7's "标记已处理", pressed by the owner on an exception nobody else can end: work that landed by
+ * hand leaves the platform no fact to read, so the item says "this did not land" and goes on saying
+ * it until a person closes it with the reason they know and the platform does not.
+ */
+describe('an owner marking an exception handled', () => {
+  const PRESS = 'Mark as handled';
+
+  async function click(target: HTMLElement): Promise<void> {
+    await act(async () => {
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await settle();
+  }
+
+  async function type(field: HTMLTextAreaElement, value: string): Promise<void> {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  /**
+   * One owner-assigned exception, mounted, against a read that answers with it until the resolve
+   * door has taken it — an item leaves the rail because the server stops serving the row, which is
+   * what this whole module is built on.
+   */
+  async function mountOwnerCard(): Promise<void> {
+    let open: ProjectOpenItemRow[] = [ESCALATED];
+    apiMock.mockImplementation(async (path: string) => {
+      if (!String(path).endsWith('/open-items')) {
+        open = [];
+        return { itemId: ESCALATED.itemId, state: 'RESOLVED', resolution: 'HANDLED' };
+      }
+      return { needsYou: open, withCoordinator: [] };
+    });
+    const qc = client({ needsYou: [ESCALATED], withCoordinator: [] });
+    await mount(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await settle();
+  }
+
+  /** The card's own press, and the dialog it opens, with the reason typed when one is given. */
+  async function openDialog(reason?: string): Promise<HTMLElement> {
+    const trigger = button(PRESS);
+    expect(trigger).toBeTruthy();
+    await click(trigger!);
+
+    const dialog = document.body.querySelector<HTMLElement>('.ant-modal');
+    expect(dialog).not.toBeNull();
+    const field = dialog!.querySelector<HTMLTextAreaElement>('textarea');
+    expect(field).not.toBeNull();
+    if (reason !== undefined) await type(field!, reason);
+    return dialog!;
+  }
+
+  /** The dialog's own press: the second button wearing the label, after the card's own. */
+  async function confirm(): Promise<HTMLButtonElement | undefined> {
+    return buttonAppears(PRESS, 2);
+  }
+
+  it('sends the reason to the item’s own resolve door', async () => {
+    await mountOwnerCard();
+    const reason = '09-21 手工 rebase 到 main，patch-id 逐条核过；这 3 个文件的冲突就是那次重放。';
+    await openDialog(reason);
+    const ok = await confirm();
+    expect(ok?.disabled).toBe(false);
+    await click(ok!);
+
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/open-items/${ESCALATED.itemId}/resolve`,
+      { method: 'POST', body: { note: reason } },
+    );
+  });
+
+  it('sends nothing while the reason is empty', async () => {
+    await mountOwnerCard();
+    await openDialog();
+    expect((await confirm())?.disabled).toBe(true);
+
+    // Whitespace is not a reason either: the server trims the note before it judges it, so this
+    // press is refused here rather than sent off to be refused there.
+    await type(document.body.querySelector<HTMLTextAreaElement>('textarea')!, '   ');
+    const ok = await confirm();
+    expect(ok?.disabled).toBe(true);
+    await click(ok!);
+
+    expect(apiMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
+  });
+
+  it('draws the item no more once the door has taken it', async () => {
+    await mountOwnerCard();
+    expect(document.getElementById(`open-item-${ESCALATED.itemId}`)).not.toBeNull();
+
+    await openDialog('hand-rebased onto main on 09-21');
+    await click((await confirm())!);
+    await settle();
+
+    expect(document.getElementById(`open-item-${ESCALATED.itemId}`)).toBeNull();
   });
 });

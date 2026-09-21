@@ -13719,6 +13719,12 @@ button.composer-usage:focus-visible {
 .project-open-item-error {
   flex-basis: 100%;
 }
+.project-open-item-reason-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
 .project-open-item-foot {
   padding: 8px 14px;
   border-top: 1px solid var(--border-subtle);
