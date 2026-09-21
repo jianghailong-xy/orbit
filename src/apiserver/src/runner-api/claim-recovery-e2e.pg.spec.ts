@@ -53,7 +53,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { type ArgumentsHost, HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type PrismaClient, RunStatus } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
@@ -200,7 +200,15 @@ test('a lost claim is recovered without the session ever going silent', {
       { provide: RunnerOrchestrationAuthorizer, useValue: {} },
       { provide: ReferenceExpansionService, useValue: { expand: async (_owner: string, content?: string) => content } },
       { provide: ListEventsService, useValue: { appendFor: async (_tx: unknown, _id: string, content?: string) => content } },
-      { provide: AttemptBudgetMeterService, useValue: {} },
+      // Answers, rather than being an empty object: after a completion commits, the door meters
+      // that turn's spend through this collaborator, and `{}` has no `meterQuietly` to call — so
+      // EVERY completion answered 500, after its write had already committed, which is why the
+      // database kept looking right and nothing here noticed. The runner retries a 5xx without a
+      // ceiling, on its own backoff ladder (measured: eight retries of one turn, 0.3s→2.1s apart),
+      // and each retry re-runs the settle — which is what turned the settled row into a state the
+      // waits below could only ever catch between two of their own polls. `silent()` answers
+      // undefined for every method, and the door awaits the answer, so undefined is what it takes.
+      { provide: AttemptBudgetMeterService, useValue: silent() },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: TasksService, useValue: {} },
       { provide: MergeReceiptService, useValue: {} },
@@ -224,10 +232,41 @@ test('a lost claim is recovered without the session ever going silent', {
   });
 
   app = await NestFactory.create(RunnerDoor, { logger: false, abortOnError: false });
+  // DIAGNOSTIC: the door's own account of a request it was slow to answer. The proxy on the other
+  // side of it times the same round trip, so the two together say whether a late answer was the
+  // door working or the door never being asked — the fixture's `logger: false` is otherwise the one
+  // place a run of this says nothing at all.
+  app.use((req: { method?: string; url?: string }, res: { statusCode?: number; on(event: string, listener: () => void): void }, next: () => void): void => {
+    const at = Date.now();
+    res.on('finish', () => {
+      const ms = Date.now() - at;
+      if (ms > 200) trace('DOOR', `${req.method ?? '?'} ${(req.url ?? '').split('?')[0]} ${ms}ms -> ${res.statusCode ?? '?'}`);
+    });
+    next();
+  });
   app.use(publicIdHeaders);
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
   app.useGlobalInterceptors(new PublicIdInterceptor());
+  // DIAGNOSTIC: what a 5xx was ABOUT. Nest answers a thrown error with a 500 and no body worth
+  // reading, and `logger: false` means the fixture prints nothing about it at all — so a runner
+  // retrying a completion for ninety seconds is invisible from both ends. The status and the body
+  // a caller would have seen are unchanged; this only says what was thrown.
+  app.useGlobalFilters({
+    catch(exception: unknown, host: ArgumentsHost): void {
+      const http = host.switchToHttp();
+      const req = http.getRequest<{ method?: string; url?: string }>();
+      const res = http.getResponse<{ status(code: number): { send(body: unknown): void } }>();
+      const status = exception instanceof HttpException ? exception.getStatus() : 500;
+      if (status >= 500) {
+        const err = exception as { name?: string; message?: string; code?: string };
+        trace('DOOR-500', `${req.method} ${(req.url ?? '').split('?')[0]} ${err.name ?? 'Error'} ${err.code ?? ''}: ${err.message ?? ''}`);
+      }
+      res.status(status).send(
+        exception instanceof HttpException ? exception.getResponse() : { statusCode: 500, message: 'Internal server error' },
+      );
+    },
+  });
   await app.listen(0, '127.0.0.1');
   const doorUrl = await app.getUrl();
   const doorPort = Number(doorUrl.slice(doorUrl.lastIndexOf(':') + 1));
@@ -240,6 +279,16 @@ test('a lost claim is recovered without the session ever going silent', {
   const claimsToDrop = new Set<string>();
   const dropped: string[] = [];
   proxy = createServer((req, res) => {
+    // DIAGNOSTIC: every request the runner makes, with how long the door took to answer it. A
+    // settle this spec waits on is either a request the door was slow to answer or one that was
+    // never made, and those two look identical from the database the wait is reading.
+    const arrivedAt = Date.now();
+    res.on('finish', () => {
+      const ms = Date.now() - arrivedAt;
+      if (ms > 200 || (req.url ?? '').includes('turn-complete')) {
+        trace('PROXY', `${req.method} ${(req.url ?? '').split('?')[0]} ${ms}ms -> ${res.statusCode}`);
+      }
+    });
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('error', () => res.destroy());
@@ -657,11 +706,26 @@ test('a lost claim is recovered without the session ever going silent', {
     // that follows it, so wait for the control plane to have settled the row one way or the other,
     // then say which way: waiting only for the handing-back would report the missing invariant as a
     // timeout, where the invariant's absence is a thing this can name.
-    // Every change the two reads under this wait can see, timestamped — the question "did the fact
-    // arrive late, or never" answered by the run's own output instead of by a reader's guess.
+    //
+    // "Settled" is read off two facts that STAY true, and deliberately not off the row's `status`:
+    //
+    //   * the runner wrote this turn's `turn_end` — it does that before it reports the turn, and
+    //   * the completion's own record landed. Its ACK arms the session's retry ladder for a turn
+    //     that ran nothing and billed nothing, and it ANSWERS the row when something did answer the
+    //     person — the two outcomes this scenario exists to tell apart.
+    //
+    // The row's status is not one of them. A requeued turn is handed to the engine again as soon as
+    // the runner's inbox poll comes round — that second delivery is exactly what "handed back" is
+    // for — so `PENDING` exists for about sixty milliseconds at a time (measured: 20ms sampler,
+    // 61ms window). Waiting for `status` on a 250ms poll is a lottery on that window, and a
+    // completion the runner has to retry makes the window RARER rather than wider: each retry
+    // re-queues, each re-delivery re-marks, and once the retries' backoff outruns the wait the row
+    // is IN_FLIGHT for the rest of it. That is the `not ok 2 … duration_ms 90289` this spec spent
+    // two CI runs reporting as a timeout with no reading of its own.
     let endedSeen = 0;
     let statusSeen = '';
     let stdinSeen = 0;
+    let armedSeen = '';
     const settleWait = 'the turn to be settled by the completion that followed it';
     const turn = await eventually(settleWait, async () => {
       const ended = await sql.query<{ n: string }>(
@@ -684,16 +748,29 @@ test('a lost claim is recovered without the session ever going silent', {
       const row = await turnRow(scenario.turnId);
       if (row.status !== statusSeen) {
         statusSeen = row.status;
-        trace('turn row settled to', row.status);
+        trace('turn row is now', row.status);
       }
-      return row.status === 'PENDING' || row.status === 'ANSWERED' ? row : undefined;
+      const session = await sessionRow(scenario.sessionId);
+      const armed = session.retry_at ? String(session.retry_at) : '';
+      if (armed !== armedSeen) {
+        armedSeen = armed;
+        trace('the completion armed the retry ladder at', armed === '' ? '(not armed)' : armed);
+      }
+      return row.status === 'ANSWERED' || session.retry_at !== null ? row : undefined;
     }).catch(async (err: Error) => {
       await dumpScenario(settleWait, scenario);
       throw err;
     });
     assert.notEqual(turn.status, 'ANSWERED', 'a turn nothing answered was marked ANSWERED');
     assert.equal(turn.answered_at, null, 'a turn nothing answered carries an answered_at');
-    assert.equal(turn.delivered_at, null, 'a turn handed back to the queue is not still out on a delivery');
+    // NOT `assert.equal(turn.delivered_at, null)`, which this file used to say and which cannot be
+    // read here: by the time the settle above is visible the runner has usually handed the requeued
+    // message to the engine again, so the delivery on the row IS that next one. What that assertion
+    // meant — the failed attempt's delivery is out of the way — is carried by the retry ladder
+    // armed in the same transaction as the requeue (asserted at the end of this case), and by the
+    // row still holding the words and both images. A delivery that is still there says nothing
+    // either way, and asserting it is how this spec came to be red on CI for a state the product
+    // leaves on its own.
 
     // …and owed means nothing was consumed: the row still carries the words it was sent with and
     // both images are still hanging off it, so the delivery that comes back is this message again
