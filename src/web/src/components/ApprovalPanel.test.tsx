@@ -75,18 +75,41 @@ describe('single create approval', () => {
   const create = (toolName: string, input: Record<string, unknown>): ApprovalInfo =>
     ({ id: 'c1', toolName, input }) as ApprovalInfo;
 
-  it('names the task and shows what it is and what would settle it', () => {
+  it('leads with the consequence, then the name, then what would settle it', () => {
     const html = render(
       create('orbit_task_create', {
         title: 'Fix login redirect',
         description: 'Users land on **/404** after signing in.',
         acceptanceCriteria: 'Signing in lands on /home',
+        completionCriterion: 'EXECUTABLE',
         projectId: 'p1',
+        // The runner's own preview of the write — the same report the batch card reads.
+        preview: {
+          taskCount: 1,
+          startingNow: 1,
+          blocked: 0,
+          needsManualStart: 0,
+          notDispatchable: 0,
+          lists: [{ id: 'l1', title: 'Backlog' }],
+          tasks: [{ title: 'Fix login redirect' }],
+        },
       }),
     );
 
-    expect(html).toContain('Confirm: create task “Fix login redirect”?');
+    // The header carries the count, exactly as the batch card's does; the task's own name is the
+    // card's first row, where it can wrap instead of being truncated to fit a header.
+    expect(html).toContain('Confirm: create 1 task?');
+    expect(html).toContain('<p class="create-title">Fix login redirect</p>');
+    // The consequence first, from the preview the runner attached.
+    expect(html).toContain('1 starts running within the minute');
+    expect(html).toContain('into Backlog · EXECUTABLE');
+    // The description is written for the agent that will execute the task, so it is folded — with
+    // its length on the label, and the Markdown intact behind the fold rather than gone.
+    expect(html).toContain('<details class="create-fold">');
+    expect(html).toContain('the description (40 characters)');
+    expect(html).not.toContain('<details class="create-fold" open');
     expect(html).toContain('<strong>/404</strong>');
+    // The owner's own standard stays on the card: it is what they are agreeing to.
     expect(html).toContain('Done when');
     expect(html).toContain('Signing in lands on /home');
     expect(html).toContain('Create it');
@@ -95,6 +118,26 @@ describe('single create approval', () => {
     expect(html).toContain('Chat about this');
     // The raw tool name over a JSON dump is exactly what this card replaces.
     expect(html).not.toContain('orbit_task_create');
+  });
+
+  it('says nothing about running when the runner attached no preview', () => {
+    // An older runner, or a preview read that failed: the card loses its pill and keeps everything
+    // else. It must not invent "0 start running within the minute" for a task nobody counted.
+    const html = render(
+      create('orbit_task_create', { title: 'Fix login redirect', description: 'why' }),
+    );
+    expect(html).toContain('Confirm: create 1 task?');
+    expect(html).not.toContain('running within the minute');
+    expect(html).not.toContain('dag-approval-impact');
+  });
+
+  it('folds a long acceptance criteria at the ceiling the owner card uses, and offers the rest', () => {
+    const long = 'x'.repeat(300);
+    const html = render(
+      create('orbit_task_create', { title: 't', acceptanceCriteria: long }),
+    );
+    expect(html).toContain(`>${'x'.repeat(240)}…</p>`);
+    expect(html).toContain('Show all');
   });
 
   it('names the project and lists the criteria it states', () => {
@@ -107,7 +150,12 @@ describe('single create approval', () => {
     );
 
     expect(html).toContain('Confirm: create project “Checkout rewrite”?');
+    // A project has no count to lead with, so its name stays in the header — and its goal is folded
+    // under the noun that names it, never called a description.
+    expect(html).toContain('the goal (17 characters)');
     expect(html).toContain('One-page checkout');
+    // A project's criteria are a declared list of assertions, and the list is what makes them
+    // readable, so they are not flattened into the sentence a task's criteria becomes.
     expect(html).toContain('<li>p95 under 1s</li>');
   });
 

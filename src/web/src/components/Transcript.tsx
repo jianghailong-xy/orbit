@@ -14,6 +14,7 @@ import {
   EyeOutlined,
   FileAddOutlined,
   FileTextOutlined,
+  FolderAddOutlined,
   FolderOpenOutlined,
   GlobalOutlined,
   LoadingOutlined,
@@ -963,6 +964,8 @@ function isGroupableTool(node: Node): node is ToolNode {
     node.name !== 'ExitPlanMode' &&
     node.name !== 'mcp__orbit__session_create' &&
     node.name !== 'mcp__orbit__task_create_batch' &&
+    node.name !== 'mcp__orbit__task_create' &&
+    node.name !== 'mcp__orbit__project_create' &&
     node.name !== 'Task' &&
     node.name !== 'Workspace'
   );
@@ -2653,6 +2656,27 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
     // A batch is the record of an approval, and once the card is decided this row is all that is
     // left of it — a folded `task_create_batch ✓` says a decision happened and nothing about what
     // was decided.
+    //
+    // A single create is the same record one size down, and it used to fall through to the default
+    // branch: an `orbit · task_create` row with a dump of its own input for a summary, which is
+    // what the most common create in this deployment looked like.
+    case 'mcp__orbit__task_create':
+    case 'mcp__orbit__project_create': {
+      const project = name === 'mcp__orbit__project_create';
+      const title = typeof i.title === 'string' ? i.title : undefined;
+      const prose = project ? i.goal : i.description;
+      return {
+        label: project ? 'Create project' : 'Create task',
+        icon: project ? <FolderAddOutlined /> : <CheckSquareOutlined />,
+        tone: 'agent',
+        summary: title,
+        body: typeof prose === 'string' && prose ? (
+          <div className="chat-tool-prompt">
+            <MD>{prose}</MD>
+          </div>
+        ) : undefined,
+      };
+    }
     case 'mcp__orbit__task_create_batch': {
       const tasks: BatchTaskInput[] = Array.isArray(i.tasks) ? i.tasks : [];
       const graph = buildBatchGraph(tasks);

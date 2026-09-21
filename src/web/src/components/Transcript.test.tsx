@@ -816,6 +816,32 @@ describe('Orbit write tool cards', () => {
     payload: { id: 't1', name, input },
   });
 
+  it('says what a single create wrote, by name', () => {
+    // One size down from the batch: the row names the task and carries its description, instead of
+    // falling through to `orbit · task_create` over a dump of the call's own JSON.
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__task_create', {
+              title: '修复登录跳转',
+              description: '登录后落在 **/404**。',
+              acceptanceCriteria: '落在 /home',
+            }),
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('Create task');
+    expect(html).toContain('修复登录跳转');
+    expect(html).not.toContain('mcp__orbit__task_create');
+    // The description stays behind the row's own fold: unlike the batch, the thing a reader would
+    // otherwise lose — which task this was — is already on the row as its summary, and a description
+    // written for the executing agent runs to thousands of characters.
+    expect(html).not.toContain('登录后落在');
+  });
+
   it('says what a batch created and what shape it had', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>

@@ -72,6 +72,47 @@ public struct CreateApprovalPreview: Equatable, Sendable {
     public let prose: String
     /// The task's acceptance criteria, or each of the project's stated criteria.
     public let criteria: [String]
+    /// The consequence of the write, in the same shape the batch card reads: how many run within
+    /// the minute, how many wait, how many nothing will ever trigger. A task create is a batch of
+    /// one and the server computes it the same way, when it files the card — so this is the same
+    /// report, and nil when that read failed, which must not cost a human their card.
+    public let preview: BatchApprovalPreview?
+    /// The completion criterion the caller declared (`EXECUTABLE`, `OWNER_CONFIRMED`, …). Empty on
+    /// a project, which states acceptance criteria instead of declaring how the work settles.
+    public let criterion: String
+
+    /// The consequence lines, first and largest — the batch card's own, which is the point: one
+    /// task is a batch of one and the two cards should say the same kind of thing first.
+    public var impact: [String] {
+        preview.map(Approvals.batchImpactLines) ?? []
+    }
+
+    /// Where it lands and how it settles, under the pill. The assignee is deliberately not named:
+    /// the create defaults it to the calling agent, so "unassigned" is a claim this card cannot
+    /// make from the input — and when nothing can run it, the pill already says so.
+    public var detail: String {
+        var parts: [String] = []
+        if let list = preview?.lists.first, !list.isEmpty { parts.append("into \(list)") }
+        if !criterion.isEmpty { parts.append(criterion) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The row the batch card puts its titles in. A project keeps its name in the header — it has no
+    /// count to lead with — so this is empty for one.
+    public var titleLine: String { isProject ? "" : title }
+
+    /// The long-form field, folded: the task's description or the project's goal. Written for the
+    /// agent that will execute it, which is why it is the one field that does not get to sit
+    /// unfolded on a phone.
+    public var descriptionText: String { prose }
+
+    /// The project's criteria arrive one per item; a task's arrive as one Markdown block.
+    public var criteriaText: String {
+        isProject ? criteria.map { "- \($0)" }.joined(separator: "\n") : criteria.joined(separator: "\n")
+    }
+
+    /// The noun the fold's label names, so a project's goal is never called a description.
+    public var foldNoun: String { isProject ? "goal" : "description" }
 }
 
 /// What ending a blocker would write, read off the ask the runner raised. The one ask here that is
@@ -123,8 +164,32 @@ public extension Approvals {
             isProject: isProject,
             title: input["title"]?.stringValue ?? "",
             prose: input[isProject ? "goal" : "description"]?.stringValue ?? "",
-            criteria: criteria)
+            criteria: criteria,
+            // The same key the batch card reads, for the same reason: the counts are the decision
+            // and the body is not. Absent on an older runner, which costs the card its pill and
+            // nothing else.
+            preview: batchPreview(from: input),
+            criterion: input["completionCriterion"]?.stringValue ?? "")
     }
+
+    /// The caption over the field the owner is agreeing to. The same two words web puts over it.
+    static let createDoneWhen = "Done when"
+
+    /// The single create card's header: the count, exactly as the batch card's header is a count —
+    /// "Create 1 task?" beside "Create 3 tasks?". The web half composes the same sentence into its
+    /// own `Confirm: …` line and the native card draws an icon chip beside it, so it is the words
+    /// that are shared and `CreateCardCopyParityTests` is what keeps them shared.
+    static let createHeading = "Create 1 task?"
+
+    /// The fold's own line, carrying its length the way the evidence card's claim fold does: this is
+    /// the longest field on the card and the least decisive, and how much of it there is is exactly
+    /// what decides whether to open it.
+    static func createFold(_ noun: String, _ chars: Int) -> String {
+        "the \(noun) (\(chars) characters)"
+    }
+
+    /// What the fold's control says once it is open.
+    static func createFoldHide(_ noun: String) -> String { "hide the \(noun)" }
 
     /// The blocker facts carried on an `orbit_blocker_resolve` ask, or nil for any other approval.
     /// The runner resolves the blocker against the project read before it asks, so the card carries
@@ -214,12 +279,17 @@ public extension Approvals {
     /// Counts first and titles last, because the titles are the eye-catching part and the least
     /// useful one: fifty tasks that wait on each other cost one run and fifty independent ones
     /// cost none at all, and both look the same as a list of names.
+    ///
+    /// Written to survive n = 1, which is what a single create is: the card that shows one task
+    /// reads these lines too, and "1 wait on a prerequisite" is not a sentence anybody wrote.
     static func batchImpactLines(_ p: BatchApprovalPreview) -> [String] {
         var lines: [String] = []
         if p.startingNow > 0 {
             lines.append("\(p.startingNow) start\(p.startingNow == 1 ? "s" : "") running within the minute")
         }
-        if p.blocked > 0 { lines.append("\(p.blocked) wait on a prerequisite") }
+        if p.blocked > 0 {
+            lines.append("\(p.blocked) wait\(p.blocked == 1 ? "s" : "") on a prerequisite")
+        }
         if p.needsManualStart > 0 {
             lines.append("\(p.needsManualStart) need\(p.needsManualStart == 1 ? "s" : "") a manual start — nothing will trigger \(p.needsManualStart == 1 ? "it" : "them")")
         }

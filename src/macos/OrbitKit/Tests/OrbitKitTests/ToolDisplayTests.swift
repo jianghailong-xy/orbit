@@ -127,9 +127,36 @@ final class ToolDisplayTests: XCTestCase {
     }
 
     func testMcpLabelIsHumanized() {
-        let d = ToolDisplay.describe(name: "mcp__orbit__task_create", input: .null, status: .ok, id: "t1")
-        XCTAssertEqual(d.label, "orbit · task_create")
+        // The generic fallback, for every Orbit tool that has not earned a row of its own: the
+        // server's own tool name, `mcp__` clipped and `__` read as the separator it is.
+        let d = ToolDisplay.describe(name: "mcp__orbit__task_get", input: .null, status: .ok, id: "t1")
+        XCTAssertEqual(d.label, "orbit · task_get")
         XCTAssertEqual(d.tone, .plain)
+    }
+
+    // A single create is the app's most common write, and it used to fall through to that fallback:
+    // an `orbit · task_create` row whose summary was a dump of the call's own JSON. It gets the
+    // batch row's treatment one size down — named, and carrying what it was written with.
+    func testASingleCreateGetsItsOwnRow() {
+        let d = ToolDisplay.describe(name: "mcp__orbit__task_create",
+                                     input: obj(["title": .string("Fix login redirect"),
+                                                 "description": .string("why")]),
+                                     status: .running, id: "t1")
+        XCTAssertEqual(d.label, "Create task")
+        XCTAssertEqual(d.tone, .agent)
+        XCTAssertEqual(d.summary, "Fix login redirect")
+        XCTAssertEqual(d.body, .markdown("why"))
+        // Folded, unlike the batch: what a reader would otherwise lose — which task this was — is
+        // already on the row, and a description is written for the agent that will execute it.
+        XCTAssertFalse(d.autoOpen)
+
+        let project = ToolDisplay.describe(name: "mcp__orbit__project_create",
+                                           input: obj(["title": .string("Checkout"),
+                                                       "goal": .string("one page")]),
+                                           status: .running, id: "t2")
+        XCTAssertEqual(project.label, "Create project")
+        XCTAssertEqual(project.summary, "Checkout")
+        XCTAssertEqual(project.body, .markdown("one page"))
     }
 
     // A failure is the loudest thing a call can do and the least proportionate to unfold: what has

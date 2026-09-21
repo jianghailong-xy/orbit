@@ -167,6 +167,54 @@ final class OrbitAskPreviewTests: XCTestCase {
         let lines = Approvals.batchImpactLines(p)
         XCTAssertEqual(lines[0], "1 starts running within the minute")
         XCTAssertEqual(lines[1], "1 needs a manual start — nothing will trigger it")
+
+        // The single create card reads these same lines, which is what makes n = 1 a shape they
+        // have to survive: "1 wait on a prerequisite" is not a sentence anybody wrote.
+        let waiting = Approvals.batchPreview(from: json("""
+            {"preview":{"taskCount":1,"blocked":1}}
+            """))!
+        XCTAssertEqual(Approvals.batchImpactLines(waiting), ["1 waits on a prerequisite"])
+    }
+
+    // MARK: a single create wears the batch card's skeleton
+
+    func testASingleCreateLeadsWithTheSameConsequenceTheBatchCardDoes() {
+        let task = Approvals.createPreview(toolName: "orbit_task_create", from: json("""
+            {"title":"Fix login redirect","description":"why","completionCriterion":"EXECUTABLE",
+             "preview":{"taskCount":1,"startingNow":1,"lists":[{"id":"l1","title":"Backlog"}]}}
+            """))!
+
+        // The same lines the batch card leads with, from the same server-computed report.
+        XCTAssertEqual(task.impact, ["1 starts running within the minute"])
+        XCTAssertEqual(task.detail, "into Backlog · EXECUTABLE")
+        // The name moves out of the header and onto its own row, where it can wrap.
+        XCTAssertEqual(task.titleLine, "Fix login redirect")
+        XCTAssertEqual(task.foldNoun, "description")
+        XCTAssertEqual(task.descriptionText, "why")
+    }
+
+    func testASingleCreateWithoutAPreviewSaysNothingAboutRunning() {
+        // An older runner, or a preview read that failed. The card must not invent a count it was
+        // never given — "0 start running within the minute" would read as "nothing will happen".
+        let task = Approvals.createPreview(toolName: "orbit_task_create", from: json("""
+            {"title":"t","completionCriterion":"EXECUTABLE"}
+            """))!
+
+        XCTAssertTrue(task.impact.isEmpty)
+        XCTAssertEqual(task.detail, "EXECUTABLE")
+    }
+
+    func testAProjectKeepsItsNameUpTopAndItsGoalInTheFold() {
+        let project = Approvals.createPreview(toolName: "orbit_project_create", from: json("""
+            {"title":"Checkout","goal":"one page","acceptanceCriteriaItems":[{"text":"p95 < 1s"}]}
+            """))!
+
+        // No count to lead with, no dispatch to report, and never a goal called a description.
+        XCTAssertTrue(project.impact.isEmpty)
+        XCTAssertEqual(project.detail, "")
+        XCTAssertEqual(project.titleLine, "")
+        XCTAssertEqual(project.foldNoun, "goal")
+        XCTAssertEqual(project.criteriaText, "- p95 < 1s")
     }
 
     // MARK: dag preview

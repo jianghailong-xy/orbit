@@ -177,6 +177,21 @@ public struct ToolDisplay: Equatable, Sendable {
         // decided. The tool call's own input carries the titles and the refs, so the shape is
         // recomputed from what was actually sent — including for batches approved before any of
         // this existed.
+        //
+        // A single create is the same record one size down: it is grouped with the batch row rather
+        // than falling through to the generic `orbit · task_create` plus a dump of its own input,
+        // which is what the one create a session files most often used to look like.
+        case "mcp__orbit__task_create", "mcp__orbit__project_create":
+            let project = name.hasSuffix("project_create")
+            let title = input["title"]?.stringValue
+            let prose = input[project ? "goal" : "description"]?.stringValue
+            return ToolDisplay(label: project ? "Create project" : "Create task",
+                               symbol: project ? "folder.badge.plus" : "checklist", tone: .agent,
+                               summary: (title?.isEmpty == false) ? title : nil, summaryMono: false,
+                               path: nil, meta: nil,
+                               body: (prose?.isEmpty == false) ? .markdown(prose!) : .none,
+                               autoOpen: false)
+
         case "mcp__orbit__task_create_batch":
             let tasks = Approvals.batchTasks(from: input)
             let tree = Approvals.batchTreeRows(tasks).map(\.text).joined(separator: "\n")
