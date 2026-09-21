@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 会话列表 — 搜索框（小构图）</title>
+<style>
+  :root {
+    --amber: #FF9500;
+    --amber-bg: rgba(255, 149, 0, .12);
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .20);
+    --surface: #fff;
+    --fill: rgba(0, 0, 0, .065);
+    --glass: rgba(255, 255, 255, .50);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, "Liberation Sans", "Helvetica Neue", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1000px; margin: 0 0 26px; }
+  .lede code { font-size: 13px; background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  .row { display: flex; gap: 30px; align-items: flex-start; }
+  figure { margin: 0; width: 393px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+
+  .phone { width: 393px; height: 300px; background: var(--surface); overflow: hidden;
+           border-radius: 26px; box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
+           color: var(--label); position: relative; }
+  .status { height: 59px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 28px 0 39px; font-size: 17px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 500; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 25px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+
+  .nav { height: 44px; display: flex; align-items: center; justify-content: space-between;
+         padding: 0 16px; gap: 8px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 44px;
+             background: var(--glass); border-radius: 999px; flex: none;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 44px; }
+  .platter.capsule { padding: 0 3px; gap: 3px; }
+  .slot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .ico { width: 20px; height: 20px; stroke: var(--label); fill: none; stroke-width: 1.85;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .title { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+
+  .searchWrap { height: 56px; }
+  .search { margin: 0 16px; height: 44px; border-radius: 22px;
+            display: flex; align-items: center; gap: 8px; padding: 0 13px;
+            font-size: 17px; }
+  .search .ico { width: 17px; height: 17px; fill: none; stroke-width: 2.2;
+                 stroke-linecap: round; stroke-linejoin: round; }
+  /* 现状：iOS 26 的白玻璃胶囊，压在琥珀上 —— 量到的填充是 (255,252,252) */
+  .search.asIs { background: rgba(255,255,255,.78); color: var(--label-2);
+                 box-shadow: 0 1px 2px rgba(0,0,0,.05), inset 0 0 0 .5px rgba(0,0,0,.05); }
+  .search.asIs .ico { stroke: var(--label-2); }
+  /* 改后：与背景无关的稳定填充 + 一圈细边，两种状态下同一支控件 */
+  .search.stable { background: var(--fill); color: var(--label-2);
+                   box-shadow: inset 0 0 0 .5px rgba(0,0,0,.10); }
+  .search.stable .ico { stroke: var(--label-2); }
+  .search.mk { outline: 1.5px dashed var(--mark); outline-offset: 3px; }
+
+  .needs { height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 16px;
+           background: var(--amber-bg); border-bottom: .5px solid var(--sep); }
+  .needs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; }
+  .needs .txt { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden;
+                text-overflow: ellipsis; }
+  .needs .chev { width: 15px; height: 15px; stroke: var(--label-3); fill: none; stroke-width: 2.4;
+                 stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .grp { padding: 16px 16px 5px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .srow { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+  .srow .col { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 16px; letter-spacing: -.01em; }
+  .srow .sub { font-size: 13px; color: var(--label-2); margin-top: 1px; }
+  .srow .rel { font-size: 13px; color: var(--label-2); flex: none; }
+  .flood { background: var(--amber-bg); }
+  .ruler { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--mark); }
+  .ruler span { position: absolute; right: 6px; top: 3px; font-size: 11.5px; font-weight: 700;
+                color: #8f1d13; background: #fff; border-radius: 5px; padding: 0 5px;
+                box-shadow: 0 0 0 1px rgba(255,59,48,.45); }
+</style>
+
+<h1>iOS 会话列表 — 搜索框</h1>
+<p class="lede">
+  三格都是 393pt 宽、按你两张截图量出来的几何。搜索框量到的两版颜色不一样：第一张是深灰 <code>(235,226,217)</code>，
+  这张是白玻璃 <code>(255,252,252)</code>——比底下的琥珀还亮。<b>它不是一支"中性"控件，它的长相由背后那层琥珀决定。</b>
+</p>
+
+<div class="row">
+
+  <!-- A 现状 -->
+  <figure>
+    <span class="tag now">现状</span>
+    <div class="phone">
+      <div class="flood">
+        <div class="status"><span>9:20</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">76</span></span></div>
+        <div class="nav">
+          <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+          <span class="title">orbit</span>
+          <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+        </div>
+        <div class="searchWrap"><div class="search asIs mk"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div></div>
+        <div class="needs" style="border-bottom:none"><span class="dot"></span><span class="txt">Escalated to you · 项目推进可靠性：集…</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+    </div>
+    <figcaption>
+      <b>现状：头部最亮的是搜索框</b>
+      白玻璃胶囊压在琥珀上，比标题和两个玻璃按钮都亮——视觉重心落在了一个"输入框"上，而它此刻并不是这屏的主任务。
+      而且它常驻：<code>displayMode: .always</code>，56pt 永不收起（静止时首行被推到 ~257pt）。
+    </figcaption>
+  </figure>
+
+  <!-- B 改后 ① -->
+  <figure>
+    <span class="tag after">改后 ①</span>
+    <div class="phone">
+      <div class="status"><span>9:20</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">76</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="title">orbit</span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="searchWrap"><div class="search stable mk"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search all sessions</div></div>
+      <div class="needs"><span class="dot"></span><span class="txt">Wikids AI 游戏模拟器 · Escalated to you</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+    </div>
+    <figcaption>
+      <b>① 稳定填充 + 说清范围</b>
+      <b>填充与背后无关</b>：<code>--fill</code>（≈6.5% 黑）加一圈细边，白底和琥珀底上是同一支控件——不再是"底色的镜子"。
+      配合上一条（琥珀只占 36pt）之后，头部最亮的重新是标题，搜索框退到它该有的位置。
+      <br><b>文案</b>：它搜的是服务端<em>所有</em>工作区的会话与消息正文（命中会替换列表的 sections），
+      而占位符只写了 "Search sessions"——写成 <code>Search all sessions</code>，别让它在当前工作区/scope 里假装只搜这里。
+    </figcaption>
+  </figure>
+
+  <!-- C 改后 ② -->
+  <figure>
+    <span class="tag after">改后 ②</span>
+    <div class="phone">
+      <div class="status"><span>9:20</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">76</span></span></div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+        <span class="title">orbit</span>
+        <span class="platter capsule"><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg></span><span class="slot"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg></span></span>
+      </div>
+      <div class="needs"><span class="dot"></span><span class="txt">Wikids AI 游戏模拟器 · Escalated to you</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.172 release</div><div class="sub">Running · tagging v0.1.172</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div><div class="sub">Waiting for you · 8m</div></div><span class="rel">8m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Gateway 413 on upload</div><div class="sub">Dormant · finished</div></div><span class="rel">1h</span></div>
+      <div class="ruler" style="top:139px"><span>滚动后：搜索框已收起（省 56pt）</span></div>
+    </div>
+    <figcaption>
+      <b>② 静止时可见，滚动即收起</b>
+      这一格画的是<em>滚动后</em>的样子：搜索框收起，列表紧接导航栏（相对 ① 多出一行半）。
+      做法只是把 <code>displayMode</code> 从 <code>.always</code> 换成 <code>.automatic</code>——iOS 自己的 Mail / Notes / 设置就是这个手感：进页面看得见，往下读就让它走。
+      <br>当初改成 <code>.always</code> 的理由是"找不到搜索"，那条在"静止时仍在最上面"的前提下依然成立——收起的只是滚动之后的它。
+    </figcaption>
+  </figure>
+
+</div>
+
+<p class="lede" style="margin-top:30px">
+  <b>我的判断：</b>搜索框本身没什么可改的——它是系统的 search field，形状、字号、命中区都对。三处要动的是它的<b>材质</b>（别当底色的镜子）、
+  <b>文案</b>（说清跨工作区）、<b>常驻</b>（静止在、滚动走）。这三条都不动它搜什么、结果怎么显示，改动面很窄。<br>
+  ② 里那条 <code>displayMode</code> 是唯一有"回到从前"风险的（当初的动因写在 <code>AgentsView.swift</code> 的注释里），要动就把那段注释一起改写成新的理由。
+</p>
+</html>
