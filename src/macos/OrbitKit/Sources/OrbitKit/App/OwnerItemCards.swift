@@ -1,7 +1,7 @@
 import Foundation
 
-/// The two owner cards this client draws, as pure logic: what each says, when each is answerable,
-/// and what a press sends (contract §7.5, mocks 4 and 5).
+/// The three owner cards this client draws, as pure logic: what each says, when each is answerable,
+/// and what a press sends (contract §7.5, mocks 4, 5 and 6 ①).
 ///
 /// WHY THE WORDS ARE HERE AND NOT IN THE VIEW. They are the web's words, and the two clients must
 /// not drift: a person who reads "Approve merge to main" in a banner, opens the card and finds a
@@ -265,5 +265,165 @@ public enum PromotionCards {
     /// `refs/heads/x` → `x`, the way every ref is shown to a person here.
     public static func shortRef(_ ref: String) -> String {
         ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
+    }
+}
+
+// MARK: - an exception that became the owner's
+
+/// Where one open item stands right now, as the owner's own read publishes it.
+///
+/// The same three states the question card has, and for the same reason: a card is delivered once
+/// and then re-derived from the read on every render, and "the read has not come back yet" is a
+/// third state that must never be drawn as "the item went away".
+public enum OwnerItemStanding: Equatable, Sendable {
+    /// No read has come back. The card draws with dead buttons rather than claiming anything.
+    case unread
+    /// The item, as the owner's read publishes it.
+    case open(ProjectOpenItemRow)
+    /// The read came back and this item is not in it: resolved here, resolved elsewhere (the
+    /// coordinator closed it, the task moved on), or handed back to the coordinator by this press.
+    case gone
+}
+
+/// The exception that became the owner's without anybody asking, and the pause they are the only
+/// one who can lift (contract §7.5, mock 5's right column and mock 6 ①).
+///
+/// WHY IT EXISTS AT ALL. The server counts these two among the four owner items and lands the count
+/// on the project's coordinator conversation, so the session list, the console header and the
+/// needs-you banner all light up on it. On the web the card is drawn in that same conversation
+/// (`ProjectExceptionCards` in `WorkspaceView.tsx`) — and on this client it was not, for a while:
+/// a row said "Waiting for approval", the banner said "Escalated to you", and pressing either
+/// opened a conversation with nothing in it to press. A badge that opens nothing is worse than a
+/// dark one, which is the rule the server's own counting read is written under.
+///
+/// WHY ONLY THE OWNER'S GROUP. `ExceptionCards.cards` reads the same group the question card does
+/// (`needsYou`), not everything the project has open: an item still with the coordinator is
+/// somebody's work in progress, and a second copy of that work on the owner's phone would be the
+/// same list drawn twice.
+public enum ExceptionCards {
+    /// The card's header, in the words the needs-you banner uses for the same kind, so a person who
+    /// pressed the banner finds the card saying what the banner said. `OwnerItemCardsTests` holds
+    /// both to `NeedsYouLogic.ownerItemText` — the banner and the card are the same fact.
+    public static let escalatedTitle = "Escalated to you"
+    public static let pauseTitle = "Paused"
+    /// §7.5's provenance mark, the same one the merge and question cards carry.
+    public static let provenance = "FROM ORBIT"
+    public static let provenanceTitle =
+        "Orbit filed this from the fact that opened it. It is not something an agent turn wrote "
+        + "into this page."
+    /// Mock 5's press: the item goes back to the conversation that should have had it (§4.7).
+    /// Nothing is retried and nothing ends — what the coordinator does about it is the coordinator's.
+    public static let askCoordinatorAgain = "Ask the coordinator again"
+    /// Mock 6 ①'s press (§6.3 F-T4): the coordinator stops being paused and starts working again.
+    public static let resume = "Resume"
+    /// What a card whose item the read no longer carries says about itself. Native-only copy, and
+    /// deliberately so: the browser re-derives its cards from the read on every render and the card
+    /// simply goes, which leaves a reader who just pressed something with nothing to read.
+    public static let gone = "This exception is no longer open."
+    /// The read did not come back. Native-only, like the question card's `unreadable`.
+    public static let unreadable = "Couldn’t read this exception — pull to retry."
+    /// The two receipts, drawn only for a press made on THIS screen: what it sent, and where.
+    public static let returned = "Sent back to the coordinator"
+    public static let resumed = "Resumed"
+    /// `Owner: you · waiting 2h 10m` — the browser's `ownerLine`, owner arm.
+    public static let ownerPrefix = "Owner: you"
+    /// What a refused resume says, in the browser's headline (`FusePauseCard`'s alert).
+    public static let notResumed = "The coordinator was not resumed"
+    /// What a refused hand-back says. Native-only: the browser draws the server's own sentence.
+    public static let notReturned = "That item was not sent back"
+
+    /// The items this client draws a card for: the owner's group, minus the two kinds that have
+    /// cards of their own (`CoordinatorQuestions.open`, `PromotionCards.stage`). Mirrors the web's
+    /// `ItemAsCard`, which draws nothing for those two for the same reason — one question, answered
+    /// in one place.
+    public static func cards(_ items: ProjectOpenItemsView?) -> [ProjectOpenItemRow] {
+        (items?.needsYou ?? []).filter {
+            $0.kind != .coordinatorQuestion && $0.kind != .promotionApproval
+        }
+    }
+
+    /// Where one item stands, by the address the card was delivered under.
+    public static func standing(items: ProjectOpenItemsView?,
+                                itemId: String) -> OwnerItemStanding {
+        guard let items else { return .unread }
+        guard let row = cards(items).first(where: { $0.itemId == itemId }) else { return .gone }
+        return .open(row)
+    }
+
+    /// Whether this card is still something waiting on the reader — what a count of open items
+    /// would use. Not drawn by any bar today: the browser's rail points at decisions, not at
+    /// exceptions (§7.6 V13's `needsDecisionCount`), and this is the same rule.
+    public static func isOpen(_ standing: OwnerItemStanding) -> Bool {
+        if case .open = standing { return true }
+        return false
+    }
+
+    /// Whether the pause may be lifted: the server lists `RESUME` only while there is an episode to
+    /// resume, and the door takes the episode by id — so a card missing either is a card whose press
+    /// the server would refuse.
+    public static func resumable(_ row: ProjectOpenItemRow) -> Bool {
+        row.fuseEpisodeId != nil && row.actions.contains(.resume)
+    }
+
+    /// Whether the item may be sent back. The server lists `ASK_COORDINATOR_AGAIN` only while a live
+    /// coordinator conversation exists to hand it to (`askable`, §4.7), so a project with nobody
+    /// coordinating it draws no button rather than a button whose only answer is a refusal.
+    public static func askable(_ row: ProjectOpenItemRow) -> Bool {
+        row.actions.contains(.askCoordinatorAgain)
+    }
+
+    /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
+    /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
+    /// every other kind this card draws and says so in its own title.
+    public static func heading(_ row: ProjectOpenItemRow, now: Date = Date()) -> String? {
+        switch row.assigneeReason {
+        case .escalated:
+            return "Now yours — no one acted on this for \(waitedBeforeEscalation(row))"
+        case .coordinatorEnded:
+            return "Now yours — the coordinator conversation ended"
+        case .chainLimit:
+            return "Now yours — the 3rd failure in this chain"
+        case .handedOver:
+            return "Now yours — the coordinator handed it over"
+        case .noCoordinator:
+            return "Now yours — this project has no coordinator (waiting \(waited(row, now: now)))"
+        case .defaultReason, .unknown:
+            return nil
+        }
+    }
+
+    /// The card's first line: why it is the owner's, or — for an item that carries no escalation
+    /// reason — its own title, which is what the browser's plain `OpenItemCard` puts in the heading
+    /// slot. One line either way, so the card never opens with a blank.
+    public static func headingLine(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
+        heading(row, now: now) ?? row.title
+    }
+
+    /// What escalated, under the heading the browser draws it above, for the kinds whose heading is
+    /// no longer the item's title. Nil when the heading IS the title, which would print it twice.
+    public static func subject(_ row: ProjectOpenItemRow, now: Date = Date()) -> String? {
+        heading(row, now: now) == nil ? nil : row.title
+    }
+
+    /// How long the coordinator had it before the clock took it away — the window the project set,
+    /// read off the two instants rather than off the setting, so a window that was changed
+    /// afterwards cannot make this sentence lie about what happened. `a while` when the read does
+    /// not say when it escalated, which is the browser's own fallback.
+    public static func waitedBeforeEscalation(_ row: ProjectOpenItemRow) -> String {
+        guard let escalated = row.escalatedAt.flatMap(RelativeTime.parse),
+              let since = RelativeTime.parse(row.waitingSince) else { return "a while" }
+        return RelativeTime.span(escalated.timeIntervalSince(since))
+    }
+
+    /// How long it has been waiting: `2h 10m`, in the browser's `formatSpan` words.
+    public static func waited(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
+        guard let since = RelativeTime.parse(row.waitingSince) else { return "a while" }
+        return RelativeTime.span(now.timeIntervalSince(since))
+    }
+
+    /// §7.5's footer: who owes an answer, and for how long. The owner arm of the browser's
+    /// `ownerLine` — the coordinator arm belongs to the rows this client does not draw.
+    public static func ownerLine(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
+        "\(ownerPrefix) · waiting \(waited(row, now: now))"
     }
 }

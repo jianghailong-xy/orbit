@@ -438,6 +438,22 @@ public final class APIClient: @unchecked Sendable {
         try await post("projects/\(projectID)/open-items/\(itemID)/answer", body: req)
     }
 
+    /// Send an escalated item back to the conversation that should have had it (§4.7, mock 5).
+    ///
+    /// The owner's own credential and no acting session, like the answer door beside it: the item
+    /// came to the owner because nobody acted on it, and handing it back is the owner's press — the
+    /// door refuses a session, and nothing is retried by it.
+    public func returnOpenItemToCoordinator(projectID: String,
+                                            itemID: String) async throws -> OpenItemReturned {
+        try await postEmpty("projects/\(projectID)/open-items/\(itemID)/return-to-coordinator")
+    }
+
+    /// Lift the pause on the coordinator (§6.3 F-T4, mock 6 ①) — the owner's alone. Resuming
+    /// without raising anything is what the plain press means, so no limits travel with it.
+    public func resumeProjectFuse(projectID: String, episodeID: String) async throws -> FuseResumed {
+        try await postEmpty("projects/\(projectID)/fuse/\(episodeID)/resume")
+    }
+
     /// What this project is currently asking its owner to merge, or nil when it is asking nothing.
     /// The door answers a bare `null` for that, which decodes straight into the optional.
     public func currentPromotion(projectID: String) async throws -> ProjectPromotionView? {

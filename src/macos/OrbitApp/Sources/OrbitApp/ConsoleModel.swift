@@ -2183,6 +2183,13 @@ final class ConsoleModel {
                 // Only state A is a question. B is landing on its own, C is a receipt and D is
                 // waiting on somebody else — none of the three is something to point a reader at.
                 return PromotionCards.stage(promotionStanding(promotionID)) == .askingYou
+            case .escalatedItem, .fusePause:
+                // An exception is drawn where it arrived — under the turn that was last when the
+                // item was read — and that is where it is answered. The bar above the transcript
+                // points at the project's DECISIONS (the browser's rail counts `PendingDecisionRow`s,
+                // not the open items), so these two are not counted here; what names them is the
+                // needs-you banner, which carries the item itself.
+                return false
             }
         }.map(\.id)
     }
@@ -2246,6 +2253,16 @@ final class ConsoleModel {
             openItems = items
             for row in CoordinatorQuestions.open(items) {
                 deliver(.coordinatorQuestion(itemID: row.itemId))
+            }
+            // And the exceptions that became the owner's, which had no card here at all: the
+            // session list, the console header and the needs-you banner all count them (the
+            // server lands the count on this conversation because this is where the card is
+            // drawn), so a build that drew none of them said "Waiting for approval" over a
+            // conversation with nothing in it to press. `ExceptionCards.cards` draws the owner's
+            // group only — what is still the coordinator's is work in progress, and the agent's.
+            for row in ExceptionCards.cards(items) {
+                deliver(row.kind == .fusePaused ? .fusePause(itemID: row.itemId)
+                                                : .escalatedItem(itemID: row.itemId))
             }
         }
         // `do` rather than `try?`, because this door answers `null` for "asking nothing" and `try?`
@@ -2591,9 +2608,17 @@ final class ConsoleModel {
                 if case .promotionApproval = $0.kind { return true }
                 return false
             }?.id
-        // No native card yet for an escalated exception or a pause: the press opens the
-        // conversation, and the project page is where those two are answered.
-        case .escalated, .fusePaused, .unknown:
+        // The exception that became the owner's, and the pause they lift: both by their own item's
+        // id, which is the address the card was delivered under (`ExceptionCards.cards`). A pause
+        // is drawn as the pause card because that is the card it is; every other item the owner's
+        // group holds is the escalation one.
+        case .escalated:
+            let id = DeliveredDecisionCard(kind: .escalatedItem(itemID: item.itemId)).id
+            return decisionCards.contains { $0.id == id } ? id : nil
+        case .fusePaused:
+            let id = DeliveredDecisionCard(kind: .fusePause(itemID: item.itemId)).id
+            return decisionCards.contains { $0.id == id } ? id : nil
+        case .unknown:
             return nil
         }
     }
@@ -2602,6 +2627,11 @@ final class ConsoleModel {
     /// Where one delivered question stands right now, re-derived from the read on every call.
     func questionStanding(_ itemID: String) -> CoordinatorQuestionStanding {
         CoordinatorQuestions.standing(items: openItems, itemId: itemID)
+    }
+
+    /// The same for one delivered exception card, from the same read.
+    func ownerItemStanding(_ itemID: String) -> OwnerItemStanding {
+        ExceptionCards.standing(items: openItems, itemId: itemID)
     }
 
     /// The candidate one delivered merge card is about, or nil when the read no longer publishes
@@ -2635,6 +2665,41 @@ final class ConsoleModel {
             return receipt
         } catch {
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
+            return nil
+        }
+    }
+
+    /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
+    /// should have had it, with the project's clock for it restarted. Nothing is retried and
+    /// nothing ends here — what the coordinator does about it is the coordinator's.
+    ///
+    /// The receipt is handed back rather than kept: the card that made the press is the one that
+    /// shows what was sent and where it went, exactly as the question card does. A refusal leaves
+    /// the card standing and says which refusal it met.
+    func returnEscalatedItem(_ row: ProjectOpenItemRow) async -> OpenItemReturned? {
+        guard let projectID else { return nil }
+        do {
+            let receipt = try await api.returnOpenItemToCoordinator(projectID: projectID,
+                                                                    itemID: row.itemId)
+            await refreshRulerQuestions(force: true)
+            return receipt
+        } catch {
+            statusMessage = "\(ExceptionCards.notReturned) — \(APIClient.failureReason(error))."
+            return nil
+        }
+    }
+
+    /// Lift the pause (§6.3 F-T4, mock 6 ①) — the owner's alone, and the one press that starts a
+    /// stopped conversation again. The episode the card was drawn from rides along, so a press
+    /// made after the pause was lifted is refused by the door rather than resuming the next one.
+    func resumeFuse(_ row: ProjectOpenItemRow) async -> FuseResumed? {
+        guard let projectID, let episodeID = row.fuseEpisodeId else { return nil }
+        do {
+            let resumed = try await api.resumeProjectFuse(projectID: projectID, episodeID: episodeID)
+            await refreshRulerQuestions(force: true)
+            return resumed
+        } catch {
+            statusMessage = "\(ExceptionCards.notResumed) — \(APIClient.failureReason(error))."
             return nil
         }
     }

@@ -85,6 +85,12 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
         /// answer door takes — the same address the push payload and the Needs-you bar carry.
         case coordinatorQuestion(itemID: String)
+        /// One exception that became the owner's without anybody asking, by the item the
+        /// hand-back door takes (§7.5, mock 5's right column). The same address the push payload
+        /// and the Needs-you banner carry, so a press that names the item lands on this row.
+        case escalatedItem(itemID: String)
+        /// The pause on the coordinator, by the item the resume door takes (§6.3 F-T4, mock 6 ①).
+        case fusePause(itemID: String)
     }
 
     public let kind: Kind
@@ -135,6 +141,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // above the transcript and the push that opens it both point at these by id.
         case .promotionApproval(let promotionID): return "promotion-\(promotionID)"
         case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
+        // The exception cards' ids, in the web's own spelling too: `open-item-<itemId>` is what
+        // `ProjectProgressStatus.tsx` gives the two exception cards, and `fuse-<itemId>` is what
+        // the pause card gives itself.
+        case .escalatedItem(let itemID):          return "open-item-\(itemID)"
+        case .fusePause(let itemID):              return "fuse-\(itemID)"
         }
     }
 }
@@ -213,8 +224,10 @@ public enum DeliveryAnchor {
         case .ownerConfirmation:
             return nil
         // Exhaustive rather than defaulted: a card added later has to say which of the two it is.
-        // The two owner cards anchor where they arrived, like every question the platform files:
-        // what they are about happened before the read that found them.
+        // The owner cards — the question, the merge, the exception that became yours and the pause
+        // — anchor where they arrived, like every question the platform files: what they are about
+        // happened before the read that found them. (The exception cards arrived after the fact:
+        // a task failed, a clock ran out, and the read that publishes the item runs later still.)
         //
         // All FOUR receipts are placed by the door's own clock rather than here —
         // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
@@ -226,7 +239,7 @@ public enum DeliveryAnchor {
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
-             .promotionApproval, .coordinatorQuestion:
+             .promotionApproval, .coordinatorQuestion, .escalatedItem, .fusePause:
             return items.last?.id
         }
     }
