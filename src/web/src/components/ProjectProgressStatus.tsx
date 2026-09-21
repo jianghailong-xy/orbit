@@ -1,5 +1,5 @@
 import { useId, useState, type JSX, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Input, Modal } from 'antd';
 import type {
@@ -173,11 +173,12 @@ const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
 };
 
-/** The presses that WRITE, and the only ones. Everything else an item lists is a way in.
+/** The presses that WRITE, and the only ones. Two things turn on the same answer: that a card draws
+ *  them only where this row carries what they would need, and that a ROW leaves them out — a row is
+ *  a way in (§7.2 V5), and the one press it offers is a reading door.
  *
- *  One set, because three things turn on the same answer: which presses a card draws, that a press
- *  is drawn as a button rather than a link, and that a ROW leaves them out — a row is a way in
- *  (§7.2 V5), and the one press it offers is a reading door. */
+ *  It is NOT what decides a card's weights any more (mock 7): a card leads with the next step for its
+ *  KIND, and for a conflict that step is `Open task session` — a door that writes nothing. */
 const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
   'RETRY',
   'CANCEL_TASK',
@@ -240,20 +241,64 @@ function cardActions(row: ProjectOpenItemRow): OpenItemAction[] {
   );
 }
 
+/** The doors a card may LEAD with: go onto the work, run the task again, hand the item back. The
+ *  rest of an item's list is a way to LOOK (`Open coordinator`) or to STOP (`Cancel task`), which
+ *  the mock demotes to text links — both are still there, they just no longer compete with the press
+ *  the card is asking for (mock 7's rule 2). */
+const LEADING_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
+  'OPEN_TASK_SESSION',
+  'RETRY',
+  'ASK_COORDINATOR_AGAIN',
+]);
+
+/** What the next step is for a kind of exception, where the design names one (mock 7 ①②③).
+ *
+ *  A conflict and a failed combined-tree check both want the branch fixed, so the way onto that
+ *  branch leads and a whole new run is the way to take the same step differently. A task that failed
+ *  wants another run, so `Retry` leads and the run is the alternative. A kind this map has no answer
+ *  for — an integration error, which the mock does not draw — keeps the server's own order rather
+ *  than being handed a step nobody asked for. */
+const KIND_NEXT_STEP: Partial<Record<OpenItemKind, OpenItemAction>> = {
+  INTEGRATION_CONFLICT: 'OPEN_TASK_SESSION',
+  INTEGRATION_CHECK_FAILED: 'OPEN_TASK_SESSION',
+  TASK_FAILED: 'RETRY',
+};
+
+/** The presses a card leads with, in the order it draws them: the step this kind of exception is
+ *  asking for, then the same step taken another way.
+ *
+ *  Both come from the server's own list, so a card never offers a door that is not there: a kind
+ *  whose next step the server does not list leads with whatever the server put first, and a card
+ *  whose pair is missing a door draws the one it has. */
+function leadingDoors(row: ProjectOpenItemRow, actions: OpenItemAction[]): OpenItemAction[] {
+  const leading = actions.filter((action) => LEADING_ACTIONS.has(action));
+  // An item that has become the owner's leads with the way back to the coordinator that should have
+  // had it (§4.7): the work is not the owner's to run again, and the server lists no RETRY for one.
+  const next = row.assignee === 'OWNER' ? 'ASK_COORDINATOR_AGAIN' : KIND_NEXT_STEP[row.kind];
+  if (next == null || !leading.includes(next)) return leading;
+  return [next, ...leading.filter((action) => action !== next)];
+}
+
 function ItemLink({
   row,
   action,
   primary,
+  quiet,
 }: {
   row: ProjectOpenItemRow;
   action: OpenItemAction;
   /** The press the reader is expected to make. Only the owner's own rows have one: what the
    *  coordinator is handling is offered to be looked at, not to be acted on. */
   primary?: boolean;
+  /** The CARD's quiet weight for the doors it is not asking for (mock 7, 方案 B): a text link rather
+   *  than the boxed way-in a row draws, so the press beside it is what the eye lands on. */
+  quiet?: boolean;
 }): JSX.Element {
   const href = actionHref(row, action) ?? '#';
   const label = ACTION_LABEL[action] ?? action;
-  const className = `project-open-item-action${primary ? ' is-primary' : ''}`;
+  const className = quiet
+    ? 'project-open-item-quiet'
+    : `project-open-item-action${primary ? ' is-primary' : ''}`;
   // An in-page anchor is an anchor; a route is a Link, so it does not reload the app.
   return href.startsWith('#') ? (
     <a className={className} href={href}>
@@ -459,25 +504,45 @@ const HAND_CLOSABLE_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
   'TASK_FAILED',
 ]);
 
-/** One press, one button. `primary` is the first one a card offers — the mock's own emphasis, and
- *  the reason a reader can tell the expected press from the other ways out. */
+/**
+ * The three weights a card's presses are drawn in (mock 7, 方案 B): the press this kind of exception
+ * is asking for, the other way to take that step, and — for the two doors that only LOOK or only
+ * STOP — a quiet text link. A link is a weight and not an element: the presses drawn in it are the
+ * link-flavoured button, so an ending the eye is meant to pass over is still one a keyboard reaches.
+ */
+type PressTier = 'primary' | 'secondary' | 'link';
+
+/** One press, one button — in the weight the card gave it. */
 function PressButton({
   label,
-  primary,
+  tier,
   danger,
   pending,
   onClick,
 }: {
   label: string;
-  primary?: boolean;
+  tier: PressTier;
   danger?: boolean;
   pending?: boolean;
   onClick: () => void;
 }): JSX.Element {
+  if (tier === 'link') {
+    return (
+      <Button
+        className={`project-open-item-quiet${danger ? ' is-danger' : ''}`}
+        type="link"
+        size="small"
+        loading={pending}
+        onClick={onClick}
+      >
+        {label}
+      </Button>
+    );
+  }
   return (
     <Button
       size="small"
-      type={primary ? 'primary' : 'default'}
+      type={tier === 'primary' ? 'primary' : 'default'}
       danger={danger}
       loading={pending}
       onClick={onClick}
@@ -503,11 +568,11 @@ function PressError({ headline, error }: { headline: string; error: Error }): JS
 function RetryPress({
   row,
   projectId,
-  primary,
+  tier,
 }: {
   row: ProjectOpenItemRow;
   projectId: string;
-  primary?: boolean;
+  tier: PressTier;
 }): JSX.Element {
   const qc = useQueryClient();
   const retry = useMutation(retryTaskMutationOptions(qc, projectId, row.taskId ?? ''));
@@ -517,7 +582,7 @@ function RetryPress({
     <>
       <PressButton
         label={ACTION_LABEL.RETRY!}
-        primary={primary}
+        tier={tier}
         pending={retry.isPending}
         onClick={() => retry.mutate({ triggerId: newRunRequestToken() })}
       />
@@ -530,14 +595,48 @@ function RetryPress({
   );
 }
 
+/**
+ * Open task session: the way onto the work an exception is about — the attempt that opened it, or
+ * the task when that attempt has no session left.
+ *
+ * Drawn as a press where the card leads with it (mock 7's rule 1: what a conflict is asking for is
+ * somebody to go and fix the branch, which is a different step from running it again) rather than as
+ * the way in a row draws. The same address either way, and a route, so it does not reload the app.
+ */
+function OpenTaskSessionPress({
+  row,
+  tier,
+}: {
+  row: ProjectOpenItemRow;
+  tier: PressTier;
+}): JSX.Element {
+  const navigate = useNavigate();
+  // `cardActions` draws this action only where the row carries the address it reaches.
+  const href = actionHref(row, 'OPEN_TASK_SESSION') as string;
+  return (
+    <PressButton
+      label={ACTION_LABEL.OPEN_TASK_SESSION!}
+      tier={tier}
+      onClick={() => navigate(href)}
+    />
+  );
+}
+
+/**
+ * Cancel task: the attempt stops here and the exceptions it opened close with it (§4.2:
+ * `TASK_CLOSED`). No run is stopped by it — a task with a live run is a task that is not FAILED —
+ * so the press is about the record, and its confirm says exactly that.
+ *
+ * Drawn in the QUIET weight wherever it appears (mock 7's rule 2): stopping a task is one of the two
+ * things a reader does rarest and last, so it never takes the weight of the press the card is
+ * asking for — and it still asks before it writes.
+ */
 function CancelTaskPress({
   row,
   projectId,
-  primary,
 }: {
   row: ProjectOpenItemRow;
   projectId: string;
-  primary?: boolean;
 }): JSX.Element {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
@@ -546,7 +645,7 @@ function CancelTaskPress({
     <>
       <PressButton
         label={ACTION_LABEL.CANCEL_TASK!}
-        primary={primary}
+        tier="link"
         danger
         pending={cancel.isPending}
         onClick={() => setConfirming(true)}
@@ -577,11 +676,11 @@ function CancelTaskPress({
 function AskCoordinatorAgainPress({
   row,
   projectId,
-  primary,
+  tier,
 }: {
   row: ProjectOpenItemRow;
   projectId: string;
-  primary?: boolean;
+  tier: PressTier;
 }): JSX.Element {
   const qc = useQueryClient();
   const ask = useMutation(askCoordinatorAgainMutationOptions(qc, projectId, row.itemId));
@@ -589,7 +688,7 @@ function AskCoordinatorAgainPress({
     <>
       <PressButton
         label={ACTION_LABEL.ASK_COORDINATOR_AGAIN!}
-        primary={primary}
+        tier={tier}
         pending={ask.isPending}
         onClick={() => ask.mutate()}
       />
@@ -604,6 +703,10 @@ function AskCoordinatorAgainPress({
  * The owner closing an exception themselves. Like the cancel press, the press asks first — the
  * reason is required, and a reader who has typed nothing yet is asked for it rather than sent off to
  * be refused — and a refusal leaves the dialog open over the item it was about.
+ *
+ * It is drawn in the QUIET weight at the end of the row (mock 7, 方案 B) rather than as a third
+ * button: it is the ending for an exception nobody has to act on at all, offered to the one reader
+ * who already knows that, so it is the last thing in the row and the lightest.
  */
 function MarkHandledPress({
   row,
@@ -626,7 +729,12 @@ function MarkHandledPress({
   };
   return (
     <>
-      <PressButton label={MARK_HANDLED} pending={mark.isPending} onClick={() => setAsking(true)} />
+      <PressButton
+        label={MARK_HANDLED}
+        tier="link"
+        pending={mark.isPending}
+        onClick={() => setAsking(true)}
+      />
       <Modal
         open={asking}
         title={MARK_HANDLED_MODAL_TITLE}
@@ -665,26 +773,31 @@ function MarkHandledPress({
   );
 }
 
-/** One press of a card, by the action the server named. An action that writes and has no press
- *  here is one this build cannot make — and `cardActions` has already left it undrawn. */
+/** One press of a card, by the action the server named, in the weight the card gave it. An action
+ *  that writes and has no press here is one this build cannot make — and `cardActions` has already
+ *  left it undrawn. */
 function ItemPress({
   row,
   action,
   projectId,
-  primary,
+  tier,
 }: {
   row: ProjectOpenItemRow;
   action: OpenItemAction;
   projectId: string;
-  primary?: boolean;
+  tier: PressTier;
 }): JSX.Element | null {
   switch (action) {
     case 'RETRY':
-      return <RetryPress row={row} projectId={projectId} primary={primary} />;
+      return <RetryPress row={row} projectId={projectId} tier={tier} />;
+    case 'OPEN_TASK_SESSION':
+      return <OpenTaskSessionPress row={row} tier={tier} />;
+    // Cancel task takes no weight: it is the one door drawn quiet wherever it lands (see its own
+    // press), so the card's three weights never reach it.
     case 'CANCEL_TASK':
-      return <CancelTaskPress row={row} projectId={projectId} primary={primary} />;
+      return <CancelTaskPress row={row} projectId={projectId} />;
     case 'ASK_COORDINATOR_AGAIN':
-      return <AskCoordinatorAgainPress row={row} projectId={projectId} primary={primary} />;
+      return <AskCoordinatorAgainPress row={row} projectId={projectId} tier={tier} />;
     default:
       return null;
   }
@@ -866,15 +979,20 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
   );
 }
 
-/** A card's presses, in the server's own order: a link where the press is a way in, a button where
- *  it writes. The first of the WRITING ones is drawn as the primary press — the mock's own emphasis
- *  on both cards (Retry where the coordinator owns the work, "Ask the coordinator again" where the
- *  owner does), and one rule rather than a list of exceptions.
+/** A card's presses, in the weights the mock gives them (mock 7, 方案 B): the step this kind of
+ *  exception is asking for, the other way to take that step, and — behind both — the doors that only
+ *  look and only stop, drawn as quiet links so they stop competing with the press.
  *
- *  "Mark as handled" is drawn after them and never as the primary press: it is the ending for an
+ *  The pair comes from `leadingDoors`, which reads the server's own list: a card never leads with a
+ *  press the server did not offer, and `cardActions` has already left undrawn anything this row
+ *  carries no address for. The pair is drawn first and the rest after it in the server's own order,
+ *  so a card reads left to right as what to do, what else would do it, and the ways in and out.
+ *
+ *  "Mark as handled" is drawn after them and never as one of the pair: it is the ending for an
  *  exception nobody has to act on at all — the work is already where it was going — so it is offered
- *  last, to the one reader who knows that. It is not on the server's `actions` list (see this
- *  module's head), which is why it is drawn from the kind rather than from the row's own list. */
+ *  last, to the one reader who knows that (方案 B: a link at the end of the row, not a third button).
+ *  It is not on the server's `actions` list (see this module's head), which is why it is drawn from
+ *  the kind rather than from the row's own list. */
 function CardActions({
   projectId,
   row,
@@ -883,21 +1001,30 @@ function CardActions({
   row: ProjectOpenItemRow;
 }): JSX.Element {
   const actions = cardActions(row);
-  const primary = actions.find((action) => WRITE_ACTIONS.has(action));
+  // The pair in its own order — the step this kind is asking for, then the alternative beside it —
+  // and the rest of the server's list after it: a card reads left to right as what to do, what else
+  // would do it, and the ways in and out.
+  const leading = leadingDoors(row, actions);
+  const [primary, secondary] = leading;
+  const tierOf = (action: OpenItemAction): PressTier =>
+    action === primary ? 'primary' : action === secondary ? 'secondary' : 'link';
+  const ordered = [...leading, ...actions.filter((action) => !leading.includes(action))];
   const handClosable = row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind);
   return (
     <>
-      {actions.map((action) =>
-        WRITE_ACTIONS.has(action) ? (
+      {ordered.map((action) =>
+        // A door a card may lead with, or one it writes through, has a press of its own; everything
+        // else an item lists is a door to look through, and is drawn as the way in it is.
+        LEADING_ACTIONS.has(action) || WRITE_ACTIONS.has(action) ? (
           <ItemPress
             key={action}
             row={row}
             action={action}
             projectId={projectId}
-            primary={action === primary}
+            tier={tierOf(action)}
           />
         ) : (
-          <ItemLink key={action} row={row} action={action} />
+          <ItemLink key={action} row={row} action={action} quiet />
         ),
       )}
       {handClosable ? <MarkHandledPress row={row} projectId={projectId} /> : null}

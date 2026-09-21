@@ -13827,6 +13827,29 @@ button.composer-usage:focus-visible {
   border-color: var(--brand-strong);
   color: #fff;
 }
+/* The action row's third weight (mock 7, 方案 B): the doors that only look and only stop read as text
+   links instead of boxes as heavy as the press the card is asking for — no border, no fill,
+   underlined, and quiet until they are hovered. Scoped to the action row so these four properties
+   stand against the link chrome antd sets for the presses drawn in this weight, which comes in at
+   the same weight as a bare class of this file's; the row's own box is untouched, because it is the
+   way IN and not a door being demoted. */
+.project-open-item-actions .project-open-item-quiet {
+  height: auto;
+  padding: 0 2px;
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.project-open-item-actions .project-open-item-quiet.is-danger {
+  color: var(--error);
+}
+.project-open-item-actions a.project-open-item-quiet:hover,
+.project-open-item-actions button.project-open-item-quiet:hover {
+  color: var(--text-1);
+}
+.project-open-item-actions .project-open-item-quiet.is-danger:hover {
+  color: var(--error);
+}
 
 /* ── The exception cards (mocks 5 and 6 ①) ─────────────────────────────────────────────────
    One card for a conflict, a failed combined-tree check, a task that failed, an item a clock made

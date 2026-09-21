@@ -550,6 +550,158 @@ describe('the exception cards’ presses', () => {
   });
 });
 
+/** The weight a press is drawn in, which is the whole of what mock 7 changes: the press the card is
+ *  asking for, the other way to take that step, or one of the doors that only look or only stop. */
+type Weight = 'primary' | 'secondary' | 'link';
+
+/** A card's action row, in the order the card draws it, each press with the weight it is drawn in.
+ *
+ *  Read off the variant the press wears — the solid button, the outlined button, or the link the two
+ *  doors that neither lead nor write were demoted to (mock 7, 方案 B). An `<a>` is a way in, which is
+ *  a link wherever it is drawn; a press wearing none of the three is one this test cannot read, and
+ *  says so rather than being taken for a link.
+ */
+function actionRow(html: string): { label: string; weight: Weight }[] {
+  const row = new DOMParser()
+    .parseFromString(html, 'text/html')
+    .querySelector('.project-open-item-actions');
+  expect(row, 'the card draws an action row').not.toBeNull();
+  return Array.from(row!.children).map((press) => {
+    const variant = press.className.match(/ant-btn-(primary|default|link)\b/)?.[1];
+    const weight: Weight | null =
+      press.tagName === 'A' || variant === 'link'
+        ? 'link'
+        : variant === 'primary'
+          ? 'primary'
+          : variant === 'default'
+            ? 'secondary'
+            : null;
+    expect(weight, `a press in one of the three weights: ${press.outerHTML}`).not.toBeNull();
+    return { label: press.textContent?.trim() ?? '', weight: weight as Weight };
+  });
+}
+
+/**
+ * The action row's three weights (mock 7, 方案 B): four equal buttons became the press this kind of
+ * exception is asking for, the other way to take the same step, and — behind both — the two doors
+ * that only look and only stop, demoted to text links.
+ *
+ * What each card leads with is the mock's rule 1: the next step for THAT kind, taken from the doors
+ * the server lists for it and never from a door this build invented; the alternative is the same
+ * step taken another way. Rule 2 is the demotion: `Open coordinator` and `Cancel task` are both
+ * still there, and `Cancel task` still asks before it writes.
+ */
+describe('the exception card’s action row', () => {
+  function card(row: ProjectOpenItemRow): string {
+    return paint(
+      row.assignee === 'OWNER'
+        ? { needsYou: [row], withCoordinator: [] }
+        : { needsYou: [], withCoordinator: [row] },
+      () => <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+  }
+
+  it('draws an escalated card as one press, one alternative, and two text links', () => {
+    // 方案 B, and not 方案 C: the way back to the coordinator leads, the way onto the run is the one
+    // press beside it, and both endings — stopping the task, and the owner's own "handled" — are
+    // links at the end of the row rather than a third button beside them.
+    expect(actionRow(card(ESCALATED))).toEqual([
+      { label: 'Ask the coordinator again', weight: 'primary' },
+      { label: 'Open task session', weight: 'secondary' },
+      { label: 'Cancel task', weight: 'link' },
+      { label: 'Mark as handled', weight: 'link' },
+    ]);
+  });
+
+  it('leads a conflict and a failed check with the way onto the branch, Retry as the alternative', () => {
+    // Rule 1 of the mock: a conflict and a failed combined-tree check both want the branch fixed, so
+    // the way onto it leads and Retry — the heavier step, a whole new run — is the way to take the
+    // same step differently. Neither of these is the server's first door: `Open coordinator` is.
+    const expected = [
+      { label: 'Open task session', weight: 'primary' },
+      { label: 'Retry', weight: 'secondary' },
+      { label: 'Open coordinator', weight: 'link' },
+      { label: 'Cancel task', weight: 'link' },
+    ];
+    expect(actionRow(card(CONFLICT))).toEqual(expected);
+    expect(actionRow(card(CHECK_FAILED))).toEqual(expected);
+  });
+
+  it('leads a failed task with Retry, and the run as the alternative', () => {
+    // The one kind whose next step is another run (mock 7 ③): the press and its alternative swap,
+    // and the two doors behind them are the same two links.
+    expect(actionRow(card(item()))).toEqual([
+      { label: 'Retry', weight: 'primary' },
+      { label: 'Open task session', weight: 'secondary' },
+      { label: 'Open coordinator', weight: 'link' },
+      { label: 'Cancel task', weight: 'link' },
+    ]);
+  });
+
+  it('asks for the reason from the row’s link, and sends nothing without one', async () => {
+    // The ending 方案 B demotes is still the press: a quiet link nobody could press would be an
+    // ending nobody could make, which is the one thing this door exists for. Mounted rather than
+    // painted, because what it does when pressed is the whole of the assertion.
+    let open: ProjectOpenItemRow[] = [ESCALATED];
+    apiMock.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('/open-items')) return { needsYou: open, withCoordinator: [] };
+      open = [];
+      return { itemId: ESCALATED.itemId, state: 'RESOLVED', resolution: 'HANDLED' };
+    });
+    await mount(
+      <MemoryRouter>
+        <QueryClientProvider client={client({ needsYou: [ESCALATED], withCoordinator: [] })}>
+          <ProjectExceptionCards projectId={PROJECT_ID} now={NOW} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await settle();
+
+    const press = button('Mark as handled');
+    expect(press?.className).toContain('ant-btn-link');
+
+    await act(async () => press!.click());
+    await settle();
+    expect(
+      document.body.querySelector<HTMLElement>('.ant-modal'),
+      'the press opens the dialog that asks for the reason',
+    ).not.toBeNull();
+
+    // Empty is not a reason — the server requires one (`ResolveOpenItemDto.note`) — so the press
+    // sends nothing. Read off the requests rather than off the button's own disabled state.
+    const ok = await buttonAppears('Mark as handled', 2);
+    await act(async () => ok!.click());
+    await settle();
+    expect(apiMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toEqual([]);
+  });
+
+  it('draws no ending on a card that is neither the owner’s nor one of the three exceptions', () => {
+    // The negative control. An integration error is not one of the three kinds the mock gives a next
+    // step to, and the coordinator has it rather than the owner: the row is therefore the doors the
+    // server listed in the server's own order, and the ending only the owner may make is not drawn.
+    const error = item({
+      itemId: '5bQpWm2rT8vXkAeNcJ4ZhL',
+      kind: 'INTEGRATION_ERROR',
+      title: 'Integration error: the integration job ended with a code Orbit cannot read',
+      facts: facts({ errorCode: 'INTEGRATION_REPOSITORY_UNKNOWN' }),
+    });
+    const html = card(error);
+
+    expect(html).toContain('Integration error');
+    expect(actionRow(html)).toEqual([
+      { label: 'Open task session', weight: 'primary' },
+      { label: 'Retry', weight: 'secondary' },
+      { label: 'Open coordinator', weight: 'link' },
+      { label: 'Cancel task', weight: 'link' },
+    ]);
+    expect(html).not.toContain('Mark as handled');
+
+    // And it is the ASSIGNEE that withholds it, not the kind: the same item once it is the owner's
+    // carries the ending, which is what makes the absence above about who has it.
+    expect(card({ ...error, assignee: 'OWNER' })).toContain('Mark as handled');
+  });
+});
+
 describe('CoordinatorProgressRows — wake-ups and the day’s self-started turns', () => {
   function rows(
     wakeups: CoordinatorWakeups,
