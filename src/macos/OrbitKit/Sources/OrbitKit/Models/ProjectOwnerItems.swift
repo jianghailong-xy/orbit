@@ -26,6 +26,95 @@ public enum ProjectOpenItemKind: String, Codable, Sendable {
     }
 }
 
+/// Who is expected to act on an item: the project's coordinator, or its owner in person (§4.1).
+public enum ProjectOpenItemAssignee: String, Codable, Sendable {
+    case coordinator = "COORDINATOR"
+    case owner = "OWNER"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemAssignee(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Why it is theirs (§4.1, §4.4 X-D6, §4.5 X-C3, §4.6 X-E1). `DEFAULT` is the ordinary answer; the
+/// other five are each a story the card has to tell, because an item that BECAME the owner's says
+/// something a plain assignment does not.
+public enum ProjectOpenItemAssigneeReason: String, Codable, Sendable {
+    case `default` = "DEFAULT"
+    case noCoordinator = "NO_COORDINATOR"
+    case coordinatorEnded = "COORDINATOR_ENDED"
+    case chainLimit = "CHAIN_LIMIT"
+    case escalated = "ESCALATED"
+    case handedOver = "HANDED_OVER"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemAssigneeReason(rawValue: raw) ?? .unknown
+    }
+}
+
+/// The presses an item offers, as the server decides they exist — never as a client guesses (§4.8).
+/// A door nobody built is a button that answers a press with nothing, so the server omits it and the
+/// card draws what it is given; one this build does not know decodes as ``unknown`` and is not drawn.
+/// `CaseIterable` because both ends' labels are held against each other action by action.
+public enum ProjectOpenItemAction: String, Codable, Sendable, CaseIterable {
+    case review = "REVIEW"
+    case openCoordinator = "OPEN_COORDINATOR"
+    case openTaskSession = "OPEN_TASK_SESSION"
+    case retry = "RETRY"
+    case cancelTask = "CANCEL_TASK"
+    case askCoordinatorAgain = "ASK_COORDINATOR_AGAIN"
+    case resume = "RESUME"
+    case answer = "ANSWER"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemAction(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Where an item owed to a coordinator is on its way there (§4.4). `NOT_REQUIRED` is the owner's own
+/// items: nothing is delivered to a person, they are shown the card.
+public enum ProjectOpenItemDeliveryState: String, Codable, Sendable {
+    case notRequired = "NOT_REQUIRED"
+    case pending = "PENDING"
+    case queued = "QUEUED"
+    case delivered = "DELIVERED"
+    case returned = "RETURNED"
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProjectOpenItemDeliveryState(rawValue: raw) ?? .unknown
+    }
+}
+
+/// What the delivery of one item to the coordinator came to, and the conversation it went to — the
+/// address `OPEN_COORDINATOR` needs.
+public struct ProjectOpenItemDelivery: Codable, Equatable, Sendable {
+    public let state: ProjectOpenItemDeliveryState
+    public let sessionId: String?
+    public let at: String?
+
+    public init(state: ProjectOpenItemDeliveryState = .notRequired,
+                sessionId: String? = nil, at: String? = nil) {
+        self.state = state
+        self.sessionId = sessionId
+        self.at = at
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decodeIfPresent(ProjectOpenItemDeliveryState.self, forKey: .state) ?? .unknown
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        at = try c.decodeIfPresent(String.self, forKey: .at)
+    }
+}
+
 /// What a coordinator asked its owner to decide (§5.2 R7).
 public struct CoordinatorQuestion: Codable, Equatable, Sendable {
     public struct Option: Codable, Equatable, Sendable {
@@ -74,19 +163,54 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// The server's own sentence about the fact that opened it. Drawn rather than re-derived: a
     /// card that composed its own would be free to disagree with the row beside it on the web.
     public let detailLine: String
+    /// Who is expected to act on it, and — when it BECAME theirs rather than being theirs from
+    /// birth — why. The pair is what decides an item's heading (§7.5's `escalationHeading`).
+    public let assignee: ProjectOpenItemAssignee
+    public let assigneeReason: ProjectOpenItemAssigneeReason
     public let waitingSince: String
+    /// When it stops being the coordinator's, frozen at creation; nil once it is the owner's.
+    public let escalateAt: String?
+    /// When the clock (or a hand-over) made it the owner's. Nil for an item that was theirs from
+    /// birth — which is why the footer can say "waiting" about one and "escalated" about the other.
+    public let escalatedAt: String?
+    public let taskId: String?
+    /// The attempt this item is about, when there is one: the run whose failure opened it.
+    public let sessionId: String?
+    /// The merge candidate a `REVIEW` press would open, when this item is about a merge.
+    public let promotionId: String?
+    /// The fuse episode a `RESUME` press would lift.
+    public let fuseEpisodeId: String?
+    public let delivery: ProjectOpenItemDelivery
+    /// What the server says may be pressed on this row — the ONLY source of what a card offers.
+    public let actions: [ProjectOpenItemAction]
     /// What was asked, for a `COORDINATOR_QUESTION`; nil for every other kind.
     public let question: CoordinatorQuestion?
 
     public var id: String { itemId }
 
     public init(itemId: String, kind: ProjectOpenItemKind, title: String, detailLine: String = "",
-                waitingSince: String, question: CoordinatorQuestion? = nil) {
+                assignee: ProjectOpenItemAssignee = .coordinator,
+                assigneeReason: ProjectOpenItemAssigneeReason = .default,
+                waitingSince: String, escalateAt: String? = nil, escalatedAt: String? = nil,
+                taskId: String? = nil, sessionId: String? = nil, promotionId: String? = nil,
+                fuseEpisodeId: String? = nil,
+                delivery: ProjectOpenItemDelivery = ProjectOpenItemDelivery(),
+                actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
         self.detailLine = detailLine
+        self.assignee = assignee
+        self.assigneeReason = assigneeReason
         self.waitingSince = waitingSince
+        self.escalateAt = escalateAt
+        self.escalatedAt = escalatedAt
+        self.taskId = taskId
+        self.sessionId = sessionId
+        self.promotionId = promotionId
+        self.fuseEpisodeId = fuseEpisodeId
+        self.delivery = delivery
+        self.actions = actions
         self.question = question
     }
 
@@ -96,7 +220,19 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         kind = try c.decodeIfPresent(ProjectOpenItemKind.self, forKey: .kind) ?? .unknown
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         detailLine = try c.decodeIfPresent(String.self, forKey: .detailLine) ?? ""
+        assignee = try c.decodeIfPresent(ProjectOpenItemAssignee.self, forKey: .assignee) ?? .unknown
+        assigneeReason = try c.decodeIfPresent(ProjectOpenItemAssigneeReason.self,
+                                               forKey: .assigneeReason) ?? .unknown
         waitingSince = try c.decodeIfPresent(String.self, forKey: .waitingSince) ?? ""
+        escalateAt = try c.decodeIfPresent(String.self, forKey: .escalateAt)
+        escalatedAt = try c.decodeIfPresent(String.self, forKey: .escalatedAt)
+        taskId = try c.decodeIfPresent(String.self, forKey: .taskId)
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        promotionId = try c.decodeIfPresent(String.self, forKey: .promotionId)
+        fuseEpisodeId = try c.decodeIfPresent(String.self, forKey: .fuseEpisodeId)
+        delivery = try c.decodeIfPresent(ProjectOpenItemDelivery.self, forKey: .delivery)
+            ?? ProjectOpenItemDelivery()
+        actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
         question = try c.decodeIfPresent(CoordinatorQuestion.self, forKey: .question)
     }
 }
@@ -143,6 +279,14 @@ public struct OwnerAnswerRequest: Codable, Sendable {
         self.option = option
         self.text = text
     }
+}
+
+/// `POST /projects/:id/open-items/:itemId/resolve` — the reason an owner closed an exception by
+/// hand (§4.7). Required and non-empty: nothing on the line could verify the ending, so this
+/// sentence is the whole of what the record gains.
+public struct ResolveOpenItemRequest: Codable, Sendable {
+    public let note: String
+    public init(note: String) { self.note = note }
 }
 
 /// Where a merge candidate is (§3.3). Terminal states are `MERGED`, `DECLINED`, `CANCELLED`,

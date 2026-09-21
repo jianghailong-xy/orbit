@@ -2183,6 +2183,11 @@ final class ConsoleModel {
                 // Only state A is a question. B is landing on its own, C is a receipt and D is
                 // waiting on somebody else — none of the three is something to point a reader at.
                 return PromotionCards.stage(promotionStanding(promotionID)) == .askingYou
+            // An exception is counted only while the OWNER has it: one the coordinator is working
+            // through is drawn to be read, and this bar is about what is the reader's to act on —
+            // the same split the cross-session banner and the project page's two groups make.
+            case .exceptionItem(let itemID), .fusePause(let itemID):
+                return ExceptionCards.isOpen(exceptionStanding(itemID))
             }
         }.map(\.id)
     }
@@ -2246,6 +2251,20 @@ final class ConsoleModel {
             openItems = items
             for row in CoordinatorQuestions.open(items) {
                 deliver(.coordinatorQuestion(itemID: row.itemId))
+            }
+            // The exception todos, in the order the web's coordinator conversation draws them: the
+            // pause first, then everything else oldest first (§7.5). Both halves of the read — an
+            // exception the coordinator is working through is a card too, and the whole point of
+            // drawing it here is that the owner can see what has stopped the project.
+            for row in ExceptionCards.drawable(items) {
+                switch ExceptionCards.card(row) {
+                case .fusePause:
+                    deliver(.fusePause(itemID: row.itemId))
+                case .escalatedItem, .openItem:
+                    deliver(.exceptionItem(itemID: row.itemId))
+                case nil:
+                    break // a kind with a card of its own (a question, a merge) — see `card(_:)`
+                }
             }
         }
         // `do` rather than `try?`, because this door answers `null` for "asking nothing" and `try?`
@@ -2580,28 +2599,42 @@ final class ConsoleModel {
 
     /// Which row draws one owner item here: the question by its own address, and a merge approval
     /// by the candidate on screen — a project has at most one live candidate, and the item names
-    /// the card rather than the candidate.
+    /// the card rather than the candidate. The two exception kinds are addressed the way they were
+    /// delivered: an escalated item by its own card, and a pause by the card the fuse drew.
     private func rowID(forOwnerItem item: SessionOwnerItem) -> String? {
         switch item.kind {
         case .coordinatorQuestion:
-            let id = DeliveredDecisionCard(kind: .coordinatorQuestion(itemID: item.itemId)).id
-            return decisionCards.contains { $0.id == id } ? id : nil
+            return delivered(.coordinatorQuestion(itemID: item.itemId))
         case .promotionApproval:
             return decisionCards.first {
                 if case .promotionApproval = $0.kind { return true }
                 return false
             }?.id
-        // No native card yet for an escalated exception or a pause: the press opens the
-        // conversation, and the project page is where those two are answered.
-        case .escalated, .fusePaused, .unknown:
+        case .escalated:
+            return delivered(.exceptionItem(itemID: item.itemId))
+        case .fusePaused:
+            return delivered(.fusePause(itemID: item.itemId))
+        case .unknown:
             return nil
         }
     }
 
+    /// The id of a card this window actually holds, or nil when it holds none: a press that asked
+    /// for a card the read has not delivered yet is a press with nowhere to go, and saying so beats
+    /// scrolling to a row that does not exist.
+    private func delivered(_ kind: DeliveredDecisionCard.Kind) -> String? {
+        let id = DeliveredDecisionCard(kind: kind).id
+        return decisionCards.contains { $0.id == id } ? id : nil
+    }
 
     /// Where one delivered question stands right now, re-derived from the read on every call.
     func questionStanding(_ itemID: String) -> CoordinatorQuestionStanding {
         CoordinatorQuestions.standing(items: openItems, itemId: itemID)
+    }
+
+    /// The same for one exception todo, or the pause: what the read says about this address now.
+    func exceptionStanding(_ itemID: String) -> ExceptionItemStanding {
+        ExceptionCards.standing(items: openItems, itemId: itemID)
     }
 
     /// The candidate one delivered merge card is about, or nil when the read no longer publishes
@@ -2637,6 +2670,83 @@ final class ConsoleModel {
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
+    }
+
+    // MARK: the exception todos' own doors (§7.5)
+
+    /// §4.7: hand an escalated item back to the project's coordinator. Nothing is retried and
+    /// nothing ends here — the item goes back with its clock restarted, and the read is what closes
+    /// this card if the server says it is no longer the owner's.
+    func returnItemToCoordinator(_ itemID: String) async {
+        guard let projectID else { return }
+        do {
+            try await api.returnOpenItemToCoordinator(projectID: projectID, itemID: itemID)
+        } catch {
+            statusMessage = "That item was not handed back — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// §4.7's "标记已处理": close an exception the owner dealt with themselves. The reason is required
+    /// by the door, so an empty one is refused here rather than sent off to be refused there — and a
+    /// refusal is handed back rather than only announced, because the dialog it was typed in has to
+    /// stay open over the item it was about.
+    func resolveItem(_ itemID: String, note: String) async -> String? {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        // No project, nothing to close: this conversation coordinates none, so no card of this kind
+        // can be on screen. And a blank reason is refused here rather than sent off to be refused
+        // by the door, which trims it again before it judges it.
+        guard let projectID else { return nil }
+        guard !trimmed.isEmpty else { return "A reason is required to close this item." }
+        do {
+            try await api.resolveOpenItem(projectID: projectID, itemID: itemID, note: trimmed)
+        } catch {
+            let reason = "That item was not closed — \(APIClient.failureReason(error))."
+            statusMessage = reason
+            return reason
+        }
+        await refreshRulerQuestions(force: true)
+        return nil
+    }
+
+    /// Retry: start the failed task again, through the same door every other Run press in this app
+    /// sends, under the name of this press (`PublicID.newToken`, drawn at the gesture so a lost
+    /// ANSWER resent carries the same name rather than starting a second run). Nothing writes the
+    /// ITEM: the server clears the task's failure as the run is dispatched and answers on the same
+    /// fact, so the card closes because the task moved (§4.2).
+    func retryItemTask(_ taskID: String) async {
+        do {
+            try await api.executeTask(taskID, triggerId: PublicID.newToken())
+        } catch {
+            statusMessage = "That task was not started — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// Cancel task: the attempt stops here and the exceptions it opened close with it (§4.2
+    /// `TASK_CLOSED`). No run is stopped by it — a task with a live run is a task that is not
+    /// FAILED — so the press is about the record, which is what its confirm says. The existing
+    /// status write is the door: `PATCH /tasks/:id`, the same one every other status edit sends.
+    func cancelItemTask(_ taskID: String) async {
+        do {
+            _ = try await api.updateTask(taskID, UpdateTaskRequest(status: .cancelled))
+        } catch {
+            statusMessage = "That task was not cancelled — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// §6.3 F-T4: lift the coordinator's pause. Resumed or refused, the items are re-read: the card
+    /// goes when the episode closes, and a second pause — a new episode, never this row again
+    /// (§6.2) — arrives as its own card.
+    func resumeFuse(_ episodeID: String) async {
+        guard let projectID, !episodeID.isEmpty else { return }
+        do {
+            try await api.resumeFuse(projectID: projectID, episodeID: episodeID)
+        } catch {
+            statusMessage = "The coordinator was not resumed — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
     }
 
     /// M-T4: merge it. The candidate's own source SHA rides along, so a card rendered before a

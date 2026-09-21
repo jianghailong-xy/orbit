@@ -438,6 +438,33 @@ public final class APIClient: @unchecked Sendable {
         try await post("projects/\(projectID)/open-items/\(itemID)/answer", body: req)
     }
 
+    /// §4.7: send an escalated item back to the project's coordinator, with the clock the project
+    /// set for it restarted. The same credential and the same door family as the answer above.
+    ///
+    /// Nothing is retried and nothing ends here — what the coordinator does about it is the
+    /// coordinator's, which is the whole reason this press exists rather than a second Retry. The
+    /// server refuses it when there is no live coordinator conversation to hand it to, and the
+    /// refusal is the answer: the card says what it was.
+    public func returnOpenItemToCoordinator(projectID: String, itemID: String) async throws {
+        try await postRaw("projects/\(projectID)/open-items/\(itemID)/return-to-coordinator",
+                          body: Empty())
+    }
+
+    /// §4.7's "标记已处理": the owner ends an exception they dealt with themselves. The reason is
+    /// required by the door (`ResolveOpenItemDto`, at least one character, trimmed and checked again
+    /// in the service), and it is the whole of what the record gains — nothing could verify the
+    /// ending for itself.
+    public func resolveOpenItem(projectID: String, itemID: String, note: String) async throws {
+        try await postRaw("projects/\(projectID)/open-items/\(itemID)/resolve",
+                          body: ResolveOpenItemRequest(note: note))
+    }
+
+    /// §6.3 F-T4: lift the coordinator's pause. An empty body resumes WITHOUT raising anything,
+    /// which is what the plain press means — the limits the project set stay where they are.
+    public func resumeFuse(projectID: String, episodeID: String) async throws {
+        try await postRaw("projects/\(projectID)/fuse/\(episodeID)/resume", body: Empty())
+    }
+
     /// What this project is currently asking its owner to merge, or nil when it is asking nothing.
     /// The door answers a bare `null` for that, which decodes straight into the optional.
     public func currentPromotion(projectID: String) async throws -> ProjectPromotionView? {

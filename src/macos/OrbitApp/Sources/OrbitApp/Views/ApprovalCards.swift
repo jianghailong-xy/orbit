@@ -96,6 +96,11 @@ private struct ApprovalHeader: View {
     let title: String
     let tone: Color
     var badge: String? = nil
+    /// How many lines the title gets. One for a card whose title NAMES the ask ("Deny this
+    /// command?"), where a second line would only be a longer restatement of the same few words —
+    /// and two for the exception cards, whose title is a sentence the reader acts on ("Now yours —
+    /// no one acted on this for 2h"): a phone truncating that hides the one fact the card is for.
+    var titleLines: Int = 1
 
     var body: some View {
         HStack(spacing: 8) {
@@ -107,7 +112,7 @@ private struct ApprovalHeader: View {
             Text(title)
                 .font(.orbitProse.bold())
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .lineLimit(titleLines)
                 .layoutPriority(1)      // a long MCP tool name truncates; the ask never does
             Spacer(minLength: 4)
             if let badge {
@@ -1294,6 +1299,10 @@ struct DeliveredDecisionCardView: View {
                 CoordinatorQuestionCardView(console: console, itemID: itemID)
             case .promotionApproval(let promotionID):
                 PromotionApprovalCardView(console: console, promotionID: promotionID)
+            case .exceptionItem(let itemID):
+                ExceptionItemCardView(console: console, itemID: itemID)
+            case .fusePause(let itemID):
+                FusePauseCardView(console: console, itemID: itemID)
             }
         }
         // A card re-derives itself when it comes into view, on top of the reads the console runs
@@ -2049,6 +2058,334 @@ private struct PromotionApprovalCardView: View {
         Task {
             await run()
             acting = false
+        }
+    }
+}
+
+/// An exception the project still owes somebody (mock 5): the conflict, the failed combined-tree
+/// check, the integration error or the failed task the coordinator is working through — and the
+/// same item once it is the owner's, with the heading saying how it got here.
+///
+/// ONE VIEW FOR BOTH CARDS, because which one it is is a fact about the ROW rather than about the
+/// delivery: an item that escalates while the card is on screen keeps its address and changes its
+/// heading, and this client re-reads the row on every render (web's `ItemAsCard` decides the same
+/// way, for the same reason). The tone follows the same fact — amber while the owner has it,
+/// the neutral a coordinator-owned row wears in the browser's own two-tone scheme.
+///
+/// The words, the presses and the decision of which card this is all come from `ExceptionCards`, so
+/// macOS, iOS and the browser cannot come apart on any of them — and so the whole of it is testable
+/// on Linux, where no SwiftUI exists.
+///
+/// TWO LAYOUT TRADE-OFFS, both made for the phone. The provenance mark rides the meta line rather
+/// than the mock's end-of-head slot: `ApprovalHeader` truncates whatever is not the title in the
+/// middle, and on a narrow card "FROM ORBIT" becomes "FR…IT" — the three Orbit-filed cards above put
+/// it on the meta line for exactly that reason. And the heading gets two lines (`titleLines`),
+/// because on a phone it is the sentence the reader acts on and the one line it used to get hid the
+/// reason the item reached them. The mock's label/value rows are the browser's own `<dl>` around a
+/// sentence this client draws as the server's paragraph, which is what the web card draws too.
+private struct ExceptionItemCardView: View {
+    let console: ConsoleModel
+    let itemID: String
+    @Environment(\.openURL) private var openURL
+    /// The two doors that ask first. Cancel-task confirms in a dialog; Mark-as-handled needs a
+    /// reason, so it asks in the alert the rest of this app takes a typed word in. Each remembers
+    /// what it is about, because the dialog outlives the branch that drew the button.
+    @State private var confirmingCancel = false
+    @State private var cancellingTaskID: String?
+    @State private var askingWhy = false
+    @State private var markHandledItemID = ""
+    @State private var reason = ""
+    /// The refusal this card's own press met, held here rather than only announced: the dialog it
+    /// was typed in stays open over the item it was about.
+    @State private var failure: String?
+    @State private var busy = false
+
+    private var standing: ExceptionItemStanding { console.exceptionStanding(itemID) }
+
+    var body: some View {
+        let standing = self.standing
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            switch standing {
+            case .open(let row):
+                opened(row)
+            case .unread, .gone:
+                // The address and nothing else: a read that has not come back is not a description
+                // of anything, and this card kept no copy of an earlier one. Both states stay on
+                // screen — a card that vanished mid-read is indistinguishable, to the person
+                // reading it, from a render that broke.
+                head(ExceptionCards.unreadHeading)
+                Text(standing == .unread ? ExceptionCards.unreadable : ExceptionCards.gone)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(itemID)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .approvalChrome(tone, dimmed: !ExceptionCards.isOpen(standing))
+        // The two dialogs, on the card rather than inside the branch that draws the buttons: a
+        // confirm that unmounted with the row it was about would take its own question down with it.
+        .confirmationDialog(ExceptionCards.cancelTaskModalTitle, isPresented: $confirmingCancel,
+                            titleVisibility: .visible) {
+            Button(ExceptionCards.cancelTaskModalOk, role: .destructive) {
+                guard let taskID = cancellingTaskID else { return }
+                act { await console.cancelItemTask(taskID) }
+            }
+            .disabled(busy)
+            Button("Cancel", role: .cancel) { cancellingTaskID = nil }
+        } message: {
+            Text(ExceptionCards.cancelTaskModalBody)
+        }
+        .alert(ExceptionCards.markHandledModalTitle, isPresented: $askingWhy) {
+            TextField(ExceptionCards.markHandledReasonPrompt, text: $reason, axis: .vertical)
+                .lineLimit(2...6)
+            Button(ExceptionCards.markHandled) {
+                let item = markHandledItemID
+                guard !item.isEmpty else { return }
+                act { failure = await console.resolveItem(item, note: reason) }
+            }
+            // Empty is not a press: the door requires the reason, so the confirm waits for one.
+            .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) { reason = "" }
+        } message: {
+            Text(ExceptionCards.markHandledModalBody)
+        }
+    }
+
+    /// Amber while the owner has it, the neutral the browser's coordinator rows wear while the
+    /// coordinator does — the same two colours the two cards use, so a card and its banner agree.
+    private var tone: Color {
+        if case .open(let row) = standing, row.assignee == .owner { return .orange }
+        return .secondary
+    }
+
+    /// The head every one of these cards wears: the heading, and the mark saying nobody but Orbit
+    /// wrote it.
+    private func head(_ title: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ApprovalHeader(symbol: "exclamationmark.triangle.fill", title: title, tone: tone,
+                           titleLines: 2)
+            Text(ExceptionCards.fromOrbit)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(ExceptionCards.fromOrbitTitle)
+        }
+    }
+
+    @ViewBuilder
+    private func opened(_ row: ProjectOpenItemRow) -> some View {
+        let escalated = ExceptionCards.card(row) == .escalatedItem
+        head(ExceptionCards.heading(row))
+        // What escalated, above the sentence about it: the heading says how it got here, and this
+        // says what "it" is, which the heading no longer has room for.
+        if escalated {
+            Text(row.title)
+                .font(.orbitProse.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if let detail = nonEmpty(row.detailLine) {
+            Text(detail)
+                .font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if let failure {
+            Text(failure)
+                .font(.orbitLabel).foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        ApprovalActions {
+            ForEach(Array(ExceptionCards.presses(row).enumerated()), id: \.offset) { _, press in
+                pressButton(press, row)
+            }
+            if ExceptionCards.markHandled(row) {
+                markHandledButton(row)
+            }
+        }
+        Text(ExceptionCards.ownerLine(row))
+            .font(.orbitLabel).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// One press, by the shape `ExceptionCards` gave it. A way in navigates; a write goes to its
+    /// door. The primary press is the first WRITING one the row listed — the mock's own emphasis,
+    /// and the reason a reader can tell the expected press from the other ways out.
+    @ViewBuilder
+    private func pressButton(_ press: ExceptionPress, _ row: ProjectOpenItemRow) -> some View {
+        let primary = press.action != nil && press.action == ExceptionCards.primary(row)
+        switch press {
+        case .link(_, let label, let destination):
+            emphasised(primary) {
+                Button { PlatformHaptics.tap(); go(destination) } label: {
+                    Text(label).approvalActionLabel()
+                }
+            }
+            .disabled(busy)
+        case .write(let action, let label, let target):
+            emphasised(primary) {
+                Button {
+                    PlatformHaptics.tap()
+                    // Cancel asks first: it is a status write, and the dialog says what it does and
+                    // does not touch before it is made.
+                    if action == .cancelTask, case .task(let taskID) = target {
+                        cancellingTaskID = taskID
+                        confirmingCancel = true
+                        return
+                    }
+                    act { await run(action, target) }
+                } label: {
+                    Text(label).approvalActionLabel()
+                }
+            }
+            .disabled(busy)
+        case .resumeFuse(let label, let episodeID):
+            // Drawn even when the row names no episode, and drawn dead there: hiding it would leave
+            // the card with nothing to do (the browser draws it disabled for the same case).
+            emphasised(primary) {
+                Button { PlatformHaptics.tap(); act { await console.resumeFuse(episodeID ?? "") } } label: {
+                    Text(label).approvalActionLabel()
+                }
+            }
+            .disabled(busy || episodeID == nil)
+        case .markHandled:
+            EmptyView()   // drawn after the server's own presses, never as the primary one
+        }
+    }
+
+    /// A press's button chrome. Spelled as a branch rather than as a ternary because the two styles
+    /// are two different types, and the card's own emphasis is the only thing that forks.
+    @ViewBuilder
+    private func emphasised<C: View>(_ primary: Bool, @ViewBuilder _ content: () -> C) -> some View {
+        if primary {
+            content().buttonStyle(.borderedProminent)
+        } else {
+            content().buttonStyle(.bordered)
+        }
+    }
+
+    /// The owner closing an exception themselves: the press asks first, because the reason is
+    /// required, and a reader who has typed nothing yet is asked for it rather than sent off to be
+    /// refused.
+    private func markHandledButton(_ row: ProjectOpenItemRow) -> some View {
+        Button {
+            PlatformHaptics.tap()
+            failure = nil
+            reason = ""
+            markHandledItemID = row.itemId
+            askingWhy = true
+        } label: {
+            Text(ExceptionCards.markHandled).approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+        .disabled(busy)
+    }
+
+    /// A way in, in this client's own vocabulary: a row of this conversation is scrolled to, and a
+    /// session or a task is opened through the app's own deep-link door — the same one a
+    /// `[title](orbit-task:<id>)` link in a transcript uses, and not a second mechanism beside it.
+    private func go(_ destination: ExceptionLink) {
+        switch destination {
+        case .card(let rowID):
+            console.requestScroll(to: rowID)
+        case .session(let id):
+            if let url = URL(string: "orbit-session:\(id)") { openURL(url) }
+        case .task(let id):
+            if let url = URL(string: "orbit-task:\(id)") { openURL(url) }
+        }
+    }
+
+    private func run(_ action: ProjectOpenItemAction, _ target: ExceptionWriteTarget) async {
+        switch (action, target) {
+        case (.retry, .task(let taskID)):
+            await console.retryItemTask(taskID)
+        case (.cancelTask, .task(let taskID)):
+            await console.cancelItemTask(taskID)
+        case (.askCoordinatorAgain, .item(let itemID)):
+            await console.returnItemToCoordinator(itemID)
+        default:
+            break
+        }
+    }
+
+    private func act(_ work: @escaping () async -> Void) {
+        guard !busy else { return }
+        busy = true
+        Task {
+            await work()
+            busy = false
+        }
+    }
+}
+
+/// The coordinator's pause (mock 6 ①): why it stopped, what it cost, and the one press that starts
+/// it again.
+///
+/// Its own card because it is the one item in this family with a WRITE behind it, and because it is
+/// the only item that is ABOUT the coordinator rather than about a piece of work: while it holds,
+/// every other item is waiting on a conversation that has stopped.
+private struct FusePauseCardView: View {
+    let console: ConsoleModel
+    let itemID: String
+    @State private var busy = false
+
+    private var standing: ExceptionItemStanding { console.exceptionStanding(itemID) }
+
+    var body: some View {
+        let standing = self.standing
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            switch standing {
+            case .open(let row):
+                ApprovalHeader(symbol: "pause.circle.fill", title: ExceptionCards.heading(row),
+                               tone: .orange, titleLines: 2)
+                Text(ExceptionCards.fromOrbit)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(ExceptionCards.fromOrbitTitle)
+                // Everything the reader needs to weigh the resume is the server's own sentence —
+                // the pause writes its own `detailLine` rather than borrowing the failure wording,
+                // for exactly that reason (§6.2).
+                if let detail = nonEmpty(row.detailLine) {
+                    Text(detail)
+                        .font(.orbitProse)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                ApprovalActions {
+                    ForEach(Array(ExceptionCards.presses(row).enumerated()), id: \.offset) { _, press in
+                        if case .resumeFuse(let label, let episodeID) = press {
+                            Button { resume(episodeID) } label: {
+                                Text(label).approvalActionLabel()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(busy || episodeID == nil)
+                        }
+                    }
+                }
+                Text(ExceptionCards.ownerLine(row))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            case .unread, .gone:
+                ApprovalHeader(symbol: "pause.circle.fill", title: ExceptionCards.unreadFuseHeading,
+                               tone: .orange, titleLines: 2)
+                Text(ExceptionCards.fromOrbit)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(standing == .unread ? ExceptionCards.unreadable : ExceptionCards.gone)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(itemID)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .approvalChrome(.orange, dimmed: !ExceptionCards.isOpen(standing))
+    }
+
+    private func resume(_ episodeID: String?) {
+        guard !busy, let episodeID else { return }
+        PlatformHaptics.tap()
+        busy = true
+        Task {
+            await console.resumeFuse(episodeID)
+            busy = false
         }
     }
 }

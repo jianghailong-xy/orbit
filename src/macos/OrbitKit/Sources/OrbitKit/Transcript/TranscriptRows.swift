@@ -85,6 +85,15 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
         /// answer door takes — the same address the push payload and the Needs-you bar carry.
         case coordinatorQuestion(itemID: String)
+        /// One exception the project still owes somebody (§7.5): a merge conflict, a failed
+        /// combined-tree check, an integration error, a failed task — or the same once it is the
+        /// owner's. One case for both, because which card that is is a fact about the ROW, which the
+        /// console re-reads on every render: an item that escalates while the card is on screen
+        /// changes its heading, not its address.
+        case exceptionItem(itemID: String)
+        /// The coordinator's pause (§6.2, mock 6 ①) — the one item that is about the coordinator
+        /// rather than about a piece of work, and the one with a press that starts it again.
+        case fusePause(itemID: String)
     }
 
     public let kind: Kind
@@ -135,6 +144,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // above the transcript and the push that opens it both point at these by id.
         case .promotionApproval(let promotionID): return "promotion-\(promotionID)"
         case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
+        // The exception cards, in the same spelling — the web's `ItemCard` ids its element
+        // `open-item-<itemId>`, and a paused item's card `fuse-<itemId>`. Two ids rather than one so
+        // the two cards the web spells differently are found by the name each is looked for under.
+        case .exceptionItem(let itemID):          return "open-item-\(itemID)"
+        case .fusePause(let itemID):              return "fuse-\(itemID)"
         }
     }
 }
@@ -226,7 +240,7 @@ public enum DeliveryAnchor {
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
-             .promotionApproval, .coordinatorQuestion:
+             .promotionApproval, .coordinatorQuestion, .exceptionItem, .fusePause:
             return items.last?.id
         }
     }
