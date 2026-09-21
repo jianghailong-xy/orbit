@@ -124,6 +124,13 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
     // back. Unsetting it is exactly what must not happen here (it IS the provider's key), so
     // turn the feature off explicitly: same outcome, no advice that would break the session.
     ENABLE_CLAUDEAI_MCP_SERVERS: '0',
+    // The built-in Explore agent is declared `inherit` but capped at the opus tier: when the
+    // session's model is not one of Claude's own families (deepseek-flash is not), Explore asks
+    // for *opus*, and on an endpoint like this one that resolves to the vendor's own top model.
+    // Every research subagent then runs — and bills — a generation above the model the user
+    // picked and the row defaults to. The CLI's switch for exactly this case makes Explore
+    // inherit the session model; `CLAUDE_CODE_SUBAGENT_MODEL` does not (measured on 2.1.278).
+    CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
   };
   // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
   // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
