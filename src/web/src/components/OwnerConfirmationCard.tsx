@@ -138,8 +138,10 @@ export const OWNER_CONFIRMATION_STALE_CODES: readonly string[] = [
 ];
 
 /** Where the report starts being folded: long enough for a sentence or two, short enough that the
- *  buttons stay on a phone's screen. */
-const REPORT_CLAMP = 240;
+ *  buttons stay on a phone's screen. The single-create card folds a task's acceptance criteria at
+ *  the same ceiling — the same kind of field, read by the same person, on a card with the same
+ *  reason to keep its buttons in view. */
+export const REPORT_CLAMP = 240;
 
 /** The run waiting in THIS session, or null — the card is drawn in the session that reported, only. */
 export function ownerConfirmationWaitingIn(

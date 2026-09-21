@@ -163,6 +163,13 @@ struct ToolApprovalCard: View {
     let console: ConsoleModel
     let approval: PendingApproval
 
+    /// The two folds a single create draws, and the card's own state: the description is written
+    /// for the agent that will execute the task and the criteria is the owner's own ruler, so both
+    /// are one press away rather than gone — and a press here must not reopen them on the next read
+    /// of the transcript.
+    @State private var descriptionOpen = false
+    @State private var criteriaOpen = false
+
     private var rememberRule: PermissionRule? {
         approval.input.flatMap { Approvals.rememberRule(toolName: approval.toolName ?? "", input: $0) }
     }
@@ -205,6 +212,54 @@ struct ToolApprovalCard: View {
         }
     }
 
+    /// The field written for the agent that will execute the task, folded to a line that carries its
+    /// length. It is the longest thing on the card by an order of magnitude — 1.4k to 3.9k characters
+    /// across the last twenty single creates in this deployment — and the one field nobody decides
+    /// from: you are agreeing to the task, not reading its prompt.
+    @ViewBuilder
+    private func descriptionFold(_ create: CreateApprovalPreview) -> some View {
+        let text = create.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            DisclosureToggle(open: descriptionOpen,
+                             label: descriptionOpen
+                                 ? Approvals.createFoldHide(create.foldNoun)
+                                 : Approvals.createFold(create.foldNoun, text.count)) {
+                descriptionOpen.toggle()
+            }
+            if descriptionOpen {
+                // Opened, it is the Markdown the runner actually sent: headings, lists, fenced
+                // commands — folded is a line, open is the document.
+                MarkdownView(source: text).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// What would settle it: the owner's own standard, so it stays on the card rather than moving
+    /// into the same fold the prompt does. Folded at the same ceiling, and by the same helper, as
+    /// the report on the owner-confirmation card — the same field deserves the same treatment in
+    /// both places, and a criterion the owner cannot finish reading is one they cannot decide from.
+    @ViewBuilder
+    private func criteriaBlock(_ create: CreateApprovalPreview) -> some View {
+        let full = OwnerConfirmations.plainText(create.criteriaText)
+        let folded = OwnerConfirmations.foldedBody(create.criteriaText)
+        if !full.isEmpty {
+            Text(Approvals.createDoneWhen)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(criteriaOpen ? full : folded.text)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if folded.folded {
+                DisclosureToggle(open: criteriaOpen,
+                                 label: criteriaOpen ? OwnerConfirmations.showLess
+                                                     : OwnerConfirmations.showAll) {
+                    criteriaOpen.toggle()
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             if let batch {
@@ -233,18 +288,33 @@ struct ToolApprovalCard: View {
                              more: 0,
                              mono: false)
             } else if let create {
+                // A single create wears the batch card's skeleton — the count, the consequence, where
+                // it lands, the name in the tree's own slot — and folds the two fields that made it
+                // a wall: the description is written for the agent that will execute it, and the
+                // criteria is folded at the ceiling the owner-confirmation card already folds a
+                // run's report at. Before this the whole of both fields was the card, and on a phone
+                // the buttons sat three screens below the header.
                 ApprovalHeader(symbol: create.isProject ? "folder.badge.plus" : "checklist",
-                               title: "Create \(create.isProject ? "project" : "task") “\(create.title)”?",
+                               // A project has no count to lead with, so it keeps its name up here —
+                               // the same split web draws.
+                               title: create.isProject
+                                   ? "Create project “\(create.title)”?"
+                                   : Approvals.createHeading,
                                tone: .orange, badge: create.isProject ? "new project" : "new task")
-                OrbitAskBody(impact: [],
-                             note: create.prose,
-                             detail: create.criteria.isEmpty ? "" : "Done when",
-                             // The same Markdown web assembles: a project's stated criteria become
-                             // a list, a task's are already one Markdown block.
-                             rows: create.isProject ? create.criteria.map { "- \($0)" } : create.criteria,
-                             more: 0,
-                             mono: false,
-                             markdown: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(create.impact, id: \.self) { ImpactPill(text: $0) }
+                    if !create.detail.isEmpty {
+                        Text(create.detail).font(.orbitLabel).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if !create.titleLine.isEmpty {
+                        Text(create.titleLine).font(.orbitProse)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    descriptionFold(create)
+                    criteriaBlock(create)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else if let blocker {
                 // What it asked for is the headline; why the agent says that no longer applies is
                 // the evidence under it — the same fork the batch card makes between counts and
@@ -354,6 +424,21 @@ private func shapeSuffix(_ batch: BatchApprovalPreview) -> String {
     return shape.isEmpty ? "" : " · \(shape)"
 }
 
+/// One consequence line, in the card's own accent: how many runs this write starts, how many wait,
+/// how many nothing will trigger. The batch card has led with these since it was written; a single
+/// create reads the same lines because it is a batch of one, and the two cards saying the same kind
+/// of thing first is what makes one family of them.
+private struct ImpactPill: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.orbitLabel).fontWeight(.semibold)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+    }
+}
+
 private struct OrbitAskBody: View {
     let impact: [String]
     let note: String
@@ -379,10 +464,7 @@ private struct OrbitAskBody: View {
                 }
             }
             ForEach(impact, id: \.self) { line in
-                Text(line)
-                    .font(.orbitLabel).fontWeight(.semibold)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+                ImpactPill(text: line)
             }
             if !detail.isEmpty {
                 Text(detail).font(.orbitLabel).foregroundStyle(.secondary)

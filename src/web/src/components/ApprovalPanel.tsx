@@ -5,6 +5,12 @@ import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
+import { markdownToPlainText } from '../lib/markdownText';
+import {
+  OWNER_CONFIRMATION_SHOW_ALL,
+  OWNER_CONFIRMATION_SHOW_LESS,
+  REPORT_CLAMP,
+} from './OwnerConfirmationCard';
 import { bashCommandRules } from '@orbit/shared';
 
 /**
@@ -109,12 +115,48 @@ const isTaskCreate = (a: ApprovalInfo): boolean => a.toolName === 'orbit_task_cr
 const isProjectCreate = (a: ApprovalInfo): boolean => a.toolName === 'orbit_project_create';
 
 interface CreateInput {
+  isProject: boolean;
   title: string;
   /** A task's description, or a project's goal. */
   prose: string;
-  /** A task's acceptance criteria, or a project's stated criteria as a list; markdown either way. */
+  /** A project's stated criteria as a list, or a task's as one Markdown block; markdown either way. */
   criteria: string;
+  /**
+   * The server's own preview of what the write does, on a task create — the same report the batch
+   * card reads: how many run within the minute, how many wait, how many nothing will ever trigger.
+   * One task is a batch of one and the server computes it the same way, when it files the card.
+   * Absent when that read failed, which costs the card its pill and nothing else.
+   */
+  preview: BatchPreview | null;
+  /** The completion criterion the caller declared; empty on a project, which declares criteria instead. */
+  criterion: string;
 }
+
+/** Where a single create lands and how it settles, under the pill. The assignee is deliberately not
+ *  named: the create defaults it to the calling agent, so "unassigned" is a claim this card cannot
+ *  make from the input — and when nothing can run it, the pill says so instead. */
+export function createDetail(input: CreateInput): string {
+  const list = input.preview?.lists?.[0]?.title ?? '';
+  return [list && `into ${list}`, input.criterion].filter(Boolean).join(' · ');
+}
+
+/** The caption over the field the owner is agreeing to. macOS/iOS: `Approvals.createDoneWhen`. */
+export const CREATE_DONE_WHEN = 'Done when';
+
+/** The fold's own line, carrying its length the way the evidence card's claim fold does: this is the
+ *  longest field on the card and the least decisive, and how much of it there is is what decides
+ *  whether to open it. macOS/iOS: `Approvals.createFold`. */
+export function createFoldLabel(noun: string, chars: number): string {
+  return `the ${noun} (${chars} characters)`;
+}
+
+/** What the fold's control says once it is open. macOS/iOS: `Approvals.createFoldHide`. */
+export function createFoldHideLabel(noun: string): string {
+  return `hide the ${noun}`;
+}
+
+/** The noun the fold names, so a project's goal is never called a description. */
+export const createFoldNoun = (input: CreateInput): string => (input.isProject ? 'goal' : 'description');
 
 /**
  * Orbit's ask before an agent ends a project blocker.
@@ -158,6 +200,7 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   const text = (v: unknown): string => (typeof v === 'string' ? v : '');
   const items = Array.isArray(obj.acceptanceCriteriaItems) ? obj.acceptanceCriteriaItems : [];
   return {
+    isProject: project,
     title: text(obj.title),
     prose: text(project ? obj.goal : obj.description),
     criteria: project
@@ -167,6 +210,10 @@ function createInput(a: ApprovalInfo): CreateInput | null {
           .map((t) => `- ${t}`)
           .join('\n')
       : text(obj.acceptanceCriteria),
+    // The same key the batch card reads, for the same reason: the counts are the decision and the
+    // body is not. A project create has no dispatch to report, so it carries none.
+    preview: project ? null : (obj.preview as BatchPreview | undefined) ?? null,
+    criterion: text(obj.completionCriterion),
   };
 }
 
@@ -346,9 +393,11 @@ export function ApprovalPanel({
             : batch
               ? `🧩 Confirm: create ${batch.taskCount ?? 0} task${batch.taskCount === 1 ? '' : 's'}?`
               : create
-                ? isProjectCreate(approval)
+                ? create.isProject
                   ? `📁 Confirm: create project “${create.title}”?`
-                  : `📝 Confirm: create task “${create.title}”?`
+                  // A task's own name is the card's first row, where it can wrap to as many lines
+                  // as it needs; the header carries the count, exactly as the batch card's does.
+                  : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
                   : `🔓 Approve tool call: ${approval.toolName}`}
@@ -447,17 +496,130 @@ function BlockerResolveBody({ input }: { input: BlockerResolveInput }): JSX.Elem
   );
 }
 
-/** What a single create would write: what it is, then what would settle it. */
+/** What a single create would write. The batch card's skeleton, one size down: the consequence
+ *  first, then where it lands and the name — and the two fields that used to be the whole card,
+ *  folded. */
 function CreateBody({ input }: { input: CreateInput }): JSX.Element {
+  const [descriptionOpen, setDescriptionOpen] = useState(false);
+  const [criteriaOpen, setCriteriaOpen] = useState(false);
+  const noun = createFoldNoun(input);
+  const detail = createDetail(input);
+  // A task's criteria is one prose block written as a prompt for the agent that will run it — the
+  // field that turns into a wall. Flattened and folded at the ceiling the owner-confirmation card
+  // folds a run's report at, which is the same kind of field read by the same person. A project's
+  // criteria are a declared list of assertions, and the list is what makes them readable.
+  const said = markdownToPlainText(input.criteria);
+  const long = said.length > REPORT_CLAMP;
   return (
     <div className="dag-approval">
-      {input.prose && <Markdown remarkPlugins={[remarkGfm]}>{input.prose}</Markdown>}
+      <ImpactPills preview={input.preview} withZeroStarting={false} />
+      {detail && <p className="dag-approval-foot">{detail}</p>}
+      {!input.isProject && input.title && <p className="create-title">{input.title}</p>}
+      {input.prose && (
+        <details
+          className="create-fold"
+          open={descriptionOpen}
+          onToggle={(e) => setDescriptionOpen((e.currentTarget as HTMLDetailsElement).open)}
+        >
+          <summary>
+            {descriptionOpen
+              ? createFoldHideLabel(noun)
+              : createFoldLabel(noun, input.prose.length)}
+          </summary>
+          <Markdown remarkPlugins={[remarkGfm]}>{input.prose}</Markdown>
+        </details>
+      )}
       {input.criteria && (
         <>
-          <p className="dag-approval-caption">Done when</p>
-          <Markdown remarkPlugins={[remarkGfm]}>{input.criteria}</Markdown>
+          <p className="dag-approval-caption">{CREATE_DONE_WHEN}</p>
+          {input.isProject ? (
+            <Markdown remarkPlugins={[remarkGfm]}>{input.criteria}</Markdown>
+          ) : (
+            <>
+              <p className="dag-approval-criteria">
+                {long && !criteriaOpen ? `${said.slice(0, REPORT_CLAMP)}…` : said}
+              </p>
+              {long && (
+                <button
+                  type="button"
+                  className="decision-ask-toggle"
+                  aria-expanded={criteriaOpen}
+                  onClick={() => setCriteriaOpen(!criteriaOpen)}
+                >
+                  {criteriaOpen ? OWNER_CONFIRMATION_SHOW_LESS : OWNER_CONFIRMATION_SHOW_ALL}
+                </button>
+              )}
+            </>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The consequence lines a card leads with, in the order a person decides in. The batch card has led
+ * with these since it was written; a single create reads the same lines, because one task is a batch
+ * of one and the two cards saying the same kind of thing first is what makes one family of them.
+ *
+ * `withZeroStarting` is the one place the two differ: a batch states its running count even when it
+ * is zero — the card is about counts, and "0" is an answer — where a single task that starts nothing
+ * says nothing, since the pill it would get ("0 start running within the minute") reads as "nothing
+ * will happen" on a card where the other lines are not there to qualify it.
+ */
+function impactLines(
+  preview: BatchPreview,
+  { withZeroStarting }: { withZeroStarting: boolean },
+): Array<{ tone: '' | 'run' | 'block'; text: string }> {
+  const starting = preview.startingNow ?? 0;
+  const blocked = preview.blocked ?? 0;
+  const manual = preview.needsManualStart ?? 0;
+  const inert = preview.notDispatchable ?? 0;
+  const lines: Array<{ tone: '' | 'run' | 'block'; text: string }> = [];
+  if (starting > 0 || withZeroStarting) {
+    lines.push({
+      tone: starting > 0 ? 'run' : '',
+      text: `${starting} start${starting === 1 ? 's' : ''} running within the minute`,
+    });
+  }
+  if (blocked > 0) {
+    lines.push({ tone: '', text: `${blocked} wait${blocked === 1 ? 's' : ''} on a prerequisite` });
+  }
+  if (manual > 0) {
+    // Every root of a fresh DAG. Auto-run starts a task when a prerequisite finishes, so one
+    // with no prerequisites is never picked up however unblocked it looks — saying "will
+    // start" here is what this card got wrong before it was ever used.
+    lines.push({
+      tone: '',
+      text: `${manual} need${manual === 1 ? 's' : ''} a manual start — nothing will trigger ${manual === 1 ? 'it' : 'them'}`,
+    });
+  }
+  if (inert > 0) {
+    // Not the same as blocked: nothing finishing will release these. They sit until a person
+    // assigns them, so a batch that is silently all of these did nothing at all.
+    lines.push({
+      tone: 'block',
+      text: `${inert} cannot run — unassigned, no runner, auto-run off, or the list is paused`,
+    });
+  }
+  return lines;
+}
+
+/** Those lines as the card draws them: tinted, at the top, before anything else. */
+function ImpactPills({ preview, withZeroStarting }: {
+  preview: BatchPreview | null;
+  withZeroStarting: boolean;
+}): JSX.Element | null {
+  if (!preview) return null;
+  const lines = impactLines(preview, { withZeroStarting });
+  if (lines.length === 0) return null;
+  return (
+    <div className="dag-approval-impact">
+      {lines.map((l, i) => (
+        <span key={i} className={`dag-impact${l.tone ? ` dag-impact--${l.tone}` : ''}`}>
+          {l.text}
+        </span>
+      ))}
     </div>
   );
 }
@@ -470,10 +632,6 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
  * costs two runs, and fifty independent ones costs fifty.
  */
 function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
-  const starting = preview.startingNow ?? 0;
-  const blocked = preview.blocked ?? 0;
-  const manual = preview.needsManualStart ?? 0;
-  const inert = preview.notDispatchable ?? 0;
   const edges = (preview.internalEdges ?? 0) + (preview.externalEdges ?? 0);
   const tasks = preview.tasks ?? [];
   // Described from the window the card draws, not the whole batch — so the sentence says what the
@@ -485,27 +643,7 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
   const hasShape = shouldDraw(graph);
   return (
     <div className="dag-approval">
-      <div className="dag-approval-impact">
-        <span className={`dag-impact${starting > 0 ? ' dag-impact--run' : ''}`}>
-          {starting} start{starting === 1 ? 's' : ''} running within the minute
-        </span>
-        {blocked > 0 && <span className="dag-impact">{blocked} wait on a prerequisite</span>}
-        {manual > 0 && (
-          // Every root of a new DAG. Auto-run starts a task when a prerequisite finishes, so one
-          // with no prerequisites is never picked up however unblocked it looks — saying "will
-          // start" here is what this card got wrong before it was ever used.
-          <span className="dag-impact">
-            {manual} need{manual === 1 ? 's' : ''} a manual start — nothing will trigger {manual === 1 ? 'it' : 'them'}
-          </span>
-        )}
-        {inert > 0 && (
-          // Not the same as blocked: nothing finishing will release these. They sit until a
-          // person assigns them, so a batch that is silently all of these did nothing at all.
-          <span className="dag-impact dag-impact--block">
-            {inert} cannot run — unassigned, no runner, auto-run off, or the list is paused
-          </span>
-        )}
-      </div>
+      <ImpactPills preview={preview} withZeroStarting />
       {(preview.lists?.length ?? 0) > 0 && (
         <p className="dag-approval-foot">
           into {preview.lists!.map((l) => l.title).join(', ')}

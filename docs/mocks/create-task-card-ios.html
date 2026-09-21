@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>单任务确认卡 = 批卡骨架 + 折叠 — iPhone 效果图</title>
+<style>
+  /* iOS 真 token：抄 src/macos/OrbitApp/.../Typography.swift 的 iOS 档，
+     卡片几何抄 ApprovalMetrics（iOS: padding 14 / radius 14 / spacing 12 / row 44）
+     与 approvalChrome（tone 7% 面 + 28% 描边）。 */
+  :root {
+    --orange: #FF9500; --orange-ink: #b26a00;
+    --blue: #007AFF; --red: #FF3B30;
+    --label: #000; --label-2: rgba(60,60,67,.6); --label-3: rgba(60,60,67,.3);
+    --sep: rgba(60,60,67,.16); --surface: #fff;
+    --fill: rgba(120,120,128,.12); --fill-2: rgba(120,120,128,.08);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:40px 28px 64px; background:#ececef; color:#16161a;
+         font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Noto Sans CJK SC",Roboto,sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  h1 { font-size:24px; letter-spacing:-.02em; margin:0 0 6px; }
+  .lede { color:#55555e; max-width:980px; margin:0 0 8px; }
+  .lede b { color:#16161a; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px;
+         background:#e2e2e8; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; flex-wrap:wrap; gap:36px; align-items:flex-start; margin-top:26px; }
+  figure { margin:0; width:393px; }
+  figcaption { margin-top:14px; font-size:13.5px; line-height:1.55; color:#55555e; }
+  figcaption > b:first-child { display:block; font-size:14.5px; color:#16161a; margin-bottom:3px; }
+  figcaption ul { margin:6px 0 0; padding-left:18px; }
+  figcaption li { margin-top:4px; }
+  .tag { display:inline-block; font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+         padding:3px 7px; border-radius:5px; vertical-align:1px; }
+  .tag.now { background:#ffe4e0; color:#b3261e; }
+  .tag.new { background:#e3f0ff; color:#0b57d0; }
+  .tag.idea { background:#fff0d1; color:#9a6000; }
+
+  /* ── 电话框（同 blocker-resolve-card-ios.html） ───────────────── */
+  .phone { width:393px; height:852px; border-radius:48px; overflow:hidden; background:var(--surface);
+           color:var(--label); display:flex; flex-direction:column; position:relative;
+           box-shadow:0 12px 40px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08); }
+  .status { height:54px; display:flex; align-items:flex-end; justify-content:space-between;
+            padding:0 26px 6px; font-size:15px; font-weight:600; }
+  .nav { padding:2px 16px 10px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--sep); }
+  .nav .back { width:30px; height:30px; border-radius:50%; background:var(--fill); display:grid;
+               place-items:center; font-size:15px; }
+  .nav .titles { flex:1; text-align:center; line-height:1.15; }
+  .nav .t { font-size:15px; font-weight:600; }
+  .nav .s { font-size:11.5px; color:var(--label-2); }
+  .nav .badge { background:var(--fill); border-radius:6px; padding:2px 6px; font-size:11px;
+                color:var(--label-2); margin-left:4px; vertical-align:1px; }
+  .nav .share { width:30px; height:30px; border-radius:50%; background:var(--fill); display:grid;
+                place-items:center; font-size:14px; }
+  .thread { flex:1; padding:12px 14px 0; overflow:hidden; display:flex; flex-direction:column; position:relative; }
+  .thread .spacer { flex:1 1 auto; }
+  .report { font-size:14.5px; line-height:1.55; color:#1f2329; padding:0 2px 12px; }
+  .row-t { display:flex; gap:8px; align-items:center; margin-bottom:10px; color:var(--label-2); }
+  .row-t .chip { width:22px; height:22px; border-radius:6px; background:var(--fill-2); display:grid;
+                 place-items:center; font-size:11px; flex:none; }
+  .row-t .x { font-size:13.5px; color:#1f2329; }
+  .row-t .shape { font-size:13px; color:var(--label-2); }
+  .row-t .n { font:11px/1 ui-monospace,Menlo,monospace; color:var(--label-2); background:var(--fill);
+              border-radius:5px; padding:2px 5px; }
+  .row-t .spin { margin-left:auto; color:var(--label-3); font-size:13px; }
+
+  /* ── 确认卡（原生语言） ───────────────────────────────────────── */
+  .card { padding:14px; border-radius:14px; background:rgba(255,149,0,.07);
+          border:1px solid rgba(255,149,0,.28); }
+  .head { display:flex; align-items:center; gap:8px; }
+  .head .icon { width:22px; height:22px; border-radius:6px; display:grid; place-items:center; font-size:12px;
+                background:rgba(255,149,0,.16); color:var(--orange-ink); flex:none; }
+  .head .title { font-size:17px; font-weight:700; flex:1; white-space:nowrap; overflow:hidden;
+                 text-overflow:ellipsis; }
+  .head .name { font:11px/1 ui-monospace,Menlo,monospace; color:var(--orange-ink);
+                background:rgba(255,149,0,.16); border-radius:999px; padding:3px 8px; flex:none; }
+  .body { margin-top:12px; }
+  /* impact pill —— OrbitAskBody 的那颗，批卡一直在用 */
+  .pill { display:inline-block; font-size:13px; font-weight:600; padding:4px 8px; border-radius:7px;
+          background:rgba(0,122,255,.14); color:#0a4fa8; }
+  .meta { font-size:13px; color:var(--label-2); margin-top:6px; }
+  .item { font-size:17px; line-height:1.42; color:var(--label); margin-top:8px; }
+  .cap { font-size:13px; color:var(--label-2); margin-top:10px; }
+  .md { font-size:17px; line-height:1.42; }
+  .md h2 { font-size:20px; line-height:1.24; font-weight:600; margin:12px 0 2px; }
+  .md h2:first-child { margin-top:0; }
+  .md p { margin:8px 0 0; }
+  .md ul { margin:8px 0 0; padding-left:19px; }
+  .md li { margin-top:2px; }
+  .md pre { font:13px/1.45 ui-monospace,Menlo,monospace; background:var(--fill-2); border-radius:7px;
+            padding:8px 10px; margin:8px 0 0; white-space:pre-wrap; }
+  .md code { font:13px/1.4 ui-monospace,Menlo,monospace; background:var(--fill-2); border-radius:4px;
+             padding:1px 4px; }
+  .md b { font-weight:600; }
+  .crit { font-size:13px; line-height:1.5; color:var(--label-2); margin-top:6px; }
+  /* 折叠行 = DisclosureToggle（label + chevron，整行可点，plain 样式） */
+  .fold { display:flex; align-items:center; gap:6px; min-height:44px; font-size:13px; color:var(--label-2);
+          margin-top:2px; }
+  .fold .chev { font-size:11px; }
+  .clamp { position:relative; }
+  /* 卡片面 = 白底 + orange 7%，所以渐隐要收到同一个值，否则看起来像一个高亮块 */
+  .clamp .fade { position:absolute; left:0; right:0; bottom:0; height:30px;
+                 background:linear-gradient(rgba(255,248,237,0), rgba(255,248,237,1)); }
+  .actions { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .btn { min-height:44px; border-radius:22px; display:grid; place-items:center; font-size:17px; }
+  .btn.primary { background:var(--blue); color:#fff; font-weight:440; }
+  .btn.tinted { background:var(--fill); color:var(--blue); font-weight:440; }
+  .tail { padding:10px 14px 0; }
+  .bgbar { display:flex; align-items:center; gap:8px; font-size:13.5px; padding:11px 14px; border-radius:12px;
+           background:var(--fill-2); }
+  .bgbar .n { color:var(--label-2); font-size:13px; }
+  .bgbar .chev { margin-left:auto; color:var(--label-3); }
+  .composer { display:flex; align-items:center; gap:10px; padding:9px 12px; margin-top:10px;
+              border:1px solid var(--sep); border-radius:22px; color:var(--label-3); font-size:15px; }
+  .composer .send { margin-left:auto; width:30px; height:30px; border-radius:50%; background:var(--blue);
+                    color:#fff; display:grid; place-items:center; font-size:13px; }
+  .footbar { display:flex; align-items:center; gap:14px; padding:10px 18px 22px; font-size:13px;
+             color:var(--label-2); }
+  .footbar .ctx { margin-left:auto; }
+
+  /* 量尺与标注 */
+  /* 剪裁线画在 thread 的底边上，标签在线的**上方**（height:0 的盒子里放子元素会被一起裁掉） */
+  .clipnote { position:absolute; left:0; right:0; bottom:0; }
+  .clipnote .line { border-top:2px dashed #b3261e; }
+  .clipnote .txt { position:absolute; right:0; bottom:6px; font-size:12px; color:#b3261e;
+                   background:#fff; padding:3px 8px; border-radius:8px; border:1px solid #f0c9c5;
+                   max-width:96%; }
+  .badge-h { position:absolute; right:-68px; top:0; width:60px; font:600 11px/1.3 ui-monospace,Menlo,monospace;
+             color:#b3261e; background:#fff; border:1px solid #f0c9c5; border-radius:8px; padding:6px 5px;
+             text-align:center; }
+  .mark { outline:1.5px dashed #0b57d0; outline-offset:3px; border-radius:8px; }
+  .num { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; background:#0b57d0;
+         color:#fff; font:700 10px/1 -apple-system,sans-serif; vertical-align:1px; margin-right:4px; }
+  .ghost { height:44px; border:1.5px dashed #b3261e; border-radius:22px; display:grid; place-items:center;
+           font-size:13px; color:#b3261e; background:rgba(255,59,48,.04); }
+
+  /* 骨架对照：两张卡同宽并排，左侧标出对应的槽位 */
+  .skel { display:flex; gap:22px; align-items:flex-start; }
+  .skel .col { width:365px; }
+  .skel .colhead { font-size:12.5px; font-weight:700; color:#16161a; margin-bottom:8px; }
+  .slots { width:78px; position:relative; font:600 11px/1 ui-monospace,Menlo,monospace; color:#8a8a92; }
+  .slots span { position:absolute; right:10px; white-space:nowrap; transform:translateY(-6px); }
+  .slots span::after { content:""; position:absolute; right:-9px; top:5px; width:7px;
+                       border-top:1px solid #b9b9c2; }
+  .tree { font:13px/1.55 ui-monospace,Menlo,monospace; color:var(--label-2); margin-top:6px; }
+  .note { margin-top:30px; padding:16px 18px; background:#fff; border:1px solid #dcdce2; border-radius:12px;
+          max-width:1000px; font-size:13.5px; line-height:1.6; color:#3c3c43; }
+  .note h3 { margin:0 0 8px; font-size:15px; color:#16161a; }
+  .note ul { margin:6px 0 0; padding-left:18px; }
+  .note li { margin-top:5px; }
+</style>
+
+<h1>单任务 create 卡：拉回批卡那套骨架</h1>
+<p class="lede">批卡（<code>task_create_batch</code>）现在是这个族里最好读的一张：<b>后果在最上面一行</b>（「3 start running
+within the minute」）、元信息一行、标题只给一屏窗口，动作永远在可见处。单卡（<code>task_create</code>）把
+<b>描述全文 + 验收标准全文</b>直接倒进正文 —— 而描述是写给执行 agent 的 prompt（真数据：最近 20 次单建任务，
+描述 1.4k–3.9k 字符、验收标准 200–650 字符；正文按 iOS <code>orbitProse</code> = 17pt 渲染），
+这条真载荷量出来：卡片 <b>2,321pt ≈ 2.7 个整屏</b>（一屏 852pt），一屏里只看得到它的开头，<b>「Create it」挂在卡尾</b>。四张图：现状、建议默认态、建议展开态、两张卡的骨架对照。</p>
+
+<div class="row">
+
+  <!-- ── ① 今天 ─────────────────────────────────────────────── -->
+  <figure>
+    <span class="tag now">① 今天</span>
+    <div class="phone">
+      <div class="status"><span>10:27</span><span>▮▮▮ 5G ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">orbit</div><div class="s">Awaiting Input</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread">
+        <div class="report">这次不铺代码，先把任务挂上。三张卡一条确认，你点同意之前什么都不写。</div>
+        <div class="row-t"><span class="chip">🧩</span><span class="x">orbit · task_create</span>
+          <span class="spin">⟳</span></div>
+        <div class="card" id="card-today">
+          <div class="head">
+            <div class="icon">🗒</div>
+            <div class="title">Create task “claim-recovery-e2e 的 90s 等待…</div>
+            <div class="name">new task</div>
+          </div>
+          <div class="body">
+            <div class="md" id="md-today">
+<h2>背景</h2>
+<p>main 的 PG job 现在有一类<b>非清单红</b>：<code>claim-recovery-e2e.pg.spec.js</code> 在 CI 负载下偶发超时，harness 第二次跑干净，于是标 <code>NOT REPRODUCED</code> 并让 job 以 exit 3 收场（<code>spec-level-red</code> 为 0，但 job 仍红）。它现在正是「PG job 判不出绿色」的那一个。</p>
+<p>两次出现（同一断言、同一栈）：</p>
+<ul><li>run <code>35519154811</code>（sha <code>67c9f9e24</code>）：<code>tests=3 pass=1 fail=2</code>，<code>not ok 2 - a first spawn that produces no reply leaves the turn owed, not answered</code>，<code>error: &#x27;timed out waiting for the turn to be settled by the completion that followed it&#x27;</code>，<code>duration_ms 90289</code>，栈在 <code>eventually (…claim-recovery-e2e.pg.spec.js:408)</code> / 调用点 <code>:477</code></li><li>run <code>35395989655</code>（09-18 21:17）：同样的 <code>tests=3 pass=1 fail=2</code>，同样 NOT REPRODUCED</li></ul>
+<p>对照：run <code>35490034611</code>（落地前基线）这条 spec <b>干净</b>：<code>tests 3 / pass 3 / fail 0</code>，整份 <code>duration_ms 104870</code>。——所以不是一直红，是负载形状的偶发。</p>
+<h2>形态</h2>
+<p>等待本身<b>已经有墙钟截止</b>，这跟 web 那单（50 次微任务计数）不是同一种病：</p>
+<pre>async function eventually&lt;T&gt;(what: string, read: () =&gt; Promise&lt;T | undefined&gt;, timeoutMs = 90_000): Promise&lt;T&gt; {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() &lt; deadline) { last = await read(); if (last !== undefined) return last; await sleep(250); }
+  throw new Error(`timed out waiting for ${what}`);
+}</pre>
+<p>源文件 <code>src/apiserver/src/runner-api/claim-recovery-e2e.pg.spec.ts</code>（<code>eventually</code> 在 ~422 行；同文件 ~376 行还有另一处 <code>120_000</code> 的 deadline）。要判的是：<b>90 秒对这个路径在 CI 负载下是否本来就不够</b>（那就给足并留余量），还是<b>这条等待依赖了进程交错</b>（spawn/完成事件到达顺序），加预算只是把抖动藏起来——后者要改成等一个持久事实。</p>
+<p>别默认是前者：这条 spec 是 e2e（真 spawn），CI 上 4 核 + 别的 job 并行，<code>--maxWorkers</code> 与套件自身的并行度都要看一眼。</p>
+<h2>要求</h2>
+<ul><li>先量再改：让那条被等的事实自己报出实际耗时（插桩/计时），拿到 CI 形状负载下的 median/max，再决定预算是多少。<b>只把 90_000 改大而不给这个分布，不算结论。</b></li><li>证明要交替 A/B（改前红、改后绿），受控负载做法：<code>yes</code> 压核、等 45–75s 再跑、报 median/max，别拿一次绿当结论；也别拿本机 load 30–70（那是别人的会话）当受控条件。</li><li>如果结论是「产品侧真的会晚到」（比如那条完成事件在负载下确实要 &gt;90s），说清楚是产品慢还是 fixture 造的场景太慢，并给产品的证据。</li></ul>
+<h2>操作坑</h2>
+<ul><li>跑单条：<code>bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/claim-recovery-e2e.pg.spec.ts</code>（自建自毁 PostgreSQL；<code># SKIP</code> 也算红）。</li><li>worktree 里别跑 <code>npm ci</code>；先铺 overlay。</li><li>这条 spec 整份正常就要 ~105s，别把「跑得久」当失败。</li><li>收尾前再 <code>git fetch origin main</code> 一次。</li></ul>
+            </div>
+            <div class="cap">Done when</div>
+            <div class="crit" id="crit-today"><p>证据要回答「90s 为什么不够」而不是「加大到 N 秒后绿了」：(a) 让那条等待自己报出被等的事实实际花了多久（插桩或计时输出），并给出 CI 负载下的分布（多次运行的 median/max）；(b) 同一条命令在受控负载下改前红/改后绿，交替 A/B，负载水平写出来；(c) 若结论是「等待依赖了进程交错」而不是「预算太紧」，说明改成等哪个持久事实，并证明删掉交错依赖后不再随负载抖动。评论里写明分支与 commit sha，main 不含本任务提交。</p></div>
+          </div>
+          <div class="actions">
+            <div class="btn primary">Create it</div>
+            <div class="btn tinted">Chat about this</div>
+          </div>
+        </div>
+        <div class="clipnote" style="bottom:0">
+          <div class="line"></div>
+          <div class="txt" id="clip-txt">屏到底了 — 按钮还在下面</div>
+        </div>
+      </div>
+      <div class="tail">
+        <div class="bgbar">▣ <b>Background processes</b><span class="n">1 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ Message…<span class="send">↑</span></div>
+      </div>
+      <div class="footbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span>
+        <span class="ctx">17%</span></div>
+    </div>
+    <figcaption><b>① 现状（你截图里那一族的单卡）</b>
+      载荷是库里真的一条（09-20 15:54，描述 1,945 字符 / 验收标准 228 字符）。卡片正文没有小标题、没有折叠、
+      没有「后果」那一行：标题在头行被 <code>lineLimit(1)</code> 截成十来个字，紧接着就是 17pt 的 Markdown 全文，
+      再看「Done when」+ 标准全文。实测卡片高 <b id="h-today-cap">—</b>（整屏 852pt），
+      这一屏只能看到它的开头 —— 两颗按钮在屏下第 3 屏，而 <code>ApprovalHeader</code> 早已滚出视野。</figcaption>
+  </figure>
+</div>
+
+<div class="row">
+
+  <!-- ── ② 建议：默认态 ─────────────────────────────────────── -->
+  <figure>
+    <span class="tag new">② 建议 · 默认态</span>
+    <div class="phone">
+      <div class="status"><span>10:27</span><span>▮▮▮ 5G ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">orbit</div><div class="s">Awaiting Input</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread">
+        <div class="report">这次不铺代码，先把任务挂上。三张卡一条确认，你点同意之前什么都不写。</div>
+        <div class="row-t"><span class="chip">🧩</span><span class="x">Create task</span>
+          <span class="shape" id="row-shape">claim-recovery-e2e 的 90s 等待…</span><span class="spin">⟳</span></div>
+        <div class="spacer"></div>
+        <div class="card">
+          <div class="head mark">
+            <div class="icon">🗒</div>
+            <div class="title">Create 1 task?</div>
+            <div class="name">new task</div>
+          </div>
+          <div class="body">
+            <div class="pill mark"><span class="num">1</span>1 starts running within the minute</div>
+            <div class="meta mark"><span class="num">2</span>into Backlog · unassigned · EXECUTABLE</div>
+            <div class="item mark"><span class="num">3</span>claim-recovery-e2e 的 90s 等待在 CI 负载下偶发超时：harness 判 not-reproduced，挡住 PG job 变绿</div>
+            <div class="fold mark"><span class="num">4</span>Description · 1.9k 字符<span class="chev">▾</span></div>
+            <div class="cap"><span class="num">5</span>Done when</div>
+            <div class="clamp">
+              <div class="crit" style="margin-top:4px">证据要回答「90s 为什么不够」而不是「加大到 N 秒后绿了」：(a) 让那条等待自己报出被等的事实
+                实际花了多久（插桩或计时输出），并给出 CI 负载下的分布（多次运行的 median/max）；(b) 同一条命令在受控负载下
+                改前红/改后绿，交替 A/B，负载水平写出来。</div>
+              <div class="fade"></div>
+            </div>
+            <div class="fold"><span class="num">6</span>Show all<span class="chev">▾</span></div>
+          </div>
+          <div class="actions">
+            <div class="btn primary">Create it</div>
+            <div class="btn tinted">Chat about this</div>
+          </div>
+        </div>
+        <div class="tail">
+          <div class="bgbar">▣ <b>Background processes</b><span class="n">1 total</span><span class="chev">›</span></div>
+          <div class="composer">＋ Message…<span class="send">↑</span></div>
+        </div>
+      </div>
+      <div class="footbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span>
+        <span class="ctx">17%</span></div>
+    </div>
+    <figcaption><b>② 建议默认态 —— 单卡 = 批卡骨架 + 两处折叠</b>
+      <ul>
+        <li><span class="num">1</span><b>头行改成计数</b>（<code>Create 1 task?</code> + <code>new task</code>），和批卡的
+          <code>Create 3 tasks?</code> 是同一句话；标题不再塞进头行挨截断。</li>
+        <li><span class="num">2</span><b>后果 pill</b>：批卡一直在用的那颗（<code>orbitLabel</code> semibold、tint 14%、
+          r7）。<code>startingNow / blocked / needsManualStart / notDispatchable</code> 单建同样成立 —— 一条任务就是一条批，
+          <b>服务端在收下这张卡时用同一个 <code>previewCreateMany</code> 算出它</b>并挂在 <code>input.preview</code> 上
+          （批卡的数就是从这里来的）。读失败就当没有，卡片照发。</li>
+        <li><span class="num">3</span><b>元信息一行</b>：落在哪个 list、有没有人跑它、按什么判完成。对应批卡的
+          <code>into X · N dependency edges</code>。（<code>· unassigned</code> 这一段同样来自 preview。）</li>
+        <li><span class="num">4</span><b>标题占「树」那一格</b>：批卡这里放标题树，单卡放它自己这一条 —— 2–3 行放得下，
+          不再被头行的 <code>lineLimit(1)</code> 截掉。</li>
+        <li><span class="num">5</span><b>描述折成一行</b>：<code>Description · 1.9k 字符</code> + chevron，用的就是卡片族里已有的
+          <code>DisclosureToggle</code>（label + 整行可点 + 44pt），不是新控件。描述是写给执行 agent 的 prompt，
+          默认不占屏；要看一眼的长短写在字符数里。</li>
+        <li><span class="num">6</span><b>验收标准留在卡上</b>：它是<b>签字的那把尺子</b>，所以不折进「详情」里 ——
+          给 3 行 + 渐隐 + <code>Show all</code>（族里 <code>OwnerConfirmations.showAll</code> 的原话）。</li>
+      </ul>
+      默认态整卡 <b id="h-new-cap">—</b>，一屏装得下：头、后果、标题、两项明细、两颗按钮同时在视野里。</figcaption>
+  </figure>
+
+  <!-- ── ③ 建议：展开态 ─────────────────────────────────────── -->
+  <figure>
+    <span class="tag new">③ 建议 · 展开态</span>
+    <div class="phone">
+      <div class="status"><span>10:27</span><span>▮▮▮ 5G ▰</span></div>
+      <div class="nav">
+        <div class="back">‹</div>
+        <div class="titles"><div class="t">orbit</div><div class="s">Awaiting Input</div></div>
+        <div class="share">⇧</div>
+      </div>
+      <div class="thread">
+        <div class="row-t"><span class="chip">🧩</span><span class="x">Create task</span>
+          <span class="shape">claim-recovery-e2e 的 90s 等待…</span></div>
+        <div class="card">
+          <div class="head">
+            <div class="icon">🗒</div>
+            <div class="title">Create 1 task?</div>
+            <div class="name">new task</div>
+          </div>
+          <div class="body">
+            <div class="pill">1 starts running within the minute</div>
+            <div class="meta">into Backlog · unassigned · EXECUTABLE</div>
+            <div class="item">claim-recovery-e2e 的 90s 等待在 CI 负载下偶发超时：harness 判 not-reproduced，挡住 PG job 变绿</div>
+            <div class="fold">Description · 1.9k 字符<span class="chev">▴</span></div>
+            <div class="md" style="margin-top:2px">
+              <h2>背景</h2>
+              <p>main 的 PG job 现在有一类<b>非清单红</b>：<code>claim-recovery-e2e.pg.spec.js</code> 在 CI
+                 负载下偶发超时，harness 第二次跑干净，于是标 <code>NOT REPRODUCED</code> 并让 job 以 exit 3
+                 收场（<code>spec-level-red</code> 为 0，但 job 仍红）。</p>
+              <p>两次出现（同一断言、同一栈）：</p>
+              <ul>
+                <li>run <code>35519154811</code>（sha <code>67c9f9e24</code>）：<code>tests=3 pass=1 fail=2</code>，
+                    <code>duration_ms 90289</code>，栈在 <code>eventually (…:408)</code>/调用点 <code>:477</code></li>
+              </ul>
+              <pre>async function eventually&lt;T&gt;(what: string, read: () =&gt; Promise&lt;T | undefined&gt;, timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs;
+  …
+}</pre>
+            </div>
+            <div class="cap">Done when</div>
+            <div class="crit" style="margin-top:4px">证据要回答「90s 为什么不够」而不是「加大到 N 秒后绿了」：(a) 让那条等待自己报出被等的事实
+              实际花了多久（插桩或计时输出），并给出 CI 负载下的分布（多次运行的 median/max）；(b) 同一条命令在受控负载下
+              改前红/改后绿，交替 A/B，负载水平写出来；(c) 若结论是「等待依赖了进程交错」而不是「预算太紧」，说明改成等哪个
+              持久事实，并证明删掉交错依赖后不再随负载抖动。评论里写明分支与 commit sha，main 不含本任务提交。</div>
+            <div class="fold">Show less<span class="chev">▴</span></div>
+          </div>
+          <div class="actions">
+            <div class="btn primary">Create it</div>
+            <div class="btn tinted">Chat about this</div>
+          </div>
+        </div>
+        <div class="clipnote" style="bottom:0">
+          <div class="line"></div>
+          <div class="txt">展开态：Create it 在屏下 —— 这是他自己按开的，默认态不长这样</div>
+        </div>
+      </div>
+      <div class="tail" style="margin-top:auto">
+        <div class="bgbar">▣ <b>Background processes</b><span class="n">1 total</span><span class="chev">›</span></div>
+        <div class="composer">＋ Message…<span class="send">↑</span></div>
+      </div>
+      <div class="footbar"><span>Auto</span><span>DeepSeek</span><span>DeepSeek V4.1…</span><span>Max</span>
+        <span class="ctx">17%</span></div>
+    </div>
+    <figcaption><b>③ 建议 · 展开态</b>
+      点 <code>Description</code>：描述在<b>原位</b>展开（不像今天那样一进来就铺满），Markdown 照旧渲染 ——
+      <code>## 背景</code> 是 20pt 标题、代码块是 mono、<code>- [ ]</code> 仍然是勾选框，一行都没少，只是从「默认给」变成「要看才给」。
+      点 <code>Show all</code>：验收标准放到全文，控制词换成 <code>Show less</code>。
+      展开后卡片会比一屏长、<code>Create it</code> 落到屏下 —— <b>这是他自己按开的</b>，不是默认态的样子；
+      默认态永远只有 537pt，动作永远在视野里。<b>这一处是本次设计真正要你拍板的地方</b>：
+      展开就在原位（本图，改动最小，用已有的 <code>DisclosureToggle</code>），
+      还是「点开描述 = 弹一个全屏阅读器」，卡本身的高度从不变化（要新做一个 sheet，多一层手势）。</figcaption>
+  </figure>
+</div>
+
+<!-- ── ④ 骨架对照 ───────────────────────────────────────────── -->
+<h1 style="margin-top:44px;font-size:20px">④ 两张卡并排：同一个骨架，六个槽位</h1>
+<p class="lede">左边是你截图里那张批卡（3 个独立任务，照抄），右边是建议后的单卡。槽位对齐，只有「树」那一格的内容不同。</p>
+<div class="row" style="align-items:flex-start">
+  <div class="skel">
+    <div class="slots" id="rail">
+      <span data-for="head">头 / 计数</span>
+      <span data-for="pill">后果 pill</span>
+      <span data-for="meta">元信息</span>
+      <span data-for="item">树 / 名称</span>
+      <span data-for="fold">明细（折）</span>
+      <span data-for="actions">动作</span>
+    </div>
+    <div class="col">
+      <div class="colhead">批卡 · <code>task_create_batch</code>（今天就这样）</div>
+      <div class="card">
+        <div class="head">
+          <div class="icon">🗂</div><div class="title">Create 3 tasks?</div><div class="name">new tasks</div>
+        </div>
+        <div class="body">
+          <div class="pill" style="background:rgba(0,122,255,.22);color:#0a4fa8">3 start running within the minute</div>
+          <div class="meta">· 3 independent tasks</div>
+          <div class="tree">· 新增 docs/pilot-integration-line/README.md<br>· 新增 docs/pilot-integration-line/notes-1.md<br>· 新增 docs/pilot-integration-line/notes-2.md</div>
+        </div>
+        <div class="actions">
+          <div class="btn primary">Create them</div>
+          <div class="btn tinted">Chat about this</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="colhead">单卡 · <code>task_create</code>（建议，与 ② 同一份内容）</div>
+      <div class="card">
+        <div class="head" data-slot="head">
+          <div class="icon">🗒</div><div class="title">Create 1 task?</div><div class="name">new task</div>
+        </div>
+        <div class="body">
+          <div class="pill" data-slot="pill">1 starts running within the minute</div>
+          <div class="meta" data-slot="meta">into Backlog · unassigned · EXECUTABLE</div>
+          <div class="item" data-slot="item">claim-recovery-e2e 的 90s 等待在 CI 负载下偶发超时：harness 判 not-reproduced，挡住 PG job 变绿</div>
+          <div class="fold" data-slot="fold">Description · 1.9k 字符<span class="chev">▾</span></div>
+          <div class="cap">Done when</div>
+          <div class="clamp">
+            <div class="crit" style="margin-top:4px">证据要回答「90s 为什么不够」而不是「加大到 N 秒后绿了」：(a) 让那条等待自己报出被等的事实
+              实际花了多久（插桩或计时输出），并给出 CI 负载下的分布（多次运行的 median/max）；(b) 同一条命令在受控负载下
+              改前红/改后绿，交替 A/B，负载水平写出来。</div>
+            <div class="fade"></div>
+          </div>
+          <div class="fold">Show all<span class="chev">▾</span></div>
+        </div>
+        <div class="actions">
+          <div class="btn primary">Create it</div>
+          <div class="btn tinted">Chat about this</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <h3>落地要动的地方（按代价排，前三条客户端即可，第四条要 runner）</h3>
+  <ul>
+    <li><b>纯改版式（客户端）</b>：单卡分支的 <code>OrbitAskBody(impact: [], note: prose, detail: "Done when", rows: criteria)</code>
+      换成「pill + meta + 标题行 + 两个 DisclosureToggle」。<code>ApprovalCards.swift</code> 一处；web 的
+      <code>CreateBody</code> 同结构（宽栏可以默认展开，但引导顺序和文案一致，抄同一份字符串）。</li>
+    <li><b>头行改计数</b>：<code>Create task “标题”?</code> → <code>Create 1 task?</code>，标题移到正文首行。文案常量与
+      <code>OrbitAskPreviewTests</code> 一起改。</li>
+    <li><b>transcript 行</b>：<code>ToolDisplay</code> 里 <code>mcp__orbit__task_create</code> 现在落到 <code>default</code> 分支，
+      显示 <code>orbit · task_create</code> + 一坨 mono kv；批卡那行是「Create tasks · 3 independent tasks」。给单卡加一条同族的
+      行（<code>Create task</code> + 标题），抬头与折叠卡就成套了。</li>
+    <li><b>pill / meta 的数据（服务端，不是 runner）</b>：放在 <code>POST /runner/sessions/:id/approvals</code> 落卡的那一刻 ——
+      <code>toolName</code> 是 <code>orbit_task_create</code> 时用同一个 <code>previewCreateMany(ownerId, {tasks:[input]})</code> 算一份挂进
+      <code>input.preview</code>，best-effort（读失败就照原样落卡）。放服务端而不是 runner：runner 是个只在发版时才更新的二进制，
+      放它那边等于「装着的每个 runner 都还在问老问题」。客户端 <code>batchPreview(from:)</code> 连解析都不用重写，
+      拿不到就退回「没有 pill 的那版骨架」（头 + 标题 + 两折 + 动作），依然比今天短得多。</li>
+    <li><b>不给 pill 的情况也要说清楚</b>：<code>orbit_project_create</code> 是同一张卡、同一处改（goal 折进 Description，
+      标准列表折进 Done when），但它没有 dispatch 这回事 —— pill 那一格对项目改成什么，等定了再画。</li>
+  </ul>
+</div>
+
+<script>
+  // ④ 的六个槽位：照单卡量出来的 y 摆标签
+  const colSingle = document.querySelectorAll('.skel .col')[1];
+  const rail = document.getElementById('rail');
+  const railTop = rail.getBoundingClientRect().top;
+  const singleActions = colSingle.querySelector('.actions').getBoundingClientRect().top;
+  const singleTop = colSingle.querySelector('.card').getBoundingClientRect().top;
+  rail.querySelectorAll('span').forEach((el) => {
+    const key = el.dataset.for;
+    const target = key === 'actions' ? singleActions
+      : colSingle.querySelector(`[data-slot="${key}"]`).getBoundingClientRect().top;
+    el.style.top = Math.round(target - railTop + (key === 'actions' ? 8 : 0)) + 'px';
+  });
+  rail.style.height = Math.round(singleActions - singleTop + 60) + 'px';
+
+  const cardToday = document.getElementById('card-today');
+  const cardNew = document.querySelectorAll('.row')[1].querySelector('.card');
+  const screenH = 852;
+  const h1 = Math.round(cardToday.getBoundingClientRect().height);
+  const h2 = Math.round(cardNew.getBoundingClientRect().height);
+  const tr = cardToday.closest('.thread').getBoundingClientRect();
+  const visible = Math.max(0, Math.round(tr.bottom - cardToday.getBoundingClientRect().top));
+  const screens = (h) => (h / screenH).toFixed(1) + ' 屏';
+  document.getElementById('h-today-cap').textContent = h1 + 'pt ≈ ' + screens(h1);
+  document.getElementById('h-new-cap').textContent = h2 + 'pt（整屏 ' + screenH + 'pt）';
+  document.getElementById('clip-txt').textContent = '屏到底了 — 这张卡还有 ' +
+    (h1 - visible) + 'pt（≈' + screens(h1 - visible) + '）在下面';
+
+
+</script>
+</html>

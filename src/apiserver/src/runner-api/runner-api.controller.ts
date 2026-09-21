@@ -141,6 +141,7 @@ import {
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
+import { type CreateTaskBatchItemDto } from '../tasks/dto';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -2995,7 +2996,7 @@ export class RunnerApiController {
           // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
           // agent that waits for a card nobody can ever be shown.
           toolName: stripNul(dto.toolName),
-          input: stripNul(dto.input ?? {}) as Prisma.InputJsonValue,
+          input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input),
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
@@ -3029,6 +3030,49 @@ export class RunnerApiController {
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
   }
+
+  /**
+   * The input a card is stored with: the asker's own, and — on a single task create — the server's
+   * preview of what that write would do.
+   *
+   * The batch card has led with those counts since it was written, because fifty titles say nothing
+   * about how many runs start within the minute. A single create says very little either, and it is
+   * a batch of one: the same read answers it (`{"tasks":[input]}` is a batch of one on the same
+   * function the batch card's preview comes from), so the two cards lead with the same line.
+   *
+   * Computed HERE rather than in the runner, where the batch's is computed, for one reason: a card
+   * is a question a person is looking at, and an enrichment that waits on a workspace binary that
+   * updates on its own release would leave every already-installed runner asking the old question.
+   * The runner's input is the whole of what the write will send, so nothing is lost by doing it on
+   * this side of the wire.
+   *
+   * Best-effort, deliberately. `previewCreateMany` is a read that also re-checks the write's own
+   * preconditions, and a body it refuses is a body the write would refuse too — but a failure here
+   * must cost the card its consequence line and never the question itself, because an agent waiting
+   * on a card nobody was shown is the failure this whole path exists to prevent.
+   */
+  private async cardInput(
+    ownerId: string,
+    toolName: string,
+    raw: unknown,
+  ): Promise<Prisma.InputJsonValue> {
+    const input = stripNul(raw ?? {}) as Record<string, unknown>;
+    if (toolName !== RunnerApiController.taskCreateApprovalToolName || input.preview || !this.tasks) {
+      return input as Prisma.InputJsonValue;
+    }
+    try {
+      const preview = await this.tasks.previewCreateMany(ownerId, {
+        tasks: [input as unknown as CreateTaskBatchItemDto],
+      });
+      return { ...input, preview } as Prisma.InputJsonValue;
+    } catch {
+      // The card is drawn without its pill; the question stands.
+      return input as Prisma.InputJsonValue;
+    }
+  }
+
+  /** The MCP tool name a single create asks under — the one card this controller enriches. */
+  private static readonly taskCreateApprovalToolName = 'orbit_task_create';
 
   /**
    * Whether this session's workspace already permanently allows the call being asked about.

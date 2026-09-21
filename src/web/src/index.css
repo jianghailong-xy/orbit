@@ -8099,6 +8099,29 @@ button.composer-usage:focus-visible {
   color: var(--text-3);
   font-size: 11.5px;
 }
+/* The single create's own two rows: the name, which the batch card puts in its tree and this card
+   has no tree for, and the fold over the description — the field written for the agent that will
+   execute the task, and the only one long enough to push the buttons off a phone's screen. */
+.create-title {
+  margin: 4px 0 2px;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.create-fold {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.create-fold > summary {
+  padding: 3px 0;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.dag-approval-criteria {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.6;
+}
 .approval-input {
   white-space: pre-wrap;
   word-break: break-word;
